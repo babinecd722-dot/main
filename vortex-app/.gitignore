@@ -1,0 +1,4 @@
+node_modules/
+vortex.db
+vortex.db-shm
+vortex.db-wal

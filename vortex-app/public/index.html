@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vortex</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#06060c;--s1:#0a0a15;--s2:#10101e;--s3:#181830;--s4:#222245;--a:#7c5cfc;--a2:#b44dff;--ag:linear-gradient(135deg,#7c5cfc,#b44dff,#ff6b9d);--t:#eef;--t2:#8888aa;--t3:#555570;--b:rgba(255,255,255,.04);--grn:#3ddc84;--r:10px}
+html,body{height:100%;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);color:var(--t);-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--s3);border-radius:4px}
+button{font-family:inherit}input,textarea{font-family:inherit}
+
+/* AUTH SCREEN */
+.auth{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:100;flex-direction:column;gap:16px}
+.auth.hide{display:none}
+.auth-logo{font-size:36px;font-weight:900;background:var(--ag);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.auth-sub{font-size:12px;color:var(--t2);margin-bottom:16px}
+.auth-box{width:340px;background:var(--s1);border:1px solid var(--b);border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:10px}
+.auth-box h2{font-size:18px;font-weight:700;text-align:center;margin-bottom:4px}
+.auth-tabs{display:flex;gap:0;margin-bottom:4px;border-bottom:1px solid var(--b)}
+.auth-tab{flex:1;padding:8px;text-align:center;font-size:12.5px;font-weight:600;color:var(--t2);cursor:pointer;border-bottom:2px solid transparent;transition:.15s}
+.auth-tab.a{color:var(--t);border-color:var(--a)}
+.f-group{display:flex;flex-direction:column;gap:3px}
+.f-group label{font-size:11px;color:var(--t2);font-weight:500}
+.f-group input{padding:9px 12px;background:var(--s2);border:1px solid var(--b);border-radius:var(--r);color:var(--t);font-size:13px;outline:0;transition:.2s}
+.f-group input:focus{border-color:rgba(124,92,252,.35);box-shadow:0 0 0 2px rgba(124,92,252,.06)}
+.auth-btn{padding:10px;border:0;border-radius:var(--r);background:var(--ag);color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s;margin-top:4px}
+.auth-btn:hover{transform:scale(1.02);box-shadow:0 4px 16px rgba(124,92,252,.2)}
+.auth-err{font-size:11px;color:#ff5555;text-align:center;min-height:14px}
+
+/* APP LAYOUT */
+.app{display:flex;height:100vh;position:relative}
+.app.hide{display:none}
+
+/* SIDEBAR */
+.side{width:300px;min-width:300px;background:var(--s1);border-right:1px solid var(--b);display:flex;flex-direction:column}
+.sh{padding:10px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--b)}
+.sh .brand{display:flex;align-items:center;gap:6px}.sh .brand .mark{width:26px;height:26px;border-radius:8px;background:var(--ag);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;color:#fff}.sh .brand span{font-weight:700;font-size:14px;background:var(--ag);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.ib{width:28px;height:28px;border:0;background:0;color:var(--t2);cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:.12s}.ib:hover{background:var(--s3);color:var(--t)}.ib svg{width:15px;height:15px}
+.ss{padding:4px 10px 6px;position:relative}.ss input{width:100%;padding:7px 10px 7px 28px;background:var(--s2);border:1px solid var(--b);border-radius:8px;color:var(--t);font-size:11.5px;outline:0;transition:.2s}.ss input:focus{border-color:rgba(124,92,252,.3)}.ss svg{position:absolute;left:18px;top:50%;transform:translateY(-50%);width:12px;height:12px;color:var(--t3)}
+.chat-list{flex:1;overflow-y:auto;padding:4px 6px}
+.ci{display:flex;align-items:center;gap:8px;padding:8px;border-radius:9px;cursor:pointer;transition:.12s}.ci:hover{background:rgba(124,92,252,.04)}.ci.a{background:rgba(124,92,252,.07)}
+.av{width:36px;height:36px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;position:relative}
+.av .on{position:absolute;bottom:-1px;right:-1px;width:9px;height:9px;border-radius:50%;background:var(--grn);border:2px solid var(--s1)}
+.ci .inf{flex:1;min-width:0}.ci .inf .tp{display:flex;align-items:center;gap:3px;margin-bottom:1px}.ci .inf .nm{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ci .inf .tm{font-size:9.5px;color:var(--t3);margin-left:auto}.ci .inf .pv{font-size:11px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s-me{padding:8px 10px;border-top:1px solid var(--b);display:flex;align-items:center;gap:8px;cursor:pointer}.s-me:hover{background:var(--s2)}.s-me .nm{font-size:12px;font-weight:600;flex:1}
+
+/* MAIN AREA */
+.main{flex:1;display:flex;flex-direction:column;background:var(--bg)}
+.empty-state{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--t3)}.empty-state .es-logo{font-size:48px;font-weight:900;background:var(--ag);-webkit-background-clip:text;-webkit-text-fill-color:transparent;opacity:.3}.empty-state p{font-size:13px}
+.ch{padding:9px 16px;display:flex;align-items:center;justify-content:space-between;background:rgba(10,10,21,.8);backdrop-filter:blur(14px);border-bottom:1px solid var(--b)}
+.chl{display:flex;align-items:center;gap:8px}.chl .av{width:30px;height:30px;border-radius:9px;font-size:12px}
+.chi .nm{font-size:12.5px;font-weight:600}.chi .st{font-size:10px;color:var(--grn);display:flex;align-items:center;gap:3px}.chi .st.off{color:var(--t3)}.chi .st::before{content:'';width:4px;height:4px;border-radius:50%;background:currentColor}
+.chr{display:flex;gap:1px}
+.msgs{flex:1;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:2px}
+.m{max-width:55%;padding:7px 11px;border-radius:12px;font-size:12.5px;line-height:1.5;animation:mi .15s ease}
+@keyframes mi{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.m.in{align-self:flex-start;background:var(--s2);border:1px solid var(--b);border-bottom-left-radius:3px}.m.out{align-self:flex-end;background:linear-gradient(135deg,rgba(124,92,252,.8),rgba(160,70,255,.75));border-bottom-right-radius:3px}
+.mt{font-size:9px;color:rgba(255,255,255,.3);margin-top:2px;text-align:right}.m.out .mt{color:rgba(255,255,255,.45)}
+.md{text-align:center;padding:6px 0}.md span{background:var(--s2);color:var(--t3);font-size:10px;padding:2px 8px;border-radius:6px}
+.typ{display:none;gap:3px;padding:6px 10px;align-self:flex-start;background:var(--s2);border:1px solid var(--b);border-radius:12px;border-bottom-left-radius:3px}.typ.sh{display:flex}.typ span{width:4px;height:4px;background:var(--t3);border-radius:50%;animation:tb 1.2s infinite}.typ span:nth-child(2){animation-delay:.15s}.typ span:nth-child(3){animation-delay:.3s}
+@keyframes tb{0%,60%,100%{transform:translateY(0);opacity:.3}30%{transform:translateY(-4px);opacity:1}}
+.inp{padding:6px 12px 10px;background:rgba(10,10,21,.8);backdrop-filter:blur(14px);border-top:1px solid var(--b);display:flex;align-items:flex-end;gap:5px}
+.inp textarea{flex:1;padding:8px 10px;background:var(--s2);border:1px solid var(--b);border-radius:var(--r);color:var(--t);font-size:12px;outline:0;resize:none;min-height:34px;max-height:80px;line-height:1.4}.inp textarea:focus{border-color:rgba(124,92,252,.3)}.inp textarea::placeholder{color:var(--t3)}
+.snd{width:34px;height:34px;border:0;border-radius:var(--r);background:var(--ag);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.12s;flex-shrink:0}.snd:hover{transform:scale(1.04)}.snd:active{transform:scale(.94)}.snd svg{width:14px;height:14px;fill:currentColor}
+
+/* NEW CHAT / SEARCH OVERLAY */
+.ov{position:fixed;inset:0;z-index:50;background:rgba(6,6,12,.85);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center}.ov.sh{display:flex}
+.ov-pnl{background:var(--s1);border:1px solid var(--b);border-radius:14px;width:360px;max-height:70vh;overflow:hidden;display:flex;flex-direction:column}
+.ov-h{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--b)}.ov-h h3{font-size:15px;font-weight:700}
+.ov-body{flex:1;overflow-y:auto;padding:8px}
+.ov-search{padding:4px 12px 8px}.ov-search input{width:100%;padding:8px 10px;background:var(--s2);border:1px solid var(--b);border-radius:8px;color:var(--t);font-size:12px;outline:0}.ov-search input:focus{border-color:rgba(124,92,252,.3)}
+.ov-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:.12s}.ov-item:hover{background:rgba(124,92,252,.06)}
+.ov-item .nm{font-size:12.5px;font-weight:600}.ov-item .sub{font-size:10.5px;color:var(--t2)}
+
+/* SETTINGS */
+.settings{position:fixed;inset:0;z-index:60;background:var(--bg);display:none;flex-direction:column}
+.settings.sh{display:flex}
+.set-h{padding:12px 16px;border-bottom:1px solid var(--b);display:flex;align-items:center;gap:10px}.set-h h2{font-size:16px;font-weight:700;flex:1}
+.set-body{flex:1;overflow-y:auto;padding:16px;max-width:500px;margin:0 auto;width:100%}
+.set-section{margin-bottom:20px}.set-section h3{font-size:13px;font-weight:600;color:var(--t2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-size:11px}
+.set-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--s1);border:1px solid var(--b);border-radius:var(--r);margin-bottom:4px}
+.set-item label{font-size:12.5px;font-weight:500}.set-item .desc{font-size:10.5px;color:var(--t2)}
+.set-item input[type="text"],.set-item textarea{flex:1;margin-left:12px;padding:6px 8px;background:var(--s2);border:1px solid var(--b);border-radius:6px;color:var(--t);font-size:12px;outline:0}
+.set-item textarea{min-height:50px;resize:vertical}
+.set-btn{padding:8px 16px;border:0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;transition:.12s}
+.set-btn.primary{background:var(--ag);color:#fff}.set-btn.primary:hover{transform:scale(1.02)}
+.set-btn.danger{background:rgba(255,50,50,.1);color:#ff5555;border:1px solid rgba(255,50,50,.15)}.set-btn.danger:hover{background:rgba(255,50,50,.2)}
+
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(40px);background:var(--s2);border:1px solid rgba(124,92,252,.2);color:var(--t);padding:8px 16px;border-radius:10px;font-size:11.5px;font-weight:600;z-index:200;transition:.25s ease;opacity:0}.toast.sh{transform:translateX(-50%) translateY(0);opacity:1}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div class="auth" id="authScreen">
+  <div class="auth-logo">Vortex</div>
+  <div class="auth-sub">The future of messaging</div>
+  <div class="auth-box">
+    <div class="auth-tabs">
+      <div class="auth-tab a" onclick="authTab('login')">Log In</div>
+      <div class="auth-tab" onclick="authTab('register')">Sign Up</div>
+    </div>
+    <div id="authForm"></div>
+    <div class="auth-err" id="authErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app hide" id="appScreen">
+  <div class="side">
+    <div class="sh">
+      <div class="brand"><div class="mark">V</div><span>Vortex</span></div>
+      <div style="display:flex;gap:1px">
+        <button class="ib" onclick="showNewChat()" title="New Chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="ib" onclick="showSettings()" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
+      </div>
+    </div>
+    <div class="ss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input placeholder="Search chats..." id="chatSearch"></div>
+    <div class="chat-list" id="chatList"></div>
+    <div class="s-me" id="sideMe" onclick="showSettings()"></div>
+  </div>
+  <div class="main" id="mainArea">
+    <div class="empty-state"><div class="es-logo">V</div><p>Select a chat or start a new conversation</p></div>
+  </div>
+</div>
+
+<!-- NEW CHAT OVERLAY -->
+<div class="ov" id="newChatOv" onclick="if(event.target===this)closeOv('newChatOv')">
+  <div class="ov-pnl">
+    <div class="ov-h"><h3>New Chat</h3><button class="ib" onclick="closeOv('newChatOv')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+    <div class="ov-search"><input placeholder="Search users by username..." id="userSearch" oninput="searchUsers()"></div>
+    <div class="ov-body" id="userResults"></div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div class="settings" id="settingsScreen">
+  <div class="set-h">
+    <button class="ib" onclick="closeSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    <h2>Settings</h2>
+    <button class="set-btn primary" onclick="saveSettings()">Save</button>
+  </div>
+  <div class="set-body" id="settingsBody"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let token = localStorage.getItem('vortex_token');
+let me = null;
+let socket = null;
+let currentRoom = null;
+let chats = [];
+let onlineUserIds = new Set();
+let typingTimers = {};
+
+const API = '';
+
+async function api(url, opts = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API + url, { ...opts, headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function toast(t) {
+  const el = document.getElementById('toast');
+  el.textContent = t;
+  el.classList.add('sh');
+  setTimeout(() => el.classList.remove('sh'), 2000);
+}
+
+function closeOv(id) { document.getElementById(id).classList.remove('sh'); }
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+  return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+}
+
+// === AUTH ===
+let authMode = 'login';
+function authTab(mode) {
+  authMode = mode;
+  document.querySelectorAll('.auth-tab').forEach((t, i) => t.classList.toggle('a', (i === 0 && mode === 'login') || (i === 1 && mode === 'register')));
+  renderAuthForm();
+}
+
+function renderAuthForm() {
+  const f = document.getElementById('authForm');
+  document.getElementById('authErr').textContent = '';
+  if (authMode === 'login') {
+    f.innerHTML = `<div class="f-group"><label>Username or Email</label><input id="aLogin" placeholder="username or email"></div><div class="f-group"><label>Password</label><input id="aPass" type="password" placeholder="password"></div><button class="auth-btn" onclick="doLogin()">Log In</button>`;
+  } else {
+    f.innerHTML = `<div class="f-group"><label>Display Name</label><input id="aName" placeholder="Your name"></div><div class="f-group"><label>Username</label><input id="aUser" placeholder="unique username"></div><div class="f-group"><label>Email</label><input id="aEmail" placeholder="you@email.com"></div><div class="f-group"><label>Password</label><input id="aPass2" type="password" placeholder="min 4 characters"></div><button class="auth-btn" onclick="doRegister()">Create Account</button>`;
+  }
+}
+
+async function doLogin() {
+  try {
+    const data = await api('/api/login', { method: 'POST', body: JSON.stringify({ login: document.getElementById('aLogin').value, password: document.getElementById('aPass').value }) });
+    token = data.token;
+    me = data.user;
+    localStorage.setItem('vortex_token', token);
+    enterApp();
+  } catch (e) { document.getElementById('authErr').textContent = e.message; }
+}
+
+async function doRegister() {
+  try {
+    const data = await api('/api/register', { method: 'POST', body: JSON.stringify({ displayName: document.getElementById('aName').value, username: document.getElementById('aUser').value, email: document.getElementById('aEmail').value, password: document.getElementById('aPass2').value }) });
+    token = data.token;
+    me = data.user;
+    localStorage.setItem('vortex_token', token);
+    enterApp();
+  } catch (e) { document.getElementById('authErr').textContent = e.message; }
+}
+
+async function enterApp() {
+  document.getElementById('authScreen').classList.add('hide');
+  document.getElementById('appScreen').classList.remove('hide');
+  if (!me) me = await api('/api/me');
+  renderSideMe();
+  connectSocket();
+  loadChats();
+}
+
+function logout() {
+  token = null; me = null; currentRoom = null;
+  localStorage.removeItem('vortex_token');
+  if (socket) socket.disconnect();
+  document.getElementById('appScreen').classList.add('hide');
+  document.getElementById('authScreen').classList.remove('hide');
+  document.getElementById('settingsScreen').classList.remove('sh');
+  renderAuthForm();
+}
+
+// === SOCKET ===
+function connectSocket() {
+  socket = io({ auth: { token } });
+  socket.on('message:new', (msg) => {
+    if (msg.roomId === currentRoom) appendMessage(msg);
+    loadChats();
+  });
+  socket.on('user:online', (d) => { onlineUserIds.add(d.userId); renderChatList(); });
+  socket.on('user:offline', (d) => { onlineUserIds.delete(d.userId); renderChatList(); });
+  socket.on('typing:start', (d) => { if (d.roomId === currentRoom) document.querySelector('.typ')?.classList.add('sh'); });
+  socket.on('typing:stop', (d) => { if (d.roomId === currentRoom) document.querySelector('.typ')?.classList.remove('sh'); });
+  api('/api/online').then(ids => { onlineUserIds = new Set(ids); renderChatList(); });
+}
+
+// === CHATS ===
+async function loadChats() {
+  chats = await api('/api/chats');
+  renderChatList();
+}
+
+function renderChatList() {
+  const el = document.getElementById('chatList');
+  if (!chats.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:12px">No chats yet.<br>Click + to start one.</div>'; return; }
+  el.innerHTML = chats.map(c => {
+    const u = c.otherUser;
+    const name = c.type === 'direct' && u ? u.displayName || u.username : c.name || 'Chat';
+    const color = u ? u.avatarColor : '#7c5cfc';
+    const isOn = u && onlineUserIds.has(u.id);
+    const pv = c.last_message ? (c.last_message.length > 28 ? c.last_message.slice(0, 28) + '...' : c.last_message) : 'No messages';
+    return `<div class="ci${c.id === currentRoom ? ' a' : ''}" onclick="openChat('${c.id}')"><div class="av" style="background:${color}">${name[0].toUpperCase()}${isOn ? '<div class="on"></div>' : ''}</div><div class="inf"><div class="tp"><span class="nm">${name}</span><span class="tm">${fmtTime(c.last_time)}</span></div><div class="pv">${pv}</div></div></div>`;
+  }).join('');
+}
+
+function renderSideMe() {
+  document.getElementById('sideMe').innerHTML = `<div class="av" style="background:${me.avatarColor};width:30px;height:30px;border-radius:9px;font-size:12px">${(me.displayName || me.username)[0].toUpperCase()}</div><div class="nm">${me.displayName || me.username}</div><button class="ib" onclick="event.stopPropagation();showSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>`;
+}
+
+// === OPEN CHAT ===
+async function openChat(roomId) {
+  currentRoom = roomId;
+  renderChatList();
+  const chat = chats.find(c => c.id === roomId);
+  const u = chat?.otherUser;
+  const name = chat?.type === 'direct' && u ? u.displayName || u.username : chat?.name || 'Chat';
+  const color = u ? u.avatarColor : '#7c5cfc';
+  const isOn = u && onlineUserIds.has(u.id);
+
+  document.getElementById('mainArea').innerHTML = `
+    <div class="ch"><div class="chl"><div class="av" style="background:${color};width:30px;height:30px;border-radius:9px;font-size:12px">${name[0].toUpperCase()}</div><div class="chi"><div class="nm">${name}</div><div class="st${isOn ? '' : ' off'}">${isOn ? 'online' : 'offline'}</div></div></div><div class="chr"><button class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button></div></div>
+    <div class="msgs" id="msgs"></div>
+    <div class="inp"><textarea rows="1" placeholder="Message..." id="mInp"></textarea><button class="snd" onclick="sendMsg()"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button></div>`;
+
+  const inp = document.getElementById('mInp');
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } });
+  inp.addEventListener('input', () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 80) + 'px'; });
+
+  const messages = await api(`/api/chats/${roomId}/messages`);
+  const msgsEl = document.getElementById('msgs');
+  msgsEl.innerHTML = messages.map(m => msgHTML(m)).join('') + '<div class="typ"><span></span><span></span><span></span></div>';
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  inp.focus();
+}
+
+function msgHTML(m) {
+  const isMe = m.senderId === me.id;
+  const time = fmtTime(m.createdAt);
+  return `<div class="m ${isMe ? 'out' : 'in'}">${m.content}<div class="mt">${time}</div></div>`;
+}
+
+function appendMessage(msg) {
+  const msgsEl = document.getElementById('msgs');
+  if (!msgsEl) return;
+  const typEl = msgsEl.querySelector('.typ');
+  const div = document.createElement('div');
+  div.innerHTML = msgHTML(msg);
+  if (typEl) msgsEl.insertBefore(div.firstChild, typEl);
+  else msgsEl.appendChild(div.firstChild);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+function sendMsg() {
+  const inp = document.getElementById('mInp');
+  const content = inp.value.trim();
+  if (!content || !currentRoom) return;
+  socket.emit('message:send', { roomId: currentRoom, content });
+  inp.value = '';
+  inp.style.height = 'auto';
+}
+
+// === NEW CHAT ===
+function showNewChat() { document.getElementById('newChatOv').classList.add('sh'); document.getElementById('userSearch').value = ''; document.getElementById('userResults').innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Type a username to search</div>'; document.getElementById('userSearch').focus(); }
+
+async function searchUsers() {
+  const q = document.getElementById('userSearch').value.trim();
+  if (q.length < 2) { document.getElementById('userResults').innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">Type at least 2 characters</div>'; return; }
+  const users = await api('/api/users/search?q=' + encodeURIComponent(q));
+  if (!users.length) { document.getElementById('userResults').innerHTML = '<div style="padding:16px;text-align:center;color:var(--t3);font-size:12px">No users found</div>'; return; }
+  document.getElementById('userResults').innerHTML = users.map(u => `<div class="ov-item" onclick="startChat('${u.id}')"><div class="av" style="background:${u.avatarColor};width:36px;height:36px;border-radius:11px;font-size:14px">${(u.displayName || u.username)[0].toUpperCase()}</div><div><div class="nm">${u.displayName || u.username}</div><div class="sub">@${u.username}</div></div></div>`).join('');
+}
+
+async function startChat(userId) {
+  const { roomId } = await api('/api/chats/direct', { method: 'POST', body: JSON.stringify({ userId }) });
+  await api('/api/contacts', { method: 'POST', body: JSON.stringify({ contactId: userId }) });
+  closeOv('newChatOv');
+  await loadChats();
+  openChat(roomId);
+}
+
+// === SETTINGS ===
+function showSettings() {
+  document.getElementById('settingsScreen').classList.add('sh');
+  document.getElementById('settingsBody').innerHTML = `
+    <div class="set-section"><h3>Profile</h3>
+      <div class="set-item"><label>Display Name</label><input type="text" id="setName" value="${me.displayName || ''}"></div>
+      <div class="set-item"><label>Bio</label><input type="text" id="setBio" value="${me.bio || ''}"></div>
+      <div class="set-item"><label>Status</label><input type="text" id="setStatus" value="${me.status || ''}"></div>
+    </div>
+    <div class="set-section"><h3>Account</h3>
+      <div class="set-item"><label>Username</label><span style="font-size:12px;color:var(--t2)">@${me.username}</span></div>
+      <div class="set-item"><label>Email</label><span style="font-size:12px;color:var(--t2)">${me.email}</span></div>
+    </div>
+    <div class="set-section"><h3>Appearance</h3>
+      <div class="set-item"><label>Theme</label><span style="font-size:12px;color:var(--t2)">Dark (default)</span></div>
+      <div class="set-item"><label>Font Size</label><span style="font-size:12px;color:var(--t2)">Normal</span></div>
+    </div>
+    <div class="set-section"><h3>Notifications</h3>
+      <div class="set-item"><label>Message Notifications</label><span style="font-size:12px;color:var(--grn)">Enabled</span></div>
+      <div class="set-item"><label>Sound</label><span style="font-size:12px;color:var(--grn)">Enabled</span></div>
+    </div>
+    <div class="set-section"><h3>Privacy</h3>
+      <div class="set-item"><label>Last Seen</label><span style="font-size:12px;color:var(--t2)">Everyone</span></div>
+      <div class="set-item"><label>Read Receipts</label><span style="font-size:12px;color:var(--grn)">Enabled</span></div>
+    </div>
+    <div style="margin-top:20px"><button class="set-btn danger" onclick="logout()">Log Out</button></div>`;
+}
+
+function closeSettings() { document.getElementById('settingsScreen').classList.remove('sh'); }
+
+async function saveSettings() {
+  const displayName = document.getElementById('setName')?.value;
+  const bio = document.getElementById('setBio')?.value;
+  const status = document.getElementById('setStatus')?.value;
+  await api('/api/me', { method: 'PUT', body: JSON.stringify({ displayName, bio, status }) });
+  me.displayName = displayName;
+  me.bio = bio;
+  me.status = status;
+  renderSideMe();
+  closeSettings();
+  toast('Settings saved!');
+}
+
+// INIT
+renderAuthForm();
+if (token) {
+  api('/api/me').then(user => { me = user; enterApp(); }).catch(() => { localStorage.removeItem('vortex_token'); token = null; });
+}
+</script>
+</body>
+</html>
