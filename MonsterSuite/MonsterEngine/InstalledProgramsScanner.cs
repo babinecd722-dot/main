@@ -11,7 +11,7 @@ public static class InstalledProgramsScanner
     private const string UninstallPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
     private const string UninstallPathWow = @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
 
-    public static IReadOnlyList<InstalledProgramRecord> Scan()
+    public static IReadOnlyList<InstalledProgramRecord> ScanWin32()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return Array.Empty<InstalledProgramRecord>();
@@ -37,6 +37,7 @@ public static class InstalledProgramsScanner
                     list.Add(new InstalledProgramRecord
                     {
                         DisplayName = displayName.Trim(),
+                        Source = InstallSourceKind.Win32Registry,
                         Publisher = sk.GetValue("Publisher") as string,
                         DisplayVersion = sk.GetValue("DisplayVersion") as string,
                         InstallDate = sk.GetValue("InstallDate") as string,

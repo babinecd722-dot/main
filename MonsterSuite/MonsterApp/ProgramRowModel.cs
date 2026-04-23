@@ -10,4 +10,5 @@ public sealed class ProgramRowModel
     public string Title => Record.DisplayName;
     public string Subtitle =>
         string.Join(" · ", new[] { Record.Publisher, Record.DisplayVersion }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    public string SourceBadge => Record.Source == InstallSourceKind.MicrosoftStore ? "STORE" : "WIN32";
 }

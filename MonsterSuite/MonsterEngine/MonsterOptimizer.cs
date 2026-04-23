@@ -4,8 +4,8 @@ using System.Runtime.InteropServices;
 namespace MonsterEngine;
 
 /// <summary>
-/// Агрессивная очистка «как у Ashampoo»: temp, кэши браузеров, префетч (осторожно), корзина через PowerShell.
-/// Логи только в память — на диск ничего не пишем.
+/// Многоступенчатая оптимизация: временные каталоги, кэши браузеров, миниатюры,
+/// отчёты об ошибках Windows, DNS-кэш, корзина. Только разрешённые зоны PathGuard.
 /// </summary>
 public sealed class MonsterOptimizer
 {
@@ -42,7 +42,7 @@ public sealed class MonsterOptimizer
             catch { /* */ }
         }
 
-        void TryDeleteDirContents(string dir, bool topOnly)
+        void TryDeleteDirContents(string dir, bool topOnly, bool requireCleanupZone)
         {
             try
             {
@@ -52,11 +52,13 @@ public sealed class MonsterOptimizer
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var parent = Path.GetDirectoryName(f) ?? "";
-                    if (!PathGuard.IsAggressiveCleanupTarget(f) && !PathGuard.IsAggressiveCleanupTarget(parent))
+                    if (requireCleanupZone &&
+                        !PathGuard.IsAggressiveCleanupTarget(f) &&
+                        !PathGuard.IsAggressiveCleanupTarget(parent))
                         continue;
                     TryDeleteFile(f);
                 }
-                if (!topOnly)
+                if (!topOnly && requireCleanupZone)
                 {
                     foreach (var d in Directory.EnumerateDirectories(dir))
                     {
@@ -73,36 +75,60 @@ public sealed class MonsterOptimizer
             catch { /* */ }
         }
 
-        L("Temp: пользователь и система…");
-        TryDeleteDirContents(Path.GetTempPath(), topOnly: false);
-        TryDeleteDirContents(Environment.GetEnvironmentVariable("TEMP") ?? "", topOnly: false);
-        TryDeleteDirContents(Environment.GetEnvironmentVariable("TMP") ?? "", topOnly: false);
+        L("Этап 1/6 — временные каталоги…");
+        TryDeleteDirContents(Path.GetTempPath(), topOnly: false, requireCleanupZone: true);
+        TryDeleteDirContents(Environment.GetEnvironmentVariable("TEMP") ?? "", topOnly: false, requireCleanupZone: true);
+        TryDeleteDirContents(Environment.GetEnvironmentVariable("TMP") ?? "", topOnly: false, requireCleanupZone: true);
         var winTemp = Path.Combine(Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows", "Temp");
-        TryDeleteDirContents(winTemp, topOnly: false);
+        TryDeleteDirContents(winTemp, topOnly: false, requireCleanupZone: true);
 
-        L("Кэш браузеров (Chrome / Edge / IE)…");
+        L("Этап 2/6 — кэш браузеров…");
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        TryDeleteDirContents(Path.Combine(local, @"Google\Chrome\User Data\Default\Cache"), topOnly: true);
-        TryDeleteDirContents(Path.Combine(local, @"Google\Chrome\User Data\Default\Code Cache"), topOnly: true);
-        TryDeleteDirContents(Path.Combine(local, @"Microsoft\Edge\User Data\Default\Cache"), topOnly: true);
-        TryDeleteDirContents(Path.Combine(local, @"Microsoft\Edge\User Data\Default\Code Cache"), topOnly: true);
-        TryDeleteDirContents(Path.Combine(local, @"Microsoft\Windows\INetCache"), topOnly: false);
+        TryDeleteDirContents(Path.Combine(local, @"Google\Chrome\User Data\Default\Cache"), topOnly: true, requireCleanupZone: true);
+        TryDeleteDirContents(Path.Combine(local, @"Google\Chrome\User Data\Default\Code Cache"), topOnly: true, requireCleanupZone: true);
+        TryDeleteDirContents(Path.Combine(local, @"Google\Chrome\User Data\ShaderCache"), topOnly: true, requireCleanupZone: true);
+        TryDeleteDirContents(Path.Combine(local, @"Microsoft\Edge\User Data\Default\Cache"), topOnly: true, requireCleanupZone: true);
+        TryDeleteDirContents(Path.Combine(local, @"Microsoft\Edge\User Data\Default\Code Cache"), topOnly: true, requireCleanupZone: true);
+        TryDeleteDirContents(Path.Combine(local, @"Microsoft\Edge\User Data\ShaderCache"), topOnly: true, requireCleanupZone: true);
+        TryDeleteDirContents(Path.Combine(local, @"Microsoft\Windows\INetCache"), topOnly: false, requireCleanupZone: true);
 
-        L("Prefetch…");
+        L("Этап 3/6 — миниатюры проводника…");
+        TryDeleteDirContents(
+            Path.Combine(local, @"Microsoft\Windows\Explorer"),
+            topOnly: true,
+            requireCleanupZone: true);
+
+        L("Этап 4/6 — отчёты об ошибках Windows…");
+        var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+        TryDeleteDirContents(Path.Combine(programData, @"Microsoft\Windows\WER\ReportQueue"), topOnly: false, requireCleanupZone: true);
+        TryDeleteDirContents(Path.Combine(programData, @"Microsoft\Windows\WER\ReportArchive"), topOnly: false, requireCleanupZone: true);
+
+        L("Этап 5/6 — Prefetch…");
         var prefetch = Path.Combine(Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows", "Prefetch");
-        TryDeleteDirContents(prefetch, topOnly: true);
+        TryDeleteDirContents(prefetch, topOnly: true, requireCleanupZone: true);
 
-        L("Очистка корзины (PowerShell)…");
+        L("Этап 6/6 — DNS-кэш, корзина…");
         try
         {
-            await RunProcessAsync("powershell.exe", "-NoProfile -Command Clear-RecycleBin -Force -ErrorAction SilentlyContinue", cancellationToken).ConfigureAwait(false);
+            await RunProcessAsync("ipconfig.exe", "/flushdns", cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            L($"DNS: {ex.Message}");
+        }
+
+        try
+        {
+            await RunProcessAsync("powershell.exe",
+                "-NoProfile -Command Clear-RecycleBin -Force -ErrorAction SilentlyContinue",
+                cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             L($"Корзина: {ex.Message}");
         }
 
-        L($"Готово. Удалено файлов: ~{files}, объём ~{bytes / 1024} KB.");
+        L($"Итог: файлов ~{files}, ~{bytes / 1024} KB.");
         return new OptimizeResult(true, lines, files, bytes);
     }
 

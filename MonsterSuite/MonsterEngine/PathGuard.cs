@@ -69,12 +69,15 @@ public static class PathGuard
             var prefetch = Path.Combine(windir, "Prefetch");
             var local = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
             var localLow = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + "Low");
+            var common = Path.GetFullPath(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData));
+            var wer = Path.Combine(common, @"Microsoft\Windows\WER");
 
             if (norm.StartsWith(temp, PathComparison)) return true;
             if (norm.StartsWith(winTemp, PathComparison)) return true;
             if (norm.StartsWith(prefetch, PathComparison)) return true;
             if (norm.StartsWith(local, PathComparison)) return true;
             if (norm.StartsWith(localLow, PathComparison)) return true;
+            if (norm.StartsWith(wer, PathComparison)) return true;
         }
         catch
         {

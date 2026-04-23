@@ -5,8 +5,10 @@ using Microsoft.Win32;
 namespace MonsterEngine;
 
 /// <summary>
-/// Режим «как Revo»: штатный деинсталлятор + агрессивный добой хвостов (папки + реестр).
-/// Драйверы и защищённые ветви ядра не трогаем — иначе неизбежна поломка ОС.
+/// Полное удаление в духе Revo: штатный деинсталлятор / Remove-AppxPackage,
+/// затем рекурсивное снятие деревьев установки и плановых «хвостов» на диске,
+/// глубокая чистка реестра, задания планировщика и пользовательские службы.
+/// Системные деревья Windows и критичные ветви реестра заблокированы.
 /// </summary>
 public sealed class RadicalUninstallEngine
 {
@@ -28,8 +30,14 @@ public sealed class RadicalUninstallEngine
             return new RadicalUninstallResult(false, lines);
         }
 
-        var roots = CollectInstallRoots(program);
-        L($"Корни установки: {string.Join("; ", roots)}");
+        if (program.Source == InstallSourceKind.MicrosoftStore)
+        {
+            await UninstallStoreAsync(program, L, cancellationToken).ConfigureAwait(false);
+            return new RadicalUninstallResult(true, lines);
+        }
+
+        var roots = TailDeletionPlanner.PlanDirectories(program);
+        L($"План каталогов к удалению: {roots.Count} — {string.Join("; ", roots.Take(12))}{(roots.Count > 12 ? "…" : "")}");
 
         var exit = await RunBuiltinUninstallerAsync(program, L, cancellationToken).ConfigureAwait(false);
         L($"Выход деинсталлятора: {exit?.ToString() ?? "не запущен / неизвестно"}");
@@ -39,49 +47,85 @@ public sealed class RadicalUninstallEngine
             cancellationToken.ThrowIfCancellationRequested();
             if (!Directory.Exists(dir))
             {
-                L($"Папка уже отсутствует: {dir}");
+                L($"Каталог уже отсутствует: {dir}");
                 continue;
             }
             if (!PathGuard.IsAllowedDirectoryDelete(dir))
             {
-                L($"ЗАЩИТА: пропуск системного пути: {dir}");
+                L($"ЗАЩИТА ОС: пропуск системного пути: {dir}");
                 continue;
             }
             try
             {
                 Directory.Delete(dir, recursive: true);
-                L($"Удалено дерево: {dir}");
+                L($"Снято дерево: {dir}");
             }
             catch (Exception ex)
             {
-                L($"Не удалось удалить {dir}: {ex.Message}");
+                L($"Не удалось снять {dir}: {ex.Message}");
             }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         TryDeleteUninstallKey(program, L);
-        PurgeRegistryMentions(program.DisplayName, program.Publisher, L, cancellationToken);
 
-        L("Готово.");
+        var needles = BuildNeedles(program);
+        HeavyRegistryPurge.Purge(needles, L, cancellationToken);
+        ShellExtensionCleanup.PurgePaths(CollectPathFragments(program, roots), L, cancellationToken);
+        ServiceTaskPurger.PurgeForProgram(program, L, cancellationToken);
+
+        L("Цикл удаления завершён.");
         return new RadicalUninstallResult(true, lines);
     }
 
-    private static HashSet<string> CollectInstallRoots(InstalledProgramRecord program)
+    private static async Task UninstallStoreAsync(
+        InstalledProgramRecord program,
+        Action<string> log,
+        CancellationToken ct)
     {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        void Add(string? p)
+        var pfn = program.StorePackageFullName;
+        if (string.IsNullOrWhiteSpace(pfn))
         {
-            if (string.IsNullOrWhiteSpace(p)) return;
-            try
-            {
-                var full = Path.GetFullPath(Environment.ExpandEnvironmentVariables(p.Trim().Trim('"')));
-                if (Directory.Exists(full)) set.Add(full.TrimEnd('\\'));
-            }
-            catch { /* ignore */ }
+            log("Store: нет PackageFullName.");
+            return;
         }
 
-        Add(program.InstallLocation);
+        log($"Store: Remove-AppxPackage — {pfn}");
+        var script = "Remove-AppxPackage -Package '" + pfn.Replace("'", "''") + "' -ErrorAction Stop";
+        await RunPowerShellAsync(script, log, ct).ConfigureAwait(false);
 
+        var roots = TailDeletionPlanner.PlanDirectories(program);
+        foreach (var dir in roots)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!Directory.Exists(dir)) continue;
+            if (!PathGuard.IsAllowedDirectoryDelete(dir))
+            {
+                log($"ЗАЩИТА ОС: {dir}");
+                continue;
+            }
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+                log($"Снято: {dir}");
+            }
+            catch (Exception ex)
+            {
+                log($"{dir}: {ex.Message}");
+            }
+        }
+
+        var needles = BuildNeedles(program);
+        HeavyRegistryPurge.Purge(needles, log, ct);
+        ShellExtensionCleanup.PurgePaths(CollectPathFragments(program, roots), log, ct);
+        ServiceTaskPurger.PurgeForProgram(program, log, ct);
+    }
+
+    private static List<string> CollectPathFragments(InstalledProgramRecord program, IReadOnlySet<string> roots)
+    {
+        var list = new List<string>();
+        foreach (var r in roots)
+            if (!string.IsNullOrWhiteSpace(r)) list.Add(r);
         var us = program.UninstallString;
         if (!string.IsNullOrWhiteSpace(us))
         {
@@ -90,15 +134,25 @@ public sealed class RadicalUninstallEngine
             {
                 try
                 {
-                    var path = Path.GetFullPath(Environment.ExpandEnvironmentVariables(exe));
-                    if (File.Exists(path))
-                        Add(Path.GetDirectoryName(path));
+                    var full = Path.GetFullPath(Environment.ExpandEnvironmentVariables(exe));
+                    if (File.Exists(full)) list.Add(full);
                 }
                 catch { /* */ }
             }
         }
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
-        return set;
+    private static List<string> BuildNeedles(InstalledProgramRecord program)
+    {
+        var list = new List<string> { program.DisplayName };
+        if (!string.IsNullOrWhiteSpace(program.Publisher)) list.Add(program.Publisher!);
+        var shortName = program.DisplayName;
+        if (shortName.StartsWith("[Store]", StringComparison.OrdinalIgnoreCase))
+            shortName = shortName["[Store]".Length..].Trim();
+        if (!string.IsNullOrWhiteSpace(shortName) && !shortName.Equals(program.DisplayName, StringComparison.OrdinalIgnoreCase))
+            list.Add(shortName);
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static async Task<int?> RunBuiltinUninstallerAsync(
@@ -111,7 +165,7 @@ public sealed class RadicalUninstallEngine
         var line = !string.IsNullOrWhiteSpace(quiet) ? quiet : normal;
         if (string.IsNullOrWhiteSpace(line))
         {
-            log("Нет UninstallString — только ручная зачистка папок/реестра.");
+            log("Нет UninstallString — только зачистка каталогов и реестра.");
             return null;
         }
 
@@ -162,7 +216,7 @@ public sealed class RadicalUninstallEngine
             return null;
         }
 
-        log($"Запуск: {fileName} {arguments}");
+        log($"Запуск деинсталлятора: {fileName} {arguments}");
 
         var psi = new ProcessStartInfo
         {
@@ -178,8 +232,28 @@ public sealed class RadicalUninstallEngine
         return proc.ExitCode;
     }
 
+    private static async Task RunPowerShellAsync(string script, Action<string> log, CancellationToken ct)
+    {
+        var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+        var psi = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -EncodedCommand {encoded}",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        using var p = Process.Start(psi);
+        if (p is null) return;
+        await p.WaitForExitAsync(ct).ConfigureAwait(false);
+        var err = await p.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(err)) log(err.Trim());
+    }
+
     private static void TryDeleteUninstallKey(InstalledProgramRecord program, Action<string> log)
     {
+        if (program.Source != InstallSourceKind.Win32Registry) return;
         try
         {
             var path = program.RegistryKeyPath;
@@ -197,7 +271,7 @@ public sealed class RadicalUninstallEngine
 
             if (!PathGuard.IsAllowedRegistryKeyDelete($"{hiveName}\\{subFull}"))
             {
-                log("ЗАЩИТА: ключ реестра в запретной зоне.");
+                log("ЗАЩИТА: ключ в запретной зоне.");
                 return;
             }
 
@@ -211,91 +285,12 @@ public sealed class RadicalUninstallEngine
                 return;
             }
             parent.DeleteSubKeyTree(leaf, throwOnMissingSubKey: false);
-            log($"Удалён ключ деинсталлятора: {program.RegistryKeyPath}");
+            log($"Удалён ключ списка программ: {program.RegistryKeyPath}");
         }
         catch (Exception ex)
         {
-            log($"Ключ деинсталлятора: {ex.Message}");
+            log($"Ключ Uninstall: {ex.Message}");
         }
-    }
-
-    private static void PurgeRegistryMentions(string displayName, string? publisher, Action<string> log, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(displayName)) return;
-        var needles = new List<string> { displayName };
-        if (!string.IsNullOrWhiteSpace(publisher)) needles.Add(publisher!);
-
-        var maxOps = 12_000;
-        var ops = 0;
-
-        void ScanKey(RegistryKey key, string path, int depth, int maxDepth)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (depth > maxDepth || ops >= maxOps) return;
-            if (!PathGuard.IsAllowedRegistryKeyDelete(path)) return;
-
-            try
-            {
-                foreach (var name in key.GetValueNames())
-                {
-                    ct.ThrowIfCancellationRequested();
-                    if (ops >= maxOps) return;
-                    var val = key.GetValue(name)?.ToString();
-                    if (string.IsNullOrEmpty(val)) continue;
-                    if (!needles.Any(n => val.Contains(n, StringComparison.OrdinalIgnoreCase))) continue;
-                    try
-                    {
-                        key.DeleteValue(name, throwOnMissingValue: false);
-                        ops++;
-                        log($"Удалено значение {path}\\@{name}");
-                    }
-                    catch (Exception ex)
-                    {
-                        log($"Значение {name}: {ex.Message}");
-                    }
-                }
-
-                foreach (var subName in key.GetSubKeyNames())
-                {
-                    ct.ThrowIfCancellationRequested();
-                    if (ops >= maxOps) return;
-                    using var sub = key.OpenSubKey(subName, writable: true);
-                    if (sub is null) continue;
-                    var subPath = $"{path}\\{subName}";
-                    ScanKey(sub, subPath, depth + 1, maxDepth);
-                }
-            }
-            catch (UnauthorizedAccessException) { /* */ }
-        }
-
-        void ScanRoot(RegistryHive hive, RegistryView view, string hiveLabel, string relativePath, int maxDepth)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                using var baseKey = RegistryKey.OpenBaseKey(hive, view);
-                using var k = baseKey.OpenSubKey(relativePath, writable: true);
-                if (k is null) return;
-                ScanKey(k, $"{hiveLabel}\\{relativePath}", 0, maxDepth);
-            }
-            catch (Exception ex)
-            {
-                log($"{hiveLabel}\\{relativePath}: {ex.Message}");
-            }
-        }
-
-        // Агрессивно, но не полный обход HKCU (слишком долго): автозагрузка, классы, кэш проводника
-        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
-        {
-            ScanRoot(RegistryHive.CurrentUser, view, "HKCU", @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", 2);
-            ScanRoot(RegistryHive.CurrentUser, view, "HKCU", @"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce", 2);
-            ScanRoot(RegistryHive.CurrentUser, view, "HKCU", @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run", 2);
-            ScanRoot(RegistryHive.CurrentUser, view, "HKCU", @"SOFTWARE\Classes", 5);
-            ScanRoot(RegistryHive.LocalMachine, view, "HKLM", @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", 2);
-            ScanRoot(RegistryHive.LocalMachine, view, "HKLM", @"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce", 2);
-        }
-
-        log($"Проход реестра (хвосты HKCU) завершён, операций: {ops}.");
     }
 }
 

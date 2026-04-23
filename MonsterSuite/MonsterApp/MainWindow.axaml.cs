@@ -52,7 +52,7 @@ public partial class MainWindow : Window
         StatusText.Text = "Сканирование…";
         var rows = await Task.Run(() =>
         {
-            var list = InstalledProgramsScanner.Scan();
+            var list = CatalogScanner.ScanAll();
             var built = new List<ProgramRowModel>();
             foreach (var rec in list)
             {
@@ -77,8 +77,9 @@ public partial class MainWindow : Window
         {
             _programs.Clear();
             foreach (var r in rows) _programs.Add(r);
+            StatCount.Text = _programs.Count.ToString();
             ApplyFilter();
-            StatusText.Text = $"Найдено: {_programs.Count}";
+            StatusText.Text = $"готово · записей в каталоге: {_programs.Count}";
         });
     }
 
