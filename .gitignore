@@ -1,0 +1,21 @@
+**/bin/
+**/obj/
+MonsterSuite/publish/
+*.user
+*.suo
+
+*.amx
+*.o
+# local Open MP / Pawn build artifacts
+pawno/pawncc.log
+*.lst
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Optional local overrides (uncomment if you use a local .env in scripts)
+# .env
+.local/

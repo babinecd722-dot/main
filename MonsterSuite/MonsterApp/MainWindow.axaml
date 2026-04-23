@@ -1,0 +1,265 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:MonsterApp"
+        x:Class="MonsterApp.MainWindow"
+        Title="Monster"
+        Width="1240" Height="780"
+        MinWidth="1000" MinHeight="600"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        Background="#0c0a10"
+        SystemDecorations="Full">
+  <Window.Styles>
+    <Style Selector="Button.nav">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#d4c8e8"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="18,14"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.18"/>
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.nav:pointerover">
+      <Setter Property="Background" Value="#2a2238"/>
+    </Style>
+    <Style Selector="Button.nav.active">
+      <Setter Property="Foreground" Value="#ffffff"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#ff00aa" Offset="0"/>
+            <GradientStop Color="#8b2cff" Offset="0.45"/>
+            <GradientStop Color="#00e8ff" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="CornerRadius" Value="22"/>
+      <Setter Property="Padding" Value="22,11"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#ffffff"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Color="#ff0066" Offset="0"/>
+            <GradientStop Color="#aa00ff" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15"/>
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.danger:pointerover">
+      <Setter Property="RenderTransform" Value="scale(1.04)"/>
+      <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
+    </Style>
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="#241a32"/>
+      <Setter Property="Foreground" Value="#e8e0f5"/>
+      <Setter Property="BorderBrush" Value="#5a4080"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Padding" Value="20,10"/>
+    </Style>
+    <Style Selector="Button.optimize">
+      <Setter Property="CornerRadius" Value="32"/>
+      <Setter Property="Padding" Value="56,24"/>
+      <Setter Property="FontSize" Value="23"/>
+      <Setter Property="FontWeight" Value="Black"/>
+      <Setter Property="Foreground" Value="#061208"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="MinWidth" Value="340"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Color="#00ff99" Offset="0"/>
+            <GradientStop Color="#00ddff" Offset="0.5"/>
+            <GradientStop Color="#00ff88" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.2"/>
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="Button.optimize:pointerover">
+      <Setter Property="RenderTransform" Value="scale(1.05)"/>
+      <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
+    </Style>
+  </Window.Styles>
+
+  <Panel>
+    <!-- Ambient glow -->
+    <Border IsHitTestVisible="False" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+      <Border.Background>
+        <RadialGradientBrush Center="0.15,0.1" GradientOrigin="0.15,0.1" RadiusX="0.85" RadiusY="0.95">
+          <GradientStop Color="#401840" Offset="0"/>
+          <GradientStop Color="#100818" Offset="0.45"/>
+          <GradientStop Color="#0c0a10" Offset="1"/>
+        </RadialGradientBrush>
+      </Border.Background>
+    </Border>
+    <Border IsHitTestVisible="False" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="520" Height="420" Margin="0,0,-80,-80" Opacity="0.35">
+      <Border.Background>
+        <RadialGradientBrush Center="0.8,0.85" GradientOrigin="0.8,0.85" RadiusX="0.9" RadiusY="0.9">
+          <GradientStop Color="#300060" Offset="0"/>
+          <GradientStop Color="Transparent" Offset="1"/>
+        </RadialGradientBrush>
+      </Border.Background>
+    </Border>
+
+    <Grid ColumnDefinitions="268,*">
+      <!-- Sidebar -->
+      <Border Grid.Column="0" Margin="16,16,0,16" CornerRadius="22" Background="#161222" BorderBrush="#3d2858" BorderThickness="1">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <Border Margin="20,24,20,8" Padding="16" CornerRadius="18" Background="#1f1830">
+            <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto">
+              <Border Grid.RowSpan="3" Width="64" Height="64" CornerRadius="16" ClipToBounds="True" Background="#2a1f3d">
+                <Image Source="avares://MonsterApp/Assets/logo.png" Stretch="Uniform"/>
+              </Border>
+              <TextBlock Grid.Column="1" Margin="14,4,0,0" Text="MONSTER" FontSize="20" FontWeight="Black" Foreground="#ffffff">
+                <TextBlock.Foreground>
+                  <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Color="#ff5ee0" Offset="0"/>
+                    <GradientStop Color="#00f0ff" Offset="1"/>
+                  </LinearGradientBrush>
+                </TextBlock.Foreground>
+              </TextBlock>
+              <TextBlock Grid.Column="1" Grid.Row="1" Margin="14,2,0,0" Text="erasure suite" FontSize="11" Foreground="#7a6a94" LetterSpacing="3"/>
+              <TextBlock Grid.Column="1" Grid.Row="2" Margin="14,6,0,0" Text="полное снятие · Win10/11" FontSize="10" Foreground="#5c4d78"/>
+            </Grid>
+          </Border>
+
+          <StackPanel Grid.Row="1" Margin="14,8,14,0" Spacing="8">
+            <Button x:Name="NavUninstall" Classes="nav active" Content="◆  Удаление" Click="OnNavUninstall"/>
+            <Button x:Name="NavOptimize" Classes="nav" Content="◇  Оптимизация" Click="OnNavOptimize"/>
+          </StackPanel>
+
+          <Border Grid.Row="2" Margin="16,0,16,18" Padding="14,12" CornerRadius="14" Background="#120e1c" BorderBrush="#352050" BorderThickness="1">
+            <StackPanel Spacing="4">
+              <TextBlock Text="режим" Foreground="#6b5f82" FontSize="10" LetterSpacing="2"/>
+              <TextBlock Text="RADICAL" Foreground="#00ffc8" FontWeight="Bold" FontSize="13"/>
+            </StackPanel>
+          </Border>
+        </Grid>
+      </Border>
+
+      <!-- Main -->
+      <Grid Grid.Column="1" Margin="16">
+        <Border CornerRadius="22" Background="#14101c" BorderBrush="#3a2860" BorderThickness="1">
+          <Grid Margin="28">
+            <!-- Uninstall -->
+            <Grid x:Name="PageUninstall" RowDefinitions="Auto,Auto,*,Auto,150">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Каталог установок" FontSize="28" FontWeight="Bold" Foreground="#f4ecff"/>
+                  <TextBlock Text="Win32 + Microsoft Store · иконки из exe · снятие деревьев и реестра" FontSize="13" Foreground="#9a88bc"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                  <TextBox x:Name="SearchBox" Width="240" Watermark="Поиск…"
+                           Background="#1c1528" Foreground="#f0e8ff" BorderBrush="#4f3a70" CornerRadius="12"
+                           Padding="14,10"/>
+                  <Button Classes="ghost" Content="Обновить" Click="OnRefresh"/>
+                </StackPanel>
+              </Grid>
+
+              <UniformGrid Grid.Row="1" Margin="0,18,0,14" Columns="3">
+                <Border Margin="0,0,8,0" Padding="16,14" CornerRadius="16" Background="#1a1426" BorderBrush="#352855" BorderThickness="1">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="обнаружено" Foreground="#8b7aa8" FontSize="11"/>
+                    <TextBlock x:Name="StatCount" Text="—" Foreground="#ff66cc" FontSize="22" FontWeight="Bold"/>
+                  </StackPanel>
+                </Border>
+                <Border Margin="4,0" Padding="16,14" CornerRadius="16" Background="#1a1426" BorderBrush="#352855" BorderThickness="1">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="движок" Foreground="#8b7aa8" FontSize="11"/>
+                    <TextBlock Text=".NET 8 · полный цикл" Foreground="#66eeff" FontSize="15" FontWeight="SemiBold"/>
+                  </StackPanel>
+                </Border>
+                <Border Margin="8,0,0,0" Padding="16,14" CornerRadius="16" Background="#1a1426" BorderBrush="#352855" BorderThickness="1">
+                  <StackPanel Spacing="4">
+                    <TextBlock Text="действие" Foreground="#8b7aa8" FontSize="11"/>
+                    <TextBlock Text="Полностью = Revo-class" Foreground="#88ffaa" FontSize="14" FontWeight="SemiBold"/>
+                  </StackPanel>
+                </Border>
+              </UniformGrid>
+
+              <Border Grid.Row="2" CornerRadius="18" Background="#0e0a14" BorderBrush="#2a2040" BorderThickness="1">
+                <ScrollViewer>
+                  <ItemsControl x:Name="ProgramList" Margin="6">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type local:ProgramRowModel}">
+                        <Border Margin="6,5" Padding="16,14" CornerRadius="16" Background="#18122a" BorderBrush="#3d2a58" BorderThickness="1">
+                          <Grid ColumnDefinitions="52,Auto,*,Auto">
+                            <Border Grid.Column="0" Width="44" Height="44" CornerRadius="12" ClipToBounds="True" Background="#251c38">
+                              <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                            </Border>
+                            <Border Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Padding="8,4" CornerRadius="8" Background="#301840">
+                              <TextBlock Text="{Binding SourceBadge}" FontSize="10" FontWeight="Bold" Foreground="#ff88dd"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" Margin="14,0,12,0" VerticalAlignment="Center" Spacing="2">
+                              <TextBlock Text="{Binding Title}" Foreground="#faf5ff" FontWeight="SemiBold" FontSize="15"/>
+                              <TextBlock Text="{Binding Subtitle}" Foreground="#8f7eb8" FontSize="12"/>
+                            </StackPanel>
+                            <Button Grid.Column="3" Classes="danger" Content="Полностью" VerticalAlignment="Center"
+                                    Click="OnRadicalUninstall"/>
+                          </Grid>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Border>
+
+              <TextBlock Grid.Row="3" x:Name="StatusText" Margin="0,10,0,6" Foreground="#c0b0e0" FontSize="12"/>
+
+              <Border Grid.Row="4" CornerRadius="16" Background="#0a0812" BorderBrush="#281838" BorderThickness="1" Padding="14">
+                <ScrollViewer>
+                  <TextBlock x:Name="LogUninstall" Foreground="#5dffc0" FontFamily="JetBrains Mono, Consolas, monospace" FontSize="11" TextWrapping="Wrap"/>
+                </ScrollViewer>
+              </Border>
+            </Grid>
+
+            <!-- Optimize -->
+            <Grid x:Name="PageOptimize" IsVisible="False" RowDefinitions="Auto,*,Auto,160">
+              <StackPanel HorizontalAlignment="Center" Spacing="6" Margin="0,8,0,0">
+                <TextBlock Text="GAME" FontSize="62" FontWeight="Black" HorizontalAlignment="Center"
+                           Foreground="#00ff77" FontFamily="Segoe UI Black, Arial Black, sans-serif"/>
+                <TextBlock Text="многоступенчатая зачистка · DNS · кэш · WER · корзина" HorizontalAlignment="Center" Foreground="#9888b8" FontSize="13"/>
+              </StackPanel>
+
+              <Grid Grid.Row="1" Margin="0,8,0,0">
+                <Canvas x:Name="LightningCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" IsHitTestVisible="False"/>
+                <Button x:Name="BtnOptimize" Classes="optimize" Content="ОПТИМИЗИРОВАТЬ"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Click="OnOptimize"/>
+              </Grid>
+
+              <TextBlock Grid.Row="2" x:Name="OptimizeStatus" Text="" Foreground="#d0c0f0" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+
+              <Border Grid.Row="3" CornerRadius="16" Background="#0a0812" BorderBrush="#281838" BorderThickness="1" Padding="14">
+                <ScrollViewer>
+                  <TextBlock x:Name="LogOptimize" Foreground="#5dffc0" FontFamily="JetBrains Mono, Consolas, monospace" FontSize="11" TextWrapping="Wrap"/>
+                </ScrollViewer>
+              </Border>
+            </Grid>
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+  </Panel>
+</Window>
