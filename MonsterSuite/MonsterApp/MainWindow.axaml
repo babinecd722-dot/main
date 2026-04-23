@@ -1,0 +1,183 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:MonsterApp"
+        x:Class="MonsterApp.MainWindow"
+        Title="Monster"
+        Width="1180" Height="720"
+        MinWidth="960" MinHeight="560"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="-1"
+        Background="#141018"
+        SystemDecorations="Full">
+  <Window.Styles>
+    <Style Selector="Button.nav">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#c8c0d8"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="16,12"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="FontSize" Value="14"/>
+    </Style>
+    <Style Selector="Button.nav:pointerover">
+      <Setter Property="Background" Value="#2a2438"/>
+    </Style>
+    <Style Selector="Button.nav.active">
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#ff00c8" Offset="0"/>
+            <GradientStop Color="#7b2cbf" Offset="0.55"/>
+            <GradientStop Color="#00e5ff" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+      <Setter Property="Foreground" Value="#ffffff"/>
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="CornerRadius" Value="20"/>
+      <Setter Property="Padding" Value="20,10"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="#ffffff"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Color="#ff0080" Offset="0"/>
+            <GradientStop Color="#9d00ff" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter">
+      <Setter Property="Opacity" Value="0.92"/>
+    </Style>
+    <Style Selector="Button.optimize">
+      <Setter Property="CornerRadius" Value="28"/>
+      <Setter Property="Padding" Value="48,22"/>
+      <Setter Property="FontSize" Value="22"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="#0a0a0c"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="MinWidth" Value="320"/>
+      <Setter Property="Background">
+        <Setter.Value>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+            <GradientStop Color="#00ff88" Offset="0"/>
+            <GradientStop Color="#00ccff" Offset="0.5"/>
+            <GradientStop Color="#00ff88" Offset="1"/>
+          </LinearGradientBrush>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style Selector="Button.optimize:pointerover">
+      <Setter Property="RenderTransform" Value="scale(1.03)"/>
+      <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
+    </Style>
+  </Window.Styles>
+
+  <Grid ColumnDefinitions="240,*">
+    <!-- Sidebar -->
+    <Border Grid.Column="0" Background="#1e1b2e" BorderBrush="#3d2a4d" BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="Auto,*,Auto">
+        <StackPanel Margin="20,28,20,20" Spacing="4">
+          <TextBlock Text="MONSTER" FontSize="22" FontWeight="Black" Foreground="#ffffff">
+            <TextBlock.Foreground>
+              <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                <GradientStop Color="#ff4fd8" Offset="0"/>
+                <GradientStop Color="#00f0ff" Offset="1"/>
+              </LinearGradientBrush>
+            </TextBlock.Foreground>
+          </TextBlock>
+          <TextBlock Text="suite" FontSize="12" Foreground="#8a7a9e" LetterSpacing="4" />
+        </StackPanel>
+        <StackPanel Grid.Row="1" Margin="12,0,12,0" Spacing="6">
+          <Button x:Name="NavUninstall" Classes="nav active" Content="Удаление" Click="OnNavUninstall"/>
+          <Button x:Name="NavOptimize" Classes="nav" Content="Оптимизация" Click="OnNavOptimize"/>
+        </StackPanel>
+        <TextBlock Grid.Row="2" Margin="20" Text="Win 10 · 11" Foreground="#5c4f6e" FontSize="11"/>
+      </Grid>
+    </Border>
+
+    <!-- Content -->
+    <Grid Grid.Column="1">
+      <Border Margin="24" CornerRadius="20" Background="#1a1524" BorderBrush="#352850" BorderThickness="1">
+        <Grid Margin="28">
+          <!-- Uninstall page -->
+          <Grid x:Name="PageUninstall" RowDefinitions="Auto,*,Auto,140">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="6">
+                <TextBlock Text="Установленное" FontSize="26" FontWeight="Bold" Foreground="#f0e8ff"/>
+                <TextBlock Text="Полное удаление с хвостами" FontSize="13" Foreground="#9b8cb8"/>
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBox x:Name="SearchBox" Width="220" Watermark="Поиск…"
+                         Background="#241c32" Foreground="#eee" BorderBrush="#4a3a64" CornerRadius="10"
+                         Padding="12,8"/>
+                <Button Content="Обновить" Click="OnRefresh" CornerRadius="14" Padding="18,10"
+                        Background="#2d2640" Foreground="#ddd" BorderThickness="0"/>
+              </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="1" Margin="0,20,0,12" CornerRadius="16" Background="#120e1a" BorderBrush="#302040" BorderThickness="1">
+              <ScrollViewer>
+                <ItemsControl x:Name="ProgramList">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:ProgramRowModel}">
+                      <Border Margin="8,6" Padding="14,12" CornerRadius="14" Background="#1e1830" BorderBrush="#3a2a55" BorderThickness="1">
+                        <Grid ColumnDefinitions="48,*,Auto">
+                          <Border Grid.Column="0" Width="40" Height="40" CornerRadius="10" ClipToBounds="True" Background="#2a2038">
+                            <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                          </Border>
+                          <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{Binding Title}" Foreground="#f5f0ff" FontWeight="SemiBold" FontSize="15"/>
+                            <TextBlock Text="{Binding Subtitle}" Foreground="#8f7caf" FontSize="12"/>
+                          </StackPanel>
+                          <Button Grid.Column="2" Classes="danger" Content="Полностью" VerticalAlignment="Center"
+                                  Click="OnRadicalUninstall"/>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Border>
+
+            <TextBlock Grid.Row="2" x:Name="StatusText" Text="" Foreground="#b8a8d8" FontSize="12"/>
+
+            <Border Grid.Row="3" CornerRadius="14" Background="#0f0c16" BorderBrush="#2a2038" BorderThickness="1" Padding="14">
+              <ScrollViewer>
+                <TextBlock x:Name="LogUninstall" Foreground="#7dffc8" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"/>
+              </ScrollViewer>
+            </Border>
+          </Grid>
+
+          <!-- Optimize page -->
+          <Grid x:Name="PageOptimize" IsVisible="False" RowDefinitions="Auto,*,Auto,160">
+            <StackPanel HorizontalAlignment="Center" Spacing="8" Margin="0,20,0,10">
+              <TextBlock Text="GAME" FontSize="56" FontWeight="Black" HorizontalAlignment="Center"
+                         Foreground="#00ff66" FontFamily="Segoe UI Black, Arial Black, sans-serif"/>
+              <TextBlock Text="Очистка · кэш · следы" HorizontalAlignment="Center" Foreground="#a090c0" FontSize="13"/>
+            </StackPanel>
+
+            <Grid Grid.Row="1">
+              <Canvas x:Name="LightningCanvas" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" IsHitTestVisible="False"/>
+              <Button x:Name="BtnOptimize" Classes="optimize" Content="ОПТИМИЗИРОВАТЬ"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Click="OnOptimize"/>
+            </Grid>
+
+            <TextBlock Grid.Row="2" x:Name="OptimizeStatus" Text="" Foreground="#c0b0e0" HorizontalAlignment="Center"/>
+
+            <Border Grid.Row="3" CornerRadius="14" Background="#0f0c16" BorderBrush="#2a2038" BorderThickness="1" Padding="14">
+              <ScrollViewer>
+                <TextBlock x:Name="LogOptimize" Foreground="#7dffc8" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"/>
+              </ScrollViewer>
+            </Border>
+          </Grid>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>

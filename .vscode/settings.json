@@ -1,0 +1,10 @@
+{
+  "files.associations": {
+    "*.inc": "pawn",
+    "*.pwn": "pawn",
+    "*.p": "pawn"
+  },
+  "[pawn]": {
+    "editor.tabSize": 4
+  }
+}
