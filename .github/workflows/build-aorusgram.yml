@@ -60,23 +60,27 @@ jobs:
 
       - name: Inject AorusGram sources into Telegram iOS
         run: |
-          # Copy AorusGramUI submodule
-          mkdir -p telegram-ios/submodules/AorusGramUI/Sources
-          cp -r aorusgram/telegram-ios/submodules/AorusGramUI/. \
-                telegram-ios/submodules/AorusGramUI/
+          PATCHES=aorusgram/patches
+          TG=telegram-ios
 
-          # Apply patched files
-          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift \
-             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift
-          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift \
-             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
-          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift \
-             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift
-          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD \
-             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD
+          # AorusGramUI — новый модуль
+          mkdir -p $TG/submodules/AorusGramUI/Sources
+          cp -r $PATCHES/submodules/AorusGramUI/. \
+                $TG/submodules/AorusGramUI/
 
-          echo "AorusGram injection complete"
-          ls telegram-ios/submodules/AorusGramUI/
+          # Патченые файлы PeerInfoScreen
+          PEER=$TG/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift \
+             $PEER/Sources/PeerInfoScreen.swift
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift \
+             $PEER/Sources/PeerInfoSettingsItems.swift
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift \
+             $PEER/Sources/PeerInfoScreenSettingsActions.swift
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD \
+             $PEER/BUILD
+
+          echo "=== AorusGram injection complete ==="
+          ls $TG/submodules/AorusGramUI/
 
       - name: Patch app name → AorusGram
         run: |
