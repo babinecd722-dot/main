@@ -4,26 +4,13 @@ on:
   push:
     branches: [ main, "claude/**" ]
   workflow_dispatch:
-    inputs:
-      configuration:
-        description: 'Build configuration (debug_sim_arm64 / release_arm64)'
-        required: false
-        default: 'debug_sim_arm64'
 
 jobs:
   build:
-    runs-on: macos-14   # Apple Silicon, Xcode 15+
-
-    env:
-      CONFIGURATION: ${{ github.event.inputs.configuration || 'debug_sim_arm64' }}
-      BAZEL_CACHE: ~/telegram-bazel-cache
-      CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-      CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-      PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
-      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+    runs-on: macos-14
 
     steps:
-      - name: Checkout AorusGram patches
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           path: aorusgram
@@ -33,148 +20,77 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-${{ hashFiles('aorusgram/scripts/setup.sh') }}-v2
+          key: tg-ios-src-v3
 
-      - name: Clone Telegram iOS (if not cached)
+      - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
         run: |
-          # Клонируем без субмодулей сначала
           git clone --depth=1 \
             https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios
-
-          # Инициализируем субмодули по одному, пропуская проблемные
           cd telegram-ios
-          git submodule init
-          git submodule update --depth=1 --jobs=8 || true
+          git submodule update --init --depth=1 --jobs=8 || true
 
-          # Проблемный субмодуль tgcalls — клонируем без shallow
-          if [ ! -f submodules/TgVoipWebrtc/tgcalls/.git ]; then
-            git submodule update --jobs=4 submodules/TgVoipWebrtc || true
-          fi
-          cd ..
-
-      - name: Cache Bazel artifacts
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.BAZEL_CACHE }}
-          key: bazel-aorusgram-${{ runner.os }}-${{ env.CONFIGURATION }}-${{ github.run_number }}
-          restore-keys: |
-            bazel-aorusgram-${{ runner.os }}-${{ env.CONFIGURATION }}-
-            bazel-aorusgram-${{ runner.os }}-
-
-      - name: Inject AorusGram sources into Telegram iOS
+      - name: Inject AorusGram sources
         run: |
           PATCHES=aorusgram/patches
           TG=telegram-ios
-
-          # AorusGramUI — новый модуль
-          mkdir -p $TG/submodules/AorusGramUI/Sources
-          cp -r $PATCHES/submodules/AorusGramUI/. \
-                $TG/submodules/AorusGramUI/
-
-          # Патченые файлы PeerInfoScreen
           PEER=$TG/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen
-          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift \
-             $PEER/Sources/PeerInfoScreen.swift
-          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift \
-             $PEER/Sources/PeerInfoSettingsItems.swift
-          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift \
-             $PEER/Sources/PeerInfoScreenSettingsActions.swift
-          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD \
-             $PEER/BUILD
 
-          echo "=== AorusGram injection complete ==="
-          ls $TG/submodules/AorusGramUI/
+          mkdir -p $TG/submodules/AorusGramUI/Sources
+          cp -r $PATCHES/submodules/AorusGramUI/. $TG/submodules/AorusGramUI/
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift $PEER/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift $PEER/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift $PEER/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD $PEER/
+          echo "Injection complete"
 
-      - name: Patch app name → AorusGram
+      - name: Patch app name
         run: |
           PLIST="telegram-ios/Telegram/Telegram-iOS/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName AorusGram" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleName AorusGram" "$PLIST" 2>/dev/null || true
-          echo "App name patched"
 
       - name: Setup Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || \
-          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
           xcodebuild -version
-          python3 --version
 
       - name: Install Bazel
-        run: |
-          brew install bazel 2>/dev/null || true
-          bazel version
+        run: brew install bazel 2>/dev/null || true
 
-      # --- Code signing ---
-      - name: Import signing certificate
-        if: ${{ env.CERTIFICATE_BASE64 != '' }}
-        run: |
-          KEYCHAIN=$RUNNER_TEMP/aorusgram.keychain-db
-
-          echo "Creating keychain..."
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN || true
-          security set-keychain-settings -lut 21600 $KEYCHAIN
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN
-
-          echo "Decoding certificate..."
-          echo "$CERTIFICATE_BASE64" | base64 --decode -o $RUNNER_TEMP/cert.p12
-          ls -lh $RUNNER_TEMP/cert.p12
-
-          echo "Importing certificate (password: $CERTIFICATE_PASSWORD)..."
-          security import $RUNNER_TEMP/cert.p12 \
-            -P "$CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k $KEYCHAIN \
-            && echo "Certificate imported OK" \
-            || echo "WARNING: cert import failed, continuing without signing"
-
-          security list-keychain -d user -s $KEYCHAIN
-          security find-identity -v -p codesigning || true
-
-      - name: Install provisioning profile
-        if: ${{ env.PROVISIONING_PROFILE_BASE64 != '' }}
-        run: |
-          PP=$RUNNER_TEMP/aorusgram.mobileprovision
-          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP
-          ls -lh $PP
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          UUID=$(security cms -D -i $PP 2>/dev/null | \
-            python3 -c "import sys,plistlib; d=plistlib.loads(sys.stdin.buffer.read()); print(d['UUID'])" 2>/dev/null || echo "profile")
-          cp $PP ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
-          echo "Provisioning profile installed: $UUID"
-
-      # --- Build ---
-      - name: Build AorusGram (Bazel via Make.py)
+      - name: Build (no signing)
         working-directory: telegram-ios
-        env:
-          TELEGRAM_CODESIGNING_GIT_PASSWORD: ${{ secrets.TELEGRAM_CODESIGNING_GIT_PASSWORD }}
         run: |
           python3 build-system/Make/Make.py \
             --overrideXcodeVersion \
-            --cacheDir ${{ env.BAZEL_CACHE }} \
+            --cacheDir ~/tg-bazel-cache \
             build \
             --configurationPath build-system/appstore-configuration.json \
             --buildNumber=${{ github.run_number }} \
-            --configuration=${{ env.CONFIGURATION }} \
+            --configuration=debug_arm64 \
             --continueOnError \
-            2>&1 | tee $RUNNER_TEMP/build.log | tail -150
+            2>&1 | tee $RUNNER_TEMP/build.log | tail -200
 
-      - name: Export IPA (release only)
-        if: ${{ env.CONFIGURATION == 'release_arm64' && env.CERTIFICATE_BASE64 != '' }}
-        env:
-          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-        working-directory: telegram-ios
+      - name: Package unsigned IPA
         run: |
-          xcodebuild -exportArchive \
-            -archivePath build/AorusGram.xcarchive \
-            -exportOptionsPlist ../aorusgram/ios-app/ExportOptions.plist \
-            -exportPath $RUNNER_TEMP/IPA
+          # Находим .app
+          APP=$(find telegram-ios -name "Telegram.app" -type d 2>/dev/null | head -1)
+          if [ -z "$APP" ]; then
+            APP=$(find ~/tg-bazel-cache -name "Telegram.app" -type d 2>/dev/null | head -1)
+          fi
+          echo "Found app: $APP"
 
-      - name: Upload IPA artifact
-        if: ${{ env.CONFIGURATION == 'release_arm64' && env.CERTIFICATE_BASE64 != '' }}
+          mkdir -p $RUNNER_TEMP/Payload
+          cp -r "$APP" $RUNNER_TEMP/Payload/AorusGram.app
+          cd $RUNNER_TEMP
+          zip -r AorusGram-unsigned.ipa Payload/
+          ls -lh AorusGram-unsigned.ipa
+
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: AorusGram-${{ github.run_number }}.ipa
-          path: ${{ runner.temp }}/IPA/*.ipa
+          name: AorusGram-unsigned-${{ github.run_number }}
+          path: ${{ runner.temp }}/AorusGram-unsigned.ipa
           retention-days: 14
 
       - name: Upload build log
