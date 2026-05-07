@@ -1,0 +1,135 @@
+name: Build AorusGram IPA
+
+on:
+  push:
+    branches: [ main, "claude/**" ]
+  workflow_dispatch:
+    inputs:
+      configuration:
+        description: 'Build configuration'
+        required: false
+        default: 'release_arm64'
+
+jobs:
+  build:
+    runs-on: macos-14   # Apple Silicon runner
+
+    env:
+      CONFIGURATION: ${{ github.event.inputs.configuration || 'release_arm64' }}
+
+    steps:
+      - name: Checkout AorusGram
+        uses: actions/checkout@v4
+
+      - name: Cache Telegram iOS source
+        uses: actions/cache@v4
+        with:
+          path: telegram-ios
+          key: telegram-ios-${{ hashFiles('scripts/setup.sh') }}
+          restore-keys: telegram-ios-
+
+      - name: Cache Bazel
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/bazel
+            ~/Library/Caches/bazel
+          key: bazel-${{ runner.os }}-${{ hashFiles('telegram-ios/WORKSPACE') }}
+          restore-keys: bazel-${{ runner.os }}-
+
+      - name: Setup environment
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          xcodebuild -version
+          python3 --version
+
+      - name: Install Bazel
+        run: |
+          brew install bazel || true
+          bazel version
+
+      - name: Run setup script
+        run: bash scripts/setup.sh
+
+      - name: Generate app icon
+        run: |
+          brew install librsvg || true
+          bash AorusGram/Resources/Icons/generate_icon.sh || echo "Icon gen skipped"
+
+      # --- Code signing ---
+      - name: Import signing certificate
+        if: ${{ env.CERTIFICATE_BASE64 != '' }}
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN=$RUNNER_TEMP/aorusgram.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN
+          security set-keychain-settings -lut 21600 $KEYCHAIN
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN
+          echo "$CERTIFICATE_BASE64" | base64 --decode -o $RUNNER_TEMP/cert.p12
+          security import $RUNNER_TEMP/cert.p12 -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN
+          security list-keychain -d user -s $KEYCHAIN
+
+      - name: Install provisioning profile
+        if: ${{ env.PROVISIONING_PROFILE_BASE64 != '' }}
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          PP=$RUNNER_TEMP/aorusgram.mobileprovision
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      # --- Build ---
+      - name: Build AorusGram
+        run: |
+          cd telegram-ios
+          python3 build-system/Make/Make.py \
+            --cacheDir=$HOME/.cache/bazel \
+            build \
+            --configurationPath=../build-config.json \
+            --buildNumber=${{ github.run_number }} \
+            2>&1 | tail -100
+
+      # Fallback: xcodebuild если Bazel не сработал
+      - name: Build via xcodebuild (fallback)
+        if: failure()
+        run: |
+          xcodebuild \
+            -workspace telegram-ios/Telegram.xcworkspace \
+            -scheme Telegram \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/AorusGram.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
+            archive 2>&1 | tail -80
+
+      - name: Export IPA
+        if: ${{ env.CERTIFICATE_BASE64 != '' }}
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/AorusGram.xcarchive \
+            -exportOptionsPlist ios-app/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/IPA
+
+      - name: Upload IPA
+        if: ${{ env.CERTIFICATE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: AorusGram-${{ github.run_number }}.ipa
+          path: ${{ runner.temp }}/IPA/*.ipa
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.run_number }}
+          path: ${{ runner.temp }}/*.log
+          retention-days: 5
