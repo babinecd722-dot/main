@@ -73,18 +73,28 @@ jobs:
 
       - name: Package unsigned IPA
         run: |
-          # Находим .app
-          APP=$(find telegram-ios -name "Telegram.app" -type d 2>/dev/null | head -1)
-          if [ -z "$APP" ]; then
-            APP=$(find ~/tg-bazel-cache -name "Telegram.app" -type d 2>/dev/null | head -1)
-          fi
-          echo "Found app: $APP"
+          echo "=== Searching for .app ==="
+          find telegram-ios/build* -name "*.app" -type d 2>/dev/null | head -20 || true
+          find ~/tg-bazel-cache -name "*.app" -type d 2>/dev/null | head -10 || true
+          find telegram-ios -name "*.ipa" 2>/dev/null | head -5 || true
 
-          mkdir -p $RUNNER_TEMP/Payload
-          cp -r "$APP" $RUNNER_TEMP/Payload/AorusGram.app
-          cd $RUNNER_TEMP
-          zip -r AorusGram-unsigned.ipa Payload/
-          ls -lh AorusGram-unsigned.ipa
+          # Telegram iOS Make.py кладёт IPA в build/artifacts/
+          IPA=$(find telegram-ios -name "*.ipa" 2>/dev/null | head -1)
+          if [ -n "$IPA" ]; then
+            echo "Found IPA: $IPA"
+            cp "$IPA" $RUNNER_TEMP/AorusGram-unsigned.ipa
+          else
+            # Ищем .app
+            APP=$(find telegram-ios -name "Telegram.app" -o -name "AorusGram.app" 2>/dev/null | grep -v ".dSYM" | head -1)
+            if [ -z "$APP" ]; then
+              APP=$(find ~/tg-bazel-cache -name "*.app" -type d 2>/dev/null | grep -v ".dSYM" | head -1)
+            fi
+            echo "Found .app: $APP"
+            mkdir -p $RUNNER_TEMP/Payload
+            cp -r "$APP" $RUNNER_TEMP/Payload/AorusGram.app
+            cd $RUNNER_TEMP && zip -qr AorusGram-unsigned.ipa Payload/
+          fi
+          ls -lh $RUNNER_TEMP/AorusGram-unsigned.ipa
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
