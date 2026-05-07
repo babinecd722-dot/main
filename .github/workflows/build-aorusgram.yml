@@ -6,57 +6,88 @@ on:
   workflow_dispatch:
     inputs:
       configuration:
-        description: 'Build configuration'
+        description: 'Build configuration (debug_sim_arm64 / release_arm64)'
         required: false
-        default: 'release_arm64'
+        default: 'debug_sim_arm64'
 
 jobs:
   build:
-    runs-on: macos-14   # Apple Silicon runner
+    runs-on: macos-14   # Apple Silicon, Xcode 15+
 
     env:
-      CONFIGURATION: ${{ github.event.inputs.configuration || 'release_arm64' }}
+      CONFIGURATION: ${{ github.event.inputs.configuration || 'debug_sim_arm64' }}
+      BAZEL_CACHE: ~/telegram-bazel-cache
 
     steps:
-      - name: Checkout AorusGram
+      - name: Checkout AorusGram patches
         uses: actions/checkout@v4
+        with:
+          path: aorusgram
 
       - name: Cache Telegram iOS source
+        id: tg-cache
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: telegram-ios-${{ hashFiles('scripts/setup.sh') }}
-          restore-keys: telegram-ios-
+          key: tg-ios-src-${{ hashFiles('aorusgram/scripts/setup.sh') }}-v2
 
-      - name: Cache Bazel
+      - name: Clone Telegram iOS (if not cached)
+        if: steps.tg-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth=1 --recurse-submodules --shallow-submodules \
+            https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios || \
+          git clone --depth=1 \
+            https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios
+
+      - name: Cache Bazel artifacts
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cache/bazel
-            ~/Library/Caches/bazel
-          key: bazel-${{ runner.os }}-${{ hashFiles('telegram-ios/WORKSPACE') }}
-          restore-keys: bazel-${{ runner.os }}-
+          path: ${{ env.BAZEL_CACHE }}
+          key: bazel-aorusgram-${{ runner.os }}-${{ env.CONFIGURATION }}-${{ github.run_number }}
+          restore-keys: |
+            bazel-aorusgram-${{ runner.os }}-${{ env.CONFIGURATION }}-
+            bazel-aorusgram-${{ runner.os }}-
 
-      - name: Setup environment
+      - name: Inject AorusGram sources into Telegram iOS
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          # Copy AorusGramUI submodule
+          mkdir -p telegram-ios/submodules/AorusGramUI/Sources
+          cp -r aorusgram/telegram-ios/submodules/AorusGramUI/. \
+                telegram-ios/submodules/AorusGramUI/
+
+          # Apply patched files
+          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift \
+             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift
+          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift \
+             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift \
+             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift
+          cp aorusgram/telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD \
+             telegram-ios/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD
+
+          echo "AorusGram injection complete"
+          ls telegram-ios/submodules/AorusGramUI/
+
+      - name: Patch app name → AorusGram
+        run: |
+          PLIST="telegram-ios/Telegram/Telegram-iOS/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName AorusGram" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName AorusGram" "$PLIST" 2>/dev/null || true
+          echo "App name patched"
+
+      - name: Setup Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
           python3 --version
 
       - name: Install Bazel
         run: |
-          brew install bazel || true
+          brew install bazel 2>/dev/null || true
           bazel version
 
-      - name: Run setup script
-        run: bash scripts/setup.sh
-
-      - name: Generate app icon
-        run: |
-          brew install librsvg || true
-          bash AorusGram/Resources/Icons/generate_icon.sh || echo "Icon gen skipped"
-
-      # --- Code signing ---
+      # --- Code signing (optional, for real device build) ---
       - name: Import signing certificate
         if: ${{ env.CERTIFICATE_BASE64 != '' }}
         env:
@@ -72,6 +103,7 @@ jobs:
           security import $RUNNER_TEMP/cert.p12 -P "$CERTIFICATE_PASSWORD" \
             -A -t cert -f pkcs12 -k $KEYCHAIN
           security list-keychain -d user -s $KEYCHAIN
+          echo "Certificate imported"
 
       - name: Install provisioning profile
         if: ${{ env.PROVISIONING_PROFILE_BASE64 != '' }}
@@ -82,54 +114,47 @@ jobs:
           echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP ~/Library/MobileDevice/Provisioning\ Profiles/
+          echo "Provisioning profile installed"
 
       # --- Build ---
-      - name: Build AorusGram
+      - name: Build AorusGram (Bazel via Make.py)
+        working-directory: telegram-ios
+        env:
+          TELEGRAM_CODESIGNING_GIT_PASSWORD: ${{ secrets.TELEGRAM_CODESIGNING_GIT_PASSWORD }}
         run: |
-          cd telegram-ios
           python3 build-system/Make/Make.py \
-            --cacheDir=$HOME/.cache/bazel \
+            --overrideXcodeVersion \
+            --cacheDir ${{ env.BAZEL_CACHE }} \
             build \
-            --configurationPath=../build-config.json \
+            --configurationPath build-system/appstore-configuration.json \
             --buildNumber=${{ github.run_number }} \
-            2>&1 | tail -100
+            --configuration=${{ env.CONFIGURATION }} \
+            --continueOnError \
+            2>&1 | tee $RUNNER_TEMP/build.log | tail -150
 
-      # Fallback: xcodebuild если Bazel не сработал
-      - name: Build via xcodebuild (fallback)
-        if: failure()
-        run: |
-          xcodebuild \
-            -workspace telegram-ios/Telegram.xcworkspace \
-            -scheme Telegram \
-            -sdk iphoneos \
-            -configuration Release \
-            -archivePath $RUNNER_TEMP/AorusGram.xcarchive \
-            CODE_SIGN_STYLE=Manual \
-            DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
-            archive 2>&1 | tail -80
-
-      - name: Export IPA
-        if: ${{ env.CERTIFICATE_BASE64 != '' }}
+      - name: Export IPA (release only)
+        if: ${{ env.CONFIGURATION == 'release_arm64' && env.CERTIFICATE_BASE64 != '' }}
         env:
           CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+        working-directory: telegram-ios
         run: |
           xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/AorusGram.xcarchive \
-            -exportOptionsPlist ios-app/ExportOptions.plist \
+            -archivePath build/AorusGram.xcarchive \
+            -exportOptionsPlist ../aorusgram/ios-app/ExportOptions.plist \
             -exportPath $RUNNER_TEMP/IPA
 
-      - name: Upload IPA
-        if: ${{ env.CERTIFICATE_BASE64 != '' }}
+      - name: Upload IPA artifact
+        if: ${{ env.CONFIGURATION == 'release_arm64' && env.CERTIFICATE_BASE64 != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: AorusGram-${{ github.run_number }}.ipa
           path: ${{ runner.temp }}/IPA/*.ipa
           retention-days: 14
 
-      - name: Upload build logs
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-${{ github.run_number }}
-          path: ${{ runner.temp }}/*.log
-          retention-days: 5
+          name: build-log-${{ github.run_number }}
+          path: ${{ runner.temp }}/build.log
+          retention-days: 7
