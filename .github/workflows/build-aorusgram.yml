@@ -73,26 +73,33 @@ jobs:
 
       - name: Package unsigned IPA
         run: |
-          # Make.py кладёт IPA в bazel-bin/Telegram/Telegram.ipa
-          IPA="telegram-ios/bazel-bin/Telegram/Telegram.ipa"
+          echo "=== Searching for app ==="
+          # Ищем .ipa сначала
+          IPA=$(find telegram-ios/bazel-bin -name "*.ipa" 2>/dev/null | head -1)
 
-          if [ -f "$IPA" ]; then
-            echo "Found IPA at $IPA"
+          if [ -n "$IPA" ]; then
+            echo "Found IPA: $IPA"
             cp "$IPA" $RUNNER_TEMP/AorusGram-unsigned.ipa
           else
-            echo "IPA not found at expected path, searching..."
-            FOUND=$(find telegram-ios/bazel-bin -name "*.ipa" 2>/dev/null | head -1)
-            if [ -n "$FOUND" ]; then
-              echo "Found: $FOUND"
-              cp "$FOUND" $RUNNER_TEMP/AorusGram-unsigned.ipa
-            else
-              echo "No IPA found. Contents of bazel-bin:"
-              ls telegram-ios/bazel-bin/ 2>/dev/null || true
+            # Без подписи Bazel создаёт .app, пакуем вручную
+            APP=$(find telegram-ios/bazel-bin -name "Telegram.app" -type d 2>/dev/null | grep -v ".dSYM" | head -1)
+            if [ -z "$APP" ]; then
+              APP=$(find telegram-ios/bazel-out -name "Telegram.app" -type d 2>/dev/null | grep -v ".dSYM" | head -1)
+            fi
+            echo "Found .app: $APP"
+            if [ -z "$APP" ]; then
+              echo "Nothing found. Listing bazel-bin:"
+              find telegram-ios/bazel-bin -maxdepth 3 2>/dev/null || true
               exit 1
             fi
+            mkdir -p $RUNNER_TEMP/Payload
+            cp -r "$APP" $RUNNER_TEMP/Payload/AorusGram.app
+            cd $RUNNER_TEMP
+            zip -qr AorusGram-unsigned.ipa Payload/
           fi
 
           ls -lh $RUNNER_TEMP/AorusGram-unsigned.ipa
+          echo "Done!"
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
