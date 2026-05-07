@@ -34,10 +34,20 @@ jobs:
       - name: Clone Telegram iOS (if not cached)
         if: steps.tg-cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth=1 --recurse-submodules --shallow-submodules \
-            https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios || \
+          # Клонируем без субмодулей сначала
           git clone --depth=1 \
             https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios
+
+          # Инициализируем субмодули по одному, пропуская проблемные
+          cd telegram-ios
+          git submodule init
+          git submodule update --depth=1 --jobs=8 || true
+
+          # Проблемный субмодуль tgcalls — клонируем без shallow
+          if [ ! -f submodules/TgVoipWebrtc/tgcalls/.git ]; then
+            git submodule update --jobs=4 submodules/TgVoipWebrtc || true
+          fi
+          cd ..
 
       - name: Cache Bazel artifacts
         uses: actions/cache@v4
