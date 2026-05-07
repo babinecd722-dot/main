@@ -68,38 +68,48 @@ jobs:
             --configurationPath build-system/appstore-configuration.json \
             --buildNumber=${{ github.run_number }} \
             --configuration=debug_arm64 \
+            --outputBuildArtifactsPath $RUNNER_TEMP/artifacts \
             --continueOnError \
             2>&1 | tee $RUNNER_TEMP/build.log | tail -200
 
+          # Сохраняем список всех найденных файлов для диагностики
+          echo "=== All .app and .ipa files ===" > $RUNNER_TEMP/found_files.txt
+          find . -name "*.app" -type d 2>/dev/null | grep -v ".dSYM" >> $RUNNER_TEMP/found_files.txt || true
+          find . -name "*.ipa" 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true
+          find $RUNNER_TEMP/artifacts -type f 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true
+          cat $RUNNER_TEMP/found_files.txt
+
       - name: Package unsigned IPA
         run: |
-          echo "=== Searching for app ==="
-          # Ищем .ipa сначала
-          IPA=$(find telegram-ios/bazel-bin -name "*.ipa" 2>/dev/null | head -1)
+          # 1. Проверяем --outputBuildArtifactsPath
+          IPA=$(find $RUNNER_TEMP/artifacts -name "*.ipa" 2>/dev/null | head -1)
+
+          # 2. Ищем в bazel-bin
+          if [ -z "$IPA" ]; then
+            IPA=$(find telegram-ios/bazel-bin -name "*.ipa" 2>/dev/null | head -1)
+          fi
 
           if [ -n "$IPA" ]; then
             echo "Found IPA: $IPA"
             cp "$IPA" $RUNNER_TEMP/AorusGram-unsigned.ipa
           else
-            # Без подписи Bazel создаёт .app, пакуем вручную
-            APP=$(find telegram-ios/bazel-bin -name "Telegram.app" -type d 2>/dev/null | grep -v ".dSYM" | head -1)
+            # 3. Берём .app и пакуем вручную
+            APP=$(find telegram-ios/bazel-bin telegram-ios/bazel-out \
+              -name "Telegram.app" -type d 2>/dev/null \
+              | grep -v ".dSYM" | head -1)
+
             if [ -z "$APP" ]; then
-              APP=$(find telegram-ios/bazel-out -name "Telegram.app" -type d 2>/dev/null | grep -v ".dSYM" | head -1)
-            fi
-            echo "Found .app: $APP"
-            if [ -z "$APP" ]; then
-              echo "Nothing found. Listing bazel-bin:"
-              find telegram-ios/bazel-bin -maxdepth 3 2>/dev/null || true
+              echo "ERROR: No .app found. See found_files.txt artifact."
               exit 1
             fi
+
+            echo "Packaging $APP → IPA"
             mkdir -p $RUNNER_TEMP/Payload
             cp -r "$APP" $RUNNER_TEMP/Payload/AorusGram.app
-            cd $RUNNER_TEMP
-            zip -qr AorusGram-unsigned.ipa Payload/
+            cd $RUNNER_TEMP && zip -qr AorusGram-unsigned.ipa Payload/
           fi
 
           ls -lh $RUNNER_TEMP/AorusGram-unsigned.ipa
-          echo "Done!"
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
