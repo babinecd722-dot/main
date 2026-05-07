@@ -17,6 +17,10 @@ jobs:
     env:
       CONFIGURATION: ${{ github.event.inputs.configuration || 'debug_sim_arm64' }}
       BAZEL_CACHE: ~/telegram-bazel-cache
+      CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+      CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+      PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
 
     steps:
       - name: Checkout AorusGram patches
@@ -101,34 +105,43 @@ jobs:
           brew install bazel 2>/dev/null || true
           bazel version
 
-      # --- Code signing (optional, for real device build) ---
+      # --- Code signing ---
       - name: Import signing certificate
         if: ${{ env.CERTIFICATE_BASE64 != '' }}
-        env:
-          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
+          set -euo pipefail
           KEYCHAIN=$RUNNER_TEMP/aorusgram.keychain-db
+
+          echo "Creating keychain..."
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN
           security set-keychain-settings -lut 21600 $KEYCHAIN
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN
+
+          echo "Decoding certificate..."
           echo "$CERTIFICATE_BASE64" | base64 --decode -o $RUNNER_TEMP/cert.p12
-          security import $RUNNER_TEMP/cert.p12 -P "$CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k $KEYCHAIN
+          ls -lh $RUNNER_TEMP/cert.p12
+
+          echo "Importing certificate..."
+          security import $RUNNER_TEMP/cert.p12 \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k $KEYCHAIN \
+            || { echo "Import failed! Wrong password or corrupt cert."; exit 1; }
+
           security list-keychain -d user -s $KEYCHAIN
-          echo "Certificate imported"
+          security find-identity -v -p codesigning $KEYCHAIN || true
+          echo "Certificate imported successfully"
 
       - name: Install provisioning profile
         if: ${{ env.PROVISIONING_PROFILE_BASE64 != '' }}
-        env:
-          PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
         run: |
           PP=$RUNNER_TEMP/aorusgram.mobileprovision
           echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode -o $PP
+          ls -lh $PP
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP ~/Library/MobileDevice/Provisioning\ Profiles/
-          echo "Provisioning profile installed"
+          UUID=$(security cms -D -i $PP 2>/dev/null | \
+            python3 -c "import sys,plistlib; d=plistlib.loads(sys.stdin.buffer.read()); print(d['UUID'])" 2>/dev/null || echo "profile")
+          cp $PP ~/Library/MobileDevice/Provisioning\ Profiles/${UUID}.mobileprovision
+          echo "Provisioning profile installed: $UUID"
 
       # --- Build ---
       - name: Build AorusGram (Bazel via Make.py)
