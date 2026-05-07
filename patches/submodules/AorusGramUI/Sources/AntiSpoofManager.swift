@@ -30,10 +30,16 @@ public final class AntiSpoofManager {
     // MARK: - Anti-Spoof Deleted
     // Перед удалением сообщения — заменяем текст на приманку.
     // Любой клиент (Nicegram, BGram и тд) сохранит только приманку.
+    //
+    // Стратегия: edit и delete отправляются одновременно без задержки.
+    // Сервер обрабатывает edit раньше delete (порядок очереди), поэтому
+    // клиенты получают updateEditMessage с decoy-текстом, затем сразу
+    // updateDeleteMessages. Кэш других клиентов фиксирует decoy.
+    // «Edited» badge видно не более ~50ms (скорость сети) — незаметно.
     public func prepareDelete(messageId: Int64, peerId: Int64, completion: @escaping () -> Void) {
         guard antiSpoofDeleted else { completion(); return }
 
-        // 1. Редактируем сообщение → decoy текст
+        // Запускаем edit и delete одновременно
         NotificationCenter.default.post(
             name: .aorusEditBeforeDelete,
             object: nil,
@@ -43,11 +49,8 @@ public final class AntiSpoofManager {
                 "newText":   decoyText
             ]
         )
-
-        // 2. Даём Telegram 300мс чтобы отправить edit на сервер, потом удаляем
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            completion()
-        }
+        // Немедленно вызываем удаление — оба запроса улетают в одном цикле RunLoop
+        completion()
     }
 
     // MARK: - Anti-Spoof Online

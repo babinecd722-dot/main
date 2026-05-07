@@ -17,6 +17,7 @@ private enum AorusSection: Int32 {
     case performance
     case ui
     case antiSpoof
+    case aorusCode
     case channel
 }
 
@@ -54,6 +55,10 @@ private enum AorusEntry: ItemListNodeEntry {
     case antiSpoofDeleted(PresentationTheme, String, String, Bool)
     case antiSpoofOnline(PresentationTheme, String, String, Bool)
 
+    // AorusCode
+    case aorusCodeHeader(PresentationTheme, String)
+    case aorusCodeEnabled(PresentationTheme, String, String, Bool)
+
     // Channel
     case officialChannel(PresentationTheme, String)
 
@@ -70,6 +75,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.ui.rawValue
         case .antiSpoofHeader, .antiSpoofDeleted, .antiSpoofOnline:
             return AorusSection.antiSpoof.rawValue
+        case .aorusCodeHeader, .aorusCodeEnabled:
+            return AorusSection.aorusCode.rawValue
         case .officialChannel:
             return AorusSection.channel.rawValue
         }
@@ -98,7 +105,9 @@ private enum AorusEntry: ItemListNodeEntry {
         case .antiSpoofHeader:      return 50
         case .antiSpoofDeleted:     return 51
         case .antiSpoofOnline:      return 52
-        case .officialChannel:      return 60
+        case .aorusCodeHeader:      return 60
+        case .aorusCodeEnabled:     return 61
+        case .officialChannel:      return 70
         }
     }
 
@@ -222,6 +231,15 @@ private enum AorusEntry: ItemListNodeEntry {
                 updated: { args.toggleAntiSpoofOnline($0) }
             )
 
+        case let .aorusCodeHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .aorusCodeEnabled(_, title, _, value):
+            return ItemListSwitchItem(
+                presentationData: presentationData, title: title, value: value, maximumNumberOfLines: 1,
+                sectionId: section, style: .blocks,
+                updated: { args.toggleAorusCode($0) }
+            )
+
         case let .officialChannel(_, title):
             return ItemListActionItem(
                 presentationData: presentationData,
@@ -255,6 +273,7 @@ private struct AorusArguments {
     let toggleSiriShortcuts:    (Bool) -> Void
     let toggleAntiSpoofDeleted: (Bool) -> Void
     let toggleAntiSpoofOnline:  (Bool) -> Void
+    let toggleAorusCode:        (Bool) -> Void
     let openOfficialChannel:    () -> Void
 }
 
@@ -277,6 +296,7 @@ private struct AorusState: Equatable {
     var siriShortcuts: Bool
     var antiSpoofDeleted: Bool
     var antiSpoofOnline: Bool
+    var aorusCodeEnabled: Bool
 }
 
 private func aorusEntries(state: AorusState, theme: PresentationTheme) -> [AorusEntry] {
@@ -307,6 +327,9 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme) -> [Aorus
         .antiSpoofDeleted(theme, "Анти-спуф удалёнок", "Заменяет текст на приманку перед удалением", state.antiSpoofDeleted),
         .antiSpoofOnline(theme, "Анти-спуф онлайна", "Показывает реальный last seen собеседника", state.antiSpoofOnline),
 
+        .aorusCodeHeader(theme, "🔐 AORUS CODE"),
+        .aorusCodeEnabled(theme, "AorusCode (стеганография)", "Скрытое сообщение внутри обычного текста", state.aorusCodeEnabled),
+
         .officialChannel(theme, "📢 Официальный канал @aorusgram"),
     ]
 }
@@ -316,7 +339,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme) -> [Aorus
 public func aorusGramController(context: AccountContext) -> ViewController {
     let mgr = AorusGramManager.shared
     let spoof = AntiSpoofManager.shared
-    let statePromise = ValuePromise(AorusState(
+    let initialState = AorusState(
         ghostMode:          mgr.ghostMode,
         blockReadReceipts:  mgr.blockReadReceipts,
         hideTyping:         mgr.hideTyping,
@@ -332,14 +355,19 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         glassUI:            mgr.glassUI,
         siriShortcuts:      mgr.siriShortcuts,
         antiSpoofDeleted:   spoof.antiSpoofDeleted,
-        antiSpoofOnline:    spoof.antiSpoofOnline
-    ), ignoreRepeated: true)
-    let stateValue = Atomic(value: statePromise.get() |> take(1))
+        antiSpoofOnline:    spoof.antiSpoofOnline,
+        aorusCodeEnabled:   AorusCodeManager.shared.isEnabled
+    )
+    let statePromise = ValuePromise(initialState, ignoreRepeated: true)
+    let stateValue   = Atomic<AorusState>(value: initialState)
 
     func updateState(_ f: @escaping (inout AorusState) -> Void) {
-        statePromise.set(statePromise.get() |> map { s -> AorusState in
-            var s = s; f(&s); return s
-        })
+        stateValue.modify { current in
+            var next = current
+            f(&next)
+            statePromise.set(next)
+            return next
+        }
     }
 
     let arguments = AorusArguments(
@@ -357,8 +385,9 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         toggleStreaks:            { v in mgr.streaks = v;             updateState { $0.streaks = v } },
         toggleGlassUI:           { v in mgr.glassUI = v;             updateState { $0.glassUI = v } },
         toggleSiriShortcuts:     { v in mgr.siriShortcuts = v;       updateState { $0.siriShortcuts = v } },
-        toggleAntiSpoofDeleted:  { v in spoof.antiSpoofDeleted = v;  updateState { $0.antiSpoofDeleted = v } },
-        toggleAntiSpoofOnline:   { v in spoof.antiSpoofOnline = v;   updateState { $0.antiSpoofOnline = v } },
+        toggleAntiSpoofDeleted:  { v in spoof.antiSpoofDeleted = v;            updateState { $0.antiSpoofDeleted = v } },
+        toggleAntiSpoofOnline:   { v in spoof.antiSpoofOnline = v;             updateState { $0.antiSpoofOnline = v } },
+        toggleAorusCode:         { v in AorusCodeManager.shared.isEnabled = v; updateState { $0.aorusCodeEnabled = v } },
         openOfficialChannel: {
             let url = URL(string: mgr.channelURL)!
             context.sharedContext.applicationBindings.openUrl(url.absoluteString)
