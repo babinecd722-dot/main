@@ -73,33 +73,54 @@ jobs:
             2>&1 | tee $RUNNER_TEMP/build.log | tail -200
 
           # Сохраняем список всех найденных файлов для диагностики
-          echo "=== All .app and .ipa files ===" > $RUNNER_TEMP/found_files.txt
-          find . -name "*.app" -type d 2>/dev/null | grep -v ".dSYM" >> $RUNNER_TEMP/found_files.txt || true
-          find . -name "*.ipa" 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true
+          echo "=== All .app and .ipa files (with symlinks) ===" > $RUNNER_TEMP/found_files.txt
+          find -L . -name "*.app" -type d 2>/dev/null | grep -v ".dSYM" >> $RUNNER_TEMP/found_files.txt || true
+          find -L . -name "*.ipa" 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true
+          echo "=== bazel-bin top-level ===" >> $RUNNER_TEMP/found_files.txt
+          ls -la bazel-bin/ 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true
+          echo "=== artifacts ===" >> $RUNNER_TEMP/found_files.txt
           find $RUNNER_TEMP/artifacts -type f 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true
           cat $RUNNER_TEMP/found_files.txt
 
       - name: Package unsigned IPA
         run: |
           # 1. Проверяем --outputBuildArtifactsPath
-          IPA=$(find $RUNNER_TEMP/artifacts -name "*.ipa" 2>/dev/null | head -1)
+          IPA=$(find $RUNNER_TEMP/artifacts -name "*.ipa" 2>/dev/null | head -1 || true)
 
-          # 2. Ищем в bazel-bin
+          # 2. Ищем .ipa в bazel-bin (с -L для симлинков)
           if [ -z "$IPA" ]; then
-            IPA=$(find telegram-ios/bazel-bin -name "*.ipa" 2>/dev/null | head -1)
+            IPA=$(find -L telegram-ios/bazel-bin -name "*.ipa" 2>/dev/null | head -1 || true)
           fi
 
           if [ -n "$IPA" ]; then
             echo "Found IPA: $IPA"
             cp "$IPA" $RUNNER_TEMP/AorusGram-unsigned.ipa
           else
-            # 3. Берём .app и пакуем вручную
-            APP=$(find telegram-ios/bazel-bin telegram-ios/bazel-out \
-              -name "Telegram.app" -type d 2>/dev/null \
-              | grep -v ".dSYM" | head -1)
+            # 3. Ищем .app — сначала в bazel-bin с симлинками, потом везде
+            APP=$(find -L telegram-ios/bazel-bin -name "Telegram.app" -type d 2>/dev/null \
+              | grep -v ".dSYM" | head -1 || true)
 
             if [ -z "$APP" ]; then
-              echo "ERROR: No .app found. See found_files.txt artifact."
+              APP=$(find -L telegram-ios/bazel-out -name "Telegram.app" -type d 2>/dev/null \
+                | grep -v ".dSYM" | head -1 || true)
+            fi
+
+            if [ -z "$APP" ]; then
+              APP=$(find -L telegram-ios -name "*.app" -type d 2>/dev/null \
+                | grep -v ".dSYM" | head -1 || true)
+            fi
+
+            if [ -z "$APP" ]; then
+              APP=$(find -L $RUNNER_TEMP/artifacts -name "*.app" -type d 2>/dev/null \
+                | grep -v ".dSYM" | head -1 || true)
+            fi
+
+            if [ -z "$APP" ]; then
+              echo "ERROR: No .app found anywhere."
+              echo "=== bazel-bin contents ==="
+              ls -la telegram-ios/bazel-bin/ 2>/dev/null || echo "(empty or missing)"
+              echo "=== artifacts contents ==="
+              find $RUNNER_TEMP/artifacts -type f 2>/dev/null || echo "(empty)"
               exit 1
             fi
 
