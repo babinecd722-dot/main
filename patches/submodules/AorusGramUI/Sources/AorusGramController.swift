@@ -121,7 +121,7 @@ private enum AorusEntry: ItemListNodeEntry {
 
         case let .privacyHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .ghostMode(_, title, subtitle, value):
+        case let .ghostMode(_, title, _, value):
             return ItemListSwitchItem(
                 presentationData: presentationData, title: title, value: value, maximumNumberOfLines: 1,
                 sectionId: section,
@@ -362,7 +362,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
     let stateValue   = Atomic<AorusState>(value: initialState)
 
     func updateState(_ f: @escaping (inout AorusState) -> Void) {
-        stateValue.modify { current in
+        let _ = stateValue.modify { current in
             var next = current
             f(&next)
             statePromise.set(next)
