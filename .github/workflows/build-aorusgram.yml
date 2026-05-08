@@ -89,7 +89,9 @@ jobs:
             --configurationPath build-system/appstore-configuration.json \
             --buildNumber=${{ github.run_number }} \
             --configuration=debug_arm64 \
+            --xcodeManagedCodesigning \
             --outputBuildArtifactsPath $RUNNER_TEMP/artifacts \
+            --continueOnError \
             2>&1 | tee $RUNNER_TEMP/build.log | tail -100
 
       - name: Show compile errors
