@@ -63,6 +63,11 @@ jobs:
       - name: Build (no signing)
         working-directory: telegram-ios
         run: |
+          echo "=== Python version ==="
+          python3 --version
+          echo "=== Make.py help ==="
+          python3 build-system/Make/Make.py --help 2>&1 | head -30 || true
+          echo "=== Starting build ==="
           set -o pipefail
           python3 build-system/Make/Make.py \
             --overrideXcodeVersion \
@@ -77,12 +82,15 @@ jobs:
       - name: Show compile errors
         if: always()
         run: |
+          echo "=== First 50 lines of build log (Make.py startup) ==="
+          head -50 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
+          echo ""
           echo "=== Swift / Bazel compile errors ==="
           grep -E " error:" $RUNNER_TEMP/build.log | grep -v "^#" | head -80 \
             || echo "(no error lines found)"
           echo ""
-          echo "=== Last 30 lines of build log ==="
-          tail -30 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
+          echo "=== Last 50 lines of build log ==="
+          tail -50 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
 
       - name: Collect build artifacts info
         if: always()
