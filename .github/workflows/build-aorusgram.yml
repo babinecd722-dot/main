@@ -75,13 +75,7 @@ jobs:
             python3 -c "import json; open('build-system/appstore-configuration.json','w').write(json.dumps({'bundle-id':'org.aorusgram.Telegram-iOS','bundle-id-extensions':{'Share':'org.aorusgram.Telegram-iOS.Share','NotificationService':'org.aorusgram.Telegram-iOS.NotificationService','NotificationContent':'org.aorusgram.Telegram-iOS.NotificationContent','Widget':'org.aorusgram.Telegram-iOS.Widget','BroadcastUpload':'org.aorusgram.Telegram-iOS.BroadcastUpload','IntentsExtension':'org.aorusgram.Telegram-iOS.Intents','IntentsUIExtension':'org.aorusgram.Telegram-iOS.IntentsUI','Watch':'org.aorusgram.Telegram-iOS.Watch','WatchExtension':'org.aorusgram.Telegram-iOS.Watch.WatchExtension'},'team-id':'AORUSGRAM1','build-number':'1','version':'10.0.0','provisioning-profiles':{}},indent=2))"
             echo "Created appstore-configuration.json"
           fi
-          python3 -c "
-path='build-system/Make/Make.py'; txt=open(path).read()
-old='if codesigning_data.aps_environment is None:'
-new=\"codesigning_data.aps_environment = codesigning_data.aps_environment or 'development'\n    if False:\"
-open(path,'w').write(txt.replace(old,new,1)) if old in txt else None
-print('Make.py patched OK' if old in txt else 'WARNING: pattern not found')
-"
+          python3 -c "p='build-system/Make/Make.py';t=open(p).read();t=t.replace('if codesigning_data.aps_environment is None:','if False and codesigning_data.aps_environment is None:',1);t=t.replace('aps_environment=codesigning_data.aps_environment,','aps_environment=codesigning_data.aps_environment or \"development\",',1);open(p,'w').write(t);print('Make.py patched')"
 
       - name: Prepare codesigning
         run: |
