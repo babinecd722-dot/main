@@ -66,33 +66,13 @@ jobs:
           echo "=== build-system contents ==="
           ls build-system/ || echo "(no build-system dir)"
           ls build-system/Make/ 2>/dev/null | head -20 || echo "(no Make dir)"
-
           echo "=== Check appstore-configuration.json ==="
           if [ -f build-system/appstore-configuration.json ]; then
-            echo "EXISTS:"
-            cat build-system/appstore-configuration.json
+            echo "EXISTS:"; cat build-system/appstore-configuration.json
           else
-            echo "NOT FOUND — creating minimal unsigned config"
-            cat > build-system/appstore-configuration.json << 'EOCFG'
-{
-  "bundle-id": "org.aorusgram.Telegram-iOS",
-  "bundle-id-extensions": {
-    "Share": "org.aorusgram.Telegram-iOS.Share",
-    "NotificationService": "org.aorusgram.Telegram-iOS.NotificationService",
-    "NotificationContent": "org.aorusgram.Telegram-iOS.NotificationContent",
-    "Widget": "org.aorusgram.Telegram-iOS.Widget",
-    "BroadcastUpload": "org.aorusgram.Telegram-iOS.BroadcastUpload",
-    "IntentsExtension": "org.aorusgram.Telegram-iOS.Intents",
-    "IntentsUIExtension": "org.aorusgram.Telegram-iOS.IntentsUI",
-    "Watch": "org.aorusgram.Telegram-iOS.Watch",
-    "WatchExtension": "org.aorusgram.Telegram-iOS.Watch.WatchExtension"
-  },
-  "team-id": "AORUSGRAM1",
-  "build-number": "1",
-  "version": "10.0.0",
-  "provisioning-profiles": {}
-}
-EOCFG
+            echo "NOT FOUND — creating minimal config"
+            python3 -c "import json; open('build-system/appstore-configuration.json','w').write(json.dumps({'bundle-id':'org.aorusgram.Telegram-iOS','bundle-id-extensions':{'Share':'org.aorusgram.Telegram-iOS.Share','NotificationService':'org.aorusgram.Telegram-iOS.NotificationService','NotificationContent':'org.aorusgram.Telegram-iOS.NotificationContent','Widget':'org.aorusgram.Telegram-iOS.Widget','BroadcastUpload':'org.aorusgram.Telegram-iOS.BroadcastUpload','IntentsExtension':'org.aorusgram.Telegram-iOS.Intents','IntentsUIExtension':'org.aorusgram.Telegram-iOS.IntentsUI','Watch':'org.aorusgram.Telegram-iOS.Watch','WatchExtension':'org.aorusgram.Telegram-iOS.Watch.WatchExtension'},'team-id':'AORUSGRAM1','build-number':'1','version':'10.0.0','provisioning-profiles':{}},indent=2))"
+            echo "Created appstore-configuration.json"
           fi
 
       - name: Build (no signing)
