@@ -43,6 +43,8 @@ jobs:
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift $PEER/Sources/
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/BUILD $PEER/
           echo "Injection complete"
+          echo "--- AorusGramUI sources ---"
+          ls -la $TG/submodules/AorusGramUI/Sources/
 
       - name: Patch app name
         run: |
@@ -61,6 +63,7 @@ jobs:
       - name: Build (no signing)
         working-directory: telegram-ios
         run: |
+          set -o pipefail
           python3 build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir ~/tg-bazel-cache \
@@ -69,10 +72,22 @@ jobs:
             --buildNumber=${{ github.run_number }} \
             --configuration=debug_arm64 \
             --outputBuildArtifactsPath $RUNNER_TEMP/artifacts \
-            --continueOnError \
-            2>&1 | tee $RUNNER_TEMP/build.log | tail -200
+            2>&1 | tee $RUNNER_TEMP/build.log | tail -100
 
-          # Сохраняем список всех найденных файлов для диагностики
+      - name: Show compile errors
+        if: always()
+        run: |
+          echo "=== Swift / Bazel compile errors ==="
+          grep -E " error:" $RUNNER_TEMP/build.log | grep -v "^#" | head -80 \
+            || echo "(no error lines found)"
+          echo ""
+          echo "=== Last 30 lines of build log ==="
+          tail -30 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
+
+      - name: Collect build artifacts info
+        if: always()
+        working-directory: telegram-ios
+        run: |
           echo "=== All .app and .ipa files (with symlinks) ===" > $RUNNER_TEMP/found_files.txt
           find -L . -name "*.app" -type d 2>/dev/null | grep -v ".dSYM" >> $RUNNER_TEMP/found_files.txt || true
           find -L . -name "*.ipa" 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true
