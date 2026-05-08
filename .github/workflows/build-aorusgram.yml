@@ -29,7 +29,18 @@ jobs:
             https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios
           cd telegram-ios
           git submodule update --init --depth=1 --jobs=4 || true
-          git submodule update --init --depth=1 -- submodules/rlottie/rlottie || true
+
+      - name: Ensure rlottie submodule
+        run: |
+          cd telegram-ios
+          CPP_COUNT=$(find submodules/rlottie/rlottie/src -name "*.cpp" 2>/dev/null | wc -l)
+          echo "rlottie .cpp files found: $CPP_COUNT"
+          if [ "$CPP_COUNT" -eq 0 ]; then
+            echo "rlottie empty — cloning directly..."
+            rm -rf submodules/rlottie/rlottie
+            git clone --depth=1 https://github.com/TelegramMessenger/rlottie.git submodules/rlottie/rlottie
+          fi
+          echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
 
       - name: Inject AorusGram sources
         run: |
