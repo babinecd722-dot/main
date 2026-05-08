@@ -60,13 +60,46 @@ jobs:
       - name: Install Bazel
         run: brew install bazel 2>/dev/null || true
 
+      - name: Prepare build config
+        working-directory: telegram-ios
+        run: |
+          echo "=== build-system contents ==="
+          ls build-system/ || echo "(no build-system dir)"
+          ls build-system/Make/ 2>/dev/null | head -20 || echo "(no Make dir)"
+
+          echo "=== Check appstore-configuration.json ==="
+          if [ -f build-system/appstore-configuration.json ]; then
+            echo "EXISTS:"
+            cat build-system/appstore-configuration.json
+          else
+            echo "NOT FOUND — creating minimal unsigned config"
+            cat > build-system/appstore-configuration.json << 'EOCFG'
+{
+  "bundle-id": "org.aorusgram.Telegram-iOS",
+  "bundle-id-extensions": {
+    "Share": "org.aorusgram.Telegram-iOS.Share",
+    "NotificationService": "org.aorusgram.Telegram-iOS.NotificationService",
+    "NotificationContent": "org.aorusgram.Telegram-iOS.NotificationContent",
+    "Widget": "org.aorusgram.Telegram-iOS.Widget",
+    "BroadcastUpload": "org.aorusgram.Telegram-iOS.BroadcastUpload",
+    "IntentsExtension": "org.aorusgram.Telegram-iOS.Intents",
+    "IntentsUIExtension": "org.aorusgram.Telegram-iOS.IntentsUI",
+    "Watch": "org.aorusgram.Telegram-iOS.Watch",
+    "WatchExtension": "org.aorusgram.Telegram-iOS.Watch.WatchExtension"
+  },
+  "team-id": "AORUSGRAM1",
+  "build-number": "1",
+  "version": "10.0.0",
+  "provisioning-profiles": {}
+}
+EOCFG
+          fi
+
       - name: Build (no signing)
         working-directory: telegram-ios
         run: |
           echo "=== Python version ==="
           python3 --version
-          echo "=== Make.py help ==="
-          python3 build-system/Make/Make.py --help 2>&1 | head -30 || true
           echo "=== Starting build ==="
           set -o pipefail
           python3 build-system/Make/Make.py \
