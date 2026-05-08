@@ -80,23 +80,34 @@ jobs:
         run: |
           mkdir -p $RUNNER_TEMP/signing/profiles
 
-          # Make.py parses .mobileprovision with: openssl smime -inform der -verify -noverify
-          # Empty files fail — need a real CMS/DER structure with embedded plist
           openssl req -x509 -newkey rsa:2048 \
             -keyout /tmp/fake-key.pem -out /tmp/fake-cert.pem \
             -days 3650 -nodes -subj "/CN=FakeProvision" 2>/dev/null
 
-          PLIST='<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>TeamIdentifier</key><array><string>AORUSGRAM1</string></array><key>UUID</key><string>00000000-0000-0000-0000-000000000000</string><key>ExpirationDate</key><date>2030-01-01T00:00:00Z</date><key>IsXcodeManaged</key><true/><key>Entitlements</key><dict/></dict></plist>'
+          TEAM="AORUSGRAM1"
+          BASE="org.aorusgram.Telegram-iOS"
 
-          for ext in Share NotificationService NotificationContent Intents Widget BroadcastUpload IntentsExtension IntentsUIExtension Watch WatchExtension; do
-            echo "$PLIST" > /tmp/pp-${ext}.plist
+          make_profile() {
+            local ext="$1" appid="$2"
+            printf '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>TeamIdentifier</key><array><string>%s</string></array><key>UUID</key><string>00000000-0000-0000-0000-000000000001</string><key>ExpirationDate</key><date>2030-01-01T00:00:00Z</date><key>IsXcodeManaged</key><true/><key>Entitlements</key><dict><key>application-identifier</key><string>%s</string></dict></dict></plist>' \
+              "$TEAM" "$appid" > /tmp/pp-${ext}.plist
             openssl smime -sign \
               -in /tmp/pp-${ext}.plist \
-              -signer /tmp/fake-cert.pem \
-              -inkey /tmp/fake-key.pem \
+              -signer /tmp/fake-cert.pem -inkey /tmp/fake-key.pem \
               -outform DER -nodetach \
               -out "$RUNNER_TEMP/signing/profiles/${ext}.mobileprovision" 2>/dev/null
-          done
+          }
+
+          make_profile Share              "${TEAM}.${BASE}.Share"
+          make_profile NotificationService "${TEAM}.${BASE}.NotificationService"
+          make_profile NotificationContent "${TEAM}.${BASE}.NotificationContent"
+          make_profile Intents            "${TEAM}.${BASE}.Intents"
+          make_profile Widget             "${TEAM}.${BASE}.Widget"
+          make_profile BroadcastUpload    "${TEAM}.${BASE}.BroadcastUpload"
+          make_profile IntentsExtension   "${TEAM}.${BASE}.Intents"
+          make_profile IntentsUIExtension "${TEAM}.${BASE}.IntentsUI"
+          make_profile Watch              "${TEAM}.${BASE}.Watch"
+          make_profile WatchExtension     "${TEAM}.${BASE}.Watch.WatchExtension"
 
           echo "Profiles created:"
           ls -lh $RUNNER_TEMP/signing/profiles/
