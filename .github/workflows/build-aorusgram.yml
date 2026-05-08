@@ -89,7 +89,7 @@ jobs:
 
           make_profile() {
             local ext="$1" appid="$2"
-            printf '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>TeamIdentifier</key><array><string>%s</string></array><key>UUID</key><string>00000000-0000-0000-0000-000000000001</string><key>ExpirationDate</key><date>2030-01-01T00:00:00Z</date><key>IsXcodeManaged</key><true/><key>Entitlements</key><dict><key>application-identifier</key><string>%s</string></dict></dict></plist>' \
+            printf '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>TeamIdentifier</key><array><string>%s</string></array><key>UUID</key><string>00000000-0000-0000-0000-000000000001</string><key>ExpirationDate</key><date>2030-01-01T00:00:00Z</date><key>IsXcodeManaged</key><true/><key>Entitlements</key><dict><key>application-identifier</key><string>%s</string><key>aps-environment</key><string>development</string></dict></dict></plist>' \
               "$TEAM" "$appid" > /tmp/pp-${ext}.plist
             openssl smime -sign \
               -in /tmp/pp-${ext}.plist \
@@ -98,6 +98,7 @@ jobs:
               -out "$RUNNER_TEMP/signing/profiles/${ext}.mobileprovision" 2>/dev/null
           }
 
+          make_profile Telegram           "${TEAM}.${BASE}"
           make_profile Share              "${TEAM}.${BASE}.Share"
           make_profile NotificationService "${TEAM}.${BASE}.NotificationService"
           make_profile NotificationContent "${TEAM}.${BASE}.NotificationContent"
