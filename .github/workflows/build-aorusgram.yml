@@ -79,11 +79,27 @@ jobs:
       - name: Prepare codesigning
         run: |
           mkdir -p $RUNNER_TEMP/signing/profiles
+
+          # Make.py parses .mobileprovision with: openssl smime -inform der -verify -noverify
+          # Empty files fail — need a real CMS/DER structure with embedded plist
+          openssl req -x509 -newkey rsa:2048 \
+            -keyout /tmp/fake-key.pem -out /tmp/fake-cert.pem \
+            -days 3650 -nodes -subj "/CN=FakeProvision" 2>/dev/null
+
+          PLIST='<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>TeamIdentifier</key><array><string>AORUSGRAM1</string></array><key>UUID</key><string>00000000-0000-0000-0000-000000000000</string><key>ExpirationDate</key><date>2030-01-01T00:00:00Z</date><key>IsXcodeManaged</key><true/><key>Entitlements</key><dict/></dict></plist>'
+
           for ext in Share NotificationService NotificationContent Intents Widget BroadcastUpload IntentsExtension IntentsUIExtension Watch WatchExtension; do
-            touch "$RUNNER_TEMP/signing/profiles/${ext}.mobileprovision"
+            echo "$PLIST" > /tmp/pp-${ext}.plist
+            openssl smime -sign \
+              -in /tmp/pp-${ext}.plist \
+              -signer /tmp/fake-cert.pem \
+              -inkey /tmp/fake-key.pem \
+              -outform DER -nodetach \
+              -out "$RUNNER_TEMP/signing/profiles/${ext}.mobileprovision" 2>/dev/null
           done
-          echo "Dummy profiles created:"
-          ls -la $RUNNER_TEMP/signing/profiles/
+
+          echo "Profiles created:"
+          ls -lh $RUNNER_TEMP/signing/profiles/
 
       - name: Build (no signing)
         working-directory: telegram-ios
