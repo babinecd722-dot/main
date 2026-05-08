@@ -95,15 +95,24 @@ jobs:
       - name: Show compile errors
         if: always()
         run: |
-          echo "=== First 50 lines of build log (Make.py startup) ==="
-          head -50 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
-          echo ""
-          echo "=== Swift / Bazel compile errors ==="
-          grep -E " error:" $RUNNER_TEMP/build.log | grep -v "^#" | head -80 \
-            || echo "(no error lines found)"
-          echo ""
-          echo "=== Last 50 lines of build log ==="
-          tail -50 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
+          echo "=== First 80 lines ==="
+          head -80 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
+          echo "=== Errors ==="
+          grep -E " error:" $RUNNER_TEMP/build.log | head -80 || echo "(none)"
+          echo "=== Last 80 lines ==="
+          tail -80 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
+
+      - name: Commit error log to repo
+        if: failure()
+        run: |
+          cd aorusgram
+          mkdir -p build-errors
+          cp $RUNNER_TEMP/build.log build-errors/last-build.log 2>/dev/null || echo "(no log)" > build-errors/last-build.log
+          git config user.email "ci@aorusgram"
+          git config user.name "AorusGram CI"
+          git add build-errors/last-build.log
+          git diff --cached --quiet || git commit -m "ci: save build log [skip ci]"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ClaudeSigma/AorusGram.git HEAD:main
 
       - name: Collect build artifacts info
         if: always()
