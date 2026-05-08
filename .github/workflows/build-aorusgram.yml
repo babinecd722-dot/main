@@ -20,7 +20,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v3
+          key: tg-ios-src-v4
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -28,7 +28,8 @@ jobs:
           git clone --depth=1 \
             https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios
           cd telegram-ios
-          git submodule update --init --depth=1 --jobs=8 || true
+          git submodule update --init --depth=1 --jobs=4 || true
+          git submodule update --init --depth=1 --recursive -- submodules/rlottie || true
 
       - name: Inject AorusGram sources
         run: |
@@ -75,6 +76,15 @@ jobs:
             echo "Created appstore-configuration.json"
           fi
 
+      - name: Prepare codesigning
+        run: |
+          mkdir -p $RUNNER_TEMP/signing/profiles
+          for ext in Share NotificationService NotificationContent Intents Widget BroadcastUpload IntentsExtension IntentsUIExtension Watch WatchExtension; do
+            touch "$RUNNER_TEMP/signing/profiles/${ext}.mobileprovision"
+          done
+          echo "Dummy profiles created:"
+          ls -la $RUNNER_TEMP/signing/profiles/
+
       - name: Build (no signing)
         working-directory: telegram-ios
         run: |
@@ -87,9 +97,9 @@ jobs:
             --cacheDir ~/tg-bazel-cache \
             build \
             --configurationPath build-system/appstore-configuration.json \
+            --codesigningInformationPath $RUNNER_TEMP/signing \
             --buildNumber=${{ github.run_number }} \
             --configuration=debug_arm64 \
-            --xcodeManagedCodesigning \
             --outputBuildArtifactsPath $RUNNER_TEMP/artifacts \
             --continueOnError \
             2>&1 | tee $RUNNER_TEMP/build.log | tail -100
