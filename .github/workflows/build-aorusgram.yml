@@ -42,8 +42,12 @@ jobs:
           fi
           echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
 
-      - name: Replace Icon Composer bundles (incompatible with Xcode < 26)
-        run: python3 -c "import base64; exec(base64.b64decode('aW1wb3J0IG9zLCBzaHV0aWwKCmljb25fZGlycyA9IFtdCmZvciByb290LCBkaXJzLCBmaWxlcyBpbiBvcy53YWxrKCd0ZWxlZ3JhbS1pb3MnKToKICAgIGZvciBkIGluIGRpcnM6CiAgICAgICAgaWYgZC5lbmRzd2l0aCgnLmljb24nKToKICAgICAgICAgICAgaWNvbl9kaXJzLmFwcGVuZChvcy5wYXRoLmpvaW4ocm9vdCwgZCkpCgpwcmludCgnRm91bmQnLCBsZW4oaWNvbl9kaXJzKSwgJy5pY29uIGJ1bmRsZShzKScpCmZvciBpY29uX3BhdGggaW4gaWNvbl9kaXJzOgogICAgbmFtZSA9IG9zLnBhdGguYmFzZW5hbWUoaWNvbl9wYXRoKVs6LTVdCiAgICBwYXJlbnQgPSBvcy5wYXRoLmRpcm5hbWUoaWNvbl9wYXRoKQogICAgYXBwaWNvbnNldCA9IG9zLnBhdGguam9pbihwYXJlbnQsIG5hbWUgKyAnLmFwcGljb25zZXQnKQogICAgb3MubWFrZWRpcnMoYXBwaWNvbnNldCwgZXhpc3Rfb2s9VHJ1ZSkKICAgIG9wZW4ob3MucGF0aC5qb2luKGFwcGljb25zZXQsICdDb250ZW50cy5qc29uJyksICd3Jykud3JpdGUoCiAgICAgICAgJ3siaW1hZ2VzIjpbeyJpZGlvbSI6InVuaXZlcnNhbCIsInBsYXRmb3JtIjoiaW9zIiwic2l6ZSI6IjEwMjR4MTAyNCJ9XSwnCiAgICAgICAgJyJpbmZvIjp7ImF1dGhvciI6Inhjb2RlIiwidmVyc2lvbiI6MX19JykKICAgIHNodXRpbC5ybXRyZWUoaWNvbl9wYXRoKQogICAgcHJpbnQoJ1JlcGxhY2VkOicsIGljb25fcGF0aCkKCnByaW50KCdEb25lOicsIGxlbihpY29uX2RpcnMpLCAnYnVuZGxlKHMpIHJlcGxhY2VkJykK').decode())"
+      - name: Fix Icon Composer bundles (incompatible with Xcode < 26)
+        run: |
+          python3 -c "import base64; exec(base64.b64decode('aW1wb3J0IG9zLCBzaHV0aWwKCmljb25fZGlycyA9IFtdCmZvciByb290LCBkaXJzLCBmaWxlcyBpbiBvcy53YWxrKCd0ZWxlZ3JhbS1pb3MnKToKICAgIGZvciBkIGluIGRpcnM6CiAgICAgICAgaWYgZC5lbmRzd2l0aCgnLmljb24nKToKICAgICAgICAgICAgaWNvbl9kaXJzLmFwcGVuZChvcy5wYXRoLmpvaW4ocm9vdCwgZCkpCgpwcmludCgnRm91bmQnLCBsZW4oaWNvbl9kaXJzKSwgJy5pY29uIGJ1bmRsZShzKScpCmZvciBpY29uX3BhdGggaW4gaWNvbl9kaXJzOgogICAgbmFtZSA9IG9zLnBhdGguYmFzZW5hbWUoaWNvbl9wYXRoKVs6LTVdCiAgICBwYXJlbnQgPSBvcy5wYXRoLmRpcm5hbWUoaWNvbl9wYXRoKQogICAgYXBwaWNvbnNldCA9IG9zLnBhdGguam9pbihwYXJlbnQsIG5hbWUgKyAnLmFwcGljb25zZXQnKQogICAgb3MubWFrZWRpcnMoYXBwaWNvbnNldCwgZXhpc3Rfb2s9VHJ1ZSkKICAgIG9wZW4ob3MucGF0aC5qb2luKGFwcGljb25zZXQsICdDb250ZW50cy5qc29uJyksICd3Jykud3JpdGUoCiAgICAgICAgJ3siaW1hZ2VzIjpbeyJpZGlvbSI6InVuaXZlcnNhbCIsInBsYXRmb3JtIjoiaW9zIiwic2l6ZSI6IjEwMjR4MTAyNCJ9XSwnCiAgICAgICAgJyJpbmZvIjp7ImF1dGhvciI6Inhjb2RlIiwidmVyc2lvbiI6MX19JykKICAgIHNodXRpbC5ybXRyZWUoaWNvbl9wYXRoKQogICAgcHJpbnQoJ1JlcGxhY2VkOicsIGljb25fcGF0aCkKCnByaW50KCdEb25lOicsIGxlbihpY29uX2RpcnMpLCAnYnVuZGxlKHMpIHJlcGxhY2VkJykK').decode())"
+          # Telegram/BUILD globs for .icon/**/* — allow empty so removed dirs don't fail
+          echo "build --incompatible_disallow_empty_glob=false" >> telegram-ios/.bazelrc
+          echo "Added allow_empty glob flag to .bazelrc"
 
       - name: Inject AorusGram sources
         run: |
