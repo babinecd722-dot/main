@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AorusGramSettingsView: View {
     // MARK: - State
@@ -93,7 +94,7 @@ struct AorusGramSettingsView: View {
             )
             .onChange(of: ghostMode) { v in
                 AorusGramConfig.setEnabled(.ghostMode, v)
-                GhostModeManager.shared.toggle()
+                GhostModeManager.shared.setEnabled(v)
             }
 
             Divider().opacity(0.15)
@@ -249,7 +250,11 @@ struct AorusGramSettingsView: View {
             )
             .onChange(of: siri) { v in
                 AorusGramConfig.setEnabled(.siriShortcuts, v)
-                if v { SiriShortcutsManager.shared.donateAllDefaults() }
+                if v {
+                    if #available(iOS 16.0, *) {
+                        SiriShortcutsManager.shared.donateAllDefaults()
+                    }
+                }
             }
         }
     }
