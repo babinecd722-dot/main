@@ -1,0 +1,144 @@
+!!brut.androlib.meta.MetaInfo
+apkFileName: app.apk
+compressionType: false
+doNotCompress:
+- resources.arsc
+- png
+- jpg
+- webp
+- mp3
+- res/raw/com_android_billingclient_heterodyne_info
+- res/raw/com_android_billingclient_registration_info.binarypb
+- res/raw/root_r6.crt
+- ogg
+- wav
+- assets/patch_build.txt
+- assets/dexopt/baseline.prof
+- assets/dexopt/baseline.profm
+isFrameworkApk: false
+packageInfo:
+  forcedPackageId: '127'
+  renameManifestPackage: null
+sdkInfo:
+  minSdkVersion: '26'
+  targetSdkVersion: '36'
+sharedLibrary: false
+sparseResources: false
+unknownFiles:
+  androidsupportmultidexversion.txt: '8'
+  app-update-ktx.properties: '8'
+  app-update.properties: '8'
+  billing-ktx.properties: '8'
+  billing.properties: '8'
+  client_analytics.proto: '8'
+  core-common.properties: '8'
+  DebugProbesKt.bin: '8'
+  firebase-analytics.properties: '8'
+  firebase-auth-interop.properties: '8'
+  firebase-database-collection.properties: '8'
+  firebase-encoders-proto.properties: '8'
+  firebase-encoders.properties: '8'
+  firebase-iid-interop.properties: '8'
+  firebase-measurement-connector.properties: '8'
+  kotlin-tooling-metadata.json: '8'
+  messaging_event.proto: '8'
+  messaging_event_extension.proto: '8'
+  play-services-ads-identifier.properties: '8'
+  play-services-appset.properties: '8'
+  play-services-base.properties: '8'
+  play-services-basement.properties: '8'
+  play-services-cloud-messaging.properties: '8'
+  play-services-location.properties: '8'
+  play-services-measurement-api.properties: '8'
+  play-services-measurement-base.properties: '8'
+  play-services-measurement-impl.properties: '8'
+  play-services-measurement-sdk-api.properties: '8'
+  play-services-measurement-sdk.properties: '8'
+  play-services-measurement.properties: '8'
+  play-services-places-placereport.properties: '8'
+  play-services-stats.properties: '8'
+  play-services-tasks.properties: '8'
+  review-ktx.properties: '8'
+  review.properties: '8'
+  google/api/annotations.proto: '8'
+  google/api/auth.proto: '8'
+  google/api/backend.proto: '8'
+  google/api/billing.proto: '8'
+  google/api/client.proto: '8'
+  google/api/config_change.proto: '8'
+  google/api/consumer.proto: '8'
+  google/api/context.proto: '8'
+  google/api/control.proto: '8'
+  google/api/distribution.proto: '8'
+  google/api/documentation.proto: '8'
+  google/api/endpoint.proto: '8'
+  google/api/field_behavior.proto: '8'
+  google/api/http.proto: '8'
+  google/api/httpbody.proto: '8'
+  google/api/label.proto: '8'
+  google/api/launch_stage.proto: '8'
+  google/api/log.proto: '8'
+  google/api/logging.proto: '8'
+  google/api/metric.proto: '8'
+  google/api/monitored_resource.proto: '8'
+  google/api/monitoring.proto: '8'
+  google/api/quota.proto: '8'
+  google/api/resource.proto: '8'
+  google/api/service.proto: '8'
+  google/api/source_info.proto: '8'
+  google/api/system_parameter.proto: '8'
+  google/api/usage.proto: '8'
+  google/apphosting/datastore/testing/datastore_test_trace.proto: '8'
+  google/cloud/audit/audit_log.proto: '8'
+  google/firebase/firestore/proto/bundle.proto: '8'
+  google/firebase/firestore/proto/maybe_document.proto: '8'
+  google/firebase/firestore/proto/mutation.proto: '8'
+  google/firebase/firestore/proto/target.proto: '8'
+  google/firestore/admin/index.proto: '8'
+  google/firestore/v1/aggregation_result.proto: '8'
+  google/firestore/v1/bloom_filter.proto: '8'
+  google/firestore/v1/common.proto: '8'
+  google/firestore/v1/document.proto: '8'
+  google/firestore/v1/firestore.proto: '8'
+  google/firestore/v1/pipeline.proto: '8'
+  google/firestore/v1/query.proto: '8'
+  google/firestore/v1/write.proto: '8'
+  google/geo/type/viewport.proto: '8'
+  google/logging/type/http_request.proto: '8'
+  google/logging/type/log_severity.proto: '8'
+  google/longrunning/operations.proto: '8'
+  google/protobuf/any.proto: '8'
+  google/protobuf/api.proto: '8'
+  google/protobuf/descriptor.proto: '8'
+  google/protobuf/duration.proto: '8'
+  google/protobuf/empty.proto: '8'
+  google/protobuf/field_mask.proto: '8'
+  google/protobuf/source_context.proto: '8'
+  google/protobuf/struct.proto: '8'
+  google/protobuf/timestamp.proto: '8'
+  google/protobuf/type.proto: '8'
+  google/protobuf/wrappers.proto: '8'
+  google/rpc/code.proto: '8'
+  google/rpc/error_details.proto: '8'
+  google/rpc/status.proto: '8'
+  google/rpc/context/attribute_context.proto: '8'
+  google/type/calendar_period.proto: '8'
+  google/type/color.proto: '8'
+  google/type/date.proto: '8'
+  google/type/datetime.proto: '8'
+  google/type/dayofweek.proto: '8'
+  google/type/expr.proto: '8'
+  google/type/fraction.proto: '8'
+  google/type/latlng.proto: '8'
+  google/type/money.proto: '8'
+  google/type/postal_address.proto: '8'
+  google/type/quaternion.proto: '8'
+  google/type/timeofday.proto: '8'
+usesFramework:
+  ids:
+  - 1
+  tag: null
+version: 2.7.0-dirty
+versionInfo:
+  versionCode: '1398'
+  versionName: 16.80.3830

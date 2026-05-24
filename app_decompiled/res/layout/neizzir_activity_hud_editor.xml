@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:id="@id/neizzir3_activity_hud_editor" android:background="@drawable/neizzir20_hud_editor_bg" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <View android:background="@drawable/neizzir20_hud_grid_pattern" android:layout_width="0.0dip" android:layout_height="0.0dip" android:alpha="0.15" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <com.google.android.material.card.MaterialCardView android:id="@id/neizzir_toolbar_card" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16.0dip" android:layout_marginEnd="16.0dip" app:cardBackgroundColor="#cc121217" app:cardCornerRadius="16.0dip" app:cardElevation="8.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" app:strokeColor="#1affffff" app:strokeWidth="1.0dip">
+        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="8.0dip" android:layout_width="wrap_content" android:layout_height="wrap_content">
+            <ImageButton android:id="@id/neizzir4_btnUndo" android:background="@drawable/neizzir20_hud_btn_secondary" android:padding="10.0dip" android:layout_width="44.0dip" android:layout_height="44.0dip" android:src="@drawable/neizzir20_ic_undo" android:scaleType="centerInside" android:contentDescription="Отменить" app:tint="#ff808080" />
+            <View android:layout_width="8.0dip" android:layout_height="1.0dip" />
+            <ImageButton android:id="@id/neizzir4_btnRedo" android:background="@drawable/neizzir20_hud_btn_secondary" android:padding="10.0dip" android:layout_width="44.0dip" android:layout_height="44.0dip" android:src="@drawable/neizzir20_ic_redo" android:scaleType="centerInside" android:contentDescription="Повторить" app:tint="#ff808080" />
+            <View android:background="#1affffff" android:layout_width="1.0dip" android:layout_height="28.0dip" android:layout_marginStart="12.0dip" android:layout_marginEnd="12.0dip" />
+            <ImageButton android:id="@id/neizzir_btnSave" android:background="@drawable/neizzir20_hud_btn_accent" android:padding="10.0dip" android:layout_width="44.0dip" android:layout_height="44.0dip" android:src="@drawable/neizzir20_ic_save" android:scaleType="centerInside" android:contentDescription="Сохранить" app:tint="#ff0a0a0f" />
+            <View android:layout_width="8.0dip" android:layout_height="1.0dip" />
+            <ImageButton android:id="@id/neizzir_nazad" android:background="@drawable/neizzir20_hud_btn_danger" android:padding="10.0dip" android:layout_width="44.0dip" android:layout_height="44.0dip" android:src="@drawable/neizzir20_ic_close" android:scaleType="centerInside" android:contentDescription="Назад" app:tint="#ffffffff" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+    <com.google.android.material.card.MaterialCardView android:id="@id/neizzir_hint_card" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="16.0dip" app:cardBackgroundColor="#99121217" app:cardCornerRadius="12.0dip" app:cardElevation="4.0dip" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:strokeWidth="0.0dip">
+        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="12.0dip" android:layout_width="wrap_content" android:layout_height="wrap_content">
+            <ImageView android:layout_width="16.0dip" android:layout_height="16.0dip" android:src="@drawable/neizzir20_ic_info" app:tint="#ff00e5cc" />
+            <TextView android:textSize="11.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Нажмите на кнопку для редактирования • Потяните за углы для изменения размера" android:layout_marginStart="8.0dip" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</androidx.constraintlayout.widget.ConstraintLayout>

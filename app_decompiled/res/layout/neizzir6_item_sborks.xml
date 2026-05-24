@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="12.0dip" app:cardBackgroundColor="#12ffffff" app:cardCornerRadius="20.0dip" app:cardElevation="0.0dip" app:strokeWidth="0.0dip"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.constraintlayout.widget.ConstraintLayout android:layout_width="fill_parent" android:layout_height="wrap_content">
+        <com.google.android.material.card.MaterialCardView android:id="@id/neizzir6_logoCardView" android:layout_width="0.0dip" android:layout_height="wrap_content" app:cardCornerRadius="20.0dip" app:cardElevation="0.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" app:strokeWidth="0.0dip">
+            <FrameLayout android:id="@id/neizzir10_logoContainer" android:layout_width="fill_parent" android:layout_height="wrap_content" android:minHeight="140.0dip">
+                <ImageView android:id="@id/neizzir6_logoImageView" android:background="#ff1a1a1f" android:layout_width="fill_parent" android:layout_height="wrap_content" android:scaleType="fitCenter" android:adjustViewBounds="true" android:maxHeight="280.0dip" android:minHeight="140.0dip" android:contentDescription="Логотип" />
+                <ImageView android:id="@id/neizzir10_logoImageViewNext" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="wrap_content" android:scaleType="fitCenter" android:adjustViewBounds="true" android:maxHeight="280.0dip" android:minHeight="140.0dip" android:contentDescription="Следующее" />
+                <ProgressBar android:layout_gravity="center" android:id="@id/neizzir10_logoProgressBar" android:visibility="gone" android:layout_width="32.0dip" android:layout_height="32.0dip" android:indeterminate="true" android:indeterminateTint="#ffffffff" style="?android:progressBarStyleSmall" />
+                <View android:layout_gravity="bottom" android:background="@drawable/neizzir20_gradient_bottom_card" android:layout_width="fill_parent" android:layout_height="80.0dip" />
+                <FrameLayout android:layout_gravity="center" android:id="@id/neizzir10_playOverlayImageView" android:background="@drawable/neizzir20_play_overlay_bg" android:focusable="true" android:visibility="gone" android:clickable="true" android:layout_width="56.0dip" android:layout_height="56.0dip">
+                    <ImageView android:layout_gravity="center" android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_play_triangle" android:layout_marginStart="2.0dip" app:tint="#ffffffff" />
+                </FrameLayout>
+                <TextView android:textSize="9.0sp" android:textColor="#ffffffff" android:layout_gravity="start|center|top" android:id="@id/neizzir6_newTextView" android:background="@drawable/neizzir20_badge_new_green" android:paddingTop="4.0dip" android:paddingBottom="4.0dip" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_margin="12.0dip" android:text="NEW" android:fontFamily="@font/montserrat_extra_bold" android:paddingStart="10.0dip" android:paddingEnd="10.0dip" />
+                <LinearLayout android:layout_gravity="bottom|center" android:orientation="horizontal" android:id="@id/neizzir10_pageIndicator" android:focusable="false" android:clickable="false" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="12.0dip" />
+            </FrameLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <LinearLayout android:orientation="vertical" android:padding="16.0dip" android:layout_width="0.0dip" android:layout_height="wrap_content" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/neizzir6_logoCardView">
+            <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                <TextView android:textSize="17.0sp" android:textColor="#ffffffff" android:ellipsize="end" android:id="@id/neizzir6_packNameTextView" android:layout_width="0.0dip" android:layout_height="wrap_content" android:maxLines="1" android:layout_weight="1.0" android:fontFamily="@font/montserrat_extra_bold" />
+                <ImageView android:id="@id/neizzir6_shareImageView" android:background="?selectableItemBackgroundBorderless" android:padding="6.0dip" android:layout_width="32.0dip" android:layout_height="32.0dip" android:src="@drawable/neizzir20_ic_share" android:contentDescription="Поделиться" app:tint="#ff666666" />
+            </LinearLayout>
+            <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="10.0dip">
+                <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                    <ImageView android:id="@id/neizzir6_faqImageView" android:background="?selectableItemBackgroundBorderless" android:padding="4.0dip" android:layout_width="28.0dip" android:layout_height="28.0dip" android:src="@drawable/neizzir20_ic_info" android:contentDescription="Описание" app:tint="#ff666666" />
+                    <View android:layout_width="12.0dip" android:layout_height="1.0dip" />
+                    <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir20_ic_download_stat" android:contentDescription="Загрузки" app:tint="#ff666666" />
+                    <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:id="@id/neizzir6_downloadCountTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="4.0dip" />
+                    <View android:layout_width="16.0dip" android:layout_height="1.0dip" />
+                    <ImageView android:id="@id/neizzir6_likeIconImageView" android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir20_ic_heart" android:contentDescription="Лайки" app:tint="#ff666666" />
+                    <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:id="@id/neizzir6_likeCountTextView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="4.0dip" />
+                </LinearLayout>
+                <Space android:id="@id/neizzir6_rowSpacer" android:layout_width="8.0dip" android:layout_height="1.0dip" />
+                <TextView android:textSize="13.0sp" android:textColor="#ff0a0a0f" android:gravity="center" android:id="@id/neizzir6_singleDownloadButton" android:background="@drawable/neizzir20_btn_download_accent" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="36.0dip" android:text="Скачать" android:fontFamily="@font/montserrat_extra_bold" android:paddingStart="20.0dip" android:paddingEnd="20.0dip" />
+            </LinearLayout>
+            <LinearLayout android:orientation="horizontal" android:id="@id/neizzir6_buttonsLayout" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="14.0dip">
+                <TextView android:textSize="13.0sp" android:textColor="#ffffffff" android:gravity="center" android:id="@id/neizzir6_deleteButton" android:background="@drawable/neizzir20_btn_outline_red" android:visibility="gone" android:layout_width="0.0dip" android:layout_height="40.0dip" android:text="Удалить" android:layout_weight="1.0" android:fontFamily="@font/montserrat_extra_bold" />
+                <Space android:layout_width="8.0dip" android:layout_height="1.0dip" />
+                <TextView android:textSize="13.0sp" android:textColor="#ffe9f6ff" android:gravity="center" android:id="@id/neizzir6_downloadButton" android:background="@drawable/neizzir20_hud_btn_secondary" android:visibility="gone" android:layout_width="0.0dip" android:layout_height="40.0dip" android:text="Установить" android:layout_weight="1.0" android:fontFamily="@font/montserrat_extra_bold" />
+            </LinearLayout>
+            <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:id="@id/neizzir20_progress_container" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="14.0dip">
+                <ProgressBar android:id="@id/neizzir8_itemProgress" android:visibility="gone" android:layout_width="0.0dip" android:layout_height="8.0dip" android:max="100" android:progressDrawable="@drawable/neizzir20_progress_drawable" android:layout_weight="1.0" style="?android:progressBarStyleHorizontal" />
+                <TextView android:textSize="12.0sp" android:textColor="#ffffffff" android:id="@id/neizzir8_itemProgressText" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="10.0dip" />
+            </LinearLayout>
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.material.card.MaterialCardView>

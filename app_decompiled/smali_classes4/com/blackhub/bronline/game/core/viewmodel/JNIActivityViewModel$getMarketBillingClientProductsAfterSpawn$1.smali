@@ -1,0 +1,134 @@
+.class public final Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel$getMarketBillingClientProductsAfterSpawn$1;
+.super Ljava/lang/Object;
+.source "JNIActivityViewModel.kt"
+
+# interfaces
+.implements Lcom/blackhub/bronline/game/core/utils/payment/OnQueryProductsListener;
+
+
+# annotations
+.annotation system Ldalvik/annotation/EnclosingMethod;
+    value = Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel;->getMarketBillingClientProductsAfterSpawn()V
+.end annotation
+
+.annotation system Ldalvik/annotation/InnerClass;
+    accessFlags = 0x19
+    name = null
+.end annotation
+
+.annotation runtime Lkotlin/Metadata;
+    d1 = {
+        "\u0000#\n\u0000\n\u0002\u0018\u0002\n\u0000\n\u0002\u0010\u0002\n\u0000\n\u0002\u0010 \n\u0002\u0018\u0002\n\u0002\u0008\u0002\n\u0002\u0018\u0002\n\u0000*\u0001\u0000\u0008\n\u0018\u00002\u00020\u0001J\u0016\u0010\u0002\u001a\u00020\u00032\u000c\u0010\u0004\u001a\u0008\u0012\u0004\u0012\u00020\u00060\u0005H\u0016J\u0010\u0010\u0007\u001a\u00020\u00032\u0006\u0010\u0008\u001a\u00020\tH\u0016\u00a8\u0006\n"
+    }
+    d2 = {
+        "com/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel$getMarketBillingClientProductsAfterSpawn$1",
+        "Lcom/blackhub/bronline/game/core/utils/payment/OnQueryProductsListener;",
+        "onSuccess",
+        "",
+        "products",
+        "",
+        "Lcom/android/billingclient/api/ProductDetails;",
+        "onFailure",
+        "billingError",
+        "Lcom/blackhub/bronline/game/core/utils/payment/BillingError;",
+        "app_siteRelease"
+    }
+    k = 0x1
+    mv = {
+        0x2,
+        0x2,
+        0x0
+    }
+    xi = 0x30
+.end annotation
+
+
+# instance fields
+.field final synthetic this$0:Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel;
+
+
+# direct methods
+.method constructor <init>(Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel;)V
+    .locals 0
+
+    iput-object p1, p0, Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel$getMarketBillingClientProductsAfterSpawn$1;->this$0:Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel;
+
+    .line 665
+    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public onFailure(Lcom/blackhub/bronline/game/core/utils/payment/BillingError;)V
+    .locals 3
+
+    const-string v0, "billingError"
+
+    invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+    .line 672
+    invoke-virtual {p1}, Lcom/blackhub/bronline/game/core/utils/payment/BillingError;->getResponseCode()I
+
+    move-result v0
+
+    invoke-virtual {p1}, Lcom/blackhub/bronline/game/core/utils/payment/BillingError;->getDebugMessage()Ljava/lang/String;
+
+    move-result-object p1
+
+    new-instance v1, Ljava/lang/StringBuilder;
+
+    invoke-direct {v1}, Ljava/lang/StringBuilder;-><init>()V
+
+    const-string v2, "funName=JNIActivityViewModel.displayProducts, responseCode="
+
+    invoke-virtual {v1, v2}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+
+    invoke-virtual {v1, v0}, Ljava/lang/StringBuilder;->append(I)Ljava/lang/StringBuilder;
+
+    const-string v0, ", message="
+
+    invoke-virtual {v1, v0}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+
+    invoke-virtual {v1, p1}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+
+    invoke-virtual {v1}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
+
+    move-result-object p1
+
+    .line 673
+    const-string v0, "MARKET_BILLING"
+
+    .line 671
+    invoke-static {p1, v0}, Lcom/blackhub/bronline/game/core/utils/UtilsKt;->crashlyticsLog(Ljava/lang/String;Ljava/lang/String;)V
+
+    return-void
+.end method
+
+.method public onSuccess(Ljava/util/List;)V
+    .locals 1
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "(",
+            "Ljava/util/List<",
+            "Lcom/android/billingclient/api/ProductDetails;",
+            ">;)V"
+        }
+    .end annotation
+
+    const-string v0, "products"
+
+    invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V
+
+    .line 667
+    iget-object v0, p0, Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel$getMarketBillingClientProductsAfterSpawn$1;->this$0:Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel;
+
+    invoke-static {v0}, Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel;->access$get_marketBillingClientProducts$p(Lcom/blackhub/bronline/game/core/viewmodel/JNIActivityViewModel;)Lkotlinx/coroutines/flow/MutableStateFlow;
+
+    move-result-object v0
+
+    invoke-interface {v0, p1}, Lkotlinx/coroutines/flow/MutableStateFlow;->setValue(Ljava/lang/Object;)V
+
+    return-void
+.end method

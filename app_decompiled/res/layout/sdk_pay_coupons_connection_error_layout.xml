@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center" android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="fill_parent" android:layout_marginHorizontal="@dimen/sdk_pay_spacer_l"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/sdk_pay_im_coupon_connection_error" android:contentDescription="@null" />
+    <Space android:layout_width="fill_parent" android:layout_height="@dimen/sdk_pay_spacer_xxxl" />
+    <TextView android:textColor="?sdk_pay_text_primary" android:gravity="center" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="@string/sdk_pay_coupon_connection_error_title" style="@style/Headlines.Headline20" />
+    <Space android:layout_width="fill_parent" android:layout_height="@dimen/sdk_pay_spacer_s" />
+    <TextView android:textColor="?sdk_pay_text_secondary" android:gravity="center" android:layout_width="fill_parent" android:layout_height="wrap_content" android:text="@string/sdk_pay_coupon_connection_error_message" style="@style/Body.Body10" />
+    <Space android:layout_width="fill_parent" android:layout_height="@dimen/sdk_pay_spacer_m" />
+    <Button android:textColor="?sdk_pay_text_quaternary_constant" android:id="@id/retry_button" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/sdk_pay_coupon_connection_update" android:layout_marginVertical="@dimen/sdk_pay_spacer_xs" style="@style/Theme.MediumButton" />
+</LinearLayout>

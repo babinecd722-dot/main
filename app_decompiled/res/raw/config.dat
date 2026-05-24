@@ -1,0 +1,171 @@
+# Model BPC Archiveawdadwdaw
+#
+CDIMAGE NEIZZIR\\DMNEIZZIR.bpc
+CDIMAGE NEIZZIR\\NEIZZIR.bpc
+CDIMAGE mesh\\Event_9may26.bpc
+CDIMAGE mesh\\Event_Quest2.bpc
+CDIMAGE mesh\\Event_BP29.bpc
+CDIMAGE mesh\\Revert_NY26.bpc
+CDIMAGE mesh\\Interiors.bpc
+CDIMAGE mesh\\Event_Valentin26_Old.bpc
+CDIMAGE mesh\\Event_Valentin26.bpc
+CDIMAGE mesh\\Event_Quest_Port_Old.bpc
+CDIMAGE mesh\\DLC_PortJob.bpc
+CDIMAGE mesh\\Event_BP28.bpc
+CDIMAGE mesh\\Event_Season1.bpc
+CDIMAGE mesh\\Event_BP27.bpc
+CDIMAGE mesh\\Event_Quest1.bpc
+CDIMAGE mesh\\Event_NY26_Old.bpc
+CDIMAGE mesh\\Event_NY26.bpc
+CDIMAGE mesh\\Gun_store.bpc
+CDIMAGE mesh\\Event_Grom.bpc
+CDIMAGE mesh\\FTUE.bpc
+CDIMAGE mesh\\Event_H25.bpc
+CDIMAGE mesh\\Event_H25_Old.bpc
+CDIMAGE mesh\\Event_BP23_tfs.bpc
+CDIMAGE mesh\\Level_Garel.bpc
+CDIMAGE mesh\\br_hotfix.bpc
+CDIMAGE mesh\\br_bp_events.bpc
+CDIMAGE mesh\\br_racetrack.bpc
+CDIMAGE mesh\\br_event_ny_2025.bpc
+CDIMAGE mesh\\br_anim.bpc
+CDIMAGE mesh\\br_collision.bpc
+CDIMAGE mesh\\br_accessories_01.bpc
+CDIMAGE mesh\\br_cars_01_nologo.bpc
+CDIMAGE mesh\\br_cars_01.bpc
+CDIMAGE mesh\\br_common.bpc
+CDIMAGE mesh\\br_map_02.bpc
+CDIMAGE mesh\\br_map_01.bpc
+CDIMAGE mesh\\br_event_ny.bpc
+CDIMAGE mesh\\br_skins_01.bpc
+CDIMAGE mesh\\br_legacy_smp.bpc
+CDIMAGE mesh\\br_map_00.bpc
+#
+# Object types | IDE
+#
+IDE DATA\MISC.IDE
+IDE DATA\PEDS.IDE
+IDE DATA\VEHICLES.IDE
+IDE DATA\WEAPONS.IDE
+#
+IDE DATA\MAPS\IDE\Event_Quest2.ide
+IDE DATA\MAPS\IDE\Event_Valentin26.ide
+IDE DATA\MAPS\IDE\PortJob.ide
+IDE DATA\MAPS\IDE\Quest1.ide
+IDE DATA\MAPS\IDE\event_NY2026.ide
+IDE DATA\MAPS\IDE\event_HLN2025.ide
+IDE DATA\MAPS\IDE\Winter_Mod25.IDE
+IDE DATA\MAPS\IDE\Level-GunStore.IDE
+IDE DATA\MAPS\IDE\Event_Grom.IDE
+IDE DATA\MAPS\IDE\Event_BP23_tfs.IDE
+IDE DATA\MAPS\IDE\Level_Garel.IDE
+IDE DATA\MAPS\IDE\Level_bp_events.IDE
+IDE DATA\MAPS\IDE\Level_dr25.IDE
+IDE DATA\MAPS\IDE\BRmap_Winter.IDE
+IDE DATA\MAPS\IDE\BRmap_Arzamas.IDE
+IDE DATA\MAPS\IDE\BRmap_Yjniy.IDE
+IDE DATA\MAPS\IDE\BRmap_Lutkarino.IDE
+IDE DATA\MAPS\IDE\BRmap_Batyrevo.IDE
+IDE DATA\MAPS\IDE\BRmap_Mount.IDE
+IDE DATA\MAPS\IDE\BRmap_Interiors.IDE
+IDE DATA\MAPS\IDE\BRmap_1.1.IDE
+IDE DATA\MAPS\IDE\BRmap_1.2.IDE
+IDE DATA\MAPS\IDE\BRmap_1.3.IDE
+IDE DATA\MAPS\IDE\BRmap_1.IDE
+IDE DATA\MAPS\IDE\BRmap_2.IDE
+IDE DATA\MAPS\IDE\BRmap_3.IDE
+IDE DATA\MAPS\IDE\BRmap_4.IDE
+IDE DATA\MAPS\IDE\BRmap_5.IDE
+IDE DATA\MAPS\IDE\BRmap_6.IDE
+IDE DATA\MAPS\IDE\BRmap_7.IDE
+IDE DATA\MAPS\IDE\BRmap_8.IDE
+IDE DATA\MAPS\IDE\BRmap_9.IDE
+IDE DATA\MAPS\IDE\BRmap_12.IDE
+IDE DATA\MAPS\IDE\BRmap_13.IDE
+IDE DATA\MAPS\IDE\BRmap_trees.IDE
+IDE DATA\MAPS\IDE\BRmap_Props.IDE
+IDE DATA\MAPS\IDE\BR_legacy_SMP.IDE
+IDE DATA\MAPS\IDE\Level_Beregovoy.IDE
+IDE DATA\MAPS\IDE\Level_HuntForest.IDE
+IDE DATA\MAPS\IDE\Level_Works.IDE
+IDE DATA\MAPS\IDE\Level_Mine.IDE
+IDE DATA\MAPS\IDE\Level_Koryakino.IDE
+IDE DATA\MAPS\IDE\Level_landfill.IDE
+IDE DATA\MAPS\IDE\Level_Gaz.IDE
+IDE DATA\MAPS\IDE\Level_Electrical.IDE
+IDE DATA\MAPS\IDE\BRmap_Halloween.ide
+IDE DATA\MAPS\IDE\BRmap_9May.ide
+IDE DATA\MAPS\IDE\BRmap_NewYear.ide
+IDE DATA\MAPS\IDE\Level_Marketplace.ide
+IDE DATA\MAPS\IDE\Level_Workshops.ide
+IDE DATA\MAPS\IDE\Level_RaceTrack.ide
+IDE DATA\MAPS\IDE\Level_Uzniy.ide
+IDE DATA\MAPS\IDE\event_9may_25.ide
+#
+#NN
+IDE DATA\MAPS\IDE\Level_Nizhegorodsk.ide
+#
+IDE DATA\MAPS\IDE\LOD.IDE
+IDE DATA\MAPS\IDE\skybox.IDE
+#
+IDE DATA\MAPS\generic\barriers.ide
+IDE DATA\MAPS\generic\dynamic.ide
+IDE DATA\MAPS\generic\dynamic2.ide
+IDE DATA\MAPS\generic\multiobj.ide
+#IDE DATA\MAPS\generic\vegepart.ide
+IDE DATA\MAPS\veh_mods.IDE
+#
+# Scene information | IPL
+#
+IPL DATA\MAPS\Level_events\Event_Quest2.ipl
+IPL DATA\MAPS\Level_events\Event_TempObj.ipl
+IPL DATA\MAPS\Level_events\Event_Valentin26.ipl
+IPL DATA\MAPS\Core\PortJob.ipl
+IPL DATA\MAPS\Core\Quest1.ipl
+IPL DATA\MAPS\Level_events\BRmap_Event_NY2026.ipl
+#IPL DATA\MAPS\Level_WINTER\Winter_Mod25.IPL
+IPL DATA\MAPS\Level_Other\Level-GunStore.IPL
+#IPL DATA\MAPS\Level_events\Event_Grom.IPL
+IPL DATA\MAPS\Level_events\Event_FTUE.IPL
+#IPL DATA\MAPS\Level_events\BRmap_Event_HLN2025.ipl
+IPL DATA\MAPS\Level_events\Event_BP23_tfs.IPL
+IPL DATA\MAPS\Level_events\Level_Summer_2025.IPL
+#IPL DATA\MAPS\Level_WINTER\BRmap_Winter.IPL
+IPL DATA\MAPS\Level_events\BRmap_Event_dr25.IPL
+IPL DATA\MAPS\Level_events\BRmap_Event_NY.IPL
+#
+IPL DATA\MAPS\Level_events\BRmap_Event_HLN.ipl
+IPL DATA\MAPS\Level_events\BRmap_Event_HLN_grss.ipl
+#IPL DATA\MAPS\Level_events\BRmap_Event_DR.ipl
+#IPL DATA\MAPS\Level_events\BRmap_Event_9May.ipl
+IPL DATA\MAPS\Level_events\event_9may_25.ipl
+#
+IPL DATA\MAPS\Level_Interiors\Level_Interiors.ipl
+IPL DATA\MAPS\Level_Interiors\Level_Interiors_1.ipl
+#
+IPL DATA\MAPS\Level_Mount\Level_Mount.ipl
+#
+IPL DATA\MAPS\Level_Other\occluUz.ipl
+IPL DATA\MAPS\Level_Other\Level_East.ipl
+IPL DATA\MAPS\Level_Other\Level_East_1.ipl
+IPL DATA\MAPS\Level_Other\Level_North.ipl
+IPL DATA\MAPS\Level_Other\Level_South.ipl
+IPL DATA\MAPS\Level_Other\Level_Marketplace.ipl
+IPL DATA\MAPS\Level_Other\Level_Workshops.ipl
+IPL DATA\MAPS\Level_Other\Level_RaceTrack.ipl
+IPL DATA\MAPS\Level_Other\BRmap_Props.ipl
+#
+IPL DATA\MAPS\Level_Town\Level_Arzamas_N.ipl
+IPL DATA\MAPS\Level_Town\Level_Arzamas_S.ipl
+IPL DATA\MAPS\Level_Town\Level_Batyrevo.ipl
+IPL DATA\MAPS\Level_Town\Level_Beregovoy.ipl
+IPL DATA\MAPS\Level_Town\Level_Busaevo.ipl
+IPL DATA\MAPS\Level_Town\Level_Garel.ipl
+IPL DATA\MAPS\Level_Town\Level_Koryakino.ipl
+IPL DATA\MAPS\Level_Town\Level_Litkarino.ipl
+#IPL DATA\MAPS\Level_Town\Level_Nizhegorodsk.ipl
+IPL DATA\MAPS\Level_Town\Level_Nizhegorodsk_new.ipl
+IPL DATA\MAPS\Level_Town\Level_Nizhegorodsk_LC.ipl
+IPL DATA\MAPS\Level_Town\Level_Uzniy.ipl
+#
+

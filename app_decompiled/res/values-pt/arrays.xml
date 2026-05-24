@@ -1,0 +1,490 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <integer-array name="black_pass_boost_levels">
+        <item>1</item>
+        <item>5</item>
+        <item>10</item>
+        <item>35</item>
+    </integer-array>
+    <string-array name="black_pass_navigation_button_titles">
+        <item>Black Pass</item>
+        <item>Missões</item>
+        <item>Ranking</item>
+    </string-array>
+    <string-array name="craft_forced_tutorial_title">
+        <item>Tutorial: categorias</item>
+        <item>Tutorial: classes</item>
+        <item>Tutorial: filtro</item>
+        <item>Tutorial: características</item>
+        <item>Tutorial: produção</item>
+        <item>Tutorial: componentes</item>
+        <item>Tutorial: navegação</item>
+        <item>Tutorial: armazenamento</item>
+        <item>Tutorial: barras de progresso</item>
+    </string-array>
+    <string-array name="donate_footer_titles">
+        <item>Promoções</item>
+        <item>Transporte</item>
+        <item>Skins</item>
+        <item>Conjuntos</item>
+        <item>VIP</item>
+        <item>Acessórios</item>
+    </string-array>
+    <string-array name="donate_header_titles">
+        <item>Bens</item>
+        <item>Serviços</item>
+        <item>Black Pass</item>
+        <item>Caixas</item>
+    </string-array>
+    <string-array name="donate_tile_array_with_title">
+        <item>Promoções e ofertas especiais</item>
+        <item>Transporte</item>
+        <item>Skins</item>
+        <item>Conjuntos</item>
+        <item>Pacotes VIP</item>
+        <item>Pacotes de dinheiro</item>
+        <item>Acessórios</item>
+    </string-array>
+    <string-array name="driver_license_type">
+        <item>Categoria A</item>
+        <item>Categoria B</item>
+        <item>Categoria C</item>
+        <item>Categoria D</item>
+        <item>Transporte aquático</item>
+    </string-array>
+    <string-array name="driving_school_all_quests">
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Placa \"Dê a preferência\" - o motorista deve dar preferência aos veículos.</item>
+        <item>Placa \"Via principal\" - o motorista tem preferência sobre os outros participantes do trânsito.</item>
+        <item>Placa \"Via principal\" - o motorista não tem preferência sobre os outros participantes do trânsito.</item>
+        <item>Placa \"Via principal\" - o motorista deve parar antes do bordo da pista.</item>
+        <item>Como abrir o menu radial para controle do carro?</item>
+        <item>Ao apertar a buzina.</item>
+        <item>Usando o comando /radial.</item>
+        <item>Ao abrir as configurações do jogo.</item>
+        <item>Pressionando e segurando o dedo no veículo ou na área central da tela.</item>
+        <item>Como ligar o motor do carro?</item>
+        <item>Usando a dica ou botão no menu radial</item>
+        <item>Usando o comando /eng</item>
+        <item>Clicando duas vezes na buzina</item>
+        <item>O motor liga automaticamente</item>
+        <item>O que este botão faz?</item>
+        <item>Liga o motor</item>
+        <item>Abre as portas do carro</item>
+        <item>Liga ou desliga as luzes</item>
+        <item>Chama o menu de controle da suspensão</item>
+        <item>O que este botão faz?</item>
+        <item>Engata a marcha neutra</item>
+        <item>Desliga o motor do carro</item>
+        <item>Estaciona o carro em um local aleatório</item>
+        <item>Estaciona o carro onde você está</item>
+        <item>O que este botão faz?</item>
+        <item>Abre ou fecha as portas</item>
+        <item>Abre a porta do motorista</item>
+        <item>Desliga o motor do carro</item>
+        <item>Tira a chave do carro</item>
+        <item>O que este botão faz?</item>
+        <item>Liga o motor</item>
+        <item>Abre as portas do carro</item>
+        <item>Liga ou desliga o motor do carro</item>
+        <item>Desliga o motor</item>
+        <item>O que este botão faz?</item>
+        <item>Desliga o motor do carro</item>
+        <item>Insere a chave na ignição ou a remove</item>
+        <item>Abre as portas do carro</item>
+        <item>Engata a marcha neutra</item>
+        <item>O que este botão faz?</item>
+        <item>Permite o controle da suspensão se melhorada no tuning</item>
+        <item>Abre as portas do carro</item>
+        <item>Liga o motor</item>
+        <item>Permite o controle das luzes</item>
+        <item>O que é o menu radial?</item>
+        <item>Uma maneira de interagir com meu carro que permite roubá-lo</item>
+        <item>Uma maneira de interagir com meu personagem</item>
+        <item>Uma maneira de interagir com minha casa</item>
+        <item>Uma maneira de interagir com seu carro. Permite ligar o motor, luzes e mais</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>Zona com velocidade máxima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade máxima\".</item>
+        <item>Esta placa proíbe a parada e estacionamento de veículos. Aplica-se apenas a um lado da via.</item>
+        <item>Esta placa permite apenas movimento em frente. Placas semelhantes para direita, esquerda, retorno e outros movimentos.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>Esta placa proíbe a entrada na direção em que está instalada. A placa não se aplica a veículos de rota.</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Esta placa proíbe passar por postos de controle sem parar. Essa placa é colocada em postos da polícia de trânsito, ao cruzar fronteiras.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa indica uma passagem de pedestres terrestre especializada, onde o motorista deve dar preferência ao pedestre.</item>
+        <item>Esta placa proíbe passar por postos de controle sem parar. Essa placa é colocada em postos da polícia de trânsito, ao cruzar fronteiras.</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>Esta placa proíbe a circulação de todos os veículos, exceto veículos de empresas que atendem a esta área e veículos de rota.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa define a altura máxima do veículo que pode prosseguir na estrada.</item>
+        <item>Zona com velocidade máxima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade máxima\".</item>
+        <item>Esta placa proíbe a ultrapassagem de todos os veículos no trecho onde esta placa está instalada.</item>
+        <item>Esta placa proíbe o estacionamento de veículos. Aplica-se apenas a um lado da via.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe passar por postos de controle sem parar. Essa placa é colocada em postos da polícia de trânsito, ao cruzar fronteiras.</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>Esta placa proíbe a circulação de todos os veículos, exceto veículos de empresas que atendem a esta área e veículos de rota.</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Zona com velocidade máxima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade máxima\".</item>
+        <item>A placa indica uma passagem de pedestres terrestre especializada, onde o motorista deve dar preferência ao pedestre.</item>
+        <item>Esta placa proíbe a ultrapassagem de todos os veículos no trecho onde esta placa está instalada.</item>
+        <item>Esta placa proíbe passar por postos de controle sem parar. Essa placa é colocada em postos da polícia de trânsito, ao cruzar fronteiras.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa indica uma passagem de pedestres terrestre especializada, onde o motorista deve dar preferência ao pedestre.</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>Zona com velocidade máxima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade máxima\".</item>
+        <item>Esta placa limita a velocidade máxima no trecho onde está instalada.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe passar por postos de controle sem parar. Essa placa é colocada em postos da polícia de trânsito, ao cruzar fronteiras.</item>
+        <item>Zona com velocidade máxima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade máxima\".</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>Esta placa cancela todas as restrições anteriores e define as atribuídas ao trecho de circulação.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa informa sobre a direção do movimento circular usando setas.</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Placa \"Via principal\" - o motorista deve parar antes do bordo da pista.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Placa \"Via principal\" - o motorista deve parar antes do bordo da pista.</item>
+        <item>Zona com velocidade máxima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade máxima\".</item>
+        <item>Via de maior velocidade. Velocidade mínima nesta via 40 km/h, máxima - 110 km/h. Parar fora de estacionamento especial é proibido.</item>
+        <item>Esta placa proíbe passar por postos de controle sem parar. Essa placa é colocada em postos da polícia de trânsito, ao cruzar fronteiras.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Local de parada de ônibus ou táxi. Carros comuns não podem parar a menos de 15 metros desta placa.</item>
+        <item>Placa \"Ônibus\". Informa sobre a presença de ônibus nesta parada.</item>
+        <item>Placa \"Abobus\". Informa sobre a presença de abobuses nesta parada.</item>
+        <item>Placa \"Ônibus\" - o motorista deve parar antes do bordo da pista.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Zona com velocidade mínima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade mínima\".</item>
+        <item>Zona com velocidade máxima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade máxima\".</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Esta placa proíbe passar por postos de controle sem parar. Essa placa é colocada em postos da polícia de trânsito, ao cruzar fronteiras.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Placa \"Estacionamento\". Informa sobre a presença de paradas de ônibus nesta área.</item>
+        <item>Placa \"Estacionamento\". Indica proibição de estacionamento neste território.</item>
+        <item>Placa \"Estacionamento\". Permite a circulação neste território.</item>
+        <item>A placa indica uma área especializada para parada de veículos.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Placa \"Passagem de pedestres\". Indica a possibilidade de estacionamento nesta área.</item>
+        <item>A placa indica uma passagem de pedestres terrestre especializada, onde o motorista deve dar preferência ao pedestre.</item>
+        <item>Zona com velocidade mínima limitada. Zona válida até a placa \"Fim da zona de limite de velocidade mínima\".</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa indica o início de uma área povoada. Após esta placa, limite de velocidade - 60km/h (Velocidade máxima em áreas povoadas).</item>
+        <item>A placa indica o fim de uma área povoada. Após esta placa, limite de velocidade - 80 km/h.</item>
+        <item>A placa indica o início de uma área povoada. Após esta placa, limite de velocidade - 90km/h (Velocidade máxima em áreas povoadas).</item>
+        <item>A placa indica o início de uma área povoada. Após esta placa, limite de velocidade - 110km/h (Velocidade máxima em áreas povoadas).</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa indica o fim de uma área povoada. Após esta placa, limite de velocidade - 90km/h (Velocidade máxima fora de áreas povoadas).</item>
+        <item>A placa indica o fim de uma área povoada. Após esta placa, limite de velocidade - 80 km/h.</item>
+        <item>A placa indica o início de uma área povoada. Após esta placa, limite de velocidade - 60km/h (Velocidade máxima em áreas povoadas).</item>
+        <item>A placa indica o fim de uma área povoada. Após esta placa, limite de velocidade - 110 km/h.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa mostra ao motorista que ele deve dirigir a toda velocidade.</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via principal e tem prioridade no cruzamento.</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e tem prioridade ao passar pelo cruzamento.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e pode não dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Esta placa proíbe o estacionamento de veículos. Aplica-se apenas a um lado da via.</item>
+        <item>Esta placa proíbe a parada e estacionamento de veículos. Aplica-se apenas a um lado da via.</item>
+        <item>A placa indica o fim de uma área povoada. Após esta placa, limite de velocidade - 80 km/h.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe o estacionamento de veículos. Aplica-se apenas a um lado da via.</item>
+        <item>Esta placa proíbe a parada e estacionamento de veículos. Aplica-se apenas a um lado da via.</item>
+        <item>Esta placa permite o estacionamento no território da via.</item>
+        <item>A placa indica o fim de uma área povoada. Após esta placa, limite de velocidade - 80 km/h.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à direita.</item>
+        <item>A placa proíbe movimento em frente, permite movimento em todas as outras direções.</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à esquerda.</item>
+        <item>Esta placa permite apenas movimento em frente. Placas semelhantes para direita, esquerda, retorno e outros movimentos.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa permite virar à direita, mas proíbe à esquerda.</item>
+        <item>Esta placa proíbe virar à direita. Placas de proibição semelhantes: virar à esquerda, retorno.</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à esquerda.</item>
+        <item>A placa proíbe movimento em frente, mas permite virar à esquerda.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Esta placa informa sobre a presença de radar na estrada. O radar pode multá-lo, tenha cuidado.</item>
+        <item>A placa indica o início de uma área povoada. Após esta placa, limite de velocidade - 60km/h (Velocidade máxima em áreas povoadas).</item>
+        <item>Esta placa exige que o motorista pare o veículo antes da linha de PARADA ou antes do bordo da pista que cruza.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à esquerda.</item>
+        <item>Esta placa mostra ao motorista que ele está em uma via secundária e deve dar preferência a todos os veículos com direito de passagem (incluindo da direita).</item>
+        <item>Esta placa informa sobre a direção de movimento para caminhões.</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à direita.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe motoristas de caminhão de ultrapassar.</item>
+        <item>Esta placa proíbe motoristas de carro de ultrapassar.</item>
+        <item>Esta placa informa sobre a direção de movimento para caminhões.</item>
+        <item>Esta placa permite o estacionamento no território da via.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à direita.</item>
+        <item>A placa permite virar à direita, mas proíbe à esquerda.</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à esquerda.</item>
+        <item>Esta placa proíbe motoristas de caminhão de prosseguir.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa permite que motoristas de ônibus circulem nesta faixa.</item>
+        <item>Esta placa proíbe que motoristas de ônibus circulem nesta faixa.</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à esquerda.</item>
+        <item>A placa permite movimento em frente, mas proíbe virar à direita.</item>
+        <item>Como abrir o menu radial para controle da embarcação?</item>
+        <item>Ao apertar a buzina.</item>
+        <item>Usando o comando /radial.</item>
+        <item>Ao abrir as configurações do jogo.</item>
+        <item>Pressionando e segurando o dedo no veículo ou na área central da tela.</item>
+        <item>Como ligar o motor da embarcação?</item>
+        <item>Usando a dica ou botão no menu radial</item>
+        <item>Usando o comando /eng</item>
+        <item>Clicando duas vezes na buzina</item>
+        <item>O motor liga automaticamente</item>
+        <item>O que este botão faz?</item>
+        <item>Liga o motor</item>
+        <item>Abre as portas do carro</item>
+        <item>Liga ou desliga as luzes</item>
+        <item>Chama o menu de controle da suspensão</item>
+        <item>O que este botão faz?</item>
+        <item>Abre ou fecha as portas</item>
+        <item>Abre a porta do motorista</item>
+        <item>Desliga o motor do carro</item>
+        <item>Tira a chave do carro</item>
+        <item>O que este botão faz?</item>
+        <item>Liga o motor</item>
+        <item>Abre as portas do carro</item>
+        <item>Liga ou desliga o motor do barco</item>
+        <item>Desliga o motor</item>
+        <item>O que este botão faz?</item>
+        <item>Desliga o motor do barco</item>
+        <item>Insere a chave na ignição ou a remove</item>
+        <item>Abre as portas do carro</item>
+        <item>Engata a marcha neutra</item>
+        <item>O que é o menu radial?</item>
+        <item>Uma maneira de interagir com meu navio que permite roubá-lo</item>
+        <item>Uma maneira de interagir com meu personagem</item>
+        <item>Uma maneira de interagir com minha casa</item>
+        <item>Uma maneira de interagir com seu barco. Permite ligar o motor, luzes e mais</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe levantar âncoras neste local.</item>
+        <item>"A placa proíbe descer de âncora debaixo d'água."</item>
+        <item>A placa proíbe lançar âncora neste local.</item>
+        <item>A placa proíbe a passagem de navios com âncora.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe carros de se moverem na água.</item>
+        <item>Esta placa proíbe a circulação de pequenas embarcações.</item>
+        <item>Esta placa proíbe a circulação de todas as embarcações.</item>
+        <item>Esta placa proíbe a circulação de grandes embarcações.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe criar ondas.</item>
+        <item>Esta placa permite criar ondas.</item>
+        <item>Esta placa proíbe a circulação devido à presença de ondas.</item>
+        <item>Esta placa proíbe a circulação em tempestade devido às ondas.</item>
+        <item>O que significa a placa mostrada na imagem?</item>
+        <item>Esta placa proíbe estacionamento de carros.</item>
+        <item>Esta placa proíbe a amarração de pequenos barcos.</item>
+        <item>Esta placa proíbe amarração e estacionamento.</item>
+        <item>Esta placa se refere a carros.</item>
+    </string-array>
+    <string-array name="entertainment_system_all_descriptions">
+        <item>Batalha em equipe — jogo onde você precisa lutar ao lado de outros jogadores contra os oponentes! A equipe vencedora é a que tiver mais abates durante o tempo de jogo!</item>
+        <item>Choppin - jogo onde sobreviventes lutam contra infectados! Torne-se um bastião de resistência e enfrente os mortos ou vice-versa - Não dê chance aos sobreviventes.</item>
+        <item>Derby - lute contra outros jogadores pelo direito de ser o rei da colina! Obtenha novos equipamentos e elimine seus oponentes. Vencedor é quem cair menos vezes. Vá em frente!</item>
+        <item>Batalha de tanques - jogo onde 4 jogadores competem pelo status de melhor tanqueiro. Sua tarefa é matar o máximo de tanques em 3 minutos, lutando contra outros tanqueiros.</item>
+        <item>Corrida armamentista — evento onde a tarefa dos jogadores é matar outros e obter novas armas. O vencedor é o primeiro a alcançar a última arma.</item>
+        <item>Corrida - participe da clássica batalha de carros. Chegue em primeiro à linha de chegada e vença os outros reis do mundo automotivo. Lembre-se, o primeiro a terminar será o motorista mais ousado e corajoso. Vá!</item>
+    </string-array>
+    <string-array name="entertainment_system_all_games">
+        <item>Batalha em equipe</item>
+        <item>Choppin</item>
+        <item>Derby</item>
+        <item>Batalha de tanques</item>
+        <item>Corrida armamentista</item>
+        <item>Corrida</item>
+    </string-array>
+    <string-array name="exo_controls_playback_speeds">
+        <item>0,25x</item>
+        <item>0,5x</item>
+        <item>0,75x</item>
+        <item>Normal</item>
+        <item>1,25x</item>
+        <item>1,5x</item>
+        <item>2x</item>
+    </string-array>
+    <string-array name="fractions_army_staff_array">
+        <item>Soldado</item>
+        <item>Cabo</item>
+        <item>Sargento</item>
+        <item>Sargento-mor</item>
+        <item>Subtenente</item>
+        <item>Tenente</item>
+        <item>Capitão</item>
+        <item>Major</item>
+        <item>Tenente-coronel</item>
+        <item>Coronel</item>
+    </string-array>
+    <string-array name="fractions_government_staff_array">
+        <item>Motorista</item>
+        <item>Guarda</item>
+        <item>Chefe de segurança</item>
+        <item>Secretário</item>
+        <item>Conselheiro</item>
+        <item>Licenciador</item>
+        <item>Advogado</item>
+        <item>Deputado</item>
+        <item>Vice-governador</item>
+        <item>Governador</item>
+    </string-array>
+    <string-array name="fractions_hospital_staff_array">
+        <item>Estagiário</item>
+        <item>Paramédico</item>
+        <item>Médico</item>
+        <item>Narcologista</item>
+        <item>Pediatra</item>
+        <item>Clínico geral</item>
+        <item>Traumatologista</item>
+        <item>Cirurgião</item>
+        <item>Chefe de departamento</item>
+        <item>Médico-chefe</item>
+    </string-array>
+    <string-array name="fractions_mass_media_staff_array">
+        <item>Estagiário</item>
+        <item>Fotógrafo</item>
+        <item>Jornalista</item>
+        <item>Correspondente</item>
+        <item>Apresentador</item>
+        <item>Editor</item>
+        <item>Profissional de marketing</item>
+        <item>Gerente</item>
+        <item>Produtor</item>
+        <item>Diretor</item>
+    </string-array>
+    <string-array name="fuel_fill_titles">
+        <item>AI-92</item>
+        <item>AI-95</item>
+        <item>AI-98</item>
+        <item>AI-100</item>
+        <item>DT</item>
+    </string-array>
+    <string-array name="inv_main_actions">
+        <item>Usar</item>
+        <item>Trocar</item>
+        <item>Excluir</item>
+    </string-array>
+    <string-array name="inv_main_buttons">
+        <item>Menu</item>
+        <item>Estatísticas</item>
+        <item>Doar</item>
+        <item>Tablet</item>
+        <item>BLACK PASS</item>
+        <item>Inventário</item>
+        <item>Recompensas</item>
+    </string-array>
+    <string-array name="launcher_info_array">
+        <item>"· formato de entrada: Nick_Name
+"</item>
+        <item>"· comprimento do apelido 3-20 caracteres
+"</item>
+        <item>"· palavras ofensivas e obscenas
+ são proibidas no apelido
+"</item>
+        <item>"· o apelido deve conter apenas letras latinas
+"</item>
+        <item>"· uso de dígitos e símbolos proibido
+"</item>
+    </string-array>
+    <string-array name="new_menu_setting_language_names">
+        <item>Russo</item>
+        <item>Português(Brasil)</item>
+    </string-array>
+    <string-array name="new_menu_setting_region_names">
+        <item>CIS</item>
+        <item>Mundo</item>
+    </string-array>
+    <string-array name="new_menu_setting_title_parameters_controls">
+        <item>Método de controle do carro</item>
+        <item>Ativar visão traseira</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_controls">
+        <item>Joystick</item>
+        <item>Botões</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_graphics_car">
+        <item>Desativado</item>
+        <item>Padrão</item>
+        <item>Médio</item>
+        <item>Alto</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_graphics_distance">
+        <item>Baixo</item>
+        <item>Padrão</item>
+        <item>Médio</item>
+        <item>Alto</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_graphics_effect_qualities">
+        <item>Baixo</item>
+        <item>Padrão</item>
+        <item>Médio</item>
+        <item>Alto</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_graphics_quality_shadow">
+        <item>Desativado</item>
+        <item>Baixo</item>
+        <item>Médio</item>
+        <item>Alto</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_graphics_quality_water">
+        <item>Baixo</item>
+        <item>Padrão</item>
+        <item>Médio</item>
+        <item>Alto</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_graphics_vegetation">
+        <item>Baixo</item>
+        <item>Normal</item>
+        <item>Alto</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_snow_intensity">
+        <item>Desativado</item>
+        <item>Fraco</item>
+        <item>Médio</item>
+        <item>Forte</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_switch_keyboard">
+        <item>Antigo</item>
+        <item>Novo</item>
+        <item>Sistema</item>
+        <item>Jogo</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_switch_new_old">
+        <item>Antigo</item>
+        <item>Novo</item>
+    </string-array>
+    <string-array name="new_menu_setting_value_parameters_switch_new_outdated">
+        <item>Desatualizado</item>
+        <item>Novo</item>
+    </string-array>
+    <string-array name="spawn_location_place_names">
+        <item>Fração</item>
+        <item>Estação</item>
+        <item>Último local</item>
+        <item>Garagem</item>
+        <item>Casa</item>
+        <item>Garagem da família</item>
+        <item>Casa da família</item>
+        <item>Iate</item>
+    </string-array>
+    <integer-array name="spawn_location_place_number">
+        <item>2</item>
+        <item>0</item>
+        <item>1</item>
+        <item>3</item>
+        <item>4</item>
+        <item>6</item>
+        <item>7</item>
+        <item>5</item>
+    </integer-array>
+</resources>

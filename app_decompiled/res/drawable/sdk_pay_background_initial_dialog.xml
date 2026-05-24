@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:topLeftRadius="@dimen/sdk_pay_bottom_sheet_top_border_radius" android:topRightRadius="@dimen/sdk_pay_bottom_sheet_top_border_radius" android:bottomLeftRadius="0.0dip" android:bottomRightRadius="0.0dip" />
+    <padding android:left="0.0dip" android:top="0.0dip" android:right="0.0dip" android:bottom="0.0dip" />
+    <solid android:color="?sdk_pay_bg_secondary" />
+</shape>

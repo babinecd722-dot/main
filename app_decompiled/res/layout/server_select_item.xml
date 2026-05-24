@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:orientation="vertical" android:background="@drawable/neizzir_server_card" android:layout_width="160.0dip" android:layout_height="80.0dip"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <View android:id="@id/server_list_back_color" android:background="@drawable/neizzir_server_card" android:layout_width="fill_parent" android:layout_height="fill_parent" android:alpha="1.0" />
+    <View android:background="@drawable/neizzir_server_card_inner" android:layout_width="fill_parent" android:layout_height="fill_parent" android:layout_margin="1.0dip" />
+    <LinearLayout android:orientation="vertical" android:paddingLeft="10.0dip" android:paddingTop="8.0dip" android:paddingRight="10.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="fill_parent">
+        <FrameLayout android:layout_width="fill_parent" android:layout_height="18.0dip">
+            <TextView android:textSize="9.0sp" android:textColor="#ff08070c" android:gravity="center" android:layout_gravity="center|right" android:id="@id/br_server_x2" android:background="@drawable/neizzir_server_badge" android:paddingLeft="12.0dip" android:paddingTop="2.0dip" android:paddingRight="12.0dip" android:paddingBottom="2.0dip" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="x2" android:fontFamily="@font/montserrat_bold" />
+        </FrameLayout>
+        <Space android:layout_width="fill_parent" android:layout_height="0.0dip" android:layout_weight="1.0" />
+        <com.blackhub.bronline.game.common.roundcornerprogressbar.RoundCornerProgressBar android:id="@id/br_server_progress" android:layout_width="fill_parent" android:layout_height="3.0dip" android:layout_marginLeft="4.0dip" android:layout_marginRight="4.0dip" app:rcAnimationEnable="true" app:rcAnimationSpeedScale="2.4" app:rcBackgroundColor="#30ffffff" app:rcBackgroundPadding="0.0dip" app:rcMax="100.0" app:rcProgress="0.0" app:rcProgressColor="#ff00b7a3" app:rcRadius="2.0dip" app:rcReverse="false" app:rcSecondaryProgress="0.0" app:rcSecondaryProgressColor="#3300b7a3" />
+        <TextView android:textSize="9.0sp" android:textColor="#ccffffff" android:gravity="center" android:id="@id/br_server_online" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="4.0dip" android:text="999/1000" android:fontFamily="@font/montserrat_bold" />
+        <TextView android:textSize="9.0sp" android:textColor="#ffffffff" android:gravity="center" android:id="@id/br_server_name" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Server Name" android:includeFontPadding="false" android:fontFamily="@font/montserrat_bold" />
+    </LinearLayout>
+    <ImageView android:layout_gravity="bottom|center|left" android:id="@id/br_server_image" android:visibility="gone" android:layout_width="@dimen/_25sdp" android:layout_height="@dimen/_25sdp" app:srcCompat="@drawable/img_peaw" />
+</FrameLayout>

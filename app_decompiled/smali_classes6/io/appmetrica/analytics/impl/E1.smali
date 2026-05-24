@@ -1,0 +1,73 @@
+.class public final Lio/appmetrica/analytics/impl/E1;
+.super Lio/appmetrica/analytics/coreutils/internal/executors/SafeRunnable;
+.source "SourceFile"
+
+
+# instance fields
+.field public final synthetic a:Lio/appmetrica/analytics/impl/N1;
+
+
+# direct methods
+.method public constructor <init>(Lio/appmetrica/analytics/impl/N1;)V
+    .locals 0
+
+    .line 1
+    iput-object p1, p0, Lio/appmetrica/analytics/impl/E1;->a:Lio/appmetrica/analytics/impl/N1;
+
+    invoke-direct {p0}, Lio/appmetrica/analytics/coreutils/internal/executors/SafeRunnable;-><init>()V
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public final runSafety()V
+    .locals 3
+
+    .line 1
+    iget-object v0, p0, Lio/appmetrica/analytics/impl/E1;->a:Lio/appmetrica/analytics/impl/N1;
+
+    monitor-enter v0
+
+    .line 2
+    :try_start_0
+    iget-object v1, p0, Lio/appmetrica/analytics/impl/E1;->a:Lio/appmetrica/analytics/impl/N1;
+
+    .line 3
+    iget-boolean v2, v1, Lio/appmetrica/analytics/impl/N1;->c:Z
+
+    if-nez v2, :cond_0
+
+    .line 4
+    monitor-exit v0
+
+    return-void
+
+    :catchall_0
+    move-exception v1
+
+    goto :goto_0
+
+    .line 6
+    :cond_0
+    monitor-exit v0
+    :try_end_0
+    .catchall {:try_start_0 .. :try_end_0} :catchall_0
+
+    .line 7
+    iget-object v0, v1, Lio/appmetrica/analytics/impl/N1;->b:Lio/appmetrica/analytics/impl/C1;
+
+    .line 8
+    invoke-interface {v0}, Lio/appmetrica/analytics/impl/C1;->onCreate()V
+
+    return-void
+
+    .line 9
+    :goto_0
+    :try_start_1
+    monitor-exit v0
+    :try_end_1
+    .catchall {:try_start_1 .. :try_end_1} :catchall_0
+
+    throw v1
+.end method

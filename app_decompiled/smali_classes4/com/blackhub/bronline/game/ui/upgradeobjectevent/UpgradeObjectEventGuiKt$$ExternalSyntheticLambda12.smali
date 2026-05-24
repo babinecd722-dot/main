@@ -1,0 +1,52 @@
+.class public final synthetic Lcom/blackhub/bronline/game/ui/upgradeobjectevent/UpgradeObjectEventGuiKt$$ExternalSyntheticLambda12;
+.super Ljava/lang/Object;
+.source "R8$$SyntheticClass"
+
+# interfaces
+.implements Lkotlin/jvm/functions/Function2;
+
+
+# instance fields
+.field public final synthetic f$0:Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventUiState;
+
+.field public final synthetic f$1:Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventViewModel;
+
+
+# direct methods
+.method public synthetic constructor <init>(Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventUiState;Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventViewModel;)V
+    .locals 0
+
+    .line 0
+    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
+
+    iput-object p1, p0, Lcom/blackhub/bronline/game/ui/upgradeobjectevent/UpgradeObjectEventGuiKt$$ExternalSyntheticLambda12;->f$0:Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventUiState;
+
+    iput-object p2, p0, Lcom/blackhub/bronline/game/ui/upgradeobjectevent/UpgradeObjectEventGuiKt$$ExternalSyntheticLambda12;->f$1:Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventViewModel;
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public final invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+    .locals 2
+
+    .line 0
+    iget-object v0, p0, Lcom/blackhub/bronline/game/ui/upgradeobjectevent/UpgradeObjectEventGuiKt$$ExternalSyntheticLambda12;->f$0:Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventUiState;
+
+    iget-object v1, p0, Lcom/blackhub/bronline/game/ui/upgradeobjectevent/UpgradeObjectEventGuiKt$$ExternalSyntheticLambda12;->f$1:Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventViewModel;
+
+    check-cast p1, Landroidx/compose/runtime/Composer;
+
+    check-cast p2, Ljava/lang/Integer;
+
+    invoke-virtual {p2}, Ljava/lang/Integer;->intValue()I
+
+    move-result p2
+
+    invoke-static {v0, v1, p1, p2}, Lcom/blackhub/bronline/game/ui/upgradeobjectevent/UpgradeObjectEventGuiKt;->$r8$lambda$l9obXgqaudV5Oqkz_KrlUDTvpS0(Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventUiState;Lcom/blackhub/bronline/game/gui/upgradeobjectevent/UpgradeObjectEventViewModel;Landroidx/compose/runtime/Composer;I)Lkotlin/Unit;
+
+    move-result-object p1
+
+    return-object p1
+.end method

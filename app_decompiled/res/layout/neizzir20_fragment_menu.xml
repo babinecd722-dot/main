@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout android:background="#ff0a0a0f" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <View android:background="@drawable/neizzir19_glow_accent" android:layout_width="200.0dip" android:layout_height="200.0dip" android:layout_marginTop="-50.0dip" android:alpha="0.3" android:layout_marginEnd="-50.0dip" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <androidx.core.widget.NestedScrollView android:scrollbars="none" android:layout_width="0.0dip" android:layout_height="0.0dip" android:fillViewport="true" android:overScrollMode="never" app:layout_constraintBottom_toTopOf="@id/neizzir20_bottom_nav" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent">
+        <LinearLayout android:orientation="vertical" android:paddingBottom="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+            <LinearLayout android:orientation="vertical" android:paddingLeft="20.0dip" android:paddingTop="24.0dip" android:paddingRight="20.0dip" android:paddingBottom="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="20.0dip">
+                <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                    <ImageButton android:id="@id/neizzir19_btn_back" android:background="@drawable/neizzir19_ripple_circle" android:padding="8.0dip" android:layout_width="40.0dip" android:layout_height="40.0dip" android:src="@drawable/neizzir19_ic_arrow_back" app:tint="#ffffffff" />
+                    <TextView android:textSize="24.0sp" android:textColor="#ffffffff" android:layout_width="0.0dip" android:layout_height="wrap_content" android:text="Настройки" android:layout_weight="1.0" android:fontFamily="@font/montserrat_extra_bold" android:layout_marginStart="12.0dip" />
+                    <ImageButton android:id="@id/neizzir19_ic_tg" android:background="@drawable/neizzir19_ripple_circle" android:padding="8.0dip" android:layout_width="40.0dip" android:layout_height="40.0dip" android:src="@drawable/neizzir19_ic_tg" app:tint="#ffffffff" />
+                </LinearLayout>
+                <androidx.cardview.widget.CardView android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="20.0dip" app:cardBackgroundColor="#00000000" app:cardCornerRadius="20.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:background="@drawable/neizzir19_card_gradient_accent" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <ImageView android:layout_width="64.0dip" android:layout_height="64.0dip" android:src="@drawable/neizzir_logo" android:scaleType="fitCenter" />
+                        <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="16.0dip">
+                            <TextView android:textSize="20.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="NEIZZIR" android:fontFamily="@font/montserrat_extra_bold" android:letterSpacing="0.1" />
+                            <TextView android:textSize="11.0sp" android:textColor="#b0ffffff" android:id="@id/neizzir19_status_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4.0dip" android:text="Загрузка..." android:lineSpacingExtra="2.0dip" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+            <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8.0dip" android:text="Быстрые действия" android:fontFamily="@font/muller_bold" android:layout_marginStart="20.0dip" />
+            <HorizontalScrollView android:paddingLeft="20.0dip" android:paddingRight="20.0dip" android:scrollbars="none" android:clipToPadding="false" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="12.0dip" android:paddingHorizontal="20.0dip">
+                <LinearLayout android:orientation="horizontal" android:layout_width="wrap_content" android:layout_height="wrap_content">
+                    <com.google.android.material.card.MaterialCardView android:id="@id/neizzir19_item_help" android:layout_width="100.0dip" android:layout_height="wrap_content" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip" app:rippleColor="#33ffffff">
+                        <LinearLayout android:gravity="center" android:orientation="vertical" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_purple" android:layout_width="48.0dip" android:layout_height="48.0dip">
+                                <ImageView android:layout_width="26.0dip" android:layout_height="26.0dip" android:src="@drawable/neizzir9_ic_help" app:tint="#ffa855f7" />
+                            </LinearLayout>
+                            <TextView android:textSize="12.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10.0dip" android:text="Команды" android:fontFamily="@font/muller_bold" />
+                            <TextView android:textSize="10.0sp" android:textColor="#ff505050" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="лаунчера" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                    <View android:layout_width="12.0dip" android:layout_height="1.0dip" />
+                    <com.google.android.material.card.MaterialCardView android:id="@id/neizzir19_card_play" android:layout_width="100.0dip" android:layout_height="wrap_content" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip" app:rippleColor="#33ffffff">
+                        <LinearLayout android:gravity="center" android:orientation="vertical" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_accent" android:layout_width="48.0dip" android:layout_height="48.0dip">
+                                <ImageView android:layout_width="26.0dip" android:layout_height="26.0dip" android:src="@drawable/neizzir_ic_play" app:tint="#ff00e5cc" />
+                            </LinearLayout>
+                            <TextView android:textSize="12.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10.0dip" android:text="Играть" android:fontFamily="@font/muller_bold" />
+                            <TextView android:textSize="10.0sp" android:textColor="#ff505050" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="без сборки" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                    <View android:layout_width="12.0dip" android:layout_height="1.0dip" />
+                    <com.google.android.material.card.MaterialCardView android:id="@id/neizzir19_card_install" android:layout_width="100.0dip" android:layout_height="wrap_content" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip" app:rippleColor="#33ffffff">
+                        <LinearLayout android:gravity="center" android:orientation="vertical" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_blue" android:layout_width="48.0dip" android:layout_height="48.0dip">
+                                <ImageView android:layout_width="26.0dip" android:layout_height="26.0dip" android:src="@drawable/neizzir_ic_download" app:tint="#ff3b82f6" />
+                            </LinearLayout>
+                            <TextView android:textSize="12.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10.0dip" android:text="Установить" android:fontFamily="@font/muller_bold" />
+                            <TextView android:textSize="10.0sp" android:textColor="#ff505050" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text=".zip сборку" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                    <View android:layout_width="12.0dip" android:layout_height="1.0dip" />
+                    <com.google.android.material.card.MaterialCardView android:id="@id/neizzir19_card_folder" android:layout_width="100.0dip" android:layout_height="wrap_content" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip" app:rippleColor="#33ffffff">
+                        <LinearLayout android:gravity="center" android:orientation="vertical" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_amber" android:layout_width="48.0dip" android:layout_height="48.0dip">
+                                <ImageView android:layout_width="26.0dip" android:layout_height="26.0dip" android:src="@drawable/neizzir_ic_explore" app:tint="#fff59e0b" />
+                            </LinearLayout>
+                            <TextView android:textSize="12.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="10.0dip" android:text="Открыть" android:fontFamily="@font/muller_bold" />
+                            <TextView android:textSize="10.0sp" android:textColor="#ff505050" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="папку игры" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                    <View android:layout_width="12.0dip" android:layout_height="1.0dip" />
+                </LinearLayout>
+            </HorizontalScrollView>
+            <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24.0dip" android:text="Редакторы" android:fontFamily="@font/muller_bold" android:layout_marginStart="20.0dip" />
+            <LinearLayout android:orientation="vertical" android:paddingLeft="20.0dip" android:paddingRight="20.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="12.0dip" android:paddingHorizontal="20.0dip">
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_hitbox" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_red" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir_hitcfg_ic" app:tint="#ffef4444" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="HitBox" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ffef4444" android:id="@id/neizzir19_hitbox_value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Размер: 1.0x" />
+                            </LinearLayout>
+                            <androidx.appcompat.widget.SwitchCompat android:id="@id/neizzir19_hitbox_switch" android:layout_width="wrap_content" android:layout_height="wrap_content" app:thumbTint="#ff00e5cc" app:trackTint="#ff2d2d35" />
+                        </LinearLayout>
+                        <View android:background="#ff2d2d35" android:layout_width="fill_parent" android:layout_height="1.0dip" android:layout_marginLeft="16.0dip" android:layout_marginRight="16.0dip" android:layout_marginHorizontal="16.0dip" />
+                        <LinearLayout android:orientation="horizontal" android:paddingLeft="12.0dip" android:paddingTop="8.0dip" android:paddingRight="12.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="12.0dip" android:paddingVertical="8.0dip">
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_hitbox_editor" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_settings" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Размер" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                            <View android:background="#ff2d2d35" android:layout_width="1.0dip" android:layout_height="24.0dip" android:layout_marginLeft="8.0dip" android:layout_marginRight="8.0dip" android:layout_marginHorizontal="8.0dip" />
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_hitbox_video" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_play_video" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Обзор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_hpbar" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_emerald" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir11_ic_hpbar" app:tint="#ff10b981" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="HP Bar" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ff10b981" android:id="@id/neizzir19_hpbar_value" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Активен" />
+                            </LinearLayout>
+                            <androidx.appcompat.widget.SwitchCompat android:id="@id/neizzir19_hpbar_switch" android:layout_width="wrap_content" android:layout_height="wrap_content" app:thumbTint="#ff00e5cc" app:trackTint="#ff2d2d35" />
+                        </LinearLayout>
+                        <View android:background="#ff2d2d35" android:layout_width="fill_parent" android:layout_height="1.0dip" android:layout_marginLeft="16.0dip" android:layout_marginRight="16.0dip" android:layout_marginHorizontal="16.0dip" />
+                        <LinearLayout android:orientation="horizontal" android:paddingLeft="12.0dip" android:paddingTop="8.0dip" android:paddingRight="12.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="12.0dip" android:paddingVertical="8.0dip">
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_hpbar_editor" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_settings" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Настройка" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                            <View android:background="#ff2d2d35" android:layout_width="1.0dip" android:layout_height="24.0dip" android:layout_marginLeft="8.0dip" android:layout_marginRight="8.0dip" android:layout_marginHorizontal="8.0dip" />
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_hpbar_video" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_play_video" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Обзор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_commands" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_violet" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir15_ic_commands" app:tint="#ff8b5cf6" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Короткие команды" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ff8b5cf6" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Настроено: 9 команд" />
+                            </LinearLayout>
+                            <androidx.appcompat.widget.SwitchCompat android:id="@id/neizzir19_commands_switch" android:layout_width="wrap_content" android:layout_height="wrap_content" app:thumbTint="#ff00e5cc" app:trackTint="#ff2d2d35" />
+                        </LinearLayout>
+                        <View android:background="#ff2d2d35" android:layout_width="fill_parent" android:layout_height="1.0dip" android:layout_marginLeft="16.0dip" android:layout_marginRight="16.0dip" android:layout_marginHorizontal="16.0dip" />
+                        <LinearLayout android:orientation="horizontal" android:paddingLeft="12.0dip" android:paddingTop="8.0dip" android:paddingRight="12.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="12.0dip" android:paddingVertical="8.0dip">
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_commands_editor" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_settings" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Редактор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                            <View android:background="#ff2d2d35" android:layout_width="1.0dip" android:layout_height="24.0dip" android:layout_marginLeft="8.0dip" android:layout_marginRight="8.0dip" android:layout_marginHorizontal="8.0dip" />
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_commands_video" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_play_video" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Обзор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_rastyag_toggle" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_cyan" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir_ic_rastyag" app:tint="#ff06b6d4" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Растяг экрана" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ff606060" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Применить Aspect Ratio" />
+                            </LinearLayout>
+                            <androidx.appcompat.widget.SwitchCompat android:id="@id/neizzir19_rastyag_t_switch" android:layout_width="wrap_content" android:layout_height="wrap_content" app:thumbTint="#ff00e5cc" app:trackTint="#ff2d2d35" />
+                        </LinearLayout>
+                        <View android:background="#ff2d2d35" android:layout_width="fill_parent" android:layout_height="1.0dip" android:layout_marginLeft="16.0dip" android:layout_marginRight="16.0dip" android:layout_marginHorizontal="16.0dip" />
+                        <LinearLayout android:orientation="horizontal" android:paddingLeft="12.0dip" android:paddingTop="8.0dip" android:paddingRight="12.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="12.0dip" android:paddingVertical="8.0dip">
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_rastyag_t_editor" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_settings" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Настройка" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                            <View android:background="#ff2d2d35" android:layout_width="1.0dip" android:layout_height="24.0dip" android:layout_marginLeft="8.0dip" android:layout_marginRight="8.0dip" android:layout_marginHorizontal="8.0dip" />
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_rastyag_t_video" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_play_video" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Обзор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_weapon" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" android:foreground="?selectableItemBackground" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_orange" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir12_ic_weapon" app:tint="#fff97316" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Редактор Weapon" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ff606060" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Настройка оружия" />
+                            </LinearLayout>
+                            <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir19_ic_chevron" app:tint="#ff404040" />
+                        </LinearLayout>
+                        <View android:background="#ff2d2d35" android:layout_width="fill_parent" android:layout_height="1.0dip" android:layout_marginLeft="16.0dip" android:layout_marginRight="16.0dip" android:layout_marginHorizontal="16.0dip" />
+                        <LinearLayout android:orientation="horizontal" android:paddingLeft="12.0dip" android:paddingTop="8.0dip" android:paddingRight="12.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="12.0dip" android:paddingVertical="8.0dip">
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_weapon_video" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_play_video" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Видео обзор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_sens" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" android:foreground="?selectableItemBackground" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_yellow" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir6_ic_sens" app:tint="#ffeab308" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Чувствительность" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ff606060" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Камера и прицел" />
+                            </LinearLayout>
+                            <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir19_ic_chevron" app:tint="#ff404040" />
+                        </LinearLayout>
+                        <View android:background="#ff2d2d35" android:layout_width="fill_parent" android:layout_height="1.0dip" android:layout_marginLeft="16.0dip" android:layout_marginRight="16.0dip" android:layout_marginHorizontal="16.0dip" />
+                        <LinearLayout android:orientation="horizontal" android:paddingLeft="12.0dip" android:paddingTop="8.0dip" android:paddingRight="12.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="12.0dip" android:paddingVertical="8.0dip">
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_sens_video" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_play_video" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Видео обзор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_hud_editor" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" android:foreground="?selectableItemBackground" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_pink" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_hud_editor" app:tint="#ffec4899" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="HUD Редактор" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ff606060" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Расположение кнопок" />
+                            </LinearLayout>
+                            <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir19_ic_chevron" app:tint="#ff404040" />
+                        </LinearLayout>
+                        <View android:background="#ff2d2d35" android:layout_width="fill_parent" android:layout_height="1.0dip" android:layout_marginLeft="16.0dip" android:layout_marginRight="16.0dip" android:layout_marginHorizontal="16.0dip" />
+                        <LinearLayout android:orientation="horizontal" android:paddingLeft="12.0dip" android:paddingTop="8.0dip" android:paddingRight="12.0dip" android:paddingBottom="8.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingHorizontal="12.0dip" android:paddingVertical="8.0dip">
+                            <LinearLayout android:gravity="center" android:orientation="horizontal" android:id="@id/neizzir19_hud_editor_video" android:background="@drawable/neizzir19_ripple_rounded" android:padding="10.0dip" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                                <ImageView android:layout_width="18.0dip" android:layout_height="18.0dip" android:src="@drawable/neizzir19_ic_play_video" app:tint="#ff808080" />
+                                <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Видео обзор" android:fontFamily="@font/muller_bold" android:layout_marginStart="8.0dip" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+                <androidx.cardview.widget.CardView android:id="@id/neizzir19_item_gui_editor" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="10.0dip" android:foreground="?selectableItemBackground" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="16.0dip" app:cardElevation="0.0dip">
+                    <LinearLayout android:orientation="vertical" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                        <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+                            <LinearLayout android:gravity="center" android:background="@drawable/neizzir19_icon_bg_cyan" android:layout_width="44.0dip" android:layout_height="44.0dip">
+                                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_hud_editor" app:tint="#ff06b6d4" />
+                            </LinearLayout>
+                            <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="14.0dip">
+                                <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Редактор GUI" android:fontFamily="@font/muller_bold" />
+                                <TextView android:textSize="12.0sp" android:textColor="#ff606060" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Hud/NewHud.xaml и HUD текстуры" />
+                            </LinearLayout>
+                            <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir19_ic_chevron" app:tint="#ff404040" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+            </LinearLayout>
+            <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24.0dip" android:text="Геймплей" android:fontFamily="@font/muller_bold" android:layout_marginStart="20.0dip" />
+            <LinearLayout android:orientation="vertical" android:paddingLeft="20.0dip" android:paddingRight="20.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="12.0dip" android:paddingHorizontal="20.0dip">
+                <include android:id="@id/neizzir19_item_sounds" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_run" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_shtraf" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_drift" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_stan" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_autoprocess" layout="@layout/neizzir19_item_toggle" />
+            </LinearLayout>
+            <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24.0dip" android:text="Визуальные" android:fontFamily="@font/muller_bold" android:layout_marginStart="20.0dip" />
+            <LinearLayout android:orientation="vertical" android:paddingLeft="20.0dip" android:paddingRight="20.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="12.0dip" android:paddingHorizontal="20.0dip">
+                <include android:id="@id/neizzir19_item_summer" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_time" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_strip" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_spotlight" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_traser" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_ammo" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_snow" layout="@layout/neizzir19_item_toggle" />
+            </LinearLayout>
+            <TextView android:textSize="13.0sp" android:textColor="#ff808080" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24.0dip" android:text="Производительность" android:fontFamily="@font/muller_bold" android:layout_marginStart="20.0dip" />
+            <LinearLayout android:orientation="vertical" android:paddingLeft="20.0dip" android:paddingRight="20.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="12.0dip" android:paddingHorizontal="20.0dip">
+                <include android:id="@id/neizzir19_item_fpsup" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_unlockfps" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_banners" layout="@layout/neizzir19_item_toggle" />
+                <include android:id="@id/neizzir19_item_videopleer" layout="@layout/neizzir19_item_toggle" />
+            </LinearLayout>
+            <View android:layout_width="fill_parent" android:layout_height="16.0dip" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+    <com.google.android.material.card.MaterialCardView android:id="@id/neizzir20_bottom_nav" android:layout_width="0.0dip" android:layout_height="64.0dip" android:layout_marginBottom="10.0dip" android:layout_marginStart="12.0dip" android:layout_marginEnd="12.0dip" app:cardBackgroundColor="#ff121217" app:cardCornerRadius="20.0dip" app:cardElevation="0.0dip" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:strokeColor="#1affffff" app:strokeWidth="1.0dip">
+        <LinearLayout android:gravity="center" android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="fill_parent" android:paddingStart="8.0dip" android:paddingEnd="8.0dip">
+            <LinearLayout android:gravity="center" android:orientation="vertical" android:id="@id/neizzir_nav_home" android:background="?selectableItemBackgroundBorderless" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="fill_parent" android:layout_weight="1.0">
+                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_nav_home" app:tint="#ff666666" />
+                <TextView android:textSize="10.0sp" android:textColor="#ff666666" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Главная" />
+            </LinearLayout>
+            <LinearLayout android:gravity="center" android:orientation="vertical" android:id="@id/neizzir_nav_menu" android:background="?selectableItemBackgroundBorderless" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="fill_parent" android:layout_weight="1.0">
+                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_nav_menu" app:tint="#ff00e5cc" />
+                <TextView android:textSize="10.0sp" android:textColor="#ff00e5cc" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Меню" android:fontFamily="@font/montserrat_extra_bold" />
+            </LinearLayout>
+            <LinearLayout android:gravity="center" android:orientation="vertical" android:id="@id/neizzir_nav_play" android:background="?selectableItemBackgroundBorderless" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="fill_parent" android:layout_weight="1.0">
+                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_play_triangle" app:tint="#ffef4444" />
+                <TextView android:textSize="10.0sp" android:textColor="#ffef4444" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Играть" android:fontFamily="@font/montserrat_extra_bold" />
+            </LinearLayout>
+            <LinearLayout android:gravity="center" android:orientation="vertical" android:id="@id/neizzir_nav_custom" android:background="?selectableItemBackgroundBorderless" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="fill_parent" android:layout_weight="1.0">
+                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_nav_custom" app:tint="#ff666666" />
+                <TextView android:textSize="10.0sp" android:textColor="#ff666666" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Custom" />
+            </LinearLayout>
+            <LinearLayout android:gravity="center" android:orientation="vertical" android:id="@id/neizzir_nav_sborks" android:background="?selectableItemBackgroundBorderless" android:focusable="true" android:clickable="true" android:layout_width="0.0dip" android:layout_height="fill_parent" android:layout_weight="1.0">
+                <ImageView android:layout_width="24.0dip" android:layout_height="24.0dip" android:src="@drawable/neizzir20_ic_nav_builds" app:tint="#ff666666" />
+                <TextView android:textSize="10.0sp" android:textColor="#ff666666" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" android:text="Сборки" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+</androidx.constraintlayout.widget.ConstraintLayout>

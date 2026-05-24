@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:layout_gravity="bottom" android:orientation="vertical" android:background="@drawable/neizzir19_video_bottom_gradient" android:paddingTop="24.0dip" android:paddingBottom="16.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:paddingStart="16.0dip" android:paddingEnd="16.0dip"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center" android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="wrap_content">
+        <ImageButton android:id="@id/exo_rew" android:background="@drawable/neizzir19_ripple_circle" android:padding="10.0dip" android:layout_width="44.0dip" android:layout_height="44.0dip" android:src="@drawable/neizzir19_ic_rewind" app:tint="#ffffffff" />
+        <ImageButton android:id="@id/exo_play_pause" android:background="@drawable/neizzir19_play_button_bg" android:padding="14.0dip" android:layout_width="56.0dip" android:layout_height="56.0dip" android:layout_marginLeft="24.0dip" android:layout_marginRight="24.0dip" android:src="@drawable/neizzir19_ic_play" android:layout_marginHorizontal="24.0dip" app:tint="#ff0a0a0f" />
+        <ImageButton android:id="@id/exo_ffwd" android:background="@drawable/neizzir19_ripple_circle" android:padding="10.0dip" android:layout_width="44.0dip" android:layout_height="44.0dip" android:src="@drawable/neizzir19_ic_forward" app:tint="#ffffffff" />
+    </LinearLayout>
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="16.0dip">
+        <TextView android:textSize="12.0sp" android:textColor="#ffffffff" android:gravity="center" android:id="@id/exo_position" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="44.0dip" android:fontFamily="@font/muller_bold" />
+        <androidx.media3.ui.DefaultTimeBar android:id="@id/exo_progress" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_marginLeft="12.0dip" android:layout_marginRight="12.0dip" android:layout_weight="1.0" android:layout_marginHorizontal="12.0dip" app:bar_height="3.0dip" app:buffered_color="#ff606060" app:played_color="#ff00e5cc" app:scrubber_color="#ff00e5cc" app:scrubber_disabled_size="0.0dip" app:scrubber_enabled_size="14.0dip" app:unplayed_color="#ff404040" />
+        <TextView android:textSize="12.0sp" android:textColor="#ffffffff" android:gravity="center" android:id="@id/exo_duration" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="44.0dip" android:fontFamily="@font/muller_bold" />
+    </LinearLayout>
+</LinearLayout>

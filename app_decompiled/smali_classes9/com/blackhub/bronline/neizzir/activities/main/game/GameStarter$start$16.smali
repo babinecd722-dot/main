@@ -1,0 +1,324 @@
+.class final Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+.super Lkotlin/coroutines/jvm/internal/SuspendLambda;
+.source "GameStarter.kt"
+
+# interfaces
+.implements Lkotlin/jvm/functions/Function2;
+
+
+# annotations
+.annotation system Ldalvik/annotation/EnclosingMethod;
+    value = Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter;->start(Landroid/app/Activity;Lcom/blackhub/bronline/neizzir/activities/main/settings/SettingsRepository;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+.end annotation
+
+.annotation system Ldalvik/annotation/InnerClass;
+    accessFlags = 0x18
+    name = null
+.end annotation
+
+.annotation system Ldalvik/annotation/Signature;
+    value = {
+        "Lkotlin/coroutines/jvm/internal/SuspendLambda;",
+        "Lkotlin/jvm/functions/Function2<",
+        "Lkotlinx/coroutines/CoroutineScope;",
+        "Lkotlin/coroutines/Continuation<",
+        "-",
+        "Lkotlin/Unit;",
+        ">;",
+        "Ljava/lang/Object;",
+        ">;"
+    }
+.end annotation
+
+.annotation runtime Lkotlin/Metadata;
+    d1 = {
+        "\u0000\n\n\u0000\n\u0002\u0010\u0002\n\u0002\u0018\u0002\u0010\u0000\u001a\u00020\u0001*\u00020\u0002H\u008a@"
+    }
+    d2 = {
+        "<anonymous>",
+        "",
+        "Lkotlinx/coroutines/CoroutineScope;"
+    }
+    k = 0x3
+    mv = {
+        0x1,
+        0x9,
+        0x0
+    }
+    xi = 0x30
+.end annotation
+
+.annotation runtime Lkotlin/coroutines/jvm/internal/DebugMetadata;
+    c = "com.blackhub.bronline.neizzir.activities.main.game.GameStarter$start$16"
+    f = "GameStarter.kt"
+    i = {}
+    l = {
+        0xf8
+    }
+    m = "invokeSuspend"
+    n = {}
+    s = {}
+.end annotation
+
+
+# instance fields
+.field final synthetic $activity:Landroid/app/Activity;
+
+.field final synthetic $progress:Landroid/app/Dialog;
+
+.field label:I
+
+
+# direct methods
+.method constructor <init>(Landroid/app/Dialog;Landroid/app/Activity;Lkotlin/coroutines/Continuation;)V
+    .locals 1
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "(",
+            "Landroid/app/Dialog;",
+            "Landroid/app/Activity;",
+            "Lkotlin/coroutines/Continuation<",
+            "-",
+            "Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;",
+            ">;)V"
+        }
+    .end annotation
+
+    iput-object p1, p0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$progress:Landroid/app/Dialog;
+
+    iput-object p2, p0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$activity:Landroid/app/Activity;
+
+    const/4 v0, 0x2
+
+    invoke-direct {p0, v0, p3}, Lkotlin/coroutines/jvm/internal/SuspendLambda;-><init>(ILkotlin/coroutines/Continuation;)V
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public final create(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Lkotlin/coroutines/Continuation;
+    .locals 3
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "(",
+            "Ljava/lang/Object;",
+            "Lkotlin/coroutines/Continuation<",
+            "*>;)",
+            "Lkotlin/coroutines/Continuation<",
+            "Lkotlin/Unit;",
+            ">;"
+        }
+    .end annotation
+
+    new-instance v0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+
+    iget-object v1, p0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$progress:Landroid/app/Dialog;
+
+    iget-object v2, p0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$activity:Landroid/app/Activity;
+
+    invoke-direct {v0, v1, v2, p2}, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;-><init>(Landroid/app/Dialog;Landroid/app/Activity;Lkotlin/coroutines/Continuation;)V
+
+    check-cast v0, Lkotlin/coroutines/Continuation;
+
+    return-object v0
+.end method
+
+.method public bridge synthetic invoke(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+    .locals 1
+
+    check-cast p1, Lkotlinx/coroutines/CoroutineScope;
+
+    check-cast p2, Lkotlin/coroutines/Continuation;
+
+    invoke-virtual {p0, p1, p2}, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->invoke(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+
+    move-result-object v0
+
+    return-object v0
+.end method
+
+.method public final invoke(Lkotlinx/coroutines/CoroutineScope;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+    .locals 2
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "(",
+            "Lkotlinx/coroutines/CoroutineScope;",
+            "Lkotlin/coroutines/Continuation<",
+            "-",
+            "Lkotlin/Unit;",
+            ">;)",
+            "Ljava/lang/Object;"
+        }
+    .end annotation
+
+    invoke-virtual {p0, p1, p2}, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->create(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Lkotlin/coroutines/Continuation;
+
+    move-result-object v0
+
+    check-cast v0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+
+    sget-object v1, Lkotlin/Unit;->INSTANCE:Lkotlin/Unit;
+
+    invoke-virtual {v0, v1}, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;
+
+    move-result-object v0
+
+    return-object v0
+.end method
+
+.method public final invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;
+    .locals 10
+
+    invoke-static {}, Lkotlin/coroutines/intrinsics/IntrinsicsKt;->getCOROUTINE_SUSPENDED()Ljava/lang/Object;
+
+    move-result-object v0
+
+    .line 245
+    iget v1, p0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->label:I
+
+    const/4 v2, 0x1
+
+    packed-switch v1, :pswitch_data_0
+
+    new-instance p1, Ljava/lang/IllegalStateException;
+
+    const-string v0, "call to \'resume\' before \'invoke\' with coroutine"
+
+    invoke-direct {p1, v0}, Ljava/lang/IllegalStateException;-><init>(Ljava/lang/String;)V
+
+    throw p1
+
+    :pswitch_0
+    move-object v0, p0
+
+    .local v0, "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    .local p1, "$result":Ljava/lang/Object;
+    :try_start_0
+    invoke-static {p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V
+    :try_end_0
+    .catch Ljava/lang/Exception; {:try_start_0 .. :try_end_0} :catch_0
+
+    goto :goto_0
+
+    .line 254
+    :catch_0
+    move-exception v1
+
+    goto :goto_1
+
+    .line 245
+    .end local v0    # "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    .end local p1    # "$result":Ljava/lang/Object;
+    :pswitch_1
+    invoke-static {p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V
+
+    move-object v1, p0
+
+    .line 246
+    .local v1, "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    .restart local p1    # "$result":Ljava/lang/Object;
+    iget-object v3, v1, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$progress:Landroid/app/Dialog;
+
+    invoke-virtual {v3}, Landroid/app/Dialog;->dismiss()V
+
+    .line 247
+    nop
+
+    .line 248
+    :try_start_1
+    sget-object v4, Lcom/blackhub/bronline/neizzir/activities/main/util/CacheManager;->INSTANCE:Lcom/blackhub/bronline/neizzir/activities/main/util/CacheManager;
+
+    .line 249
+    iget-object v3, v1, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$activity:Landroid/app/Activity;
+
+    move-object v5, v3
+
+    check-cast v5, Landroid/content/Context;
+
+    .line 250
+    nop
+
+    .line 251
+    nop
+
+    .line 252
+    move-object v9, v1
+
+    check-cast v9, Lkotlin/coroutines/Continuation;
+
+    .line 248
+    iput v2, v1, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->label:I
+
+    const/4 v6, 0x1
+
+    const/4 v7, 0x1
+
+    const/4 v8, 0x1
+
+    invoke-virtual/range {v4 .. v9}, Lcom/blackhub/bronline/neizzir/activities/main/util/CacheManager;->clearAppCache(Landroid/content/Context;ZZZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+
+    move-result-object v3
+    :try_end_1
+    .catch Ljava/lang/Exception; {:try_start_1 .. :try_end_1} :catch_1
+
+    if-ne v3, v0, :cond_0
+
+    .line 245
+    return-object v0
+
+    .line 248
+    :cond_0
+    move-object v0, v1
+
+    .end local v1    # "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    .restart local v0    # "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    :goto_0
+    goto :goto_1
+
+    .line 254
+    .end local v0    # "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    .restart local v1    # "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    :catch_1
+    move-exception v0
+
+    move-object v0, v1
+
+    .line 256
+    .end local v1    # "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    .restart local v0    # "this":Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;
+    :goto_1
+    iget-object v1, v0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$activity:Landroid/app/Activity;
+
+    check-cast v1, Landroid/content/Context;
+
+    invoke-static {v1, v2}, Lcom/blackhub/bronline/neizzir/activities/main/util/NeizzirAutostart;->setAutostartEnabled(Landroid/content/Context;Z)V
+
+    .line 257
+    iget-object v1, v0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$activity:Landroid/app/Activity;
+
+    new-instance v2, Landroid/content/Intent;
+
+    iget-object v3, v0, Lcom/blackhub/bronline/neizzir/activities/main/game/GameStarter$start$16;->$activity:Landroid/app/Activity;
+
+    check-cast v3, Landroid/content/Context;
+
+    const-class v4, Lcom/blackhub/bronline/game/core/JNIActivity;
+
+    invoke-direct {v2, v3, v4}, Landroid/content/Intent;-><init>(Landroid/content/Context;Ljava/lang/Class;)V
+
+    invoke-virtual {v1, v2}, Landroid/app/Activity;->startActivity(Landroid/content/Intent;)V
+
+    .line 258
+    sget-object v1, Lkotlin/Unit;->INSTANCE:Lkotlin/Unit;
+
+    return-object v1
+
+    nop
+
+    :pswitch_data_0
+    .packed-switch 0x0
+        :pswitch_1
+        :pswitch_0
+    .end packed-switch
+.end method

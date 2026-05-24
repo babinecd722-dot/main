@@ -1,0 +1,14 @@
+.class public final synthetic Landroidx/compose/ui/text/input/NullableInputConnectionWrapperApi34$$ExternalSyntheticApiModelOutline0;
+.super Ljava/lang/Object;
+.source "R8$$SyntheticClass"
+
+
+# direct methods
+.method public static bridge synthetic m(Landroid/view/inputmethod/InputConnection;Landroid/view/inputmethod/HandwritingGesture;Ljava/util/concurrent/Executor;Ljava/util/function/IntConsumer;)V
+    .locals 0
+
+    .line 0
+    invoke-interface {p0, p1, p2, p3}, Landroid/view/inputmethod/InputConnection;->performHandwritingGesture(Landroid/view/inputmethod/HandwritingGesture;Ljava/util/concurrent/Executor;Ljava/util/function/IntConsumer;)V
+
+    return-void
+.end method

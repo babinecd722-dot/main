@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:gravity="center_vertical" android:orientation="vertical" android:id="@id/coupon_item" android:focusable="true" android:clickable="true" android:layout_width="fill_parent" android:layout_height="wrap_content" android:foreground="@drawable/sdk_pay_ripple_foreground"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <Space android:layout_width="fill_parent" android:layout_height="@dimen/sdk_pay_spacer_m" />
+    <LinearLayout android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginHorizontal="@dimen/sdk_pay_spacer_m">
+        <TextView android:textColor="?sdk_pay_text_quaternary_constant" android:id="@id/coupon_item_nominal" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" style="@style/Headlines.Headline20" />
+        <ImageView android:id="@id/coupon_selected_check" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/sdk_pay_ic_selected_coupon" android:layout_marginStart="@dimen/sdk_pay_spacer_m" />
+    </LinearLayout>
+    <TextView android:textColor="?sdk_pay_text_quaternary_constant" android:ellipsize="end" android:id="@id/coupon_item_description" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sdk_pay_spacer_xs" android:maxLines="1" android:layout_marginHorizontal="@dimen/sdk_pay_spacer_m" style="@style/Captions.Caption20" />
+    <TextView android:textColor="?sdk_pay_text_quaternary_constant" android:ellipsize="end" android:id="@id/coupon_item_interval" android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginTop="@dimen/sdk_pay_spacer_xs" android:maxLines="1" android:layout_marginHorizontal="@dimen/sdk_pay_spacer_m" style="@style/Captions.Caption20" />
+    <Space android:layout_width="fill_parent" android:layout_height="@dimen/sdk_pay_spacer_m" />
+</LinearLayout>

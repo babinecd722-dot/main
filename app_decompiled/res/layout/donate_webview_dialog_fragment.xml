@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:background="@color/total_black" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <WebView android:id="@id/webView" android:background="@color/total_black" android:layout_width="fill_parent" android:layout_height="fill_parent" android:layerType="hardware" />
+    <ProgressBar android:layout_gravity="center" android:id="@id/progressBar" android:layout_width="@dimen/_45wdp" android:layout_height="@dimen/_45wdp" android:indeterminate="true" android:indeterminateDrawable="@drawable/bg_progressbar_custom" />
+    <ImageButton android:layout_gravity="end" android:id="@id/imageClose" android:background="@color/transparent" android:layout_width="@dimen/_38wdp" android:layout_height="@dimen/_38wdp" android:layout_margin="@dimen/_8wdp" android:src="@drawable/ic_close_new" android:contentDescription="@string/common_close" app:tint="@color/white" />
+</FrameLayout>

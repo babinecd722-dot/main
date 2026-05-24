@@ -1,0 +1,84 @@
+.class public final Lcom/blackhub/bronline/game/ui/craft/uiblock/CraftAnimButtonsBlockKt$CraftAnimButtonsBlock$$inlined$animateColor$5;
+.super Ljava/lang/Object;
+.source "Transition.kt"
+
+# interfaces
+.implements Lkotlin/jvm/functions/Function0;
+
+
+# annotations
+.annotation system Ldalvik/annotation/EnclosingMethod;
+    value = Lcom/blackhub/bronline/game/ui/craft/uiblock/CraftAnimButtonsBlockKt;->CraftAnimButtonsBlock(Landroidx/compose/ui/Modifier;Lcom/blackhub/bronline/game/gui/craft/enums/CraftScreenTypeEnum;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZZZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+.end annotation
+
+.annotation system Ldalvik/annotation/InnerClass;
+    accessFlags = 0x19
+    name = null
+.end annotation
+
+.annotation system Ldalvik/annotation/Signature;
+    value = {
+        "Ljava/lang/Object;",
+        "Lkotlin/jvm/functions/Function0<",
+        "Ljava/lang/Boolean;",
+        ">;"
+    }
+.end annotation
+
+.annotation system Ldalvik/annotation/SourceDebugExtension;
+    value = "SMAP\nTransition.kt\nKotlin\n*S Kotlin\n*F\n+ 1 Transition.kt\nandroidx/compose/animation/TransitionKt$animateColor$$inlined$animateValue$1\n*L\n1#1,1856:1\n*E\n"
+.end annotation
+
+.annotation runtime Lkotlin/Metadata;
+    k = 0x3
+    mv = {
+        0x2,
+        0x2,
+        0x0
+    }
+    xi = 0x30
+.end annotation
+
+.annotation build Lkotlin/jvm/internal/SourceDebugExtension;
+    value = {
+        "SMAP\nTransition.kt\nKotlin\n*S Kotlin\n*F\n+ 1 Transition.kt\nandroidx/compose/animation/TransitionKt$animateColor$$inlined$animateValue$1\n*L\n1#1,1856:1\n*E\n"
+    }
+.end annotation
+
+
+# instance fields
+.field final synthetic $this_animateValue:Landroidx/compose/animation/core/Transition;
+
+
+# direct methods
+.method public constructor <init>(Landroidx/compose/animation/core/Transition;)V
+    .locals 0
+
+    .line 0
+    iput-object p1, p0, Lcom/blackhub/bronline/game/ui/craft/uiblock/CraftAnimButtonsBlockKt$CraftAnimButtonsBlock$$inlined$animateColor$5;->$this_animateValue:Landroidx/compose/animation/core/Transition;
+
+    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public final invoke()Ljava/lang/Object;
+    .locals 1
+    .annotation system Ldalvik/annotation/Signature;
+        value = {
+            "()",
+            "Ljava/lang/Boolean;"
+        }
+    .end annotation
+
+    .line 1856
+    iget-object v0, p0, Lcom/blackhub/bronline/game/ui/craft/uiblock/CraftAnimButtonsBlockKt$CraftAnimButtonsBlock$$inlined$animateColor$5;->$this_animateValue:Landroidx/compose/animation/core/Transition;
+
+    invoke-virtual {v0}, Landroidx/compose/animation/core/Transition;->getTargetState()Ljava/lang/Object;
+
+    move-result-object v0
+
+    return-object v0
+.end method

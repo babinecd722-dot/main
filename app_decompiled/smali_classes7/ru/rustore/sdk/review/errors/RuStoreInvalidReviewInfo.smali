@@ -1,0 +1,37 @@
+.class public final Lru/rustore/sdk/review/errors/RuStoreInvalidReviewInfo;
+.super Lru/rustore/sdk/core/exception/RuStoreException;
+.source "r8-map-id-381588c9714ce4cd7b266fd2cfd03df7665598235e0d80e8276ada3382f3292f"
+
+
+# annotations
+.annotation runtime Lkotlin/Metadata;
+    d1 = {
+        "\u0000\u000c\n\u0002\u0018\u0002\n\u0002\u0018\u0002\n\u0002\u0008\u0002\u0018\u00002\u00020\u0001B\u0005\u00a2\u0006\u0002\u0010\u0002\u00a8\u0006\u0003"
+    }
+    d2 = {
+        "Lru/rustore/sdk/review/errors/RuStoreInvalidReviewInfo;",
+        "Lru/rustore/sdk/core/exception/RuStoreException;",
+        "()V",
+        "sdk-public-review_release"
+    }
+    k = 0x1
+    mv = {
+        0x1,
+        0x8,
+        0x0
+    }
+    xi = 0x30
+.end annotation
+
+
+# direct methods
+.method public constructor <init>()V
+    .locals 1
+
+    .line 1
+    const-string v0, "Review can\'t be started with the passed ReviewInfo instance"
+
+    invoke-direct {p0, v0}, Lru/rustore/sdk/core/exception/RuStoreException;-><init>(Ljava/lang/String;)V
+
+    return-void
+.end method

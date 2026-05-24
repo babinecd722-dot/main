@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView android:layout_width="fill_parent" android:layout_height="wrap_content" android:layout_marginBottom="8.0dip" app:cardBackgroundColor="#12ffffff" app:cardCornerRadius="14.0dip" app:cardElevation="0.0dip" app:strokeWidth="0.0dip"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:padding="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content">
+        <TextView android:textSize="14.0sp" android:textColor="#ff00e5cc" android:gravity="center" android:id="@id/neizzir20_item_id" android:background="@drawable/neizzir20_circle_dark_bg" android:layout_width="36.0dip" android:layout_height="36.0dip" android:fontFamily="@font/montserrat_extra_bold" />
+        <com.google.android.material.card.MaterialCardView android:id="@id/neizzir20_preview_card" android:visibility="gone" android:layout_width="52.0dip" android:layout_height="52.0dip" android:layout_marginStart="12.0dip" app:cardBackgroundColor="#ff1a1a1f" app:cardCornerRadius="10.0dip" app:cardElevation="0.0dip" app:strokeWidth="0.0dip">
+            <ImageView android:id="@id/neizzir20_item_preview" android:layout_width="fill_parent" android:layout_height="fill_parent" android:scaleType="centerCrop" />
+        </com.google.android.material.card.MaterialCardView>
+        <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" android:layout_marginStart="12.0dip">
+            <TextView android:textSize="15.0sp" android:textColor="#ffffffff" android:id="@id/neizzir20_item_title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:fontFamily="@font/montserrat_extra_bold" />
+            <TextView android:textSize="12.0sp" android:textColor="#ff666666" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2.0dip" />
+        </LinearLayout>
+        <ImageView android:id="@id/neizzir20_item_listen" android:background="@drawable/neizzir20_ripple_circle" android:padding="8.0dip" android:visibility="gone" android:layout_width="40.0dip" android:layout_height="40.0dip" android:src="@drawable/neizzir_ic_play" android:layout_marginEnd="4.0dip" app:tint="#ff00e5cc" />
+        <ImageView android:id="@id/neizzir20_item_eye" android:background="@drawable/neizzir20_ripple_circle" android:padding="8.0dip" android:visibility="gone" android:layout_width="40.0dip" android:layout_height="40.0dip" android:src="@drawable/neizzir2_preview" android:layout_marginEnd="4.0dip" app:tint="#ff808080" />
+        <ImageView android:id="@id/neizzir20_item_install" android:background="@drawable/neizzir20_ripple_circle" android:padding="8.0dip" android:layout_width="40.0dip" android:layout_height="40.0dip" android:src="@drawable/neizzir20_ic_download" app:tint="#ff00e5cc" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

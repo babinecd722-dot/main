@@ -1,0 +1,405 @@
+{
+  "config": [
+    {
+      "name": "accelerate",
+      "x": 115.0,
+      "y": 115.0,
+      "width": 105.0,
+      "height": 105.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["sprint", "accelerate", "hud_swim"],
+	  "texturesNew": ["hud2_sprint", "hud2_accelerate", "hud2_swim"]
+    },
+    {
+      "name": "entercar",
+      "x": 100.0,
+      "y": 275.0,
+      "width": 90.0,
+      "height": 90.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["hud_car", "hud_boat", "hud_train", "hud_heli", "hud_plane", "hud_bike", "hud_car", "hud_car", "hud_car", "hud_car"],
+	  "texturesNew": ["hud2_car", "hud2_boat", "hud_train", "hud_heli", "hud2_plane", "hud2_bike", "hud2_car", "hud2_car", "hud2_car", "hud2_car"]
+    },
+    {
+      "name": "move",
+      "x": 0.0,
+      "y": 260.0,
+      "width": 320.0,
+      "height": 1000.0,
+      "anchorX": "left",
+      "anchorY": "top",
+	  "texturesOld": ["hud_circle", "hud_cane"],
+	  "texturesNew": ["hud2_move_bg", "hud2_move_stick", "hud2_move_pointer"]
+    },
+    {
+      "name": "lookaround",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 1000.0,
+      "height": 1000.0,
+      "anchorX": "left",
+      "anchorY": "top"
+    },
+    {
+      "name": "chat",
+      "x": 250.0,
+      "y": 5.0,
+      "width": 580.0,
+      "height": 154.0,
+      "anchorX": "left",
+      "anchorY": "top"
+    },
+    {
+      "name": "aim_melee_gun",
+      "x": 100.0,
+      "y": 195.0,
+      "width": 90.0,
+      "height": 90.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+      "texturesOld": ["hud_lockon", "punch", "hud_extinguisher", "fishing_rod_old", "gui_te_snowball_old", "hud_aim_rocket_old", "hud_lockon", "hud_scanner"],
+      "texturesNew": ["hud2_lockon", "hud2_punch", "hud2_extinguisher", "fishing_rod", "gui_te_snowball_new", "hud_aim_rocket_new", "hud2_lockon", "hud2_scanner"]
+    },
+    {
+      "name": "gun",
+      "x": 190.0,
+      "y": 195.0,
+      "width": 90.0,
+      "height": 90.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["shoot", "hud_car_extinguisher", "nbaton_widget"],
+	  "texturesNew": ["hud2_shoot", "hud2_car_extinguisher", "hud2_nbaton_widget"]
+    },
+    {
+      "name": "gun_two",
+      "x": 20.0,
+      "y": 200.0,
+      "width": 90.0,
+      "height": 90.0,
+      "anchorX": "left",
+      "anchorY": "bottom"
+    },
+    {
+      "name": "quick_switch_weapon",
+      "x": 196.0,
+      "y": 114.0,
+      "width": 90.0,
+      "height": 90.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+      "texturesOld": ["hud_quick_switch_weapon"],
+      "texturesNew": ["hud2_quick_switch_weapon"]
+    },
+    {
+      "name": "reload_gun",
+      "x": 260.0,
+      "y": 125.0,
+      "width": 60.0,
+      "height": 60.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+      "texturesOld": ["hud_reload"],
+      "texturesNew": ["hud2_reload"]
+    },
+    {
+      "name": "brake",
+      "x": 215.0,
+      "y": 115.0,
+      "width": 105.0,
+      "height": 105.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["brake"],
+	  "texturesNew": ["hud2_brake"]
+    },
+    {
+      "name": "handbrake",
+      "x": 100.0,
+      "y": 195.0,
+      "width": 90.0,
+      "height": 90.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["handbrake"],
+	  "texturesNew": ["hud2_handbrake"]
+    },
+    {
+      "name": "horn",
+      "x": 50.0,
+      "y": 325.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["horn"],
+	  "texturesNew": ["hud2_horn"]
+    },
+    {
+      "name": "passengerentercar",
+      "x": 180.0,
+      "y": 270.0,
+      "width": 80.0,
+      "height": 80.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["WidgetGetIn"],
+	  "texturesNew": ["hud2_WidgetGetIn"]
+    },
+    {
+      "name": "menu",
+      "x": 20.0,
+      "y": 170.0,
+      "width": 95.0,
+      "height": 35.0,
+      "anchorX": "left",
+      "anchorY": "top",
+	  "texturesOld": ["hud_menu"],
+	  "texturesNew": ["hud_menu"]
+    },
+	{
+      "name": "donat_store",
+      "x": 120.0,
+      "y": 170.0,
+      "width": 35.0,
+      "height": 35.0,
+      "anchorX": "left",
+      "anchorY": "top"
+    },
+	{
+      "name": "interaction",
+      "x": 285.0,
+      "y": 100.0,
+      "width": 75.0,
+      "height": 75.0,
+      "anchorX": "right",
+      "anchorY": "bottom"
+    },
+	{
+      "name": "gifts",
+      "x": 150.0,
+      "y": 60.0,
+      "width": 120.0,
+      "height": 60.0,
+      "anchorX": "left",
+      "anchorY": "bottom"
+    },
+	{
+      "name": "event",
+      "x": 280.0,
+      "y": 10.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "top"
+    },
+	{
+      "name": "task",
+      "x": 225.0,
+      "y": 10.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "top"
+    },
+	{
+      "name": "notification",
+      "x": 0.0,
+      "y": 0.0,
+      "width": 0.0,
+      "height": 0.0,
+      "anchorX": "right",
+      "anchorY": "top"
+    },
+	{
+      "name": "new_donat_store",
+      "x": 170.0,
+      "y": 10.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "top"
+    },
+  {
+      "name": "inventory",
+      "x": 115.0,
+      "y": 10.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "top"
+    },
+	{
+      "name": "new_menu",
+      "x": 60.0,
+      "y": 10.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "top"
+    },
+  	{
+      "name": "exit",
+      "x": 60.0,
+      "y": 10.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "top",
+	  "texturesOld": ["hud_exit"],
+	  "texturesNew": ["hud_exit"]
+    },
+    {
+      "name": "voice",
+      "x": 20.0,
+      "y": 256.0,
+      "width": 70.0,
+      "height": 70.0,
+      "anchorX": "left",
+      "anchorY": "top",
+	  "texturesOld": ["off_micro", "micro_active", "voice_timer"],
+	  "texturesNew": ["hud2_off_micro", "hud2_micro_active", "hud2_voice_timer"]
+    },
+    {
+      "name": "carcamera",
+      "x": 110.0,
+      "y": 325.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["cam-toggle"],
+	  "texturesNew": ["hud2_cam_toggle"]
+    },
+	{
+      "name": "radio",
+      "x": 170.0,
+      "y": 325.0,
+      "width": 50.0,
+      "height": 50.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["radio_widget"],
+	  "texturesNew": ["hud2_radio_widget"]
+    },
+    {
+      "name": "baton",
+      "x": 95.0,
+      "y": 210.0,
+      "width": 70.0,
+      "height": 70.0,
+      "anchorX": "left",
+      "anchorY": "top",
+	  "texturesOld": ["nbaton_widget"],
+	  "texturesNew": ["hud2_nbaton_widget"]
+    },
+    {
+      "name": "helpin",
+      "x": 180.0,
+      "y": 270.0,
+      "width": 75.0,
+      "height": 75.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["helpin_widget"],
+	  "texturesNew": ["hud2_helpin_widget"]
+    },
+    {
+      "name": "move_left",
+      "x": 16.0,
+      "y": 140.0,
+      "width": 105.0,
+      "height": 105.0,
+      "anchorX": "left",
+      "anchorY": "bottom",
+	  "texturesOld": ["hud_arrow_left"],
+	  "texturesNew": ["hud2_arrow_left"]
+    },
+    {
+      "name": "move_right",
+      "x": 130.0,
+      "y": 140.0,
+      "width": 105.0,
+      "height": 105.0,
+      "anchorX": "left",
+      "anchorY": "bottom",
+	  "texturesOld": ["hud_arrow_right"],
+	  "texturesNew": ["hud2_arrow_right"]
+    },
+    {
+      "name": "launch",
+	  "x": 280.0,
+      "y": 160.0,
+      "width": 80.0,
+      "height": 80.0,
+      "anchorX": "left",
+      "anchorY": "bottom",
+	  "texturesOld": ["speedo_lwidget"],
+	  "texturesNew": ["hud2_speedo_lwidget"]
+    },
+    {
+      "name": "nitro",
+      "x": 180.0,
+      "y": 210.0,
+      "width": 80.0,
+      "height": 80.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["hud_nitro"],
+	  "texturesNew": ["hud2_nitro"]
+    },
+    {
+      "name": "hydraulic",
+      "x": 262.5,
+      "y": 210.0,
+      "width": 80.0,
+      "height": 80.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["hydraulicCar"],
+	  "texturesNew": ["hud2_hydraulicCar"]
+    },
+    {
+      "name": "dive",
+      "x": 262.5,
+      "y": 210.0,
+      "width": 80.0,
+      "height": 80.0,
+      "anchorX": "right",
+      "anchorY": "bottom",
+	  "texturesOld": ["hud_dive"],
+	  "texturesNew": ["hud2_dive"]
+    },
+	{
+      "name": "hud_plus",
+      "x": 50.0,
+      "y": 100.0,
+      "width": 80.0,
+      "height": 80.0,
+      "anchorX": "left",
+      "anchorY": "bottom"
+    },
+	{
+      "name": "hud_minus",
+      "x": 150.0,
+      "y": 100.0,
+      "width": 80.0,
+      "height": 80.0,
+      "anchorX": "left",
+      "anchorY": "bottom"
+    },
+    {
+      "name": "megaphone",
+      "x": 15.0,
+      "y": 210.0,
+      "width": 25.0,
+      "height": 25.0,
+      "anchorX": "left",
+      "anchorY": "top",
+	    "texturesOld": ["hud_megaphone_widget"],
+	    "texturesNew": ["hud2_megaphone_widget"]
+    }
+  ]
+}

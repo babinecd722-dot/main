@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:background="#ff000000" android:layout_width="fill_parent" android:layout_height="fill_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <androidx.media3.ui.PlayerView android:id="@id/neizzir_video_player" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="fill_parent" app:controller_layout_id="@layout/neizzir19_video_controls" app:resize_mode="fit" app:show_buffering="never" app:show_timeout="3000" app:surface_type="texture_view" app:use_controller="true" />
+    <ImageView android:id="@id/neizzir_image_viewer" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="fill_parent" android:scaleType="fitCenter" android:contentDescription="@string/app_name" />
+    <LinearLayout android:gravity="end" android:layout_gravity="top" android:orientation="horizontal" android:background="@drawable/neizzir19_video_top_gradient" android:padding="12.0dip" android:layout_width="fill_parent" android:layout_height="wrap_content" android:elevation="10.0dip">
+        <FrameLayout android:background="@drawable/neizzir19_ripple_circle" android:focusable="true" android:clickable="true" android:layout_width="44.0dip" android:layout_height="44.0dip" android:layout_marginEnd="8.0dip">
+            <ImageView android:layout_gravity="center" android:id="@id/neizzir_video_fullscreen" android:layout_width="22.0dip" android:layout_height="22.0dip" android:src="@drawable/neizzir19_ic_fullscreen" app:tint="#ffffffff" />
+        </FrameLayout>
+        <FrameLayout android:id="@id/neizzir_video_close" android:background="@drawable/neizzir19_ripple_circle" android:focusable="true" android:clickable="true" android:layout_width="44.0dip" android:layout_height="44.0dip">
+            <ImageView android:layout_gravity="center" android:layout_width="22.0dip" android:layout_height="22.0dip" android:src="@drawable/neizzir19_ic_close" app:tint="#ffffffff" />
+        </FrameLayout>
+    </LinearLayout>
+    <LinearLayout android:gravity="center" android:layout_gravity="center" android:orientation="vertical" android:id="@id/neizzir_video_loading" android:visibility="gone" android:layout_width="wrap_content" android:layout_height="wrap_content" android:elevation="10.0dip">
+        <ProgressBar android:layout_width="48.0dip" android:layout_height="48.0dip" android:indeterminateTint="#ff00e5cc" />
+        <TextView android:textSize="14.0sp" android:textColor="#ffffffff" android:id="@id/neizzir_video_loading_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16.0dip" android:text="Загрузка..." android:fontFamily="@font/muller_bold" />
+    </LinearLayout>
+    <LinearLayout android:gravity="center" android:orientation="vertical" android:id="@id/neizzir_video_error" android:padding="32.0dip" android:visibility="gone" android:layout_width="fill_parent" android:layout_height="fill_parent" android:elevation="10.0dip">
+        <ImageView android:layout_width="64.0dip" android:layout_height="64.0dip" android:src="@drawable/neizzir19_ic_error" app:tint="#ffef4444" />
+        <TextView android:textSize="18.0sp" android:textColor="#ffffffff" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16.0dip" android:text="Ошибка загрузки" android:fontFamily="@font/muller_bold" />
+        <TextView android:textSize="14.0sp" android:textColor="#ff808080" android:gravity="center" android:id="@id/neizzir_video_error_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8.0dip" android:text="Проверьте подключение к интернету" />
+        <com.google.android.material.button.MaterialButton android:textColor="#ff000000" android:id="@id/neizzir_video_retry" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="24.0dip" android:text="Повторить" app:backgroundTint="#ff00e5cc" app:cornerRadius="12.0dip" />
+    </LinearLayout>
+</FrameLayout>

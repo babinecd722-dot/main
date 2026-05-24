@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout android:layout_width="fill_parent" android:layout_height="wrap_content"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <Button android:textColor="?sdk_pay_text_quaternary_constant" android:id="@id/purchase_button" android:layout_width="fill_parent" android:layout_height="wrap_content" android:backgroundTint="?sdk_pay_surface_accent" android:layout_marginHorizontal="@dimen/sdk_pay_spacer_l" android:layout_marginVertical="@dimen/sdk_pay_spacer_xs" style="@style/Theme.ActionButton" />
+</FrameLayout>
