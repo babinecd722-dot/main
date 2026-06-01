@@ -1,30 +1,35 @@
-Зеркало сайта https://blackrussia.online/
-==========================================
+Зеркало https://blackrussia.online/ (полное)
+============================================
 
-Содержимое:
-- index.html          — главная
-- start/index.html    — «Как начать играть»
-- donate/index.html   — «Пополнить счёт»
-- api/                — снимки API (новости, серверы, донат и т.д.)
-- external/           — CDN (static-prod2, шрифты, картинки новостей)
-- mirror-manifest.json
+Скачано 16 маршрутов — все, что есть на сайте (включая legacy .php и API-404).
 
-Как открыть локально (обязательно через HTTP, не file://):
+Рабочие страницы (как на живом сайте):
+  /                      — главная
+  /start                 — как начать играть
+  /donate                — донат
+  /donate-launcher/pay   — оплата из лаунчера
+  /registration          — регистрация
+  /refreg                — реферальная регистрация
+  /donate.php            → редирект на /donate
+  /donate_v2/pay_choice.php → /donate-launcher/pay
+  /refreg/register.php   → /refreg
 
+Страницы 404 (на оригинале тоже 404, это API-пути Nuxt):
+  /news, /promocode, /techwork, /gameservers
+  /donate/methods, /donate/transaction, /v2/donate/transaction
+
+Запуск локально:
   cd blackrussia.online
   python3 -m http.server 8080
+  → http://127.0.0.1:8080/
 
-  Откройте: http://127.0.0.1:8080/
+Проверка в GUI (скриншоты всех страниц):
+  cd /workspace
+  node mirror-rewrite-fix.js   # после mirror-fix.js
+  DISPLAY=:1 node mirror-verify-gui.js
+  → mirror-screenshots/
 
-Повторное скачивание (из корня workspace):
-
+Полное перескачивание:
   node mirror-full.js
   node mirror-fix.js
-
-Ограничения:
-- Сайт защищён vDDoS; зеркало снято через headless Chrome.
-- Внешние ссылки (форум, VK, магазины приложений) ведут в интернет.
-- forum.blackrussia.online и tarif.blackrussia.online — отдельные поддомены, не включены.
-- Динамические платежи/API доната офлайн работают частично (используются сохранённые JSON).
-
-Дата зеркала: см. mirror-manifest.json
+  node mirror-rewrite-fix.js
