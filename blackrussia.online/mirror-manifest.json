@@ -1,0 +1,153 @@
+{
+  "source": "https://blackrussia.online",
+  "mirroredAt": "2026-06-01T19:08:14.567Z",
+  "routes": [
+    "/",
+    "/donate",
+    "/donate-launcher/pay",
+    "/donate.php",
+    "/donate/methods",
+    "/donate/transaction",
+    "/donate_v2/pay_choice.php",
+    "/gameservers",
+    "/news",
+    "/promocode",
+    "/refreg",
+    "/refreg/register.php",
+    "/registration",
+    "/start",
+    "/techwork",
+    "/v2/donate/transaction"
+  ],
+  "routeMeta": [
+    {
+      "route": "/",
+      "title": "BLACK RUSSIA - Играй в Россию на своем телефоне",
+      "finalUrl": "/index.html",
+      "bytes": 625605,
+      "local": "index.html",
+      "status": 200
+    },
+    {
+      "route": "/donate",
+      "title": "BLACK RUSSIA - Пополнить игровой счет",
+      "finalUrl": "/donate/index.html",
+      "bytes": 465819,
+      "local": "donate/index.html",
+      "status": 200
+    },
+    {
+      "route": "/donate-launcher/pay",
+      "title": "BLACK RUSSIA - Пополнить игровой счет",
+      "finalUrl": "/donate-launcher/pay/index.html",
+      "bytes": 354600,
+      "local": "donate-launcher/pay/index.html",
+      "status": 200
+    },
+    {
+      "route": "/donate.php",
+      "title": "BLACK RUSSIA - Пополнить игровой счет",
+      "finalUrl": "/donate/index.html",
+      "bytes": 465819,
+      "local": "donate.php",
+      "status": 200
+    },
+    {
+      "route": "/donate/methods",
+      "title": "",
+      "finalUrl": "/donate/methods/index.html",
+      "bytes": 360009,
+      "local": "donate/methods/index.html",
+      "status": 404
+    },
+    {
+      "route": "/donate/transaction",
+      "title": "",
+      "finalUrl": "/donate/transaction/index.html",
+      "bytes": 360021,
+      "local": "donate/transaction/index.html",
+      "status": 404
+    },
+    {
+      "route": "/donate_v2/pay_choice.php",
+      "title": "BLACK RUSSIA - Пополнить игровой счет",
+      "finalUrl": "/donate-launcher/pay/index.html",
+      "bytes": 354600,
+      "local": "donate_v2/pay_choice.php",
+      "status": 200
+    },
+    {
+      "route": "/gameservers",
+      "title": "",
+      "finalUrl": "/gameservers/index.html",
+      "bytes": 360000,
+      "local": "gameservers/index.html",
+      "status": 404
+    },
+    {
+      "route": "/news",
+      "title": "",
+      "finalUrl": "/news/index.html",
+      "bytes": 359979,
+      "local": "news/index.html",
+      "status": 404
+    },
+    {
+      "route": "/promocode",
+      "title": "",
+      "finalUrl": "/promocode/index.html",
+      "bytes": 359994,
+      "local": "promocode/index.html",
+      "status": 404
+    },
+    {
+      "route": "/refreg",
+      "title": "BLACK RUSSIA - Играй в Россию на своем телефоне",
+      "finalUrl": "/index.html",
+      "bytes": 594714,
+      "local": "refreg/index.html",
+      "status": 200
+    },
+    {
+      "route": "/refreg/register.php",
+      "title": "BLACK RUSSIA - Играй в Россию на своем телефоне",
+      "finalUrl": "/index.html",
+      "bytes": 594715,
+      "local": "refreg/register.php",
+      "status": 200
+    },
+    {
+      "route": "/registration",
+      "title": "BLACK RUSSIA - Регистрация",
+      "finalUrl": "/registration/index.html",
+      "bytes": 385712,
+      "local": "registration/index.html",
+      "status": 200
+    },
+    {
+      "route": "/start",
+      "title": "BLACK RUSSIA - Как начать играть?",
+      "finalUrl": "/start/index.html",
+      "bytes": 394096,
+      "local": "start/index.html",
+      "status": 200
+    },
+    {
+      "route": "/techwork",
+      "title": "",
+      "finalUrl": "/techwork/index.html",
+      "bytes": 359991,
+      "local": "techwork/index.html",
+      "status": 404
+    },
+    {
+      "route": "/v2/donate/transaction",
+      "title": "",
+      "finalUrl": "/v2/donate/transaction/index.html",
+      "bytes": 360030,
+      "local": "v2/donate/transaction/index.html",
+      "status": 404
+    }
+  ],
+  "assetCount": 139
+}
