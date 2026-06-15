@@ -6092,7 +6092,7 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
         "                // round and drop the glyph below the baseline.\n"
         "                let aorusRawH = dateFont.capHeight.rounded() + 1.5\n"
         "                // Render the symbol oversized so the cropped glyph stays crisp.\n"
-        "                let aorusCfg = UIImage.SymbolConfiguration(pointSize: dateFont.pointSize * 2.0, weight: .bold)\n"
+        "                let aorusCfg = UIImage.SymbolConfiguration(pointSize: dateFont.pointSize * 2.0, weight: .medium)\n"
         "                guard let aorusSym = UIImage(systemName: aorusName, withConfiguration: aorusCfg) else { return }\n"
         "                let aorusTinted = aorusSym.withTintColor(dateColor, renderingMode: .alwaysOriginal)\n"
         "                // BAKE the colour into RGB pixels. A raw SF Symbol is an alpha-only\n"
