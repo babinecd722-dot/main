@@ -130,7 +130,7 @@ public struct AorusL10n {
     // MARK: Media bypass
     public var bypassHeader: String { t("ОБХОД ОГРАНИЧЕНИЙ", "BYPASS") }
     public var bypassSavePaid: String { t("Сохранение платных медиа", "Save Paid Media") }
-    public var bypassSaveViewOnce: String { t("Сохранение одноразовых", "Save View-Once Media") }
+    public var bypassSaveViewOnce: String { t("Сохранение одноразок", "Save View-Once Media") }
     public var bypassStoryDownload: String { t("Скачивание сторис", "Download Stories") }
 
     // MARK: Deleted / edited markers

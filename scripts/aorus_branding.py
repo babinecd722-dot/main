@@ -865,21 +865,40 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                let __aorusEditEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_deleted_messages\") as? Bool) ?? true\n"
                 "                if __aorusEditEnabled, let prev = aorusPrev, prev.flags.contains(.Incoming), prev.text != message.text, !prev.text.isEmpty {\n"
                 "                    transaction.updateMessage(id, update: { currentMessage -> PostboxUpdateMessage in\n"
-                "                        if currentMessage.text.contains(\"\\n\\n\\u{270F}\\u{FE0F} \") || currentMessage.text.contains(\"\\nОригинал:\\n\") || currentMessage.text.contains(\"\\nOriginal:\\n\") { return .skip }\n"
-                "                        let aorusOriginalLabel = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Оригинал:\" : \"Original:\"\n"
-                "                        let aorusBase = currentMessage.text + \"\\n\"\n"
-                "                        let aorusLabelLoc = (aorusBase as NSString).length\n"
-                "                        let aorusLabelLen = (aorusOriginalLabel as NSString).length\n"
-                "                        let aorusAfterLabel = aorusBase + aorusOriginalLabel + \"\\n\"\n"
-                "                        let newText = aorusAfterLabel + prev.text\n"
-                "                        let aorusOrigEnd = (newText as NSString).length\n"
+                "                        // AorusGram: rebuild the FULL edit history with proper labels.\n"
+                "                        // Bottom (oldest) = Оригинал:, newer versions above = Изменение #N.\n"
+                "                        // Bold on EVERY label, one BlockQuote around the whole history.\n"
+                "                        let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
+                "                        let aorusOriginalLabel = aorusRu ? \"Оригинал:\" : \"Original:\"\n"
+                "                        let aorusHistPattern = \"\\n(?:Оригинал:|Original:|Изменение #\\\\d+:|Change #\\\\d+:)\\n\"\n"
+                "                        if currentMessage.text.range(of: aorusHistPattern, options: .regularExpression) != nil { return .skip }\n"
+                "                        let aorusPrevFull = prev.text\n"
+                "                        let aorusFlat: String\n"
+                "                        if let aorusRe = try? NSRegularExpression(pattern: aorusHistPattern) {\n"
+                "                            aorusFlat = aorusRe.stringByReplacingMatches(in: aorusPrevFull, options: [], range: NSRange(aorusPrevFull.startIndex..., in: aorusPrevFull), withTemplate: \"\\u{0001}\")\n"
+                "                        } else {\n"
+                "                            aorusFlat = aorusPrevFull\n"
+                "                        }\n"
+                "                        let aorusVersions = aorusFlat.components(separatedBy: \"\\u{0001}\")\n"
+                "                        let aorusCount = aorusVersions.count\n"
+                "                        var newText = currentMessage.text\n"
                 "                        var aorusEntities: [MessageTextEntity] = []\n"
                 "                        for attr in currentMessage.attributes { if let te = attr as? TextEntitiesMessageAttribute { aorusEntities.append(contentsOf: te.entities) } }\n"
-                "                        // AorusGram: render the original inside a native quote block (accent bar + tinted\n"
-                "                        // rounded background) with a bold title. The original is shown inline (NOT under a\n"
-                "                        // spoiler) so it is visible immediately without having to tap to reveal.\n"
-                "                        aorusEntities.append(MessageTextEntity(range: aorusLabelLoc ..< aorusOrigEnd, type: .BlockQuote(isCollapsed: false)))\n"
-                "                        aorusEntities.append(MessageTextEntity(range: aorusLabelLoc ..< (aorusLabelLoc + aorusLabelLen), type: .Bold))\n"
+                "                        var aorusQuoteStart = -1\n"
+                "                        for (aorusIdx, aorusVer) in aorusVersions.enumerated() {\n"
+                "                            let aorusLabel = (aorusIdx == aorusCount - 1) ? aorusOriginalLabel : (aorusRu ? \"Изменение #\\(aorusCount - aorusIdx):\" : \"Change #\\(aorusCount - aorusIdx):\")\n"
+                "                            newText += \"\\n\"\n"
+                "                            let aorusLabelLoc = (newText as NSString).length\n"
+                "                            if aorusQuoteStart < 0 { aorusQuoteStart = aorusLabelLoc }\n"
+                "                            newText += aorusLabel\n"
+                "                            let aorusLabelEnd = (newText as NSString).length\n"
+                "                            aorusEntities.append(MessageTextEntity(range: aorusLabelLoc ..< aorusLabelEnd, type: .Bold))\n"
+                "                            newText += \"\\n\" + aorusVer\n"
+                "                        }\n"
+                "                        if aorusQuoteStart >= 0 {\n"
+                "                            let aorusQuoteEnd = (newText as NSString).length\n"
+                "                            aorusEntities.append(MessageTextEntity(range: aorusQuoteStart ..< aorusQuoteEnd, type: .BlockQuote(isCollapsed: false)))\n"
+                "                        }\n"
                 "                        var aorusNewAttrs = currentMessage.attributes.filter { !($0 is TextEntitiesMessageAttribute) }\n"
                 "                        aorusNewAttrs.append(TextEntitiesMessageAttribute(entities: aorusEntities))\n"
                 "                        return .update(StoreMessage(\n"
@@ -3899,6 +3918,102 @@ def patch_default_auto_night(tg: Path) -> None:
         print("AutoNight: WARNING AutomaticThemeSwitchSetting pattern not found")
 
 
+def patch_force_dark_base_theme(tg: Path) -> None:
+    """Make the BASE default theme dark (.night) for fresh installs / stock.
+
+    patch_default_auto_night already pins automaticThemeSwitchSetting to
+    (trigger: .system, theme: .night). With the BASE theme also .night the
+    resolved theme is night whether the device is in light OR dark mode — i.e.
+    AorusGram is always dark out of the box, independent of the iOS appearance —
+    while the Auto-Night settings screen still reads "Системная" (trigger is left
+    untouched). The light theme stays fully selectable in Settings → Appearance.
+    Existing users keep their stored preference; only the fresh-install default
+    changes. Idempotent.
+    """
+    f = tg / "submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift"
+    if not f.is_file():
+        print("ForceDark: PresentationThemeSettings.swift not found — skipped")
+        return
+    t = f.read_text(encoding="utf-8")
+    old = "PresentationThemeSettings(theme: .builtin(.dayClassic), themePreferredBaseTheme:"
+    new = "PresentationThemeSettings(theme: .builtin(.night), themePreferredBaseTheme:"
+    if new in t:
+        print("ForceDark: base default theme already .night")
+        return
+    if old in t:
+        t = t.replace(old, new, 1)
+        f.write_text(t, encoding="utf-8")
+        print("ForceDark: defaultSettings base theme -> .night (always dark stock)")
+    else:
+        print("ForceDark: WARNING defaultSettings base-theme anchor not found — skipped")
+
+
+def patch_intro_default_dark(tg: Path) -> None:
+    """Force the pre-login / intro presentation to the dark theme.
+
+    The intro tour + auth screens render before any account settings exist, via
+    defaultPresentationData(), which hard-codes the light theme
+    (defaultPresentationTheme). We swap it to defaultDarkPresentationTheme so the
+    welcome screen ("Aorusgram / The world's fastest messaging app") and the whole
+    login flow are dark, matching the always-dark stock default. Idempotent.
+    """
+    f = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
+    if not f.is_file():
+        print("IntroDark: PresentationData.swift not found — skipped")
+        return
+    t = f.read_text(encoding="utf-8")
+    old = ("theme: defaultPresentationTheme, autoNightModeTriggered: false, "
+           "chatWallpaper: defaultPresentationTheme.chat.defaultWallpaper")
+    new = ("theme: defaultDarkPresentationTheme, autoNightModeTriggered: true, "
+           "chatWallpaper: defaultDarkPresentationTheme.chat.defaultWallpaper")
+    if new in t:
+        print("IntroDark: defaultPresentationData already dark")
+        return
+    if old in t:
+        t = t.replace(old, new, 1)
+        f.write_text(t, encoding="utf-8")
+        print("IntroDark: defaultPresentationData -> dark theme")
+    else:
+        print("IntroDark: WARNING defaultPresentationData theme anchor not found — skipped")
+
+
+def patch_view_once_no_consume(tg: Path) -> None:
+    """View-once SPOOF: open the media WITHOUT marking it consumed/viewed.
+
+    SecretMediaPreviewController.applyMessageView() calls
+    markMessageContentAsConsumedInteractively(messageId:).start() the moment the
+    media is displayed — that is what tells the server "I viewed it" and starts the
+    self-destruct. Gated on the same view-once toggle (_AG_K_BYPASS_ONCE): when ON
+    we skip the consume call entirely, so the media is never marked viewed, is not
+    deleted, and stays re-viewable. The gallery still displays it (display is
+    independent of consumption). Idempotent.
+    """
+    SENTINEL = "// __aorus_vo_noconsume__"
+    f = tg / "submodules/GalleryUI/Sources/SecretMediaPreviewController.swift"
+    if not f.is_file():
+        print("ViewOnceNoConsume: SecretMediaPreviewController.swift not found")
+        return
+    t = f.read_text(encoding="utf-8")
+    if SENTINEL in t:
+        print("ViewOnceNoConsume: already patched")
+        return
+    pat = re.compile(
+        r"self\.markMessageAsConsumedDisposable\.set\(\s*self\.context\.engine\.messages"
+        r"\.markMessageContentAsConsumedInteractively\([^)]*\)\.start\(\)\s*\)"
+    )
+
+    def _repl(m: "re.Match[str]") -> str:
+        return (f"if !UserDefaults.standard.bool(forKey: \"{_AG_K_BYPASS_ONCE}\") {{ "
+                f"{m.group(0)} }}  {SENTINEL}")
+
+    new_t, n = pat.subn(_repl, t, count=1)
+    if n:
+        f.write_text(new_t, encoding="utf-8")
+        print("ViewOnceNoConsume: gated consume call on view-once toggle")
+    else:
+        print("ViewOnceNoConsume: WARNING consume-call anchor not found — skipped")
+
+
 def patch_local_premium(tg: Path) -> None:
     """Local Telegram Premium for the user's OWN account(s), client-side only.
 
@@ -6541,6 +6656,8 @@ def main() -> None:
     # patch_default_dark_theme intentionally NOT called (it forced .explicitNone,
     # which showed "Off"). Instead pin auto-night to System + Night explicitly:
     patch_default_auto_night(tg)
+    patch_force_dark_base_theme(tg)
+    patch_intro_default_dark(tg)
     patch_aorus_badges(tg)
     patch_local_premium(tg)
     patch_bypass_copy_protection(tg)
@@ -6554,6 +6671,7 @@ def main() -> None:
     patch_view_once_capture(tg)
     patch_view_once_save_button(tg)
     patch_view_once_direct_save_button(tg)
+    patch_view_once_no_consume(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)
     patch_chat_context_menu_hide_name_forward(tg)
