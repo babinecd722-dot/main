@@ -45,6 +45,7 @@ final class LicenseGate {
     func start() {
         guard !started else { return }
         guard LicenseKeyProvider.isProvisioned else { return }   // inert without a key
+        AorusEnvGuard.enforceAtGate()                            // independent JB hard-stop
         started = true
         LicenseStore.shared.load()
         if telegramUserId == nil { telegramUserId = LicenseStore.shared.telegramUserId }

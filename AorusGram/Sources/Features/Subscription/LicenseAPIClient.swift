@@ -47,6 +47,11 @@ final class LicenseAPIClient {
     private func baseBody(telegramUserId: Int64?) -> [String: Any] {
         var body: [String: Any] = [:]
         if let uid = telegramUserId { body["telegram_user_id"] = uid }
+        // Tamper signal: jailbreak / injected-hook / debugger. Placed in the body so
+        // it is covered by the request's HMAC (X-Aorus-Body-Sha256). The SERVER is the
+        // enforcement point — it can deny/ban a device or key based on these flags.
+        let env = AorusEnvGuard.flags()
+        if !env.isEmpty { body["env"] = env }
         return body
     }
 
@@ -56,6 +61,8 @@ final class LicenseAPIClient {
         guard LicenseKeyProvider.isProvisioned else {
             completion(.failure(.notProvisioned)); return
         }
+        // Independent JB/injection hard-stop on the license path itself.
+        AorusEnvGuard.enforceBeforeRequest()
         guard let url = URL(string: SubscriptionConfig.baseURLString + path) else {
             completion(.failure(.network)); return
         }

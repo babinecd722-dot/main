@@ -14,6 +14,11 @@ public final class AorusGramBootstrap {
         guard !didSetup else { return }
         didSetup = true
 
+        // License-layer hardening (audience is non-jailbroken sideload, so this is
+        // safe). Refuse debugger attach, then hard-stop on a jailbreak/injection.
+        AorusEnvGuard.denyDebuggerAttach()
+        AorusEnvGuard.enforceAtLaunch()
+
         // Persist the account-data root so AccountBackupManager can locate the
         // accounts-metadata / account-* directories for backup & restore.
         if let accountPath = accountPath, !accountPath.isEmpty {
