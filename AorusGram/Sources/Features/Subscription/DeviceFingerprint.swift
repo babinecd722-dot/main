@@ -4,22 +4,29 @@ import Security
 
 // Stable per-device fingerprint sent in X-Aorus-Device.
 //
-//   device_hash = SHA256( idfv | installId | bundleId | appSalt )  (64 hex lower)
+//   device_hash = SHA256( installId | bundleId | appSalt )  (64 hex lower)
 //
-// installId is a UUID created once and stored in the Keychain only (never in
-// UserDefaults, never reset on a normal launch).
+// DRM-style stability: the identity is anchored ONLY on a Keychain-stored UUID.
+// iOS keeps Keychain items across app deletion/reinstall, so a reinstall keeps the
+// same device_hash → the free trial cannot be farmed by reinstalling.
+//
+// We deliberately do NOT mix in identifierForVendor: idfv RESETS once all of the
+// vendor's apps are removed, which is exactly the reinstall case we must survive.
+//
+// The UUID is stored REDUNDANTLY in two Keychain items that heal each other, and
+// with kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly so it is bound to this
+// physical device and is not carried to a new device by an encrypted backup
+// restore (a restored device is correctly treated as new).
 enum DeviceFingerprint {
     private static let kcService = "com.aorusgram.license"
-    private static let kcAccount = "install_id"
+    private static let kcAccountPrimary = "install_id"
+    private static let kcAccountBackup = "install_id_b"
 
     static func deviceHash() -> String {
-        let idfv = UIDevice.current.identifierForVendor?.uuidString ?? "no-idfv"
         let installId = keychainInstallId()
         let bundleId = Bundle.main.bundleIdentifier ?? "com.aorusgram"
 
         var input = Data()
-        input.append(Data(idfv.utf8))
-        input.append(0x1f)
         input.append(Data(installId.utf8))
         input.append(0x1f)
         input.append(Data(bundleId.utf8))
@@ -28,11 +35,22 @@ enum DeviceFingerprint {
         return LicenseCrypto.sha256Hex(input)
     }
 
-    // Get-or-create the persistent install id (Keychain).
+    // Get-or-create the persistent install id, self-healing across the two slots.
     static func keychainInstallId() -> String {
-        if let existing = readInstallId() { return existing }
+        let primary = readInstallId(account: kcAccountPrimary)
+        let backup = readInstallId(account: kcAccountBackup)
+
+        if let value = primary ?? backup {
+            // Restore whichever slot is missing so a single keychain hiccup can't
+            // silently mint a new identity on the next launch.
+            if primary == nil { writeInstallId(value, account: kcAccountPrimary) }
+            if backup == nil { writeInstallId(value, account: kcAccountBackup) }
+            return value
+        }
+
         let generated = UUID().uuidString
-        writeInstallId(generated)
+        writeInstallId(generated, account: kcAccountPrimary)
+        writeInstallId(generated, account: kcAccountBackup)
         return generated
     }
 
@@ -54,11 +72,11 @@ enum DeviceFingerprint {
 
     // MARK: - Keychain
 
-    private static func readInstallId() -> String? {
+    private static func readInstallId(account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: kcService,
-            kSecAttrAccount as String: kcAccount,
+            kSecAttrAccount as String: account,
             kSecReturnData as String:  true,
             kSecMatchLimit as String:  kSecMatchLimitOne,
         ]
@@ -69,16 +87,16 @@ enum DeviceFingerprint {
         return value
     }
 
-    private static func writeInstallId(_ value: String) {
+    private static func writeInstallId(_ value: String, account: String) {
         let base: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: kcService,
-            kSecAttrAccount as String: kcAccount,
+            kSecAttrAccount as String: account,
         ]
         SecItemDelete(base as CFDictionary)
         var add = base
         add[kSecValueData as String] = Data(value.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         _ = SecItemAdd(add as CFDictionary, nil)
     }
 }

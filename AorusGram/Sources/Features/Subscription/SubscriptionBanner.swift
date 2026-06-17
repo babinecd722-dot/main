@@ -183,7 +183,7 @@ final class SubscriptionBanner: UIView {
 
     // MARK: Toast
 
-    static func toast(icon: String, text: String) {
+    static func toast(duck: SubscriptionDuck, text: String) {
         let window = SubscriptionBanner.makePassthroughWindow()
         guard let host = window.rootViewController?.view else { return }
 
@@ -198,12 +198,25 @@ final class SubscriptionBanner: UIView {
         blur.clipsToBounds = true
         container.addSubview(blur)
 
+        let iconView = SubscriptionDuckView(duck: duck, renderSizePx: 110)
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.setContentHuggingPriority(.required, for: .horizontal)
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 28),
+            iconView.heightAnchor.constraint(equalToConstant: 28),
+        ])
+
         let label = UILabel()
-        label.text = "\(icon)  \(text)"
+        label.text = text
         label.font = UIFont.systemFont(ofSize: 15, weight: .medium)
         label.textColor = .white
-        label.translatesAutoresizingMaskIntoConstraints = false
-        blur.contentView.addSubview(label)
+
+        let row = UIStackView(arrangedSubviews: [iconView, label])
+        row.axis = .horizontal
+        row.alignment = .center
+        row.spacing = 8
+        row.translatesAutoresizingMaskIntoConstraints = false
+        blur.contentView.addSubview(row)
 
         host.addSubview(container)
         NSLayoutConstraint.activate([
@@ -215,10 +228,10 @@ final class SubscriptionBanner: UIView {
             blur.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             blur.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             blur.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            label.topAnchor.constraint(equalTo: blur.contentView.topAnchor, constant: 12),
-            label.bottomAnchor.constraint(equalTo: blur.contentView.bottomAnchor, constant: -12),
-            label.leadingAnchor.constraint(equalTo: blur.contentView.leadingAnchor, constant: 18),
-            label.trailingAnchor.constraint(equalTo: blur.contentView.trailingAnchor, constant: -18),
+            row.topAnchor.constraint(equalTo: blur.contentView.topAnchor, constant: 11),
+            row.bottomAnchor.constraint(equalTo: blur.contentView.bottomAnchor, constant: -11),
+            row.leadingAnchor.constraint(equalTo: blur.contentView.leadingAnchor, constant: 16),
+            row.trailingAnchor.constraint(equalTo: blur.contentView.trailingAnchor, constant: -18),
         ])
 
         UIView.animate(withDuration: 0.25, animations: { container.alpha = 1 })

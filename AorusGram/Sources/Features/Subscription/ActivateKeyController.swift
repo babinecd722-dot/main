@@ -17,6 +17,7 @@ final class ActivateKeyController: SubscriptionBaseController {
     private let primary = SubscriptionStyle.primaryButton("Активировать")
     private let spinner = UIActivityIndicatorView(style: .medium)
     private var didAnimateEntrance = false
+    private var didPrepareEntrance = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -88,6 +89,13 @@ final class ActivateKeyController: SubscriptionBaseController {
         ])
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Put the content in its hidden start state BEFORE the screen is shown, so the
+        // animation never lags behind a fully-rendered frame.
+        prepareEntranceState()
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         animateEntrance()
@@ -98,16 +106,27 @@ final class ActivateKeyController: SubscriptionBaseController {
 
     // MARK: - Animations
 
-    private func animateEntrance() {
-        guard !didAnimateEntrance else { return }
-        didAnimateEntrance = true
-        let views = contentStack.arrangedSubviews
-        for (i, v) in views.enumerated() {
+    private func prepareEntranceState() {
+        guard !didPrepareEntrance else { return }
+        didPrepareEntrance = true
+        for (i, v) in contentStack.arrangedSubviews.enumerated() {
             v.alpha = 0
-            v.transform = CGAffineTransform(translationX: 0, y: 14)
-            UIView.animate(withDuration: 0.42, delay: 0.05 * Double(i),
-                           usingSpringWithDamping: 0.9, initialSpringVelocity: 0.3,
-                           options: [.curveEaseOut], animations: {
+            // The duck (first item) pops in with a scale; everything else rises.
+            v.transform = (i == 0)
+                ? CGAffineTransform(scaleX: 0.5, y: 0.5)
+                : CGAffineTransform(translationX: 0, y: 24)
+        }
+    }
+
+    private func animateEntrance() {
+        guard didPrepareEntrance, !didAnimateEntrance else { return }
+        didAnimateEntrance = true
+        for (i, v) in contentStack.arrangedSubviews.enumerated() {
+            let delay = 0.07 * Double(i)
+            let damping: CGFloat = (i == 0) ? 0.6 : 0.84   // bouncier pop for the duck
+            UIView.animate(withDuration: 0.58, delay: delay,
+                           usingSpringWithDamping: damping, initialSpringVelocity: 0.5,
+                           options: [.curveEaseOut, .allowUserInteraction], animations: {
                 v.alpha = 1
                 v.transform = .identity
             })

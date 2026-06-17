@@ -348,7 +348,7 @@ final class LicenseGate {
     }
 
     private func showToast(_ text: String) {
-        SubscriptionBanner.toast(icon: "✅", text: text)
+        SubscriptionBanner.toast(duck: .boost, text: text)
     }
 
     private func presentAlert(_ message: String) {
