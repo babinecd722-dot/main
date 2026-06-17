@@ -4014,6 +4014,48 @@ def patch_view_once_no_consume(tg: Path) -> None:
         print("ViewOnceNoConsume: WARNING consume-call anchor not found — skipped")
 
 
+def patch_license_key_provider(tg: Path) -> None:
+    """Inject the obfuscated LICENSE HMAC key into LicenseKeyProvider.swift.
+
+    The real key is read from the LICENSE_HMAC_KEY_HEX environment variable (wired
+    to a GitHub Actions secret). It is hex-decoded to raw bytes, XORed with a
+    rotating pad (kept in sync with the Swift side) and emitted as a byte-array
+    literal in place of the __AORUS_LICENSE_KEY_OBFUSCATED__ marker. The key is
+    NEVER printed and never committed in plaintext. If the env var is absent the
+    marker is left empty (isProvisioned == false) so the build still succeeds and
+    the client simply refuses to sign requests.
+    """
+    f = tg / "submodules/AorusGramUI/Sources/Features/Subscription/LicenseKeyProvider.swift"
+    if not f.is_file():
+        print("LicenseKey: LicenseKeyProvider.swift not found — skipped")
+        return
+    marker = "/*__AORUS_LICENSE_KEY_OBFUSCATED__*/"
+    t = f.read_text(encoding="utf-8")
+    if marker not in t:
+        print("LicenseKey: marker absent (already injected?) — skipped")
+        return
+    key_hex = os.environ.get("LICENSE_HMAC_KEY_HEX", "").strip()
+    if not key_hex:
+        print("LicenseKey: LICENSE_HMAC_KEY_HEX not set — provider left UNPROVISIONED")
+        return
+    try:
+        raw = bytes.fromhex(key_hex)
+    except ValueError:
+        print("LicenseKey: LICENSE_HMAC_KEY_HEX is not valid hex — left UNPROVISIONED")
+        return
+    if not raw:
+        print("LicenseKey: LICENSE_HMAC_KEY_HEX decoded to 0 bytes — left UNPROVISIONED")
+        return
+    pad = [0x5A, 0xC3, 0x19, 0x7E, 0x2B, 0xF0, 0x8D, 0x44,
+           0x16, 0xA9, 0x6C, 0xD1, 0x3F, 0x82, 0xE5, 0x70]
+    obf = [raw[i] ^ pad[i % len(pad)] for i in range(len(raw))]
+    literal = ", ".join("0x%02x" % b for b in obf)
+    t = t.replace(marker, literal, 1)
+    f.write_text(t, encoding="utf-8")
+    # Never log the key itself — only its byte length.
+    print("LicenseKey: provisioned obfuscated HMAC key (%d bytes)" % len(raw))
+
+
 def patch_local_premium(tg: Path) -> None:
     """Local Telegram Premium for the user's OWN account(s), client-side only.
 
@@ -6672,6 +6714,7 @@ def main() -> None:
     patch_view_once_save_button(tg)
     patch_view_once_direct_save_button(tg)
     patch_view_once_no_consume(tg)
+    patch_license_key_provider(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)
     patch_chat_context_menu_hide_name_forward(tg)
