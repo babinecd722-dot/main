@@ -151,7 +151,7 @@ final class LicenseGate {
                         if response.status.allowsAppAccess {
                             self.bannerShownThisLaunch = true
                             self.hideLock()
-                            self.showToast("Пробный период активирован")
+                            self.showToast(SubL10n.toastTrialActivated)
                         } else {
                             self.apply(status: response.status, response: response)
                         }
@@ -171,8 +171,8 @@ final class LicenseGate {
         lockKind = kind
         let vc = SubscriptionExpiredController()
         if banned {
-            vc.titleTextOverride = "Устройство заблокировано"
-            vc.bodyTextOverride = "Доступ к AorusGram ограничен."
+            vc.titleTextOverride = SubL10n.bannedTitle
+            vc.bodyTextOverride = SubL10n.bannedBody
         }
         vc.onBuy = { [weak self] in self?.openPurchaseBot() }
         vc.onEnterKey = { [weak self] in self?.pushActivateKeyInLock() }
@@ -183,10 +183,10 @@ final class LicenseGate {
         guard lockKind != .connection else { return }
         lockKind = .connection
         let vc = SubscriptionExpiredController()
-        vc.titleTextOverride = "Нет соединения"
-        vc.bodyTextOverride = "Не удалось проверить подписку. Проверьте интернет и попробуйте снова."
-        vc.primaryTitleOverride = "Повторить"
-        vc.secondaryTitleOverride = "Ввести ключ"
+        vc.titleTextOverride = SubL10n.noConnTitle
+        vc.bodyTextOverride = SubL10n.noConnBody
+        vc.primaryTitleOverride = SubL10n.retry
+        vc.secondaryTitleOverride = SubL10n.enterKey
         vc.hidePriceCard = true
         vc.hideFootnote = true
         vc.onBuy = { [weak self] in self?.refresh() }            // primary = retry
@@ -201,7 +201,7 @@ final class LicenseGate {
         vc.onActivated = { [weak self] _ in
             self?.bannerShownThisLaunch = true
             self?.hideLock()
-            self?.showToast("Подписка активирована")
+            self?.showToast(SubL10n.toastSubActivated)
         }
         nav.pushViewController(vc, animated: true)
     }
@@ -269,8 +269,8 @@ final class LicenseGate {
         let duck: SubscriptionDuck
         let title: String
         switch status {
-        case .trialActive: duck = .fire;  title = "Пробный период активен"
-        case .paidActive:  duck = .boost; title = "Подписка активна"
+        case .trialActive: duck = .fire;  title = SubL10n.bannerTrialActive
+        case .paidActive:  duck = .boost; title = SubL10n.bannerPaidActive
         default: return
         }
         let subtitle = remainingText(days)
@@ -294,7 +294,7 @@ final class LicenseGate {
         // AorusGram's main chat list (in-app, never the browser).
         vc.onBuy = { [weak self] in
             self?.dismissModal()
-            self?.openPurchaseBot(inMainNav: true)
+            self?.openPurchaseBotViaScheme()
         }
         vc.onHaveKey = { [weak self] in self?.pushActivateKeyInModal() }
         vc.navigationItem.leftBarButtonItem = UIBarButtonItem(
@@ -307,7 +307,7 @@ final class LicenseGate {
         vc.telegramUserId = telegramUserId
         vc.onActivated = { [weak self] _ in
             self?.dismissModal()
-            self?.showToast("Подписка активирована")
+            self?.showToast(SubL10n.toastSubActivated)
         }
         return vc
     }
@@ -383,30 +383,27 @@ final class LicenseGate {
             ])
     }
 
-    // MARK: - Russian day pluralization
-
-    private func remainingText(_ days: Int) -> String {
-        if days <= 0 { return "Заканчивается сегодня" }
-        let word = dayWord(days)
-        let verb = (word == "день") ? "остался" : "осталось"
-        return "\(verb) \(days) \(word)"
-    }
-
-    private func dayWord(_ n: Int) -> String {
-        let mod100 = n % 100
-        if mod100 >= 11 && mod100 <= 14 { return "дней" }
-        switch n % 10 {
-        case 1: return "день"
-        case 2, 3, 4: return "дня"
-        default: return "дней"
+    // Active flow: open the bot through the app's own aorusgram:// deep link so it
+    // resolves inside AorusGram's main chat list. If the scheme can't be opened, fall
+    // back to the in-app resolver (openExternalUrl) — never the browser.
+    private func openPurchaseBotViaScheme() {
+        guard let url = URL(string: SubscriptionConfig.purchaseBotScheme) else {
+            openPurchaseBot(inMainNav: true); return
+        }
+        UIApplication.shared.open(url, options: [:]) { [weak self] success in
+            if !success { self?.openPurchaseBot(inMainNav: true) }
         }
     }
 
+    // MARK: - Remaining-time text (localized + RU pluralization)
+
+    private func remainingText(_ days: Int) -> String { SubL10n.remaining(days: days) }
+
     private func message(for error: LicenseError) -> String {
         switch error {
-        case .network: return "Не удалось подключиться. Проверьте интернет."
-        case .notProvisioned: return "Сервис временно недоступен. Попробуйте позже."
-        default: return "Не удалось активировать. Попробуйте позже."
+        case .network: return SubL10n.errNetwork
+        case .notProvisioned: return SubL10n.errService
+        default: return SubL10n.errActivateRetry
         }
     }
 }

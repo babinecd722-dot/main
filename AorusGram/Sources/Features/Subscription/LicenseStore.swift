@@ -23,12 +23,23 @@ final class LicenseStore {
         var daysLeft: Int?
         var lastCheckWall: Double      // Date().timeIntervalSince1970 at the check
         var telegramUserId: Int64?
+        // Tamper / theft protection (optional → old blobs decode and are re-signed).
+        var deviceHash: String?        // device this cache belongs to
+        var sig: String?               // HMAC over the fields above (key = license key)
     }
 
     private(set) var snapshot: Snapshot?
 
     func load() {
-        snapshot = readKeychain()
+        guard let s = readKeychain() else { snapshot = nil; return }
+        // Integrity + device binding: a tampered blob, or one lifted from another
+        // device, is ignored. This only forces a fresh online check — it can never
+        // lock out a legitimate user (the server verdict restores access).
+        if s.sig == sign(s), s.deviceHash == DeviceFingerprint.deviceHash() {
+            snapshot = s
+        } else {
+            snapshot = nil
+        }
     }
 
     func save(response: LicenseResponse, telegramUserId: Int64?) {
@@ -115,10 +126,36 @@ final class LicenseStore {
         return (Date().timeIntervalSince1970 - last) > interval
     }
 
+    // MARK: - Integrity
+
+    // Canonical, deterministic representation of the signed fields (excludes `sig`).
+    private func canonicalString(_ s: Snapshot) -> String {
+        return [
+            s.statusRaw,
+            s.plan ?? "",
+            s.activeUntil.map(String.init) ?? "",
+            s.serverNow.map(String.init) ?? "",
+            s.daysLeft.map(String.init) ?? "",
+            String(format: "%.0f", s.lastCheckWall),
+            s.telegramUserId.map(String.init) ?? "",
+            s.deviceHash ?? "",
+        ].joined(separator: "|")
+    }
+
+    // HMAC-SHA256 with the embedded license key. Never logged.
+    private func sign(_ s: Snapshot) -> String {
+        let key = LicenseKeyProvider.licenseHmacKeyBytes()
+        return LicenseCrypto.hmacSHA256Hex(message: Data(canonicalString(s).utf8), keyBytes: key)
+    }
+
     // MARK: - Keychain (JSON blob)
 
     private func writeKeychain(_ snap: Snapshot) {
-        guard let data = try? JSONEncoder().encode(snap) else { return }
+        var s = snap
+        s.deviceHash = DeviceFingerprint.deviceHash()
+        s.sig = nil
+        s.sig = sign(s)            // sign over the canonical fields (incl. deviceHash)
+        guard let data = try? JSONEncoder().encode(s) else { return }
         let base: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: kcService,

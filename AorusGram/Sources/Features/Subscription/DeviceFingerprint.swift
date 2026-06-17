@@ -18,9 +18,14 @@ import Security
 // physical device and is not carried to a new device by an encrypted backup
 // restore (a restored device is correctly treated as new).
 enum DeviceFingerprint {
-    private static let kcService = "com.aorusgram.license"
-    private static let kcAccountPrimary = "install_id"
-    private static let kcAccountBackup = "install_id_b"
+    // Three redundant slots under different service/account names. They heal each
+    // other, so the identity survives unless ALL three are wiped at once — much
+    // harder to "reset the trial" by poking the keychain.
+    private static let slots: [(service: String, account: String)] = [
+        ("com.aorusgram.license", "install_id"),
+        ("com.aorusgram.license", "install_id_b"),
+        ("com.aorusgram.device", "did"),
+    ]
 
     static func deviceHash() -> String {
         let installId = keychainInstallId()
@@ -35,22 +40,21 @@ enum DeviceFingerprint {
         return LicenseCrypto.sha256Hex(input)
     }
 
-    // Get-or-create the persistent install id, self-healing across the two slots.
+    // Get-or-create the persistent install id, self-healing across all slots.
     static func keychainInstallId() -> String {
-        let primary = readInstallId(account: kcAccountPrimary)
-        let backup = readInstallId(account: kcAccountBackup)
+        let values = slots.map { readInstallId(service: $0.service, account: $0.account) }
 
-        if let value = primary ?? backup {
-            // Restore whichever slot is missing so a single keychain hiccup can't
-            // silently mint a new identity on the next launch.
-            if primary == nil { writeInstallId(value, account: kcAccountPrimary) }
-            if backup == nil { writeInstallId(value, account: kcAccountBackup) }
+        // Use the first surviving value (majority would be even stronger, but any
+        // single survivor is enough to keep the same identity).
+        if let value = values.compactMap({ $0 }).first {
+            for (i, slot) in slots.enumerated() where values[i] != value {
+                writeInstallId(value, service: slot.service, account: slot.account)
+            }
             return value
         }
 
         let generated = UUID().uuidString
-        writeInstallId(generated, account: kcAccountPrimary)
-        writeInstallId(generated, account: kcAccountBackup)
+        for slot in slots { writeInstallId(generated, service: slot.service, account: slot.account) }
         return generated
     }
 
@@ -72,10 +76,10 @@ enum DeviceFingerprint {
 
     // MARK: - Keychain
 
-    private static func readInstallId(account: String) -> String? {
+    private static func readInstallId(service: String, account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
-            kSecAttrService as String: kcService,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String:  true,
             kSecMatchLimit as String:  kSecMatchLimitOne,
@@ -87,10 +91,10 @@ enum DeviceFingerprint {
         return value
     }
 
-    private static func writeInstallId(_ value: String, account: String) {
+    private static func writeInstallId(_ value: String, service: String, account: String) {
         let base: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
-            kSecAttrService as String: kcService,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(base as CFDictionary)

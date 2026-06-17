@@ -14,7 +14,7 @@ final class ActivateKeyController: SubscriptionBaseController {
     private let field = UITextField()
     private let fieldContainer = UIView()
     private let errorLabel = SubscriptionStyle.body("", color: SubscriptionStyle.destructive, size: 14)
-    private let primary = SubscriptionStyle.primaryButton("Активировать")
+    private let primary = SubscriptionStyle.primaryButton(SubL10n.activate)
     private let spinner = UIActivityIndicatorView(style: .medium)
     private var didAnimateEntrance = false
     private var didPrepareEntrance = false
@@ -24,8 +24,8 @@ final class ActivateKeyController: SubscriptionBaseController {
 
         addContent(SubscriptionStyle.centered(duck, size: 150))
         addSpacing(2)
-        addContent(SubscriptionStyle.title("Введите ключ"))
-        addContent(SubscriptionStyle.body("Введите ключ подписки, полученный в боте AorusGram."))
+        addContent(SubscriptionStyle.title(SubL10n.activateTitle))
+        addContent(SubscriptionStyle.body(SubL10n.activateBody))
         addSpacing(8)
 
         buildField()
@@ -197,7 +197,7 @@ final class ActivateKeyController: SubscriptionBaseController {
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                         self.onActivated?(response)
                     } else {
-                        self.showError("Ключ не найден")
+                        self.showError(SubL10n.errKeyNotFound)
                     }
                 case .failure(let error):
                     self.showError(self.message(for: error))
@@ -220,7 +220,7 @@ final class ActivateKeyController: SubscriptionBaseController {
             field.isEnabled = false
         } else {
             spinner.stopAnimating()
-            primary.setTitle("Активировать", for: .normal)
+            primary.setTitle(SubL10n.activate, for: .normal)
             primary.isEnabled = true
             field.isEnabled = true
         }
@@ -230,16 +230,16 @@ final class ActivateKeyController: SubscriptionBaseController {
         switch error {
         case .server(let code):
             switch code {
-            case "code_not_found":              return "Ключ не найден"
-            case "code_not_active", "code_already_used": return "Ключ уже использован"
-            case "code_expired":                return "Срок действия ключа истёк"
-            case "code_issued_to_another_user": return "Ключ выдан другому аккаунту"
-            case "rate_limited":                return "Слишком много попыток. Попробуйте позже."
-            default:                            return "Не удалось активировать ключ"
+            case "code_not_found":              return SubL10n.errKeyNotFound
+            case "code_not_active", "code_already_used": return SubL10n.errKeyUsed
+            case "code_expired":                return SubL10n.errKeyExpired
+            case "code_issued_to_another_user": return SubL10n.errKeyAnotherAccount
+            case "rate_limited":                return SubL10n.errRateLimited
+            default:                            return SubL10n.errActivateGeneric
             }
-        case .network:        return "Не удалось подключиться. Проверьте интернет."
-        case .notProvisioned: return "Сервис временно недоступен. Попробуйте позже."
-        case .http, .decode:  return "Не удалось активировать ключ"
+        case .network:        return SubL10n.errNetwork
+        case .notProvisioned: return SubL10n.errService
+        case .http, .decode:  return SubL10n.errActivateGeneric
         }
     }
 }

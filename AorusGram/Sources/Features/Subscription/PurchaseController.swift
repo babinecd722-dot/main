@@ -1,40 +1,89 @@
 import UIKit
 
-// Premium / purchase screen. Reachable from the expired screen or settings.
+// Subscription management screen (opened from the entry banner for an ACTIVE user).
+//
+// Not a second "buy" wall: it shows the current subscription state — plan, status and
+// how long it stays active — with a single primary action to extend it. The duck stays.
 final class PurchaseController: SubscriptionBaseController {
-    var onBuy: (() -> Void)?
-    var onHaveKey: (() -> Void)?
+    var onBuy: (() -> Void)?        // extend / renew (opens the bot)
+    var onHaveKey: (() -> Void)?    // enter another key
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        addContent(SubscriptionStyle.centered(SubscriptionDuckView(duck: .purchase), size: 170))
-        addSpacing(4)
-        addContent(SubscriptionStyle.title("AorusGram Premium"))
+        addContent(SubscriptionStyle.centered(SubscriptionDuckView(duck: .purchase), size: 150))
+        addSpacing(2)
+        addContent(SubscriptionStyle.title(SubL10n.premiumTitle))
 
-        let price = SubscriptionStyle.body(SubscriptionConfig.priceText,
-                                           color: SubscriptionStyle.accent, size: 18)
-        price.font = UIFont.systemFont(ofSize: 18, weight: .semibold)
-        addContent(price)
+        let snap = LicenseStore.shared.snapshot
+        let status = LicenseStatus.parse(snap?.statusRaw ?? "")
+        let isTrial = (status == .trialActive)
 
-        addSpacing(6)
-        let features = UIStackView(arrangedSubviews: [
-            SubscriptionStyle.featureRow("Стабильный доступ"),
-            SubscriptionStyle.featureRow("Быстрое подключение"),
-            SubscriptionStyle.featureRow("Без лишних настроек"),
-            SubscriptionStyle.featureRow("Поддержка развития AorusGram"),
-        ])
-        features.axis = .vertical
-        features.alignment = .fill
-        features.spacing = 12
-        addContent(SubscriptionStyle.card(features))
+        // Status pill.
+        let statusLabel = UILabel()
+        statusLabel.text = isTrial ? SubL10n.statusTrial : SubL10n.statusActive
+        statusLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        statusLabel.textColor = isTrial ? SubscriptionStyle.accent : SubscriptionStyle.success
+        statusLabel.textAlignment = .center
+        addContent(statusLabel)
 
-        let buy = SubscriptionStyle.primaryButton("Купить в боте")
-        let haveKey = SubscriptionStyle.secondaryButton("У меня уже есть ключ")
-        buy.addTarget(self, action: #selector(buyTapped), for: .touchUpInside)
-        haveKey.addTarget(self, action: #selector(haveKeyTapped), for: .touchUpInside)
-        addBottomButton(buy)
-        addBottomButton(haveKey)
+        addSpacing(8)
+        addContent(SubscriptionStyle.card(buildInfoStack(snap: snap, isTrial: isTrial)))
+
+        let renew = SubscriptionStyle.primaryButton(SubL10n.renew)
+        let key = SubscriptionStyle.secondaryButton(SubL10n.enterAnotherKey)
+        renew.addTarget(self, action: #selector(buyTapped), for: .touchUpInside)
+        key.addTarget(self, action: #selector(haveKeyTapped), for: .touchUpInside)
+        addBottomButton(renew)
+        addBottomButton(key)
+    }
+
+    private func buildInfoStack(snap: LicenseStore.Snapshot?, isTrial: Bool) -> UIView {
+        var rows: [UIView] = []
+
+        // Big "N days left" headline.
+        if let days = snap?.daysLeft {
+            let big = UILabel()
+            big.text = SubL10n.remaining(days: max(days, 0))
+            big.font = UIFont.systemFont(ofSize: 22, weight: .bold)
+            big.textColor = SubscriptionStyle.primaryText
+            big.textAlignment = .center
+            big.numberOfLines = 0
+            rows.append(big)
+        }
+
+        // Active-until date row.
+        if let until = snap?.activeUntil, until > 0 {
+            let dateStr = PurchaseController.formatDate(until)
+            let line = UILabel()
+            line.text = isTrial ? SubL10n.trialUntil(dateStr) : SubL10n.activeUntil(dateStr)
+            line.font = UIFont.systemFont(ofSize: 15, weight: .regular)
+            line.textColor = SubscriptionStyle.secondaryText
+            line.textAlignment = .center
+            line.numberOfLines = 0
+            rows.append(line)
+        }
+
+        // Price hint.
+        let price = UILabel()
+        price.text = SubL10n.price
+        price.font = UIFont.systemFont(ofSize: 14, weight: .regular)
+        price.textColor = SubscriptionStyle.secondaryText
+        price.textAlignment = .center
+        rows.append(price)
+
+        let stack = UIStackView(arrangedSubviews: rows)
+        stack.axis = .vertical
+        stack.alignment = .fill
+        stack.spacing = 8
+        return stack
+    }
+
+    private static func formatDate(_ unix: Int64) -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: SubL10n.isRU ? "ru_RU" : "en_US")
+        df.dateFormat = "dd.MM.yyyy"
+        return df.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 
     @objc private func buyTapped() { onBuy?() }

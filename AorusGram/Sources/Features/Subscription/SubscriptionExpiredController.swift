@@ -20,13 +20,12 @@ final class SubscriptionExpiredController: SubscriptionBaseController {
 
         addContent(SubscriptionStyle.centered(SubscriptionDuckView(duck: .expired), size: 180))
         addSpacing(6)
-        addContent(SubscriptionStyle.title(titleTextOverride ?? "Пробный период закончился"))
-        addContent(SubscriptionStyle.body(bodyTextOverride ??
-            "Чтобы продолжить пользоваться AorusGram, введите ключ подписки."))
+        addContent(SubscriptionStyle.title(titleTextOverride ?? SubL10n.expiredTitle))
+        addContent(SubscriptionStyle.body(bodyTextOverride ?? SubL10n.expiredBody))
 
         if !hidePriceCard {
             let price = UILabel()
-            price.text = SubscriptionConfig.priceText
+            price.text = SubL10n.price
             price.font = UIFont.systemFont(ofSize: 20, weight: .bold)
             price.textColor = SubscriptionStyle.primaryText
             price.textAlignment = .center
@@ -35,12 +34,12 @@ final class SubscriptionExpiredController: SubscriptionBaseController {
         }
 
         if !hideFootnote {
-            addContent(SubscriptionStyle.body("Ключ можно получить в официальном боте AorusGram.",
+            addContent(SubscriptionStyle.body(SubL10n.keyHint,
                                               color: SubscriptionStyle.secondaryText, size: 13))
         }
 
-        let buy = SubscriptionStyle.primaryButton(primaryTitleOverride ?? "Купить ключ")
-        let enter = SubscriptionStyle.secondaryButton(secondaryTitleOverride ?? "Ввести ключ")
+        let buy = SubscriptionStyle.primaryButton(primaryTitleOverride ?? SubL10n.buyKey)
+        let enter = SubscriptionStyle.secondaryButton(secondaryTitleOverride ?? SubL10n.enterKey)
         buy.addTarget(self, action: #selector(buyTapped), for: .touchUpInside)
         enter.addTarget(self, action: #selector(enterTapped), for: .touchUpInside)
         addBottomButton(buy)

@@ -13,15 +13,13 @@ enum SubscriptionConfig {
 
     // MARK: Purchase bot
     static let purchaseBotUsername = "AorusGram_bot"
-    // Resolved by Telegram's OWN internal resolver (openExternalUrl, forceExternal:
-    // false), so it opens the bot chat inside AorusGram and never escapes to Safari.
-    // We do not use a raw aorusgram:// deep link: the branded build registers that
-    // scheme in Info.plist, but Telegram's internal scheme (APP_SPECIFIC_URL_SCHEME)
-    // is still "tg", so aorusgram://resolve would not be parsed.
+    // The app's own deep-link scheme (aorusgram://). The build sets
+    // app_specific_url_scheme = "aorusgram" to match Info.plist, so this resolves the
+    // bot chat INSIDE AorusGram (no Safari, no real-Telegram hop).
+    static let purchaseBotScheme = "aorusgram://resolve?domain=AorusGram_bot&start=buy"
+    // Resolved by Telegram's own internal resolver (openExternalUrl, forceExternal:
+    // false) for the over-lock flow and as an in-app fallback. Never the browser.
     static let purchaseBotLink = "https://t.me/AorusGram_bot?start=buy"
-
-    // MARK: Pricing (display only)
-    static let priceText = "200₽ / месяц"
 
     // MARK: Networking
     static let requestTimeout: TimeInterval = 15

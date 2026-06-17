@@ -9,8 +9,8 @@ final class TrialWelcomeController: SubscriptionBaseController {
     var onActivateTrial: (() -> Void)?
     var onHaveKey: (() -> Void)?
 
-    private let primary = SubscriptionStyle.primaryButton("Активировать 3 дня")
-    private let secondary = SubscriptionStyle.secondaryButton("У меня уже есть ключ")
+    private let primary = SubscriptionStyle.primaryButton(SubL10n.startTrial)
+    private let secondary = SubscriptionStyle.secondaryButton(SubL10n.haveKey)
     private let spinner = UIActivityIndicatorView(style: .medium)
 
     override func viewDidLoad() {
@@ -18,9 +18,9 @@ final class TrialWelcomeController: SubscriptionBaseController {
 
         addContent(SubscriptionStyle.centered(SubscriptionDuckView(duck: .trial), size: 170))
         addSpacing(6)
-        addContent(SubscriptionStyle.title("Добро пожаловать в AorusGram"))
-        addContent(SubscriptionStyle.body("Вам доступен пробный период на 3 дня."))
-        addContent(SubscriptionStyle.body("После окончания потребуется ключ подписки.",
+        addContent(SubscriptionStyle.title(SubL10n.welcomeTitle))
+        addContent(SubscriptionStyle.body(SubL10n.welcomeBody1))
+        addContent(SubscriptionStyle.body(SubL10n.welcomeBody2,
                                           color: SubscriptionStyle.secondaryText, size: 14))
 
         primary.addTarget(self, action: #selector(activateTapped), for: .touchUpInside)
@@ -46,7 +46,7 @@ final class TrialWelcomeController: SubscriptionBaseController {
             secondary.isEnabled = false
         } else {
             spinner.stopAnimating()
-            primary.setTitle("Активировать 3 дня", for: .normal)
+            primary.setTitle(SubL10n.startTrial, for: .normal)
             primary.isEnabled = true
             secondary.isEnabled = true
         }
