@@ -10,6 +10,10 @@ swift_library(
     copts = ["-Xfrontend", "-disable-availability-checking"],
     deps = [
         "//submodules/Display:Display",
+        "//submodules/AsyncDisplayKit:AsyncDisplayKit",
+        "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
+        "//submodules/MediaResources:MediaResources",
+        "//submodules/AnimatedStickerNode:AnimatedStickerNode",
     ],
     visibility = [
         "//visibility:public",

@@ -4025,7 +4025,7 @@ def patch_license_key_provider(tg: Path) -> None:
     marker is left empty (isProvisioned == false) so the build still succeeds and
     the client simply refuses to sign requests.
     """
-    f = tg / "submodules/AorusGramUI/Sources/Features/Subscription/LicenseKeyProvider.swift"
+    f = tg / "submodules/AorusGram/Sources/Features/Subscription/LicenseKeyProvider.swift"
     if not f.is_file():
         print("LicenseKey: LicenseKeyProvider.swift not found — skipped")
         return
@@ -4054,39 +4054,6 @@ def patch_license_key_provider(tg: Path) -> None:
     f.write_text(t, encoding="utf-8")
     # Never log the key itself — only its byte length.
     print("LicenseKey: provisioned obfuscated HMAC key (%d bytes)" % len(raw))
-
-
-def patch_subscription_animations(tg: Path) -> None:
-    """Embed the committed .tgs animations (base64) into SubscriptionAnimationAssets.swift.
-
-    The .tgs files live in submodules/AorusGramUI/Animations/. Each is base64-encoded
-    and substituted for its token in the Swift asset file. A missing file leaves the
-    token as-is (the player then shows nothing — no crash, no fallback image).
-    """
-    import base64 as _b64
-    asset = tg / "submodules/AorusGramUI/Sources/Features/Subscription/SubscriptionAnimationAssets.swift"
-    anim_dir = tg / "submodules/AorusGramUI/Animations"
-    if not asset.is_file():
-        print("SubAnim: SubscriptionAnimationAssets.swift not found — skipped")
-        return
-    mapping = {
-        "__AORUS_ANIM_TRIAL__":   anim_dir / "trial_duck.tgs",
-        "__AORUS_ANIM_EXPIRED__": anim_dir / "expired_duck_calendar.tgs",
-        "__AORUS_ANIM_PURCHASE__": anim_dir / "purchase_duck.tgs",
-    }
-    t = asset.read_text(encoding="utf-8")
-    injected = 0
-    for token, path in mapping.items():
-        if token not in t:
-            continue
-        if not path.is_file():
-            print(f"SubAnim: WARNING {path.name} missing — token left empty")
-            continue
-        b64 = _b64.b64encode(path.read_bytes()).decode("ascii")
-        t = t.replace(token, b64, 1)
-        injected += 1
-    asset.write_text(t, encoding="utf-8")
-    print(f"SubAnim: embedded {injected} animation(s)")
 
 
 def patch_local_premium(tg: Path) -> None:
@@ -6748,7 +6715,6 @@ def main() -> None:
     patch_view_once_direct_save_button(tg)
     patch_view_once_no_consume(tg)
     patch_license_key_provider(tg)
-    patch_subscription_animations(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)
     patch_chat_context_menu_hide_name_forward(tg)

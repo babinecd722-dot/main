@@ -8,6 +8,8 @@ class SubscriptionBaseController: UIViewController {
     let contentStack = UIStackView()
     let buttonStack = UIStackView()
 
+    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = SubscriptionStyle.background

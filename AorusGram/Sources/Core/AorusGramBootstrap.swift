@@ -122,6 +122,11 @@ public final class AorusGramBootstrap {
             }
         }
 
+        // Subscription / license gate. INERT unless an HMAC key is provisioned, and
+        // strictly fail-open — it can never lock the user out without a definitive
+        // server/cache "expired/banned" verdict.
+        LicenseGate.shared.start()
+
         observeAppLifecycle()
     }
 
