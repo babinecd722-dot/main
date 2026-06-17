@@ -2491,6 +2491,71 @@ def patch_app_delegate_publish_account_id(tg: Path) -> None:
         print("PublishAccountId: bootstrap anchor not found — skipped gracefully")
 
 
+def patch_app_delegate_open_purchase_bot(tg: Path) -> None:
+    """Open the purchase bot INSIDE AorusGram, above the lock screen.
+
+    The branded build only registers the aorusgram:// scheme (tg:// removed), so the
+    old UIApplication.open(tg://…/https://t.me/…) escaped to Safari. Instead, when the
+    license gate posts `aorusgram.openPurchaseBotInApp`, we build a fresh Telegram
+    NavigationController, resolve the bot via the in-app URL handler
+    (openExternalUrl, forceExternal: false), and present it modally on the TOPMOST
+    window — which is the gate's lock window. The result: while the subscription is
+    expired only the bot chat is reachable; dismissing it returns to the lock.
+
+    Signatures verified against Telegram-iOS release-12.8 (SharedAccountContext.
+    openExternalUrl, OpenURLContext.generic, NavigationController(mode:theme:),
+    NavigationControllerTheme(presentationTheme:)).
+    """
+    path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    if not path.is_file():
+        print("OpenPurchaseBot: AppDelegate.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusgram.openPurchaseBotInApp" in t:
+        print("OpenPurchaseBot: already injected")
+        return
+
+    sentinel = "// AorusGram: open purchase bot in-app over the lock"
+    hook = (
+        "\n        " + sentinel + "\n"
+        "        NotificationCenter.default.addObserver(forName: NSNotification.Name(\"aorusgram.openPurchaseBotInApp\"),\n"
+        "            object: nil, queue: .main) { [weak self] note in\n"
+        "            let aorusBotUrl = (note.userInfo?[\"url\"] as? String) ?? \"https://t.me/AorusGram_bot?start=buy\"\n"
+        "            guard let app = self?.contextValue else {\n"
+        "                if let u = URL(string: aorusBotUrl) { UIApplication.shared.open(u, options: [:], completionHandler: nil) }\n"
+        "                return\n"
+        "            }\n"
+        "            let aorusPresentationData = app.context.sharedContext.currentPresentationData.with { $0 }\n"
+        "            let aorusBotNav = NavigationController(mode: .single, theme: NavigationControllerTheme(presentationTheme: aorusPresentationData.theme))\n"
+        "            // Topmost non-hidden window == the license gate's lock window.\n"
+        "            let aorusTopWindow = UIApplication.shared.connectedScenes\n"
+        "                .compactMap { $0 as? UIWindowScene }\n"
+        "                .flatMap { $0.windows }\n"
+        "                .filter { !$0.isHidden }\n"
+        "                .max(by: { $0.windowLevel < $1.windowLevel })\n"
+        "            var aorusPresenter = aorusTopWindow?.rootViewController\n"
+        "            while let aorusNext = aorusPresenter?.presentedViewController { aorusPresenter = aorusNext }\n"
+        "            aorusPresenter?.present(aorusBotNav, animated: true, completion: nil)\n"
+        "            app.context.sharedContext.openExternalUrl(\n"
+        "                context: app.context,\n"
+        "                urlContext: .generic,\n"
+        "                url: aorusBotUrl,\n"
+        "                forceExternal: false,\n"
+        "                presentationData: aorusPresentationData,\n"
+        "                navigationController: aorusBotNav,\n"
+        "                dismissInput: {})\n"
+        "        }\n"
+    )
+
+    anchor = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
+    if anchor in t:
+        t = t.replace(anchor, anchor + hook, 1)
+        path.write_text(t, encoding="utf-8")
+        print("OpenPurchaseBot: in-app bot opener injected after bootstrap call")
+    else:
+        print("OpenPurchaseBot: bootstrap anchor not found — skipped gracefully")
+
+
 def patch_app_delegate_import_telegram_api(tg: Path) -> None:
     """Ensure AppDelegate.swift imports TelegramApi so we can call Api.functions.*.
 
@@ -6733,6 +6798,7 @@ def main() -> None:
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
     patch_app_delegate_publish_account_id(tg)
+    patch_app_delegate_open_purchase_bot(tg)
     patch_app_delegate_import_telegram_api(tg)
     patch_app_delegate_account_restore_hook(tg)
     patch_app_delegate_siri_continue_activity(tg)

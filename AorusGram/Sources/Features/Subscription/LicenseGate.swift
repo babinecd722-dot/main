@@ -360,19 +360,18 @@ final class LicenseGate {
         top?.present(alert, animated: true)
     }
 
-    // MARK: - External purchase bot (v1)
+    // MARK: - Purchase bot (opened IN-APP, over the lock)
 
+    // We do NOT use UIApplication.open here: the branded build only registers the
+    // aorusgram:// scheme (tg:// is gone), so opening a tg:/https link escaped to
+    // the browser. Instead we ask AppDelegate (which holds the Telegram context) to
+    // open the bot chat inside AorusGram, presented ABOVE the lock window so the bot
+    // is the only thing reachable while the subscription is expired.
     private func openPurchaseBot() {
-        let urls = [SubscriptionConfig.purchaseDeepLink, SubscriptionConfig.purchaseWebFallback]
-            .compactMap { URL(string: $0) }
-        openFirst(urls)
-    }
-
-    private func openFirst(_ urls: [URL]) {
-        guard let first = urls.first else { return }
-        UIApplication.shared.open(first, options: [:]) { [weak self] success in
-            if !success { self?.openFirst(Array(urls.dropFirst())) }
-        }
+        NotificationCenter.default.post(
+            name: NSNotification.Name("aorusgram.openPurchaseBotInApp"),
+            object: nil,
+            userInfo: ["url": SubscriptionConfig.purchaseWebFallback])
     }
 
     // MARK: - Russian day pluralization
