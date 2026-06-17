@@ -290,7 +290,12 @@ final class LicenseGate {
 
     private func presentPurchaseModally() {
         let vc = PurchaseController()
-        vc.onBuy = { [weak self] in self?.openPurchaseBot() }
+        // Active (not locked): close the sheet and open the bot as a normal chat in
+        // AorusGram's main chat list (in-app, never the browser).
+        vc.onBuy = { [weak self] in
+            self?.dismissModal()
+            self?.openPurchaseBot(inMainNav: true)
+        }
         vc.onHaveKey = { [weak self] in self?.pushActivateKeyInModal() }
         vc.navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .close, target: self, action: #selector(dismissModalAction))
@@ -360,18 +365,22 @@ final class LicenseGate {
         top?.present(alert, animated: true)
     }
 
-    // MARK: - Purchase bot (opened IN-APP, over the lock)
+    // MARK: - Purchase bot (opened IN-APP, never the browser)
 
-    // We do NOT use UIApplication.open here: the branded build only registers the
-    // aorusgram:// scheme (tg:// is gone), so opening a tg:/https link escaped to
-    // the browser. Instead we ask AppDelegate (which holds the Telegram context) to
-    // open the bot chat inside AorusGram, presented ABOVE the lock window so the bot
-    // is the only thing reachable while the subscription is expired.
-    private func openPurchaseBot() {
+    // AppDelegate (which holds the Telegram context) resolves the bot with Telegram's
+    // own internal resolver (openExternalUrl, forceExternal: false), so it never
+    // escapes to Safari. Two modes:
+    //   • inMainNav == true  → open as a normal chat in the main navigation (active user)
+    //   • inMainNav == false → present above the lock window so the bot is the only
+    //     reachable screen while the subscription is expired
+    private func openPurchaseBot(inMainNav: Bool = false) {
         NotificationCenter.default.post(
             name: NSNotification.Name("aorusgram.openPurchaseBotInApp"),
             object: nil,
-            userInfo: ["url": SubscriptionConfig.purchaseWebFallback])
+            userInfo: [
+                "url": SubscriptionConfig.purchaseBotLink,
+                "mainNav": NSNumber(value: inMainNav),
+            ])
     }
 
     // MARK: - Russian day pluralization
