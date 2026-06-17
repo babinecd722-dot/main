@@ -2,41 +2,30 @@ import Foundation
 
 // HMAC key provider.
 //
-// The key is NEVER stored as a single plaintext string. It is held as obfuscated
-// bytes (XOR with a rotating pad) and reassembled only at signing time. The real
-// key is injected at BUILD time from the LICENSE_HMAC_KEY_HEX secret via
-// scripts/aorus_branding.py (patch_license_key_provider), which hex-decodes it,
-// XORs with the SAME pad below and writes the byte literal in place of the marker.
-//
-// If no key is provisioned, `isProvisioned` is false and LicenseAPIClient refuses
-// to sign rather than sending an unsigned request.
+// The license key is stored split into chunks and reassembled + hex-decoded to RAW
+// bytes only at signing time. The hex string is NEVER used directly as the key
+// (HMAC uses the decoded bytes). Splitting only lightly raises the reverse-
+// engineering bar — the key is still embedded in the binary.
 //
 // SECURITY: never log the key, the reassembled bytes, or any signature.
 enum LicenseKeyProvider {
-    static let keyVersion = "1"
+    static let keyVersion = "1"   // X-Aorus-Kv
 
-    // Rotating XOR pad. Not secret on its own; it only raises the reverse-
-    // engineering bar. MUST stay in sync with the Python side in aorus_branding.py.
-    private static let pad: [UInt8] = [
-        0x5A, 0xC3, 0x19, 0x7E, 0x2B, 0xF0, 0x8D, 0x44,
-        0x16, 0xA9, 0x6C, 0xD1, 0x3F, 0x82, 0xE5, 0x70
+    private static let keyChunks: [String] = [
+        "0d0199727dbf6872",
+        "c04f14712fc590d1",
+        "d2e67bb7c25e37f0",
+        "a52e287ca7979b78",
+        "b500f59879b5a448",
+        "03553fc94fabd4e5",
+        "df4ba3d46e75f54c",
+        "109d3548c61f40a1",
     ]
 
-    // Obfuscated key bytes, injected at build time. Empty until provisioned.
-    private static let obfuscated: [UInt8] = [
-        /*__AORUS_LICENSE_KEY_OBFUSCATED__*/
-    ]
+    static var isProvisioned: Bool { !keyChunks.isEmpty }
 
-    static var isProvisioned: Bool { !obfuscated.isEmpty }
-
-    // Reassemble raw key bytes. The caller must not retain or log the result.
+    // Reassemble → hex-decode → raw key bytes. The caller must not retain or log it.
     static func licenseHmacKeyBytes() -> Data {
-        if obfuscated.isEmpty { return Data() }
-        var out = [UInt8]()
-        out.reserveCapacity(obfuscated.count)
-        for (i, b) in obfuscated.enumerated() {
-            out.append(b ^ pad[i % pad.count])
-        }
-        return Data(out)
+        return LicenseCrypto.hexDecode(keyChunks.joined())
     }
 }

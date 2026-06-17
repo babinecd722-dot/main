@@ -3,24 +3,27 @@ import UIKit
 
 // Root-level subscription gate.
 //
-// SAFETY MODEL (fail-open by design):
-//  • The whole gate is INERT unless an HMAC key is provisioned (LicenseKeyProvider).
-//    Without the key no request can be signed/succeed, so the gate never locks
-//    anything — AorusGram behaves exactly like a normal Telegram client.
-//  • The user is locked out ONLY on a DEFINITIVE locked verdict: the server returns
-//    expired/banned, OR a cached license has provably passed active_until. Any
-//    uncertainty (network/parse error, missing data) FAILS OPEN.
+// ENFORCEMENT MODEL:
+//  • Inert only if no key is provisioned (LicenseKeyProvider.isProvisioned == false).
+//    With a key embedded this never happens — the gate is always active.
+//  • The SERVER is the source of truth. The user reaches the chat list only on an
+//    active verdict (trial_active / paid_active).
+//  • Offline grace (per spec §12): a cached active license whose active_until has not
+//    passed is honoured while offline. Cached-expired → locked. No usable cache and
+//    no network → a connection-error lock screen (NOT free access).
 //
 // LOCK MECHANISM (root-swap-equivalent): a dedicated opaque UIWindow above
-// everything. While visible it covers and intercepts all input, so nothing behind
-// it (chat list, search, deeplink target, back/swipe) is reachable. Hidden when the
-// license is active.
+// everything. While visible it covers and intercepts all input, so nothing behind it
+// (chat list, search, deeplink target, back/swipe) is reachable.
 final class LicenseGate {
     static let shared = LicenseGate()
     private init() {}
 
+    private enum LockKind { case none, loading, trial, expired, banned, connection }
+
     private var started = false
     private var lockWindow: UIWindow?
+    private var lockKind: LockKind = .none
     private var telegramUserId: Int64?
     private var bannerShownThisLaunch = false
     private var inFlight = false
@@ -35,10 +38,7 @@ final class LicenseGate {
     // Entry point — called once from AorusGramBootstrap.setup().
     func start() {
         guard !started else { return }
-        guard LicenseKeyProvider.isProvisioned else {
-            // No key provisioned → gate stays completely inert.
-            return
-        }
+        guard LicenseKeyProvider.isProvisioned else { return }   // inert without a key
         started = true
         LicenseStore.shared.load()
         if telegramUserId == nil { telegramUserId = LicenseStore.shared.telegramUserId }
@@ -46,10 +46,19 @@ final class LicenseGate {
         NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive),
                                                name: UIApplication.didBecomeActiveNotification, object: nil)
 
-        // Defer to the next runloop so the app's scene/window exists before we draw.
+        // Defer so the app's scene/window exists before we draw the overlay.
         DispatchQueue.main.async { [weak self] in
-            self?.applyCachedLockIfAny()
-            self?.refresh()
+            guard let self = self else { return }
+            let cached = LicenseStore.shared.effectiveOfflineStatus()
+            if cached.allowsAppAccess {
+                // Valid offline grace — let the app through; confirm with the server.
+            } else if cached.isLocked {
+                self.showExpired(banned: cached == .banned)
+            } else {
+                // Unknown / not_started — cover with a splash until the first verdict.
+                self.showLoading()
+            }
+            self.refresh()
         }
     }
 
@@ -61,11 +70,6 @@ final class LicenseGate {
     }
 
     // MARK: - Resolution
-
-    private func applyCachedLockIfAny() {
-        let cached = LicenseStore.shared.effectiveOfflineStatus()
-        if cached.isLocked { showExpired(banned: cached == .banned) }
-    }
 
     private func refresh() {
         guard started, !inFlight else { return }
@@ -80,15 +84,10 @@ final class LicenseGate {
                     LicenseStore.shared.save(response: response, telegramUserId: uid)
                     self.apply(status: response.status, response: response)
                 case .failure:
-                    self.applyFailOpen()
+                    self.applyNetworkFailure()
                 }
             }
         }
-    }
-
-    private func applyFailOpen() {
-        let cached = LicenseStore.shared.effectiveOfflineStatus()
-        if cached.isLocked { showExpired(banned: cached == .banned) } else { hideLock() }
     }
 
     private func apply(status: LicenseStatus, response: LicenseResponse?) {
@@ -103,15 +102,34 @@ final class LicenseGate {
         case .banned:
             showExpired(banned: true)
         case .networkError:
-            applyFailOpen()
+            applyNetworkFailure()
+        }
+    }
+
+    // No permissive fall-through: unknown + offline = locked (connection screen).
+    private func applyNetworkFailure() {
+        let cached = LicenseStore.shared.effectiveOfflineStatus()
+        switch cached {
+        case .trialActive, .paidActive:
+            hideLock()                                   // honour valid offline grace
+        case .expired, .banned:
+            showExpired(banned: cached == .banned)
+        default:
+            showConnection()
         }
     }
 
     // MARK: - Lock screens
 
+    private func showLoading() {
+        guard lockKind != .loading else { return }
+        lockKind = .loading
+        setLockRoot(SubscriptionLoadingController())
+    }
+
     private func showTrialWelcome() {
-        if let nav = lockWindow?.rootViewController as? UINavigationController,
-           nav.viewControllers.first is TrialWelcomeController { return }
+        guard lockKind != .trial else { return }
+        lockKind = .trial
         let vc = TrialWelcomeController()
         vc.onActivateTrial = { [weak self, weak vc] in
             guard let self = self else { return }
@@ -142,14 +160,30 @@ final class LicenseGate {
     }
 
     private func showExpired(banned: Bool) {
-        if let nav = lockWindow?.rootViewController as? UINavigationController,
-           nav.viewControllers.first is SubscriptionExpiredController { return }
+        let kind: LockKind = banned ? .banned : .expired
+        guard lockKind != kind else { return }
+        lockKind = kind
         let vc = SubscriptionExpiredController()
         if banned {
             vc.titleTextOverride = "Устройство заблокировано"
             vc.bodyTextOverride = "Доступ к AorusGram ограничен."
         }
         vc.onBuy = { [weak self] in self?.openPurchaseBot() }
+        vc.onEnterKey = { [weak self] in self?.pushActivateKeyInLock() }
+        setLockRoot(vc)
+    }
+
+    private func showConnection() {
+        guard lockKind != .connection else { return }
+        lockKind = .connection
+        let vc = SubscriptionExpiredController()
+        vc.titleTextOverride = "Нет соединения"
+        vc.bodyTextOverride = "Не удалось проверить подписку. Проверьте интернет и попробуйте снова."
+        vc.primaryTitleOverride = "Повторить"
+        vc.secondaryTitleOverride = "Ввести ключ"
+        vc.hidePriceCard = true
+        vc.hideFootnote = true
+        vc.onBuy = { [weak self] in self?.refresh() }            // primary = retry
         vc.onEnterKey = { [weak self] in self?.pushActivateKeyInLock() }
         setLockRoot(vc)
     }
@@ -193,6 +227,7 @@ final class LicenseGate {
     }
 
     private func hideLock() {
+        lockKind = .none
         guard let window = lockWindow else { return }
         window.isHidden = true
         window.rootViewController = nil
