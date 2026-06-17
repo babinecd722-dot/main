@@ -13,6 +13,7 @@ final class LicenseStore {
 
     private let kcService = "com.aorusgram.license"
     private let kcAccount = "cache_v1"
+    private let udTelegramKey = "aorusgram_lic_tg_uid"   // non-sensitive UI/id mirror
 
     struct Snapshot: Codable {
         var statusRaw: String
@@ -62,8 +63,26 @@ final class LicenseStore {
         ud.removeObject(forKey: "aorusgram_lic_days_left")
     }
 
-    var telegramUserId: Int64? { snapshot?.telegramUserId }
+    // Prefer the id captured with the last license snapshot; fall back to the
+    // standalone mirror set right after Telegram login (before any license check).
+    var telegramUserId: Int64? {
+        if let id = snapshot?.telegramUserId, id != 0 { return id }
+        let v = UserDefaults.standard.object(forKey: udTelegramKey) as? NSNumber
+        return v.map { $0.int64Value }
+    }
     var daysLeft: Int? { snapshot?.daysLeft }
+
+    // Persist the Telegram account id independently of the license snapshot, so the
+    // first /license/check, /bootstrap and /activate after login carry the real id.
+    func setTelegramUserId(_ id: Int64) {
+        guard id != 0 else { return }
+        UserDefaults.standard.set(NSNumber(value: id), forKey: udTelegramKey)
+        if var snap = snapshot {
+            snap.telegramUserId = id
+            snapshot = snap
+            writeKeychain(snap)
+        }
+    }
 
     // Estimated current server time = server anchor + elapsed wall clock since the
     // last check. If the clock moved backwards we do NOT extend validity.

@@ -6,17 +6,22 @@ import Display
 import MediaResources
 import AnimatedStickerNode
 
-// The three duck animations.
+// Embedded subscription animations: large duck illustrations for the full-screen
+// flows + small looping icons used inside the entry banner.
 enum SubscriptionDuck: String {
     case trial
     case expired
     case purchase
+    case fire        // small banner icon — "пробный период активен"
+    case boost       // small banner icon — "подписка активна"
 
     var base64: String {
         switch self {
         case .trial:    return SubscriptionAnimationAssets.trial
         case .expired:  return SubscriptionAnimationAssets.expired
         case .purchase: return SubscriptionAnimationAssets.purchase
+        case .fire:     return SubscriptionAnimationAssets.fire
+        case .boost:    return SubscriptionAnimationAssets.boost
         }
     }
 }

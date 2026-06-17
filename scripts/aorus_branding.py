@@ -2442,6 +2442,55 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
     print("AntiSpoofDeletePreflight: rewrote _internal_deleteMessagesInteractively with edit-before-delete chain")
 
 
+def patch_app_delegate_publish_account_id(tg: Path) -> None:
+    """Publish the logged-in Telegram account id to the license gate.
+
+    The license server binds keys to a specific telegram_user_id, so the client must
+    send the real account id in /license/check, /bootstrap and /activate. We read it
+    from `self.contextValue` (the AuthorizedApplicationContext — the same accessor the
+    auto-reply hook uses) and post it on NotificationCenter; AorusGramBootstrap
+    forwards it to LicenseGate.setTelegramUserId (which de-dupes).
+
+    We publish on a few staggered delays (to catch both an already-logged-in cold
+    start and a login that completes mid-session) and again on every foreground.
+    Nothing sensitive is logged.
+    """
+    path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    if not path.is_file():
+        print("PublishAccountId: AppDelegate.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusgram.activeAccountId" in t:
+        print("PublishAccountId: already injected")
+        return
+
+    sentinel = "// AorusGram: publish active Telegram account id"
+    hook = (
+        "\n        " + sentinel + "\n"
+        "        let aorusgramPublishAccountId: () -> Void = { [weak self] in\n"
+        "            guard let app = self?.contextValue else { return }\n"
+        "            let aorusUid = app.context.account.peerId.id._internalGetInt64Value()\n"
+        "            guard aorusUid != 0 else { return }\n"
+        "            NotificationCenter.default.post(\n"
+        "                name: NSNotification.Name(\"aorusgram.activeAccountId\"),\n"
+        "                object: nil, userInfo: [\"telegramUserId\": NSNumber(value: aorusUid)])\n"
+        "        }\n"
+        "        for aorusDelay in [2.0, 5.0, 12.0, 30.0] {\n"
+        "            DispatchQueue.main.asyncAfter(deadline: .now() + aorusDelay, execute: aorusgramPublishAccountId)\n"
+        "        }\n"
+        "        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification,\n"
+        "            object: nil, queue: .main) { _ in aorusgramPublishAccountId() }\n"
+    )
+
+    anchor = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
+    if anchor in t:
+        t = t.replace(anchor, anchor + hook, 1)
+        path.write_text(t, encoding="utf-8")
+        print("PublishAccountId: account-id publisher injected after bootstrap call")
+    else:
+        print("PublishAccountId: bootstrap anchor not found — skipped gracefully")
+
+
 def patch_app_delegate_import_telegram_api(tg: Path) -> None:
     """Ensure AppDelegate.swift imports TelegramApi so we can call Api.functions.*.
 
@@ -6683,6 +6732,7 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
+    patch_app_delegate_publish_account_id(tg)
     patch_app_delegate_import_telegram_api(tg)
     patch_app_delegate_account_restore_hook(tg)
     patch_app_delegate_siri_continue_activity(tg)

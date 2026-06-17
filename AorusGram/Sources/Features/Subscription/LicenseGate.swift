@@ -23,15 +23,21 @@ final class LicenseGate {
 
     private var started = false
     private var lockWindow: UIWindow?
+    private var modalWindow: UIWindow?
     private var lockKind: LockKind = .none
     private var telegramUserId: Int64?
     private var bannerShownThisLaunch = false
     private var inFlight = false
 
-    // Optional binding hook: call once the Telegram account id is known.
+    // Binding hook: called once the Telegram account id is known (published from
+    // AppDelegate after login). De-duped so a re-publish of the same id never
+    // triggers a redundant /license/check.
     func setTelegramUserId(_ id: Int64?) {
         guard let id = id, id != 0 else { return }
+        guard id != telegramUserId else { return }
         telegramUserId = id
+        // Persist so check/bootstrap/activate keep sending the real id across launches.
+        LicenseStore.shared.setTelegramUserId(id)
         if started { refresh() }
     }
 
@@ -254,83 +260,104 @@ final class LicenseGate {
         return scenes.compactMap { $0 as? UIWindowScene }.first
     }
 
-    private func appKeyWindow() -> UIWindow? {
-        if let lock = lockWindow, !lock.isHidden { return lock }
-        let windows = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-        return windows.first(where: { $0.isKeyWindow }) ?? windows.first
-    }
-
     // MARK: - Entry banner (active license)
 
     private func maybeShowEntryBanner(status: LicenseStatus, response: LicenseResponse?) {
         guard !bannerShownThisLaunch else { return }
         bannerShownThisLaunch = true
-        guard let window = appKeyWindow() else { return }
         let days = response?.daysLeft ?? LicenseStore.shared.daysLeft ?? -1
-        let icon: String
+        let duck: SubscriptionDuck
         let title: String
         switch status {
-        case .trialActive: icon = "🔥"; title = "Пробный период активен"
-        case .paidActive:  icon = "✅"; title = "Подписка активна"
+        case .trialActive: duck = .fire;  title = "Пробный период активен"
+        case .paidActive:  duck = .boost; title = "Подписка активна"
         default: return
         }
         let subtitle = remainingText(days)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            SubscriptionBanner.show(in: window, icon: icon, title: title, subtitle: subtitle) {
+            SubscriptionBanner.show(duck: duck, title: title, subtitle: subtitle) {
                 self?.presentPurchaseModally()
             }
         }
     }
 
-    // MARK: - Active-mode purchase/activate (modal over the running app)
+    // MARK: - Active-mode purchase/activate (own window over the running app)
+    //
+    // Presented in a dedicated full-screen window (same proven mechanism as the lock
+    // screens) instead of UIViewController.present on Telegram's custom main window,
+    // whose rootViewController-based presentation is unreliable — that was why the
+    // banner tap appeared to "do nothing".
 
     private func presentPurchaseModally() {
-        guard let presenter = topPresenter() else { return }
         let vc = PurchaseController()
         vc.onBuy = { [weak self] in self?.openPurchaseBot() }
-        vc.onHaveKey = { [weak self, weak vc] in
-            vc?.dismiss(animated: true) { self?.presentActivateModally() }
-        }
-        let nav = makeNav(vc)
+        vc.onHaveKey = { [weak self] in self?.pushActivateKeyInModal() }
         vc.navigationItem.leftBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .close, target: vc, action: #selector(UIViewController.aorusDismissSelf))
-        nav.modalPresentationStyle = .formSheet
-        presenter.present(nav, animated: true)
+            barButtonSystemItem: .close, target: self, action: #selector(dismissModalAction))
+        setModalRoot(vc)
     }
 
-    private func presentActivateModally() {
-        guard let presenter = topPresenter() else { return }
+    private func makeActivateController() -> ActivateKeyController {
         let vc = ActivateKeyController()
         vc.telegramUserId = telegramUserId
-        vc.onActivated = { [weak self, weak vc] _ in
-            vc?.dismiss(animated: true) { self?.showToast("Подписка активирована") }
+        vc.onActivated = { [weak self] _ in
+            self?.dismissModal()
+            self?.showToast("Подписка активирована")
         }
-        let nav = makeNav(vc)
-        vc.navigationItem.leftBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .close, target: vc, action: #selector(UIViewController.aorusDismissSelf))
-        nav.modalPresentationStyle = .formSheet
-        presenter.present(nav, animated: true)
+        return vc
     }
 
-    private func topPresenter() -> UIViewController? {
-        guard let root = appKeyWindow()?.rootViewController else { return nil }
-        var top = root
-        while let presented = top.presentedViewController { top = presented }
-        return top
+    private func pushActivateKeyInModal(asRoot: Bool = false) {
+        let vc = makeActivateController()
+        if !asRoot, let nav = modalWindow?.rootViewController as? UINavigationController {
+            nav.pushViewController(vc, animated: true)
+        } else {
+            vc.navigationItem.leftBarButtonItem = UIBarButtonItem(
+                barButtonSystemItem: .close, target: self, action: #selector(dismissModalAction))
+            setModalRoot(vc)
+        }
+    }
+
+    private func setModalRoot(_ controller: UIViewController) {
+        ensureModalWindow()
+        modalWindow?.rootViewController = makeNav(controller)
+        modalWindow?.makeKeyAndVisible()
+    }
+
+    private func ensureModalWindow() {
+        if modalWindow != nil { return }
+        let window: UIWindow
+        if let scene = activeScene() {
+            window = UIWindow(windowScene: scene)
+        } else {
+            window = UIWindow(frame: UIScreen.main.bounds)
+        }
+        window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1)
+        window.backgroundColor = SubscriptionStyle.background
+        window.overrideUserInterfaceStyle = .dark
+        modalWindow = window
+    }
+
+    @objc private func dismissModalAction() { dismissModal() }
+
+    private func dismissModal() {
+        guard let window = modalWindow else { return }
+        window.isHidden = true
+        window.rootViewController = nil
+        modalWindow = nil
     }
 
     private func showToast(_ text: String) {
-        guard let window = appKeyWindow() else { return }
-        SubscriptionBanner.toast(in: window, icon: "✅", text: text)
+        SubscriptionBanner.toast(icon: "✅", text: text)
     }
 
     private func presentAlert(_ message: String) {
-        guard let presenter = topPresenter() else { return }
         let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
-        presenter.present(alert, animated: true)
+        let presenter = modalWindow?.rootViewController ?? lockWindow?.rootViewController
+        var top = presenter
+        while let p = top?.presentedViewController { top = p }
+        top?.present(alert, animated: true)
     }
 
     // MARK: - External purchase bot (v1)
@@ -373,11 +400,5 @@ final class LicenseGate {
         case .notProvisioned: return "Сервис временно недоступен. Попробуйте позже."
         default: return "Не удалось активировать. Попробуйте позже."
         }
-    }
-}
-
-extension UIViewController {
-    @objc fileprivate func aorusDismissSelf() {
-        dismiss(animated: true)
     }
 }

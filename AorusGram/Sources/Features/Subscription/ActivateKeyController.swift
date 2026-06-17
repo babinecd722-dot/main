@@ -2,43 +2,33 @@ import UIKit
 
 // Key activation screen. Owns the POST /license/activate call, loading / error
 // states and error-code mapping; reports the activated license up via onActivated.
+//
+// Visually polished: animated duck illustration, a focus-reactive key field (accent
+// glow on edit), an error shake, and a soft staggered entrance.
 final class ActivateKeyController: SubscriptionBaseController {
     // Set by the coordinator; falls back to the cached id.
     var telegramUserId: Int64?
     var onActivated: ((LicenseResponse) -> Void)?
 
+    private let duck = SubscriptionDuckView(duck: .purchase)
     private let field = UITextField()
+    private let fieldContainer = UIView()
     private let errorLabel = SubscriptionStyle.body("", color: SubscriptionStyle.destructive, size: 14)
     private let primary = SubscriptionStyle.primaryButton("Активировать")
     private let spinner = UIActivityIndicatorView(style: .medium)
+    private var didAnimateEntrance = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        addContent(SubscriptionStyle.centered(duck, size: 150))
+        addSpacing(2)
         addContent(SubscriptionStyle.title("Введите ключ"))
         addContent(SubscriptionStyle.body("Введите ключ подписки, полученный в боте AorusGram."))
-        addSpacing(6)
+        addSpacing(8)
 
-        field.placeholder = "AORUS-XXXX-XXXX-XXXX"
-        field.attributedPlaceholder = NSAttributedString(
-            string: "AORUS-XXXX-XXXX-XXXX",
-            attributes: [.foregroundColor: UIColor(white: 0.4, alpha: 1.0)])
-        field.font = UIFont.monospacedSystemFont(ofSize: 17, weight: .medium)
-        field.textColor = SubscriptionStyle.primaryText
-        field.tintColor = SubscriptionStyle.accent
-        field.textAlignment = .center
-        field.autocapitalizationType = .allCharacters
-        field.autocorrectionType = .no
-        field.spellCheckingType = .no
-        field.returnKeyType = .done
-        field.delegate = self
-        field.backgroundColor = SubscriptionStyle.card
-        field.layer.cornerRadius = 12
-        field.layer.cornerCurve = .continuous
-        field.translatesAutoresizingMaskIntoConstraints = false
-        field.heightAnchor.constraint(equalToConstant: 52).isActive = true
-        field.addTarget(self, action: #selector(editingChanged), for: .editingChanged)
-        addContent(field)
+        buildField()
+        addContent(fieldContainer)
 
         errorLabel.isHidden = true
         addContent(errorLabel)
@@ -61,19 +51,98 @@ final class ActivateKeyController: SubscriptionBaseController {
                                                name: UIResponder.keyboardWillHideNotification, object: nil)
     }
 
+    private func buildField() {
+        fieldContainer.translatesAutoresizingMaskIntoConstraints = false
+        fieldContainer.backgroundColor = SubscriptionStyle.card
+        fieldContainer.layer.cornerRadius = 14
+        fieldContainer.layer.cornerCurve = .continuous
+        fieldContainer.layer.borderWidth = 1.0
+        fieldContainer.layer.borderColor = UIColor(white: 0.22, alpha: 1.0).cgColor
+        // Accent glow (off until focused).
+        fieldContainer.layer.shadowColor = SubscriptionStyle.accent.cgColor
+        fieldContainer.layer.shadowRadius = 10
+        fieldContainer.layer.shadowOffset = .zero
+        fieldContainer.layer.shadowOpacity = 0
+        fieldContainer.heightAnchor.constraint(equalToConstant: 56).isActive = true
+
+        field.attributedPlaceholder = NSAttributedString(
+            string: "AORUS-XXXX-XXXX-XXXX",
+            attributes: [.foregroundColor: UIColor(white: 0.4, alpha: 1.0)])
+        field.font = UIFont.monospacedSystemFont(ofSize: 18, weight: .semibold)
+        field.textColor = SubscriptionStyle.primaryText
+        field.tintColor = SubscriptionStyle.accent
+        field.textAlignment = .center
+        field.autocapitalizationType = .allCharacters
+        field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.returnKeyType = .done
+        field.delegate = self
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.addTarget(self, action: #selector(editingChanged), for: .editingChanged)
+        fieldContainer.addSubview(field)
+        NSLayoutConstraint.activate([
+            field.leadingAnchor.constraint(equalTo: fieldContainer.leadingAnchor, constant: 14),
+            field.trailingAnchor.constraint(equalTo: fieldContainer.trailingAnchor, constant: -14),
+            field.topAnchor.constraint(equalTo: fieldContainer.topAnchor),
+            field.bottomAnchor.constraint(equalTo: fieldContainer.bottomAnchor),
+        ])
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        animateEntrance()
         field.becomeFirstResponder()
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
+
+    // MARK: - Animations
+
+    private func animateEntrance() {
+        guard !didAnimateEntrance else { return }
+        didAnimateEntrance = true
+        let views = contentStack.arrangedSubviews
+        for (i, v) in views.enumerated() {
+            v.alpha = 0
+            v.transform = CGAffineTransform(translationX: 0, y: 14)
+            UIView.animate(withDuration: 0.42, delay: 0.05 * Double(i),
+                           usingSpringWithDamping: 0.9, initialSpringVelocity: 0.3,
+                           options: [.curveEaseOut], animations: {
+                v.alpha = 1
+                v.transform = .identity
+            })
+        }
+    }
+
+    private func setFieldFocused(_ focused: Bool) {
+        UIView.animate(withDuration: 0.22) {
+            self.fieldContainer.layer.borderColor = (focused ? SubscriptionStyle.accent
+                                                             : UIColor(white: 0.22, alpha: 1.0)).cgColor
+            self.fieldContainer.layer.shadowOpacity = focused ? 0.45 : 0
+            self.fieldContainer.layer.borderWidth = focused ? 1.5 : 1.0
+        }
+    }
+
+    private func shakeField() {
+        let shake = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        shake.values = [-10, 10, -8, 8, -5, 5, 0]
+        shake.duration = 0.45
+        shake.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        fieldContainer.layer.add(shake, forKey: "shake")
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
+    }
 
     // MARK: - Input
 
     @objc private func editingChanged() {
         let upper = (field.text ?? "").uppercased()
         if upper != field.text { field.text = upper }
-        if !errorLabel.isHidden { errorLabel.isHidden = true }
+        if !errorLabel.isHidden {
+            UIView.animate(withDuration: 0.2, animations: { self.errorLabel.alpha = 0 }, completion: { _ in
+                self.errorLabel.isHidden = true
+                self.errorLabel.alpha = 1
+            })
+        }
     }
 
     @objc private func keyboardChange(_ note: Notification) {
@@ -92,7 +161,7 @@ final class ActivateKeyController: SubscriptionBaseController {
 
     @objc private func activateTapped() {
         let code = (field.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !code.isEmpty else { return }
+        guard !code.isEmpty else { shakeField(); return }
         view.endEditing(true)
         setLoading(true)
         errorLabel.isHidden = true
@@ -106,6 +175,7 @@ final class ActivateKeyController: SubscriptionBaseController {
                 case .success(let response):
                     if response.status.allowsAppAccess {
                         LicenseStore.shared.save(response: response, telegramUserId: uid)
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                         self.onActivated?(response)
                     } else {
                         self.showError("Ключ не найден")
@@ -120,6 +190,7 @@ final class ActivateKeyController: SubscriptionBaseController {
     private func showError(_ text: String) {
         errorLabel.text = text
         errorLabel.isHidden = false
+        shakeField()
     }
 
     private func setLoading(_ loading: Bool) {
@@ -155,6 +226,9 @@ final class ActivateKeyController: SubscriptionBaseController {
 }
 
 extension ActivateKeyController: UITextFieldDelegate {
+    func textFieldDidBeginEditing(_ textField: UITextField) { setFieldFocused(true) }
+    func textFieldDidEndEditing(_ textField: UITextField) { setFieldFocused(false) }
+
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         activateTapped()
         return true

@@ -122,6 +122,21 @@ public final class AorusGramBootstrap {
             }
         }
 
+        // Active Telegram account id → license gate. Published from AppDelegate
+        // (cold start + each foreground) and from TelegramCore after a state sync,
+        // both via NotificationCenter (branding.py injects the publishers). The gate
+        // de-dupes, so multiple publishers are harmless. This is what lets keys issued
+        // to a specific Telegram ID activate (check/bootstrap/activate carry the id).
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("aorusgram.activeAccountId"),
+            object: nil,
+            queue: .main
+        ) { note in
+            if let uid = (note.userInfo?["telegramUserId"] as? NSNumber)?.int64Value {
+                LicenseGate.shared.setTelegramUserId(uid)
+            }
+        }
+
         // Subscription / license gate. INERT unless an HMAC key is provisioned, and
         // strictly fail-open — it can never lock the user out without a definitive
         // server/cache "expired/banned" verdict.
