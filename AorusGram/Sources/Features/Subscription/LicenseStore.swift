@@ -130,16 +130,16 @@ final class LicenseStore {
 
     // Canonical, deterministic representation of the signed fields (excludes `sig`).
     private func canonicalString(_ s: Snapshot) -> String {
-        return [
-            s.statusRaw,
-            s.plan ?? "",
-            s.activeUntil.map(String.init) ?? "",
-            s.serverNow.map(String.init) ?? "",
-            s.daysLeft.map(String.init) ?? "",
-            String(format: "%.0f", s.lastCheckWall),
-            s.telegramUserId.map(String.init) ?? "",
-            s.deviceHash ?? "",
-        ].joined(separator: "|")
+        var parts: [String] = []
+        parts.append(s.statusRaw)
+        parts.append(s.plan ?? "")
+        parts.append(s.activeUntil.map { String($0) } ?? "")
+        parts.append(s.serverNow.map { String($0) } ?? "")
+        parts.append(s.daysLeft.map { String($0) } ?? "")
+        parts.append(String(format: "%.0f", s.lastCheckWall))
+        parts.append(s.telegramUserId.map { String($0) } ?? "")
+        parts.append(s.deviceHash ?? "")
+        return parts.joined(separator: "|")
     }
 
     // HMAC-SHA256 with the embedded license key. Never logged.

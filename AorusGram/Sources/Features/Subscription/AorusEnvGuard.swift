@@ -167,7 +167,7 @@ enum AorusEnvGuard {
                      "/usr/share", "/var/stash"]
         for path in links {
             var st = stat()
-            if lstat(path, &st) == 0 && (Int32(st.st_mode) & S_IFMT) == S_IFLNK { return true }
+            if lstat(path, &st) == 0 && (UInt32(st.st_mode) & UInt32(S_IFMT)) == UInt32(S_IFLNK) { return true }
         }
         return false
     }
