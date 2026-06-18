@@ -1,7 +1,6 @@
 import Foundation
 import CryptoKit
 import Security
-import UIKit
 
 // MARK: - AorusGram system proxy
 //
@@ -44,6 +43,11 @@ public final class AorusProxyManager {
     // when rotating SECRET_KEY.
     private let keyVersion = "1"
 
+    // Minimum interval between actual API fetches (1 hour). currentProxy() still
+    // honours the TTL from the server response; this guard prevents hammering the
+    // endpoint on every foreground event even when the cached config is still valid.
+    private let minFetchInterval: TimeInterval = 3600
+
     // Proxy config JSON lives in Keychain — not in UserDefaults where it's readable
     // via file managers on jailbroken devices. Timestamp uses an opaque UD key.
     private let cacheStampKey = "b4e9f2d1-7a3c-4b8f-d6e1-2c5a9f7b4e3d"
@@ -72,8 +76,9 @@ public final class AorusProxyManager {
         return cached
     }
 
-    /// Fetches a fresh proxy config. De-duplicates concurrent calls. Always
-    /// resolves on the main queue.
+    /// Fetches a fresh proxy config. De-duplicates concurrent calls. Skips the
+    /// network call if the last successful fetch was within minFetchInterval (1 h).
+    /// Always resolves on the main queue.
     public func refresh(completion: ((AorusProxyConfig?) -> Void)? = nil) {
         // If the tamper flag is already set but refresh is still being called,
         // someone may have patched the gate; accumulate an extra strike.
@@ -82,6 +87,14 @@ public final class AorusProxyManager {
         }
 
         lock.lock()
+        // Skip the API call when the last successful fetch is fresh enough.
+        let age = Date().timeIntervalSince(cachedAt)
+        if !inFlight && cached != nil && age < minFetchInterval {
+            let hit = cached
+            lock.unlock()
+            DispatchQueue.main.async { completion?(hit) }
+            return
+        }
         if inFlight {
             lock.unlock()
             completion?(currentProxy() ?? lastKnownProxy())
@@ -151,17 +164,10 @@ public final class AorusProxyManager {
         return req
     }
 
-    // SHA256(identifierForVendor) → 64 hex. Stable per install, resets on
-    // reinstall — good enough for per-device rate limiting.
+    // Same keychain-UUID-based hash used by the license system so the server
+    // can cross-verify the license by device without maintaining a second mapping.
     private func deviceHash() -> String {
-        guard let idfv = UIDevice.current.identifierForVendor?.uuidString else {
-            // nil IDFV is a strong signal of instrument/emulator/hooking environment
-            AorusTamperAccumulator.shared.increment()
-            let digest = SHA256.hash(data: Data("aorus-unknown-device".utf8))
-            return digest.map { String(format: "%02x", $0) }.joined()
-        }
-        let digest = SHA256.hash(data: Data(idfv.utf8))
-        return digest.map { String(format: "%02x", $0) }.joined()
+        return DeviceFingerprint.deviceHash()
     }
 
     private func hmacHex(message: String, keyHex: String) -> String {
