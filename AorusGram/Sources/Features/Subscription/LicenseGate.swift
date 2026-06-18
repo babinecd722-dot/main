@@ -119,11 +119,23 @@ final class LicenseGate {
         }
     }
 
+    // The license just became active. If the device is currently on the limited
+    // bootstrap proxy (or has none yet), force-fetch the full subscriber proxy now
+    // so all Telegram traffic upgrades immediately instead of waiting for the next
+    // poll. A device already on the full proxy is left untouched (no redundant call).
+    private func upgradeSystemProxy() {
+        let current = AorusProxyManager.shared.lastKnownProxy()
+        if current == nil || current?.isBootstrap == true {
+            AorusProxyManager.shared.refresh(force: true)
+        }
+    }
+
     private func apply(status: LicenseStatus, response: LicenseResponse?) {
         pendingRelock = false   // the server just gave a definitive verdict
         switch status {
         case .trialActive, .paidActive:
             hideLock()
+            upgradeSystemProxy()
             maybeShowEntryBanner(status: status, response: response)
         case .notStarted:
             showTrialWelcome()
@@ -176,6 +188,7 @@ final class LicenseGate {
                         if response.status.allowsAppAccess {
                             self.bannerShownThisLaunch = true
                             self.hideLock()
+                            self.upgradeSystemProxy()
                             self.showToast(SubL10n.toastTrialActivated)
                         } else {
                             self.apply(status: response.status, response: response)
@@ -226,6 +239,7 @@ final class LicenseGate {
         vc.onActivated = { [weak self] _ in
             self?.bannerShownThisLaunch = true
             self?.hideLock()
+            self?.upgradeSystemProxy()
             self?.showToast(SubL10n.toastSubActivated)
         }
         nav.pushViewController(vc, animated: true)
@@ -335,6 +349,7 @@ final class LicenseGate {
             self?.pendingRelock = false
             self?.bannerShownThisLaunch = true
             self?.hideLock()                       // no-op if not locked
+            self?.upgradeSystemProxy()
             self?.showToast(SubL10n.toastSubActivated)
         }
         return vc
@@ -350,6 +365,7 @@ final class LicenseGate {
             self?.pendingRelock = false
             self?.bannerShownThisLaunch = true
             self?.hideLock()
+            self?.upgradeSystemProxy()
             self?.showToast(SubL10n.toastSubActivated)
         }
         vc.onClose = { [weak self] in
