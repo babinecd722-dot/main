@@ -36,7 +36,7 @@ enum SubscriptionConfig {
     // Ed25519 PUBLIC key (raw 32 bytes, lowercase hex = 64 chars) the server uses to
     // sign every license response. Empty → response verification is inert. Its leak
     // is harmless: the matching PRIVATE key lives only on the server.
-    static let responseSigningPublicKeyHex = ""
+    static let responseSigningPublicKeyHex = "ae648741a012a36c991fdf4680742c68bdf1722c1693b3781c4daa08a8c49196"
 
     // When true, a response that is unsigned OR badly-signed is rejected (treated as
     // a network failure → no access granted). Keep FALSE until the server signs every
