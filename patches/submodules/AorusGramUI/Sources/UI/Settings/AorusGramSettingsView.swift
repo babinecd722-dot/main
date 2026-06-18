@@ -25,6 +25,7 @@ struct AorusGramSettingsView: View {
     @State private var showPinboard      = false
     @State private var showDeletedAll    = false
     @State private var showClearCacheConfirm = false
+    @State private var showCacheCleared  = false
 
     @State private var deletedCount = 0
 
@@ -67,14 +68,20 @@ struct AorusGramSettingsView: View {
         ) {
             Button("Очистить", role: .destructive) {
                 DeletedMessagesCache.shared.clearAll()
-                // Refresh the counter shown in the settings row.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     deletedCount = DeletedMessagesCache.shared.allDeletedCount()
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    showCacheCleared = true
                 }
             }
             Button("Отмена", role: .cancel) {}
         } message: {
             Text("Все сохранённые оригиналы будут удалены. Действие необратимо.")
+        }
+        .alert("Кеш очищен", isPresented: $showCacheCleared) {
+            Button("Готово", role: .cancel) {}
+        } message: {
+            Text("Сохранённые оригиналы удалены.")
         }
     }
 
