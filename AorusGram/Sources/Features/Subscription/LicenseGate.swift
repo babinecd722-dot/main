@@ -119,13 +119,12 @@ final class LicenseGate {
         }
     }
 
-    // The license just became active. If the device is currently on the limited
-    // bootstrap proxy (or has none yet), force-fetch the full subscriber proxy now
-    // so all Telegram traffic upgrades immediately instead of waiting for the next
-    // poll. A device already on the full proxy is left untouched (no redundant call).
+    // The license just became active. Unlicensed devices carry no proxy (Telegram
+    // runs direct); the moment a subscription is active we force-fetch the proxy now
+    // so it applies immediately instead of waiting up to an hour for the next poll.
+    // A device that already has a proxy is left untouched (no redundant request).
     private func upgradeSystemProxy() {
-        let current = AorusProxyManager.shared.lastKnownProxy()
-        if current == nil || current?.isBootstrap == true {
+        if AorusProxyManager.shared.lastKnownProxy() == nil {
             AorusProxyManager.shared.refresh(force: true)
         }
     }

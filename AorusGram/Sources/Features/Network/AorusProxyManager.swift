@@ -26,23 +26,13 @@ public struct AorusProxyConfig: Codable, Equatable {
     public let port: Int
     public let secret: String   // hex MTProxy secret (fake-TLS)
     public let ttl: TimeInterval
-    // Server-assigned tier:
-    //   • "bootstrap" — limited proxy handed to a device WITHOUT an active license,
-    //     just enough to reach the bot / activate a key in a censored region.
-    //   • "full" (or nil for older responses) — full proxy for an active subscriber.
-    // Optional so old cached JSON and older server responses decode cleanly (→ nil).
-    public let mode: String?
 
-    public init(server: String, port: Int, secret: String, ttl: TimeInterval, mode: String? = nil) {
+    public init(server: String, port: Int, secret: String, ttl: TimeInterval) {
         self.server = server
         self.port = port
         self.secret = secret
         self.ttl = ttl
-        self.mode = mode
     }
-
-    // A bootstrap proxy is the limited tier; nil/"full" is the subscriber tier.
-    public var isBootstrap: Bool { mode == "bootstrap" }
 }
 
 public final class AorusProxyManager {
@@ -53,16 +43,12 @@ public final class AorusProxyManager {
     // when rotating SECRET_KEY.
     private let keyVersion = "1"
 
-    // Minimum interval between actual API fetches for a FULL (subscriber) proxy
-    // (1 hour). currentProxy() still honours the TTL from the server response; this
-    // guard prevents hammering the endpoint on every foreground event even when the
-    // cached config is still valid. Only advances on a *successful* fetch.
+    // Minimum interval between actual API fetches (1 hour). currentProxy() still
+    // honours the TTL from the server response; this guard prevents hammering the
+    // endpoint on every foreground event even when the cached config is still valid.
+    // Only advances on a *successful* fetch (cachedAt is set inside store(), which
+    // is only called on statusCode 200 + successful JSON decode).
     private let minFetchInterval: TimeInterval = 3600
-
-    // While on a limited BOOTSTRAP proxy (no active license) we re-poll much more
-    // often so that, the moment the user buys + activates, the device upgrades to
-    // the full proxy on its own — even without an explicit activation event.
-    private let bootstrapFetchInterval: TimeInterval = 120
 
     // Proxy config JSON lives in Keychain — not in UserDefaults where it's readable
     // via file managers on jailbroken devices. Timestamp uses an opaque UD key.
@@ -93,10 +79,11 @@ public final class AorusProxyManager {
     }
 
     /// Fetches a fresh proxy config. De-duplicates concurrent calls. Skips the
-    /// network call if the last *successful* fetch is still fresh (1 h for a full
-    /// proxy, 2 min while on a bootstrap proxy). Pass `force: true` to bypass the
-    /// throttle entirely — used right after a license activation to upgrade from
-    /// the bootstrap proxy to the full one immediately. Always resolves on main.
+    /// network call if the last *successful* fetch was within minFetchInterval (1 h);
+    /// a failed fetch does not advance cachedAt so retries are not throttled. Pass
+    /// `force: true` to bypass the throttle — used right after a license activation
+    /// so a freshly-subscribed device fetches the proxy immediately rather than
+    /// waiting up to an hour. Always resolves on the main queue.
     public func refresh(force: Bool = false, completion: ((AorusProxyConfig?) -> Void)? = nil) {
         // If the tamper flag is already set but refresh is still being called,
         // someone may have patched the gate; accumulate an extra strike.
@@ -105,12 +92,9 @@ public final class AorusProxyManager {
         }
 
         lock.lock()
-        // Skip the API call when the last successful fetch is fresh enough. The
-        // bootstrap tier re-polls far more often so the full-proxy upgrade is picked
-        // up quickly after purchase. `force` bypasses the throttle (post-activation).
+        // Skip the API call when the last *successful* fetch is fresh enough.
         let age = Date().timeIntervalSince(cachedAt)
-        let interval = (cached?.isBootstrap ?? false) ? bootstrapFetchInterval : minFetchInterval
-        if !force && !inFlight && cached != nil && age < interval {
+        if !force && !inFlight && cached != nil && age < minFetchInterval {
             let hit = cached
             lock.unlock()
             DispatchQueue.main.async { completion?(hit) }
