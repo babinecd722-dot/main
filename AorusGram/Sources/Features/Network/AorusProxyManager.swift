@@ -41,7 +41,7 @@ public final class AorusProxyManager {
 
     // Key version sent as X-Aorus-Kv. Bump in lock-step with the server table
     // when rotating SECRET_KEY.
-    private let keyVersion = "2"
+    private let keyVersion = "1"
 
     // Minimum interval between actual API fetches (1 hour). currentProxy() still
     // honours the TTL from the server response; this guard prevents hammering the
