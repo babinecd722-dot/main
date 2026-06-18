@@ -28,6 +28,9 @@ final class LicenseGate {
     private var telegramUserId: Int64?
     private var bannerShownThisLaunch = false
     private var inFlight = false
+    // When the lock is temporarily hidden so the user can reach the bot to buy, this
+    // forces a re-check (and re-lock if still not active) on the next foreground.
+    private var pendingRelock = false
 
     // Binding hook: called once the Telegram account id is known (published from
     // AppDelegate after login). De-duped so a re-publish of the same id never
@@ -53,6 +56,22 @@ final class LicenseGate {
         NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive),
                                                name: UIApplication.didBecomeActiveNotification, object: nil)
 
+        // Key activation deep link (aorusgram://activate?key=…), routed from AppDelegate.
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("aorusgram.activateKeyDeepLink"), object: nil, queue: .main
+        ) { [weak self] note in
+            if let key = note.userInfo?["key"] as? String, !key.isEmpty {
+                self?.presentActivateConfirm(key: key)
+            }
+        }
+
+        // "Subscription" button in AorusGram settings opens the management screen.
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.presentPurchaseModally()
+        }
+
         // Defer so the app's scene/window exists before we draw the overlay.
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -71,7 +90,10 @@ final class LicenseGate {
 
     @objc private func didBecomeActive() {
         guard started else { return }
-        if lockWindow != nil || LicenseStore.shared.needsRecheck(interval: SubscriptionConfig.recheckInterval) {
+        // pendingRelock: the lock was lifted so the user could reach the bot — always
+        // re-verify now (ignores the throttle) so access is re-locked if still expired.
+        if pendingRelock || lockWindow != nil
+            || LicenseStore.shared.needsRecheck(interval: SubscriptionConfig.recheckInterval) {
             refresh()
         }
     }
@@ -98,6 +120,7 @@ final class LicenseGate {
     }
 
     private func apply(status: LicenseStatus, response: LicenseResponse?) {
+        pendingRelock = false   // the server just gave a definitive verdict
         switch status {
         case .trialActive, .paidActive:
             hideLock()
@@ -115,6 +138,7 @@ final class LicenseGate {
 
     // No permissive fall-through: unknown + offline = locked (connection screen).
     private func applyNetworkFailure() {
+        pendingRelock = false
         let cached = LicenseStore.shared.effectiveOfflineStatus()
         switch cached {
         case .trialActive, .paidActive:
@@ -175,7 +199,7 @@ final class LicenseGate {
             vc.titleTextOverride = SubL10n.bannedTitle
             vc.bodyTextOverride = SubL10n.bannedBody
         }
-        vc.onBuy = { [weak self] in self?.openPurchaseBot() }
+        vc.onBuy = { [weak self] in self?.openPurchaseBotFromLock() }
         vc.onEnterKey = { [weak self] in self?.pushActivateKeyInLock() }
         setLockRoot(vc)
     }
@@ -308,9 +332,57 @@ final class LicenseGate {
         vc.telegramUserId = telegramUserId
         vc.onActivated = { [weak self] _ in
             self?.dismissModal()
+            self?.pendingRelock = false
+            self?.bannerShownThisLaunch = true
+            self?.hideLock()                       // no-op if not locked
             self?.showToast(SubL10n.toastSubActivated)
         }
         return vc
+    }
+
+    // MARK: - Activation confirmation (deep link)
+
+    private func presentActivateConfirm(key: String) {
+        let vc = ActivateConfirmController(key: key)
+        vc.telegramUserId = telegramUserId
+        vc.onActivated = { [weak self] in
+            self?.dismissModal()
+            self?.pendingRelock = false
+            self?.bannerShownThisLaunch = true
+            self?.hideLock()
+            self?.showToast(SubL10n.toastSubActivated)
+        }
+        vc.onClose = { [weak self] in
+            self?.dismissModal()
+            self?.relockIfNeeded()
+        }
+        vc.onEnterKeyManually = { [weak self] in
+            self?.pushActivateKeyInModal(asRoot: true)
+        }
+        vc.navigationItem.leftBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .close, target: self, action: #selector(dismissModalAction))
+        setModalRoot(vc)
+    }
+
+    // MARK: - Locked purchase
+
+    // From the lock screen: reveal the app so the bot chat is visible, open the bot in
+    // the main navigation (reliable, no black sheet), and arm a re-lock for the next
+    // foreground in case the user returns without activating.
+    private func openPurchaseBotFromLock() {
+        pendingRelock = true
+        hideLock()
+        openPurchaseBot(inMainNav: true)
+    }
+
+    private func relockIfNeeded() {
+        guard pendingRelock else { return }
+        pendingRelock = false
+        let cached = LicenseStore.shared.effectiveOfflineStatus()
+        if !cached.allowsAppAccess {
+            showExpired(banned: cached == .banned)
+        }
+        refresh()
     }
 
     private func pushActivateKeyInModal(asRoot: Bool = false) {
@@ -344,7 +416,10 @@ final class LicenseGate {
         modalWindow = window
     }
 
-    @objc private func dismissModalAction() { dismissModal() }
+    @objc private func dismissModalAction() {
+        dismissModal()
+        relockIfNeeded()   // no-op unless the lock was lifted for a purchase
+    }
 
     private func dismissModal() {
         guard let window = modalWindow else { return }

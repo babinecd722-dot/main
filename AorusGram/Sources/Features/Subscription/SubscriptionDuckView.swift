@@ -14,6 +14,8 @@ enum SubscriptionDuck: String {
     case purchase
     case fire        // small banner icon — "пробный период активен"
     case boost       // small banner icon — "подписка активна"
+    case confirm     // activation confirmation prompt
+    case error       // activation failed (key used / invalid)
 
     var base64: String {
         switch self {
@@ -22,6 +24,8 @@ enum SubscriptionDuck: String {
         case .purchase: return SubscriptionAnimationAssets.purchase
         case .fire:     return SubscriptionAnimationAssets.fire
         case .boost:    return SubscriptionAnimationAssets.boost
+        case .confirm:  return SubscriptionAnimationAssets.confirm
+        case .error:    return SubscriptionAnimationAssets.error
         }
     }
 }

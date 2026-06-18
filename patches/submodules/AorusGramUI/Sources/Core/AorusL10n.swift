@@ -73,6 +73,10 @@ public struct AorusL10n {
     public var accountBackupHeader: String { t("БЭКАП", "BACKUP") }
     public var aorusCodeHeader: String { t("AORUS CODE", "AORUS CODE") }
 
+    // MARK: Settings — subscription
+    public var subscription: String { t("Подписка", "Subscription") }
+    public var subscriptionSubtitle: String { t("Управление и продление", "Manage & renew") }
+
     // MARK: Settings — rows
     public var ghostMode: String { t("Режим призрака", "Ghost Mode") }
     public var deletedMessages: String { t("Удалённые сообщения", "Deleted Messages") }

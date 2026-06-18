@@ -56,6 +56,20 @@ enum SubL10n {
     static func activeUntil(_ date: String) -> String { t("Активна до \(date)", "Active until \(date)") }
     static func trialUntil(_ date: String) -> String { t("Пробный период до \(date)", "Trial until \(date)") }
 
+    // MARK: Activation confirmation (deep link)
+    static var confirmTitle: String { t("Подтверждение активации", "Activate subscription") }
+    static var confirmBody: String { t("Активировать подписку этим ключом?", "Activate your subscription with this key?") }
+    static var keyLabel: String { t("Ключ", "Key") }
+    static var cancel: String { t("Отмена", "Cancel") }
+    static var close: String { t("Закрыть", "Close") }
+    static var ok: String { t("Понятно", "OK") }
+    static var activationFailedTitle: String { t("Не удалось активировать", "Activation failed") }
+    static var activationDoneTitle: String { t("Готово!", "All set!") }
+    static var activationDoneBody: String { t("Подписка активирована.", "Your subscription is active.") }
+
+    // MARK: Settings
+    static var settingsSubscription: String { t("Подписка", "Subscription") }
+
     // MARK: Banners / toasts
     static var bannerTrialActive: String { t("Пробный период активен", "Trial active") }
     static var bannerPaidActive: String { t("Подписка активна", "Subscription active") }

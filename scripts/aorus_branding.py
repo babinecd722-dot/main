@@ -2491,6 +2491,45 @@ def patch_app_delegate_publish_account_id(tg: Path) -> None:
         print("PublishAccountId: bootstrap anchor not found — skipped gracefully")
 
 
+def patch_app_delegate_activate_deeplink(tg: Path) -> None:
+    """Intercept the aorusgram://activate?key=… deep link for subscription activation.
+
+    Both cold-launch (launchOptions) and warm opens funnel through openUrlWhenReady,
+    so intercepting at its top covers both. We extract the key and post
+    `aorusgram.activateKeyDeepLink`; LicenseGate shows the confirmation screen. The
+    link is consumed (return) so Telegram's resolver never sees the unknown host.
+    """
+    path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    if not path.is_file():
+        print("ActivateDeeplink: AppDelegate.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusgram.activateKeyDeepLink" in t:
+        print("ActivateDeeplink: already injected")
+        return
+    anchor = "private func openUrlWhenReady(url: URL, external: Bool) {\n"
+    if anchor not in t:
+        print("ActivateDeeplink: openUrlWhenReady anchor not found — skipped gracefully")
+        return
+    hook = (
+        anchor +
+        "        // AorusGram: subscription key activation deep link\n"
+        "        if url.scheme == \"aorusgram\", url.host == \"activate\" {\n"
+        "            if let aorusComps = URLComponents(url: url, resolvingAgainstBaseURL: false),\n"
+        "               let aorusKey = aorusComps.queryItems?.first(where: { $0.name == \"key\" })?.value,\n"
+        "               !aorusKey.isEmpty {\n"
+        "                NotificationCenter.default.post(\n"
+        "                    name: NSNotification.Name(\"aorusgram.activateKeyDeepLink\"),\n"
+        "                    object: nil, userInfo: [\"key\": aorusKey])\n"
+        "            }\n"
+        "            return\n"
+        "        }\n"
+    )
+    t = t.replace(anchor, hook, 1)
+    path.write_text(t, encoding="utf-8")
+    print("ActivateDeeplink: key activation deep link interceptor injected")
+
+
 def patch_app_delegate_open_purchase_bot(tg: Path) -> None:
     """Open the purchase bot INSIDE AorusGram, above the lock screen.
 
@@ -6822,6 +6861,7 @@ def main() -> None:
     patch_auto_reply_send_hook(tg)
     patch_app_delegate_publish_account_id(tg)
     patch_app_delegate_open_purchase_bot(tg)
+    patch_app_delegate_activate_deeplink(tg)
     patch_app_delegate_import_telegram_api(tg)
     patch_app_delegate_account_restore_hook(tg)
     patch_app_delegate_siri_continue_activity(tg)

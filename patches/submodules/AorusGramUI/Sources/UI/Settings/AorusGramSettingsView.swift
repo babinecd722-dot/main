@@ -39,6 +39,7 @@ struct AorusGramSettingsView: View {
                     performanceSection
                     uiSection
                     extraSection
+                    subscriptionButton
                     officialChannelButton
                     versionFooter
                 }
@@ -371,6 +372,41 @@ struct AorusGramSettingsView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Subscription
+
+    private var subscriptionButton: some View {
+        Button {
+            NotificationCenter.default.post(
+                name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        } label: {
+            GlassCard {
+                HStack(spacing: 14) {
+                    ZStack {
+                        LinearGradient(
+                            colors: [Color(hex: "#3D8BFF"), Color(hex: "#1E63E9")],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .frame(width: 44, height: 44)
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.white)
+                    }
+                    Text(AorusL10n.current.subscription)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .padding(14)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Official Channel
