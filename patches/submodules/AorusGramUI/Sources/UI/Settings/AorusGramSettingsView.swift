@@ -39,7 +39,6 @@ struct AorusGramSettingsView: View {
                     performanceSection
                     uiSection
                     extraSection
-                    subscriptionButton
                     officialChannelButton
                     versionFooter
                 }
@@ -375,21 +374,6 @@ struct AorusGramSettingsView: View {
     }
 
     // MARK: - Subscription
-
-    private var subscriptionButton: some View {
-        Button {
-            NotificationCenter.default.post(
-                name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        } label: {
-            Text(AorusL10n.current.subscription)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(Color(hex: "#3D8BFF"))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-        }
-        .buttonStyle(.plain)
-    }
 
     // MARK: - Official Channel
 
