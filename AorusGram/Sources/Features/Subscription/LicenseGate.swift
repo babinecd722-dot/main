@@ -412,23 +412,9 @@ final class LicenseGate {
     }
 
     private func setModalRoot(_ controller: UIViewController) {
-        let firstShow = (modalWindow == nil)
         ensureModalWindow()
-        let nav = makeNav(controller)
-        // Pre-configure BEFORE makeKeyAndVisible so there is no flash.
-        if firstShow {
-            nav.view.alpha = 0
-            nav.view.transform = CGAffineTransform(translationX: 0, y: 40)
-        }
-        modalWindow?.rootViewController = nav
+        modalWindow?.rootViewController = makeNav(controller)
         modalWindow?.makeKeyAndVisible()
-        if firstShow {
-            UIView.animate(withDuration: 0.48, delay: 0, usingSpringWithDamping: 0.82,
-                           initialSpringVelocity: 0.5, options: [.allowUserInteraction]) {
-                nav.view.alpha = 1
-                nav.view.transform = .identity
-            }
-        }
     }
 
     private func ensureModalWindow() {

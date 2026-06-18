@@ -14,8 +14,6 @@ final class ActivateConfirmController: SubscriptionBaseController {
     private let key: String
     private let spinner = UIActivityIndicatorView(style: .medium)
     private weak var primaryButton: UIButton?
-    // The duck/hero of the current state — gets a springy pop on every transition.
-    private weak var heroView: UIView?
 
     init(key: String) {
         self.key = key
@@ -26,9 +24,6 @@ final class ActivateConfirmController: SubscriptionBaseController {
     override func viewDidLoad() {
         super.viewDidLoad()
         renderPrompt()
-        // Entrance: content slides up + fades, the duck pops in.
-        view.layoutIfNeeded()
-        animateIn()
     }
 
     // MARK: - States
@@ -38,44 +33,9 @@ final class ActivateConfirmController: SubscriptionBaseController {
         buttonStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
     }
 
-    // Cross-fades the current state out, rebuilds via `build`, then animates the
-    // new state in. Used for prompt → success / error so the swap never snaps.
-    private func transition(_ build: @escaping () -> Void) {
-        UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseIn]) {
-            self.contentStack.alpha = 0
-            self.buttonStack.alpha = 0
-        } completion: { _ in
-            build()
-            self.view.layoutIfNeeded()
-            self.animateIn()
-        }
-    }
-
-    // Slides + fades the content/buttons up and gives the hero duck a spring pop.
-    private func animateIn() {
-        let movers: [UIView] = [contentStack, buttonStack]
-        for v in movers {
-            v.alpha = 0
-            v.transform = CGAffineTransform(translationX: 0, y: 18)
-        }
-        UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.86,
-                       initialSpringVelocity: 0.4, options: [.allowUserInteraction]) {
-            for v in movers { v.alpha = 1; v.transform = .identity }
-        }
-        if let hero = heroView {
-            hero.transform = CGAffineTransform(scaleX: 0.72, y: 0.72)
-            UIView.animate(withDuration: 0.6, delay: 0.05, usingSpringWithDamping: 0.6,
-                           initialSpringVelocity: 0.7, options: [.allowUserInteraction]) {
-                hero.transform = .identity
-            }
-        }
-    }
-
     private func renderPrompt() {
         clear()
-        let hero = SubscriptionStyle.centered(SubscriptionDuckView(duck: .confirm), size: 168)
-        heroView = hero
-        addContent(hero)
+        addContent(SubscriptionStyle.centered(SubscriptionDuckView(duck: .confirm), size: 168))
         addSpacing(4)
         addContent(SubscriptionStyle.title(SubL10n.confirmTitle))
         addContent(SubscriptionStyle.body(SubL10n.confirmBody))
@@ -94,9 +54,7 @@ final class ActivateConfirmController: SubscriptionBaseController {
 
     private func renderSuccess(_ response: LicenseResponse) {
         clear()
-        let hero = SubscriptionStyle.centered(SubscriptionDuckView(duck: .boost), size: 168)
-        heroView = hero
-        addContent(hero)
+        addContent(SubscriptionStyle.centered(SubscriptionDuckView(duck: .boost), size: 168))
         addSpacing(4)
         addContent(SubscriptionStyle.title(SubL10n.activationDoneTitle))
         addContent(SubscriptionStyle.body(SubL10n.activationDoneBody))
@@ -115,9 +73,7 @@ final class ActivateConfirmController: SubscriptionBaseController {
 
     private func renderError(_ message: String) {
         clear()
-        let hero = SubscriptionStyle.centered(SubscriptionDuckView(duck: .error), size: 168)
-        heroView = hero
-        addContent(hero)
+        addContent(SubscriptionStyle.centered(SubscriptionDuckView(duck: .error), size: 168))
         addSpacing(4)
         addContent(SubscriptionStyle.title(SubL10n.activationFailedTitle))
         addContent(SubscriptionStyle.body(message))
@@ -191,12 +147,12 @@ final class ActivateConfirmController: SubscriptionBaseController {
                 case .success(let response):
                     if response.status.allowsAppAccess {
                         LicenseStore.shared.save(response: response, telegramUserId: uid)
-                        self.transition { self.renderSuccess(response) }
+                        self.renderSuccess(response)
                     } else {
-                        self.transition { self.renderError(SubL10n.errKeyNotFound) }
+                        self.renderError(SubL10n.errKeyNotFound)
                     }
                 case .failure(let error):
-                    self.transition { self.renderError(ActivateConfirmController.message(for: error)) }
+                    self.renderError(ActivateConfirmController.message(for: error))
                 }
             }
         }
