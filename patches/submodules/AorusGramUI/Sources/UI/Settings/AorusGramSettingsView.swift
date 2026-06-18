@@ -78,7 +78,7 @@ struct AorusGramSettingsView: View {
         } message: {
             Text("Все сохранённые оригиналы будут удалены. Действие необратимо.")
         }
-        .alert("Кеш очищен", isPresented: $showCacheCleared) {
+        .alert("Кеш успешно очищен", isPresented: $showCacheCleared) {
             Button("Готово", role: .cancel) {}
         }
     }
