@@ -80,8 +80,6 @@ struct AorusGramSettingsView: View {
         }
         .alert("Кеш очищен", isPresented: $showCacheCleared) {
             Button("Готово", role: .cancel) {}
-        } message: {
-            Text("Сохранённые оригиналы удалены.")
         }
     }
 
