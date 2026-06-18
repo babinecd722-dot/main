@@ -820,15 +820,25 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         },
         clearCache: {
             let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
-            guard !stored.isEmpty else { return }
+            let isRu = AorusLang.current == .ru
+            let showDone: () -> Void = {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                let alert = UIAlertController(
+                    title: isRu ? "Кэш успешно очищен" : "Cache cleared",
+                    message: nil, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: isRu ? "Готово" : "Done", style: .default))
+                weakController?.present(alert, animated: true)
+            }
             let ids: [MessageId] = stored.compactMap { entry in
                 guard let p = entry["peerId"], let m = entry["msgId"], let ns = entry["namespace"] else { return nil }
                 return MessageId(peerId: PeerId(p), namespace: Int32(ns), id: Int32(m))
             }
+            guard !ids.isEmpty else { showDone(); return }
             let _ = (context.account.postbox.transaction { transaction -> Void in
                 transaction.deleteMessages(ids, forEachMedia: { _ in })
             } |> deliverOnMainQueue).start(completed: {
                 UserDefaults.standard.removeObject(forKey: "aorusgram_preserved_msgs")
+                showDone()
             })
         },
         openAccountBackup: {
