@@ -2492,42 +2492,65 @@ def patch_app_delegate_publish_account_id(tg: Path) -> None:
 
 
 def patch_app_delegate_activate_deeplink(tg: Path) -> None:
-    """Intercept the aorusgram://activate?key=… deep link for subscription activation.
+    """Intercept the key-activation deep link (tg:// or aorusgram:// , host "activate").
 
-    Both cold-launch (launchOptions) and warm opens funnel through openUrlWhenReady,
-    so intercepting at its top covers both. We extract the key and post
-    `aorusgram.activateKeyDeepLink`; LicenseGate shows the confirmation screen. The
-    link is consumed (return) so Telegram's resolver never sees the unknown host.
+    Two entry points are patched so it works everywhere:
+      • AppDelegate.openUrlWhenReady  — links opened from outside / at cold launch.
+      • openExternalUrlImpl (OpenUrl.swift) — links TAPPED inside a chat (the common
+        case: the bot sends a tg://activate?key=… markdown link).
+    Both extract `key` and post `aorusgram.activateKeyDeepLink`; LicenseGate shows the
+    confirmation screen. We accept tg:// too because the Telegram Bot API allows tg://
+    links in messages/buttons but rejects custom schemes like aorusgram://.
     """
-    path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
-    if not path.is_file():
+    def activate_block(url_expr: str, indent: str) -> str:
+        i = indent
+        return (
+            i + "// AorusGram: subscription key activation deep link\n"
+            + i + "if let aorusActURL = " + url_expr + ", (aorusActURL.scheme == \"aorusgram\" || aorusActURL.scheme == \"tg\"), aorusActURL.host == \"activate\" {\n"
+            + i + "    if let aorusActComps = URLComponents(url: aorusActURL, resolvingAgainstBaseURL: false),\n"
+            + i + "       let aorusActKey = aorusActComps.queryItems?.first(where: { $0.name == \"key\" })?.value,\n"
+            + i + "       !aorusActKey.isEmpty {\n"
+            + i + "        NotificationCenter.default.post(\n"
+            + i + "            name: NSNotification.Name(\"aorusgram.activateKeyDeepLink\"),\n"
+            + i + "            object: nil, userInfo: [\"key\": aorusActKey])\n"
+            + i + "    }\n"
+            + i + "    return\n"
+            + i + "}\n"
+        )
+
+    # 1) AppDelegate.openUrlWhenReady (url is a URL)
+    ad = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    if ad.is_file():
+        t = ad.read_text(encoding="utf-8")
+        if "aorusgram.activateKeyDeepLink" in t:
+            print("ActivateDeeplink: AppDelegate already injected")
+        else:
+            anchor = "private func openUrlWhenReady(url: URL, external: Bool) {\n"
+            if anchor in t:
+                t = t.replace(anchor, anchor + activate_block("url", "        "), 1)
+                ad.write_text(t, encoding="utf-8")
+                print("ActivateDeeplink: AppDelegate openUrlWhenReady interceptor injected")
+            else:
+                print("ActivateDeeplink: openUrlWhenReady anchor not found — skipped")
+    else:
         print("ActivateDeeplink: AppDelegate.swift not found, skip")
-        return
-    t = path.read_text(encoding="utf-8")
-    if "aorusgram.activateKeyDeepLink" in t:
-        print("ActivateDeeplink: already injected")
-        return
-    anchor = "private func openUrlWhenReady(url: URL, external: Bool) {\n"
-    if anchor not in t:
-        print("ActivateDeeplink: openUrlWhenReady anchor not found — skipped gracefully")
-        return
-    hook = (
-        anchor +
-        "        // AorusGram: subscription key activation deep link\n"
-        "        if url.scheme == \"aorusgram\", url.host == \"activate\" {\n"
-        "            if let aorusComps = URLComponents(url: url, resolvingAgainstBaseURL: false),\n"
-        "               let aorusKey = aorusComps.queryItems?.first(where: { $0.name == \"key\" })?.value,\n"
-        "               !aorusKey.isEmpty {\n"
-        "                NotificationCenter.default.post(\n"
-        "                    name: NSNotification.Name(\"aorusgram.activateKeyDeepLink\"),\n"
-        "                    object: nil, userInfo: [\"key\": aorusKey])\n"
-        "            }\n"
-        "            return\n"
-        "        }\n"
-    )
-    t = t.replace(anchor, hook, 1)
-    path.write_text(t, encoding="utf-8")
-    print("ActivateDeeplink: key activation deep link interceptor injected")
+
+    # 2) openExternalUrlImpl (url is a String) — in-chat link taps
+    ou = tg / "submodules/TelegramUI/Sources/OpenUrl.swift"
+    if ou.is_file():
+        t = ou.read_text(encoding="utf-8")
+        if "aorusgram.activateKeyDeepLink" in t:
+            print("ActivateDeeplink: OpenUrl already injected")
+        else:
+            anchor = "func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, url: String, forceExternal: Bool, presentationData: PresentationData, navigationController: NavigationController?, dismissInput: @escaping () -> Void) {\n"
+            if anchor in t:
+                t = t.replace(anchor, anchor + activate_block("URL(string: url)", "    "), 1)
+                ou.write_text(t, encoding="utf-8")
+                print("ActivateDeeplink: OpenUrl openExternalUrlImpl interceptor injected")
+            else:
+                print("ActivateDeeplink: openExternalUrlImpl anchor not found — skipped")
+    else:
+        print("ActivateDeeplink: OpenUrl.swift not found, skip")
 
 
 def patch_app_delegate_open_purchase_bot(tg: Path) -> None:

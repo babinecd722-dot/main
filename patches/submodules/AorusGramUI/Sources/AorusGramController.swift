@@ -295,6 +295,7 @@ private struct AorusState: Equatable {
 private final class AorusArguments {
     let set: (WritableKeyPath<AorusState, Bool>, Bool) -> Void
     let openChannel: () -> Void
+    let openSubscription: () -> Void
     let clearCache: () -> Void
     let openAccountBackup: () -> Void
     let openDeviceSpoof: () -> Void
@@ -303,6 +304,7 @@ private final class AorusArguments {
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
          openChannel: @escaping () -> Void,
+         openSubscription: @escaping () -> Void,
          clearCache: @escaping () -> Void,
          openAccountBackup: @escaping () -> Void,
          openDeviceSpoof: @escaping () -> Void,
@@ -310,6 +312,7 @@ private final class AorusArguments {
          setCacheInterval: @escaping (Int) -> Void) {
         self.set = set
         self.openChannel = openChannel
+        self.openSubscription = openSubscription
         self.clearCache = clearCache
         self.openAccountBackup = openAccountBackup
         self.openDeviceSpoof = openDeviceSpoof
@@ -371,6 +374,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case bypassSaveViewOnce(PresentationTheme, String, Bool)
     case bypassStoryDownload(PresentationTheme, String, Bool)
 
+    case subscription(PresentationTheme, String)
     case officialChannel(PresentationTheme, String)
 
     var section: ItemListSectionId {
@@ -395,7 +399,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.accountBackup.rawValue
         case .aorusCodeHeader, .aorusCodeEnabled:
             return AorusSection.aorusCode.rawValue
-        case .officialChannel:
+        case .subscription, .officialChannel:
             return AorusSection.channel.rawValue
         }
     }
@@ -441,6 +445,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case .accountBackup:        return 66
         case .aorusCodeHeader:      return 70
         case .aorusCodeEnabled:     return 71
+        case .subscription:         return 79
         case .officialChannel:      return 80
         }
     }
@@ -529,6 +534,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .bypassSaveViewOnce(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .bypassStoryDownload(lt, ls, lv):
             if case let .bypassStoryDownload(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .subscription(lt, ls):
+            if case let .subscription(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .officialChannel(lt, ls):
             if case let .officialChannel(rt, rs) = rhs { return lt === rt && ls == rs }
         }
@@ -617,6 +624,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.bypassSaveViewOnce, $0) })
         case let .bypassStoryDownload(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.bypassStoryDownload, $0) })
+        case let .subscription(_, title):
+            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openSubscription)
         case let .officialChannel(_, title):
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openChannel)
         }
@@ -685,6 +694,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .aorusCodeHeader(theme, l10n.aorusCodeHeader),
         .aorusCodeEnabled(theme, l10n.aorusCode, state.aorusCodeEnabled),
 
+        .subscription(theme, l10n.subscription),
         .officialChannel(theme, l10n.officialChannel),
     ]
 
@@ -802,6 +812,11 @@ public func aorusGramController(context: AccountContext) -> ViewController {
                     chatLocation: .peer(peer)
                 ))
             })
+        },
+        openSubscription: {
+            // The license gate (AorusGram core) owns the subscription UI; just signal it.
+            NotificationCenter.default.post(
+                name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
         },
         clearCache: {
             let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
