@@ -20,7 +20,10 @@ final class LicenseAPIClient {
         cfg.waitsForConnectivity = false
         cfg.httpShouldSetCookies = false
         cfg.urlCache = nil
-        self.session = URLSession(configuration: cfg)
+        // TLS SPKI pinning delegate. Inert (default trust) until pins are configured.
+        self.session = URLSession(configuration: cfg,
+                                  delegate: AorusPinnedSessionDelegate.shared,
+                                  delegateQueue: nil)
     }
 
     // MARK: - Public endpoints
@@ -112,6 +115,25 @@ final class LicenseAPIClient {
                 completion(.failure(isSuccess ? .decode : .http(http.statusCode)))
                 return
             }
+
+            // Response authenticity: confirm the body was signed by OUR server (anti
+            // fake-server / MITM) and bound to THIS request's nonce (anti-replay).
+            // Inert until a public key is provisioned; a forged/corrupted signature is
+            // treated as a network failure so it never grants access, while a
+            // legitimate device still keeps its valid offline grace.
+            switch LicenseResponseVerifier.verify(bodyData: data,
+                                                  headers: http.allHeaderFields,
+                                                  requestNonce: nonce) {
+            case .ok:
+                break
+            case .unsigned:
+                if SubscriptionConfig.requireSignedResponse {
+                    completion(.failure(.network)); return
+                }
+            case .invalid:
+                completion(.failure(.network)); return
+            }
+
             let parsed = LicenseResponse(json: object)
             if !isSuccess {
                 if let code = parsed.errorCode {
