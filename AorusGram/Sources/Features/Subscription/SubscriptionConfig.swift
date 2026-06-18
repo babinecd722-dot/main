@@ -41,7 +41,7 @@ enum SubscriptionConfig {
     // When true, a response that is unsigned OR badly-signed is rejected (treated as
     // a network failure → no access granted). Keep FALSE until the server signs every
     // response, otherwise every user would be locked out.
-    static let requireSignedResponse = false
+    static let requireSignedResponse = true
 
     // Max clock skew (seconds) tolerated for the signed response timestamp.
     static let responseMaxSkew: TimeInterval = 300
