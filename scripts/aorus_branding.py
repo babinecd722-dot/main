@@ -2939,17 +2939,32 @@ def patch_info_plist_speech_usage(tg: Path) -> None:
         print(f"{name}: added NSSpeechRecognitionUsageDescription")
 
 
-# Inline Swift that builds an MTSocksProxySettings from the flat UserDefaults
-# keys written by AorusProxyManager (aorusgram_proxy_server / _port / _secret).
-# Returns nil when no system proxy is configured. Foundation + MtProtoKit only —
-# safe to inline into TelegramCore (no UIKit). The fake-TLS secret is stored as a
-# hex string and decoded to Data here.
+# Inline Swift that builds an MTSocksProxySettings from the ENCRYPTED proxy blob
+# published by AorusProxyManager.ProxyVault. The blob is an AES-GCM sealed box of
+# "server\nport\nsecret", base64-encoded, stored under an opaque key in a dedicated
+# innocuously-named UserDefaults suite. The suite name, blob key and pepper bytes
+# below MUST stay byte-identical to ProxyVault in AorusProxyManager.swift, otherwise
+# decryption fails and no system proxy is applied.
+#
+# Returns nil when no system proxy is configured / decryption fails. CryptoKit +
+# Foundation + MtProtoKit only — safe to inline into TelegramCore (no UIKit). The
+# host file gets `import CryptoKit` via _ensure_import_cryptokit().
 _AORUS_PROXY_SNIPPET = (
     "({ () -> MTSocksProxySettings? in\n"
-    "                let aorusDefaults = UserDefaults.standard\n"
-    "                guard let aorusHost = aorusDefaults.string(forKey: \"aorusgram_proxy_server\"), !aorusHost.isEmpty else { return nil }\n"
-    "                let aorusPort = aorusDefaults.integer(forKey: \"aorusgram_proxy_port\")\n"
-    "                guard aorusPort > 0, let aorusSecretHex = aorusDefaults.string(forKey: \"aorusgram_proxy_secret\"), !aorusSecretHex.isEmpty else { return nil }\n"
+    "                guard let aorusStore = UserDefaults(suiteName: \"ng.session.store\"),\n"
+    "                      let aorusBlob = aorusStore.string(forKey: \"b7d4f0a2-1c93-4e85-9a6f-3d520e8c7b14\"),\n"
+    "                      let aorusBox = Data(base64Encoded: aorusBlob) else { return nil }\n"
+    "                let aorusS0: [UInt8] = [0x8c,0x21,0x47,0xf9,0x03,0xbe,0x5a,0xd7,0x6e,0x10,0xc4,0x9b]\n"
+    "                let aorusS1: [UInt8] = [0x2f,0xa8,0x73,0x14,0xe6,0x5d,0x0a,0xcf,0x91,0x46,0xb2,0x38]\n"
+    "                let aorusS2: [UInt8] = [0x7d,0xe1,0x4c,0x60,0xaa,0x05,0xf3,0x29,0x8b,0xd4,0x17,0x52]\n"
+    "                let aorusKey = SymmetricKey(data: Data(SHA256.hash(data: Data(aorusS0 + aorusS1 + aorusS2))))\n"
+    "                guard let aorusSealed = try? AES.GCM.SealedBox(combined: aorusBox),\n"
+    "                      let aorusPlain = try? AES.GCM.open(aorusSealed, using: aorusKey),\n"
+    "                      let aorusStr = String(data: aorusPlain, encoding: .utf8) else { return nil }\n"
+    "                let aorusParts = aorusStr.components(separatedBy: \"\\n\")\n"
+    "                guard aorusParts.count == 3, !aorusParts[0].isEmpty, let aorusPort = Int(aorusParts[1]), aorusPort > 0, !aorusParts[2].isEmpty else { return nil }\n"
+    "                let aorusHost = aorusParts[0]\n"
+    "                let aorusSecretHex = aorusParts[2]\n"
     "                var aorusSecret = Data(capacity: aorusSecretHex.count / 2)\n"
     "                var aorusIdx = aorusSecretHex.startIndex\n"
     "                while aorusIdx < aorusSecretHex.endIndex {\n"
@@ -2960,6 +2975,17 @@ _AORUS_PROXY_SNIPPET = (
     "                return MTSocksProxySettings(ip: aorusHost, port: UInt16(clamping: aorusPort), username: nil, password: nil, secret: aorusSecret)\n"
     "            })()"
 )
+
+
+def _ensure_import_cryptokit(t: str) -> str:
+    """Idempotently add `import CryptoKit` so the inlined proxy snippet (which uses
+    SymmetricKey / SHA256 / AES.GCM) compiles in the host file."""
+    if "import CryptoKit" in t:
+        return t
+    marker = "import Foundation\n"
+    if marker in t:
+        return t.replace(marker, marker + "import CryptoKit\n", 1)
+    return "import CryptoKit\n" + t
 
 
 def patch_system_proxy_network_override(tg: Path) -> None:
@@ -2977,9 +3003,10 @@ def patch_system_proxy_network_override(tg: Path) -> None:
         print("Network.swift not found, skip system proxy override")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusgram_proxy_server" in t:
+    if "ng.session.store" in t:
         print("Network.swift: system proxy override already present")
         return
+    t = _ensure_import_cryptokit(t)
 
     anchor = (
         "            if let effectiveActiveServer = proxySettings?.effectiveActiveServer {\n"
@@ -3019,6 +3046,7 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
     if "aorusgram_proxy_config_updated" in t:
         print("Account.swift: system proxy runtime monitor already present")
         return
+    t = _ensure_import_cryptokit(t)
 
     # 1) Force system proxy to win inside the existing monitor.
     monitor_anchor = (

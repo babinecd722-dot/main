@@ -192,13 +192,11 @@ public final class AorusProxyManager {
             ProxyKeychain.write(data)
             UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cacheStampKey)
         }
-        // Mirror to flat keys so the AppDelegate proxy bridge (injected into the
-        // TelegramUI module, which cannot import AorusGram cleanly in every build)
-        // can read the live config without a hard module dependency.
-        let ud = UserDefaults.standard
-        ud.set(cfg.server, forKey: "aorusgram_proxy_server")
-        ud.set(cfg.port,   forKey: "aorusgram_proxy_port")
-        ud.set(cfg.secret, forKey: "aorusgram_proxy_secret")
+        // Publish an ENCRYPTED, opaque copy for the system-proxy code injected into
+        // TelegramCore (which cannot import this module). server/port/secret are
+        // sealed with AES-GCM and stored as one opaque value — a jailbreak file
+        // browser sees only ciphertext, never the live proxy secret. (See ProxyVault.)
+        ProxyVault.publish(cfg)
         // Wake the system-side bridge so it re-applies immediately.
         NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
     }
@@ -209,13 +207,10 @@ public final class AorusProxyManager {
         cached = cfg
         let stamp = UserDefaults.standard.double(forKey: cacheStampKey)
         cachedAt = stamp > 0 ? Date(timeIntervalSince1970: stamp) : .distantPast
-        // Publish flat keys synchronously at construction so the network layer
-        // (Network.swift) sees a cached proxy on the very first connection of
-        // this launch, before any async refresh completes.
-        let ud = UserDefaults.standard
-        ud.set(cfg.server, forKey: "aorusgram_proxy_server")
-        ud.set(cfg.port,   forKey: "aorusgram_proxy_port")
-        ud.set(cfg.secret, forKey: "aorusgram_proxy_secret")
+        // Publish the encrypted bridge blob synchronously at construction so the
+        // network layer (Network.swift) sees a cached proxy on the very first
+        // connection of this launch, before any async refresh completes.
+        ProxyVault.publish(cfg)
     }
 
     // MARK: - Helpers
@@ -290,6 +285,56 @@ private enum ProxyKeychain {
         // back to the raw bytes — they will be the unbound plaintext written on
         // a device where SE was not available at write time.
         return AorusSeKeyBinder.unbind(raw) ?? raw
+    }
+}
+
+// MARK: - Encrypted cross-module proxy bridge
+//
+// The system-proxy code injected into TelegramCore by aorus_branding.py cannot
+// import this module, so the live proxy config must be published somewhere that
+// injected code can read. It is NOT written in plaintext: server/port/secret are
+// sealed with AES-GCM under a key derived from an in-binary pepper and stored as a
+// single opaque value, under an opaque key, in a dedicated innocuously-named
+// defaults store. Result: a jailbreak file browser sees only ciphertext under a
+// meaningless key — the old "open the plist and copy the secret" path is closed.
+//
+// SCOPE (honest): this protects the secret AT REST only. A runtime attacker that
+// hooks the proxy-apply point can still observe it in use, because MTProto needs
+// the secret in clear — that is unavoidable on any client. Server-side proxy-secret
+// rotation is the real backstop; this just removes the trivial file-copy path.
+//
+// The reader (injected into Network.swift / Account.swift) MUST use the identical
+// suite name, blob key and pepper bytes — see scripts/aorus_branding.py.
+private enum ProxyVault {
+    static let suiteName = "ng.session.store"
+    static let blobKey   = "b7d4f0a2-1c93-4e85-9a6f-3d520e8c7b14"
+
+    // key = SHA256(pepper). The pepper segments are meaningless individually and
+    // never appear verbatim; the identical bytes live in the injected reader.
+    private static let key: SymmetricKey = {
+        let s0: [UInt8] = [0x8c,0x21,0x47,0xf9,0x03,0xbe,0x5a,0xd7,0x6e,0x10,0xc4,0x9b]
+        let s1: [UInt8] = [0x2f,0xa8,0x73,0x14,0xe6,0x5d,0x0a,0xcf,0x91,0x46,0xb2,0x38]
+        let s2: [UInt8] = [0x7d,0xe1,0x4c,0x60,0xaa,0x05,0xf3,0x29,0x8b,0xd4,0x17,0x52]
+        return SymmetricKey(data: Data(SHA256.hash(data: Data(s0 + s1 + s2))))
+    }()
+
+    // Seals "server\nport\nsecret" and stores it base64 under the opaque key.
+    static func publish(_ cfg: AorusProxyConfig) {
+        purgeLegacy()
+        guard let ud = UserDefaults(suiteName: suiteName) else { return }
+        let payload = "\(cfg.server)\n\(cfg.port)\n\(cfg.secret)"
+        guard let box = try? AES.GCM.seal(Data(payload.utf8), using: key),
+              let combined = box.combined else { return }
+        ud.set(combined.base64EncodedString(), forKey: blobKey)
+    }
+
+    // Wipe the legacy plaintext flat keys left in the standard store by older
+    // builds, so an updated device never keeps a stale clear-text proxy secret.
+    private static func purgeLegacy() {
+        let ud = UserDefaults.standard
+        for k in ["aorusgram_proxy_server", "aorusgram_proxy_port", "aorusgram_proxy_secret"] {
+            ud.removeObject(forKey: k)
+        }
     }
 }
 
