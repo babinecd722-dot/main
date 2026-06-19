@@ -3191,27 +3191,28 @@ def patch_conversation_export(tg: Path) -> None:
     if "AorusConversationExport.start" in t:
         print("Conversation export: menu item already present")
         return
-    # 16-space-indented `return .single(items)` closes the more-menu builder closure
-    # (the only other occurrence is 20-space-indented inside an early guard).
-    anchor = "                return .single(items)\n            }\n"
-    injected = (
-        "                items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Скачать переписку\" : \"Download Conversation\", icon: { theme in\n"
-        "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Download\"), color: theme.contextMenu.primaryColor)\n"
-        "                }, action: { [weak self] _, f in\n"
-        "                    f(.dismissWithoutContent)\n"
-        "                    if let strongSelf = self, let exportPeer = strongSelf.data?.peer {\n"
-        "                        AorusConversationExport.start(context: strongSelf.context, peer: exportPeer, parentController: strongSelf.controller)\n"
-        "                    }\n"
-        "                })))\n"
-        "                return .single(items)\n"
-        "            }\n"
+    # Place the item directly ABOVE the per-branch "clear history / delete" action.
+    # The clearPeerHistory line is identical (20-space indent) in the user, channel
+    # and group branches; injecting before each makes the item appear above Delete
+    # for every chat type (only one branch executes at a time).
+    anchor = "                    let clearPeerHistory = ClearPeerHistory(context: strongSelf.context, peer: "
+    item = (
+        "                    items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Скачать переписку\" : \"Download Conversation\", icon: { theme in\n"
+        "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Download\"), color: theme.contextMenu.primaryColor)\n"
+        "                    }, action: { [weak self] _, f in\n"
+        "                        f(.dismissWithoutContent)\n"
+        "                        if let strongSelf = self, let exportPeer = strongSelf.data?.peer {\n"
+        "                            AorusConversationExport.start(context: strongSelf.context, peer: exportPeer, parentController: strongSelf.controller)\n"
+        "                        }\n"
+        "                    })))\n"
     )
     if anchor in t:
-        t = t.replace(anchor, injected, 1)
+        count = t.count(anchor)
+        t = t.replace(anchor, item + anchor)
         path.write_text(t, encoding="utf-8")
-        print("Conversation export: injected Download Conversation menu item")
+        print(f"Conversation export: injected Download Conversation menu item ({count}x, above Delete)")
     else:
-        print("WARNING: PeerInfoScreenPerformButtonAction more-menu anchor not found — export item NOT added")
+        print("WARNING: PeerInfoScreenPerformButtonAction clear-history anchor not found — export item NOT added")
 
 
 def patch_intro_brand_logo(tg: Path) -> None:
