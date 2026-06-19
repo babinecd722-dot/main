@@ -8,6 +8,9 @@ final class PurchaseController: SubscriptionBaseController {
     var onBuy: (() -> Void)?        // extend / renew (opens the bot)
     var onHaveKey: (() -> Void)?    // enter another key
 
+    // Entrance animation runs once, on first appearance.
+    private var didPlayEntrance = false
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
@@ -36,6 +39,51 @@ final class PurchaseController: SubscriptionBaseController {
         key.addTarget(self, action: #selector(haveKeyTapped), for: .touchUpInside)
         addBottomButton(renew)
         addBottomButton(key)
+    }
+
+    // MARK: - Entrance animation
+    //
+    // Animates ONLY this controller's own content (hero duck, info rows, buttons).
+    // It never touches the navigation bar, the window, or the root view, so it can't
+    // disturb safe-area layout — the bug that previously pushed the close button into
+    // the status bar. Initial hidden state is set in viewWillAppear (before the screen
+    // is on-screen) so there is no first-frame flash.
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard !didPlayEntrance else { return }
+        for v in contentStack.arrangedSubviews + buttonStack.arrangedSubviews {
+            v.alpha = 0
+            v.transform = CGAffineTransform(translationX: 0, y: 16)
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !didPlayEntrance else { return }
+        didPlayEntrance = true
+
+        // Hero duck: a soft spring scale-pop.
+        if let hero = contentStack.arrangedSubviews.first {
+            hero.transform = CGAffineTransform(scaleX: 0.7, y: 0.7)
+            UIView.animate(withDuration: 0.6, delay: 0,
+                           usingSpringWithDamping: 0.6, initialSpringVelocity: 0.6,
+                           options: [.allowUserInteraction]) {
+                hero.alpha = 1
+                hero.transform = .identity
+            }
+        }
+
+        // Title → status → card → buttons cascade up with a gentle fade, one after another.
+        let cascade = Array(contentStack.arrangedSubviews.dropFirst()) + buttonStack.arrangedSubviews
+        for (i, v) in cascade.enumerated() {
+            UIView.animate(withDuration: 0.5, delay: 0.08 + Double(i) * 0.05,
+                           usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3,
+                           options: [.allowUserInteraction]) {
+                v.alpha = 1
+                v.transform = .identity
+            }
+        }
     }
 
     private func buildInfoStack(snap: LicenseStore.Snapshot?, isTrial: Bool) -> UIView {
