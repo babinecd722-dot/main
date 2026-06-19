@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v101-release-12.8
+          key: tg-ios-src-v102-release-12.8
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -364,6 +364,12 @@ jobs:
           # 4. Patch PeerInfoScreen.swift in-place (add case aorusGram to enum)
           # 5. Patch PeerInfoScreenSettingsActions.swift in-place (add import + case)
           python3 -c "import base64; exec(base64.b64decode('aW1wb3J0IHJlLCBvcwoKcGVlcl9kaXIgPSAndGVsZWdyYW0taW9zL3N1Ym1vZHVsZXMvVGVsZWdyYW1VSS9Db21wb25lbnRzL1BlZXJJbmZvL1BlZXJJbmZvU2NyZWVuL1NvdXJjZXMnCgojIDEuIFBhdGNoIFBlZXJJbmZvU2NyZWVuLnN3aWZ0IOKAlCBhZGQgYW9ydXNHcmFtIHRvIGVudW0gb25seQpzY3JlZW5fcGF0aCA9IG9zLnBhdGguam9pbihwZWVyX2RpciwgJ1BlZXJJbmZvU2NyZWVuLnN3aWZ0JykKdCA9IG9wZW4oc2NyZWVuX3BhdGgpLnJlYWQoKQppZiAnY2FzZSBhb3J1c0dyYW0nIG5vdCBpbiB0OgogICAgbSA9IHJlLnNlYXJjaChyJyhlbnVtIFBlZXJJbmZvU2V0dGluZ3NTZWN0aW9uIFx7KSguKj8pKFxuXH0pJywgdCwgcmUuRE9UQUxMKQogICAgaWYgbToKICAgICAgICB0ID0gdFs6bS5zdGFydCgzKV0gKyAnXG4gICAgY2FzZSBhb3J1c0dyYW0nICsgdFttLnN0YXJ0KDMpOl0KICAgICAgICBvcGVuKHNjcmVlbl9wYXRoLCAndycpLndyaXRlKHQpCiAgICAgICAgcHJpbnQoJ1BhdGNoZWQgUGVlckluZm9TY3JlZW4uc3dpZnQ6IGFkZGVkIGNhc2UgYW9ydXNHcmFtJykKICAgIGVsc2U6CiAgICAgICAgcHJpbnQoJ1dBUk5JTkc6IFBlZXJJbmZvU2V0dGluZ3NTZWN0aW9uIG5vdCBmb3VuZCcpCmVsc2U6CiAgICBwcmludCgnUGVlckluZm9TY3JlZW4uc3dpZnQ6IGFvcnVzR3JhbSBhbHJlYWR5IHByZXNlbnQnKQoKIyAyLiBQYXRjaCBQZWVySW5mb1NjcmVlblNldHRpbmdzQWN0aW9ucy5zd2lmdCDigJQgYWRkIGltcG9ydCArIG9uZSBjYXNlCmFjdGlvbnNfcGF0aCA9IG9zLnBhdGguam9pbihwZWVyX2RpciwgJ1BlZXJJbmZvU2NyZWVuU2V0dGluZ3NBY3Rpb25zLnN3aWZ0JykKdCA9IG9wZW4oYWN0aW9uc19wYXRoKS5yZWFkKCkKY2hhbmdlZCA9IEZhbHNlCgppZiAnaW1wb3J0IEFvcnVzR3JhbVVJJyBub3QgaW4gdDoKICAgIHQgPSByZS5zdWIocideKGltcG9ydCBcdyspJywgcidcMVxuaW1wb3J0IEFvcnVzR3JhbVVJJywgdCwgY291bnQ9MSwgZmxhZ3M9cmUuTVVMVElMSU5FKQogICAgY2hhbmdlZCA9IFRydWUKICAgIHByaW50KCdBZGRlZCBpbXBvcnQgQW9ydXNHcmFtVUknKQoKaWYgJ2Nhc2UgLmFvcnVzR3JhbScgbm90IGluIHQ6CiAgICBhb3J1c19jYXNlID0gJyAgICAgICAgY2FzZSAuYW9ydXNHcmFtOlxuICAgICAgICAgICAgcHVzaChhb3J1c0dyYW1Db250cm9sbGVyKGNvbnRleHQ6IHNlbGYuY29udGV4dCkpXG4nCiAgICBmb3IgdGFyZ2V0IGluIFsnICAgICAgICBjYXNlIC5mYXE6JywgJyAgICAgICAgY2FzZSAudGlwczonLCAnICAgICAgICBjYXNlIC5zdXBwb3J0OiddOgogICAgICAgIGlmIHRhcmdldCBpbiB0OgogICAgICAgICAgICB0ID0gdC5yZXBsYWNlKHRhcmdldCwgYW9ydXNfY2FzZSArIHRhcmdldCwgMSkKICAgICAgICAgICAgY2hhbmdlZCA9IFRydWUKICAgICAgICAgICAgcHJpbnQoJ0FkZGVkIGFvcnVzR3JhbSBjYXNlIGJlZm9yZScsIHRhcmdldC5zdHJpcCgpKQogICAgICAgICAgICBicmVhawoKaWYgY2hhbmdlZDoKICAgIG9wZW4oYWN0aW9uc19wYXRoLCAndycpLndyaXRlKHQpCiAgICBwcmludCgnU2F2ZWQgYWN0aW9ucyBmaWxlJykKZWxzZToKICAgIHByaW50KCdBY3Rpb25zIGZpbGU6IG5vIGNoYW5nZXMgbmVlZGVkJykK').decode())"
+
+          # 6. Copy the AorusGram conversation-export helper into the PeerInfoScreen
+          #    module (compiled via the module's Sources/**/*.swift glob; the "Download
+          #    conversation" menu item is injected into PeerInfoScreenPerformButtonAction
+          #    by aorus_branding.py).
+          cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusConversationExport.swift $PEER/Sources/
 
           echo "Injection complete"
           echo "--- AorusGramUI sources ---"

@@ -3173,6 +3173,45 @@ def patch_disable_call_p2p(tg: Path) -> None:
         print("WARNING: OngoingCallContext.swift allowP2P anchor not found — P2P NOT disabled")
 
 
+def patch_conversation_export(tg: Path) -> None:
+    """Add a "Download conversation" item to the profile "…" action menu.
+
+    Injects a ContextMenuActionItem into the `.more` menu builder in
+    PeerInfoScreenPerformButtonAction.swift. The item calls AorusConversationExport.start
+    (a helper file copied into the same module by the workflow), which reads the chat's
+    local text history, renders a native-looking PDF and opens the system share sheet.
+    Inserted just before the menu builder's final `return .single(items)` so it appears
+    for every chat type, at the bottom of the menu. Idempotent.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenPerformButtonAction.swift"
+    if not path.is_file():
+        print("PeerInfoScreenPerformButtonAction.swift not found, skip conversation export")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusConversationExport.start" in t:
+        print("Conversation export: menu item already present")
+        return
+    # 16-space-indented `return .single(items)` closes the more-menu builder closure
+    # (the only other occurrence is 20-space-indented inside an early guard).
+    anchor = "                return .single(items)\n            }\n"
+    injected = (
+        "                items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Скачать переписку\" : \"Download Conversation\", icon: { theme in\n"
+        "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Download\"), color: theme.contextMenu.primaryColor)\n"
+        "                }, action: { [weak self] _, f in\n"
+        "                    f(.dismissWithoutContent)\n"
+        "                    if let strongSelf = self, let exportPeer = strongSelf.data?.peer {\n"
+        "                        AorusConversationExport.start(context: strongSelf.context, peer: exportPeer, parentController: strongSelf.controller)\n"
+        "                    }\n"
+        "                })))\n"
+        "                return .single(items)\n"
+        "            }\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, injected, 1)
+        path.write_text(t, encoding="utf-8")
+        print("Conversation export: injected Download Conversation menu item")
+    else:
+        print("WARNING: PeerInfoScreenPerformButtonAction more-menu anchor not found — export item NOT added")
 
 
 def patch_intro_brand_logo(tg: Path) -> None:
@@ -6935,6 +6974,7 @@ def main() -> None:
     patch_bypass_copy_protection(tg)
     patch_bypass_channel_copy_protection(tg)
     patch_bypass_story_download(tg)
+    patch_conversation_export(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
