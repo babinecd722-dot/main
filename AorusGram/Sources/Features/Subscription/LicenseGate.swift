@@ -412,22 +412,22 @@ final class LicenseGate {
     }
 
     private func setModalRoot(_ controller: UIViewController) {
-        let isNew = (modalWindow == nil)
-        let nav = makeNav(controller)
-        if isNew {
-            nav.view.alpha = 0
-            nav.view.transform = CGAffineTransform(translationX: 0, y: 44)
-        }
+        // Animate only the first appearance of the modal window (e.g. the
+        // "Subscription" button opening the management screen). Subsequent root
+        // swaps inside an already-visible window are left instant — nav-level
+        // pushes handle their own animation.
+        let firstShow = (modalWindow == nil)
         ensureModalWindow()
-        modalWindow?.rootViewController = nav
+        modalWindow?.rootViewController = makeNav(controller)
         modalWindow?.makeKeyAndVisible()
-        if isNew {
-            UIView.animate(withDuration: 0.45, delay: 0,
-                           usingSpringWithDamping: 0.80, initialSpringVelocity: 0.5,
-                           options: [.allowUserInteraction]) {
-                nav.view.alpha = 1
-                nav.view.transform = .identity
-            }
+
+        guard firstShow, let rootView = modalWindow?.rootViewController?.view else { return }
+        rootView.alpha = 0
+        rootView.transform = CGAffineTransform(translationX: 0, y: 36)
+        UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.85,
+                       initialSpringVelocity: 0.5, options: [.allowUserInteraction]) {
+            rootView.alpha = 1
+            rootView.transform = .identity
         }
     }
 
