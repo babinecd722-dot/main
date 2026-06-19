@@ -3661,7 +3661,7 @@ def patch_aorus_badges(tg: Path) -> None:
                 "    var isVerified: Bool {\n"
                 "        // AorusGram local verification — show the native Telegram checkmark\n"
                 "        // for our official channel/chat without any server flag.\n"
-                "        if [3956524111, 3710166840].contains(self.id.id._internalGetInt64Value()) {\n"
+                "        if [3956524111, 3710166840, 8887700542].contains(self.id.id._internalGetInt64Value()) {\n"
                 "            return true\n"
                 "        }\n"
                 "        switch self {"

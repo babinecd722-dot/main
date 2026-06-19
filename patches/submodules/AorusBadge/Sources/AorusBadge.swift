@@ -25,7 +25,7 @@ public enum AorusBadgeKind: Equatable {
 public enum AorusBadge {
     // Channels/chats that should show the NATIVE Telegram verified checkmark.
     // (Consumed by the TelegramCore isVerified patch, mirrored here for reference.)
-    public static let verifiedPeerRawIds: Set<Int64> = [3956524111, 3710166840]
+    public static let verifiedPeerRawIds: Set<Int64> = [3956524111, 3710166840, 8887700542]
 
     // Users that get a custom local badge.
     private static let devUserRawIds: Set<Int64> = [6297603868, 6712335037]
