@@ -496,6 +496,18 @@ jobs:
           t = t.replace('if codesigning_data.aps_environment is None:', 'if False and codesigning_data.aps_environment is None:', 1)
           t = t.replace("aps_environment=codesigning_data.aps_environment,", "aps_environment=codesigning_data.aps_environment or 'development',", 1)
 
+          # 4. Drop dSYM generation from the release build. dsymutil on the full opt
+          #    binary is the single biggest memory consumer at the final link step and
+          #    was OOM-crashing bazel on the ~7 GB runner. dSYMs are debug-symbol files
+          #    used only to symbolicate crash logs — they have ZERO effect on the app
+          #    itself or its functionality, and are not needed for a sideload IPA.
+          for _dsym_flag in ("'--apple_generate_dsym',", "'--output_groups=+dsyms',"):
+              if _dsym_flag in t:
+                  t = t.replace(_dsym_flag, "")
+                  print('Make.py: removed dSYM flag', _dsym_flag)
+              else:
+                  print('Make.py: dSYM flag already absent', _dsym_flag)
+
           open(p, 'w').write(t)
           print('All Make.py patches applied')
           MPEOF
