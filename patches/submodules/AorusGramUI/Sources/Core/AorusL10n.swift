@@ -80,7 +80,7 @@ public struct AorusL10n {
     // MARK: Settings — rows
     public var ghostMode: String { t("Режим призрака", "Ghost Mode") }
     public var deletedMessages: String { t("Удалённые сообщения", "Deleted Messages") }
-    public var clearDeletedCache: String { t("Очистить кеш", "Clear Cache") }
+    public var clearDeletedCache: String { t("Очистить кэш", "Clear Cache") }
     public var antiScreenshot: String { t("Скрытие экрана при записи", "Hide Screen While Recording") }
     public var voiceTranscription: String { t("Расшифровка голосовых", "Voice to Text") }
     public var chatSummary: String { t("Сводка чата", "Chat Summary") }
@@ -88,7 +88,7 @@ public struct AorusL10n {
     public var autoReply: String { t("Автоответчик", "Auto-Reply") }
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
     public var antiSpam: String { t("Анти-спам", "Anti-Spam") }
-    public var cacheAutoClean: String { t("Автоочистка кеша", "Auto-Clean Cache") }
+    public var cacheAutoClean: String { t("Автоочистка кэша", "Auto-Clean Cache") }
     public var cacheInterval: String { t("Интервал очистки", "Cleanup Interval") }
     // Interval value in hours: "6 ч"/"6 h", or whole days as "7 дн"/"7 d".
     public func cacheIntervalValue(_ hours: Int) -> String {
