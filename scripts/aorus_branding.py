@@ -3373,6 +3373,58 @@ def patch_user_messages_feature(tg: Path) -> None:
     print("User messages: patched context menu (override + opener item)")
 
 
+def patch_fix_media_caption_rich_edit(tg: Path) -> None:
+    """Fix an upstream bug: editing a media caption can wipe it (only the photo stays).
+
+    On edit, ChatControllerLoadDisplayNode computes a RichTextMessageAttribute via
+    richMarkdownAttributeIfNeeded and, if non-nil, sends the edit with text:"" (the
+    formatting is meant to ride the rich/Instant-Page attribute). It has NO guard for
+    messages that carry media, so a caption that classifies as "rich" (markdown blocks:
+    lists, tables, headings, quotes, …) is sent as text:"" media:.keep — wiping the
+    caption while keeping the photo. (The SEND path already disables rich via the
+    `!"".isEmpty` kill-switch; the EDIT path was missed.)
+
+    Fix: a message with real media (image/file/map) is a caption — never take the rich
+    path for it, so the caption is sent normally with entities. Idempotent.
+    """
+    path = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerLoadDisplayNode.swift"
+    if not path.is_file():
+        print("ChatControllerLoadDisplayNode.swift not found, skip media-caption edit fix")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusEditHasCaptionMedia" in t:
+        print("Media-caption edit fix: already patched")
+        return
+    anchor = (
+        "                var richTextAttribute: RichTextMessageAttribute?\n"
+        "                if !isSpecialChatContents {\n"
+        "                    richTextAttribute = richMarkdownAttributeIfNeeded(context: strongSelf.context, attributedText: expandedInputStateAttributedString(editMessage.inputState.inputText))\n"
+        "                }\n"
+    )
+    replacement = (
+        "                var richTextAttribute: RichTextMessageAttribute?\n"
+        "                // AorusGram fix: a media caption must never take the rich-text (Instant-Page)\n"
+        "                // edit path — it sends text:\"\" and wipes the caption while keeping the media.\n"
+        "                let aorusEditHasCaptionMedia = message.effectiveMedia.contains(where: { media in\n"
+        "                    switch media {\n"
+        "                    case _ as TelegramMediaImage, _ as TelegramMediaFile, _ as TelegramMediaMap:\n"
+        "                        return true\n"
+        "                    default:\n"
+        "                        return false\n"
+        "                    }\n"
+        "                })\n"
+        "                if !isSpecialChatContents, !aorusEditHasCaptionMedia {\n"
+        "                    richTextAttribute = richMarkdownAttributeIfNeeded(context: strongSelf.context, attributedText: expandedInputStateAttributedString(editMessage.inputState.inputText))\n"
+        "                }\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("Media-caption edit fix: patched (rich path skipped for media captions)")
+    else:
+        print("WARNING: media-caption edit fix anchor not found — NOT applied")
+
+
 def patch_intro_brand_logo(tg: Path) -> None:
     """Replace the OpenGL Telegram paper-plane logo on the intro/welcome screen
     with the AorusGram brand logo.
@@ -7136,6 +7188,7 @@ def main() -> None:
     patch_conversation_export(tg)
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
+    patch_fix_media_caption_rich_edit(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
