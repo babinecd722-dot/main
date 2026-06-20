@@ -3425,6 +3425,81 @@ def patch_fix_media_caption_rich_edit(tg: Path) -> None:
         print("WARNING: media-caption edit fix anchor not found — NOT applied")
 
 
+def patch_remove_send_logs(tg: Path) -> None:
+    """Remove the debug "Send Logs" item from the message context menu.
+
+    It only appears when file/console logging is enabled, but it's a developer affordance
+    with no place in a shipping client. The enclosing `if` (and its condition) is kept so
+    `downloadableMediaResourceInfos` / `loggingSettings` stay referenced — only the action
+    body is dropped, avoiding unused-variable warnings under -warnings-as-errors. Idempotent.
+    """
+    path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
+    if not path.is_file():
+        print("ChatInterfaceStateContextMenus.swift not found, skip send-logs removal")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: removed the debug logs action" in t:
+        print("Send Logs: already removed")
+        return
+    anchor = (
+        "        if (loggingSettings.logToFile || loggingSettings.logToConsole) && !downloadableMediaResourceInfos.isEmpty {\n"
+        "            actions.append(.action(ContextMenuActionItem(text: \"Send Logs\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Message\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { _, f in\n"
+        "                triggerDebugSendLogsUI(context: context, additionalInfo: \"User has requested download logs for \\(downloadableMediaResourceInfos)\", pushController: { c in\n"
+        "                    controllerInteraction.navigationController()?.pushViewController(c)\n"
+        "                })\n"
+        "                f(.default)\n"
+        "            })))\n"
+        "        }\n"
+    )
+    replacement = (
+        "        if (loggingSettings.logToFile || loggingSettings.logToConsole) && !downloadableMediaResourceInfos.isEmpty {\n"
+        "            // AorusGram: removed the debug logs action.\n"
+        "        }\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("Send Logs: removed debug context action")
+    else:
+        print("WARNING: Send Logs anchor not found — NOT removed")
+
+
+def patch_app_bundle_name(tg: Path) -> None:
+    """Rename the app bundle Telegram.app -> AorusGram.app.
+
+    Adds bundle_name to the main ios_application. This renames the .app directory and the
+    executable inside it; the Bazel target name ("Telegram"), the IPA artifact path and
+    Make.py are unaffected (they key on the target name, not the bundle name). Idempotent.
+    """
+    path = tg / "Telegram/BUILD"
+    if not path.is_file():
+        print("Telegram/BUILD not found, skip app bundle_name rename")
+        return
+    t = path.read_text(encoding="utf-8")
+    if 'bundle_name = "AorusGram"' in t:
+        print("App bundle_name: already set")
+        return
+    anchor = (
+        "ios_application(\n"
+        "    name = \"Telegram\",\n"
+        "    bundle_id ="
+    )
+    replacement = (
+        "ios_application(\n"
+        "    name = \"Telegram\",\n"
+        "    bundle_name = \"AorusGram\",\n"
+        "    bundle_id ="
+    )
+    if anchor in t:
+        t = t.replace(anchor, replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("App bundle_name: set to AorusGram (Telegram.app -> AorusGram.app)")
+    else:
+        print("WARNING: ios_application anchor not found — bundle_name NOT set")
+
+
 def patch_intro_brand_logo(tg: Path) -> None:
     """Replace the OpenGL Telegram paper-plane logo on the intro/welcome screen
     with the AorusGram brand logo.
@@ -7189,6 +7264,8 @@ def main() -> None:
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_media_caption_rich_edit(tg)
+    patch_remove_send_logs(tg)
+    patch_app_bundle_name(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
