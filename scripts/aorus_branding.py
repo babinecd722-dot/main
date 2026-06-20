@@ -3250,6 +3250,129 @@ def patch_unlimited_pinned_chats(tg: Path) -> None:
         print("WARNING: TogglePeerChatPinned limit assignments not found — unlimited pins NOT applied")
 
 
+def patch_user_messages_feature(tg: Path) -> None:
+    """Wire up the "User's messages in a group" feature.
+
+    The AorusUserMessagesChatContents class + openAorusUserMessages opener are compiled
+    into TelegramUI (copied by the workflow). This patches the upstream chat code:
+      1) Title — show the user's name for our customChatContents screen
+         (ChatControllerContentData.swift).
+      2) In that screen, the message long-press menu is a single "Go to message" action
+         that jumps to the original message in the group
+         (ChatInterfaceStateContextMenus.swift).
+      3) In a group chat, a "User's Messages" item appears above Delete and opens the
+         screen — only in groups/supergroups, with a real (non-anonymous) author, when
+         the feature toggle is on (ChatInterfaceStateContextMenus.swift).
+    All replacements are idempotent.
+    """
+    # --- 1. Title: user's name instead of the (empty) hashTagSearch title ---
+    content_data = tg / "submodules/TelegramUI/Sources/ChatControllerContentData.swift"
+    if content_data.is_file():
+        t = content_data.read_text(encoding="utf-8")
+        if "AorusUserMessagesChatContents" in t:
+            print("User messages: title already patched")
+        else:
+            anchor = (
+                "                    case .hashTagSearch:\n"
+                "                        break\n"
+                "                    case let .quickReplyMessageInput(shortcut, shortcutType):\n"
+            )
+            replacement = (
+                "                    case .hashTagSearch:\n"
+                "                        if let aorusUserMessages = customChatContents as? AorusUserMessagesChatContents {\n"
+                "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusUserMessages.peerName))], subtitle: nil, isEnabled: false)\n"
+                "                        }\n"
+                "                    case let .quickReplyMessageInput(shortcut, shortcutType):\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, replacement, 1)
+                content_data.write_text(t, encoding="utf-8")
+                print("User messages: patched title (ChatControllerContentData)")
+            else:
+                print("WARNING: ChatControllerContentData hashTagSearch title anchor not found")
+    else:
+        print("ChatControllerContentData.swift not found, skip user-messages title")
+
+    # --- 2 + 3. Context menu (single action inside screen + opener item in group) ---
+    menus = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
+    if not menus.is_file():
+        print("ChatInterfaceStateContextMenus.swift not found, skip user-messages menu")
+        return
+    t = menus.read_text(encoding="utf-8")
+    if "openAorusUserMessages(" in t:
+        print("User messages: context menu already patched")
+        return
+
+    # 2) In our screen, only "Go to message" — early-return with a single action.
+    override_anchor = (
+        "        var actions: [ContextMenuItem] = []\n"
+        "\n"
+        "        if isSharedMediaPolls && messages.count == 1 {\n"
+    )
+    override_block = (
+        "        var actions: [ContextMenuItem] = []\n"
+        "\n"
+        "        if case let .customChatContents(aorusContents) = chatPresentationInterfaceState.subject, aorusContents is AorusUserMessagesChatContents, let aorusMsg = messages.first {\n"
+        "            let aorusUiRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
+        "            var aorusItems: [ContextMenuItem] = []\n"
+        "            aorusItems.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Перейти к сообщению\" : \"Go to Message\", icon: { theme in\n"
+        "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/GoToMessage\"), color: theme.actionSheet.primaryTextColor)\n"
+        "            }, action: { c, _ in\n"
+        "                c?.dismiss(completion: {\n"
+        "                    guard let navigationController = controllerInteraction.navigationController() else {\n"
+        "                        return\n"
+        "                    }\n"
+        "                    guard let aorusPeer = aorusMsg.peers[aorusMsg.id.peerId] else {\n"
+        "                        return\n"
+        "                    }\n"
+        "                    context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(EnginePeer(aorusPeer)), subject: .message(id: .id(aorusMsg.id), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false), keepStack: .always, useExisting: true))\n"
+        "                })\n"
+        "            })))\n"
+        "            return ContextController.Items(content: .list(aorusItems), tip: nil)\n"
+        "        }\n"
+        "\n"
+        "        if isSharedMediaPolls && messages.count == 1 {\n"
+    )
+    if override_anchor in t:
+        t = t.replace(override_anchor, override_block, 1)
+    else:
+        print("WARNING: user-messages override anchor not found")
+
+    # 3) "User's Messages" item directly above Delete, groups only, non-anonymous author.
+    opener_anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {\n"
+    opener_block = (
+        "        if messages.count == 1, UserDefaults.standard.bool(forKey: \"aorusgram_feature_user_messages\"), let aorusChatPeer = chatPresentationInterfaceState.renderedPeer?.peer, let aorusAuthor = messages[0].author, aorusAuthor.id != aorusChatPeer.id {\n"
+        "            var aorusIsGroup = false\n"
+        "            if aorusChatPeer is TelegramGroup {\n"
+        "                aorusIsGroup = true\n"
+        "            } else if let aorusChannel = aorusChatPeer as? TelegramChannel, case .group = aorusChannel.info {\n"
+        "                aorusIsGroup = true\n"
+        "            }\n"
+        "            if aorusIsGroup {\n"
+        "                let aorusUiRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
+        "                actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Сообщения пользователя\" : \"User's Messages\", icon: { theme in\n"
+        "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/GoToMessage\"), color: theme.actionSheet.primaryTextColor)\n"
+        "                }, action: { c, _ in\n"
+        "                    c?.dismiss(completion: {\n"
+        "                        guard let navigationController = controllerInteraction.navigationController() else {\n"
+        "                            return\n"
+        "                        }\n"
+        "                        openAorusUserMessages(context: context, groupPeerId: aorusChatPeer.id, author: aorusAuthor, navigationController: navigationController)\n"
+        "                    })\n"
+        "                })))\n"
+        "            }\n"
+        "        }\n"
+        "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {\n"
+    )
+    if opener_anchor in t:
+        t = t.replace(opener_anchor, opener_block, 1)
+    else:
+        print("WARNING: user-messages opener anchor not found")
+
+    menus.write_text(t, encoding="utf-8")
+    print("User messages: patched context menu (override + opener item)")
+
+
 def patch_intro_brand_logo(tg: Path) -> None:
     """Replace the OpenGL Telegram paper-plane logo on the intro/welcome screen
     with the AorusGram brand logo.
@@ -7012,6 +7135,7 @@ def main() -> None:
     patch_bypass_story_download(tg)
     patch_conversation_export(tg)
     patch_unlimited_pinned_chats(tg)
+    patch_user_messages_feature(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)

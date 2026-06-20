@@ -371,6 +371,11 @@ jobs:
           #    by aorus_branding.py).
           cp $PATCHES/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/AorusConversationExport.swift $PEER/Sources/
 
+          # 7. Copy the AorusGram "user's messages in group" chat-contents helper into the
+          #    TelegramUI module (Sources/**/*.swift glob). The context-menu item and the
+          #    single "Go to message" action are injected by aorus_branding.py.
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusUserMessages.swift $TG/submodules/TelegramUI/Sources/
+
           echo "Injection complete"
           echo "--- AorusGramUI sources ---"
           ls -la $TG/submodules/AorusGramUI/Sources/

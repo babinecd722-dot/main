@@ -274,6 +274,7 @@ private struct AorusState: Equatable {
     var cacheAutoClean: Bool
     var cacheCleanInterval: Int
     var editLocally: Bool
+    var userMessages: Bool
     var doubleTapCopy: Bool
     var tripleTapDelete: Bool
     var glassUI: Bool
@@ -355,6 +356,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case messagesDoubleCopy(PresentationTheme, String, Bool)
     case messagesTripleDelete(PresentationTheme, String, Bool)
     case editLocalEnabled(PresentationTheme, String, Bool)
+    case userMessagesEnabled(PresentationTheme, String, Bool)
 
     case antiSpoofHeader(PresentationTheme, String)
     case antiSpoofDeleted(PresentationTheme, String, Bool)
@@ -387,7 +389,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.performance.rawValue
         case .uiHeader, .glassUI, .amoledMode, .hideCallsTab, .hideContactsTab, .siriShortcuts:
             return AorusSection.ui.rawValue
-        case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled:
+        case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
         case .deviceSpoofHeader, .deviceSpoof:
             return AorusSection.deviceSpoof.rawValue
@@ -432,8 +434,9 @@ private enum AorusEntry: ItemListNodeEntry {
         case .messagesDoubleCopy:   return 44
         case .messagesTripleDelete: return 45
         case .editLocalEnabled:     return 46
-        case .deviceSpoofHeader:    return 47
-        case .deviceSpoof:          return 48
+        case .userMessagesEnabled:  return 47
+        case .deviceSpoofHeader:    return 48
+        case .deviceSpoof:          return 49
         case .bypassHeader:         return 50
         case .bypassSavePaid:       return 51
         case .bypassSaveViewOnce:   return 52
@@ -508,6 +511,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .messagesTripleDelete(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .editLocalEnabled(lt, ls, lv):
             if case let .editLocalEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .userMessagesEnabled(lt, ls, lv):
+            if case let .userMessagesEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .antiSpoofHeader(lt, ls):
             if case let .antiSpoofHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .antiSpoofDeleted(lt, ls, lv):
@@ -598,6 +603,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.tripleTapDelete, $0) })
         case let .editLocalEnabled(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.editLocally, $0) })
+        case let .userMessagesEnabled(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.userMessages, $0) })
         case let .antiSpoofHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .antiSpoofDeleted(_, title, value):
@@ -676,6 +683,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
         .messagesTripleDelete(theme, l10n.tripleTapDelete, state.tripleTapDelete),
         .editLocalEnabled(theme, l10n.editLocally, state.editLocally),
+        .userMessagesEnabled(theme, l10n.userMessagesInGroup, state.userMessages),
 
         .deviceSpoofHeader(theme, l10n.deviceSpoofHeader),
         .deviceSpoof(theme, l10n.deviceSpoof, state.spoofedDeviceName ?? l10n.deviceSpoofOff),
@@ -731,6 +739,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         cacheAutoClean:     mgr.cacheAutoClean,
         cacheCleanInterval: mgr.cacheCleanInterval,
         editLocally:        mgr.editLocally,
+        userMessages:       mgr.userMessagesInGroup,
         doubleTapCopy:      mgr.doubleTapCopy,
         tripleTapDelete:    mgr.tripleTapDelete,
         glassUI:            mgr.glassUI,
@@ -779,6 +788,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.cacheAutoClean      = s.cacheAutoClean
             mgr.cacheCleanInterval  = s.cacheCleanInterval
             mgr.editLocally         = s.editLocally
+            mgr.userMessagesInGroup = s.userMessages
             mgr.doubleTapCopy       = s.doubleTapCopy
             mgr.tripleTapDelete     = s.tripleTapDelete
             mgr.glassUI             = s.glassUI

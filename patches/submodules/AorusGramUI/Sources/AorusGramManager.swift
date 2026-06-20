@@ -34,6 +34,10 @@ public final class AorusGramManager {
     // Local editing — context-menu action to edit any message in the local DB only.
     public var editLocally: Bool       = false { didSet { save() } }
 
+    // "User's messages" — context-menu action (groups only) to open a chat-like
+    // screen with all of one user's messages in that group.
+    public var userMessagesInGroup: Bool = false { didSet { save() } }
+
     // Message tap gestures (opt-in, off by default).
     public var doubleTapCopy: Bool     = false { didSet { save() } }
     public var tripleTapDelete: Bool   = false { didSet { save() } }
@@ -79,6 +83,7 @@ public final class AorusGramManager {
         siriShortcuts       = d["siriShortcuts"]       as? Bool ?? false
         autoReply           = d["autoReply"]           as? Bool ?? false
         editLocally         = d["editLocally"]         as? Bool ?? false
+        userMessagesInGroup = d["userMessagesInGroup"] as? Bool ?? false
         doubleTapCopy       = d["doubleTapCopy"]       as? Bool ?? false
         tripleTapDelete     = d["tripleTapDelete"]     as? Bool ?? false
         cacheAutoClean      = d["cacheAutoClean"]      as? Bool ?? false
@@ -107,6 +112,7 @@ public final class AorusGramManager {
             "siriShortcuts":       siriShortcuts,
             "autoReply":           autoReply,
             "editLocally":         editLocally,
+            "userMessagesInGroup": userMessagesInGroup,
             "doubleTapCopy":       doubleTapCopy,
             "tripleTapDelete":     tripleTapDelete,
             "cacheAutoClean":      cacheAutoClean,
@@ -132,6 +138,7 @@ public final class AorusGramManager {
         ud.set(streaks,             forKey: "aorusgram_feature_streaks")
         ud.set(siriShortcuts,       forKey: "aorusgram_feature_siri_shortcuts")
         ud.set(editLocally,         forKey: "aorusgram_feature_edit_locally")
+        ud.set(userMessagesInGroup, forKey: "aorusgram_feature_user_messages")
         ud.set(doubleTapCopy,       forKey: "aorusgram_feature_double_copy")
         ud.set(tripleTapDelete,     forKey: "aorusgram_feature_triple_delete")
         ud.set(voiceTwinEnabled,    forKey: "aorusgram_voice_twin_enabled")
