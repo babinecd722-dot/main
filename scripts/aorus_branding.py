@@ -3215,6 +3215,41 @@ def patch_conversation_export(tg: Path) -> None:
         print("WARNING: PeerInfoScreenPerformButtonAction clear-history anchor not found — export item NOT added")
 
 
+def patch_unlimited_pinned_chats(tg: Path) -> None:
+    """Remove the client-side cap on the number of pinned chats/channels (main list
+    and archive). Stock behaviour, no UI surface.
+
+    _internal_toggleItemPinned returns .limitExceeded once the pinned count passes
+    userLimitsConfiguration.maxPinnedChatCount / maxArchivedPinnedChatCount. Forcing
+    that local cap to Int.max means the engine never reports the limit, so the chat
+    list pins without the premium/limit wall. (Idempotent.)
+    """
+    path = tg / "submodules/TelegramCore/Sources/TelegramEngine/Peers/TogglePeerChatPinned.swift"
+    if not path.is_file():
+        print("TogglePeerChatPinned.swift not found, skip unlimited pins")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: unlimited pins" in t:
+        print("Unlimited pins: already patched")
+        return
+    replacements = [
+        ("limitCount = Int(userLimitsConfiguration.maxPinnedChatCount)",
+         "limitCount = Int.max // AorusGram: unlimited pins"),
+        ("limitCount = Int(userLimitsConfiguration.maxArchivedPinnedChatCount)",
+         "limitCount = Int.max // AorusGram: unlimited pins"),
+    ]
+    changed = 0
+    for old, new in replacements:
+        if old in t:
+            t = t.replace(old, new, 1)
+            changed += 1
+    if changed > 0:
+        path.write_text(t, encoding="utf-8")
+        print(f"Unlimited pins: patched {changed} limit assignment(s) → Int.max")
+    else:
+        print("WARNING: TogglePeerChatPinned limit assignments not found — unlimited pins NOT applied")
+
+
 def patch_intro_brand_logo(tg: Path) -> None:
     """Replace the OpenGL Telegram paper-plane logo on the intro/welcome screen
     with the AorusGram brand logo.
@@ -6976,6 +7011,7 @@ def main() -> None:
     patch_bypass_channel_copy_protection(tg)
     patch_bypass_story_download(tg)
     patch_conversation_export(tg)
+    patch_unlimited_pinned_chats(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)

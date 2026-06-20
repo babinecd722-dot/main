@@ -585,9 +585,9 @@ private enum AorusEntry: ItemListNodeEntry {
         case let .amoledMode(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.amoledMode, $0) })
         case let .hideCallsTab(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideCallsTab, $0) })
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideCallsTab, !$0) })
         case let .hideContactsTab(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideContactsTab, $0) })
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideContactsTab, !$0) })
         case let .siriShortcuts(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.siriShortcuts, $0) })
         case let .editLocalHeader(_, text):
@@ -667,8 +667,9 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .uiHeader(theme, l10n.uiHeader),
         .glassUI(theme, l10n.glassUI, state.glassUI),
         .amoledMode(theme, l10n.amoledMode, state.amoledMode),
-        .hideCallsTab(theme, l10n.hideCallsTab, state.hideCallsTab),
-        .hideContactsTab(theme, l10n.hideContactsTab, state.hideContactsTab),
+        // Switch reflects tab PRESENCE: on = tab shown (stored hide flag inverted).
+        .hideCallsTab(theme, l10n.hideCallsTab, !state.hideCallsTab),
+        .hideContactsTab(theme, l10n.hideContactsTab, !state.hideContactsTab),
         .siriShortcuts(theme, l10n.siriShortcuts, state.siriShortcuts),
 
         .editLocalHeader(theme, l10n.messagesHeader),
