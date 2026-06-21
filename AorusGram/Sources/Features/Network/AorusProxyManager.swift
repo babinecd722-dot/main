@@ -190,6 +190,16 @@ public final class AorusProxyManager {
                 candidates = [AorusProxyCandidate(server: resp.server, port: resp.port, secret: resp.secret, region: nil, priority: 1)]
             }
 
+            // Fast path: with a single candidate there is nothing to choose between, so
+            // skip probing entirely (no point delaying the apply to validate the only
+            // option). This keeps the legacy single-proxy response instant.
+            if candidates.count == 1, let only = candidates.first {
+                let cfg = AorusProxyConfig(server: only.server, port: only.port, secret: only.secret, ttl: resp.ttl)
+                self.store(cfg)
+                finish(cfg)
+                return
+            }
+
             // Probe every candidate and keep the fastest reachable one for ttl.
             self.selectBestCandidate(candidates) { best in
                 if let best = best {
