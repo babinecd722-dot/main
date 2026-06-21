@@ -376,6 +376,10 @@ jobs:
           #    single "Go to message" action are injected by aorus_branding.py.
           cp $PATCHES/submodules/TelegramUI/Sources/AorusUserMessages.swift $TG/submodules/TelegramUI/Sources/
 
+          # 8. Copy the AorusGram SOCKS5 call-proxy reader into TelegramCallsUI (the
+          #    call-start sites are patched to use it by aorus_branding.py).
+          cp $PATCHES/submodules/TelegramCallsUI/Sources/AorusCallProxy.swift $TG/submodules/TelegramCallsUI/Sources/
+
           echo "Injection complete"
           echo "--- AorusGramUI sources ---"
           ls -la $TG/submodules/AorusGramUI/Sources/

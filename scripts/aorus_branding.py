@@ -3500,6 +3500,37 @@ def patch_app_bundle_name(tg: Path) -> None:
         print("WARNING: ios_application anchor not found — bundle_name NOT set")
 
 
+def patch_call_proxy(tg: Path) -> None:
+    """Route voice/video calls through the AorusGram SOCKS5 call proxy.
+
+    PresentationCallManager creates each OngoingCallContext with `proxyServer:
+    strongSelf.proxyServer` (sourced from the user's ProxySettings + useForCalls).
+    We prefer the server-provided SOCKS5 call proxy (decoded fresh at call start by
+    aorusCallProxyServerSettings(), copied into TelegramCallsUI), falling back to the
+    user's setting when none is configured. Telegram only supports SOCKS5 for the call
+    media leg — this keeps calls working where direct voice traffic is blocked.
+    Reading at call start (not caching) means a freshly-fetched proxy is used
+    immediately. Idempotent.
+    """
+    path = tg / "submodules/TelegramCallsUI/Sources/PresentationCallManager.swift"
+    if not path.is_file():
+        print("PresentationCallManager.swift not found, skip call proxy")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusCallProxyServerSettings()" in t:
+        print("Call proxy: already patched")
+        return
+    old = "proxyServer: strongSelf.proxyServer,"
+    new = "proxyServer: aorusCallProxyServerSettings() ?? strongSelf.proxyServer,"
+    count = t.count(old)
+    if count > 0:
+        t = t.replace(old, new)
+        path.write_text(t, encoding="utf-8")
+        print(f"Call proxy: routed {count} call-start site(s) through SOCKS5 when configured")
+    else:
+        print("WARNING: PresentationCallManager proxyServer sites not found — call proxy NOT applied")
+
+
 def patch_intro_brand_logo(tg: Path) -> None:
     """Replace the OpenGL Telegram paper-plane logo on the intro/welcome screen
     with the AorusGram brand logo.
@@ -7266,6 +7297,7 @@ def main() -> None:
     patch_fix_media_caption_rich_edit(tg)
     patch_remove_send_logs(tg)
     patch_app_bundle_name(tg)
+    patch_call_proxy(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
