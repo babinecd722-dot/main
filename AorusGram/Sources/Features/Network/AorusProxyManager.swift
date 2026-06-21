@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import Security
+import Network
 
 // MARK: - AorusGram system proxy
 //
@@ -35,6 +36,39 @@ public struct AorusProxyConfig: Codable, Equatable {
     }
 }
 
+// MARK: - /getProxy response model
+//
+// Backward compatible with the old single-proxy response: the top-level
+// server/port/secret/ttl are always present. The extended response adds an
+// optional `proxies` list (multiple MTProxy candidates with region/priority)
+// and an optional `callProxy` (a SOCKS5 proxy used for voice/video calls).
+
+struct AorusProxyResponse: Codable {
+    let server: String
+    let port: Int
+    let secret: String
+    let ttl: TimeInterval
+    let proxies: [AorusProxyCandidate]?
+    let callProxy: AorusCallProxyConfig?
+}
+
+struct AorusProxyCandidate: Codable, Equatable {
+    let server: String
+    let port: Int
+    let secret: String
+    let region: String?
+    let priority: Int?
+}
+
+struct AorusCallProxyConfig: Codable, Equatable {
+    let type: String          // "socks5"
+    let server: String
+    let port: Int
+    let username: String?
+    let password: String?
+    let udp: Bool?
+}
+
 public final class AorusProxyManager {
     public static let shared = AorusProxyManager()
     private init() { load() }
@@ -58,6 +92,18 @@ public final class AorusProxyManager {
     private var cachedAt: Date = .distantPast
     private var inFlight = false
     private let lock = NSLock()
+
+    // Multi-proxy probing: each candidate MTProxy is TCP-probed `probeAttempts`
+    // times (median latency); the fastest reachable one is chosen and kept for the
+    // server-provided ttl. A single failure never disqualifies a proxy — only an
+    // all-attempts failure does. Re-probed on every refresh (hourly), which also
+    // handles fail-over: a proxy that stopped responding drops out of the next pick.
+    private let probeQueue = DispatchQueue(label: "com.aorusgram.proxy.probe", qos: .utility)
+    private let probeAttempts = 3
+    private let probeTimeout: TimeInterval = 6.0
+    // When two proxies are within this latency margin, prefer the lower server
+    // `priority` number (the server's "closest/least-loaded" hint).
+    private let probeTieMargin: TimeInterval = 0.03
 
     // MARK: - Public
 
@@ -116,24 +162,155 @@ public final class AorusProxyManager {
 
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
             guard let self = self else { return }
-            defer {
+
+            // Probing is async, so inFlight is cleared only once selection finishes.
+            let finish: (AorusProxyConfig?) -> Void = { result in
                 self.lock.lock(); self.inFlight = false; self.lock.unlock()
+                DispatchQueue.main.async { completion?(result ?? self.lastKnownProxy()) }
             }
 
-            var result: AorusProxyConfig?
-            if let http = response as? HTTPURLResponse, http.statusCode == 200,
-               let data = data,
-               let cfg = try? JSONDecoder().decode(AorusProxyConfig.self, from: data),
-               !cfg.server.isEmpty, cfg.port > 0, !cfg.secret.isEmpty {
-                result = cfg
-                self.store(cfg)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let data = data,
+                  let resp = try? JSONDecoder().decode(AorusProxyResponse.self, from: data),
+                  !resp.server.isEmpty, resp.port > 0, !resp.secret.isEmpty else {
+                finish(nil)
+                return
             }
 
-            DispatchQueue.main.async {
-                completion?(result ?? self.lastKnownProxy())
+            // Publish (or clear) the SOCKS5 call proxy for the calls layer.
+            ProxyVault.publishCall(resp.callProxy)
+
+            // Build the MTProxy candidate list: the extended `proxies` list when present,
+            // otherwise the single top-level proxy (backward compatible).
+            var candidates: [AorusProxyCandidate] = []
+            if let list = resp.proxies {
+                candidates = list.filter { !$0.server.isEmpty && $0.port > 0 && !$0.secret.isEmpty }
+            }
+            if candidates.isEmpty {
+                candidates = [AorusProxyCandidate(server: resp.server, port: resp.port, secret: resp.secret, region: nil, priority: 1)]
+            }
+
+            // Probe every candidate and keep the fastest reachable one for ttl.
+            self.selectBestCandidate(candidates) { best in
+                if let best = best {
+                    let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: resp.ttl)
+                    self.store(cfg)
+                    finish(cfg)
+                } else if self.lastKnownProxy() != nil {
+                    // Every probe failed (offline / all blocked): keep the working proxy.
+                    finish(self.lastKnownProxy())
+                } else if let first = candidates.first {
+                    // No probe success and nothing cached: apply the first as a last resort.
+                    let cfg = AorusProxyConfig(server: first.server, port: first.port, secret: first.secret, ttl: resp.ttl)
+                    self.store(cfg)
+                    finish(cfg)
+                } else {
+                    finish(nil)
+                }
             }
         }
         task.resume()
+    }
+
+    // MARK: - Multi-proxy probing & selection
+
+    /// Probes every candidate in parallel and returns the best (fastest reachable),
+    /// breaking near-ties by the server's `priority` hint. Returns nil if none answer.
+    private func selectBestCandidate(_ candidates: [AorusProxyCandidate], completion: @escaping (AorusProxyCandidate?) -> Void) {
+        let group = DispatchGroup()
+        var results: [(candidate: AorusProxyCandidate, latency: TimeInterval)] = []
+        let resultsLock = NSLock()
+
+        for candidate in candidates {
+            group.enter()
+            probeCandidate(candidate) { latency in
+                if let latency = latency {
+                    resultsLock.lock()
+                    results.append((candidate, latency))
+                    resultsLock.unlock()
+                }
+                group.leave()
+            }
+        }
+
+        group.notify(queue: probeQueue) {
+            let tieMargin = self.probeTieMargin
+            let sorted = results.sorted { lhs, rhs in
+                if abs(lhs.latency - rhs.latency) > tieMargin {
+                    return lhs.latency < rhs.latency
+                }
+                return (lhs.candidate.priority ?? Int.max) < (rhs.candidate.priority ?? Int.max)
+            }
+            completion(sorted.first?.candidate)
+        }
+    }
+
+    /// Probes one candidate `probeAttempts` times and returns the median latency of
+    /// the successful attempts, or nil if every attempt failed.
+    private func probeCandidate(_ candidate: AorusProxyCandidate, completion: @escaping (TimeInterval?) -> Void) {
+        var latencies: [TimeInterval] = []
+        let attempts = probeAttempts
+
+        func runAttempt(_ index: Int) {
+            if index >= attempts {
+                completion(Self.median(latencies))
+                return
+            }
+            probeLatency(host: candidate.server, port: candidate.port) { latency in
+                if let latency = latency {
+                    latencies.append(latency)
+                }
+                runAttempt(index + 1)
+            }
+        }
+        runAttempt(0)
+    }
+
+    /// One TCP-connect probe with a hard timeout. Latency = time to reach `.ready`.
+    private func probeLatency(host: String, port: Int, completion: @escaping (TimeInterval?) -> Void) {
+        guard port > 0, port <= 65535, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+            completion(nil)
+            return
+        }
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
+        let start = Date()
+        var didFinish = false
+        let finishLock = NSLock()
+        let finish: (TimeInterval?) -> Void = { latency in
+            finishLock.lock()
+            if didFinish {
+                finishLock.unlock()
+                return
+            }
+            didFinish = true
+            finishLock.unlock()
+            connection.cancel()
+            completion(latency)
+        }
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                finish(Date().timeIntervalSince(start))
+            case .failed, .cancelled:
+                finish(nil)
+            default:
+                break
+            }
+        }
+        connection.start(queue: probeQueue)
+        probeQueue.asyncAfter(deadline: .now() + probeTimeout) {
+            finish(nil)
+        }
+    }
+
+    private static func median(_ values: [TimeInterval]) -> TimeInterval? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        let count = sorted.count
+        if count % 2 == 1 {
+            return sorted[count / 2]
+        }
+        return (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0
     }
 
     // MARK: - Request building
@@ -308,6 +485,8 @@ private enum ProxyKeychain {
 private enum ProxyVault {
     static let suiteName = "ng.session.store"
     static let blobKey   = "b7d4f0a2-1c93-4e85-9a6f-3d520e8c7b14"
+    // Separate opaque key for the SOCKS5 call proxy blob (read by the calls layer).
+    static let callBlobKey = "c9a3f1e7-2b48-4d6a-9e15-7c0d8b3f6a21"
 
     // key = SHA256(pepper). The pepper segments are meaningless individually and
     // never appear verbatim; the identical bytes live in the injected reader.
@@ -326,6 +505,21 @@ private enum ProxyVault {
         guard let box = try? AES.GCM.seal(Data(payload.utf8), using: key),
               let combined = box.combined else { return }
         ud.set(combined.base64EncodedString(), forKey: blobKey)
+    }
+
+    // Seals "server\nport\nusername\npassword\nudp" for the SOCKS5 call proxy under a
+    // second opaque key. nil / non-socks5 / invalid clears it (calls fall back to
+    // the user's own proxy settings, if any). Read by the calls layer (Part 2).
+    static func publishCall(_ cfg: AorusCallProxyConfig?) {
+        guard let ud = UserDefaults(suiteName: suiteName) else { return }
+        guard let cfg = cfg, cfg.type.lowercased() == "socks5", !cfg.server.isEmpty, cfg.port > 0 else {
+            ud.removeObject(forKey: callBlobKey)
+            return
+        }
+        let payload = "\(cfg.server)\n\(cfg.port)\n\(cfg.username ?? "")\n\(cfg.password ?? "")\n\((cfg.udp ?? false) ? "1" : "0")"
+        guard let box = try? AES.GCM.seal(Data(payload.utf8), using: key),
+              let combined = box.combined else { return }
+        ud.set(combined.base64EncodedString(), forKey: callBlobKey)
     }
 
     // Wipe the legacy plaintext flat keys left in the standard store by older
