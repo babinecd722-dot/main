@@ -105,6 +105,14 @@ public final class AorusProxyManager {
     // `priority` number (the server's "closest/least-loaded" hint).
     private let probeTieMargin: TimeInterval = 0.03
 
+    // Fast fail-over watchdog: the last candidate list from the server (so we can
+    // re-select locally without re-hitting /getProxy), and a timer that, between the
+    // hourly refreshes, watches the live proxy and instantly switches to the fastest
+    // reachable alternative if the current one goes down (e.g. server maintenance).
+    private var lastCandidates: [AorusProxyCandidate] = []
+    private var watchdogTimer: DispatchSourceTimer?
+    private let watchdogInterval: TimeInterval = 60.0
+
     // MARK: - Public
 
     /// Returns the last known proxy if it is still within its TTL, otherwise nil.
@@ -136,6 +144,8 @@ public final class AorusProxyManager {
         if AorusTamperGuard.isFridaDetected || UserDefaults.standard.bool(forKey: "_ag_frida") {
             AorusTamperAccumulator.shared.increment()
         }
+
+        startWatchdog()
 
         lock.lock()
         // Skip the API call when the last *successful* fetch is fresh enough.
@@ -189,6 +199,9 @@ public final class AorusProxyManager {
             if candidates.isEmpty {
                 candidates = [AorusProxyCandidate(server: resp.server, port: resp.port, secret: resp.secret, region: nil, priority: 1)]
             }
+
+            // Remember the list so the fail-over watchdog can re-select locally.
+            self.lock.lock(); self.lastCandidates = candidates; self.lock.unlock()
 
             // Fast path: with a single candidate there is nothing to choose between, so
             // skip probing entirely (no point delaying the apply to validate the only
@@ -321,6 +334,65 @@ public final class AorusProxyManager {
             return sorted[count / 2]
         }
         return (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0
+    }
+
+    // MARK: - Fast fail-over watchdog
+
+    /// Starts the periodic watchdog (idempotent). It only acts when a proxy is applied
+    /// and there are alternatives to switch to.
+    private func startWatchdog() {
+        lock.lock()
+        if watchdogTimer != nil {
+            lock.unlock()
+            return
+        }
+        let timer = DispatchSource.makeTimerSource(queue: probeQueue)
+        timer.schedule(deadline: .now() + watchdogInterval, repeating: watchdogInterval)
+        timer.setEventHandler { [weak self] in
+            self?.watchdogTick()
+        }
+        watchdogTimer = timer
+        lock.unlock()
+        timer.resume()
+    }
+
+    /// Probes the currently-applied proxy; if it is confirmed down (two failed probes,
+    /// to ride out a transient blip), re-selects the fastest reachable alternative from
+    /// the known candidate list and switches to it immediately — no waiting for the
+    /// hourly refresh, and no dependency on /getProxy being reachable. Only ever
+    /// switches AWAY from a dead proxy, so two healthy proxies never flap.
+    private func watchdogTick() {
+        lock.lock()
+        let busy = inFlight
+        let current = cached
+        let candidates = lastCandidates
+        lock.unlock()
+
+        // Nothing applied yet, a refresh is already re-probing, or no alternative.
+        guard !busy, let current = current, candidates.count >= 2 else {
+            return
+        }
+
+        probeLatency(host: current.server, port: current.port) { [weak self] latency in
+            guard let self = self else { return }
+            if latency != nil {
+                return   // still alive
+            }
+            self.probeLatency(host: current.server, port: current.port) { [weak self] retry in
+                guard let self = self else { return }
+                if retry != nil {
+                    return   // recovered — was a transient blip
+                }
+                // Confirmed down: pick the fastest reachable alternative and switch.
+                self.selectBestCandidate(candidates) { [weak self] best in
+                    guard let self = self, let best = best else { return }
+                    if best.server != current.server || best.port != current.port {
+                        let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: current.ttl)
+                        self.store(cfg)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Request building
