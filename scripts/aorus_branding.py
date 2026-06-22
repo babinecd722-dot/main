@@ -3037,6 +3037,11 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
        (posted by AorusProxyManager after a fresh fetch) and re-applies the
        proxy + drops the connection so the very first launch starts using the
        proxy as soon as the control API responds — without needing a relaunch.
+    3. A connection-status observer mirrors the engine's `proxyHasConnectionIssues`
+       flag into the `aorusgram_proxy_unhealthy_since` defaults key. This is the
+       MTProto-level health beacon that AorusProxyManager's watchdog reads to fail
+       over off a proxy that is degraded but still TCP-reachable (a TCP probe alone
+       can't detect that). Cleared as soon as the connection recovers.
     """
     path = tg / "submodules/TelegramCore/Sources/Account/Account.swift"
     if not path.is_file():
@@ -3107,6 +3112,28 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
         "            }\n"
         "            return ActionDisposable { NotificationCenter.default.removeObserver(aorusObserver) }\n"
         "        }())\n"
+        "        // AorusGram: MTProto-level proxy-health beacon. A TCP probe cannot tell a\n"
+        "        // degraded proxy (still accepts TCP but the MTProto handshake stalls) from a\n"
+        "        // healthy one, so mirror the engine's own connection status into a defaults\n"
+        "        // key that AorusProxyManager's watchdog reads. `proxyHasConnectionIssues` is\n"
+        "        // the exact signal: when it stays set past the manager's threshold the current\n"
+        "        // server is penalised and the client fails over to the best alternative.\n"
+        "        self.managedOperationsDisposable.add(network.connectionStatus.start(next: { status in\n"
+        "            let aorusDefaults = UserDefaults.standard\n"
+        "            let aorusUnhealthyKey = \"aorusgram_proxy_unhealthy_since\"\n"
+        "            if case let .connecting(_, aorusProxyHasIssues) = status, aorusProxyHasIssues {\n"
+        "                // Stamp the first moment issues appeared; keep it until they clear.\n"
+        "                if aorusDefaults.double(forKey: aorusUnhealthyKey) == 0 {\n"
+        "                    aorusDefaults.set(Date().timeIntervalSince1970, forKey: aorusUnhealthyKey)\n"
+        "                }\n"
+        "            } else {\n"
+        "                // Any other state (online, updating, plain connecting, no network)\n"
+        "                // means the proxy itself is not the problem — clear the beacon.\n"
+        "                if aorusDefaults.double(forKey: aorusUnhealthyKey) != 0 {\n"
+        "                    aorusDefaults.set(0, forKey: aorusUnhealthyKey)\n"
+        "                }\n"
+        "            }\n"
+        "        }))\n"
     )
 
     # The full original block we are replacing (monitor_anchor + its body + close).

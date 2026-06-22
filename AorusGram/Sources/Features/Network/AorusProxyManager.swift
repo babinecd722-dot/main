@@ -115,6 +115,18 @@ public final class AorusProxyManager {
     private var lastCandidates: [AorusProxyCandidate] = []
     private var lastProbeReport = "—" // AORUS-DIAG
     private var watchdogTimer: DispatchSourceTimer?
+
+    // MTProto-level health fail-over: the injected connection-status observer writes the
+    // timestamp since the live proxy first reported connection issues (proxyHasConnectionIssues).
+    // A TCP probe can't see this — a degraded proxy still accepts TCP — so when that lasts past
+    // the threshold the current server is penalised (skipped by selection for a while) and we
+    // switch to the best alternative. The penalty expires so a recovered server is reconsidered.
+    private let mtprotoUnhealthyKey = "aorusgram_proxy_unhealthy_since"
+    private let mtprotoUnhealthyThreshold: TimeInterval = 8.0
+    private let failoverCooldown: TimeInterval = 20.0
+    private let serverPenaltyDuration: TimeInterval = 300.0
+    private var penalizedServers: [String: Date] = [:]
+    private var lastFailoverAt: Date = .distantPast
     // Snappy fail-over: check the live proxy every 10s with a short 3s probe. A server
     // taken down for maintenance refuses connections instantly, so a dead proxy is
     // detected and switched in ~10-15s instead of waiting for the hourly refresh.
@@ -262,11 +274,23 @@ public final class AorusProxyManager {
     ///         + a tiny server-`priority` bias (only decisive for near-ties)
     /// Lower score wins. Returns nil if none answer.
     private func selectBestCandidate(_ candidates: [AorusProxyCandidate], completion: @escaping (AorusProxyCandidate?) -> Void) {
+        // Skip servers recently penalised for MTProto-level failures (a TCP probe can't
+        // tell they're broken). Fall back to the full list if every server is penalised.
+        let nowDate = Date()
+        self.lock.lock()
+        self.penalizedServers = self.penalizedServers.filter { $0.value > nowDate }
+        let penalized = self.penalizedServers
+        self.lock.unlock()
+        var pool = candidates.filter { penalized[self.serverKey($0.server, $0.port)] == nil }
+        if pool.isEmpty {
+            pool = candidates
+        }
+
         let group = DispatchGroup()
         var scored: [(candidate: AorusProxyCandidate, result: ProbeResult, score: Double)] = []
         let resultsLock = NSLock()
 
-        for candidate in candidates {
+        for candidate in pool {
             group.enter()
             probeCandidate(candidate) { result in
                 if let result = result {
@@ -293,7 +317,7 @@ public final class AorusProxyManager {
                 let lossN = self.probeAttempts - item.result.successes
                 reportLines.append("\(item.candidate.region ?? "?"): ping=\(ms)мс loss=\(lossN)/\(self.probeAttempts) jit=\(jit)мс")
             }
-            for c in candidates where !sorted.contains(where: { $0.candidate.server == c.server && $0.candidate.port == c.port }) {
+            for c in pool where !sorted.contains(where: { $0.candidate.server == c.server && $0.candidate.port == c.port }) {
                 reportLines.append("\(c.region ?? "?"): недоступен")
             }
             self.lock.lock(); self.lastProbeReport = reportLines.isEmpty ? "—" : reportLines.joined(separator: "\n"); self.lock.unlock()
@@ -384,6 +408,10 @@ public final class AorusProxyManager {
         return (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0
     }
 
+    private func serverKey(_ host: String, _ port: Int) -> String {
+        return "\(host):\(port)"
+    }
+
     // MARK: - Fast fail-over watchdog
 
     /// Starts the periodic watchdog (idempotent). It only acts when a proxy is applied
@@ -414,10 +442,35 @@ public final class AorusProxyManager {
         let busy = inFlight
         let current = cached
         let candidates = lastCandidates
+        let lastFailover = lastFailoverAt
         lock.unlock()
 
         // Nothing applied yet, a refresh is already re-probing, or no alternative.
         guard !busy, let current = current, candidates.count >= 2 else {
+            return
+        }
+
+        // MTProto-level health (set by the injected connection-status observer): if the live
+        // proxy has had connection issues past the threshold — which a TCP probe can't see,
+        // because a degraded proxy still accepts TCP — penalise this server (so selection
+        // skips it for a while) and switch to the best alternative.
+        let now = Date()
+        let unhealthySince = UserDefaults.standard.double(forKey: mtprotoUnhealthyKey)
+        if unhealthySince > 0,
+           now.timeIntervalSince1970 - unhealthySince > mtprotoUnhealthyThreshold,
+           now.timeIntervalSince(lastFailover) > failoverCooldown {
+            lock.lock()
+            penalizedServers[serverKey(current.server, current.port)] = now.addingTimeInterval(serverPenaltyDuration)
+            lastFailoverAt = now
+            lock.unlock()
+            UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey) // re-arms if the new proxy is also bad
+            selectBestCandidate(candidates) { [weak self] best in
+                guard let self = self, let best = best else { return }
+                if best.server != current.server || best.port != current.port {
+                    let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: current.ttl)
+                    self.store(cfg)
+                }
+            }
             return
         }
 
