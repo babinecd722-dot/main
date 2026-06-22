@@ -386,7 +386,7 @@ final class ATunnelStatusViewController: UIViewController {
         contentView.addSubview(shieldContainerView)
 
         // Shield icon
-        let cfg = UIImage.SymbolConfiguration(pointSize: 48, weight: .fill)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 48, weight: .semibold)
         shieldIconView.image = UIImage(systemName: "shield.fill", withConfiguration: cfg)
         shieldIconView.tintColor = purple
         shieldIconView.contentMode = .scaleAspectFit
@@ -469,7 +469,7 @@ final class ATunnelStatusViewController: UIViewController {
         callCard.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(callCard)
 
-        let cfg = UIImage.SymbolConfiguration(pointSize: 20, weight: .fill)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
         callPhoneIcon.image = UIImage(systemName: "phone.fill", withConfiguration: cfg)
         callPhoneIcon.tintColor = purple
         callPhoneIcon.contentMode = .scaleAspectFit
