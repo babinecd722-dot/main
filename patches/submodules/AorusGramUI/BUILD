@@ -20,6 +20,8 @@ swift_library(
         "//submodules/PresentationDataUtils:PresentationDataUtils",
         "//submodules/AccountContext:AccountContext",
         "//submodules/AppBundle:AppBundle",
+        "//submodules/MediaResources:MediaResources",
+        "//submodules/AnimatedStickerNode:AnimatedStickerNode",
     ],
     visibility = [
         "//visibility:public",

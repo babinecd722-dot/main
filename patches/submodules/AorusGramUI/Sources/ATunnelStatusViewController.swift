@@ -1,6 +1,10 @@
 import Foundation
 import UIKit
 import TelegramPresentationData
+import AsyncDisplayKit
+import SwiftSignalKit
+import AnimatedStickerNode
+import MediaResources
 
 // MARK: - Data Model
 
@@ -19,237 +23,284 @@ private struct ATunnelDiag: Codable {
     let updatedAt: Double
 }
 
-// MARK: - ATunnelFlowView
+// MARK: - Duck animation (TGS)
+// Same pattern as SubscriptionDuckView — materialize base64 to tmp, feed LocalTgsSource.
 
-private enum ATunnelFlowState {
-    case active
-    case down
-    case unknown
+private final class ATunnelLocalTgsSource: AnimatedStickerNodeSource {
+    let fitzModifier: EmojiFitzModifier? = nil
+    let isVideo: Bool = false
+    private let path: String
+    init(path: String) { self.path = path }
+    func cachedDataPath(width: Int, height: Int) -> Signal<(String, Bool), NoError> { .never() }
+    func directDataPath(attemptSynchronously: Bool) -> Signal<String?, NoError> { .single(path) }
 }
 
-private final class ATunnelFlowView: UIView {
+private final class ATunnelDuckView: UIView {
+    private let node = DefaultAnimatedStickerNodeImpl()
 
+    init(renderSizePx: Int = 280) {
+        super.init(frame: .zero)
+        addSubview(node.view)
+        if let path = ATunnelDuckView.materialize() {
+            node.setup(
+                source: ATunnelLocalTgsSource(path: path),
+                width: renderSizePx, height: renderSizePx,
+                playbackMode: .loop,
+                mode: .direct(cachePathPrefix: nil)
+            )
+            node.visibility = true
+        }
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        node.frame = bounds
+        node.updateLayout(size: bounds.size)
+    }
+
+    private static func materialize() -> String? {
+        let dir = NSTemporaryDirectory() + "aorus_atunnel_anim"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let path = dir + "/duck.tgs"
+        if FileManager.default.fileExists(atPath: path) { return path }
+        guard let data = Data(base64Encoded: ATunnelDuckAsset.b64), !data.isEmpty else { return nil }
+        try? data.write(to: URL(fileURLWithPath: path))
+        return path
+    }
+}
+
+// MARK: - Embedded duck asset
+private enum ATunnelDuckAsset {
+    static let b64 = "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"
+}
+
+// MARK: - Flag view (drawn stripes, no emoji)
+
+private final class FlagView: UIView {
+    init(regionCode: String) {
+        super.init(frame: .zero)
+        layer.cornerRadius = 3
+        layer.masksToBounds = true
+        setupStripes(for: regionCode.uppercased())
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setupStripes(for code: String) {
+        switch code {
+        case "DE", "GERMANY", "ГЕРМАНИЯ":
+            // Black / Red / Gold horizontal
+            addStripe(UIColor(white: 0.07, alpha: 1), at: 0)
+            addStripe(UIColor(red: 0.84, green: 0.00, blue: 0.12, alpha: 1), at: 1)
+            addStripe(UIColor(red: 1.00, green: 0.80, blue: 0.00, alpha: 1), at: 2)
+        case "FI", "FINLAND", "ФИНЛЯНДИЯ":
+            // White + blue cross
+            backgroundColor = .white
+            let hBar = UIView()
+            hBar.backgroundColor = UIColor(red: 0.00, green: 0.20, blue: 0.60, alpha: 1)
+            hBar.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(hBar)
+            let vBar = UIView()
+            vBar.backgroundColor = UIColor(red: 0.00, green: 0.20, blue: 0.60, alpha: 1)
+            vBar.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(vBar)
+            NSLayoutConstraint.activate([
+                hBar.leadingAnchor.constraint(equalTo: leadingAnchor),
+                hBar.trailingAnchor.constraint(equalTo: trailingAnchor),
+                hBar.centerYAnchor.constraint(equalTo: centerYAnchor),
+                hBar.heightAnchor.constraint(equalTo: heightAnchor, multiplier: 0.33),
+                vBar.topAnchor.constraint(equalTo: topAnchor),
+                vBar.bottomAnchor.constraint(equalTo: bottomAnchor),
+                vBar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+                vBar.widthAnchor.constraint(equalTo: heightAnchor, multiplier: 0.33),
+            ])
+        default:
+            backgroundColor = UIColor(white: 0.3, alpha: 1)
+        }
+    }
+
+    private func addStripe(_ color: UIColor, at index: Int) {
+        let stripe = UIView()
+        stripe.backgroundColor = color
+        stripe.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stripe)
+        NSLayoutConstraint.activate([
+            stripe.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stripe.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stripe.topAnchor.constraint(equalTo: topAnchor,
+                constant: CGFloat(index) * (bounds.height > 0 ? bounds.height / 3 : 10)),
+            stripe.heightAnchor.constraint(equalTo: heightAnchor, multiplier: 1.0 / 3.0),
+        ])
+    }
+
+    // Stripes need height at layout time — redraw after bounds are set
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // For DE stripes: reframe them by thirds
+        let stripes = subviews.filter { $0.backgroundColor != .white }
+        if stripes.count == 3 {
+            let h = bounds.height / 3
+            for (i, s) in stripes.enumerated() {
+                s.frame = CGRect(x: 0, y: CGFloat(i) * h, width: bounds.width, height: h)
+            }
+        }
+    }
+}
+
+// MARK: - Flow View (Phone → ATunnel → Telegram)
+
+private enum ATunnelFlowState { case active, down, unknown }
+
+private final class ATunnelFlowView: UIView {
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
 
     private let leftIcon = UIImageView()
-    private let centerContainer = UIView()
-    private let centerIcon = UIImageView()
+    private let centerBadge = UIView()
     private let centerLabel = UILabel()
     private let rightIcon = UIImageView()
 
-    private let lineLeftLayer = CAShapeLayer()
-    private let lineRightLayer = CAShapeLayer()
-    private let arrowLeftLayer = CAShapeLayer()
-    private let arrowRightLayer = CAShapeLayer()
-    private let crossLayer1 = CAShapeLayer()
-    private let crossLayer2 = CAShapeLayer()
+    private let lineLeft  = CAShapeLayer()
+    private let lineRight = CAShapeLayer()
+    private let arrowLeft  = CAShapeLayer()
+    private let arrowRight = CAShapeLayer()
+    private let cross1 = CAShapeLayer()
+    private let cross2 = CAShapeLayer()
 
-    var state: ATunnelFlowState = .unknown {
-        didSet { applyState() }
-    }
+    var state: ATunnelFlowState = .unknown { didSet { applyState() } }
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setup()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setup()
-    }
+    override init(frame: CGRect) { super.init(frame: frame); setup() }
+    required init?(coder: NSCoder) { super.init(coder: coder); setup() }
 
     private func setup() {
         backgroundColor = .clear
 
-        let cfg = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
-        leftIcon.image = UIImage(systemName: "iphone", withConfiguration: cfg)
+        let cfgPhone = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        leftIcon.image = UIImage(systemName: "iphone", withConfiguration: cfgPhone)
         leftIcon.contentMode = .scaleAspectFit
-        leftIcon.tintColor = UIColor.secondaryLabel
 
-        let cfgCenter = UIImage.SymbolConfiguration(pointSize: 26, weight: .regular)
-        centerIcon.image = UIImage(systemName: "shield.fill", withConfiguration: cfgCenter)
-        centerIcon.contentMode = .scaleAspectFit
-        centerIcon.tintColor = UIColor.secondaryLabel
-
+        // Centre badge: purple circle with "A"
+        centerBadge.layer.cornerRadius = 18
+        centerBadge.backgroundColor = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1)
         centerLabel.text = "A"
-        centerLabel.font = .systemFont(ofSize: 13, weight: .bold)
+        centerLabel.font = .systemFont(ofSize: 14, weight: .bold)
         centerLabel.textColor = .white
         centerLabel.textAlignment = .center
+        centerBadge.addSubview(centerLabel)
 
-        let cfgRight = UIImage.SymbolConfiguration(pointSize: 20, weight: .regular)
-        rightIcon.image = UIImage(systemName: "paperplane.fill", withConfiguration: cfgRight)
+        // Right: Telegram-style circle send icon
+        let cfgTg = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        rightIcon.image = UIImage(systemName: "paperplane.circle.fill", withConfiguration: cfgTg)
         rightIcon.contentMode = .scaleAspectFit
-        rightIcon.tintColor = UIColor.secondaryLabel
 
-        centerContainer.addSubview(centerIcon)
-        centerContainer.addSubview(centerLabel)
+        [leftIcon, centerBadge, rightIcon].forEach { addSubview($0) }
 
-        [leftIcon, centerContainer, rightIcon].forEach { addSubview($0) }
-
-        for layer in [lineLeftLayer, lineRightLayer, arrowLeftLayer, arrowRightLayer] {
-            layer.fillColor = UIColor.clear.cgColor
-            layer.lineWidth = 1.5
-            layer.lineDashPattern = [5, 3]
-            self.layer.addSublayer(layer)
+        for l in [lineLeft, lineRight] {
+            l.fillColor = UIColor.clear.cgColor
+            l.lineWidth = 1.5
+            l.lineDashPattern = [6, 4]
+            layer.addSublayer(l)
         }
-        arrowLeftLayer.lineDashPattern = nil
-        arrowRightLayer.lineDashPattern = nil
-
-        for layer in [crossLayer1, crossLayer2] {
-            layer.fillColor = UIColor.clear.cgColor
-            layer.strokeColor = UIColor.systemRed.cgColor
-            layer.lineWidth = 2.5
-            layer.lineCap = .round
-            layer.isHidden = true
-            self.layer.addSublayer(layer)
+        for l in [arrowLeft, arrowRight] {
+            l.fillColor = UIColor.clear.cgColor
+            l.lineWidth = 1.5
+            l.lineCap = .round
+            layer.addSublayer(l)
         }
-
+        for l in [cross1, cross2] {
+            l.fillColor = UIColor.clear.cgColor
+            l.strokeColor = UIColor.systemRed.cgColor
+            l.lineWidth = 2.5
+            l.lineCap = .round
+            l.isHidden = true
+            layer.addSublayer(l)
+        }
         applyState()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-
         let h = bounds.height
         let w = bounds.width
-        let iconSize: CGFloat = 32
-        let centerSize: CGFloat = 36
-        let centerX = w / 2
-
-        leftIcon.frame = CGRect(x: 8, y: (h - iconSize) / 2, width: iconSize, height: iconSize)
-        centerContainer.frame = CGRect(x: centerX - centerSize / 2, y: (h - centerSize) / 2, width: centerSize, height: centerSize)
-        rightIcon.frame = CGRect(x: w - 8 - iconSize, y: (h - iconSize) / 2, width: iconSize, height: iconSize)
-
-        centerIcon.frame = centerContainer.bounds
-        centerLabel.frame = centerContainer.bounds
-
+        let iconW: CGFloat = 32
+        let badgeW: CGFloat = 36
+        let cx = w / 2
         let midY = h / 2
 
-        let leftEdge = leftIcon.frame.maxX + 4
-        let centerLeft = centerContainer.frame.minX - 4
-        let centerRight = centerContainer.frame.maxX + 4
-        let rightEdge = rightIcon.frame.minX - 4
+        leftIcon.frame  = CGRect(x: 8, y: (h - iconW) / 2, width: iconW, height: iconW)
+        centerBadge.frame = CGRect(x: cx - badgeW / 2, y: (h - badgeW) / 2, width: badgeW, height: badgeW)
+        centerBadge.layer.cornerRadius = badgeW / 2
+        centerLabel.frame = centerBadge.bounds
+        rightIcon.frame = CGRect(x: w - 8 - iconW, y: (h - iconW) / 2, width: iconW, height: iconW)
 
-        drawLine(layer: lineLeftLayer, from: CGPoint(x: leftEdge, y: midY), to: CGPoint(x: centerLeft, y: midY))
-        drawLine(layer: lineRightLayer, from: CGPoint(x: centerRight, y: midY), to: CGPoint(x: rightEdge, y: midY))
+        let lE = leftIcon.frame.maxX + 6
+        let cL = centerBadge.frame.minX - 6
+        let cR = centerBadge.frame.maxX + 6
+        let rE = rightIcon.frame.minX - 6
 
-        drawArrowHead(layer: arrowLeftLayer, at: CGPoint(x: centerLeft, y: midY), pointing: .right)
-        drawArrowHead(layer: arrowRightLayer, at: CGPoint(x: rightEdge, y: midY), pointing: .right)
+        drawLine(lineLeft,  from: CGPoint(x: lE, y: midY), to: CGPoint(x: cL, y: midY))
+        drawLine(lineRight, from: CGPoint(x: cR, y: midY), to: CGPoint(x: rE, y: midY))
+        drawArrow(arrowLeft,  tip: CGPoint(x: cL, y: midY))
+        drawArrow(arrowRight, tip: CGPoint(x: rE, y: midY))
 
-        updateCrossLayers()
+        let r = centerBadge.frame
+        let inset: CGFloat = 8
+        let p = UIBezierPath(); p.move(to: CGPoint(x: r.minX + inset, y: r.minY + inset))
+        p.addLine(to: CGPoint(x: r.maxX - inset, y: r.maxY - inset))
+        cross1.path = p.cgPath
+        let p2 = UIBezierPath(); p2.move(to: CGPoint(x: r.maxX - inset, y: r.minY + inset))
+        p2.addLine(to: CGPoint(x: r.minX + inset, y: r.maxY - inset))
+        cross2.path = p2.cgPath
     }
 
-    private func drawLine(layer: CAShapeLayer, from: CGPoint, to: CGPoint) {
-        let path = UIBezierPath()
-        path.move(to: from)
-        path.addLine(to: to)
-        layer.path = path.cgPath
+    private func drawLine(_ l: CAShapeLayer, from: CGPoint, to: CGPoint) {
+        let p = UIBezierPath(); p.move(to: from); p.addLine(to: to); l.path = p.cgPath
     }
 
-    private enum Direction { case right, left }
-
-    private func drawArrowHead(layer: CAShapeLayer, at point: CGPoint, pointing direction: Direction) {
-        let size: CGFloat = 6
-        let path = UIBezierPath()
-        switch direction {
-        case .right:
-            path.move(to: CGPoint(x: point.x - size, y: point.y - size / 2))
-            path.addLine(to: point)
-            path.addLine(to: CGPoint(x: point.x - size, y: point.y + size / 2))
-        case .left:
-            path.move(to: CGPoint(x: point.x + size, y: point.y - size / 2))
-            path.addLine(to: point)
-            path.addLine(to: CGPoint(x: point.x + size, y: point.y + size / 2))
-        }
-        layer.path = path.cgPath
-        layer.lineDashPattern = nil
-    }
-
-    private func updateCrossLayers() {
-        let r = centerContainer.frame
-        let inset: CGFloat = 6
-        let p1 = CGPoint(x: r.minX + inset, y: r.minY + inset)
-        let p2 = CGPoint(x: r.maxX - inset, y: r.maxY - inset)
-        let p3 = CGPoint(x: r.maxX - inset, y: r.minY + inset)
-        let p4 = CGPoint(x: r.minX + inset, y: r.maxY - inset)
-
-        let path1 = UIBezierPath()
-        path1.move(to: p1)
-        path1.addLine(to: p2)
-        crossLayer1.path = path1.cgPath
-
-        let path2 = UIBezierPath()
-        path2.move(to: p3)
-        path2.addLine(to: p4)
-        crossLayer2.path = path2.cgPath
+    private func drawArrow(_ l: CAShapeLayer, tip: CGPoint) {
+        let s: CGFloat = 6
+        let p = UIBezierPath()
+        p.move(to: CGPoint(x: tip.x - s, y: tip.y - s / 2))
+        p.addLine(to: tip)
+        p.addLine(to: CGPoint(x: tip.x - s, y: tip.y + s / 2))
+        l.path = p.cgPath
     }
 
     private func applyState() {
-        removeLineAnimations()
-
+        lineLeft.removeAllAnimations(); lineRight.removeAllAnimations()
         switch state {
         case .active:
-            let color = purple.cgColor
-            for l in [lineLeftLayer, lineRightLayer] {
-                l.strokeColor = color
-                l.lineDashPattern = [5, 3]
-            }
-            for l in [arrowLeftLayer, arrowRightLayer] {
-                l.strokeColor = color
-            }
+            let c = purple.cgColor
+            [lineLeft, lineRight].forEach { $0.strokeColor = c; $0.lineDashPattern = [6, 4] }
+            [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
             leftIcon.tintColor = purple
-            centerIcon.tintColor = purple
+            centerBadge.backgroundColor = purple
             rightIcon.tintColor = purple
-            crossLayer1.isHidden = true
-            crossLayer2.isHidden = true
-            addFlowAnimation(to: lineLeftLayer)
-            addFlowAnimation(to: lineRightLayer)
-
+            cross1.isHidden = true; cross2.isHidden = true
+            [lineLeft, lineRight].forEach { addFlow($0) }
         case .down:
-            let color = UIColor.systemRed.cgColor
-            for l in [lineLeftLayer, lineRightLayer] {
-                l.strokeColor = color
-                l.lineDashPattern = [5, 3]
-            }
-            for l in [arrowLeftLayer, arrowRightLayer] {
-                l.strokeColor = color
-            }
+            let c = UIColor.systemRed.cgColor
+            [lineLeft, lineRight].forEach { $0.strokeColor = c; $0.lineDashPattern = [6, 4] }
+            [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
             leftIcon.tintColor = .systemRed
-            centerIcon.tintColor = .systemRed
+            centerBadge.backgroundColor = .systemRed
             rightIcon.tintColor = .systemRed
-            crossLayer1.isHidden = false
-            crossLayer2.isHidden = false
-
+            cross1.isHidden = false; cross2.isHidden = false
         case .unknown:
-            let color = UIColor.secondaryLabel.cgColor
-            for l in [lineLeftLayer, lineRightLayer] {
-                l.strokeColor = color
-                l.lineDashPattern = [5, 3]
-            }
-            for l in [arrowLeftLayer, arrowRightLayer] {
-                l.strokeColor = color
-            }
-            leftIcon.tintColor = .secondaryLabel
-            centerIcon.tintColor = .secondaryLabel
-            rightIcon.tintColor = .secondaryLabel
-            crossLayer1.isHidden = true
-            crossLayer2.isHidden = true
+            let c = UIColor(white: 0.35, alpha: 1).cgColor
+            [lineLeft, lineRight].forEach { $0.strokeColor = c; $0.lineDashPattern = [6, 4] }
+            [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
+            leftIcon.tintColor = UIColor(white: 0.35, alpha: 1)
+            centerBadge.backgroundColor = UIColor(white: 0.25, alpha: 1)
+            rightIcon.tintColor = UIColor(white: 0.35, alpha: 1)
+            cross1.isHidden = true; cross2.isHidden = true
         }
     }
 
-    private func addFlowAnimation(to layer: CAShapeLayer) {
-        let anim = CABasicAnimation(keyPath: "lineDashPhase")
-        anim.fromValue = 0
-        anim.toValue = -10
-        anim.duration = 0.6
-        anim.repeatCount = .infinity
-        anim.isRemovedOnCompletion = false
-        layer.add(anim, forKey: "flow")
-    }
-
-    private func removeLineAnimations() {
-        lineLeftLayer.removeAllAnimations()
-        lineRightLayer.removeAllAnimations()
+    private func addFlow(_ l: CAShapeLayer) {
+        let a = CABasicAnimation(keyPath: "lineDashPhase")
+        a.fromValue = 0; a.toValue = -10
+        a.duration = 0.6; a.repeatCount = .infinity; a.isRemovedOnCompletion = false
+        l.add(a, forKey: "flow")
     }
 }
 
@@ -259,94 +310,91 @@ final class ATunnelStatusViewController: UIViewController {
 
     private let theme: PresentationTheme
     private let isRu: Bool
-
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
+    private let cardBg = UIColor(white: 0.10, alpha: 1.0)
 
-    // MARK: UI
-    private let scrollView = UIScrollView()
+    private let scrollView  = UIScrollView()
     private let contentView = UIView()
 
-    // Header
-    private let glowLayer = CALayer()
-    private let shieldContainerView = UIView()
-    private let shieldIconView = UIImageView()
-    private let shieldLetterLabel = UILabel()
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
+    private let duckView       = ATunnelDuckView(renderSizePx: 280)
+    private let titleLabel     = UILabel()
+    private let subtitleLabel  = UILabel()
 
-    // Servers
     private let serversSectionLabel = UILabel()
-    private let serverCardsStack = UIStackView()
+    private let serverCardsStack    = UIStackView()
 
-    // Calls
     private let callsSectionLabel = UILabel()
-    private let callCard = UIView()
-    private let callPhoneIcon = UIImageView()
-    private let callTitleLabel = UILabel()
-    private let callStatusIcon = UIImageView()
+    private let callCard          = UIView()
+    private let callPhoneIcon     = UIImageView()
+    private let callTitleLabel    = UILabel()
+    private let callStatusIcon    = UIImageView()
 
-    // Footer
     private let updatedLabel = UILabel()
-    private let diagButton = UIButton(type: .system)
+    private let diagButton   = UIButton(type: .system)
 
-    // State
     private var diag: ATunnelDiag?
     private var refreshTimer: Timer?
     private var serverCardViews: [UIView] = []
-
-    // MARK: - Init
+    private var didPlayEntrance = false
 
     init(theme: PresentationTheme, isRu: Bool) {
         self.theme = theme
-        self.isRu = isRu
+        self.isRu  = isRu
         super.init(nibName: nil, bundle: nil)
-        self.title = "ATunnel"
+        title = "ATunnel"
     }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) not supported")
-    }
+    required init?(coder: NSCoder) { fatalError() }
 
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        overrideUserInterfaceStyle = .dark
+        view.backgroundColor = .black
         setupNavigationBar()
-        setupViews()
+        setupScrollView()
+        setupHeader()
+        setupServerSection()
+        setupCallSection()
+        setupFooter()
         loadData()
         buildServerCards()
         applyData()
     }
 
-    // Themed nav bar + system close (X) button. The page is presented modally inside a
-    // plain UIKit UINavigationController (Telegram's node-based nav can't host a plain
-    // UIViewController), so — exactly like the subscription screens (LicenseGate) — the
-    // modal root is dismissed with a standard .close item. Bar styling follows the
-    // current Telegram theme.
-    private func setupNavigationBar() {
-        navigationItem.leftBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .close, target: self, action: #selector(closePage))
-
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = theme.list.plainBackgroundColor
-        appearance.titleTextAttributes = [.foregroundColor: theme.list.itemPrimaryTextColor]
-        appearance.largeTitleTextAttributes = [.foregroundColor: theme.list.itemPrimaryTextColor]
-        navigationItem.standardAppearance = appearance
-        navigationItem.scrollEdgeAppearance = appearance
-        navigationItem.compactAppearance = appearance
-        navigationController?.navigationBar.tintColor = purple
-    }
-
-    @objc private func closePage() {
-        dismiss(animated: true)
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard !didPlayEntrance else { return }
+        [duckView, titleLabel, subtitleLabel, serversSectionLabel,
+         serverCardsStack, callsSectionLabel, callCard, updatedLabel, diagButton].forEach {
+            $0.alpha = 0
+            $0.transform = CGAffineTransform(translationX: 0, y: 20)
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        startPulse()
-        animateCardsIn()
         startRefreshTimer()
+        guard !didPlayEntrance else { return }
+        didPlayEntrance = true
+
+        // Duck pops in
+        UIView.animate(withDuration: 0.6, delay: 0,
+                       usingSpringWithDamping: 0.6, initialSpringVelocity: 0.6,
+                       options: .allowUserInteraction) {
+            self.duckView.alpha = 1
+            self.duckView.transform = .identity
+        }
+        // Rest cascades up
+        let rest: [UIView] = [titleLabel, subtitleLabel, serversSectionLabel,
+                              serverCardsStack, callsSectionLabel, callCard, updatedLabel, diagButton]
+        for (i, v) in rest.enumerated() {
+            UIView.animate(withDuration: 0.5, delay: 0.1 + Double(i) * 0.05,
+                           usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3,
+                           options: .allowUserInteraction) {
+                v.alpha = 1; v.transform = .identity
+            }
+        }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -354,26 +402,27 @@ final class ATunnelStatusViewController: UIViewController {
         stopRefreshTimer()
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        // Update glow position only before the animation starts (no animation key yet).
-        // Resetting position while the pulse animation is running causes a visual jerk.
-        if glowLayer.animation(forKey: "pulse") == nil {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            glowLayer.position = shieldContainerView.layer.position
-            CATransaction.commit()
-        }
+    // MARK: - Nav bar
+
+    private func setupNavigationBar() {
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .close, target: self, action: #selector(closePage))
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        navigationItem.standardAppearance = appearance
+        navigationItem.scrollEdgeAppearance = appearance
+        navigationController?.navigationBar.tintColor = purple
     }
 
-    // MARK: - Setup
+    @objc private func closePage() { dismiss(animated: true) }
 
-    private func setupViews() {
-        view.backgroundColor = theme.list.plainBackgroundColor
+    // MARK: - Layout
 
-        // Scroll
+    private func setupScrollView() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.alwaysBounceVertical = true
+        scrollView.showsVerticalScrollIndicator = false
         view.addSubview(scrollView)
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -381,7 +430,6 @@ final class ATunnelStatusViewController: UIViewController {
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-
         contentView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.addSubview(contentView)
         NSLayoutConstraint.activate([
@@ -391,45 +439,17 @@ final class ATunnelStatusViewController: UIViewController {
             contentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
             contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
         ])
-
-        setupHeader()
-        setupServerSection()
-        setupCallSection()
-        setupFooter()
-        layoutContentStack()
     }
 
     private func setupHeader() {
-        // Glow layer
-        glowLayer.backgroundColor = purple.withAlphaComponent(0.35).cgColor
-        glowLayer.cornerRadius = 40
-        glowLayer.bounds = CGRect(x: 0, y: 0, width: 80, height: 80)
-        contentView.layer.addSublayer(glowLayer)
-
-        // Shield container
-        shieldContainerView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(shieldContainerView)
-
-        // Shield icon
-        let cfg = UIImage.SymbolConfiguration(pointSize: 48, weight: .semibold)
-        shieldIconView.image = UIImage(systemName: "shield.fill", withConfiguration: cfg)
-        shieldIconView.tintColor = purple
-        shieldIconView.contentMode = .scaleAspectFit
-        shieldIconView.translatesAutoresizingMaskIntoConstraints = false
-        shieldContainerView.addSubview(shieldIconView)
-
-        // "A" label on shield
-        shieldLetterLabel.text = "A"
-        shieldLetterLabel.font = .systemFont(ofSize: 22, weight: .bold)
-        shieldLetterLabel.textColor = .white
-        shieldLetterLabel.textAlignment = .center
-        shieldLetterLabel.translatesAutoresizingMaskIntoConstraints = false
-        shieldContainerView.addSubview(shieldLetterLabel)
+        // Duck
+        duckView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(duckView)
 
         // Title
         titleLabel.text = "ATunnel"
-        titleLabel.font = .systemFont(ofSize: 28, weight: .bold)
-        titleLabel.textColor = purple
+        titleLabel.font = .systemFont(ofSize: 26, weight: .bold)
+        titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(titleLabel)
@@ -437,28 +457,19 @@ final class ATunnelStatusViewController: UIViewController {
         // Subtitle
         subtitleLabel.text = isRu ? "Скоростная безопасная маршрутизация" : "Fast secure routing"
         subtitleLabel.font = .systemFont(ofSize: 15, weight: .regular)
-        subtitleLabel.textColor = theme.list.itemSecondaryTextColor
+        subtitleLabel.textColor = UIColor(white: 0.6, alpha: 1)
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 2
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(subtitleLabel)
 
         NSLayoutConstraint.activate([
-            shieldContainerView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 40),
-            shieldContainerView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            shieldContainerView.widthAnchor.constraint(equalToConstant: 72),
-            shieldContainerView.heightAnchor.constraint(equalToConstant: 72),
+            duckView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            duckView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            duckView.widthAnchor.constraint(equalToConstant: 140),
+            duckView.heightAnchor.constraint(equalToConstant: 140),
 
-            shieldIconView.centerXAnchor.constraint(equalTo: shieldContainerView.centerXAnchor),
-            shieldIconView.centerYAnchor.constraint(equalTo: shieldContainerView.centerYAnchor),
-            shieldIconView.widthAnchor.constraint(equalToConstant: 56),
-            shieldIconView.heightAnchor.constraint(equalToConstant: 56),
-
-            shieldLetterLabel.centerXAnchor.constraint(equalTo: shieldContainerView.centerXAnchor),
-            shieldLetterLabel.centerYAnchor.constraint(equalTo: shieldContainerView.centerYAnchor, constant: 2),
-            shieldLetterLabel.widthAnchor.constraint(equalTo: shieldContainerView.widthAnchor),
-
-            titleLabel.topAnchor.constraint(equalTo: shieldContainerView.bottomAnchor, constant: 16),
+            titleLabel.topAnchor.constraint(equalTo: duckView.bottomAnchor, constant: 12),
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
             titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
 
@@ -470,8 +481,8 @@ final class ATunnelStatusViewController: UIViewController {
 
     private func setupServerSection() {
         serversSectionLabel.text = isRu ? "СЕРВЕРЫ" : "SERVERS"
-        serversSectionLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        serversSectionLabel.textColor = theme.list.itemSecondaryTextColor
+        serversSectionLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        serversSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
         serversSectionLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(serversSectionLabel)
 
@@ -479,23 +490,33 @@ final class ATunnelStatusViewController: UIViewController {
         serverCardsStack.spacing = 10
         serverCardsStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(serverCardsStack)
+
+        NSLayoutConstraint.activate([
+            serversSectionLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 28),
+            serversSectionLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            serversSectionLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            serverCardsStack.topAnchor.constraint(equalTo: serversSectionLabel.bottomAnchor, constant: 8),
+            serverCardsStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            serverCardsStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+        ])
     }
 
     private func setupCallSection() {
         callsSectionLabel.text = isRu ? "ЗВОНКИ" : "CALLS"
-        callsSectionLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        callsSectionLabel.textColor = theme.list.itemSecondaryTextColor
+        callsSectionLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        callsSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
         callsSectionLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(callsSectionLabel)
 
-        callCard.backgroundColor = theme.list.itemBlocksBackgroundColor
+        callCard.backgroundColor = cardBg
         callCard.layer.cornerRadius = 14
-        callCard.layer.masksToBounds = true
+        callCard.layer.cornerCurve = .continuous
         callCard.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(callCard)
 
-        let cfg = UIImage.SymbolConfiguration(pointSize: 20, weight: .semibold)
-        callPhoneIcon.image = UIImage(systemName: "phone.fill", withConfiguration: cfg)
+        let cfgPhone = UIImage.SymbolConfiguration(pointSize: 20, weight: .medium)
+        callPhoneIcon.image = UIImage(systemName: "phone.fill", withConfiguration: cfgPhone)
         callPhoneIcon.tintColor = purple
         callPhoneIcon.contentMode = .scaleAspectFit
         callPhoneIcon.translatesAutoresizingMaskIntoConstraints = false
@@ -503,24 +524,31 @@ final class ATunnelStatusViewController: UIViewController {
 
         callTitleLabel.text = isRu ? "Маршрутизация звонков" : "Call routing"
         callTitleLabel.font = .systemFont(ofSize: 15, weight: .medium)
-        callTitleLabel.textColor = theme.list.itemPrimaryTextColor
+        callTitleLabel.textColor = .white
         callTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         callCard.addSubview(callTitleLabel)
 
-        let cfgStatus = UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
+        let cfgStatus = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
         callStatusIcon.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: cfgStatus)
-        callStatusIcon.tintColor = .systemGreen
+        callStatusIcon.tintColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
         callStatusIcon.contentMode = .scaleAspectFit
         callStatusIcon.translatesAutoresizingMaskIntoConstraints = false
         callCard.addSubview(callStatusIcon)
 
         NSLayoutConstraint.activate([
+            callsSectionLabel.topAnchor.constraint(equalTo: serverCardsStack.bottomAnchor, constant: 28),
+            callsSectionLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            callsSectionLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            callCard.topAnchor.constraint(equalTo: callsSectionLabel.bottomAnchor, constant: 8),
+            callCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            callCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             callCard.heightAnchor.constraint(equalToConstant: 56),
 
             callPhoneIcon.leadingAnchor.constraint(equalTo: callCard.leadingAnchor, constant: 16),
             callPhoneIcon.centerYAnchor.constraint(equalTo: callCard.centerYAnchor),
-            callPhoneIcon.widthAnchor.constraint(equalToConstant: 28),
-            callPhoneIcon.heightAnchor.constraint(equalToConstant: 28),
+            callPhoneIcon.widthAnchor.constraint(equalToConstant: 26),
+            callPhoneIcon.heightAnchor.constraint(equalToConstant: 26),
 
             callTitleLabel.leadingAnchor.constraint(equalTo: callPhoneIcon.trailingAnchor, constant: 12),
             callTitleLabel.centerYAnchor.constraint(equalTo: callCard.centerYAnchor),
@@ -528,14 +556,14 @@ final class ATunnelStatusViewController: UIViewController {
 
             callStatusIcon.trailingAnchor.constraint(equalTo: callCard.trailingAnchor, constant: -16),
             callStatusIcon.centerYAnchor.constraint(equalTo: callCard.centerYAnchor),
-            callStatusIcon.widthAnchor.constraint(equalToConstant: 28),
-            callStatusIcon.heightAnchor.constraint(equalToConstant: 28),
+            callStatusIcon.widthAnchor.constraint(equalToConstant: 26),
+            callStatusIcon.heightAnchor.constraint(equalToConstant: 26),
         ])
     }
 
     private func setupFooter() {
         updatedLabel.font = .systemFont(ofSize: 13, weight: .regular)
-        updatedLabel.textColor = theme.list.itemSecondaryTextColor
+        updatedLabel.textColor = UIColor(white: 0.4, alpha: 1)
         updatedLabel.textAlignment = .center
         updatedLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(updatedLabel)
@@ -543,32 +571,14 @@ final class ATunnelStatusViewController: UIViewController {
         diagButton.setTitle(isRu ? "Запустить диагностику" : "Run diagnostics", for: .normal)
         diagButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         diagButton.setTitleColor(purple, for: .normal)
-        diagButton.backgroundColor = purple.withAlphaComponent(0.12)
+        diagButton.backgroundColor = purple.withAlphaComponent(0.15)
         diagButton.layer.cornerRadius = 14
-        diagButton.layer.masksToBounds = true
+        diagButton.layer.cornerCurve = .continuous
         diagButton.translatesAutoresizingMaskIntoConstraints = false
         diagButton.addTarget(self, action: #selector(diagButtonTapped), for: .touchUpInside)
         contentView.addSubview(diagButton)
-    }
 
-    private func layoutContentStack() {
         NSLayoutConstraint.activate([
-            serversSectionLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 28),
-            serversSectionLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            serversSectionLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-
-            serverCardsStack.topAnchor.constraint(equalTo: serversSectionLabel.bottomAnchor, constant: 8),
-            serverCardsStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            serverCardsStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-
-            callsSectionLabel.topAnchor.constraint(equalTo: serverCardsStack.bottomAnchor, constant: 28),
-            callsSectionLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            callsSectionLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-
-            callCard.topAnchor.constraint(equalTo: callsSectionLabel.bottomAnchor, constant: 8),
-            callCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            callCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-
             updatedLabel.topAnchor.constraint(equalTo: callCard.bottomAnchor, constant: 20),
             updatedLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
             updatedLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
@@ -577,28 +587,22 @@ final class ATunnelStatusViewController: UIViewController {
             diagButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             diagButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             diagButton.heightAnchor.constraint(equalToConstant: 50),
-            diagButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -32),
+            diagButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -40),
         ])
     }
 
     // MARK: - Data
 
     private func loadData() {
-        guard let jsonString = UserDefaults.standard.string(forKey: "aorusgram_atunnel_status"),
-              let data = jsonString.data(using: .utf8) else {
-            diag = nil
-            return
-        }
-        let decoder = JSONDecoder()
-        diag = try? decoder.decode(ATunnelDiag.self, from: data)
+        guard let s = UserDefaults.standard.string(forKey: "aorusgram_atunnel_status"),
+              let d = s.data(using: .utf8) else { diag = nil; return }
+        diag = try? JSONDecoder().decode(ATunnelDiag.self, from: d)
     }
 
     private func buildServerCards() {
         serverCardsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         serverCardViews.removeAll()
-
         guard let servers = diag?.servers else { return }
-
         for server in servers {
             let card = makeServerCard(for: server)
             serverCardsStack.addArrangedSubview(card)
@@ -613,36 +617,27 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     private func applyCallCard() {
-        let available = diag?.callTunnel ?? false
-        let cfgStatus = UIImage.SymbolConfiguration(pointSize: 22, weight: .regular)
-        if available {
+        let on = diag?.callTunnel ?? false
+        let cfg = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        if on {
             callPhoneIcon.tintColor = purple
-            callStatusIcon.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: cfgStatus)
-            callStatusIcon.tintColor = .systemGreen
+            callStatusIcon.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: cfg)
+            callStatusIcon.tintColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
         } else {
-            callPhoneIcon.tintColor = .secondaryLabel
-            callStatusIcon.image = UIImage(systemName: "minus.circle", withConfiguration: cfgStatus)
-            callStatusIcon.tintColor = .secondaryLabel
+            callPhoneIcon.tintColor = UIColor(white: 0.35, alpha: 1)
+            callStatusIcon.image = UIImage(systemName: "minus.circle", withConfiguration: cfg)
+            callStatusIcon.tintColor = UIColor(white: 0.35, alpha: 1)
         }
     }
 
     private func applyUpdatedLabel() {
-        guard let d = diag else {
-            updatedLabel.text = isRu ? "Обновлено: —" : "Updated: —"
-            return
-        }
-        let elapsed = Date().timeIntervalSince1970 - d.updatedAt
-        let timeText: String
-        if elapsed < 10 {
-            timeText = isRu ? "только что" : "just now"
-        } else if elapsed < 60 {
-            let s = Int(elapsed)
-            timeText = isRu ? "\(s)с назад" : "\(s)s ago"
-        } else {
-            let m = Int(elapsed / 60)
-            timeText = isRu ? "\(m)м назад" : "\(m)m ago"
-        }
-        updatedLabel.text = (isRu ? "Обновлено: " : "Updated: ") + timeText
+        guard let d = diag else { updatedLabel.text = isRu ? "Обновлено: —" : "Updated: —"; return }
+        let e = Date().timeIntervalSince1970 - d.updatedAt
+        let t: String
+        if e < 10       { t = isRu ? "только что" : "just now" }
+        else if e < 60  { t = isRu ? "\(Int(e))с назад" : "\(Int(e))s ago" }
+        else            { t = isRu ? "\(Int(e/60))м назад" : "\(Int(e/60))m ago" }
+        updatedLabel.text = (isRu ? "Обновлено: " : "Updated: ") + t
     }
 
     private func applyDiagButton() {
@@ -650,83 +645,79 @@ final class ATunnelStatusViewController: UIViewController {
         diagButton.isHidden = !anyDown
     }
 
-    // MARK: - Server card factory
+    // MARK: - Server card
 
     private func makeServerCard(for server: ATunnelServerEntry) -> UIView {
         let card = UIView()
-        card.backgroundColor = theme.list.itemBlocksBackgroundColor
-        card.layer.cornerRadius = 14
-        card.layer.masksToBounds = true
+        card.backgroundColor = cardBg
+        card.layer.cornerRadius = 16
+        card.layer.cornerCurve = .continuous
 
-        // Top row
-        let flagLabel = UILabel()
-        flagLabel.text = flag(for: server.region)
-        flagLabel.font = .systemFont(ofSize: 20)
-        flagLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Flag
+        let flag = FlagView(regionCode: server.region)
+        flag.translatesAutoresizingMaskIntoConstraints = false
 
+        // Region full name
         let regionLabel = UILabel()
-        regionLabel.text = server.region
+        regionLabel.text = localizedRegion(server.region)
         regionLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        regionLabel.textColor = theme.list.itemPrimaryTextColor
+        regionLabel.textColor = .white
         regionLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let badgeView = makeBadge(for: server)
-        badgeView.translatesAutoresizingMaskIntoConstraints = false
+        // Status badge
+        let badge = makeBadge(for: server)
+        badge.translatesAutoresizingMaskIntoConstraints = false
 
-        // Flow view
-        let flowView = ATunnelFlowView()
-        flowView.state = flowState(for: server)
-        flowView.translatesAutoresizingMaskIntoConstraints = false
+        // Flow
+        let flow = ATunnelFlowView()
+        flow.state = server.active ? .active : (server.available ? .unknown : .down)
+        flow.translatesAutoresizingMaskIntoConstraints = false
 
-        // Detail label
-        let detailLabel = UILabel()
-        detailLabel.font = .systemFont(ofSize: 13, weight: .regular)
-        detailLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Detail
+        let detail = UILabel()
+        detail.font = .systemFont(ofSize: 13, weight: .regular)
+        detail.translatesAutoresizingMaskIntoConstraints = false
         if server.available, let lat = server.latencyMs, let jit = server.jitterMs {
-            detailLabel.textColor = theme.list.itemSecondaryTextColor
-            let msStr = isRu ? "мс" : "ms"
-            let jitterWord = isRu ? "джиттер" : "jitter"
-            detailLabel.text = "⚡ \(Int(lat)) \(msStr) · \(jitterWord) \(Int(jit)) \(msStr)"
+            detail.textColor = UIColor(white: 0.55, alpha: 1)
+            let ms  = isRu ? "мс" : "ms"
+            let jw  = isRu ? "джиттер" : "jitter"
+            detail.text = "⚡ \(Int(lat)) \(ms) · \(jw) \(Int(jit)) \(ms)"
         } else {
-            detailLabel.textColor = .systemRed
-            detailLabel.text = isRu ? "Сервер недоступен" : "Server unavailable"
+            detail.textColor = .systemRed
+            detail.text = isRu ? "Сервер недоступен" : "Server unavailable"
         }
 
-        card.addSubview(flagLabel)
-        card.addSubview(regionLabel)
-        card.addSubview(badgeView)
-        card.addSubview(flowView)
-        card.addSubview(detailLabel)
+        [flag, regionLabel, badge, flow, detail].forEach { card.addSubview($0) }
 
         NSLayoutConstraint.activate([
             card.heightAnchor.constraint(equalToConstant: 148),
 
-            flagLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 14),
-            flagLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            flag.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            flag.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            flag.widthAnchor.constraint(equalToConstant: 28),
+            flag.heightAnchor.constraint(equalToConstant: 20),
 
-            regionLabel.centerYAnchor.constraint(equalTo: flagLabel.centerYAnchor),
-            regionLabel.leadingAnchor.constraint(equalTo: flagLabel.trailingAnchor, constant: 8),
-            regionLabel.trailingAnchor.constraint(lessThanOrEqualTo: badgeView.leadingAnchor, constant: -8),
+            regionLabel.centerYAnchor.constraint(equalTo: flag.centerYAnchor),
+            regionLabel.leadingAnchor.constraint(equalTo: flag.trailingAnchor, constant: 10),
+            regionLabel.trailingAnchor.constraint(lessThanOrEqualTo: badge.leadingAnchor, constant: -8),
 
-            badgeView.centerYAnchor.constraint(equalTo: flagLabel.centerYAnchor),
-            badgeView.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            badge.centerYAnchor.constraint(equalTo: flag.centerYAnchor),
+            badge.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
 
-            flowView.topAnchor.constraint(equalTo: flagLabel.bottomAnchor, constant: 8),
-            flowView.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
-            flowView.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
-            flowView.heightAnchor.constraint(equalToConstant: 48),
+            flow.topAnchor.constraint(equalTo: flag.bottomAnchor, constant: 8),
+            flow.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            flow.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            flow.heightAnchor.constraint(equalToConstant: 52),
 
-            detailLabel.topAnchor.constraint(equalTo: flowView.bottomAnchor, constant: 8),
-            detailLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
-            detailLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            detail.topAnchor.constraint(equalTo: flow.bottomAnchor, constant: 6),
+            detail.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            detail.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
         ])
 
         return card
     }
 
     private func makeBadge(for server: ATunnelServerEntry) -> UIView {
-        let container = UIView()
-
         let dot = UIView()
         dot.layer.cornerRadius = 4
         dot.translatesAutoresizingMaskIntoConstraints = false
@@ -736,9 +727,9 @@ final class ATunnelStatusViewController: UIViewController {
         label.translatesAutoresizingMaskIntoConstraints = false
 
         if server.active {
-            dot.backgroundColor = UIColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1.0)
+            dot.backgroundColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
             label.text = isRu ? "АКТИВЕН" : "ACTIVE"
-            label.textColor = UIColor(red: 0.19, green: 0.82, blue: 0.35, alpha: 1.0)
+            label.textColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
         } else if server.available {
             dot.backgroundColor = .systemOrange
             label.text = isRu ? "РЕЗЕРВ" : "STANDBY"
@@ -749,78 +740,34 @@ final class ATunnelStatusViewController: UIViewController {
             label.textColor = .systemRed
         }
 
-        container.addSubview(dot)
-        container.addSubview(label)
-
+        let container = UIView()
+        container.addSubview(dot); container.addSubview(label)
         NSLayoutConstraint.activate([
             dot.widthAnchor.constraint(equalToConstant: 8),
             dot.heightAnchor.constraint(equalToConstant: 8),
             dot.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             dot.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-
             label.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 5),
             label.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             label.topAnchor.constraint(equalTo: container.topAnchor),
             label.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
-
         return container
     }
 
-    private func flowState(for server: ATunnelServerEntry) -> ATunnelFlowState {
-        if server.active { return .active }
-        if !server.available { return .down }
-        return .unknown
-    }
-
-    private func flag(for region: String) -> String {
-        let lower = region.lowercased()
-        if lower.contains("герман") || lower.contains("germany") { return "🇩🇪" }
-        if lower.contains("финлянд") || lower.contains("finland") { return "🇫🇮" }
-        if lower.contains("нидерланд") || lower.contains("netherlands") { return "🇳🇱" }
-        if lower.contains("сша") || lower.contains("usa") || lower.contains("united states") { return "🇺🇸" }
-        return "🌍"
-    }
-
-    // MARK: - Animations
-
-    private func startPulse() {
-        glowLayer.removeAllAnimations()
-
-        // Position glow behind shield
-        let center = shieldContainerView.convert(CGPoint(x: shieldContainerView.bounds.midX,
-                                                         y: shieldContainerView.bounds.midY),
-                                                  to: contentView)
-        glowLayer.position = center
-
-        let pulse = CABasicAnimation(keyPath: "transform.scale")
-        pulse.fromValue = 0.9
-        pulse.toValue = 1.1
-        pulse.duration = 2.0
-        pulse.autoreverses = true
-        pulse.repeatCount = .infinity
-        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        glowLayer.add(pulse, forKey: "pulse")
-    }
-
-    private func animateCardsIn() {
-        for (index, card) in serverCardViews.enumerated() {
-            let originalTransform = card.transform
-            card.transform = originalTransform.translatedBy(x: 0, y: 30)
-            card.alpha = 0
-            let delay = Double(index) * 0.08
-            UIView.animate(
-                withDuration: 0.55,
-                delay: delay,
-                usingSpringWithDamping: 0.75,
-                initialSpringVelocity: 0.4,
-                options: [.allowUserInteraction],
-                animations: {
-                    card.transform = originalTransform
-                    card.alpha = 1
-                }
-            )
+    // Map server region code → localized display name
+    private func localizedRegion(_ region: String) -> String {
+        let r = region.lowercased()
+        if r == "de" || r.contains("germ") || r.contains("герм") || r.contains("frankfurt") || r.contains("франкф") {
+            return isRu ? "Германия" : "Germany"
         }
+        if r == "fi" || r.contains("finl") || r.contains("финл") || r.contains("helsinki") || r.contains("хелс") {
+            return isRu ? "Финляндия" : "Finland"
+        }
+        if r == "nl" || r.contains("neth") || r.contains("нидерл") { return isRu ? "Нидерланды" : "Netherlands" }
+        if r == "us" || r.contains("usa")  || r.contains("сша")    { return isRu ? "США" : "USA" }
+        // Capitalise unknown codes as-is
+        return region
     }
 
     // MARK: - Timer
@@ -828,20 +775,13 @@ final class ATunnelStatusViewController: UIViewController {
     private func startRefreshTimer() {
         stopRefreshTimer()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
-            self?.refreshCycle()
+            self?.loadData()
+            self?.applyUpdatedLabel()
+            self?.applyDiagButton()
         }
     }
 
-    private func stopRefreshTimer() {
-        refreshTimer?.invalidate()
-        refreshTimer = nil
-    }
-
-    private func refreshCycle() {
-        loadData()
-        applyUpdatedLabel()
-        applyDiagButton()
-    }
+    private func stopRefreshTimer() { refreshTimer?.invalidate(); refreshTimer = nil }
 
     // MARK: - Actions
 
@@ -849,7 +789,9 @@ final class ATunnelStatusViewController: UIViewController {
         diagButton.isEnabled = false
         let vc = ATunnelDiagnosticsViewController(theme: theme, isRu: isRu)
         vc.onDismiss = { [weak self] in
-            self?.fullReload()
+            self?.loadData()
+            self?.buildServerCards()
+            self?.applyData()
             self?.diagButton.isEnabled = true
         }
         if #available(iOS 15.0, *) {
@@ -861,65 +803,45 @@ final class ATunnelStatusViewController: UIViewController {
         }
         present(vc, animated: true)
     }
-
-    private func fullReload() {
-        loadData()
-        buildServerCards()
-        applyData()
-        animateCardsIn()
-    }
 }
 
 // MARK: - ATunnelDiagnosticsViewController
-//
-// Modal sheet with step-by-step diagnostic logic:
-//   1. Snapshot current status (which servers are active/down)
-//   2. Trigger fresh probe via cross-module notification
-//   3. Poll UserDefaults until result arrives (max 12s)
-//   4. Compare before/after → show what was fixed or why it's still broken
-//
-// The actual fix (selecting best server, applying it) is done by AorusProxyManager.
-// This controller makes the process VISIBLE and explains the result to the user.
 
 private final class ATunnelDiagnosticsViewController: UIViewController {
 
     var onDismiss: (() -> Void)?
 
     private let theme: PresentationTheme
-    private let isRu: Bool
+    private let isRu:  Bool
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
+    private let cardBg = UIColor(white: 0.10, alpha: 1.0)
 
-    // UI
-    private let handleBar  = UIView()
-    private let titleLabel = UILabel()
+    private let handleBar    = UIView()
+    private let titleLabel   = UILabel()
     private let subtitleLabel = UILabel()
-    private let stepsStack = UIStackView()
-    private let resultCard = UIView()
-    private let resultIcon = UIImageView()
-    private let resultTitle = UILabel()
-    private let resultBody  = UILabel()
-    private let closeButton = UIButton(type: .system)
+    private let stepsStack   = UIStackView()
+    private let resultCard   = UIView()
+    private let resultIcon   = UIImageView()
+    private let resultTitle  = UILabel()
+    private let resultBody   = UILabel()
+    private let closeButton  = UIButton(type: .system)
 
-    // Step rows (icon + label)
     private var stepRows: [DiagStepRow] = []
 
-    // State
     private var pollTimer: Timer?
-    private var snapshotActiveRegion: String?   // active server before probe
-    private var snapshotUpdatedAt: Double = 0   // timestamp before probe
+    private var snapshotActiveRegion: String?
+    private var snapshotUpdatedAt: Double = 0
     private var pollElapsed: TimeInterval = 0
     private let pollInterval: TimeInterval = 0.4
     private let pollTimeout:  TimeInterval = 12.0
 
-    // Step indices
-    private let kStepAnalyze  = 0   // Анализ текущего состояния
-    private let kStepScan     = 1   // Сканирование серверов
-    private let kStepSelect   = 2   // Выбор оптимального маршрута
-    private let kStepApply    = 3   // Применение настроек
+    private let kStepAnalyze = 0
+    private let kStepScan    = 1
+    private let kStepSelect  = 2
+    private let kStepApply   = 3
 
     init(theme: PresentationTheme, isRu: Bool) {
-        self.theme = theme
-        self.isRu = isRu
+        self.theme = theme; self.isRu = isRu
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
     }
@@ -927,69 +849,51 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
 
     deinit { pollTimer?.invalidate() }
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        setupUI()
-    }
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        runDiagnostics()
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        pollTimer?.invalidate()
-    }
-
-    // MARK: – UI Setup
+    override func viewDidLoad() { super.viewDidLoad(); setupUI() }
+    override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); runDiagnostics() }
+    override func viewWillDisappear(_ animated: Bool) { super.viewWillDisappear(animated); pollTimer?.invalidate() }
 
     private func setupUI() {
-        view.backgroundColor = theme.list.plainBackgroundColor
+        view.backgroundColor = .black
+        overrideUserInterfaceStyle = .dark
 
-        // Grabber
-        handleBar.backgroundColor = UIColor(white: 0.5, alpha: 0.4)
+        handleBar.backgroundColor = UIColor(white: 0.35, alpha: 1)
         handleBar.layer.cornerRadius = 2.5
         handleBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(handleBar)
 
-        // Title
         titleLabel.text = isRu ? "Диагностика" : "Diagnostics"
         titleLabel.font = .systemFont(ofSize: 20, weight: .bold)
-        titleLabel.textColor = theme.list.itemPrimaryTextColor
+        titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)
 
-        subtitleLabel.text = isRu ? "Проверка и восстановление соединения ATunnel" : "Checking and restoring ATunnel connection"
-        subtitleLabel.font = .systemFont(ofSize: 14, weight: .regular)
-        subtitleLabel.textColor = theme.list.itemSecondaryTextColor
+        subtitleLabel.text = isRu ? "Проверка и восстановление ATunnel" : "Checking and restoring ATunnel"
+        subtitleLabel.font = .systemFont(ofSize: 14)
+        subtitleLabel.textColor = UIColor(white: 0.55, alpha: 1)
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 2
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(subtitleLabel)
 
-        // Steps
-        stepsStack.axis = .vertical
-        stepsStack.spacing = 0
+        stepsStack.axis = .vertical; stepsStack.spacing = 0
         stepsStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stepsStack)
 
-        let stepDefs: [(String, String)] = [
-            (isRu ? "Анализ текущего состояния" : "Analysing current state",       "magnifyingglass"),
-            (isRu ? "Сканирование серверов"      : "Scanning servers",              "antenna.radiowaves.left.and.right"),
-            (isRu ? "Выбор оптимального маршрута": "Selecting optimal route",       "arrow.triangle.branch"),
-            (isRu ? "Применение настроек"         : "Applying configuration",       "checkmark.shield"),
+        let defs: [(String, String)] = [
+            (isRu ? "Анализ текущего состояния" : "Analysing current state",    "magnifyingglass"),
+            (isRu ? "Сканирование серверов"      : "Scanning servers",           "antenna.radiowaves.left.and.right"),
+            (isRu ? "Выбор оптимального маршрута": "Selecting optimal route",    "arrow.triangle.branch"),
+            (isRu ? "Применение настроек"         : "Applying configuration",    "checkmark.shield"),
         ]
-        for def in stepDefs {
-            let row = DiagStepRow(title: def.0, sfSymbol: def.1, accentColor: purple, theme: theme)
-            stepRows.append(row)
-            stepsStack.addArrangedSubview(row)
+        for d in defs {
+            let row = DiagStepRow(title: d.0, sfSymbol: d.1, accentColor: purple)
+            stepRows.append(row); stepsStack.addArrangedSubview(row)
         }
 
-        // Result card (hidden until done)
-        resultCard.backgroundColor = theme.list.itemBlocksBackgroundColor
-        resultCard.layer.cornerRadius = 16
+        resultCard.backgroundColor = cardBg
+        resultCard.layer.cornerRadius = 16; resultCard.layer.cornerCurve = .continuous
         resultCard.alpha = 0
         resultCard.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(resultCard)
@@ -999,24 +903,20 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         resultCard.addSubview(resultIcon)
 
         resultTitle.font = .systemFont(ofSize: 16, weight: .semibold)
-        resultTitle.textColor = theme.list.itemPrimaryTextColor
-        resultTitle.numberOfLines = 2
+        resultTitle.textColor = .white; resultTitle.numberOfLines = 2
         resultTitle.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultTitle)
 
-        resultBody.font = .systemFont(ofSize: 13, weight: .regular)
-        resultBody.textColor = theme.list.itemSecondaryTextColor
-        resultBody.numberOfLines = 3
+        resultBody.font = .systemFont(ofSize: 13)
+        resultBody.textColor = UIColor(white: 0.55, alpha: 1); resultBody.numberOfLines = 3
         resultBody.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultBody)
 
-        // Close button
         closeButton.setTitle(isRu ? "Закрыть" : "Close", for: .normal)
         closeButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
         closeButton.setTitleColor(purple, for: .normal)
-        closeButton.backgroundColor = purple.withAlphaComponent(0.12)
-        closeButton.layer.cornerRadius = 14
-        closeButton.layer.masksToBounds = true
+        closeButton.backgroundColor = purple.withAlphaComponent(0.15)
+        closeButton.layer.cornerRadius = 14; closeButton.layer.cornerCurve = .continuous
         closeButton.alpha = 0
         closeButton.translatesAutoresizingMaskIntoConstraints = false
         closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
@@ -1065,26 +965,15 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         ])
     }
 
-    // MARK: – Diagnostics logic
-
     private func runDiagnostics() {
-        // Snapshot "before" state
         snapshotActiveRegion = currentActiveRegion()
-        snapshotUpdatedAt = currentUpdatedAt()
-
-        // Step 0: Анализ — instant, just reads current data
+        snapshotUpdatedAt    = currentUpdatedAt()
         stepRows[kStepAnalyze].setState(.running)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             guard let self = self else { return }
-            let hasData = self.snapshotUpdatedAt > 0
-            self.stepRows[self.kStepAnalyze].setState(hasData ? .ok : .warn)
-
-            // Step 1: Сканирование — trigger fresh probe via cross-module notification
+            self.stepRows[self.kStepAnalyze].setState(self.snapshotUpdatedAt > 0 ? .ok : .warn)
             self.stepRows[self.kStepScan].setState(.running)
-            NotificationCenter.default.post(
-                name: NSNotification.Name("aorusgram_request_probe"), object: nil)
-
-            // Start polling for result
+            NotificationCenter.default.post(name: NSNotification.Name("aorusgram_request_probe"), object: nil)
             self.startPolling()
         }
     }
@@ -1098,126 +987,65 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
 
     private func pollTick() {
         pollElapsed += pollInterval
-
-        let newUpdatedAt = currentUpdatedAt()
-        let probeFinished = newUpdatedAt > snapshotUpdatedAt + 0.5
-
-        if probeFinished {
-            pollTimer?.invalidate()
-            onProbeFinished()
-            return
-        }
-
-        // Timeout — probe took too long, show what we have
-        if pollElapsed >= pollTimeout {
-            pollTimer?.invalidate()
-            onProbeFinished()
-        }
+        let newAt = currentUpdatedAt()
+        if newAt > snapshotUpdatedAt + 0.5 { pollTimer?.invalidate(); onProbeFinished(); return }
+        if pollElapsed >= pollTimeout       { pollTimer?.invalidate(); onProbeFinished() }
     }
 
     private func onProbeFinished() {
-        // Step 1 → done
         stepRows[kStepScan].setState(.ok)
-
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
             guard let self = self else { return }
-
-            // Step 2: Selection — evaluate result
             self.stepRows[self.kStepSelect].setState(.running)
-            let newActiveRegion = self.currentActiveRegion()
-            let serverCount = self.currentServerCount()
-            let allDown = self.currentAllDown()
-
+            let newActive = self.currentActiveRegion()
+            let allDown   = self.currentAllDown()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self = self else { return }
                 self.stepRows[self.kStepSelect].setState(allDown ? .fail : .ok)
-
-                // Step 3: Apply
                 self.stepRows[self.kStepApply].setState(.running)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                     guard let self = self else { return }
                     self.stepRows[self.kStepApply].setState(allDown ? .fail : .ok)
-                    self.showResult(
-                        previousRegion: self.snapshotActiveRegion,
-                        newActiveRegion: newActiveRegion,
-                        serverCount: serverCount,
-                        allDown: allDown
-                    )
+                    self.showResult(prev: self.snapshotActiveRegion, new: newActive, allDown: allDown)
                 }
             }
         }
     }
 
-    private func showResult(previousRegion: String?, newActiveRegion: String?, serverCount: Int, allDown: Bool) {
+    private func showResult(prev: String?, new: String?, allDown: Bool) {
         let cfg = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
-
         if allDown {
-            // All servers unreachable — likely internet issue
             resultIcon.image = UIImage(systemName: "wifi.slash", withConfiguration: cfg)
             resultIcon.tintColor = .systemRed
             resultTitle.text = isRu ? "Серверы недоступны" : "Servers unreachable"
-            resultBody.text  = isRu
-                ? "Нет ответа ни от одного сервера. Проверьте интернет-соединение."
-                : "No server responded. Check your internet connection."
-        } else if let new = newActiveRegion, new != previousRegion, let prev = previousRegion {
-            // Successfully switched to a better server
+            resultBody.text  = isRu ? "Нет ответа ни от одного сервера. Проверьте интернет." : "No server responded. Check your internet."
+        } else if let n = new, n != prev, let p = prev {
             resultIcon.image = UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: cfg)
-            resultIcon.tintColor = UIColor(red: 0.19, green: 0.82, blue: 0.34, alpha: 1)
+            resultIcon.tintColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
             resultTitle.text = isRu ? "Маршрут переключён" : "Route switched"
-            resultBody.text  = isRu
-                ? "\(prev) → \(new)\nАктивный сервер обновлён автоматически."
-                : "\(prev) → \(new)\nActive server updated automatically."
-        } else if let active = newActiveRegion {
-            // Already on the best server — nothing needed
+            resultBody.text  = "\(p) → \(n)\n" + (isRu ? "Активный сервер обновлён автоматически." : "Active server updated automatically.")
+        } else if let active = new {
             resultIcon.image = UIImage(systemName: "checkmark.shield.fill", withConfiguration: cfg)
-            resultIcon.tintColor = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1)
+            resultIcon.tintColor = purple
             resultTitle.text = isRu ? "Соединение в норме" : "Connection is healthy"
-            resultBody.text  = isRu
-                ? "Активен: \(active). Маршрутизация работает оптимально."
-                : "Active: \(active). Routing is performing optimally."
+            resultBody.text  = (isRu ? "Активен: " : "Active: ") + active + (isRu ? ". Маршрутизация оптимальна." : ". Routing is optimal.")
         } else {
-            // Edge case: data not yet available
             resultIcon.image = UIImage(systemName: "exclamationmark.triangle.fill", withConfiguration: cfg)
             resultIcon.tintColor = .systemOrange
             resultTitle.text = isRu ? "Нет данных" : "No data"
-            resultBody.text  = isRu
-                ? "Данные ещё не получены. Откройте настройки и подождите немного."
-                : "Data not yet available. Open settings and wait a moment."
+            resultBody.text  = isRu ? "Данные ещё не получены. Подождите немного." : "Data not yet available. Wait a moment."
         }
-
-        UIView.animate(withDuration: 0.4, delay: 0, options: .curveEaseOut) {
-            self.resultCard.alpha = 1
-            self.closeButton.alpha = 1
-        }
+        UIView.animate(withDuration: 0.4) { self.resultCard.alpha = 1; self.closeButton.alpha = 1 }
     }
-
-    // MARK: – UserDefaults readers
 
     private func parsedDiag() -> ATunnelDiag? {
         guard let s = UserDefaults.standard.string(forKey: "aorusgram_atunnel_status"),
-              let d = s.data(using: .utf8),
-              let diag = try? JSONDecoder().decode(ATunnelDiag.self, from: d) else { return nil }
-        return diag
+              let d = s.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(ATunnelDiag.self, from: d)
     }
-
-    private func currentActiveRegion() -> String? {
-        parsedDiag()?.servers.first(where: { $0.active })?.region
-    }
-
-    private func currentUpdatedAt() -> Double {
-        parsedDiag()?.updatedAt ?? 0
-    }
-
-    private func currentServerCount() -> Int {
-        parsedDiag()?.servers.count ?? 0
-    }
-
-    private func currentAllDown() -> Bool {
-        guard let diag = parsedDiag() else { return true }
-        return diag.servers.allSatisfy { !$0.available }
-    }
-
-    // MARK: – Actions
+    private func currentActiveRegion() -> String? { parsedDiag()?.servers.first(where: { $0.active })?.region }
+    private func currentUpdatedAt() -> Double      { parsedDiag()?.updatedAt ?? 0 }
+    private func currentAllDown() -> Bool          { parsedDiag()?.servers.allSatisfy { !$0.available } ?? true }
 
     @objc private func closeTapped() {
         closeButton.isEnabled = false
@@ -1226,7 +1054,6 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
 }
 
 // MARK: - DiagStepRow
-// One row in the diagnostics step list: icon + title + state indicator (spinner / ✓ / ✗)
 
 private final class DiagStepRow: UIView {
 
@@ -1238,16 +1065,10 @@ private final class DiagStepRow: UIView {
     private let indicator = UIActivityIndicatorView(style: .medium)
     private let stateIcon = UIImageView()
 
-    private let accentColor: UIColor
-    private let sfSymbol: String
-
-    init(title: String, sfSymbol: String, accentColor: UIColor, theme: PresentationTheme) {
-        self.accentColor = accentColor
-        self.sfSymbol    = sfSymbol
+    init(title: String, sfSymbol: String, accentColor: UIColor) {
         super.init(frame: .zero)
 
-        // Left icon badge
-        iconBg.backgroundColor = accentColor.withAlphaComponent(0.12)
+        iconBg.backgroundColor = accentColor.withAlphaComponent(0.15)
         iconBg.layer.cornerRadius = 10
         iconBg.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconBg)
@@ -1259,28 +1080,24 @@ private final class DiagStepRow: UIView {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconBg.addSubview(iconView)
 
-        // Title
         titleLbl.text = title
         titleLbl.font = .systemFont(ofSize: 15, weight: .medium)
-        titleLbl.textColor = theme.list.itemPrimaryTextColor
+        titleLbl.textColor = .white
         titleLbl.translatesAutoresizingMaskIntoConstraints = false
         addSubview(titleLbl)
 
-        // Spinner (shown while running)
         indicator.color = accentColor
         indicator.hidesWhenStopped = true
         indicator.translatesAutoresizingMaskIntoConstraints = false
         addSubview(indicator)
 
-        // State icon (✓ / ✗ / ⚠)
         stateIcon.contentMode = .scaleAspectFit
         stateIcon.alpha = 0
         stateIcon.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stateIcon)
 
-        // Separator line at bottom
         let sep = UIView()
-        sep.backgroundColor = theme.list.itemBlocksSeparatorColor.withAlphaComponent(0.2)
+        sep.backgroundColor = UIColor(white: 0.18, alpha: 1)
         sep.translatesAutoresizingMaskIntoConstraints = false
         addSubview(sep)
 
@@ -1316,25 +1133,19 @@ private final class DiagStepRow: UIView {
             sep.bottomAnchor.constraint(equalTo: bottomAnchor),
             sep.heightAnchor.constraint(equalToConstant: 0.5),
         ])
-
         setState(.idle)
     }
-
     required init?(coder: NSCoder) { fatalError() }
 
     func setState(_ state: State) {
         let cfg = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
         switch state {
-        case .idle:
-            indicator.stopAnimating()
-            stateIcon.alpha = 0
-        case .running:
-            indicator.startAnimating()
-            stateIcon.alpha = 0
+        case .idle:    indicator.stopAnimating(); stateIcon.alpha = 0
+        case .running: indicator.startAnimating(); stateIcon.alpha = 0
         case .ok:
             indicator.stopAnimating()
             stateIcon.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: cfg)
-            stateIcon.tintColor = UIColor(red: 0.19, green: 0.82, blue: 0.34, alpha: 1)
+            stateIcon.tintColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
             UIView.animate(withDuration: 0.25) { self.stateIcon.alpha = 1 }
         case .warn:
             indicator.stopAnimating()
