@@ -7254,6 +7254,135 @@ def patch_app_badge(tg: Path) -> None:
     print("AppBadge: Contents.json verified")
 
 
+def patch_app_badge_switcher(tg: Path) -> None:
+    """Make the notch-area badge user-switchable at runtime: AorusGram / ATunnel / off.
+
+    1. Install a second imageset 'Components/AppBadgeATunnel' next to the AorusGram one.
+    2. Patch WindowContent.swift so the badge image is chosen from UserDefaults
+       ('aorusgram_app_badge') and reloads live when AorusGramUI posts the
+       'aorusgram_app_badge_changed' notification. 'off' → nil image → hidden.
+    """
+    # --- 1. ATunnel imageset --------------------------------------------------
+    src_png = Path(__file__).parent.parent / "patches" / "assets" / "AppBadgeATunnel@3x.png"
+    if not src_png.is_file():
+        print(f"AppBadgeSwitcher: source PNG not found at {src_png} — skipped imageset")
+    else:
+        components = tg / "submodules/TelegramUI/Images.xcassets/Components"
+        if not components.is_dir():
+            print(f"AppBadgeSwitcher: Components dir not found at {components} — skipped imageset")
+        else:
+            imageset = components / "AppBadgeATunnel.imageset"
+            imageset.mkdir(parents=True, exist_ok=True)
+            import shutil as _shutil
+            _shutil.copy2(str(src_png), str(imageset / "AppBadgeATunnel@3x.png"))
+            import json as _json
+            contents = {
+                "images": [
+                    {"idiom": "universal", "scale": "1x"},
+                    {"idiom": "universal", "scale": "2x"},
+                    {"filename": "AppBadgeATunnel@3x.png", "idiom": "universal", "scale": "3x"},
+                ],
+                "info": {"author": "xcode", "version": 1},
+            }
+            (imageset / "Contents.json").write_text(_json.dumps(contents, indent=2), encoding="utf-8")
+            print(f"AppBadgeSwitcher: installed Components/AppBadgeATunnel.imageset")
+
+    # --- 2. WindowContent.swift -----------------------------------------------
+    path = tg / "submodules/Display/Source/WindowContent.swift"
+    if not path.is_file():
+        print("AppBadgeSwitcher: WindowContent.swift not found — skipped")
+        return
+    t = path.read_text(encoding="utf-8")
+    orig = t
+
+    # (a) Pick the initial image from the saved choice instead of hardcoding AppBadge.
+    init_marker = '        self.badgeView.image = UIImage(bundleImageName: "Components/AppBadge")\n'
+    init_new = "        self.badgeView.image = Window1.aorusAppBadgeImage()\n"
+    if init_marker in t:
+        t = t.replace(init_marker, init_new, 1)
+
+    # (b) Observer storage property next to the other window observers.
+    obs_prop_marker = "    private var voiceOverStatusObserver: AnyObject?\n"
+    obs_prop_new = obs_prop_marker + "    private var aorusBadgeObserver: AnyObject?\n"
+    if "private var aorusBadgeObserver" not in t and obs_prop_marker in t:
+        t = t.replace(obs_prop_marker, obs_prop_new, 1)
+
+    # (c) Static image chooser + live reload helper, inserted before updateBadgeVisibility.
+    methods_anchor = "    private func updateBadgeVisibility() {\n"
+    methods_new = (
+        "    static func aorusAppBadgeImage() -> UIImage? {\n"
+        '        let choice = UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram"\n'
+        '        if choice == "off" {\n'
+        "            return nil\n"
+        "        }\n"
+        '        if choice == "atunnel" {\n'
+        '            return UIImage(bundleImageName: "Components/AppBadgeATunnel")\n'
+        "        }\n"
+        '        return UIImage(bundleImageName: "Components/AppBadge")\n'
+        "    }\n"
+        "    private func aorusReloadAppBadge() {\n"
+        "        self.badgeView.image = Window1.aorusAppBadgeImage()\n"
+        "        self.updateBadgeVisibility()\n"
+        "        if let image = self.badgeView.image {\n"
+        "            self.badgeView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((self.windowLayout.size.width - image.size.width) / 2.0), y: 5.0), size: image.size)\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+    )
+    if "aorusReloadAppBadge" not in t and methods_anchor in t:
+        t = t.replace(methods_anchor, methods_new + methods_anchor, 1)
+
+    # (d) Register the live-reload observer at the end of init.
+    reg_marker = (
+        "        self.hostView.containerView.addSubview(self.badgeView)\n"
+        "    }\n"
+    )
+    reg_new = (
+        "        self.hostView.containerView.addSubview(self.badgeView)\n"
+        '        self.aorusBadgeObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name("aorusgram_app_badge_changed"), object: nil, queue: OperationQueue.main) { [weak self] _ in\n'
+        "            self?.aorusReloadAppBadge()\n"
+        "        }\n"
+        "    }\n"
+    )
+    if "aorusBadgeObserver = NotificationCenter" not in t and reg_marker in t:
+        t = t.replace(reg_marker, reg_new, 1)
+
+    # (e) Treat a nil image (off) as hidden in both visibility computations.
+    vis_a = "        let badgeIsHidden = !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height\n"
+    vis_a_new = "        let badgeIsHidden = self.badgeView.image == nil || !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height\n"
+    if vis_a in t:
+        t = t.replace(vis_a, vis_a_new, 1)
+    vis_b = "                let badgeShouldBeHidden = !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height\n"
+    vis_b_new = "                let badgeShouldBeHidden = self.badgeView.image == nil || !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height\n"
+    if vis_b in t:
+        t = t.replace(vis_b, vis_b_new, 1)
+
+    # (f) Remove the observer in deinit.
+    deinit_marker = (
+        "        if let voiceOverStatusObserver = self.voiceOverStatusObserver {\n"
+        "            NotificationCenter.default.removeObserver(voiceOverStatusObserver)\n"
+        "        }\n"
+        "    }\n"
+    )
+    deinit_new = (
+        "        if let voiceOverStatusObserver = self.voiceOverStatusObserver {\n"
+        "            NotificationCenter.default.removeObserver(voiceOverStatusObserver)\n"
+        "        }\n"
+        "        if let aorusBadgeObserver = self.aorusBadgeObserver {\n"
+        "            NotificationCenter.default.removeObserver(aorusBadgeObserver)\n"
+        "        }\n"
+        "    }\n"
+    )
+    if "aorusBadgeObserver = self.aorusBadgeObserver" not in t and deinit_marker in t:
+        t = t.replace(deinit_marker, deinit_new, 1)
+
+    if t != orig:
+        path.write_text(t, encoding="utf-8")
+        print("AppBadgeSwitcher: patched WindowContent.swift (runtime badge switch)")
+    else:
+        print("AppBadgeSwitcher: WindowContent.swift unchanged (already patched or upstream drift)")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -7346,6 +7475,7 @@ def main() -> None:
     patch_remove_appcenter(tg)
     patch_disable_app_log_analytics(tg)
     patch_app_badge(tg)
+    patch_app_badge_switcher(tg)
     for name in ("Info.plist", "InfoBazel.plist"):
         patch_plist_icons_and_urls(tg / "Telegram/Telegram-iOS" / name)
     patch_info_plist_bgtask(tg)

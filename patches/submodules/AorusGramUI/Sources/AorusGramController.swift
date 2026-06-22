@@ -282,6 +282,7 @@ private struct AorusState: Equatable {
     var hideCallsTab: Bool
     var hideContactsTab: Bool
     var siriShortcuts: Bool
+    var appBadge: String
     var antiSpoofDeleted: Bool
     var antiSpoofOnline: Bool
     var aorusCodeEnabled: Bool
@@ -303,6 +304,7 @@ private final class AorusArguments {
     let openVoiceTwin: () -> Void
     let setCacheInterval: (Int) -> Void
     let openProxyDiagnostics: () -> Void // AORUS-DIAG
+    let openAppBadgePicker: () -> Void
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
          openChannel: @escaping () -> Void,
@@ -312,7 +314,8 @@ private final class AorusArguments {
          openDeviceSpoof: @escaping () -> Void,
          openVoiceTwin: @escaping () -> Void,
          setCacheInterval: @escaping (Int) -> Void,
-         openProxyDiagnostics: @escaping () -> Void) { // AORUS-DIAG
+         openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
+         openAppBadgePicker: @escaping () -> Void) {
         self.set = set
         self.openChannel = openChannel
         self.openSubscription = openSubscription
@@ -322,6 +325,7 @@ private final class AorusArguments {
         self.openVoiceTwin = openVoiceTwin
         self.setCacheInterval = setCacheInterval
         self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
+        self.openAppBadgePicker = openAppBadgePicker
     }
 }
 
@@ -354,6 +358,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case hideCallsTab(PresentationTheme, String, Bool)
     case hideContactsTab(PresentationTheme, String, Bool)
     case siriShortcuts(PresentationTheme, String, Bool)
+    case appBadge(PresentationTheme, String, String)
 
     case editLocalHeader(PresentationTheme, String)
     case messagesDoubleCopy(PresentationTheme, String, Bool)
@@ -391,7 +396,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.ai.rawValue
         case .perfHeader, .downloadAccel, .antiSpam, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .glassUI, .amoledMode, .hideCallsTab, .hideContactsTab, .siriShortcuts:
+        case .uiHeader, .glassUI, .amoledMode, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge:
             return AorusSection.ui.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
@@ -434,6 +439,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case .hideCallsTab:         return 33
         case .hideContactsTab:      return 34
         case .siriShortcuts:        return 35
+        case .appBadge:             return 36
         case .editLocalHeader:      return 43
         case .messagesDoubleCopy:   return 44
         case .messagesTripleDelete: return 45
@@ -508,6 +514,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .hideContactsTab(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .siriShortcuts(lt, ls, lv):
             if case let .siriShortcuts(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .appBadge(lt, ls, lv):
+            if case let .appBadge(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .editLocalHeader(lt, ls):
             if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .messagesDoubleCopy(lt, ls, lv):
@@ -602,6 +610,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideContactsTab, !$0) })
         case let .siriShortcuts(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.siriShortcuts, $0) })
+        case let .appBadge(_, title, label):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: args.openAppBadgePicker)
         case let .editLocalHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .messagesDoubleCopy(_, title, value):
@@ -650,6 +660,15 @@ private enum AorusEntry: ItemListNodeEntry {
 
 // MARK: - Entries builder
 
+// Display label for the currently-selected notch badge.
+private func appBadgeLabel(_ id: String, _ l10n: AorusL10n) -> String {
+    switch id {
+    case "atunnel": return l10n.appBadgeATunnel
+    case "off":     return l10n.appBadgeOff
+    default:        return l10n.appBadgeAorus
+    }
+}
+
 private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: AorusL10n) -> [AorusEntry] {
     // Privacy section: exactly three rows.
     //   1. Ghost Mode — combined toggle that hides online + typing + read receipts
@@ -687,6 +706,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .hideCallsTab(theme, l10n.hideCallsTab, !state.hideCallsTab),
         .hideContactsTab(theme, l10n.hideContactsTab, !state.hideContactsTab),
         .siriShortcuts(theme, l10n.siriShortcuts, state.siriShortcuts),
+        .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
 
         .editLocalHeader(theme, l10n.messagesHeader),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
@@ -757,6 +777,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         hideCallsTab:       mgr.hideCallsTab,
         hideContactsTab:    mgr.hideContactsTab,
         siriShortcuts:      mgr.siriShortcuts,
+        appBadge:           UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram",
         antiSpoofDeleted:   spoof.antiSpoofDeleted,
         antiSpoofOnline:    spoof.antiSpoofOnline,
         aorusCodeEnabled:   stealth.isEnabled,
@@ -1000,6 +1021,39 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             let nav = UINavigationController(rootViewController: vc)
             nav.modalPresentationStyle = .fullScreen
             controller.present(nav, animated: true)
+        },
+        openAppBadgePicker: {
+            // Native action sheet: AorusGram / ATunnel / Отключен. Writing the choice to
+            // UserDefaults + posting the change notification makes WindowContent.swift
+            // swap (or hide) the live notch badge immediately.
+            guard let controller = weakController else { return }
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
+            let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
+            let current = UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram"
+
+            let sheet = UIAlertController(title: l10n.appBadge, message: nil, preferredStyle: .actionSheet)
+            let options: [(String, String)] = [
+                ("aorusgram", l10n.appBadgeAorus),
+                ("atunnel",   l10n.appBadgeATunnel),
+                ("off",       l10n.appBadgeOff),
+            ]
+            for (id, name) in options {
+                let title = (id == current) ? "\(name)  ✓" : name
+                sheet.addAction(UIAlertAction(title: title, style: .default) { _ in
+                    UserDefaults.standard.set(id, forKey: "aorusgram_app_badge")
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("aorusgram_app_badge_changed"), object: nil)
+                    updateState { s in var n = s; n.appBadge = id; return n }
+                })
+            }
+            sheet.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
+            if let popover = sheet.popoverPresentationController, let view = controller.view {
+                popover.sourceView = view
+                popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            controller.present(sheet, animated: true)
         }
     )
 

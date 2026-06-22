@@ -187,9 +187,8 @@ private final class ATunnelFlowView: UIView {
         centerLabel.textAlignment = .center
         centerBadge.addSubview(centerLabel)
 
-        // Right: Telegram-style circle send icon
-        let cfgTg = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
-        rightIcon.image = UIImage(systemName: "paperplane.circle.fill", withConfiguration: cfgTg)
+        // Right: clean Telegram plane logo (single silhouette, no fold crease)
+        rightIcon.image = ATunnelFlowView.telegramPlaneImage(box: 30)
         rightIcon.contentMode = .scaleAspectFit
 
         [leftIcon, centerBadge, rightIcon].forEach { addSubview($0) }
@@ -301,6 +300,58 @@ private final class ATunnelFlowView: UIView {
         a.fromValue = 0; a.toValue = -10
         a.duration = 0.6; a.repeatCount = .infinity; a.isRemovedOnCompletion = false
         l.add(a, forKey: "flow")
+    }
+
+    // Clean single-silhouette Telegram plane (Font Awesome "telegram-plane", viewBox
+    // 448×512). One closed path — no interior fold line — rendered as a template image
+    // so the surrounding tintColor drives its colour across flow states.
+    static func telegramPlaneImage(box: CGFloat) -> UIImage {
+        // Absolute control points derived from the canonical telegram-plane path.
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: 446.7, y: 98.6))
+        path.addLine(to: CGPoint(x: 379.1, y: 417.4))
+        path.addCurve(to: CGPoint(x: 341.8, y: 434.9),
+                      controlPoint1: CGPoint(x: 374.0, y: 439.9), controlPoint2: CGPoint(x: 360.7, y: 445.5))
+        path.addLine(to: CGPoint(x: 238.8, y: 359.0))
+        path.addLine(to: CGPoint(x: 189.1, y: 406.8))
+        path.addCurve(to: CGPoint(x: 168.4, y: 416.9),
+                      controlPoint1: CGPoint(x: 183.6, y: 412.3), controlPoint2: CGPoint(x: 179.0, y: 416.9))
+        path.addLine(to: CGPoint(x: 175.8, y: 312.0))
+        path.addLine(to: CGPoint(x: 366.7, y: 139.5))
+        path.addCurve(to: CGPoint(x: 353.8, y: 135.4),
+                      controlPoint1: CGPoint(x: 375.0, y: 132.1), controlPoint2: CGPoint(x: 364.9, y: 128.0))
+        path.addLine(to: CGPoint(x: 117.8, y: 284.0))
+        path.addLine(to: CGPoint(x: 16.2, y: 252.2))
+        path.addCurve(to: CGPoint(x: 20.8, y: 219.5),
+                      controlPoint1: CGPoint(x: -5.9, y: 245.3), controlPoint2: CGPoint(x: -6.3, y: 230.1))
+        path.addLine(to: CGPoint(x: 418.2, y: 66.4))
+        path.addCurve(to: CGPoint(x: 446.7, y: 98.6),
+                      controlPoint1: CGPoint(x: 436.6, y: 59.6), controlPoint2: CGPoint(x: 452.7, y: 70.8))
+        path.close()
+
+        // Fit the glyph's tight bounds into a square box (with a hair of padding).
+        // boundingBoxOfPath is curve-accurate and excludes control points (some of
+        // which sit at negative x), so the plane stays correctly centred.
+        let bounds = path.cgPath.boundingBoxOfPath
+        let inset: CGFloat = box * 0.07
+        let avail = box - inset * 2
+        let scale = min(avail / bounds.width, avail / bounds.height)
+        let dx = (box - bounds.width * scale) / 2 - bounds.minX * scale
+        let dy = (box - bounds.height * scale) / 2 - bounds.minY * scale
+        var transform = CGAffineTransform(translationX: dx, y: dy)
+        transform = transform.scaledBy(x: scale, y: scale)
+        path.apply(transform)
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: box, height: box), format: {
+            let f = UIGraphicsImageRendererFormat.preferred()
+            f.opaque = false
+            return f
+        }())
+        let img = renderer.image { ctx in
+            UIColor.black.setFill()
+            path.fill()
+        }
+        return img.withRenderingMode(.alwaysTemplate)
     }
 }
 
