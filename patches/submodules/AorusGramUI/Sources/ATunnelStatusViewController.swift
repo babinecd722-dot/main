@@ -331,7 +331,14 @@ final class ATunnelStatusViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        glowLayer.position = shieldContainerView.layer.position
+        // Update glow position only before the animation starts (no animation key yet).
+        // Resetting position while the pulse animation is running causes a visual jerk.
+        if glowLayer.animation(forKey: "pulse") == nil {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            glowLayer.position = shieldContainerView.layer.position
+            CATransaction.commit()
+        }
     }
 
     // MARK: - Setup
@@ -652,7 +659,9 @@ final class ATunnelStatusViewController: UIViewController {
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
         if server.available, let lat = server.latencyMs, let jit = server.jitterMs {
             detailLabel.textColor = theme.list.itemSecondaryTextColor
-            detailLabel.text = "⚡ \(Int(lat)) мс · джиттер \(Int(jit)) мс"
+            let msStr = isRu ? "мс" : "ms"
+            let jitterWord = isRu ? "джиттер" : "jitter"
+            detailLabel.text = "⚡ \(Int(lat)) \(msStr) · \(jitterWord) \(Int(jit)) \(msStr)"
         } else {
             detailLabel.textColor = .systemRed
             detailLabel.text = isRu ? "Сервер недоступен" : "Server unavailable"
@@ -812,8 +821,12 @@ final class ATunnelStatusViewController: UIViewController {
     // MARK: - Actions
 
     @objc private func diagButtonTapped() {
+        diagButton.isEnabled = false
         let vc = ATunnelDiagnosticsViewController(theme: theme, isRu: isRu)
-        vc.onDismiss = { [weak self] in self?.fullReload() }
+        vc.onDismiss = { [weak self] in
+            self?.fullReload()
+            self?.diagButton.isEnabled = true
+        }
         if #available(iOS 15.0, *) {
             if let sheet = vc.sheetPresentationController {
                 sheet.detents = [.medium(), .large()]
@@ -886,6 +899,8 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         modalPresentationStyle = .pageSheet
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit { pollTimer?.invalidate() }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -1180,6 +1195,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     // MARK: – Actions
 
     @objc private func closeTapped() {
+        closeButton.isEnabled = false
         dismiss(animated: true) { [weak self] in self?.onDismiss?() }
     }
 }
