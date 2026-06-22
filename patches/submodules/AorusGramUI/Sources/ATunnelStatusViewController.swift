@@ -812,24 +812,499 @@ final class ATunnelStatusViewController: UIViewController {
     // MARK: - Actions
 
     @objc private func diagButtonTapped() {
-        NotificationCenter.default.post(name: NSNotification.Name("aorusgram_request_probe"), object: nil)
-
-        let title = isRu ? "Проверка..." : "Checking..."
-        let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
-        present(alert, animated: true)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self, weak alert] in
-            alert?.dismiss(animated: true) {
-                self?.fullReload()
+        let vc = ATunnelDiagnosticsViewController(theme: theme, isRu: isRu)
+        vc.onDismiss = { [weak self] in self?.fullReload() }
+        if #available(iOS 15.0, *) {
+            if let sheet = vc.sheetPresentationController {
+                sheet.detents = [.medium(), .large()]
+                sheet.prefersGrabberVisible = true
+                sheet.preferredCornerRadius = 24
             }
         }
+        present(vc, animated: true)
     }
 
     private func fullReload() {
         loadData()
         buildServerCards()
         applyData()
-        // Reanimate cards after reload
         animateCardsIn()
+    }
+}
+
+// MARK: - ATunnelDiagnosticsViewController
+//
+// Modal sheet with step-by-step diagnostic logic:
+//   1. Snapshot current status (which servers are active/down)
+//   2. Trigger fresh probe via cross-module notification
+//   3. Poll UserDefaults until result arrives (max 12s)
+//   4. Compare before/after → show what was fixed or why it's still broken
+//
+// The actual fix (selecting best server, applying it) is done by AorusProxyManager.
+// This controller makes the process VISIBLE and explains the result to the user.
+
+private final class ATunnelDiagnosticsViewController: UIViewController {
+
+    var onDismiss: (() -> Void)?
+
+    private let theme: PresentationTheme
+    private let isRu: Bool
+    private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
+
+    // UI
+    private let handleBar  = UIView()
+    private let titleLabel = UILabel()
+    private let subtitleLabel = UILabel()
+    private let stepsStack = UIStackView()
+    private let resultCard = UIView()
+    private let resultIcon = UIImageView()
+    private let resultTitle = UILabel()
+    private let resultBody  = UILabel()
+    private let closeButton = UIButton(type: .system)
+
+    // Step rows (icon + label)
+    private var stepRows: [DiagStepRow] = []
+
+    // State
+    private var pollTimer: Timer?
+    private var snapshotActiveRegion: String?   // active server before probe
+    private var snapshotUpdatedAt: Double = 0   // timestamp before probe
+    private var pollElapsed: TimeInterval = 0
+    private let pollInterval: TimeInterval = 0.4
+    private let pollTimeout:  TimeInterval = 12.0
+
+    // Step indices
+    private let kStepAnalyze  = 0   // Анализ текущего состояния
+    private let kStepScan     = 1   // Сканирование серверов
+    private let kStepSelect   = 2   // Выбор оптимального маршрута
+    private let kStepApply    = 3   // Применение настроек
+
+    init(theme: PresentationTheme, isRu: Bool) {
+        self.theme = theme
+        self.isRu = isRu
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .pageSheet
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        setupUI()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        runDiagnostics()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        pollTimer?.invalidate()
+    }
+
+    // MARK: – UI Setup
+
+    private func setupUI() {
+        view.backgroundColor = theme.list.plainBackgroundColor
+
+        // Grabber
+        handleBar.backgroundColor = UIColor(white: 0.5, alpha: 0.4)
+        handleBar.layer.cornerRadius = 2.5
+        handleBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(handleBar)
+
+        // Title
+        titleLabel.text = isRu ? "Диагностика" : "Diagnostics"
+        titleLabel.font = .systemFont(ofSize: 20, weight: .bold)
+        titleLabel.textColor = theme.list.itemPrimaryTextColor
+        titleLabel.textAlignment = .center
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(titleLabel)
+
+        subtitleLabel.text = isRu ? "Проверка и восстановление соединения ATunnel" : "Checking and restoring ATunnel connection"
+        subtitleLabel.font = .systemFont(ofSize: 14, weight: .regular)
+        subtitleLabel.textColor = theme.list.itemSecondaryTextColor
+        subtitleLabel.textAlignment = .center
+        subtitleLabel.numberOfLines = 2
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(subtitleLabel)
+
+        // Steps
+        stepsStack.axis = .vertical
+        stepsStack.spacing = 0
+        stepsStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stepsStack)
+
+        let stepDefs: [(String, String)] = [
+            (isRu ? "Анализ текущего состояния" : "Analysing current state",       "magnifyingglass"),
+            (isRu ? "Сканирование серверов"      : "Scanning servers",              "antenna.radiowaves.left.and.right"),
+            (isRu ? "Выбор оптимального маршрута": "Selecting optimal route",       "arrow.triangle.branch"),
+            (isRu ? "Применение настроек"         : "Applying configuration",       "checkmark.shield"),
+        ]
+        for def in stepDefs {
+            let row = DiagStepRow(title: def.0, sfSymbol: def.1, accentColor: purple, theme: theme)
+            stepRows.append(row)
+            stepsStack.addArrangedSubview(row)
+        }
+
+        // Result card (hidden until done)
+        resultCard.backgroundColor = theme.list.itemBlocksBackgroundColor
+        resultCard.layer.cornerRadius = 16
+        resultCard.alpha = 0
+        resultCard.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(resultCard)
+
+        resultIcon.contentMode = .scaleAspectFit
+        resultIcon.translatesAutoresizingMaskIntoConstraints = false
+        resultCard.addSubview(resultIcon)
+
+        resultTitle.font = .systemFont(ofSize: 16, weight: .semibold)
+        resultTitle.textColor = theme.list.itemPrimaryTextColor
+        resultTitle.numberOfLines = 2
+        resultTitle.translatesAutoresizingMaskIntoConstraints = false
+        resultCard.addSubview(resultTitle)
+
+        resultBody.font = .systemFont(ofSize: 13, weight: .regular)
+        resultBody.textColor = theme.list.itemSecondaryTextColor
+        resultBody.numberOfLines = 3
+        resultBody.translatesAutoresizingMaskIntoConstraints = false
+        resultCard.addSubview(resultBody)
+
+        // Close button
+        closeButton.setTitle(isRu ? "Закрыть" : "Close", for: .normal)
+        closeButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        closeButton.setTitleColor(purple, for: .normal)
+        closeButton.backgroundColor = purple.withAlphaComponent(0.12)
+        closeButton.layer.cornerRadius = 14
+        closeButton.layer.masksToBounds = true
+        closeButton.alpha = 0
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        view.addSubview(closeButton)
+
+        NSLayoutConstraint.activate([
+            handleBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
+            handleBar.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            handleBar.widthAnchor.constraint(equalToConstant: 40),
+            handleBar.heightAnchor.constraint(equalToConstant: 5),
+
+            titleLabel.topAnchor.constraint(equalTo: handleBar.bottomAnchor, constant: 20),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+
+            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
+            subtitleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            subtitleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+
+            stepsStack.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 28),
+            stepsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            stepsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+
+            resultCard.topAnchor.constraint(equalTo: stepsStack.bottomAnchor, constant: 20),
+            resultCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            resultCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            resultCard.heightAnchor.constraint(equalToConstant: 90),
+
+            resultIcon.leadingAnchor.constraint(equalTo: resultCard.leadingAnchor, constant: 16),
+            resultIcon.centerYAnchor.constraint(equalTo: resultCard.centerYAnchor),
+            resultIcon.widthAnchor.constraint(equalToConstant: 36),
+            resultIcon.heightAnchor.constraint(equalToConstant: 36),
+
+            resultTitle.topAnchor.constraint(equalTo: resultCard.topAnchor, constant: 16),
+            resultTitle.leadingAnchor.constraint(equalTo: resultIcon.trailingAnchor, constant: 14),
+            resultTitle.trailingAnchor.constraint(equalTo: resultCard.trailingAnchor, constant: -16),
+
+            resultBody.topAnchor.constraint(equalTo: resultTitle.bottomAnchor, constant: 4),
+            resultBody.leadingAnchor.constraint(equalTo: resultIcon.trailingAnchor, constant: 14),
+            resultBody.trailingAnchor.constraint(equalTo: resultCard.trailingAnchor, constant: -16),
+
+            closeButton.topAnchor.constraint(equalTo: resultCard.bottomAnchor, constant: 16),
+            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            closeButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            closeButton.heightAnchor.constraint(equalToConstant: 50),
+        ])
+    }
+
+    // MARK: – Diagnostics logic
+
+    private func runDiagnostics() {
+        // Snapshot "before" state
+        snapshotActiveRegion = currentActiveRegion()
+        snapshotUpdatedAt = currentUpdatedAt()
+
+        // Step 0: Анализ — instant, just reads current data
+        stepRows[kStepAnalyze].setState(.running)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self = self else { return }
+            let hasData = self.snapshotUpdatedAt > 0
+            self.stepRows[self.kStepAnalyze].setState(hasData ? .ok : .warn)
+
+            // Step 1: Сканирование — trigger fresh probe via cross-module notification
+            self.stepRows[self.kStepScan].setState(.running)
+            NotificationCenter.default.post(
+                name: NSNotification.Name("aorusgram_request_probe"), object: nil)
+
+            // Start polling for result
+            self.startPolling()
+        }
+    }
+
+    private func startPolling() {
+        pollElapsed = 0
+        pollTimer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
+            self?.pollTick()
+        }
+    }
+
+    private func pollTick() {
+        pollElapsed += pollInterval
+
+        let newUpdatedAt = currentUpdatedAt()
+        let probeFinished = newUpdatedAt > snapshotUpdatedAt + 0.5
+
+        if probeFinished {
+            pollTimer?.invalidate()
+            onProbeFinished()
+            return
+        }
+
+        // Timeout — probe took too long, show what we have
+        if pollElapsed >= pollTimeout {
+            pollTimer?.invalidate()
+            onProbeFinished()
+        }
+    }
+
+    private func onProbeFinished() {
+        // Step 1 → done
+        stepRows[kStepScan].setState(.ok)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self = self else { return }
+
+            // Step 2: Selection — evaluate result
+            self.stepRows[self.kStepSelect].setState(.running)
+            let newActiveRegion = self.currentActiveRegion()
+            let serverCount = self.currentServerCount()
+            let allDown = self.currentAllDown()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self = self else { return }
+                self.stepRows[self.kStepSelect].setState(allDown ? .fail : .ok)
+
+                // Step 3: Apply
+                self.stepRows[self.kStepApply].setState(.running)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                    guard let self = self else { return }
+                    self.stepRows[self.kStepApply].setState(allDown ? .fail : .ok)
+                    self.showResult(
+                        previousRegion: self.snapshotActiveRegion,
+                        newActiveRegion: newActiveRegion,
+                        serverCount: serverCount,
+                        allDown: allDown
+                    )
+                }
+            }
+        }
+    }
+
+    private func showResult(previousRegion: String?, newActiveRegion: String?, serverCount: Int, allDown: Bool) {
+        let cfg = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
+
+        if allDown {
+            // All servers unreachable — likely internet issue
+            resultIcon.image = UIImage(systemName: "wifi.slash", withConfiguration: cfg)
+            resultIcon.tintColor = .systemRed
+            resultTitle.text = isRu ? "Серверы недоступны" : "Servers unreachable"
+            resultBody.text  = isRu
+                ? "Нет ответа ни от одного сервера. Проверьте интернет-соединение."
+                : "No server responded. Check your internet connection."
+        } else if let new = newActiveRegion, new != previousRegion, let prev = previousRegion {
+            // Successfully switched to a better server
+            resultIcon.image = UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: cfg)
+            resultIcon.tintColor = UIColor(red: 0.19, green: 0.82, blue: 0.34, alpha: 1)
+            resultTitle.text = isRu ? "Маршрут переключён" : "Route switched"
+            resultBody.text  = isRu
+                ? "\(prev) → \(new)\nАктивный сервер обновлён автоматически."
+                : "\(prev) → \(new)\nActive server updated automatically."
+        } else if let active = newActiveRegion {
+            // Already on the best server — nothing needed
+            resultIcon.image = UIImage(systemName: "checkmark.shield.fill", withConfiguration: cfg)
+            resultIcon.tintColor = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1)
+            resultTitle.text = isRu ? "Соединение в норме" : "Connection is healthy"
+            resultBody.text  = isRu
+                ? "Активен: \(active). Маршрутизация работает оптимально."
+                : "Active: \(active). Routing is performing optimally."
+        } else {
+            // Edge case: data not yet available
+            resultIcon.image = UIImage(systemName: "exclamationmark.triangle.fill", withConfiguration: cfg)
+            resultIcon.tintColor = .systemOrange
+            resultTitle.text = isRu ? "Нет данных" : "No data"
+            resultBody.text  = isRu
+                ? "Данные ещё не получены. Откройте настройки и подождите немного."
+                : "Data not yet available. Open settings and wait a moment."
+        }
+
+        UIView.animate(withDuration: 0.4, delay: 0, options: .curveEaseOut) {
+            self.resultCard.alpha = 1
+            self.closeButton.alpha = 1
+        }
+    }
+
+    // MARK: – UserDefaults readers
+
+    private func parsedDiag() -> ATunnelDiag? {
+        guard let s = UserDefaults.standard.string(forKey: "aorusgram_atunnel_status"),
+              let d = s.data(using: .utf8),
+              let diag = try? JSONDecoder().decode(ATunnelDiag.self, from: d) else { return nil }
+        return diag
+    }
+
+    private func currentActiveRegion() -> String? {
+        parsedDiag()?.servers.first(where: { $0.active })?.region
+    }
+
+    private func currentUpdatedAt() -> Double {
+        parsedDiag()?.updatedAt ?? 0
+    }
+
+    private func currentServerCount() -> Int {
+        parsedDiag()?.servers.count ?? 0
+    }
+
+    private func currentAllDown() -> Bool {
+        guard let diag = parsedDiag() else { return true }
+        return diag.servers.allSatisfy { !$0.available }
+    }
+
+    // MARK: – Actions
+
+    @objc private func closeTapped() {
+        dismiss(animated: true) { [weak self] in self?.onDismiss?() }
+    }
+}
+
+// MARK: - DiagStepRow
+// One row in the diagnostics step list: icon + title + state indicator (spinner / ✓ / ✗)
+
+private final class DiagStepRow: UIView {
+
+    enum State { case idle, running, ok, warn, fail }
+
+    private let iconBg    = UIView()
+    private let iconView  = UIImageView()
+    private let titleLbl  = UILabel()
+    private let indicator = UIActivityIndicatorView(style: .medium)
+    private let stateIcon = UIImageView()
+
+    private let accentColor: UIColor
+    private let sfSymbol: String
+
+    init(title: String, sfSymbol: String, accentColor: UIColor, theme: PresentationTheme) {
+        self.accentColor = accentColor
+        self.sfSymbol    = sfSymbol
+        super.init(frame: .zero)
+
+        // Left icon badge
+        iconBg.backgroundColor = accentColor.withAlphaComponent(0.12)
+        iconBg.layer.cornerRadius = 10
+        iconBg.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iconBg)
+
+        let cfg = UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        iconView.image = UIImage(systemName: sfSymbol, withConfiguration: cfg)
+        iconView.tintColor = accentColor
+        iconView.contentMode = .scaleAspectFit
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconBg.addSubview(iconView)
+
+        // Title
+        titleLbl.text = title
+        titleLbl.font = .systemFont(ofSize: 15, weight: .medium)
+        titleLbl.textColor = theme.list.itemPrimaryTextColor
+        titleLbl.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLbl)
+
+        // Spinner (shown while running)
+        indicator.color = accentColor
+        indicator.hidesWhenStopped = true
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(indicator)
+
+        // State icon (✓ / ✗ / ⚠)
+        stateIcon.contentMode = .scaleAspectFit
+        stateIcon.alpha = 0
+        stateIcon.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stateIcon)
+
+        // Separator line at bottom
+        let sep = UIView()
+        sep.backgroundColor = theme.list.itemBlocksSeparatorColor.withAlphaComponent(0.2)
+        sep.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(sep)
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 60),
+
+            iconBg.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            iconBg.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconBg.widthAnchor.constraint(equalToConstant: 40),
+            iconBg.heightAnchor.constraint(equalToConstant: 40),
+
+            iconView.centerXAnchor.constraint(equalTo: iconBg.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconBg.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 20),
+            iconView.heightAnchor.constraint(equalToConstant: 20),
+
+            titleLbl.leadingAnchor.constraint(equalTo: iconBg.trailingAnchor, constant: 14),
+            titleLbl.centerYAnchor.constraint(equalTo: centerYAnchor),
+            titleLbl.trailingAnchor.constraint(equalTo: indicator.leadingAnchor, constant: -8),
+
+            indicator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            indicator.centerYAnchor.constraint(equalTo: centerYAnchor),
+            indicator.widthAnchor.constraint(equalToConstant: 24),
+            indicator.heightAnchor.constraint(equalToConstant: 24),
+
+            stateIcon.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            stateIcon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            stateIcon.widthAnchor.constraint(equalToConstant: 24),
+            stateIcon.heightAnchor.constraint(equalToConstant: 24),
+
+            sep.leadingAnchor.constraint(equalTo: iconBg.leadingAnchor),
+            sep.trailingAnchor.constraint(equalTo: trailingAnchor),
+            sep.bottomAnchor.constraint(equalTo: bottomAnchor),
+            sep.heightAnchor.constraint(equalToConstant: 0.5),
+        ])
+
+        setState(.idle)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setState(_ state: State) {
+        let cfg = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+        switch state {
+        case .idle:
+            indicator.stopAnimating()
+            stateIcon.alpha = 0
+        case .running:
+            indicator.startAnimating()
+            stateIcon.alpha = 0
+        case .ok:
+            indicator.stopAnimating()
+            stateIcon.image = UIImage(systemName: "checkmark.circle.fill", withConfiguration: cfg)
+            stateIcon.tintColor = UIColor(red: 0.19, green: 0.82, blue: 0.34, alpha: 1)
+            UIView.animate(withDuration: 0.25) { self.stateIcon.alpha = 1 }
+        case .warn:
+            indicator.stopAnimating()
+            stateIcon.image = UIImage(systemName: "exclamationmark.circle.fill", withConfiguration: cfg)
+            stateIcon.tintColor = .systemOrange
+            UIView.animate(withDuration: 0.25) { self.stateIcon.alpha = 1 }
+        case .fail:
+            indicator.stopAnimating()
+            stateIcon.image = UIImage(systemName: "xmark.circle.fill", withConfiguration: cfg)
+            stateIcon.tintColor = .systemRed
+            UIView.animate(withDuration: 0.25) { self.stateIcon.alpha = 1 }
+        }
     }
 }
