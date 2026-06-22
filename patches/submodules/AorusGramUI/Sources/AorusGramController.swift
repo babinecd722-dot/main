@@ -988,12 +988,18 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             updateState { s in var n = s; n.cacheCleanInterval = hours; return n }
         },
         openProxyDiagnostics: { // AORUS-DIAG
-            guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController else { return }
+            // Telegram's NavigationController is node-based (ASDisplayNode) and only
+            // accepts Display.ViewController instances — pushing a plain UIViewController
+            // crashes at runtime. So the ATunnel page is shown modally inside a standard
+            // UIKit UINavigationController (same UIKit-present path used for the alerts
+            // above), which fully sidesteps Telegram's custom navigation stack.
+            guard let controller = weakController else { return }
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
             let vc = ATunnelStatusViewController(theme: presentationData.theme, isRu: isRu)
-            navigationController.pushViewController(vc, animated: true)
+            let nav = UINavigationController(rootViewController: vc)
+            nav.modalPresentationStyle = .fullScreen
+            controller.present(nav, animated: true)
         }
     )
 

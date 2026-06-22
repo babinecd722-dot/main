@@ -311,10 +311,34 @@ final class ATunnelStatusViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        setupNavigationBar()
         setupViews()
         loadData()
         buildServerCards()
         applyData()
+    }
+
+    // Themed nav bar + "Done" button. The page is presented modally inside a plain
+    // UIKit UINavigationController (Telegram's node-based nav can't host a UIViewController),
+    // so we own the bar appearance here to match the current Telegram theme.
+    private func setupNavigationBar() {
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: isRu ? "Готово" : "Done",
+            style: .done, target: self, action: #selector(doneTapped))
+
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = theme.list.plainBackgroundColor
+        appearance.titleTextAttributes = [.foregroundColor: theme.list.itemPrimaryTextColor]
+        appearance.largeTitleTextAttributes = [.foregroundColor: theme.list.itemPrimaryTextColor]
+        navigationItem.standardAppearance = appearance
+        navigationItem.scrollEdgeAppearance = appearance
+        navigationItem.compactAppearance = appearance
+        navigationController?.navigationBar.tintColor = purple
+    }
+
+    @objc private func doneTapped() {
+        dismiss(animated: true)
     }
 
     override func viewDidAppear(_ animated: Bool) {
