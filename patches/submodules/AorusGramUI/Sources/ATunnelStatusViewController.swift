@@ -365,10 +365,16 @@ final class ATunnelStatusViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         guard !didPlayEntrance else { return }
-        [duckView, titleLabel, subtitleLabel, serversSectionLabel,
-         serverCardsStack, callsSectionLabel, callCard, updatedLabel, diagButton].forEach {
+        let animatable: [UIView] = [duckView, titleLabel, subtitleLabel, serversSectionLabel,
+                                    serverCardsStack, callsSectionLabel, callCard, updatedLabel]
+        animatable.forEach {
             $0.alpha = 0
             $0.transform = CGAffineTransform(translationX: 0, y: 20)
+        }
+        // diagButton starts hidden; entrance only reveals it if it was already shown
+        if !diagButton.isHidden {
+            diagButton.alpha = 0
+            diagButton.transform = CGAffineTransform(translationX: 0, y: 20)
         }
     }
 
@@ -378,21 +384,28 @@ final class ATunnelStatusViewController: UIViewController {
         guard !didPlayEntrance else { return }
         didPlayEntrance = true
 
-        // Duck pops in
-        UIView.animate(withDuration: 0.6, delay: 0,
-                       usingSpringWithDamping: 0.6, initialSpringVelocity: 0.6,
+        // Duck pops in with spring
+        UIView.animate(withDuration: 0.55, delay: 0,
+                       usingSpringWithDamping: 0.65, initialSpringVelocity: 0.5,
                        options: .allowUserInteraction) {
             self.duckView.alpha = 1
             self.duckView.transform = .identity
         }
-        // Rest cascades up
+        // Content cascades up
         let rest: [UIView] = [titleLabel, subtitleLabel, serversSectionLabel,
-                              serverCardsStack, callsSectionLabel, callCard, updatedLabel, diagButton]
+                              serverCardsStack, callsSectionLabel, callCard, updatedLabel]
         for (i, v) in rest.enumerated() {
-            UIView.animate(withDuration: 0.5, delay: 0.1 + Double(i) * 0.05,
-                           usingSpringWithDamping: 0.85, initialSpringVelocity: 0.3,
+            UIView.animate(withDuration: 0.45, delay: 0.08 + Double(i) * 0.045,
+                           usingSpringWithDamping: 0.82, initialSpringVelocity: 0.4,
                            options: .allowUserInteraction) {
                 v.alpha = 1; v.transform = .identity
+            }
+        }
+        // diagButton fades in last only if visible
+        if !diagButton.isHidden {
+            UIView.animate(withDuration: 0.4, delay: 0.08 + Double(rest.count) * 0.045,
+                           options: .allowUserInteraction) {
+                self.diagButton.alpha = 1; self.diagButton.transform = .identity
             }
         }
     }
@@ -642,7 +655,12 @@ final class ATunnelStatusViewController: UIViewController {
 
     private func applyDiagButton() {
         let anyDown = diag?.servers.contains(where: { !$0.available }) ?? false
+        let wasHidden = diagButton.isHidden
         diagButton.isHidden = !anyDown
+        if wasHidden && anyDown {
+            diagButton.alpha = 0
+            UIView.animate(withDuration: 0.35) { self.diagButton.alpha = 1 }
+        }
     }
 
     // MARK: - Server card
