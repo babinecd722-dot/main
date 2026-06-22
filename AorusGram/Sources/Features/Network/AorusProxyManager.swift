@@ -101,9 +101,11 @@ public final class AorusProxyManager {
     private let probeQueue = DispatchQueue(label: "com.aorusgram.proxy.probe", qos: .utility)
     private let probeAttempts = 3
     private let probeTimeout: TimeInterval = 6.0
-    // When two proxies are within this latency margin, prefer the lower server
-    // `priority` number (the server's "closest/least-loaded" hint).
-    private let probeTieMargin: TimeInterval = 0.03
+    // Smart-selection weights (see selectBestCandidate): added to median latency to
+    // score each server by speed AND stability AND load — not by raw ping alone.
+    private let scoreJitterWeight: Double = 1.0      // latency spread → congestion / load
+    private let scoreLossPenalty: Double = 0.5       // per failed attempt → overloaded / flaky
+    private let scorePriorityWeight: Double = 0.005  // tiny server-priority bias (ties only)
 
     // Fast fail-over watchdog: the last candidate list from the server (so we can
     // re-select locally without re-hitting /getProxy), and a timer that, between the
@@ -111,7 +113,11 @@ public final class AorusProxyManager {
     // reachable alternative if the current one goes down (e.g. server maintenance).
     private var lastCandidates: [AorusProxyCandidate] = []
     private var watchdogTimer: DispatchSourceTimer?
-    private let watchdogInterval: TimeInterval = 60.0
+    // Snappy fail-over: check the live proxy every 10s with a short 3s probe. A server
+    // taken down for maintenance refuses connections instantly, so a dead proxy is
+    // detected and switched in ~10-15s instead of waiting for the hourly refresh.
+    private let watchdogInterval: TimeInterval = 10.0
+    private let watchdogProbeTimeout: TimeInterval = 3.0
 
     // MARK: - Public
 
@@ -237,19 +243,29 @@ public final class AorusProxyManager {
 
     // MARK: - Multi-proxy probing & selection
 
-    /// Probes every candidate in parallel and returns the best (fastest reachable),
-    /// breaking near-ties by the server's `priority` hint. Returns nil if none answer.
+    /// Probes every candidate in parallel and picks the SMARTEST one — not the lowest
+    /// ping alone, but the best blend of speed, stability and load:
+    ///   score = median latency
+    ///         + jitter      (spread across attempts → congestion / load)
+    ///         + packet loss (failed attempts → overloaded / flaky server)
+    ///         + a tiny server-`priority` bias (only decisive for near-ties)
+    /// Lower score wins. Returns nil if none answer.
     private func selectBestCandidate(_ candidates: [AorusProxyCandidate], completion: @escaping (AorusProxyCandidate?) -> Void) {
         let group = DispatchGroup()
-        var results: [(candidate: AorusProxyCandidate, latency: TimeInterval)] = []
+        var scored: [(candidate: AorusProxyCandidate, score: Double)] = []
         let resultsLock = NSLock()
 
         for candidate in candidates {
             group.enter()
-            probeCandidate(candidate) { latency in
-                if let latency = latency {
+            probeCandidate(candidate) { result in
+                if let result = result {
+                    let loss = Double(self.probeAttempts - result.successes)
+                    let score = result.median
+                        + result.jitter * self.scoreJitterWeight
+                        + loss * self.scoreLossPenalty
+                        + Double(candidate.priority ?? 99) * self.scorePriorityWeight
                     resultsLock.lock()
-                    results.append((candidate, latency))
+                    scored.append((candidate, score))
                     resultsLock.unlock()
                 }
                 group.leave()
@@ -257,29 +273,38 @@ public final class AorusProxyManager {
         }
 
         group.notify(queue: probeQueue) {
-            let tieMargin = self.probeTieMargin
-            let sorted = results.sorted { lhs, rhs in
-                if abs(lhs.latency - rhs.latency) > tieMargin {
-                    return lhs.latency < rhs.latency
-                }
-                return (lhs.candidate.priority ?? Int.max) < (rhs.candidate.priority ?? Int.max)
-            }
+            let sorted = scored.sorted { $0.score < $1.score }
             completion(sorted.first?.candidate)
         }
     }
 
-    /// Probes one candidate `probeAttempts` times and returns the median latency of
-    /// the successful attempts, or nil if every attempt failed.
-    private func probeCandidate(_ candidate: AorusProxyCandidate, completion: @escaping (TimeInterval?) -> Void) {
+    /// One probed candidate: median latency, how many attempts succeeded, and the
+    /// jitter (spread) of the successful latencies.
+    private struct ProbeResult {
+        let median: TimeInterval
+        let successes: Int
+        let jitter: TimeInterval
+    }
+
+    /// Probes one candidate `probeAttempts` times and returns its latency profile, or
+    /// nil if every attempt failed (unreachable). A single failure does NOT disqualify
+    /// it — it is reflected as packet loss in the score.
+    private func probeCandidate(_ candidate: AorusProxyCandidate, completion: @escaping (ProbeResult?) -> Void) {
         var latencies: [TimeInterval] = []
         let attempts = probeAttempts
 
         func runAttempt(_ index: Int) {
             if index >= attempts {
-                completion(Self.median(latencies))
+                guard let median = Self.median(latencies) else {
+                    completion(nil)
+                    return
+                }
+                let sorted = latencies.sorted()
+                let jitter = sorted.count >= 2 ? (sorted[sorted.count - 1] - sorted[0]) : 0.0
+                completion(ProbeResult(median: median, successes: latencies.count, jitter: jitter))
                 return
             }
-            probeLatency(host: candidate.server, port: candidate.port) { latency in
+            probeLatency(host: candidate.server, port: candidate.port, timeout: probeTimeout) { latency in
                 if let latency = latency {
                     latencies.append(latency)
                 }
@@ -290,7 +315,7 @@ public final class AorusProxyManager {
     }
 
     /// One TCP-connect probe with a hard timeout. Latency = time to reach `.ready`.
-    private func probeLatency(host: String, port: Int, completion: @escaping (TimeInterval?) -> Void) {
+    private func probeLatency(host: String, port: Int, timeout: TimeInterval, completion: @escaping (TimeInterval?) -> Void) {
         guard port > 0, port <= 65535, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
             completion(nil)
             return
@@ -321,7 +346,7 @@ public final class AorusProxyManager {
             }
         }
         connection.start(queue: probeQueue)
-        probeQueue.asyncAfter(deadline: .now() + probeTimeout) {
+        probeQueue.asyncAfter(deadline: .now() + timeout) {
             finish(nil)
         }
     }
@@ -373,12 +398,12 @@ public final class AorusProxyManager {
             return
         }
 
-        probeLatency(host: current.server, port: current.port) { [weak self] latency in
+        probeLatency(host: current.server, port: current.port, timeout: watchdogProbeTimeout) { [weak self] latency in
             guard let self = self else { return }
             if latency != nil {
                 return   // still alive
             }
-            self.probeLatency(host: current.server, port: current.port) { [weak self] retry in
+            self.probeLatency(host: current.server, port: current.port, timeout: self.watchdogProbeTimeout) { [weak self] retry in
                 guard let self = self else { return }
                 if retry != nil {
                     return   // recovered — was a transient blip
