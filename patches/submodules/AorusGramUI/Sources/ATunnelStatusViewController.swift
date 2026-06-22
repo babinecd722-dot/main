@@ -318,13 +318,14 @@ final class ATunnelStatusViewController: UIViewController {
         applyData()
     }
 
-    // Themed nav bar + "Done" button. The page is presented modally inside a plain
-    // UIKit UINavigationController (Telegram's node-based nav can't host a UIViewController),
-    // so we own the bar appearance here to match the current Telegram theme.
+    // Themed nav bar + system close (X) button. The page is presented modally inside a
+    // plain UIKit UINavigationController (Telegram's node-based nav can't host a plain
+    // UIViewController), so — exactly like the subscription screens (LicenseGate) — the
+    // modal root is dismissed with a standard .close item. Bar styling follows the
+    // current Telegram theme.
     private func setupNavigationBar() {
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: isRu ? "Готово" : "Done",
-            style: .done, target: self, action: #selector(doneTapped))
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .close, target: self, action: #selector(closePage))
 
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
@@ -337,7 +338,7 @@ final class ATunnelStatusViewController: UIViewController {
         navigationController?.navigationBar.tintColor = purple
     }
 
-    @objc private func doneTapped() {
+    @objc private func closePage() {
         dismiss(animated: true)
     }
 
