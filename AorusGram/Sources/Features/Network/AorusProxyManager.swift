@@ -112,6 +112,7 @@ public final class AorusProxyManager {
     // hourly refreshes, watches the live proxy and instantly switches to the fastest
     // reachable alternative if the current one goes down (e.g. server maintenance).
     private var lastCandidates: [AorusProxyCandidate] = []
+    private var lastProbeReport = "—" // AORUS-DIAG
     private var watchdogTimer: DispatchSourceTimer?
     // Snappy fail-over: check the live proxy every 10s with a short 3s probe. A server
     // taken down for maintenance refuses connections instantly, so a dead proxy is
@@ -252,7 +253,7 @@ public final class AorusProxyManager {
     /// Lower score wins. Returns nil if none answer.
     private func selectBestCandidate(_ candidates: [AorusProxyCandidate], completion: @escaping (AorusProxyCandidate?) -> Void) {
         let group = DispatchGroup()
-        var scored: [(candidate: AorusProxyCandidate, score: Double)] = []
+        var scored: [(candidate: AorusProxyCandidate, result: ProbeResult, score: Double)] = []
         let resultsLock = NSLock()
 
         for candidate in candidates {
@@ -265,7 +266,7 @@ public final class AorusProxyManager {
                         + loss * self.scoreLossPenalty
                         + Double(candidate.priority ?? 99) * self.scorePriorityWeight
                     resultsLock.lock()
-                    scored.append((candidate, score))
+                    scored.append((candidate, result, score))
                     resultsLock.unlock()
                 }
                 group.leave()
@@ -274,6 +275,18 @@ public final class AorusProxyManager {
 
         group.notify(queue: probeQueue) {
             let sorted = scored.sorted { $0.score < $1.score }
+            // AORUS-DIAG: capture per-server probe results for the settings diagnostic.
+            var reportLines: [String] = []
+            for item in sorted {
+                let ms = Int(item.result.median * 1000)
+                let jit = Int(item.result.jitter * 1000)
+                let lossN = self.probeAttempts - item.result.successes
+                reportLines.append("\(item.candidate.region ?? "?"): ping=\(ms)мс loss=\(lossN)/\(self.probeAttempts) jit=\(jit)мс")
+            }
+            for c in candidates where !sorted.contains(where: { $0.candidate.server == c.server && $0.candidate.port == c.port }) {
+                reportLines.append("\(c.region ?? "?"): недоступен")
+            }
+            self.lock.lock(); self.lastProbeReport = reportLines.isEmpty ? "—" : reportLines.joined(separator: "\n"); self.lock.unlock()
             completion(sorted.first?.candidate)
         }
     }
@@ -481,8 +494,33 @@ public final class AorusProxyManager {
         // sealed with AES-GCM and stored as one opaque value — a jailbreak file
         // browser sees only ciphertext, never the live proxy secret. (See ProxyVault.)
         ProxyVault.publish(cfg)
+        writeDiagnostics() // AORUS-DIAG
         // Wake the system-side bridge so it re-applies immediately.
         NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
+    }
+
+    // AORUS-DIAG: temporary proxy diagnostics surfaced in AorusGram settings (reads
+    // the UserDefaults key written here). To remove the whole feature: grep AORUS-DIAG.
+    private func writeDiagnostics() {
+        lock.lock()
+        let candidates = lastCandidates
+        let chosen = cached
+        let report = lastProbeReport
+        lock.unlock()
+        let callOn = UserDefaults(suiteName: ProxyVault.suiteName)?.string(forKey: ProxyVault.callBlobKey) != nil
+        var lines: [String] = []
+        lines.append("Серверов получено: \(candidates.count)")
+        for c in candidates {
+            lines.append("  • \(c.region ?? "?") — \(c.server):\(c.port)")
+        }
+        lines.append("Выбран: \(chosen.map { "\($0.server):\($0.port)" } ?? "—")")
+        lines.append("callProxy (звонки): \(callOn ? "да" : "нет")")
+        if report != "—" {
+            lines.append("")
+            lines.append("Пробы:")
+            lines.append(report)
+        }
+        UserDefaults.standard.set(lines.joined(separator: "\n"), forKey: "aorusgram_proxy_diag")
     }
 
     private func load() {

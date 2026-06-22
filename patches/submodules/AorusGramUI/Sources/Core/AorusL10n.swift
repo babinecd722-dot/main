@@ -107,6 +107,7 @@ public struct AorusL10n {
     public var aorusCodeHint: String { t("Удерживайте кнопку прикрепления чтобы отправить скрытое сообщение", "Hold the attachment button to send a hidden message") }
     public var accountDetails: String { t("Подробнее", "Details") }
     public var officialChannel: String { t("Официальный канал", "Official channel") }
+    public var proxyDiagnostics: String { t("Диагностика прокси", "Proxy diagnostics") } // AORUS-DIAG
 
     // MARK: Messages section (tap gestures + local editing)
     public var messagesHeader: String { t("СООБЩЕНИЯ", "MESSAGES") }

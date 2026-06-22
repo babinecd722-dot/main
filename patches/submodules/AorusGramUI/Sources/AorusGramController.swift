@@ -302,6 +302,7 @@ private final class AorusArguments {
     let openDeviceSpoof: () -> Void
     let openVoiceTwin: () -> Void
     let setCacheInterval: (Int) -> Void
+    let openProxyDiagnostics: () -> Void // AORUS-DIAG
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
          openChannel: @escaping () -> Void,
@@ -310,7 +311,8 @@ private final class AorusArguments {
          openAccountBackup: @escaping () -> Void,
          openDeviceSpoof: @escaping () -> Void,
          openVoiceTwin: @escaping () -> Void,
-         setCacheInterval: @escaping (Int) -> Void) {
+         setCacheInterval: @escaping (Int) -> Void,
+         openProxyDiagnostics: @escaping () -> Void) { // AORUS-DIAG
         self.set = set
         self.openChannel = openChannel
         self.openSubscription = openSubscription
@@ -319,6 +321,7 @@ private final class AorusArguments {
         self.openDeviceSpoof = openDeviceSpoof
         self.openVoiceTwin = openVoiceTwin
         self.setCacheInterval = setCacheInterval
+        self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
     }
 }
 
@@ -378,6 +381,7 @@ private enum AorusEntry: ItemListNodeEntry {
 
     case subscription(PresentationTheme, String)
     case officialChannel(PresentationTheme, String)
+    case proxyDiagnostics(PresentationTheme, String) // AORUS-DIAG
 
     var section: ItemListSectionId {
         switch self {
@@ -401,7 +405,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.accountBackup.rawValue
         case .aorusCodeHeader, .aorusCodeEnabled:
             return AorusSection.aorusCode.rawValue
-        case .subscription, .officialChannel:
+        case .subscription, .officialChannel, .proxyDiagnostics: // AORUS-DIAG
             return AorusSection.channel.rawValue
         }
     }
@@ -450,6 +454,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case .aorusCodeEnabled:     return 71
         case .subscription:         return 79
         case .officialChannel:      return 80
+        case .proxyDiagnostics:     return 90 // AORUS-DIAG
         }
     }
 
@@ -543,6 +548,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .subscription(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .officialChannel(lt, ls):
             if case let .officialChannel(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .proxyDiagnostics(lt, ls): // AORUS-DIAG
+            if case let .proxyDiagnostics(rt, rs) = rhs { return lt === rt && ls == rs } // AORUS-DIAG
         }
         return false
     }
@@ -635,6 +642,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openSubscription)
         case let .officialChannel(_, title):
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openChannel)
+        case let .proxyDiagnostics(_, title): // AORUS-DIAG
+            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openProxyDiagnostics) // AORUS-DIAG
         }
     }
 }
@@ -705,6 +714,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 
         .subscription(theme, l10n.subscription),
         .officialChannel(theme, l10n.officialChannel),
+        .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
     ]
 
     // The cleanup-interval slider only appears once auto-clean is switched on.
@@ -976,6 +986,12 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         setCacheInterval: { hours in
             AorusGramManager.shared.cacheCleanInterval = hours
             updateState { s in var n = s; n.cacheCleanInterval = hours; return n }
+        },
+        openProxyDiagnostics: { // AORUS-DIAG
+            let text = UserDefaults.standard.string(forKey: "aorusgram_proxy_diag") ?? "Нет данных. Открой настройки после запуска, когда прокси обновится."
+            let alert = UIAlertController(title: "Proxy diagnostics", message: text, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            weakController?.present(alert, animated: true)
         }
     )
 
