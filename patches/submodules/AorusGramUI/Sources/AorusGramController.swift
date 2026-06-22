@@ -988,10 +988,12 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             updateState { s in var n = s; n.cacheCleanInterval = hours; return n }
         },
         openProxyDiagnostics: { // AORUS-DIAG
-            let text = UserDefaults.standard.string(forKey: "aorusgram_proxy_diag") ?? "Нет данных. Открой настройки после запуска, когда прокси обновится."
-            let alert = UIAlertController(title: "Proxy diagnostics", message: text, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            weakController?.present(alert, animated: true)
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else { return }
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
+            let vc = ATunnelStatusViewController(theme: presentationData.theme, isRu: isRu)
+            navigationController.pushViewController(vc, animated: true)
         }
     )
 

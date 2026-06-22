@@ -69,9 +69,39 @@ struct AorusCallProxyConfig: Codable, Equatable {
     let udp: Bool?
 }
 
+// MARK: - ATunnel status diagnostics (AORUS-DIAG)
+// Written by AorusProxyManager.writeDiagnostics() → read by ATunnelStatusViewController.
+// Both sides use identical field names; each file defines its own private copy of the struct.
+
+private struct ATunnelDiagData: Codable {
+    struct Server: Codable {
+        let region: String
+        let available: Bool
+        let active: Bool
+        let latencyMs: Int?
+        let jitterMs: Int?
+        let lossCount: Int
+    }
+    let servers: [Server]
+    let callTunnel: Bool
+    let updatedAt: Double
+}
+
 public final class AorusProxyManager {
     public static let shared = AorusProxyManager()
-    private init() { load() }
+    private init() {
+        load()
+        // Cross-module force-probe signal: ATunnelStatusViewController (AorusGramUI) posts
+        // this notification when the user taps "Запустить диагностику" — triggers a fresh probe.
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(_onForceProbeRequest),
+            name: NSNotification.Name("aorusgram_request_probe"),
+            object: nil)
+    }
+
+    @objc private func _onForceProbeRequest() {
+        refresh(force: true)
+    }
 
     // Key version sent as X-Aorus-Kv. Bump in lock-step with the server table
     // when rotating SECRET_KEY.
@@ -101,7 +131,11 @@ public final class AorusProxyManager {
     // handles fail-over: a proxy that stopped responding drops out of the next pick.
     private let probeQueue = DispatchQueue(label: "com.aorusgram.proxy.probe", qos: .utility)
     private let probeAttempts = 3
-    private let probeTimeout: TimeInterval = 6.0
+    private let probeTimeout: TimeInterval = 4.0       // background/hourly refresh
+    // First-launch & forced refresh: fewer attempts + shorter per-probe timeout so the
+    // user sees the initial connection come up in ≤4s instead of up to 18s (3×6s).
+    private let launchProbeAttempts = 2
+    private let launchProbeTimeout: TimeInterval = 2.0
     // Smart-selection weights (see selectBestCandidate): added to median latency to
     // score each server by speed AND stability AND load — not by raw ping alone.
     private let scoreJitterWeight: Double = 1.0      // latency spread → congestion / load
@@ -113,7 +147,8 @@ public final class AorusProxyManager {
     // hourly refreshes, watches the live proxy and instantly switches to the fastest
     // reachable alternative if the current one goes down (e.g. server maintenance).
     private var lastCandidates: [AorusProxyCandidate] = []
-    private var lastProbeReport = "—" // AORUS-DIAG
+    private var lastProbeReport = "—" // AORUS-DIAG (legacy text, kept for internal use)
+    private var lastServerStatuses: [ATunnelDiagData.Server] = [] // AORUS-DIAG structured
     private var watchdogTimer: DispatchSourceTimer?
 
     // MTProto-level health fail-over: the injected connection-status observer writes the
@@ -130,8 +165,9 @@ public final class AorusProxyManager {
     // Snappy fail-over: check the live proxy every 10s with a short 3s probe. A server
     // taken down for maintenance refuses connections instantly, so a dead proxy is
     // detected and switched in ~10-15s instead of waiting for the hourly refresh.
-    private let watchdogInterval: TimeInterval = 10.0
-    private let watchdogProbeTimeout: TimeInterval = 3.0
+    // Snappy fail-over: 4s poll + 1s probe → worst-case detection ~6s (was 10+3+3=16s)
+    private let watchdogInterval: TimeInterval = 4.0
+    private let watchdogProbeTimeout: TimeInterval = 1.0
 
     // MARK: - Public
 
@@ -237,13 +273,22 @@ public final class AorusProxyManager {
             // option). This keeps the legacy single-proxy response instant.
             if candidates.count == 1, let only = candidates.first {
                 let cfg = AorusProxyConfig(server: only.server, port: only.port, secret: only.secret, ttl: resp.ttl)
+                // Populate diagnostics so the ATunnel page shows something immediately.
+                let singleStatus = ATunnelDiagData.Server(
+                    region: only.region ?? only.server, available: true, active: true,
+                    latencyMs: nil, jitterMs: nil, lossCount: 0)
+                self.lock.lock(); self.lastServerStatuses = [singleStatus]; self.lock.unlock()
                 self.store(cfg)
                 finish(cfg)
                 return
             }
 
             // Probe every candidate and keep the fastest reachable one for ttl.
-            self.selectBestCandidate(candidates) { best in
+            // Use faster timeouts on the first (launch/force) call so the user doesn't
+            // wait up to 18s (3×6s) for the initial connection to come up.
+            let probeAtt = effectiveForce ? self.launchProbeAttempts : self.probeAttempts
+            let probeTO  = effectiveForce ? self.launchProbeTimeout  : self.probeTimeout
+            self.selectBestCandidate(candidates, attempts: probeAtt, timeout: probeTO) { best in
                 if let best = best {
                     let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: resp.ttl)
                     self.store(cfg)
@@ -273,7 +318,12 @@ public final class AorusProxyManager {
     ///         + packet loss (failed attempts → overloaded / flaky server)
     ///         + a tiny server-`priority` bias (only decisive for near-ties)
     /// Lower score wins. Returns nil if none answer.
-    private func selectBestCandidate(_ candidates: [AorusProxyCandidate], completion: @escaping (AorusProxyCandidate?) -> Void) {
+    private func selectBestCandidate(
+        _ candidates: [AorusProxyCandidate],
+        attempts: Int,
+        timeout: TimeInterval,
+        completion: @escaping (AorusProxyCandidate?) -> Void
+    ) {
         // Skip servers recently penalised for MTProto-level failures (a TCP probe can't
         // tell they're broken). Fall back to the full list if every server is penalised.
         let nowDate = Date()
@@ -282,9 +332,7 @@ public final class AorusProxyManager {
         let penalized = self.penalizedServers
         self.lock.unlock()
         var pool = candidates.filter { penalized[self.serverKey($0.server, $0.port)] == nil }
-        if pool.isEmpty {
-            pool = candidates
-        }
+        if pool.isEmpty { pool = candidates }
 
         let group = DispatchGroup()
         var scored: [(candidate: AorusProxyCandidate, result: ProbeResult, score: Double)] = []
@@ -292,9 +340,9 @@ public final class AorusProxyManager {
 
         for candidate in pool {
             group.enter()
-            probeCandidate(candidate) { result in
+            probeCandidate(candidate, attempts: attempts, timeout: timeout) { result in
                 if let result = result {
-                    let loss = Double(self.probeAttempts - result.successes)
+                    let loss = Double(attempts - result.successes)
                     let score = result.median
                         + result.jitter * self.scoreJitterWeight
                         + loss * self.scoreLossPenalty
@@ -309,18 +357,40 @@ public final class AorusProxyManager {
 
         group.notify(queue: probeQueue) {
             let sorted = scored.sorted { $0.score < $1.score }
-            // AORUS-DIAG: capture per-server probe results for the settings diagnostic.
+            let bestKey = sorted.first.map { self.serverKey($0.candidate.server, $0.candidate.port) }
+
+            // AORUS-DIAG: build per-server structured status for ATunnelStatusViewController.
+            var statuses: [ATunnelDiagData.Server] = []
+            for candidate in pool {
+                let probed = scored.first { $0.candidate.server == candidate.server && $0.candidate.port == candidate.port }
+                let ms  = probed.map { Int($0.result.median * 1000) }
+                let jit = probed.map { Int($0.result.jitter * 1000) }
+                let lossN = probed.map { attempts - $0.result.successes } ?? attempts
+                statuses.append(ATunnelDiagData.Server(
+                    region: candidate.region ?? candidate.server,
+                    available: probed != nil,
+                    active: self.serverKey(candidate.server, candidate.port) == bestKey,
+                    latencyMs: ms,
+                    jitterMs: jit,
+                    lossCount: lossN
+                ))
+            }
+
+            // Legacy text report (internal use).
             var reportLines: [String] = []
             for item in sorted {
                 let ms = Int(item.result.median * 1000)
                 let jit = Int(item.result.jitter * 1000)
-                let lossN = self.probeAttempts - item.result.successes
-                reportLines.append("\(item.candidate.region ?? "?"): ping=\(ms)мс loss=\(lossN)/\(self.probeAttempts) jit=\(jit)мс")
+                let lossN = attempts - item.result.successes
+                reportLines.append("\(item.candidate.region ?? "?"): ping=\(ms)мс loss=\(lossN)/\(attempts) jit=\(jit)мс")
             }
             for c in pool where !sorted.contains(where: { $0.candidate.server == c.server && $0.candidate.port == c.port }) {
                 reportLines.append("\(c.region ?? "?"): недоступен")
             }
-            self.lock.lock(); self.lastProbeReport = reportLines.isEmpty ? "—" : reportLines.joined(separator: "\n"); self.lock.unlock()
+            self.lock.lock()
+            self.lastProbeReport = reportLines.isEmpty ? "—" : reportLines.joined(separator: "\n")
+            self.lastServerStatuses = statuses
+            self.lock.unlock()
             completion(sorted.first?.candidate)
         }
     }
@@ -336,9 +406,13 @@ public final class AorusProxyManager {
     /// Probes one candidate `probeAttempts` times and returns its latency profile, or
     /// nil if every attempt failed (unreachable). A single failure does NOT disqualify
     /// it — it is reflected as packet loss in the score.
-    private func probeCandidate(_ candidate: AorusProxyCandidate, completion: @escaping (ProbeResult?) -> Void) {
+    private func probeCandidate(
+        _ candidate: AorusProxyCandidate,
+        attempts: Int,
+        timeout: TimeInterval,
+        completion: @escaping (ProbeResult?) -> Void
+    ) {
         var latencies: [TimeInterval] = []
-        let attempts = probeAttempts
 
         func runAttempt(_ index: Int) {
             if index >= attempts {
@@ -351,10 +425,8 @@ public final class AorusProxyManager {
                 completion(ProbeResult(median: median, successes: latencies.count, jitter: jitter))
                 return
             }
-            probeLatency(host: candidate.server, port: candidate.port, timeout: probeTimeout) { latency in
-                if let latency = latency {
-                    latencies.append(latency)
-                }
+            probeLatency(host: candidate.server, port: candidate.port, timeout: timeout) { latency in
+                if let latency = latency { latencies.append(latency) }
                 runAttempt(index + 1)
             }
         }
@@ -464,7 +536,7 @@ public final class AorusProxyManager {
             lastFailoverAt = now
             lock.unlock()
             UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey) // re-arms if the new proxy is also bad
-            selectBestCandidate(candidates) { [weak self] best in
+            selectBestCandidate(candidates, attempts: probeAttempts, timeout: watchdogProbeTimeout) { [weak self] best in
                 guard let self = self, let best = best else { return }
                 if best.server != current.server || best.port != current.port {
                     let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: current.ttl)
@@ -485,7 +557,7 @@ public final class AorusProxyManager {
                     return   // recovered — was a transient blip
                 }
                 // Confirmed down: pick the fastest reachable alternative and switch.
-                self.selectBestCandidate(candidates) { [weak self] best in
+                self.selectBestCandidate(candidates, attempts: self.probeAttempts, timeout: self.watchdogProbeTimeout) { [weak self] best in
                     guard let self = self, let best = best else { return }
                     if best.server != current.server || best.port != current.port {
                         let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: current.ttl)
@@ -562,28 +634,18 @@ public final class AorusProxyManager {
         NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
     }
 
-    // AORUS-DIAG: temporary proxy diagnostics surfaced in AorusGram settings (reads
-    // the UserDefaults key written here). To remove the whole feature: grep AORUS-DIAG.
+    // AORUS-DIAG: ATunnel status page in AorusGram settings reads this JSON.
+    // To remove the whole feature: grep AORUS-DIAG.
     private func writeDiagnostics() {
         lock.lock()
-        let candidates = lastCandidates
-        let chosen = cached
-        let report = lastProbeReport
+        let statuses = lastServerStatuses
         lock.unlock()
         let callOn = UserDefaults(suiteName: ProxyVault.suiteName)?.string(forKey: ProxyVault.callBlobKey) != nil
-        var lines: [String] = []
-        lines.append("Серверов получено: \(candidates.count)")
-        for c in candidates {
-            lines.append("  • \(c.region ?? "?") — \(c.server):\(c.port)")
+        let diag = ATunnelDiagData(servers: statuses, callTunnel: callOn, updatedAt: Date().timeIntervalSince1970)
+        if let data = try? JSONEncoder().encode(diag),
+           let str = String(data: data, encoding: .utf8) {
+            UserDefaults.standard.set(str, forKey: "aorusgram_atunnel_status") // AORUS-DIAG
         }
-        lines.append("Выбран: \(chosen.map { "\($0.server):\($0.port)" } ?? "—")")
-        lines.append("callProxy (звонки): \(callOn ? "да" : "нет")")
-        if report != "—" {
-            lines.append("")
-            lines.append("Пробы:")
-            lines.append(report)
-        }
-        UserDefaults.standard.set(lines.joined(separator: "\n"), forKey: "aorusgram_proxy_diag")
     }
 
     private func load() {
