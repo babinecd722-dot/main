@@ -670,7 +670,7 @@ final class ATunnelStatusViewController: UIViewController {
 
         // Flow
         let flow = ATunnelFlowView()
-        flow.state = server.active ? .active : (server.available ? .unknown : .down)
+        flow.state = server.available ? .active : .down
         flow.translatesAutoresizingMaskIntoConstraints = false
 
         // Detail
@@ -730,14 +730,13 @@ final class ATunnelStatusViewController: UIViewController {
             dot.backgroundColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
             label.text = isRu ? "АКТИВЕН" : "ACTIVE"
             label.textColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
-        } else if server.available {
-            dot.backgroundColor = .systemOrange
-            label.text = isRu ? "РЕЗЕРВ" : "STANDBY"
-            label.textColor = .systemOrange
-        } else {
+        } else if !server.available {
             dot.backgroundColor = .systemRed
             label.text = isRu ? "НЕДОСТУПЕН" : "DOWN"
             label.textColor = .systemRed
+        } else {
+            // available but not primary — no badge
+            return UIView()
         }
 
         let container = UIView()
