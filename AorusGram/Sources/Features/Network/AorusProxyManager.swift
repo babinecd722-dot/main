@@ -99,8 +99,27 @@ public final class AorusProxyManager {
             object: nil)
     }
 
+    // Diagnostics-triggered forced refresh: minimum 30s between API calls.
+    // Bypassing force=true on cooldown means age < minFetchInterval → cached hit,
+    // no API call. We still bump writeDiagnostics() so the poller gets a fresh
+    // updatedAt and doesn't timeout waiting for data that isn't coming.
+    private var lastDiagRefreshAt: Date = .distantPast
+    private let diagRefreshCooldown: TimeInterval = 30.0
+
     @objc private func _onForceProbeRequest() {
-        refresh(force: true)
+        lock.lock()
+        let elapsed = Date().timeIntervalSince(lastDiagRefreshAt)
+        let onCooldown = elapsed < diagRefreshCooldown
+        if !onCooldown { lastDiagRefreshAt = Date() }
+        lock.unlock()
+
+        if onCooldown {
+            // Re-publish existing data with a fresh timestamp so the UI poller
+            // detects "new" data and shows the result instead of timing out.
+            writeDiagnostics()
+        } else {
+            refresh(force: true)
+        }
     }
 
     // Key version sent as X-Aorus-Kv. Bump in lock-step with the server table
