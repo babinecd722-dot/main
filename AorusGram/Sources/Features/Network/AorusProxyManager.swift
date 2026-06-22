@@ -91,6 +91,7 @@ public final class AorusProxyManager {
     private var cached: AorusProxyConfig?
     private var cachedAt: Date = .distantPast
     private var inFlight = false
+    private var didLaunchFetch = false
     private let lock = NSLock()
 
     // Multi-proxy probing: each candidate MTProxy is TCP-probed `probeAttempts`
@@ -155,9 +156,18 @@ public final class AorusProxyManager {
         startWatchdog()
 
         lock.lock()
+        // The first fetch of each app launch always re-checks, bypassing the hourly
+        // throttle exactly once — so a rotated secret / updated server list is picked up
+        // on every cold start (a relaunch, not only a reinstall). Subsequent fetches
+        // honour minFetchInterval to spare the server's KV.
+        var effectiveForce = force
+        if !didLaunchFetch {
+            didLaunchFetch = true
+            effectiveForce = true
+        }
         // Skip the API call when the last *successful* fetch is fresh enough.
         let age = Date().timeIntervalSince(cachedAt)
-        if !force && !inFlight && cached != nil && age < minFetchInterval {
+        if !effectiveForce && !inFlight && cached != nil && age < minFetchInterval {
             let hit = cached
             lock.unlock()
             DispatchQueue.main.async { completion?(hit) }
