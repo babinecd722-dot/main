@@ -333,7 +333,7 @@ final class ATunnelStatusViewController: UIViewController {
     private let diagButton   = UIButton(type: .system)
 
     private var diag: ATunnelDiag?
-    private var refreshTimer: Timer?
+    private var refreshTimer: Foundation.Timer?
     private var serverCardViews: [UIView] = []
     private var didPlayEntrance = false
 
@@ -791,7 +791,7 @@ final class ATunnelStatusViewController: UIViewController {
 
     private func startRefreshTimer() {
         stopRefreshTimer()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+        refreshTimer = Foundation.Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.loadData()
             self?.applyUpdatedLabel()
             self?.applyDiagButton()
@@ -845,7 +845,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
 
     private var stepRows: [DiagStepRow] = []
 
-    private var pollTimer: Timer?
+    private var pollTimer: Foundation.Timer?
     private var snapshotActiveRegion: String?
     private var snapshotUpdatedAt: Double = 0
     private var pollElapsed: TimeInterval = 0
@@ -997,7 +997,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
 
     private func startPolling() {
         pollElapsed = 0
-        pollTimer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
+        pollTimer = Foundation.Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
             self?.pollTick()
         }
     }
