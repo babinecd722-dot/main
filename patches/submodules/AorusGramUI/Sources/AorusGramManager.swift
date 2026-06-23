@@ -28,6 +28,7 @@ public final class AorusGramManager {
     public var chatSummary: Bool       = false { didSet { save() } }
     public var translator: Bool        = false { didSet { save() } }
     public var antiScreenshot: Bool    = false { didSet { save() } }
+    public var callRecording: Bool     = false { didSet { save() } }
     public var streaks: Bool           = false { didSet { save() } }
     public var siriShortcuts: Bool     = false { didSet { save() } }
     public var autoReply: Bool         = false { didSet { save() } }
@@ -82,6 +83,7 @@ public final class AorusGramManager {
         chatSummary         = d["chatSummary"]         as? Bool ?? false
         translator          = d["translator"]          as? Bool ?? false
         antiScreenshot      = d["antiScreenshot"]      as? Bool ?? false
+        callRecording       = d["callRecording"]       as? Bool ?? false
         streaks             = d["streaks"]             as? Bool ?? false
         siriShortcuts       = d["siriShortcuts"]       as? Bool ?? false
         autoReply           = d["autoReply"]           as? Bool ?? false
@@ -112,6 +114,7 @@ public final class AorusGramManager {
             "chatSummary":         chatSummary,
             "translator":          translator,
             "antiScreenshot":      antiScreenshot,
+            "callRecording":       callRecording,
             "streaks":             streaks,
             "siriShortcuts":       siriShortcuts,
             "autoReply":           autoReply,
@@ -130,6 +133,7 @@ public final class AorusGramManager {
         ud.set(saveDeletedMessages, forKey: "aorusgram_feature_deleted_messages")
         ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
         ud.set(antiScreenshot,      forKey: "aorusgram_feature_anti_screenshot")
+        ud.set(callRecording,       forKey: "aorusgram_feature_call_recording")
         ud.set(voiceTranscription,  forKey: "aorusgram_feature_voice_transcription")
         ud.set(translator,          forKey: "aorusgram_feature_translator")
         ud.set(chatSummary,         forKey: "aorusgram_feature_chat_summary")

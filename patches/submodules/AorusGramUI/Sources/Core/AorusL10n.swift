@@ -83,6 +83,7 @@ public struct AorusL10n {
     public var editedMessages: String { t("Изменённые сообщения", "Edited Messages") }
     public var clearDeletedCache: String { t("Очистить кэш", "Clear Cache") }
     public var antiScreenshot: String { t("Скрытие экрана при записи", "Hide Screen While Recording") }
+    public var callRecording: String { t("Запись звонков", "Call Recording") }
     public var voiceTranscription: String { t("Расшифровка голосовых", "Voice to Text") }
     public var chatSummary: String { t("Сводка чата", "Chat Summary") }
     public var translator: String { t("Переводчик", "Translator") }

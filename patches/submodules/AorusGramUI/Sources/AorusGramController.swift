@@ -266,6 +266,7 @@ private struct AorusState: Equatable {
     var saveDeletedMessages: Bool
     var saveEditedMessages: Bool
     var antiScreenshot: Bool
+    var callRecording: Bool
     var voiceTranscription: Bool
     var chatSummary: Bool
     var translator: Bool
@@ -339,6 +340,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case saveEditedMessages(PresentationTheme, String, Bool)
     case clearDeletedCache(PresentationTheme, String)
     case antiScreenshot(PresentationTheme, String, Bool)
+    case callRecording(PresentationTheme, String, Bool)
 
     case aiHeader(PresentationTheme, String)
     case voiceTranscription(PresentationTheme, String, Bool)
@@ -392,7 +394,7 @@ private enum AorusEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
-        case .privacyHeader, .ghostMode, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot:
+        case .privacyHeader, .ghostMode, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot, .callRecording:
             return AorusSection.privacy.rawValue
         case .aiHeader, .voiceTranscription, .chatSummary, .translator, .autoReply, .voiceTwin:
             return AorusSection.ai.rawValue
@@ -425,6 +427,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case .saveEditedMessages:   return 5
         case .clearDeletedCache:    return 6
         case .antiScreenshot:       return 7
+        case .callRecording:        return 8
         case .aiHeader:             return 10
         case .voiceTranscription:   return 11
         case .chatSummary:          return 13
@@ -485,6 +488,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .clearDeletedCache(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .antiScreenshot(lt, ls, lv):
             if case let .antiScreenshot(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .callRecording(lt, ls, lv):
+            if case let .callRecording(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .aiHeader(lt, ls):
             if case let .aiHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .voiceTranscription(lt, ls, lv):
@@ -582,6 +587,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: args.clearCache)
         case let .antiScreenshot(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiScreenshot, $0) })
+        case let .callRecording(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.callRecording, $0) })
         case let .aiHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .voiceTranscription(_, title, value):
@@ -693,6 +700,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .saveEditedMessages(theme, l10n.editedMessages, state.saveEditedMessages),
         .clearDeletedCache(theme, l10n.clearDeletedCache),
         .antiScreenshot(theme, l10n.antiScreenshot, state.antiScreenshot),
+        .callRecording(theme, l10n.callRecording, state.callRecording),
 
         .aiHeader(theme, l10n.aiHeader),
         .voiceTranscription(theme, l10n.voiceTranscription, state.voiceTranscription),
@@ -769,6 +777,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         saveDeletedMessages: mgr.saveDeletedMessages,
         saveEditedMessages:  mgr.saveEditedMessages,
         antiScreenshot:     mgr.antiScreenshot,
+        callRecording:      mgr.callRecording,
         voiceTranscription: mgr.voiceTranscription,
         chatSummary:        mgr.chatSummary,
         translator:         mgr.translator,
@@ -820,6 +829,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.saveDeletedMessages = s.saveDeletedMessages
             mgr.saveEditedMessages  = s.saveEditedMessages
             mgr.antiScreenshot      = s.antiScreenshot
+            mgr.callRecording       = s.callRecording
             mgr.voiceTranscription  = s.voiceTranscription
             mgr.chatSummary         = s.chatSummary
             mgr.translator          = s.translator
