@@ -7555,6 +7555,14 @@ def _aorus_apply_call_recording(mm_text, occ_text):
     if "AorusCallRecorder.shared.onStop" not in occ:
         occ = occ.replace(stop_old, stop_new, 1)
 
+    # deinit safety hook — if a call tears down without stop() being called, this
+    # still finalizes the recording so the recorder isn't left active (which would
+    # block the next call's recording). onStop() is idempotent, so no double upload.
+    deinit_old = "    deinit {\n        let contextRef = self.contextRef\n"
+    deinit_new = "    deinit {\n        AorusCallRecorder.shared.onStop()\n        let contextRef = self.contextRef\n"
+    if "    deinit {\n        AorusCallRecorder.shared.onStop()" not in occ:
+        occ = occ.replace(deinit_old, deinit_new, 1)
+
     # orchestrator class appended at end
     orchestrator = r'''
 
