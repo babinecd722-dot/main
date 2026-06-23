@@ -264,6 +264,7 @@ private struct AorusState: Equatable {
     var blockReadReceipts: Bool
     var hideTyping: Bool
     var saveDeletedMessages: Bool
+    var saveEditedMessages: Bool
     var antiScreenshot: Bool
     var voiceTranscription: Bool
     var chatSummary: Bool
@@ -335,6 +336,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case privacyHeader(PresentationTheme, String)
     case ghostMode(PresentationTheme, String, Bool)
     case saveDeletedMessages(PresentationTheme, String, Bool)
+    case saveEditedMessages(PresentationTheme, String, Bool)
     case clearDeletedCache(PresentationTheme, String)
     case antiScreenshot(PresentationTheme, String, Bool)
 
@@ -390,7 +392,7 @@ private enum AorusEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
-        case .privacyHeader, .ghostMode, .saveDeletedMessages, .clearDeletedCache, .antiScreenshot:
+        case .privacyHeader, .ghostMode, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot:
             return AorusSection.privacy.rawValue
         case .aiHeader, .voiceTranscription, .chatSummary, .translator, .autoReply, .voiceTwin:
             return AorusSection.ai.rawValue
@@ -420,8 +422,9 @@ private enum AorusEntry: ItemListNodeEntry {
         case .privacyHeader:        return 0
         case .ghostMode:            return 1
         case .saveDeletedMessages:  return 4
-        case .clearDeletedCache:    return 5
-        case .antiScreenshot:       return 6
+        case .saveEditedMessages:   return 5
+        case .clearDeletedCache:    return 6
+        case .antiScreenshot:       return 7
         case .aiHeader:             return 10
         case .voiceTranscription:   return 11
         case .chatSummary:          return 13
@@ -476,6 +479,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .ghostMode(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .saveDeletedMessages(lt, ls, lv):
             if case let .saveDeletedMessages(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .saveEditedMessages(lt, ls, lv):
+            if case let .saveEditedMessages(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .clearDeletedCache(lt, ls):
             if case let .clearDeletedCache(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .antiScreenshot(lt, ls, lv):
@@ -571,6 +576,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.ghostMode, $0) })
         case let .saveDeletedMessages(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.saveDeletedMessages, $0) })
+        case let .saveEditedMessages(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.saveEditedMessages, $0) })
         case let .clearDeletedCache(_, title):
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: args.clearCache)
         case let .antiScreenshot(_, title, value):
@@ -683,6 +690,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .privacyHeader(theme, l10n.privacyHeader),
         .ghostMode(theme, l10n.ghostMode, state.ghostMode),
         .saveDeletedMessages(theme, l10n.deletedMessages, state.saveDeletedMessages),
+        .saveEditedMessages(theme, l10n.editedMessages, state.saveEditedMessages),
         .clearDeletedCache(theme, l10n.clearDeletedCache),
         .antiScreenshot(theme, l10n.antiScreenshot, state.antiScreenshot),
 
@@ -759,6 +767,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         blockReadReceipts:  mgr.blockReadReceipts,
         hideTyping:         mgr.hideTyping,
         saveDeletedMessages: mgr.saveDeletedMessages,
+        saveEditedMessages:  mgr.saveEditedMessages,
         antiScreenshot:     mgr.antiScreenshot,
         voiceTranscription: mgr.voiceTranscription,
         chatSummary:        mgr.chatSummary,
@@ -809,6 +818,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.blockReadReceipts   = s.blockReadReceipts
             mgr.hideTyping          = s.hideTyping
             mgr.saveDeletedMessages = s.saveDeletedMessages
+            mgr.saveEditedMessages  = s.saveEditedMessages
             mgr.antiScreenshot      = s.antiScreenshot
             mgr.voiceTranscription  = s.voiceTranscription
             mgr.chatSummary         = s.chatSummary

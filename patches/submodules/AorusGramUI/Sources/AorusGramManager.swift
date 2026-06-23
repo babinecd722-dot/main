@@ -17,6 +17,7 @@ public final class AorusGramManager {
     public var blockReadReceipts: Bool = true  { didSet { save() } }
     public var hideTyping: Bool        = true  { didSet { save() } }
     public var saveDeletedMessages: Bool = true { didSet { save() } }
+    public var saveEditedMessages: Bool = true { didSet { save() } }
     public var antiSpamEnabled: Bool   = true  { didSet { save() } }
     public var downloadAccel: Bool     = true  { didSet { save() } }
     public var glassUI: Bool           = true  { didSet { save() } }
@@ -62,6 +63,7 @@ public final class AorusGramManager {
             let ud = UserDefaults.standard
             ud.set(ghostMode,           forKey: "aorusgram_ghost_mode")
             ud.set(saveDeletedMessages, forKey: "aorusgram_feature_deleted_messages")
+            ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
             ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
         }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
@@ -69,6 +71,7 @@ public final class AorusGramManager {
         blockReadReceipts   = d["blockReadReceipts"]   as? Bool ?? true
         hideTyping          = d["hideTyping"]          as? Bool ?? true
         saveDeletedMessages = d["saveDeletedMessages"] as? Bool ?? true
+        saveEditedMessages  = d["saveEditedMessages"]  as? Bool ?? true
         antiSpamEnabled     = d["antiSpamEnabled"]     as? Bool ?? true
         downloadAccel       = d["downloadAccel"]       as? Bool ?? true
         glassUI             = d["glassUI"]             as? Bool ?? true
@@ -98,6 +101,7 @@ public final class AorusGramManager {
             "blockReadReceipts":   blockReadReceipts,
             "hideTyping":          hideTyping,
             "saveDeletedMessages": saveDeletedMessages,
+            "saveEditedMessages":  saveEditedMessages,
             "antiSpamEnabled":     antiSpamEnabled,
             "downloadAccel":       downloadAccel,
             "glassUI":             glassUI,
@@ -124,6 +128,7 @@ public final class AorusGramManager {
         let ud = UserDefaults.standard
         ud.set(ghostMode,           forKey: "aorusgram_ghost_mode")
         ud.set(saveDeletedMessages, forKey: "aorusgram_feature_deleted_messages")
+        ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
         ud.set(antiScreenshot,      forKey: "aorusgram_feature_anti_screenshot")
         ud.set(voiceTranscription,  forKey: "aorusgram_feature_voice_transcription")
         ud.set(translator,          forKey: "aorusgram_feature_translator")

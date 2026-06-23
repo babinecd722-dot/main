@@ -80,6 +80,7 @@ public struct AorusL10n {
     // MARK: Settings — rows
     public var ghostMode: String { t("Режим призрака", "Ghost Mode") }
     public var deletedMessages: String { t("Удалённые сообщения", "Deleted Messages") }
+    public var editedMessages: String { t("Изменённые сообщения", "Edited Messages") }
     public var clearDeletedCache: String { t("Очистить кэш", "Clear Cache") }
     public var antiScreenshot: String { t("Скрытие экрана при записи", "Hide Screen While Recording") }
     public var voiceTranscription: String { t("Расшифровка голосовых", "Voice to Text") }
