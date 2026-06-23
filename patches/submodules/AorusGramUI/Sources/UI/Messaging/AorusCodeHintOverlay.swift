@@ -63,7 +63,7 @@ public final class AorusCodeHintOverlay: UIView {
         // ── Callout text ──
         let label = UILabel()
         label.numberOfLines = 0
-        let lead = russian ? "Зажми на 3 секунды для открытия " : "Hold for 3 seconds to open "
+        let lead = russian ? "Зажми скрепку для открытия " : "Hold the paperclip to open "
         let attr = NSMutableAttributedString(string: lead, attributes: [
             .foregroundColor: UIColor.white,
             .font: UIFont.systemFont(ofSize: 16.0, weight: .medium)

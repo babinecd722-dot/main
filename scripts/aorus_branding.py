@@ -6607,10 +6607,10 @@ def patch_aorus_code_compose(tg: Path) -> None:
         return
     gesture_inject = (
         gesture_anchor
-        + "        // AorusGram: hold the attachment button for 3s to open AorusCode compose\n"
+        + "        // AorusGram: hold the attachment button to open AorusCode compose\n"
         + "        let aorusLongPress = UILongPressGestureRecognizer(\n"
         + "            target: self, action: #selector(self.aorusCodeLongPressed(_:)))\n"
-        + "        aorusLongPress.minimumPressDuration = 3.0\n"
+        + "        aorusLongPress.minimumPressDuration = 0.5\n"
         + "        self.attachmentButton.addGestureRecognizer(aorusLongPress)\n"
     )
     t = t.replace(gesture_anchor, gesture_inject, 1)
