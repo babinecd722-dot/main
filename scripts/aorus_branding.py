@@ -696,7 +696,7 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "    let __aorusPreserve = (UserDefaults.standard.object(forKey: \"aorusgram_feature_deleted_messages\") as? Bool) ?? true\n"
                 "    var __aorusIdsToDelete: [MessageId] = []\n"
                 "    for id in ids {\n"
-                "        guard __aorusPreserve, !aorusUserInitiatedDelete, let currentMessage = transaction.getMessage(id), currentMessage.flags.contains(.Incoming) else {\n"
+                "        guard __aorusPreserve, !aorusUserInitiatedDelete, let currentMessage = transaction.getMessage(id), currentMessage.flags.contains(.Incoming), ((transaction.getPeer(id.peerId) as? TelegramUser)?.botInfo == nil) else {\n"
                 "            __aorusIdsToDelete.append(id)\n"
                 "            continue\n"
                 "        }\n"
@@ -863,7 +863,7 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                }\n"
                 "                // AorusGram: inline original under edited text (own toggle, separate from deleted)\n"
                 "                let __aorusEditEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_edited_messages\") as? Bool) ?? true\n"
-                "                if __aorusEditEnabled, let prev = aorusPrev, prev.flags.contains(.Incoming), prev.text != message.text, !prev.text.isEmpty {\n"
+                "                if __aorusEditEnabled, let prev = aorusPrev, prev.flags.contains(.Incoming), prev.text != message.text, !prev.text.isEmpty, ((transaction.getPeer(id.peerId) as? TelegramUser)?.botInfo == nil) {\n"
                 "                    transaction.updateMessage(id, update: { currentMessage -> PostboxUpdateMessage in\n"
                 "                        // AorusGram: rebuild the FULL edit history with proper labels.\n"
                 "                        // Bottom (oldest) = Оригинал:, newer versions above = Изменение #N.\n"
@@ -976,7 +976,7 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                            object: nil,\n"
                 "                            userInfo: [\"msgId\": NSNumber(value: gid)])\n"
                 "                        let resolved = transaction.messageIdsForGlobalIds([gid])\n"
-                "                        guard let mid = resolved.first, let msg = transaction.getMessage(mid) else {\n"
+                "                        guard let mid = resolved.first, let msg = transaction.getMessage(mid), ((transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo == nil) else {\n"
                 "                            __aorusFilteredGlobalIds.append(gid)\n"
                 "                            continue\n"
                 "                        }\n"
@@ -6607,9 +6607,10 @@ def patch_aorus_code_compose(tg: Path) -> None:
         return
     gesture_inject = (
         gesture_anchor
-        + "        // AorusGram: long-press on attachment opens AorusCode compose sheet\n"
+        + "        // AorusGram: hold the attachment button for 3s to open AorusCode compose\n"
         + "        let aorusLongPress = UILongPressGestureRecognizer(\n"
         + "            target: self, action: #selector(self.aorusCodeLongPressed(_:)))\n"
+        + "        aorusLongPress.minimumPressDuration = 3.0\n"
         + "        self.attachmentButton.addGestureRecognizer(aorusLongPress)\n"
     )
     t = t.replace(gesture_anchor, gesture_inject, 1)
@@ -6643,9 +6644,36 @@ def patch_aorus_code_compose(tg: Path) -> None:
         "    }\n"
         "\n"
     )
-    t = t.replace(method_anchor, handler + method_anchor, 1)
+    # First-run hint: a one-time overlay that points at the attachment button and
+    # explains the 3s-hold AorusCode gesture. Shown only when AorusCode is enabled,
+    # gated by the "aorusgram_aorus_code_hint_shown" flag so it appears exactly once
+    # (on the first chat entry after the feature is turned on / after install).
+    hint_helper = (
+        "    private func aorusMaybeShowCodeHint() {\n"
+        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_enabled\") { return }\n"
+        "        if UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_hint_shown\") { return }\n"
+        "        if self.attachmentButtonBackground.isHidden || self.attachmentButtonBackground.alpha <= 0.01 { return }\n"
+        "        guard self.attachmentButton.bounds.width > 0.0, let window = self.attachmentButton.window else { return }\n"
+        "        UserDefaults.standard.set(true, forKey: \"aorusgram_aorus_code_hint_shown\")\n"
+        "        let target = self.attachmentButton.convert(self.attachmentButton.bounds, to: window)\n"
+        "        let russian = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
+        "        DispatchQueue.main.async {\n"
+        "            AorusCodeHintOverlay.present(in: window, targetRect: target, russian: russian)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+    )
+    t = t.replace(method_anchor, handler + hint_helper + method_anchor, 1)
+
+    # Trigger the hint from updateLayout, right after the attachment button is framed.
+    hint_anchor = "        transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: self.attachmentButtonBackground.frame)\n"
+    if hint_anchor in t:
+        t = t.replace(hint_anchor, hint_anchor + "        self.aorusMaybeShowCodeHint()\n", 1)
+    else:
+        print("AorusCodeCompose: hint trigger anchor not found — hint not wired")
+
     swift_path.write_text(t, encoding="utf-8")
-    print("AorusCodeCompose: injected long-press compose button on attachmentButton")
+    print("AorusCodeCompose: injected long-press compose button + first-run hint")
 
 
 def patch_aorus_code_reveal(tg: Path) -> None:
@@ -8106,6 +8134,47 @@ def patch_call_recording(tg: Path) -> None:
         print("CallRec: OngoingCallContext.swift unchanged (already patched or drift)")
 
 
+def patch_account_limit(tg: Path) -> None:
+    """Remove the multi-account limit (stock: free 3 / premium 4) with no UI mention.
+
+    Two enforcement sites:
+      1. The hardcoded gate in the settings "Add Account" action
+         (PeerInfoScreenSettingsActions.swift) — initial 3, bumped to 4 when premium,
+         then `if count >= maximumAvailableAccounts` shows the Premium limit screen.
+      2. The shared `maximumNumberOfAccounts` constant (AccountUtils.swift) used by the
+         can-add-accounts checks elsewhere.
+    Raising both to 100 makes the limit effectively unlimited while leaving every
+    variable read (no dead-code / unused warnings) and showing nothing in the UI.
+    """
+    gate = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift"
+    if gate.is_file():
+        t = gate.read_text(encoding="utf-8")
+        if "var maximumAvailableAccounts: Int = 100" in t:
+            print("AccountLimit: gate already patched")
+        elif "var maximumAvailableAccounts: Int = 3" in t:
+            t = t.replace("var maximumAvailableAccounts: Int = 3", "var maximumAvailableAccounts: Int = 100", 1)
+            n = t.count("maximumAvailableAccounts = 4")
+            t = t.replace("maximumAvailableAccounts = 4", "maximumAvailableAccounts = 100")
+            gate.write_text(t, encoding="utf-8")
+            print(f"AccountLimit: gate raised to 100 (premium reassigns patched: {n})")
+        else:
+            print("AccountLimit: gate anchor not found — skipped")
+    else:
+        print("AccountLimit: gate file not found — skipped")
+
+    au = tg / "submodules/AccountUtils/Sources/AccountUtils.swift"
+    if au.is_file():
+        t = au.read_text(encoding="utf-8")
+        if "public let maximumNumberOfAccounts = 100" in t:
+            print("AccountLimit: constant already patched")
+        elif "public let maximumNumberOfAccounts = 3" in t:
+            t = t.replace("public let maximumNumberOfAccounts = 3", "public let maximumNumberOfAccounts = 100", 1)
+            au.write_text(t, encoding="utf-8")
+            print("AccountLimit: maximumNumberOfAccounts = 100")
+        else:
+            print("AccountLimit: constant anchor not found — skipped")
+    else:
+        print("AccountLimit: AccountUtils.swift not found — skipped")
 
 
 def main() -> None:
@@ -8202,6 +8271,7 @@ def main() -> None:
     patch_app_badge(tg)
     patch_app_badge_switcher(tg)
     patch_call_recording(tg)
+    patch_account_limit(tg)
     for name in ("Info.plist", "InfoBazel.plist"):
         patch_plist_icons_and_urls(tg / "Telegram/Telegram-iOS" / name)
     patch_info_plist_bgtask(tg)
