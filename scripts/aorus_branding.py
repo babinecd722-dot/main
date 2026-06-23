@@ -7054,20 +7054,28 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
             else:
                 print("StatusIcons: messageText anchor not found — skip media-only fix")
 
-            # (b) Dim the deleted media content (photo/video) to 50% as well; captions/text stay opaque.
-            ci_anchor = "            strongSelf.contentNodes = sortedContentNodes\n"
+            # (b) Dim deleted media (photo/video) to 50%. Injected into the UNCONDITIONAL
+            #     per-content-node layout loop — NOT the add/remove/reorder branch where the
+            #     old injection lived. When the other side deletes a message we only append an
+            #     invisible marker to its text; the bubble's content-node set is unchanged, so
+            #     that branch never re-ran and the dim appeared only after re-entering the chat.
+            #     Running here re-applies it on every layout pass, so it shows up instantly.
+            #     allowsGroupOpacity composites the media subtree before applying alpha, so the
+            #     live video frame and the still-preview layer underneath don't double-expose
+            #     into a ghosted "flashbang" look.
+            ci_anchor = "            let contentNode = strongSelf.contentNodes[contentNodeIndex]\n"
             if "AorusGram: dim deleted media" not in bi and ci_anchor in bi:
                 bi = bi.replace(
                     ci_anchor,
                     ci_anchor +
-                    "            // AorusGram: dim deleted media (photo/video) content to 50%; captions stay opaque\n"
-                    "            let aorusDeletedMediaContent = item.message.text.hasSuffix(\"\\u{2063}\\u{2064}\")\n"
-                    "            for aorusContentNode in strongSelf.contentNodes where aorusContentNode is ChatMessageMediaBubbleContentNode {\n"
-                    "                aorusContentNode.alpha = aorusDeletedMediaContent ? 0.5 : 1.0\n"
+                    "            // AorusGram: dim deleted media (photo/video) to 50% every layout pass; group opacity avoids ghosting\n"
+                    "            if contentNode is ChatMessageMediaBubbleContentNode {\n"
+                    "                contentNode.layer.allowsGroupOpacity = true\n"
+                    "                contentNode.alpha = item.message.text.hasSuffix(\"\\u{2063}\\u{2064}\") ? 0.5 : 1.0\n"
                     "            }\n",
                     1)
             else:
-                print("StatusIcons: contentNodes anchor not found — skip media dim")
+                print("StatusIcons: contentNode loop anchor not found — skip media dim")
 
             bi_path.write_text(bi, encoding="utf-8")
             print("StatusIcons: bubble cloud dim + media-only fixes injected")
