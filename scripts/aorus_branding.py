@@ -7032,8 +7032,14 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
         elif bi_anchor in bi:
             bi_inject = (
                 bi_anchor +
-                "        // AorusGram: dim deleted cloud (bubble background) to 50%, text stays opaque\n"
+                "        // AorusGram: dim deleted cloud (bubble background) to 50%, text stays opaque.\n"
+                "        // allowsGroupOpacity flattens each node's own sublayers (fill + merged-corner/tail)\n"
+                "        // before applying alpha, so that geometry doesn't double-expose into a brighter\n"
+                "        // green wedge — an artifact visible only against AMOLED's pure-black wallpaper.\n"
                 "        let aorusDeletedCloud = item.message.text.hasSuffix(\"\\u{2063}\\u{2064}\")\n"
+                "        strongSelf.backgroundNode.layer.allowsGroupOpacity = true\n"
+                "        strongSelf.backgroundWallpaperNode.layer.allowsGroupOpacity = true\n"
+                "        strongSelf.shadowNode.layer.allowsGroupOpacity = true\n"
                 "        strongSelf.backgroundNode.alpha = aorusDeletedCloud ? 0.5 : 1.0\n"
                 "        strongSelf.backgroundWallpaperNode.alpha = aorusDeletedCloud ? 0.5 : 1.0\n"
                 "        strongSelf.shadowNode.alpha = aorusDeletedCloud ? 0.5 : 1.0\n"
