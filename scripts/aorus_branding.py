@@ -7027,29 +7027,27 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
     if bi_path.is_file():
         bi = bi_path.read_text(encoding="utf-8")
         bi_anchor = "        strongSelf.shadowNode.setType(type: backgroundType, hasWallpaper: hasWallpaper, graphics: graphics)\n"
-        if "AorusGram: dim deleted cloud" in bi:
+        if "AorusGram: deleted-message dim" in bi:
             print("StatusIcons: bubble cloud dim already present")
         elif bi_anchor in bi:
             bi_inject = (
                 bi_anchor +
-                "        // AorusGram: dim deleted cloud (bubble background) to 50%, text stays opaque.\n"
-                "        // allowsGroupOpacity flattens each node's own sublayers (fill + merged-corner/tail)\n"
-                "        // before applying alpha, so that geometry doesn't double-expose into a brighter\n"
-                "        // green wedge — an artifact visible only against AMOLED's pure-black wallpaper.\n"
+                "        // AorusGram: deleted-message dim. Collapse the ENTIRE bubble subtree (both\n"
+                "        // backdrop layers + content) into ONE opacity group, then apply 50% alpha once.\n"
+                "        // Dimming the background nodes individually double-exposed their overlapping\n"
+                "        // corner/tail geometry into a brighter wedge at the merged corner — visible only\n"
+                "        // against AMOLED's pure-black wallpaper (non-overlap 0.5, overlap 0.75). One group\n"
+                "        // = uniform alpha, so there is no overlap artifact and no media 'flashbang' either.\n"
                 "        let aorusDeletedCloud = item.message.text.hasSuffix(\"\\u{2063}\\u{2064}\")\n"
-                "        strongSelf.backgroundNode.layer.allowsGroupOpacity = true\n"
-                "        strongSelf.backgroundWallpaperNode.layer.allowsGroupOpacity = true\n"
-                "        strongSelf.shadowNode.layer.allowsGroupOpacity = true\n"
-                "        strongSelf.backgroundNode.alpha = aorusDeletedCloud ? 0.5 : 1.0\n"
-                "        strongSelf.backgroundWallpaperNode.alpha = aorusDeletedCloud ? 0.5 : 1.0\n"
-                "        strongSelf.shadowNode.alpha = aorusDeletedCloud ? 0.5 : 1.0\n"
+                "        strongSelf.mainContextSourceNode.contentNode.layer.allowsGroupOpacity = true\n"
+                "        strongSelf.mainContextSourceNode.contentNode.alpha = aorusDeletedCloud ? 0.5 : 1.0\n"
             )
             bi = bi.replace(bi_anchor, bi_inject, 1)
 
             # (a) Strip the invisible deleted-marker before the "has caption?" test so a
             #     media-only message doesn't spawn an empty text bubble (which would push
             #     the time off the photo overlay and hide the trash icon).
-            mt_anchor = "        if !messageText.isEmpty || (message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) && richText == nil) || isUnsupportedMedia || isStoryWithText {\n"
+            mt_anchor = "        if !messageText.isEmpty || message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) || isUnsupportedMedia || isStoryWithText {\n"
             if "AorusGram: strip invisible deleted-marker" not in bi and mt_anchor in bi:
                 bi = bi.replace(
                     mt_anchor,
@@ -7060,28 +7058,12 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
             else:
                 print("StatusIcons: messageText anchor not found — skip media-only fix")
 
-            # (b) Dim deleted media (photo/video) to 50%. Injected into the UNCONDITIONAL
-            #     per-content-node layout loop — NOT the add/remove/reorder branch where the
-            #     old injection lived. When the other side deletes a message we only append an
-            #     invisible marker to its text; the bubble's content-node set is unchanged, so
-            #     that branch never re-ran and the dim appeared only after re-entering the chat.
-            #     Running here re-applies it on every layout pass, so it shows up instantly.
-            #     allowsGroupOpacity composites the media subtree before applying alpha, so the
-            #     live video frame and the still-preview layer underneath don't double-expose
-            #     into a ghosted "flashbang" look.
-            ci_anchor = "            let contentNode = strongSelf.contentNodes[contentNodeIndex]\n"
-            if "AorusGram: dim deleted media" not in bi and ci_anchor in bi:
-                bi = bi.replace(
-                    ci_anchor,
-                    ci_anchor +
-                    "            // AorusGram: dim deleted media (photo/video) to 50% every layout pass; group opacity avoids ghosting\n"
-                    "            if contentNode is ChatMessageMediaBubbleContentNode {\n"
-                    "                contentNode.layer.allowsGroupOpacity = true\n"
-                    "                contentNode.alpha = item.message.text.hasSuffix(\"\\u{2063}\\u{2064}\") ? 0.5 : 1.0\n"
-                    "            }\n",
-                    1)
-            else:
-                print("StatusIcons: contentNode loop anchor not found — skip media dim")
+            # (b) Media dim is now handled by the whole-bubble opacity group above —
+            #     the media node lives under clippingNode, itself a child of contentNode,
+            #     so collapsing contentNode into one group dims photo/video uniformly with
+            #     zero double-exposure. No separate per-content-node alpha pass is needed
+            #     (the old loop injection double-exposed the live video frame against its
+            #     still preview into a 'flashbang').
 
             bi_path.write_text(bi, encoding="utf-8")
             print("StatusIcons: bubble cloud dim + media-only fixes injected")
@@ -7541,11 +7523,12 @@ def _aorus_apply_call_recording(mm_text, occ_text):
 
     # ---------- 2. OngoingCallContext.swift ----------
     if "import AVFoundation" not in occ:
-        occ = occ.replace("import TelegramCore\n", "import TelegramCore\nimport Postbox\nimport AVFoundation\n", 1)
+        occ = occ.replace("import TelegramCore\n", "import TelegramCore\nimport Postbox\nimport AVFoundation\nimport CoreImage\n", 1)
 
-    # connect hook
+    # connect hook — pass the OngoingCallContext itself so the recorder can subscribe
+    # to its incoming/outgoing video frame signals for video-call recording.
     conn_old = "                        strongSelf.contextState.set(.single(OngoingCallContextState(state: mappedState, videoState: mappedVideoState, remoteVideoState: mappedRemoteVideoState, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)))\n"
-    conn_new = "                        if case .connected = mappedState { AorusCallRecorder.shared.onConnected(account: strongSelf.account) }\n" + conn_old
+    conn_new = "                        if case .connected = mappedState { AorusCallRecorder.shared.onConnected(account: strongSelf.account, callContext: strongSelf) }\n" + conn_old
     if "AorusCallRecorder.shared.onConnected" not in occ:
         occ = occ.replace(conn_old, conn_new, 1)
 
@@ -7563,6 +7546,20 @@ def _aorus_apply_call_recording(mm_text, occ_text):
     if "    deinit {\n        AorusCallRecorder.shared.onStop()" not in occ:
         occ = occ.replace(deinit_old, deinit_new, 1)
 
+    # local-camera capturer hooks — the local stream is produced by the capturer, not
+    # routed through video(isIncoming:false), so we forward the capturer to the recorder
+    # for PiP capture. Two entry points: the call init (outgoing video call) and
+    # requestVideo (camera enabled mid-call).
+    init_cap_old = "        self.callSessionManager = callSessionManager\n"
+    init_cap_new = "        self.callSessionManager = callSessionManager\n        if let video = video { AorusCallRecorder.shared.onLocalCapturer(video) }\n"
+    if "AorusCallRecorder.shared.onLocalCapturer(video)" not in occ:
+        occ = occ.replace(init_cap_old, init_cap_new, 1)
+
+    req_cap_old = "    public func requestVideo(_ capturer: OngoingCallVideoCapturer) {\n        self.withContext { context in\n"
+    req_cap_new = "    public func requestVideo(_ capturer: OngoingCallVideoCapturer) {\n        AorusCallRecorder.shared.onLocalCapturer(capturer)\n        self.withContext { context in\n"
+    if "AorusCallRecorder.shared.onLocalCapturer(capturer)" not in occ:
+        occ = occ.replace(req_cap_old, req_cap_new, 1)
+
     # orchestrator class appended at end
     orchestrator = r'''
 
@@ -7577,17 +7574,42 @@ private final class AorusCallRecorder {
     private var remotePath = ""
     private weak var account: Account?
 
-    func onConnected(account: Account) {
+    private var videoRecorder: AorusCallVideoRecorder?
+    private weak var pendingCapturer: OngoingCallVideoCapturer?
+
+    func onConnected(account: Account, callContext: OngoingCallContext) {
         guard UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
-        self.lock.lock(); defer { self.lock.unlock() }
-        guard !self.active else { return }
+        self.lock.lock()
+        if self.active { self.lock.unlock(); return }
         self.active = true
         self.account = account
         let dir = NSTemporaryDirectory()
         let stamp = Int(Date().timeIntervalSince1970)
         self.micPath = dir + "aorus_call_mic_\(stamp).caf"
         self.remotePath = dir + "aorus_call_rem_\(stamp).caf"
+        let recorder = AorusCallVideoRecorder()
+        self.videoRecorder = recorder
+        let pendingCapturer = self.pendingCapturer
+        self.lock.unlock()
         NotificationCenter.default.post(name: NSNotification.Name("aorusgram_call_rec_start"), object: nil, userInfo: ["mic": self.micPath, "remote": self.remotePath])
+        // Subscribe to the remote (incoming) video. For an audio-only call this never
+        // emits, so the recorder finalizes with no frames and we fall back to audio.
+        recorder.start(callContext: callContext)
+        // If our camera was already active (outgoing video call), attach it for PiP.
+        if let pendingCapturer = pendingCapturer {
+            recorder.attachLocal(capturer: pendingCapturer)
+        }
+    }
+
+    // Called when the local camera capturer is set (call init or requestVideo). Stores
+    // it for PiP capture and, if recording is already running, attaches it immediately.
+    func onLocalCapturer(_ capturer: OngoingCallVideoCapturer) {
+        guard UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        self.lock.lock()
+        self.pendingCapturer = capturer
+        let recorder = self.active ? self.videoRecorder : nil
+        self.lock.unlock()
+        recorder?.attachLocal(capturer: capturer)
     }
 
     func onStop() {
@@ -7597,49 +7619,104 @@ private final class AorusCallRecorder {
         let mic = self.micPath
         let remote = self.remotePath
         let acc = self.account
+        let recorder = self.videoRecorder
+        self.videoRecorder = nil
         self.lock.unlock()
         NotificationCenter.default.post(name: NSNotification.Name("aorusgram_call_rec_stop"), object: nil)
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.8) {
-            AorusCallRecorder.mixAndUpload(micPath: mic, remotePath: remote, account: acc)
+        let proceed: (String?) -> Void = { videoPath in
+            // Small delay lets the async CAF audio writes flush before we read them.
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.8) {
+                AorusCallRecorder.mixAndUpload(micPath: mic, remotePath: remote, account: acc, videoPath: videoPath)
+            }
+        }
+        if let recorder = recorder {
+            recorder.finish { videoPath in proceed(videoPath) }
+        } else {
+            proceed(nil)
         }
     }
 
-    private static func mixAndUpload(micPath: String, remotePath: String, account: Account?) {
+    private static func mixAndUpload(micPath: String, remotePath: String, account: Account?, videoPath: String?) {
         guard let account = account else { return }
         let fm = FileManager.default
-        let composition = AVMutableComposition()
-        func addTrack(_ path: String) {
+        let removeRaw: () -> Void = {
+            try? fm.removeItem(atPath: micPath)
+            try? fm.removeItem(atPath: remotePath)
+        }
+        let removeVideo: () -> Void = {
+            if let videoPath = videoPath { try? fm.removeItem(atPath: videoPath) }
+        }
+        // Step 1: downmix the two voice tracks (mic + remote) into a SINGLE AAC M4A.
+        // AVAssetExportPresetAppleM4A renders all source audio tracks into one output
+        // track, so both sides are always present — the proven audio-recording path.
+        let audioComposition = AVMutableComposition()
+        func addAudio(_ path: String) {
             guard fm.fileExists(atPath: path) else { return }
             let asset = AVURLAsset(url: URL(fileURLWithPath: path))
             guard let src = asset.tracks(withMediaType: .audio).first,
-                  let dst = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { return }
+                  let dst = audioComposition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { return }
             try? dst.insertTimeRange(CMTimeRange(start: .zero, duration: asset.duration), of: src, at: .zero)
         }
-        addTrack(micPath)
-        addTrack(remotePath)
-        guard !composition.tracks.isEmpty else {
-            try? fm.removeItem(atPath: micPath); try? fm.removeItem(atPath: remotePath)
-            return
-        }
-        let outPath = NSTemporaryDirectory() + "aorus_call_\(Int(Date().timeIntervalSince1970)).m4a"
-        let outURL = URL(fileURLWithPath: outPath)
-        try? fm.removeItem(at: outURL)
-        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetAppleM4A) else {
-            try? fm.removeItem(atPath: micPath); try? fm.removeItem(atPath: remotePath)
-            return
-        }
-        export.outputURL = outURL
-        export.outputFileType = .m4a
-        let durationSeconds = Int(CMTimeGetSeconds(composition.duration).rounded())
-        export.exportAsynchronously {
-            try? fm.removeItem(atPath: micPath)
-            try? fm.removeItem(atPath: remotePath)
-            guard export.status == .completed else { return }
-            AorusCallRecorder.upload(account: account, path: outPath, duration: max(1, durationSeconds))
+        addAudio(micPath)
+        addAudio(remotePath)
+        guard !audioComposition.tracks.isEmpty else { removeRaw(); removeVideo(); return }
+        let durationSeconds = Int(CMTimeGetSeconds(audioComposition.duration).rounded())
+        let audioPath = NSTemporaryDirectory() + "aorus_call_aud_\(Int(Date().timeIntervalSince1970)).m4a"
+        let audioURL = URL(fileURLWithPath: audioPath)
+        try? fm.removeItem(at: audioURL)
+        guard let audioExport = AVAssetExportSession(asset: audioComposition, presetName: AVAssetExportPresetAppleM4A) else { removeRaw(); removeVideo(); return }
+        audioExport.outputURL = audioURL
+        audioExport.outputFileType = .m4a
+        audioExport.exportAsynchronously {
+            removeRaw()
+            guard audioExport.status == .completed else { removeVideo(); return }
+            // Step 2: if we recorded video, mux the muxed single audio track with the
+            // video into one MP4; otherwise just upload the mixed audio M4A.
+            if let videoPath = videoPath, fm.fileExists(atPath: videoPath) {
+                AorusCallRecorder.muxAndUploadVideo(videoPath: videoPath, audioPath: audioPath, account: account, fallbackDuration: durationSeconds)
+            } else {
+                AorusCallRecorder.uploadAudio(account: account, path: audioPath, duration: max(1, durationSeconds))
+            }
         }
     }
 
-    private static func upload(account: Account, path: String, duration: Int) {
+    private static func muxAndUploadVideo(videoPath: String, audioPath: String, account: Account, fallbackDuration: Int) {
+        let fm = FileManager.default
+        let cleanup: () -> Void = {
+            try? fm.removeItem(atPath: videoPath)
+            try? fm.removeItem(atPath: audioPath)
+        }
+        let composition = AVMutableComposition()
+        let vAsset = AVURLAsset(url: URL(fileURLWithPath: videoPath))
+        let aAsset = AVURLAsset(url: URL(fileURLWithPath: audioPath))
+        guard let vTrack = vAsset.tracks(withMediaType: .video).first,
+              let vDst = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            cleanup(); return
+        }
+        try? vDst.insertTimeRange(CMTimeRange(start: .zero, duration: vAsset.duration), of: vTrack, at: .zero)
+        vDst.preferredTransform = vTrack.preferredTransform
+        let natural = vTrack.naturalSize.applying(vTrack.preferredTransform)
+        let videoSize = CGSize(width: abs(natural.width), height: abs(natural.height))
+        if let aTrack = aAsset.tracks(withMediaType: .audio).first,
+           let aDst = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) {
+            try? aDst.insertTimeRange(CMTimeRange(start: .zero, duration: aAsset.duration), of: aTrack, at: .zero)
+        }
+        let durationSeconds = max(fallbackDuration, Int(CMTimeGetSeconds(vAsset.duration).rounded()))
+        let outPath = NSTemporaryDirectory() + "aorus_call_\(Int(Date().timeIntervalSince1970)).mp4"
+        let outURL = URL(fileURLWithPath: outPath)
+        try? fm.removeItem(at: outURL)
+        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else { cleanup(); return }
+        export.outputURL = outURL
+        export.outputFileType = .mp4
+        export.shouldOptimizeForNetworkUse = true
+        export.exportAsynchronously {
+            cleanup()
+            guard export.status == .completed else { return }
+            AorusCallRecorder.uploadVideo(account: account, path: outPath, duration: max(1, durationSeconds), size: videoSize)
+        }
+    }
+
+    private static func uploadAudio(account: Account, path: String, duration: Int) {
         let fm = FileManager.default
         let attrs = try? fm.attributesOfItem(atPath: path)
         let size = (attrs?[.size] as? NSNumber)?.int64Value
@@ -7665,6 +7742,331 @@ private final class AorusCallRecorder {
         )
         let message: EnqueueMessage = .message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
         let _ = enqueueMessages(account: account, peerId: account.peerId, messages: [message]).startStandalone()
+    }
+
+    private static func uploadVideo(account: Account, path: String, duration: Int, size: CGSize) {
+        let fm = FileManager.default
+        let attrs = try? fm.attributesOfItem(atPath: path)
+        let fileSize = (attrs?[.size] as? NSNumber)?.int64Value
+        let resource = LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: true)
+        let mediaId = MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max))
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm"
+        let name = "Call \(dateFormatter.string(from: Date())).mp4"
+        let w = Int32(max(2, size.width.rounded()))
+        let h = Int32(max(2, size.height.rounded()))
+        let file = TelegramMediaFile(
+            fileId: mediaId,
+            partialReference: nil,
+            resource: resource,
+            previewRepresentations: [],
+            videoThumbnails: [],
+            immediateThumbnailData: nil,
+            mimeType: "video/mp4",
+            size: fileSize,
+            attributes: [
+                .FileName(fileName: name),
+                .Video(duration: Double(duration), size: PixelDimensions(width: w, height: h), flags: [.supportsStreaming], preloadSize: nil, coverTime: nil, videoCodec: nil)
+            ],
+            alternativeRepresentations: []
+        )
+        let message: EnqueueMessage = .message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+        let _ = enqueueMessages(account: account, peerId: account.peerId, messages: [message]).startStandalone()
+    }
+}
+
+// AorusGram: YUV → CIImage converters for software-decoded call frames (the
+// hardware path already delivers a native CVPixelBuffer). NV12/I420 planar data
+// is packed into an NV12 CVPixelBuffer so CoreImage can colour-convert it.
+private enum AorusYUV {
+    static func makeNV12(width: Int, height: Int) -> CVPixelBuffer? {
+        var pb: CVPixelBuffer?
+        let attrs: [String: Any] = [
+            kCVPixelBufferIOSurfacePropertiesKey as String: [String: Any]()
+        ]
+        let status = CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, attrs as CFDictionary, &pb)
+        return status == kCVReturnSuccess ? pb : nil
+    }
+
+    static func copyPlane(_ src: Data, srcStride: Int, dst: UnsafeMutableRawPointer, dstStride: Int, rows: Int, rowBytes: Int) {
+        let n = min(rowBytes, min(srcStride, dstStride))
+        guard n > 0, rows > 0 else { return }
+        src.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            guard let base = raw.baseAddress else { return }
+            for row in 0 ..< rows {
+                memcpy(dst.advanced(by: row * dstStride), base.advanced(by: row * srcStride), n)
+            }
+        }
+    }
+
+    static func nv12ToCIImage(width: Int, height: Int, y: Data, strideY: Int, uv: Data, strideUV: Int) -> CIImage? {
+        guard width > 0, height > 0, let pb = makeNV12(width: width, height: height) else { return nil }
+        CVPixelBufferLockBaseAddress(pb, [])
+        defer { CVPixelBufferUnlockBaseAddress(pb, []) }
+        if let dy = CVPixelBufferGetBaseAddressOfPlane(pb, 0) {
+            copyPlane(y, srcStride: strideY, dst: dy, dstStride: CVPixelBufferGetBytesPerRowOfPlane(pb, 0), rows: height, rowBytes: width)
+        }
+        if let duv = CVPixelBufferGetBaseAddressOfPlane(pb, 1) {
+            copyPlane(uv, srcStride: strideUV, dst: duv, dstStride: CVPixelBufferGetBytesPerRowOfPlane(pb, 1), rows: height / 2, rowBytes: width)
+        }
+        return CIImage(cvPixelBuffer: pb)
+    }
+
+    static func i420ToCIImage(width: Int, height: Int, y: Data, strideY: Int, u: Data, strideU: Int, v: Data, strideV: Int) -> CIImage? {
+        guard width > 0, height > 0, let pb = makeNV12(width: width, height: height) else { return nil }
+        CVPixelBufferLockBaseAddress(pb, [])
+        defer { CVPixelBufferUnlockBaseAddress(pb, []) }
+        if let dy = CVPixelBufferGetBaseAddressOfPlane(pb, 0) {
+            copyPlane(y, srcStride: strideY, dst: dy, dstStride: CVPixelBufferGetBytesPerRowOfPlane(pb, 0), rows: height, rowBytes: width)
+        }
+        if let duv = CVPixelBufferGetBaseAddressOfPlane(pb, 1) {
+            let dstStride = CVPixelBufferGetBytesPerRowOfPlane(pb, 1)
+            let cw = width / 2
+            let ch = height / 2
+            let dst = duv.assumingMemoryBound(to: UInt8.self)
+            u.withUnsafeBytes { (ur: UnsafeRawBufferPointer) in
+                v.withUnsafeBytes { (vr: UnsafeRawBufferPointer) in
+                    guard let ub = ur.baseAddress?.assumingMemoryBound(to: UInt8.self),
+                          let vb = vr.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+                    for row in 0 ..< ch {
+                        let drow = dst.advanced(by: row * dstStride)
+                        let urow = ub.advanced(by: row * strideU)
+                        let vrow = vb.advanced(by: row * strideV)
+                        for col in 0 ..< cw {
+                            drow[col * 2] = urow[col]
+                            drow[col * 2 + 1] = vrow[col]
+                        }
+                    }
+                }
+            }
+        }
+        return CIImage(cvPixelBuffer: pb)
+    }
+}
+
+// AorusGram: video-call recorder. Composites the remote stream (full-screen,
+// aspect-fill) with the local camera (picture-in-picture, bottom-right) and
+// encodes the result to an H.264 MP4 via AVAssetWriter. Audio is muxed in later
+// from the mic+remote tracks. All frame work runs on a private serial queue.
+private final class AorusCallVideoRecorder {
+    private let queue = Queue(name: "org.aorusgram.callVideo")
+    private let ciContext = CIContext(options: nil)
+    private var writer: AVAssetWriter?
+    private var input: AVAssetWriterInput?
+    private var adaptor: AVAssetWriterInputPixelBufferAdaptor?
+    private var sessionStarted = false
+    private var firstTime: CFTimeInterval = 0
+    private var lastPTS = CMTime.invalid
+    private var canvas = CGSize(width: 720, height: 1280)
+    private var latestLocal: CIImage?
+    private var hasRemote = false
+    private var appended = false
+    private var finished = false
+    private var remoteDisposable: Disposable?
+    private var localDisposable: Disposable?
+    let outPath: String
+
+    init() {
+        self.outPath = NSTemporaryDirectory() + "aorus_call_vid_\(Int(Date().timeIntervalSince1970)).mp4"
+    }
+
+    func start(callContext: OngoingCallContext) {
+        // Remote (incoming) frames are delivered by the call's video output. The local
+        // camera is NOT routed through video(isIncoming:false) — it originates from the
+        // capturer and is attached separately via attachLocal(capturer:).
+        let remote = callContext.video(isIncoming: true)
+        self.queue.async {
+            self.remoteDisposable = remote.start(next: { [weak self] frame in
+                guard let self = self else { return }
+                self.queue.async { self.handleRemote(frame) }
+            })
+        }
+    }
+
+    func attachLocal(capturer: OngoingCallVideoCapturer) {
+        self.queue.async {
+            if self.localDisposable != nil { return }
+            let local = capturer.video()
+            self.localDisposable = local.start(next: { [weak self] frame in
+                guard let self = self else { return }
+                self.queue.async { self.handleLocal(frame) }
+            })
+        }
+    }
+
+    private func ciImage(from frame: OngoingGroupCallContext.VideoFrameData) -> CIImage? {
+        let base: CIImage?
+        switch frame.buffer {
+        case .argb(let b), .bgra(let b), .native(let b):
+            base = CIImage(cvPixelBuffer: b.pixelBuffer)
+        case .nv12(let b):
+            base = AorusYUV.nv12ToCIImage(width: b.width, height: b.height, y: b.y, strideY: b.strideY, uv: b.uv, strideUV: b.strideUV)
+        case .i420(let b):
+            base = AorusYUV.i420ToCIImage(width: b.width, height: b.height, y: b.y, strideY: b.strideY, u: b.u, strideU: b.strideU, v: b.v, strideV: b.strideV)
+        }
+        guard let img = base else { return nil }
+        return self.oriented(img, orientation: frame.orientation, mirrorH: frame.mirrorHorizontally, mirrorV: frame.mirrorVertically)
+    }
+
+    private func oriented(_ src: CIImage, orientation: OngoingCallVideoOrientation, mirrorH: Bool, mirrorV: Bool) -> CIImage {
+        var img = src.transformed(by: CGAffineTransform(translationX: -src.extent.minX, y: -src.extent.minY))
+        let w = img.extent.width
+        let h = img.extent.height
+        var t = CGAffineTransform.identity
+        if mirrorH { t = t.concatenating(CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: w, ty: 0)) }
+        if mirrorV { t = t.concatenating(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: h)) }
+        if t != .identity {
+            img = img.transformed(by: t)
+            img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
+        }
+        let angle: CGFloat
+        switch orientation {
+        case .rotation0:
+            angle = 0
+        case .rotation90:
+            angle = -CGFloat.pi / 2.0
+        case .rotation180:
+            angle = CGFloat.pi
+        case .rotation270:
+            angle = CGFloat.pi / 2.0
+        }
+        if angle != 0 {
+            img = img.transformed(by: CGAffineTransform(rotationAngle: angle))
+            img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
+        }
+        return img
+    }
+
+    private func handleLocal(_ frame: OngoingGroupCallContext.VideoFrameData) {
+        guard let img = self.ciImage(from: frame) else { return }
+        self.latestLocal = img
+        if !self.hasRemote {
+            self.append(base: img, pip: nil)
+        }
+    }
+
+    private func handleRemote(_ frame: OngoingGroupCallContext.VideoFrameData) {
+        guard let img = self.ciImage(from: frame) else { return }
+        self.hasRemote = true
+        self.append(base: img, pip: self.latestLocal)
+    }
+
+    private func setupWriter(size: CGSize) {
+        var w = Int(size.width.rounded())
+        var h = Int(size.height.rounded())
+        if w < 16 { w = 16 }
+        if h < 16 { h = 16 }
+        if w % 2 != 0 { w += 1 }
+        if h % 2 != 0 { h += 1 }
+        self.canvas = CGSize(width: w, height: h)
+        guard let writer = try? AVAssetWriter(outputURL: URL(fileURLWithPath: self.outPath), fileType: .mp4) else { return }
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: w,
+            AVVideoHeightKey: h
+        ]
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        input.expectsMediaDataInRealTime = true
+        let attrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: w,
+            kCVPixelBufferHeightKey as String: h
+        ]
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: attrs)
+        if writer.canAdd(input) {
+            writer.add(input)
+        }
+        if writer.startWriting() {
+            writer.startSession(atSourceTime: .zero)
+            self.firstTime = CACurrentMediaTime()
+            self.writer = writer
+            self.input = input
+            self.adaptor = adaptor
+            self.sessionStarted = true
+        }
+    }
+
+    private func append(base: CIImage, pip: CIImage?) {
+        if !self.sessionStarted {
+            self.setupWriter(size: base.extent.size)
+        }
+        guard self.sessionStarted, let input = self.input, let adaptor = self.adaptor, let pool = adaptor.pixelBufferPool else { return }
+        guard input.isReadyForMoreMediaData else { return }
+        let canvasRect = CGRect(origin: .zero, size: self.canvas)
+        var composite = CIImage(color: CIColor.black).cropped(to: canvasRect)
+        let filledBase = self.aspectFill(base, into: canvasRect)
+        composite = filledBase.composited(over: composite)
+        if let pip = pip, pip.extent.width > 0, pip.extent.height > 0 {
+            let pipW = self.canvas.width * 0.28
+            let pipBox = CGRect(x: 0, y: 0, width: pipW, height: pipW * 1.4)
+            let fitted = self.aspectFit(pip, into: pipBox)
+            let margin = self.canvas.width * 0.03
+            let e = fitted.extent
+            let tx = self.canvas.width - e.width - margin - e.minX
+            let ty = margin - e.minY
+            let placed = fitted.transformed(by: CGAffineTransform(translationX: tx, y: ty))
+            composite = placed.composited(over: composite)
+        }
+        var pbOut: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pbOut)
+        guard let buffer = pbOut else { return }
+        self.ciContext.render(composite, to: buffer)
+        var pts = CMTime(seconds: max(0, CACurrentMediaTime() - self.firstTime), preferredTimescale: 600)
+        if self.lastPTS.isValid && pts <= self.lastPTS {
+            pts = CMTimeAdd(self.lastPTS, CMTime(value: 1, timescale: 600))
+        }
+        self.lastPTS = pts
+        if adaptor.append(buffer, withPresentationTime: pts) {
+            self.appended = true
+        }
+    }
+
+    private func aspectFill(_ image: CIImage, into rect: CGRect) -> CIImage {
+        let ext = image.extent
+        guard ext.width > 0, ext.height > 0 else { return image }
+        let scale = max(rect.width / ext.width, rect.height / ext.height)
+        let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let se = scaled.extent
+        let tx = rect.midX - se.midX
+        let ty = rect.midY - se.midY
+        return scaled.transformed(by: CGAffineTransform(translationX: tx, y: ty)).cropped(to: rect)
+    }
+
+    private func aspectFit(_ image: CIImage, into rect: CGRect) -> CIImage {
+        let ext = image.extent
+        guard ext.width > 0, ext.height > 0 else { return image }
+        let scale = min(rect.width / ext.width, rect.height / ext.height)
+        let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let se = scaled.extent
+        let tx = rect.midX - se.midX
+        let ty = rect.midY - se.midY
+        return scaled.transformed(by: CGAffineTransform(translationX: tx, y: ty))
+    }
+
+    func finish(completion: @escaping (String?) -> Void) {
+        self.queue.async {
+            self.remoteDisposable?.dispose()
+            self.localDisposable?.dispose()
+            self.remoteDisposable = nil
+            self.localDisposable = nil
+            if self.finished {
+                completion(nil)
+                return
+            }
+            self.finished = true
+            guard self.sessionStarted, let writer = self.writer, let input = self.input, self.appended else {
+                completion(nil)
+                return
+            }
+            input.markAsFinished()
+            writer.finishWriting {
+                if writer.status == .completed {
+                    completion(self.outPath)
+                } else {
+                    completion(nil)
+                }
+            }
+        }
     }
 }
 '''
