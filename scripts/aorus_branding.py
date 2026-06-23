@@ -7397,6 +7397,307 @@ def patch_app_badge_switcher(tg: Path) -> None:
         print("AppBadgeSwitcher: WindowContent.swift unchanged (already patched or upstream drift)")
 
 
+# Call-recording branding patch (audio, iteration 1). Tested against fetched sources.
+
+def _aorus_apply_call_recording(mm_text, occ_text):
+    mm = mm_text
+    occ = occ_text
+
+    # ---------- 1. OngoingCallThreadLocalContext.mm ----------
+    mm_class = r'''#import <TgVoipWebrtc/OngoingCallThreadLocalContext.h>
+// AorusGram: call audio recorder. Two clean taps in the WebRTC ADM (mic in
+// RecordedDataIsAvailable, remote in NeedMorePlayData) write raw PCM to two CAF
+// files, driven by NSNotifications posted from OngoingCallContext.swift. The
+// post-call mix to M4A + upload to Saved Messages happens on the Swift side.
+#import <AudioToolbox/AudioToolbox.h>
+#import <os/lock.h>
+
+@interface AorusCallAudioRecorder : NSObject
++ (instancetype)shared;
+- (void)appendMic:(const void *)data frames:(UInt32)frames channels:(UInt32)channels sampleRate:(Float64)sampleRate;
+- (void)appendRemote:(const void *)data frames:(UInt32)frames channels:(UInt32)channels sampleRate:(Float64)sampleRate;
+@end
+
+@implementation AorusCallAudioRecorder {
+    os_unfair_lock _lock;
+    BOOL _active;
+    NSString *_micPath;
+    NSString *_remotePath;
+    ExtAudioFileRef _micFile;
+    ExtAudioFileRef _remoteFile;
+}
++ (instancetype)shared {
+    static AorusCallAudioRecorder *s = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ s = [[AorusCallAudioRecorder alloc] init]; });
+    return s;
+}
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _lock = OS_UNFAIR_LOCK_INIT;
+        _active = NO;
+        _micFile = NULL;
+        _remoteFile = NULL;
+        __weak AorusCallAudioRecorder *weakSelf = self;
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"aorusgram_call_rec_start" object:nil queue:nil usingBlock:^(NSNotification *n) {
+            [weakSelf aorusStart:n.userInfo];
+        }];
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"aorusgram_call_rec_stop" object:nil queue:nil usingBlock:^(NSNotification *n) {
+            [weakSelf aorusStop];
+        }];
+    }
+    return self;
+}
+- (void)aorusStart:(NSDictionary *)info {
+    os_unfair_lock_lock(&_lock);
+    _micPath = info[@"mic"];
+    _remotePath = info[@"remote"];
+    _active = YES;
+    os_unfair_lock_unlock(&_lock);
+}
+- (ExtAudioFileRef)aorusMakeFile:(NSString *)path channels:(UInt32)channels sampleRate:(Float64)sampleRate {
+    if (path.length == 0 || channels == 0 || sampleRate <= 0) return NULL;
+    AudioStreamBasicDescription asbd;
+    memset(&asbd, 0, sizeof(asbd));
+    asbd.mSampleRate = sampleRate;
+    asbd.mFormatID = kAudioFormatLinearPCM;
+    asbd.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    asbd.mBitsPerChannel = 16;
+    asbd.mChannelsPerFrame = channels;
+    asbd.mFramesPerPacket = 1;
+    asbd.mBytesPerFrame = channels * 2;
+    asbd.mBytesPerPacket = channels * 2;
+    ExtAudioFileRef file = NULL;
+    NSURL *url = [NSURL fileURLWithPath:path];
+    OSStatus status = ExtAudioFileCreateWithURL((__bridge CFURLRef)url, kAudioFileCAFType, &asbd, NULL, kAudioFileFlags_EraseFile, &file);
+    if (status != noErr || file == NULL) return NULL;
+    ExtAudioFileSetProperty(file, kExtAudioFileProperty_ClientDataFormat, sizeof(asbd), &asbd);
+    ExtAudioFileWriteAsync(file, 0, NULL);
+    return file;
+}
+- (void)appendMic:(const void *)data frames:(UInt32)frames channels:(UInt32)channels sampleRate:(Float64)sampleRate {
+    if (data == NULL || frames == 0 || channels == 0) return;
+    os_unfair_lock_lock(&_lock);
+    if (_active) {
+        if (_micFile == NULL) { _micFile = [self aorusMakeFile:_micPath channels:channels sampleRate:sampleRate]; }
+        if (_micFile != NULL) {
+            AudioBufferList abl;
+            abl.mNumberBuffers = 1;
+            abl.mBuffers[0].mNumberChannels = channels;
+            abl.mBuffers[0].mDataByteSize = frames * channels * 2;
+            abl.mBuffers[0].mData = (void *)data;
+            ExtAudioFileWriteAsync(_micFile, frames, &abl);
+        }
+    }
+    os_unfair_lock_unlock(&_lock);
+}
+- (void)appendRemote:(const void *)data frames:(UInt32)frames channels:(UInt32)channels sampleRate:(Float64)sampleRate {
+    if (data == NULL || frames == 0 || channels == 0) return;
+    os_unfair_lock_lock(&_lock);
+    if (_active) {
+        if (_remoteFile == NULL) { _remoteFile = [self aorusMakeFile:_remotePath channels:channels sampleRate:sampleRate]; }
+        if (_remoteFile != NULL) {
+            AudioBufferList abl;
+            abl.mNumberBuffers = 1;
+            abl.mBuffers[0].mNumberChannels = channels;
+            abl.mBuffers[0].mDataByteSize = frames * channels * 2;
+            abl.mBuffers[0].mData = (void *)data;
+            ExtAudioFileWriteAsync(_remoteFile, frames, &abl);
+        }
+    }
+    os_unfair_lock_unlock(&_lock);
+}
+- (void)aorusStop {
+    os_unfair_lock_lock(&_lock);
+    _active = NO;
+    if (_micFile != NULL) { ExtAudioFileDispose(_micFile); _micFile = NULL; }
+    if (_remoteFile != NULL) { ExtAudioFileDispose(_remoteFile); _remoteFile = NULL; }
+    _micPath = nil;
+    _remotePath = nil;
+    os_unfair_lock_unlock(&_lock);
+}
+@end
+'''
+    if "AorusCallAudioRecorder" not in mm:
+        mm = mm.replace("#import <TgVoipWebrtc/OngoingCallThreadLocalContext.h>\n", mm_class + "\n", 1)
+
+    # mic tap, overload 1
+    mic1_old = ("                    newMicLevel\n                );\n            }\n        }\n        _mutex.Unlock();\n        return 0;\n    }\n")
+    mic1_new = ("                    newMicLevel\n                );\n            }\n        }\n        _mutex.Unlock();\n        [[AorusCallAudioRecorder shared] appendMic:audioSamples frames:(UInt32)nSamples channels:(UInt32)nChannels sampleRate:(Float64)samplesPerSec];\n        return 0;\n    }\n")
+    if "appendMic:audioSamples frames:(UInt32)nSamples channels:(UInt32)nChannels sampleRate:(Float64)samplesPerSec" not in mm:
+        mm = mm.replace(mic1_old, mic1_new, 1)
+
+    # mic tap, overload 2 (estimatedCaptureTimeNS)
+    mic2_old = ("                    newMicLevel,\n                    estimatedCaptureTimeNS\n                );\n            }\n        }\n        _mutex.Unlock();\n        return 0;\n    }\n")
+    mic2_new = ("                    newMicLevel,\n                    estimatedCaptureTimeNS\n                );\n            }\n        }\n        _mutex.Unlock();\n        [[AorusCallAudioRecorder shared] appendMic:audioSamples frames:(UInt32)nSamples channels:(UInt32)nChannels sampleRate:(Float64)samplesPerSec];\n        return 0;\n    }\n")
+    mm = mm.replace(mic2_old, mic2_new, 1)
+
+    # remote tap (NeedMorePlayData)
+    rem_old = ("        } else {\n            nSamplesOut = 0;\n        }\n        \n        _mutex.Unlock();\n        \n        return result;\n    }\n")
+    rem_new = ("        } else {\n            nSamplesOut = 0;\n        }\n        \n        _mutex.Unlock();\n        [[AorusCallAudioRecorder shared] appendRemote:audioSamples frames:(UInt32)nSamplesOut channels:(UInt32)nChannels sampleRate:(Float64)samplesPerSec];\n        \n        return result;\n    }\n")
+    if "appendRemote:audioSamples" not in mm:
+        mm = mm.replace(rem_old, rem_new, 1)
+
+    # ---------- 2. OngoingCallContext.swift ----------
+    if "import AVFoundation" not in occ:
+        occ = occ.replace("import TelegramCore\n", "import TelegramCore\nimport Postbox\nimport AVFoundation\n", 1)
+
+    # connect hook
+    conn_old = "                        strongSelf.contextState.set(.single(OngoingCallContextState(state: mappedState, videoState: mappedVideoState, remoteVideoState: mappedRemoteVideoState, remoteAudioState: mappedRemoteAudioState, remoteBatteryLevel: mappedRemoteBatteryLevel)))\n"
+    conn_new = "                        if case .connected = mappedState { AorusCallRecorder.shared.onConnected(account: strongSelf.account) }\n" + conn_old
+    if "AorusCallRecorder.shared.onConnected" not in occ:
+        occ = occ.replace(conn_old, conn_new, 1)
+
+    # stop hook
+    stop_old = "    public func stop(sendDebugLogs: Bool = false, debugLogValue: Promise<String?>) {\n        let callId = self.callId\n"
+    stop_new = "    public func stop(sendDebugLogs: Bool = false, debugLogValue: Promise<String?>) {\n        AorusCallRecorder.shared.onStop()\n        let callId = self.callId\n"
+    if "AorusCallRecorder.shared.onStop" not in occ:
+        occ = occ.replace(stop_old, stop_new, 1)
+
+    # orchestrator class appended at end
+    orchestrator = r'''
+
+// AorusGram: call-recording orchestrator (audio). Receives connect/stop from the
+// OngoingCallContext lifecycle, drives the low-level CAF taps via NSNotification,
+// then mixes the two PCM files into one M4A and sends it to Saved Messages.
+private final class AorusCallRecorder {
+    static let shared = AorusCallRecorder()
+    private let lock = NSLock()
+    private var active = false
+    private var micPath = ""
+    private var remotePath = ""
+    private weak var account: Account?
+
+    func onConnected(account: Account) {
+        guard UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        self.lock.lock(); defer { self.lock.unlock() }
+        guard !self.active else { return }
+        self.active = true
+        self.account = account
+        let dir = NSTemporaryDirectory()
+        let stamp = Int(Date().timeIntervalSince1970)
+        self.micPath = dir + "aorus_call_mic_\(stamp).caf"
+        self.remotePath = dir + "aorus_call_rem_\(stamp).caf"
+        NotificationCenter.default.post(name: NSNotification.Name("aorusgram_call_rec_start"), object: nil, userInfo: ["mic": self.micPath, "remote": self.remotePath])
+    }
+
+    func onStop() {
+        self.lock.lock()
+        guard self.active else { self.lock.unlock(); return }
+        self.active = false
+        let mic = self.micPath
+        let remote = self.remotePath
+        let acc = self.account
+        self.lock.unlock()
+        NotificationCenter.default.post(name: NSNotification.Name("aorusgram_call_rec_stop"), object: nil)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.8) {
+            AorusCallRecorder.mixAndUpload(micPath: mic, remotePath: remote, account: acc)
+        }
+    }
+
+    private static func mixAndUpload(micPath: String, remotePath: String, account: Account?) {
+        guard let account = account else { return }
+        let fm = FileManager.default
+        let composition = AVMutableComposition()
+        func addTrack(_ path: String) {
+            guard fm.fileExists(atPath: path) else { return }
+            let asset = AVURLAsset(url: URL(fileURLWithPath: path))
+            guard let src = asset.tracks(withMediaType: .audio).first,
+                  let dst = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { return }
+            try? dst.insertTimeRange(CMTimeRange(start: .zero, duration: asset.duration), of: src, at: .zero)
+        }
+        addTrack(micPath)
+        addTrack(remotePath)
+        guard !composition.tracks.isEmpty else {
+            try? fm.removeItem(atPath: micPath); try? fm.removeItem(atPath: remotePath)
+            return
+        }
+        let outPath = NSTemporaryDirectory() + "aorus_call_\(Int(Date().timeIntervalSince1970)).m4a"
+        let outURL = URL(fileURLWithPath: outPath)
+        try? fm.removeItem(at: outURL)
+        guard let export = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetAppleM4A) else {
+            try? fm.removeItem(atPath: micPath); try? fm.removeItem(atPath: remotePath)
+            return
+        }
+        export.outputURL = outURL
+        export.outputFileType = .m4a
+        let durationSeconds = Int(CMTimeGetSeconds(composition.duration).rounded())
+        export.exportAsynchronously {
+            try? fm.removeItem(atPath: micPath)
+            try? fm.removeItem(atPath: remotePath)
+            guard export.status == .completed else { return }
+            AorusCallRecorder.upload(account: account, path: outPath, duration: max(1, durationSeconds))
+        }
+    }
+
+    private static func upload(account: Account, path: String, duration: Int) {
+        let fm = FileManager.default
+        let attrs = try? fm.attributesOfItem(atPath: path)
+        let size = (attrs?[.size] as? NSNumber)?.int64Value
+        let resource = LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: true)
+        let mediaId = MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max))
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH-mm"
+        let name = "Call \(dateFormatter.string(from: Date())).m4a"
+        let file = TelegramMediaFile(
+            fileId: mediaId,
+            partialReference: nil,
+            resource: resource,
+            previewRepresentations: [],
+            videoThumbnails: [],
+            immediateThumbnailData: nil,
+            mimeType: "audio/mp4",
+            size: size,
+            attributes: [
+                .FileName(fileName: name),
+                .Audio(isVoice: false, duration: duration, title: nil, performer: nil, waveform: nil)
+            ],
+            alternativeRepresentations: []
+        )
+        let message: EnqueueMessage = .message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+        let _ = enqueueMessages(account: account, peerId: account.peerId, messages: [message]).startStandalone()
+    }
+}
+'''
+    if "class AorusCallRecorder" not in occ:
+        occ = occ + orchestrator
+
+    return mm, occ
+
+
+def patch_call_recording(tg: Path) -> None:
+    """Call recording (audio, iteration 1). Taps mic in RecordedDataIsAvailable and
+    remote in NeedMorePlayData inside the tgcalls ADM, writing two CAF files; the
+    Swift orchestrator in OngoingCallContext.swift mixes them to one M4A and sends it
+    to Saved Messages. Gated by UserDefaults aorusgram_feature_call_recording.
+    Bridged purely via NSNotification, so no BUILD/header changes are needed.
+    Video frames are layered on in a later iteration."""
+    mm_path = tg / "submodules/TgVoipWebrtc/Sources/OngoingCallThreadLocalContext.mm"
+    occ_path = tg / "submodules/TelegramVoip/Sources/OngoingCallContext.swift"
+    if not mm_path.is_file():
+        print("CallRec: OngoingCallThreadLocalContext.mm not found — skip")
+        return
+    if not occ_path.is_file():
+        print("CallRec: OngoingCallContext.swift not found — skip")
+        return
+    mm = mm_path.read_text(encoding="utf-8")
+    occ = occ_path.read_text(encoding="utf-8")
+    mm2, occ2 = _aorus_apply_call_recording(mm, occ)
+    if mm2 != mm:
+        mm_path.write_text(mm2, encoding="utf-8")
+        print("CallRec: patched OngoingCallThreadLocalContext.mm (mic+remote taps)")
+    else:
+        print("CallRec: .mm unchanged (already patched or upstream drift)")
+    if occ2 != occ:
+        occ_path.write_text(occ2, encoding="utf-8")
+        print("CallRec: patched OngoingCallContext.swift (lifecycle + mix/upload)")
+    else:
+        print("CallRec: OngoingCallContext.swift unchanged (already patched or drift)")
+
+
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -7490,6 +7791,7 @@ def main() -> None:
     patch_disable_app_log_analytics(tg)
     patch_app_badge(tg)
     patch_app_badge_switcher(tg)
+    patch_call_recording(tg)
     for name in ("Info.plist", "InfoBazel.plist"):
         patch_plist_icons_and_urls(tg / "Telegram/Telegram-iOS" / name)
     patch_info_plist_bgtask(tg)
