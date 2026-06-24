@@ -22,6 +22,7 @@ swift_library(
         "//submodules/AppBundle:AppBundle",
         "//submodules/MediaResources:MediaResources",
         "//submodules/AnimatedStickerNode:AnimatedStickerNode",
+        "//submodules/TelegramUI/Components/ItemListDatePickerItem:ItemListDatePickerItem",
     ],
     visibility = [
         "//visibility:public",

@@ -4797,13 +4797,41 @@ def patch_local_premium(tg: Path) -> None:
 AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
 
 // AorusGram local "fake gifts" — collectible gifts the user pins to their OWN profile
-// purely locally. Nothing is sent to the server. The full ProfileGiftsContext.State.StarGift
-// (Codable) is stored so each gift renders with the native gift cell — real model,
-// pattern and backdrop. Persisted as JSON in UserDefaults (survives restarts; the gift
-// media re-downloads from Telegram as needed, so it also survives reinstalls).
+// purely locally. Nothing is sent to the server. Each entry keeps the original gift
+// (JSON-encoded StarGift, with the owner rewritten to the user) plus editable local
+// metadata (sender, date, comment, visibility). The profile pane and the native gift
+// cell are driven by a ProfileGiftsContext.State.StarGift rebuilt from those values, so
+// the gift renders with its real model / pattern / backdrop. Persisted in UserDefaults
+// (survives restarts; gift media re-downloads from Telegram, so it survives reinstalls).
+
+public struct AorusStoredGift: Codable, Equatable {
+    public var giftData: Data
+    public var senderPeerId: Int64   // 0 = no sender / anonymous
+    public var date: Int32
+    public var comment: String
+    public var showInProfile: Bool
+
+    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool) {
+        self.giftData = giftData
+        self.senderPeerId = senderPeerId
+        self.date = date
+        self.comment = comment
+        self.showInProfile = showInProfile
+    }
+
+    public var gift: StarGift? {
+        return try? JSONDecoder().decode(StarGift.self, from: self.giftData)
+    }
+
+    public var key: String {
+        guard let gift = self.gift else { return "" }
+        return AorusFakeGiftsStore.key(for: gift)
+    }
+}
+
 public enum AorusFakeGiftsStore {
     public static let enabledKey = "aorusgram_fake_gifts_enabled"
-    private static let listKey = "aorusgram_fake_gifts_list"
+    private static let listKey = "aorusgram_fake_gifts_list_v2"
 
     public static var isEnabled: Bool {
         return UserDefaults.standard.bool(forKey: enabledKey)
@@ -4822,55 +4850,102 @@ public enum AorusFakeGiftsStore {
         }
     }
 
-    public static func all() -> [ProfileGiftsContext.State.StarGift] {
+    public static func all() -> [AorusStoredGift] {
         guard let data = UserDefaults.standard.data(forKey: listKey),
-              let gifts = try? JSONDecoder().decode([ProfileGiftsContext.State.StarGift].self, from: data) else {
+              let gifts = try? JSONDecoder().decode([AorusStoredGift].self, from: data) else {
             return []
         }
         return gifts
     }
 
-    private static func persist(_ gifts: [ProfileGiftsContext.State.StarGift]) {
+    private static func persist(_ gifts: [AorusStoredGift]) {
         if let data = try? JSONEncoder().encode(gifts) {
             UserDefaults.standard.set(data, forKey: listKey)
         }
     }
 
-    public static func add(_ wrapper: ProfileGiftsContext.State.StarGift) {
+    public static func update(_ stored: AorusStoredGift) {
         var gifts = all()
-        let newKey = key(for: wrapper.gift)
-        gifts.removeAll(where: { key(for: $0.gift) == newKey })
-        gifts.insert(wrapper, at: 0)
-        persist(gifts)
+        if let index = gifts.firstIndex(where: { $0.key == stored.key }) {
+            gifts[index] = stored
+            persist(gifts)
+        }
     }
 
     public static func remove(key removeKey: String) {
         var gifts = all()
-        gifts.removeAll(where: { key(for: $0.gift) == removeKey })
+        gifts.removeAll(where: { $0.key == removeKey })
         persist(gifts)
     }
 
-    // Wrap a bare StarGift into a ProfileGiftsContext.State.StarGift. That struct has no
-    // public memberwise initializer, so we build the minimal required JSON (the same
-    // CodingKeys its Codable decoder reads) around the gift and decode it. Returns nil if
-    // the gift cannot be re-encoded.
-    public static func wrapper(for gift: StarGift) -> ProfileGiftsContext.State.StarGift? {
-        guard let giftData = try? JSONEncoder().encode(gift),
-              let giftObject = try? JSONSerialization.jsonObject(with: giftData, options: []) else {
+    // Add a freshly-opened gift, rewriting the unique gift's owner to the user so the
+    // native detail shows them as the owner.
+    public static func addGift(_ gift: StarGift, selfPeerId: Int64, date: Int32) {
+        guard let baseData = try? JSONEncoder().encode(gift) else { return }
+        let ownedData = dataWithOwner(baseData, ownerPeerId: selfPeerId) ?? baseData
+        let stored = AorusStoredGift(giftData: ownedData, senderPeerId: 0, date: date, comment: "", showInProfile: true)
+        var gifts = all()
+        let newKey = key(for: gift)
+        gifts.removeAll(where: { $0.key == newKey })
+        gifts.insert(stored, at: 0)
+        persist(gifts)
+    }
+
+    // Best-effort: rewrite the encoded gift JSON so the unique gift's ownerPeerId is the
+    // user (the gift object is nested inside the StarGift enum payload).
+    private static func dataWithOwner(_ giftData: Data, ownerPeerId: Int64) -> Data? {
+        guard let root = try? JSONSerialization.jsonObject(with: giftData, options: []) as? [String: Any] else {
             return nil
         }
-        let dict: [String: Any] = [
+        func mutate(_ dict: [String: Any]) -> [String: Any]? {
+            if dict["title"] != nil && dict["number"] != nil && dict["attributes"] != nil {
+                var updated = dict
+                updated["ownerPeerId"] = ownerPeerId
+                updated.removeValue(forKey: "ownerName")
+                updated.removeValue(forKey: "ownerAddress")
+                return updated
+            }
+            for (childKey, childValue) in dict {
+                if let childDict = childValue as? [String: Any], let mutated = mutate(childDict) {
+                    var updated = dict
+                    updated[childKey] = mutated
+                    return updated
+                }
+            }
+            return nil
+        }
+        guard let mutatedRoot = mutate(root),
+              let data = try? JSONSerialization.data(withJSONObject: mutatedRoot, options: []) else {
+            return nil
+        }
+        return data
+    }
+
+    // Build the native profile wrapper from a stored gift (date + comment applied).
+    public static func wrapper(for stored: AorusStoredGift) -> ProfileGiftsContext.State.StarGift? {
+        guard let giftObject = try? JSONSerialization.jsonObject(with: stored.giftData, options: []) else {
+            return nil
+        }
+        var dict: [String: Any] = [
             "gift": giftObject,
-            "date": 0,
-            "nameHidden": false,
+            "date": Int(stored.date),
+            "nameHidden": stored.senderPeerId == 0,
             "savedToProfile": true,
             "canUpgrade": false
         ]
+        if !stored.comment.isEmpty {
+            dict["text"] = stored.comment
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
               let wrapper = try? JSONDecoder().decode(ProfileGiftsContext.State.StarGift.self, from: data) else {
             return nil
         }
         return wrapper
+    }
+
+    // The wrappers to inject into the user's own profile gifts pane.
+    public static func profileWrappers() -> [ProfileGiftsContext.State.StarGift] {
+        return all().filter { $0.showInProfile }.compactMap { wrapper(for: $0) }
     }
 }
 '''
@@ -4894,7 +4969,7 @@ def patch_fake_gifts(tg: Path) -> None:
     gv = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift"
     if gv.is_file():
         t = gv.read_text(encoding="utf-8")
-        if "AorusFakeGiftsStore.wrapper" in t:
+        if "AorusFakeGiftsStore.addGift" in t:
             print("FakeGifts: GiftViewScreen already patched")
         else:
             anchor = (
@@ -4910,13 +4985,12 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                let aorusGiftIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
                 "                items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"\\u{0414}\\u{043e}\\u{0431}\\u{0430}\\u{0432}\\u{0438}\\u{0442}\\u{044c} \\u{0432} \\u{043f}\\u{0440}\\u{043e}\\u{0444}\\u{0438}\\u{043b}\\u{044c}\" : \"Add to Profile\", icon: { theme in\n"
                 "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Gift\"), color: theme.contextMenu.primaryColor)\n"
-                "                }, action: { [weak controller] c, _ in\n"
+                "                }, action: { [weak self, weak controller] c, _ in\n"
                 "                    c?.dismiss(completion: nil)\n"
-                "                    if let aorusWrapper = AorusFakeGiftsStore.wrapper(for: arguments.gift) {\n"
-                "                        AorusFakeGiftsStore.add(aorusWrapper)\n"
-                "                        if !AorusFakeGiftsStore.isEnabled {\n"
-                "                            AorusFakeGiftsStore.setEnabled(true)\n"
-                "                        }\n"
+                "                    guard let self else { return }\n"
+                "                    AorusFakeGiftsStore.addGift(arguments.gift, selfPeerId: self.context.account.peerId.toInt64(), date: Int32(Date().timeIntervalSince1970))\n"
+                "                    if !AorusFakeGiftsStore.isEnabled {\n"
+                "                        AorusFakeGiftsStore.setEnabled(true)\n"
                 "                    }\n"
                 "                    let aorusAddedText = aorusGiftIsRu ? \"\\u{041f}\\u{043e}\\u{0434}\\u{0430}\\u{0440}\\u{043e}\\u{043a} \\u{0434}\\u{043e}\\u{0431}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d} \\u{0432} \\u{043f}\\u{0440}\\u{043e}\\u{0444}\\u{0438}\\u{043b}\\u{044c}\" : \"Gift added to your profile\"\n"
                 "                    controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: aorusAddedText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
@@ -4935,7 +5009,7 @@ def patch_fake_gifts(tg: Path) -> None:
     gl = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/GiftsListView.swift"
     if gl.is_file():
         t = gl.read_text(encoding="utf-8")
-        if "AorusFakeGiftsStore.all()" in t:
+        if "AorusFakeGiftsStore.profileWrappers" in t:
             print("FakeGifts: GiftsListView already patched")
         else:
             anchor = (
@@ -4946,7 +5020,7 @@ def patch_fake_gifts(tg: Path) -> None:
             )
             injection = anchor + (
                 "            if self.peerId == self.context.account.peerId, AorusFakeGiftsStore.isEnabled {\n"
-                "                let aorusFakeGifts = AorusFakeGiftsStore.all()\n"
+                "                let aorusFakeGifts = AorusFakeGiftsStore.profileWrappers()\n"
                 "                if !aorusFakeGifts.isEmpty {\n"
                 "                    self.starsProducts = aorusFakeGifts + (self.starsProducts ?? [])\n"
                 "                }\n"
