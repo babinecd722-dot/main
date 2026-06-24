@@ -3552,10 +3552,29 @@ def patch_call_proxy(tg: Path) -> None:
     count = t.count(old)
     if count > 0:
         t = t.replace(old, new)
-        path.write_text(t, encoding="utf-8")
         print(f"Call proxy: routed {count} call-start site(s) through SOCKS5 when configured")
     else:
         print("WARNING: PresentationCallManager proxyServer sites not found — call proxy NOT applied")
+
+    # Force the active proxy to be used for calls whenever the proxy is enabled, even if
+    # the user never flipped the "Use proxy for calls" toggle. Without this, proxyServer
+    # is nil for calls on a proxied connection, so the call media has no path on networks
+    # where direct voice is blocked → the call "connects" forever. Messages already work
+    # because they always ride the proxied MTProto link; only the call leg was opting out.
+    cond_old = ("                if settings.enabled && settings.useForCalls {\n"
+                "                    strongSelf.proxyServer = settings.activeServer\n")
+    cond_new = ("                if settings.enabled {\n"
+                "                    // AorusGram: always route calls through the active proxy when the\n"
+                "                    // proxy is enabled (ignore the per-user useForCalls toggle), so call\n"
+                "                    // media has a working path wherever direct voice traffic is blocked.\n"
+                "                    strongSelf.proxyServer = settings.activeServer\n")
+    if cond_old in t:
+        t = t.replace(cond_old, cond_new, 1)
+        print("Call proxy: forced active proxy for calls (ignore useForCalls toggle)")
+    else:
+        print("WARNING: PresentationCallManager useForCalls condition not found — call proxy force NOT applied")
+
+    path.write_text(t, encoding="utf-8")
 
 
 def patch_intro_brand_logo(tg: Path) -> None:
@@ -6653,12 +6672,17 @@ def patch_aorus_code_compose(tg: Path) -> None:
         "        if !UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_enabled\") { return }\n"
         "        if UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_hint_shown\") { return }\n"
         "        if self.attachmentButtonBackground.isHidden || self.attachmentButtonBackground.alpha <= 0.01 { return }\n"
-        "        guard self.attachmentButton.bounds.width > 0.0, let window = self.attachmentButton.window else { return }\n"
+        "        guard self.attachmentButton.bounds.width > 0.0, self.attachmentButton.window != nil else { return }\n"
+        "        // Host the hint inside the chat controller's own view (not the key window),\n"
+        "        // so it is torn down automatically when the user leaves the chat instead of\n"
+        "        // lingering over the chat list.\n"
+        "        guard let chatController = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
+        "        let hostView = chatController.view\n"
         "        UserDefaults.standard.set(true, forKey: \"aorusgram_aorus_code_hint_shown\")\n"
-        "        let target = self.attachmentButton.convert(self.attachmentButton.bounds, to: window)\n"
+        "        let target = self.attachmentButton.convert(self.attachmentButton.bounds, to: hostView)\n"
         "        let russian = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
         "        DispatchQueue.main.async {\n"
-        "            AorusCodeHintOverlay.present(in: window, targetRect: target, russian: russian)\n"
+        "            AorusCodeHintOverlay.present(in: hostView, targetRect: target, russian: russian)\n"
         "        }\n"
         "    }\n"
         "\n"
@@ -8594,7 +8618,8 @@ def patch_gif_wallpaper(tg: Path) -> None:
          "    private var validLayout: (CGSize, WallpaperDisplayMode)?\n"
          "    private var wallpaper: TelegramWallpaper?\n"
          "    private var aorusGifHost: AorusGifWallpaperHost?\n"
-         "    var aorusForChatDisplay: Bool = false\n",
+         "    var aorusForChatDisplay: Bool = false\n"
+         "    public var aorusShowGif: Bool = false\n",
          "bg-prop")
 
     # Pass forChatDisplay through to the impl so only the real chat background drives
@@ -8655,6 +8680,18 @@ def patch_gif_wallpaper(tg: Path) -> None:
                  "    private var aorusGifObserver: NSObjectProtocol?\n"
                  "    private var aorusLastDisplayMode: WallpaperDisplayMode = .aspectFill\n",
                  "preview-prop")
+
+            # mark this preview's background as a place the GIF SHOULD render (it shows
+            # the user's current wallpaper). The gallery preview gets no such flag, so it
+            # shows the candidate wallpaper instead of the GIF.
+            psub("            if currentBackgroundNode == nil {\n"
+                 "                currentBackgroundNode = createWallpaperBackgroundNode(context: item.context, forChatDisplay: false)\n"
+                 "            }\n",
+                 "            if currentBackgroundNode == nil {\n"
+                 "                currentBackgroundNode = createWallpaperBackgroundNode(context: item.context, forChatDisplay: false)\n"
+                 "                (currentBackgroundNode as? WallpaperBackgroundNodeImpl)?.aorusShowGif = true\n"
+                 "            }\n",
+                 "preview-showgif")
 
             # subscribe in init
             psub("        self.clipsToBounds = true\n"
@@ -9025,11 +9062,14 @@ extension WallpaperBackgroundNodeImpl {
     }
 
     func aorusLayoutGifWallpaper(size: CGSize) {
-        // Renders in EVERY background node when active (chat + previews). Base-tracking
-        // lives entirely in aorusNoteWallpaperChange (real chat only) so this stays a
-        // pure renderer and never contaminates the shared state from a preview.
+        // Renders ONLY where the user's current chat wallpaper is shown: real chat
+        // backgrounds (forChatDisplay) and the Appearance "current wallpaper" preview
+        // (aorusShowGif set explicitly). It must NOT render in the wallpaper-gallery
+        // preview, where the user is auditioning a candidate wallpaper to switch to —
+        // otherwise the GIF hides the candidate and the switch looks impossible.
+        // Base-tracking lives entirely in aorusNoteWallpaperChange (real chat only).
         let defaults = UserDefaults.standard
-        let active = defaults.bool(forKey: "aorusgram_gif_wallpaper_active")
+        let active = defaults.bool(forKey: "aorusgram_gif_wallpaper_active") && (self.aorusForChatDisplay || self.aorusShowGif)
         let path = defaults.string(forKey: "aorusgram_gif_wallpaper_mp4")
         if active, let path = path, FileManager.default.fileExists(atPath: path) {
             let host: AorusGifWallpaperHost

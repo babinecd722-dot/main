@@ -2,28 +2,31 @@ import UIKit
 
 // MARK: - AorusCode first-run hint overlay
 //
-// Shown exactly once — the first time the user opens a chat (where the
-// attachment button is visible) while AorusCode is enabled in AorusGram
-// settings. It dims the screen, spotlights the attachment button with a
-// pulsing ring, and floats a callout above it explaining how to open the
-// AorusCode composer. Tapping anywhere (or a 10s timeout) dismisses it.
+// Shown exactly once — the first time the user opens a chat (where the attachment
+// button is visible) while AorusCode is enabled. It dims the screen with a soft
+// blur, spotlights the attachment button with a pulsing accent ring, and floats a
+// glass callout above it explaining how to open the AorusCode composer. Tapping
+// anywhere (or a 10s timeout) dismisses it.
 //
-// Pure UIKit, no module dependencies, presented straight onto the key window
-// so it sits above the whole chat. The one-time gating lives in the caller
-// (ChatTextInputPanelNode) via a UserDefaults flag.
+// Hosted inside the chat controller's own view (passed in as `hostView`) so it is
+// removed automatically when the user leaves the chat — it never lingers over the
+// chat list. The one-time gating lives in the caller (ChatTextInputPanelNode) via a
+// UserDefaults flag.
 
 public final class AorusCodeHintOverlay: UIView {
 
     private let accent = UIColor(red: 0.49, green: 0.36, blue: 0.96, alpha: 1.0)
+    private let accentDark = UIColor(red: 0.36, green: 0.24, blue: 0.84, alpha: 1.0)
     private let ringLayer = CAShapeLayer()
-    private let tailLayer = CAShapeLayer()
+    private let glowLayer = CAShapeLayer()
     private let bubble = UIView()
+    private let blurView = UIVisualEffectView(effect: nil)
     private var dismissed = false
 
-    public static func present(in window: UIWindow, targetRect: CGRect, russian: Bool) {
-        let overlay = AorusCodeHintOverlay(frame: window.bounds, targetRect: targetRect, russian: russian)
+    public static func present(in hostView: UIView, targetRect: CGRect, russian: Bool) {
+        let overlay = AorusCodeHintOverlay(frame: hostView.bounds, targetRect: targetRect, russian: russian)
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        window.addSubview(overlay)
+        hostView.addSubview(overlay)
         overlay.animateIn()
     }
 
@@ -32,85 +35,150 @@ public final class AorusCodeHintOverlay: UIView {
         self.backgroundColor = .clear
         self.isUserInteractionEnabled = true
 
-        // ── Dim layer with a circular spotlight cut out around the button ──
-        let dim = UIView(frame: self.bounds)
-        dim.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        dim.backgroundColor = UIColor.black.withAlphaComponent(0.55)
-        dim.isUserInteractionEnabled = false
-        let holeRadius = max(targetRect.width, targetRect.height) * 0.85
+        let holeRadius = max(targetRect.width, targetRect.height) * 0.92
         let holeRect = CGRect(
             x: targetRect.midX - holeRadius,
             y: targetRect.midY - holeRadius,
             width: holeRadius * 2.0,
             height: holeRadius * 2.0)
-        let cutout = UIBezierPath(rect: dim.bounds)
+
+        // ── Soft blur backdrop with a circular spotlight punched out around the button ──
+        self.blurView.frame = self.bounds
+        self.blurView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.blurView.isUserInteractionEnabled = false
+        self.addSubview(self.blurView)
+
+        let dimmer = UIView(frame: self.bounds)
+        dimmer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        dimmer.backgroundColor = UIColor.black.withAlphaComponent(0.30)
+        dimmer.isUserInteractionEnabled = false
+        self.addSubview(dimmer)
+
+        let cutout = UIBezierPath(rect: self.bounds)
         cutout.append(UIBezierPath(ovalIn: holeRect))
         let mask = CAShapeLayer()
         mask.path = cutout.cgPath
         mask.fillRule = .evenOdd
-        dim.layer.mask = mask
-        self.addSubview(dim)
+        self.blurView.layer.mask = mask
+        let dimMask = CAShapeLayer()
+        dimMask.path = cutout.cgPath
+        dimMask.fillRule = .evenOdd
+        dimmer.layer.mask = dimMask
 
-        // ── Pulsing ring centred on the button ──
-        let ringFrame = holeRect.insetBy(dx: -3.0, dy: -3.0)
+        // ── Outer breathing glow + pulsing accent ring centred on the button ──
+        let ringFrame = holeRect.insetBy(dx: -2.0, dy: -2.0)
+        self.glowLayer.frame = ringFrame
+        self.glowLayer.path = UIBezierPath(ovalIn: CGRect(origin: .zero, size: ringFrame.size)).cgPath
+        self.glowLayer.fillColor = UIColor.clear.cgColor
+        self.glowLayer.strokeColor = self.accent.withAlphaComponent(0.5).cgColor
+        self.glowLayer.lineWidth = 8.0
+        self.glowLayer.shadowColor = self.accent.cgColor
+        self.glowLayer.shadowRadius = 10.0
+        self.glowLayer.shadowOpacity = 0.9
+        self.glowLayer.shadowOffset = .zero
+        self.layer.addSublayer(self.glowLayer)
+
         self.ringLayer.frame = ringFrame
         self.ringLayer.path = UIBezierPath(ovalIn: CGRect(origin: .zero, size: ringFrame.size)).cgPath
         self.ringLayer.fillColor = UIColor.clear.cgColor
-        self.ringLayer.strokeColor = self.accent.cgColor
+        self.ringLayer.strokeColor = UIColor.white.cgColor
         self.ringLayer.lineWidth = 2.5
         self.layer.addSublayer(self.ringLayer)
 
-        // ── Callout text ──
-        let label = UILabel()
-        label.numberOfLines = 0
-        let lead = russian ? "Зажми скрепку для открытия " : "Hold the paperclip to open "
+        // ── Glass callout above the button ──
+        let lead = russian ? "Зажми скрепку, чтобы открыть " : "Hold the paperclip to open "
         let attr = NSMutableAttributedString(string: lead, attributes: [
-            .foregroundColor: UIColor.white,
-            .font: UIFont.systemFont(ofSize: 16.0, weight: .medium)
+            .foregroundColor: UIColor.white.withAlphaComponent(0.95),
+            .font: UIFont.systemFont(ofSize: 15.5, weight: .medium)
         ])
         attr.append(NSAttributedString(string: "AorusCode", attributes: [
             .foregroundColor: UIColor.white,
-            .font: UIFont.systemFont(ofSize: 16.0, weight: .heavy)
+            .font: UIFont.systemFont(ofSize: 15.5, weight: .heavy)
         ]))
+
+        let label = UILabel()
+        label.numberOfLines = 0
         label.attributedText = attr
 
-        let maxBubbleWidth = min(self.bounds.width - 32.0, 320.0)
-        let inset = UIEdgeInsets(top: 11.0, left: 14.0, bottom: 11.0, right: 14.0)
-        let textSize = label.sizeThatFits(CGSize(width: maxBubbleWidth - inset.left - inset.right, height: .greatestFiniteMagnitude))
-        let bubbleSize = CGSize(width: textSize.width + inset.left + inset.right, height: textSize.height + inset.top + inset.bottom)
+        // Paperclip glyph badge on the left of the callout.
+        let iconSize: CGFloat = 30.0
+        let iconView = UIView()
+        iconView.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+        iconView.layer.cornerRadius = iconSize / 2.0
+        let icon = UIImageView()
+        icon.contentMode = .center
+        icon.tintColor = .white
+        if #available(iOS 13.0, *) {
+            let cfg = UIImage.SymbolConfiguration(pointSize: 15.0, weight: .semibold)
+            icon.image = UIImage(systemName: "paperclip", withConfiguration: cfg)
+        }
 
-        // Position the callout above the button, clamped to the screen.
-        let arrowHeight: CGFloat = 9.0
-        var bubbleX = targetRect.midX - bubbleSize.width * 0.32
+        let maxBubbleWidth = min(self.bounds.width - 32.0, 330.0)
+        let inset = UIEdgeInsets(top: 13.0, left: 13.0, bottom: 13.0, right: 15.0)
+        let gap: CGFloat = 10.0
+        let textAvail = maxBubbleWidth - inset.left - inset.right - iconSize - gap
+        let textSize = label.sizeThatFits(CGSize(width: textAvail, height: .greatestFiniteMagnitude))
+        let contentHeight = max(iconSize, textSize.height)
+        let bubbleSize = CGSize(
+            width: inset.left + iconSize + gap + textSize.width + inset.right,
+            height: contentHeight + inset.top + inset.bottom)
+
+        let arrowHeight: CGFloat = 10.0
+        var bubbleX = targetRect.midX - bubbleSize.width * 0.30
         bubbleX = max(12.0, min(bubbleX, self.bounds.width - 12.0 - bubbleSize.width))
-        var bubbleY = targetRect.minY - arrowHeight - 12.0 - bubbleSize.height
-        // The attachment button lives in the bottom input bar, so the callout sits
-        // well clear of the top; a fixed floor is enough to stay below the status bar.
+        var bubbleY = targetRect.minY - arrowHeight - 14.0 - bubbleSize.height
         bubbleY = max(60.0, bubbleY)
 
         self.bubble.frame = CGRect(x: bubbleX, y: bubbleY, width: bubbleSize.width, height: bubbleSize.height)
-        self.bubble.backgroundColor = self.accent
-        self.bubble.layer.cornerRadius = 14.0
-        self.bubble.layer.shadowColor = UIColor.black.cgColor
-        self.bubble.layer.shadowOpacity = 0.35
-        self.bubble.layer.shadowRadius = 12.0
-        self.bubble.layer.shadowOffset = CGSize(width: 0.0, height: 6.0)
+        self.bubble.layer.cornerRadius = 18.0
+        self.bubble.layer.cornerCurve = .continuous
+        self.bubble.clipsToBounds = false
+
+        // Accent gradient fill.
+        let gradient = CAGradientLayer()
+        gradient.frame = CGRect(origin: .zero, size: bubbleSize)
+        gradient.colors = [self.accent.cgColor, self.accentDark.cgColor]
+        gradient.startPoint = CGPoint(x: 0.0, y: 0.0)
+        gradient.endPoint = CGPoint(x: 1.0, y: 1.0)
+        gradient.cornerRadius = 18.0
+        let gradientHost = UIView(frame: CGRect(origin: .zero, size: bubbleSize))
+        gradientHost.layer.cornerRadius = 18.0
+        gradientHost.layer.cornerCurve = .continuous
+        gradientHost.clipsToBounds = true
+        gradientHost.layer.addSublayer(gradient)
+        gradientHost.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.bubble.addSubview(gradientHost)
+
+        self.bubble.layer.shadowColor = self.accentDark.cgColor
+        self.bubble.layer.shadowOpacity = 0.45
+        self.bubble.layer.shadowRadius = 16.0
+        self.bubble.layer.shadowOffset = CGSize(width: 0.0, height: 8.0)
         self.addSubview(self.bubble)
 
-        label.frame = CGRect(x: inset.left, y: inset.top, width: bubbleSize.width - inset.left - inset.right, height: bubbleSize.height - inset.top - inset.bottom)
+        iconView.frame = CGRect(x: inset.left, y: (bubbleSize.height - iconSize) / 2.0, width: iconSize, height: iconSize)
+        icon.frame = iconView.bounds
+        iconView.addSubview(icon)
+        self.bubble.addSubview(iconView)
+
+        label.frame = CGRect(
+            x: inset.left + iconSize + gap,
+            y: (bubbleSize.height - textSize.height) / 2.0,
+            width: textSize.width,
+            height: textSize.height)
         self.bubble.addSubview(label)
 
-        // ── Downward tail pointing from the callout to the button ──
-        let tailX = max(self.bubble.frame.minX + 18.0, min(targetRect.midX, self.bubble.frame.maxX - 18.0))
-        let tailTop = self.bubble.frame.maxY - 0.5
+        // ── Tail pointing from the callout toward the button ──
+        let tailX = max(self.bubble.frame.minX + 22.0, min(targetRect.midX, self.bubble.frame.maxX - 22.0))
+        let tailTop = self.bubble.frame.maxY - 1.0
         let tp = UIBezierPath()
-        tp.move(to: CGPoint(x: tailX - 10.0, y: tailTop))
-        tp.addLine(to: CGPoint(x: tailX + 10.0, y: tailTop))
+        tp.move(to: CGPoint(x: tailX - 11.0, y: tailTop))
+        tp.addLine(to: CGPoint(x: tailX + 11.0, y: tailTop))
         tp.addLine(to: CGPoint(x: tailX, y: tailTop + arrowHeight))
         tp.close()
-        self.tailLayer.path = tp.cgPath
-        self.tailLayer.fillColor = self.accent.cgColor
-        self.layer.addSublayer(self.tailLayer)
+        let tailLayer = CAShapeLayer()
+        tailLayer.path = tp.cgPath
+        tailLayer.fillColor = self.accentDark.cgColor
+        self.layer.addSublayer(tailLayer)
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(self.handleTap))
         self.addGestureRecognizer(tap)
@@ -123,39 +191,40 @@ public final class AorusCodeHintOverlay: UIView {
 
     private func animateIn() {
         self.alpha = 0.0
-        self.bubble.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
-        UIView.animate(withDuration: 0.28, delay: 0.0, options: [.curveEaseOut], animations: {
+        self.bubble.transform = CGAffineTransform(scaleX: 0.8, y: 0.8).translatedBy(x: 0.0, y: 8.0)
+
+        UIView.animate(withDuration: 0.32, delay: 0.0, options: [.curveEaseOut], animations: {
             self.alpha = 1.0
+            self.blurView.effect = UIBlurEffect(style: .systemUltraThinMaterialDark)
         })
-        UIView.animate(withDuration: 0.45, delay: 0.05, usingSpringWithDamping: 0.62, initialSpringVelocity: 0.4, options: [], animations: {
+        UIView.animate(withDuration: 0.55, delay: 0.06, usingSpringWithDamping: 0.66, initialSpringVelocity: 0.5, options: [], animations: {
             self.bubble.transform = .identity
         })
 
-        // Pulsing ring (scale + fade out), repeating.
+        // Pulsing ring (scale + fade), repeating.
         let scale = CABasicAnimation(keyPath: "transform.scale")
         scale.fromValue = 1.0
-        scale.toValue = 1.3
+        scale.toValue = 1.22
         let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0.9
+        fade.fromValue = 0.95
         fade.toValue = 0.0
         let group = CAAnimationGroup()
         group.animations = [scale, fade]
-        group.duration = 1.15
+        group.duration = 1.4
         group.repeatCount = .infinity
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
         self.ringLayer.add(group, forKey: "aorusPulse")
 
-        // Gentle bob on the tail to draw the eye toward the button.
-        let bob = CABasicAnimation(keyPath: "transform.translation.y")
-        bob.fromValue = -3.0
-        bob.toValue = 3.0
-        bob.duration = 0.7
-        bob.autoreverses = true
-        bob.repeatCount = .infinity
-        bob.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.tailLayer.add(bob, forKey: "aorusBob")
+        // Gentle breathing glow.
+        let breathe = CABasicAnimation(keyPath: "shadowOpacity")
+        breathe.fromValue = 0.4
+        breathe.toValue = 1.0
+        breathe.duration = 1.1
+        breathe.autoreverses = true
+        breathe.repeatCount = .infinity
+        breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        self.glowLayer.add(breathe, forKey: "aorusGlow")
 
-        // Safety auto-dismiss.
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
             self?.dismiss()
         }
@@ -168,8 +237,9 @@ public final class AorusCodeHintOverlay: UIView {
     private func dismiss() {
         if self.dismissed { return }
         self.dismissed = true
-        UIView.animate(withDuration: 0.22, animations: {
+        UIView.animate(withDuration: 0.26, animations: {
             self.alpha = 0.0
+            self.bubble.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
         }, completion: { _ in
             self.removeFromSuperview()
         })
