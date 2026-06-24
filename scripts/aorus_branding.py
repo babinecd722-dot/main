@@ -4715,6 +4715,14 @@ def patch_local_premium(tg: Path) -> None:
         "    private static let lock = NSLock()\n"
         "    private static var accountPeerRawIds = Set<Int64>()\n"
         "\n"
+        "    // Local premium master toggle (\"Прочее\" → Локальный премиум). Default ON:\n"
+        "    // a fresh install (key absent) keeps premium enabled.\n"
+        "    public static var isEnabled: Bool {\n"
+        "        let defaults = UserDefaults.standard\n"
+        "        if defaults.object(forKey: \"aorusgram_local_premium\") == nil { return true }\n"
+        "        return defaults.bool(forKey: \"aorusgram_local_premium\")\n"
+        "    }\n"
+        "\n"
         "    public static func registerCurrentAccount(_ rawId: Int64) {\n"
         "        lock.lock()\n"
         "        accountPeerRawIds.insert(rawId)\n"
@@ -4722,6 +4730,7 @@ def patch_local_premium(tg: Path) -> None:
         "    }\n"
         "\n"
         "    public static func isOwnAccount(_ rawId: Int64) -> Bool {\n"
+        "        if !isEnabled { return false }\n"
         "        lock.lock()\n"
         "        let result = accountPeerRawIds.contains(rawId)\n"
         "        lock.unlock()\n"
@@ -4774,7 +4783,7 @@ def patch_local_premium(tg: Path) -> None:
             t = t.replace(
                 anchor,
                 "        AorusGramPremium.registerCurrentAccount(account.peerId.id._internalGetInt64Value()) // AorusGram local premium\n"
-                "        self.isPremium = true\n",
+                "        self.isPremium = AorusGramPremium.isEnabled\n",
                 1,
             )
             acc_ctx.write_text(t, encoding="utf-8")

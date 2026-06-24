@@ -111,6 +111,7 @@ public struct AorusL10n {
     public var antiSpoofDeleted: String { t("Анти-спуф удалёнок", "Anti-Spoof Deletions") }
     public var antiSpoofOnline: String { t("Анти-спуф онлайна", "Anti-Spoof Online") }
     public var accountBackup: String { t("Бэкап аккаунтов", "Account Backup") }
+    public var misc: String { t("Прочее", "Other") }
     public var aorusCode: String { t("AorusCode", "AorusCode") }
     public var aorusCodeHint: String { t("Удерживайте кнопку прикрепления чтобы отправить скрытое сообщение", "Hold the attachment button to send a hidden message") }
     public var accountDetails: String { t("Подробнее", "Details") }
