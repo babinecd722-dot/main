@@ -6677,7 +6677,7 @@ def patch_aorus_code_compose(tg: Path) -> None:
         "        // so it is torn down automatically when the user leaves the chat instead of\n"
         "        // lingering over the chat list.\n"
         "        guard let chatController = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
-        "        let hostView = chatController.view\n"
+        "        guard let hostView = chatController.view else { return }\n"
         "        UserDefaults.standard.set(true, forKey: \"aorusgram_aorus_code_hint_shown\")\n"
         "        let target = self.attachmentButton.convert(self.attachmentButton.bounds, to: hostView)\n"
         "        let russian = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
