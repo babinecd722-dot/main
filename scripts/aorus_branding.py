@@ -8237,6 +8237,34 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        self.gifItemNode = ItemListPeerActionItemNode()\n",
             "init-item")
 
+        # observer property: rebuild the grid when the GIF wallpaper state changes
+        sub("    private var queuedTransitions: [ThemeGridEntryTransition] = []\n",
+            "    private var queuedTransitions: [ThemeGridEntryTransition] = []\n"
+            "    private var aorusGifWallpaperObserver: NSObjectProtocol?\n",
+            "gif-observer-prop")
+
+        # subscribe in init (the data signal does not observe UserDefaults) and
+        # unsubscribe in deinit
+        sub("        self.updateWallpapers()\n"
+            "    }\n"
+            "    \n"
+            "    deinit {\n"
+            "        self.disposable?.dispose()\n"
+            "    }\n",
+            "        self.aorusGifWallpaperObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil, queue: .main) { [weak self] _ in\n"
+            "            self?.updateWallpapers()\n"
+            "        }\n"
+            "        self.updateWallpapers()\n"
+            "    }\n"
+            "    \n"
+            "    deinit {\n"
+            "        self.disposable?.dispose()\n"
+            "        if let observer = self.aorusGifWallpaperObserver {\n"
+            "            NotificationCenter.default.removeObserver(observer)\n"
+            "        }\n"
+            "    }\n",
+            "gif-observer-init")
+
         # add the GIF button node to the grid (generic mode only)
         sub("        self.gridNode.addSubnode(self.galleryItemNode)\n",
             "        self.gridNode.addSubnode(self.galleryItemNode)\n"
@@ -8251,9 +8279,13 @@ def patch_gif_wallpaper(tg: Path) -> None:
         # in generic mode (where the GIF button exists). Both gallery layout paths — the
         # PeerActionItem icon path (actually used) and the legacy ActionItem path — are
         # patched so the rows visually join into one continuous block.
-        sub("        let params = ListViewItemLayoutParams(width: layout.size.width, leftInset: listInsets.left, rightInset: listInsets.right, availableHeight: layout.size.height)\n",
+        # Anchor on the (unique) gallery-layout declaration inside containerLayoutUpdated.
+        # NOTE: do NOT anchor on "let params = ..." — that 8-space string is a substring
+        # of the 16-space-indented `let params` in presentationLayoutUpdated, so a naive
+        # replace lands in the wrong function scope.
+        sub("        let (galleryLayout, galleryApply): (ListViewItemNodeLayout, (Bool) -> Void)\n",
             "        let aorusHasGifButton: Bool = { if case .generic = self.mode { return true } else { return false } }()\n"
-            "        let params = ListViewItemLayoutParams(width: layout.size.width, leftInset: listInsets.left, rightInset: listInsets.right, availableHeight: layout.size.height)\n",
+            "        let (galleryLayout, galleryApply): (ListViewItemNodeLayout, (Bool) -> Void)\n",
             "gif-has-button")
 
         # gallery icon path (PeerActionItem — the branch actually taken)
@@ -8655,6 +8687,7 @@ final class AorusGifWallpaperHost: UIView {
         UserDefaults.standard.removeObject(forKey: "aorusgram_gif_wallpaper_mp4")
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         try? FileManager.default.removeItem(at: docs.appendingPathComponent("aorus_gif_wallpaper.mp4"))
+        NotificationCenter.default.post(name: Notification.Name("AorusGramGifWallpaperChanged"), object: nil)
     }
 }
 

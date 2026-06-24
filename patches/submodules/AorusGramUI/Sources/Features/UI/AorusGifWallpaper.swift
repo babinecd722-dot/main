@@ -22,6 +22,10 @@ import ImageIO
 public enum AorusGifWallpaperStore {
     public static let activeKey = "aorusgram_gif_wallpaper_active"
     public static let pathKey = "aorusgram_gif_wallpaper_mp4"
+    // Posted whenever the GIF wallpaper is activated or cleared, so the wallpaper
+    // grid screen can rebuild its entries (its data signal does not observe
+    // UserDefaults). The name is a plain string shared with ThemeGridControllerNode.
+    public static let changedNotification = Notification.Name("AorusGramGifWallpaperChanged")
 
     static var documents: URL {
         return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -37,12 +41,14 @@ public enum AorusGifWallpaperStore {
     public static func activate(mp4: URL) {
         UserDefaults.standard.set(true, forKey: activeKey)
         UserDefaults.standard.set(mp4.path, forKey: pathKey)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
     public static func clear() {
         UserDefaults.standard.set(false, forKey: activeKey)
         UserDefaults.standard.removeObject(forKey: pathKey)
         try? FileManager.default.removeItem(at: mp4URL)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 }
 
