@@ -500,17 +500,22 @@ public final class AorusGifPreviewNode: ASDisplayNode {
         pv.play(url: URL(fileURLWithPath: path))
         playerView = pv
 
-        // Blue ✓ checkmark badge (top-right, matches Telegram selection style).
+        // Native-style ✓ checkmark (top-right): white circle, dark check — matches
+        // Telegram's own wallpaper selection indicator in the grid.
         let d: CGFloat = 26.0
         let circle = UIView(frame: CGRect(x: view.bounds.width - d - 6.0, y: 6.0, width: d, height: d))
-        circle.backgroundColor = UIColor(red: 0.20, green: 0.56, blue: 1.0, alpha: 1.0)
+        circle.backgroundColor = UIColor.white
         circle.clipsToBounds = true
         circle.layer.cornerRadius = d / 2.0
+        circle.layer.shadowColor = UIColor.black.cgColor
+        circle.layer.shadowOpacity = 0.18
+        circle.layer.shadowRadius = 3.0
+        circle.layer.shadowOffset = CGSize(width: 0, height: 1)
         circle.autoresizingMask = [.flexibleLeftMargin, .flexibleBottomMargin]
         let checkLbl = UILabel(frame: circle.bounds)
         checkLbl.text = "✓"
-        checkLbl.textColor = .white
-        checkLbl.font = .systemFont(ofSize: 13.0, weight: .bold)
+        checkLbl.textColor = UIColor(white: 0.12, alpha: 1.0)
+        checkLbl.font = .systemFont(ofSize: 13.0, weight: .semibold)
         checkLbl.textAlignment = .center
         circle.addSubview(checkLbl)
         view.addSubview(circle)
