@@ -8273,6 +8273,49 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        }\n",
             "addSubnode")
 
+        # CRITICAL: the header buttons (color/gallery/reset/remove) do NOT handle their
+        # own taps — a single TapLongTapOrDoubleTapGestureRecognizer on gridNode.view
+        # routes both the press-highlight and the action by frame hit-testing. The GIF
+        # button must be wired into BOTH closures or it is dead (no highlight, no action).
+
+        # tapAction: route the tap to gifItem.action (place after the gallery branch)
+        sub("                            } else if self.galleryItemNode.frame.contains(location) {\n"
+            "                                if let galleryItem = self.galleryItem as? ItemListActionItem {\n"
+            "                                    galleryItem.action()\n"
+            "                                } else if let galleryItem = self.galleryItem as? ItemListPeerActionItem {\n"
+            "                                    galleryItem.action?()\n"
+            "                                }\n"
+            "                            } else if self.resetItemNode.frame.contains(location) {\n",
+            "                            } else if self.galleryItemNode.frame.contains(location) {\n"
+            "                                if let galleryItem = self.galleryItem as? ItemListActionItem {\n"
+            "                                    galleryItem.action()\n"
+            "                                } else if let galleryItem = self.galleryItem as? ItemListPeerActionItem {\n"
+            "                                    galleryItem.action?()\n"
+            "                                }\n"
+            "                            } else if self.gifItemNode.frame.contains(location) {\n"
+            "                                self.gifItem.action?()\n"
+            "                            } else if self.resetItemNode.frame.contains(location) {\n",
+            "tap-action-route")
+
+        # highlight: light up the GIF button on touch-down (place after the gallery branch)
+        sub("                    } else if strongSelf.galleryItemNode.frame.contains(point) {\n"
+            "                        highlightedNode = strongSelf.galleryItemNode\n"
+            "                    } else if strongSelf.resetItemNode.frame.contains(point) {\n",
+            "                    } else if strongSelf.galleryItemNode.frame.contains(point) {\n"
+            "                        highlightedNode = strongSelf.galleryItemNode\n"
+            "                    } else if strongSelf.gifItemNode.frame.contains(point) {\n"
+            "                        highlightedNode = strongSelf.gifItemNode\n"
+            "                    } else if strongSelf.resetItemNode.frame.contains(point) {\n",
+            "tap-highlight-pick")
+
+        # highlight: clear the GIF button highlight along with the others
+        sub("                    strongSelf.galleryItemNode.setHighlighted(false, at: CGPoint(), animated: true)\n"
+            "                    strongSelf.resetItemNode.setHighlighted(false, at: CGPoint(), animated: true)\n",
+            "                    strongSelf.galleryItemNode.setHighlighted(false, at: CGPoint(), animated: true)\n"
+            "                    strongSelf.gifItemNode.setHighlighted(false, at: CGPoint(), animated: true)\n"
+            "                    strongSelf.resetItemNode.setHighlighted(false, at: CGPoint(), animated: true)\n",
+            "tap-highlight-clear")
+
         # In generic mode the GIF button follows the gallery button, so the gallery is
         # no longer the last item of its block and must draw a separator (alwaysPlain:
         # false) instead of rounding its bottom corners. aorusHasGifButton is true only
