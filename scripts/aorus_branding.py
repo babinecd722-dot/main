@@ -8220,8 +8220,7 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "    private let galleryItemNode: ListViewItemNode\n"
             "    private var galleryItem: ItemListItem\n"
             "    private let gifItemNode: ItemListPeerActionItemNode\n"
-            "    private var gifItem: ItemListPeerActionItem\n"
-            "    private var aorusGifPreviewNode: AorusGifPreviewNode?\n",
+            "    private var gifItem: ItemListPeerActionItem\n",
             "props")
 
         # init: create the GIF action item (after the gallery switch block)
@@ -8232,29 +8231,40 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "\n"
             "        let aorusGifRussian = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") || (Locale.current.languageCode == \"ru\")\n"
             "        let aorusGifTitle = aorusGifRussian ? \"\\u{0412}\\u{044b}\\u{0431}\\u{0440}\\u{0430}\\u{0442}\\u{044c} GIF\" : \"Choose GIF\"\n"
-            "        self.gifItem = ItemListPeerActionItem(presentationData: ItemListPresentationData(presentationData), icon: nil, title: aorusGifTitle, additionalDetailLabel: nil, alwaysPlain: false, hasSeparator: false, sectionId: 0, height: .generic, color: .accent, editing: false, action: {\n"
+            "        self.gifItem = ItemListPeerActionItem(presentationData: ItemListPresentationData(presentationData), icon: nil, title: aorusGifTitle, alwaysPlain: false, hasSeparator: false, sectionId: 0, height: .generic, color: .accent, editing: false, action: {\n"
             "            AorusGifWallpaperPicker.present(russian: aorusGifRussian)\n"
             "        })\n"
             "        self.gifItemNode = ItemListPeerActionItemNode()\n",
             "init-item")
 
-        # add the node to the grid (generic mode only)
+        # add the GIF button node to the grid (generic mode only)
         sub("        self.gridNode.addSubnode(self.galleryItemNode)\n",
             "        self.gridNode.addSubnode(self.galleryItemNode)\n"
             "        if case .generic = mode {\n"
             "            self.gridNode.addSubnode(self.gifItemNode)\n"
-            "            let aorusPreview = AorusGifPreviewNode()\n"
-            "            self.gridNode.addSubnode(aorusPreview)\n"
-            "            self.aorusGifPreviewNode = aorusPreview\n"
             "        }\n",
             "addSubnode")
 
-        # merge the gallery row with the GIF row: in generic mode the gallery is no
-        # longer the last block item, so it must draw a separator (alwaysPlain: false)
-        # instead of rounding its bottom corners.
+        # In generic mode the GIF button follows the gallery button, so the gallery is
+        # no longer the last item of its block and must draw a separator (alwaysPlain:
+        # false) instead of rounding its bottom corners. aorusHasGifButton is true only
+        # in generic mode (where the GIF button exists). Both gallery layout paths — the
+        # PeerActionItem icon path (actually used) and the legacy ActionItem path — are
+        # patched so the rows visually join into one continuous block.
+        sub("        let params = ListViewItemLayoutParams(width: layout.size.width, leftInset: listInsets.left, rightInset: listInsets.right, availableHeight: layout.size.height)\n",
+            "        let aorusHasGifButton: Bool = { if case .generic = self.mode { return true } else { return false } }()\n"
+            "        let params = ListViewItemLayoutParams(width: layout.size.width, leftInset: listInsets.left, rightInset: listInsets.right, availableHeight: layout.size.height)\n",
+            "gif-has-button")
+
+        # gallery icon path (PeerActionItem — the branch actually taken)
+        sub("            (galleryLayout, galleryApply) = makeGalleryIconLayout(galleryItem, params, ItemListNeighbors(top: isChannel ? .none : .sameSection(alwaysPlain: false), bottom: .sameSection(alwaysPlain: !hasCustomWallpaper)))\n",
+            "            (galleryLayout, galleryApply) = makeGalleryIconLayout(galleryItem, params, ItemListNeighbors(top: isChannel ? .none : .sameSection(alwaysPlain: false), bottom: .sameSection(alwaysPlain: !hasCustomWallpaper && !aorusHasGifButton)))\n",
+            "gallery-neighbor-icon")
+
+        # gallery legacy path (ItemListActionItem)
         sub("            (galleryLayout, galleryApply) = makeGalleryLayout(galleryItem, params, ItemListNeighbors(top: isChannel ? .none : .sameSection(alwaysPlain: false), bottom: .sameSection(alwaysPlain: true)))\n",
-            "            (galleryLayout, galleryApply) = makeGalleryLayout(galleryItem, params, ItemListNeighbors(top: isChannel ? .none : .sameSection(alwaysPlain: false), bottom: .sameSection(alwaysPlain: false)))\n",
-            "gallery-neighbor")
+            "            (galleryLayout, galleryApply) = makeGalleryLayout(galleryItem, params, ItemListNeighbors(top: isChannel ? .none : .sameSection(alwaysPlain: false), bottom: .sameSection(alwaysPlain: !aorusHasGifButton)))\n",
+            "gallery-neighbor-legacy")
 
         # layout: async layout maker
         sub("        let makeDescriptionLayout = self.descriptionItemNode.asyncLayout()\n",
@@ -8271,11 +8281,10 @@ def patch_gif_wallpaper(tg: Path) -> None:
         # layout: realize gif node
         sub("        descriptionApply()\n",
             "        descriptionApply()\n"
-            "        gifApply()\n",
+            "        gifApply(false)\n",
             "layout-apply")
 
-        # layout: reserve vertical space for the gif button only (generic mode);
-        # the gif preview overlay sits on top of the first grid row — no extra inset needed.
+        # layout: reserve vertical space for the gif button (generic mode)
         sub("        var buttonInset: CGFloat = buttonTopInset + buttonHeight + buttonBottomInset\n"
             "        if !isChannel || hasCustomWallpaper {\n"
             "            buttonInset += buttonHeight\n"
@@ -8286,11 +8295,10 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        }\n"
             "        if case .generic = self.mode {\n"
             "            buttonInset += buttonHeight\n"
-            "        }\n"
-            "        let aorusGifIsActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")\n",
+            "        }\n",
             "layout-inset")
 
-        # layout: frame the gif button; place gif preview overlay at the first grid cell
+        # layout: frame the gif button right below the gallery button
         sub("        transition.updateFrame(node: self.galleryItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: galleryLayout.contentSize))\n"
             "        originY += galleryLayout.contentSize.height\n",
             "        transition.updateFrame(node: self.galleryItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: galleryLayout.contentSize))\n"
@@ -8298,23 +8306,56 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        if case .generic = self.mode {\n"
             "            transition.updateFrame(node: self.gifItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: gifLayout.contentSize))\n"
             "            originY += gifLayout.contentSize.height\n"
-            "            // Gif preview overlays the first grid cell — positioned at the top of the\n"
-            "            // wallpaper grid (y = buttonInset within gridNode), same width/height as\n"
-            "            // one grid cell, isUserInteractionEnabled = false so taps pass through.\n"
-            "            if let previewNode = self.aorusGifPreviewNode {\n"
-            "                previewNode.isUserInteractionEnabled = false\n"
-            "                if aorusGifIsActive {\n"
-            "                    let cellW = floor(params.width / 3.0)\n"
-            "                    let cellH = floor(cellW * 1.333)\n"
-            "                    previewNode.isHidden = false\n"
-            "                    transition.updateFrame(node: previewNode, frame: CGRect(x: 0.0, y: originY, width: cellW, height: cellH))\n"
-            "                    previewNode.refreshDisplay()\n"
-            "                } else {\n"
-            "                    previewNode.isHidden = true\n"
-            "                }\n"
-            "            }\n"
             "        }\n",
             "layout-frame")
+
+        # ── Native GIF grid entry injection ──────────────────────────────────
+        # Inject the active GIF as a real ThemeGridControllerEntry at index 0 of the
+        # wallpaper grid (generic mode), so GridNode lays it out as a genuine cell that
+        # scrolls with the grid and shows the native selection checkmark. The entry is
+        # flagged isAorusGif; ThemeGridControllerItemNode renders it as a looping video.
+
+        # entry struct: add the flag
+        sub("    var isEditable: Bool\n"
+            "    var isSelected: Bool\n"
+            "    \n"
+            "    static func <(lhs: ThemeGridControllerEntry, rhs: ThemeGridControllerEntry) -> Bool {\n",
+            "    var isEditable: Bool\n"
+            "    var isSelected: Bool\n"
+            "    var isAorusGif: Bool = false\n"
+            "    \n"
+            "    static func <(lhs: ThemeGridControllerEntry, rhs: ThemeGridControllerEntry) -> Bool {\n",
+            "entry-field")
+
+        # entry stableId: unique sentinel for the GIF entry (avoids colliding with the
+        # base wallpaper, whose TelegramWallpaper value it shares)
+        sub("    var stableId: StableId {\n"
+            "        switch self.wallpaper {\n",
+            "    var stableId: StableId {\n"
+            "        if self.isAorusGif {\n"
+            "            return .image(\"__aorusgram_gif__\")\n"
+            "        }\n"
+            "        switch self.wallpaper {\n",
+            "entry-stableid")
+
+        # entry item(): thread the flag into the grid item
+        sub("        return ThemeGridControllerItem(context: context, theme: self.theme, wallpaper: self.wallpaper, wallpaperId: self.stableId, isEmpty: self.isEmpty, emojiFile: self.emoji, channelMode: self.channelMode, index: self.index, editable: self.isEditable, selected: self.isSelected, interaction: interaction)\n",
+            "        return ThemeGridControllerItem(context: context, theme: self.theme, wallpaper: self.wallpaper, wallpaperId: self.stableId, isEmpty: self.isEmpty, emojiFile: self.emoji, channelMode: self.channelMode, index: self.index, editable: self.isEditable, selected: self.isSelected, isAorusGif: self.isAorusGif, interaction: interaction)\n",
+            "entry-item")
+
+        # transition builder: prepend the GIF entry in generic mode when active, and
+        # mark the base chat wallpaper unselected (the GIF is the selected one).
+        sub("                entries.insert(ThemeGridControllerEntry(index: 0, wallpaper: presentationData.chatWallpaper, emoji: nil, isEditable: false, isSelected: true), at: 0)\n"
+            "                index += 1\n",
+            "                let aorusGifActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")\n"
+            "                entries.insert(ThemeGridControllerEntry(index: 0, wallpaper: presentationData.chatWallpaper, emoji: nil, isEditable: false, isSelected: !aorusGifActive), at: 0)\n"
+            "                index += 1\n"
+            "                if aorusGifActive {\n"
+            "                    var aorusGifEntry = ThemeGridControllerEntry(index: -1, wallpaper: presentationData.chatWallpaper, emoji: nil, isEditable: false, isSelected: true)\n"
+            "                    aorusGifEntry.isAorusGif = true\n"
+            "                    entries.insert(aorusGifEntry, at: 0)\n"
+            "                }\n",
+            "transition-inject")
 
         grid.write_text(t, encoding="utf-8")
         print("GifWallpaper: patched ThemeGridControllerNode.swift")
@@ -8322,14 +8363,136 @@ def patch_gif_wallpaper(tg: Path) -> None:
     # BUILD dep
     if grid_build.is_file():
         bt = grid_build.read_text(encoding="utf-8")
-        if "//submodules/AorusGramUI" not in bt:
-            anchor = '        "//submodules/WallpaperBackgroundNode",\n'
-            if anchor in bt:
-                bt = bt.replace(anchor, anchor + '        "//submodules/AorusGramUI",\n', 1)
-                grid_build.write_text(bt, encoding="utf-8")
-                print("GifWallpaper: added AorusGramUI dep to WallpaperGridScreen BUILD")
+        anchor = '        "//submodules/WallpaperBackgroundNode",\n'
+        if "//submodules/AorusGramUI" not in bt and anchor in bt:
+            bt = bt.replace(anchor, anchor + '        "//submodules/AorusGramUI",\n', 1)
+            print("GifWallpaper: added AorusGramUI dep to WallpaperGridScreen BUILD")
+        elif "//submodules/AorusGramUI" not in bt:
+            print("GifWallpaper: WARNING WallpaperGridScreen BUILD anchor not found")
+        # RadialStatusNode: native selection checkmark drawn over the GIF cell
+        if "//submodules/RadialStatusNode" not in bt:
+            rsa = '        "//submodules/GridMessageSelectionNode",\n'
+            if rsa in bt:
+                bt = bt.replace(rsa, rsa + '        "//submodules/RadialStatusNode",\n', 1)
+                print("GifWallpaper: added RadialStatusNode dep to WallpaperGridScreen BUILD")
             else:
-                print("GifWallpaper: WARNING WallpaperGridScreen BUILD anchor not found")
+                print("GifWallpaper: WARNING RadialStatusNode BUILD anchor not found")
+        grid_build.write_text(bt, encoding="utf-8")
+
+    # ── 1b. Grid item node: render the injected GIF entry as a looping video ──
+    item_f = tg / ("submodules/TelegramUI/Components/Settings/WallpaperGridScreen"
+                   "/Sources/ThemeGridControllerItem.swift")
+    if item_f.is_file():
+        it = item_f.read_text(encoding="utf-8")
+        if "AorusGifGridVideoView" in it:
+            print("GifWallpaper: grid item already patched")
+        else:
+            def isub(anchor: str, repl: str, label: str) -> None:
+                nonlocal it
+                if anchor in it:
+                    it = it.replace(anchor, repl, 1)
+                else:
+                    print(f"GifWallpaper: WARNING item anchor not found — {label}")
+
+            # imports
+            isub("import GridMessageSelectionNode\n",
+                 "import GridMessageSelectionNode\nimport RadialStatusNode\nimport AVFoundation\n",
+                 "item-import")
+
+            # ThemeGridControllerItem: store the flag + init param
+            isub("    let editable: Bool\n"
+                 "    let selected: Bool\n"
+                 "    let interaction: ThemeGridControllerInteraction\n",
+                 "    let editable: Bool\n"
+                 "    let selected: Bool\n"
+                 "    let isAorusGif: Bool\n"
+                 "    let interaction: ThemeGridControllerInteraction\n",
+                 "item-prop")
+
+            isub("index: Int, editable: Bool, selected: Bool, interaction: ThemeGridControllerInteraction) {\n",
+                 "index: Int, editable: Bool, selected: Bool, isAorusGif: Bool = false, interaction: ThemeGridControllerInteraction) {\n",
+                 "item-init-sig")
+
+            isub("        self.selected = selected\n"
+                 "        self.interaction = interaction\n",
+                 "        self.selected = selected\n"
+                 "        self.isAorusGif = isAorusGif\n"
+                 "        self.interaction = interaction\n",
+                 "item-init-assign")
+
+            # ItemNode: stored properties for the video + checkmark
+            isub("    private var item: ThemeGridControllerItem?\n"
+                 "    \n"
+                 "    override init() {\n",
+                 "    private var item: ThemeGridControllerItem?\n"
+                 "    private var aorusGifVideoView: AorusGifGridVideoView?\n"
+                 "    private var aorusGifStatusNode: RadialStatusNode?\n"
+                 "    \n"
+                 "    override init() {\n",
+                 "node-prop")
+
+            # tapGesture: GIF cell is already the active wallpaper — ignore taps
+            isub("        if case .ended = recognizer.state {\n"
+                 "            if let item = self.item, !item.isEmpty {\n"
+                 "                item.interaction.openWallpaper(item.wallpaper)\n"
+                 "            }\n"
+                 "        }\n",
+                 "        if case .ended = recognizer.state {\n"
+                 "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
+                 "                item.interaction.openWallpaper(item.wallpaper)\n"
+                 "            }\n"
+                 "        }\n",
+                 "node-tap")
+
+            # layout: render the GIF video + native checkmark, or tear it down
+            isub("        let bounds = self.bounds\n"
+                 "        if let item = self.item {\n"
+                 "            self.wallpaperNode.setWallpaper(context: item.context, theme: item.theme, wallpaper: item.wallpaper, isEmpty: item.isEmpty, emojiFile: item.emojiFile, selected: !item.channelMode && item.selected, size: bounds.size, synchronousLoad: false)\n"
+                 "            self.selectionNode?.frame = CGRect(origin: CGPoint(), size: bounds.size)\n"
+                 "        }\n",
+                 "        let bounds = self.bounds\n"
+                 "        if let item = self.item, item.isAorusGif {\n"
+                 "            self.wallpaperNode.isHidden = true\n"
+                 "            let videoView: AorusGifGridVideoView\n"
+                 "            if let existing = self.aorusGifVideoView {\n"
+                 "                videoView = existing\n"
+                 "            } else {\n"
+                 "                videoView = AorusGifGridVideoView()\n"
+                 "                self.view.insertSubview(videoView, at: 0)\n"
+                 "                self.aorusGifVideoView = videoView\n"
+                 "            }\n"
+                 "            videoView.frame = bounds\n"
+                 "            if let path = UserDefaults.standard.string(forKey: \"aorusgram_gif_wallpaper_mp4\"), FileManager.default.fileExists(atPath: path) {\n"
+                 "                videoView.play(path: path)\n"
+                 "            }\n"
+                 "            let statusNode: RadialStatusNode\n"
+                 "            if let existing = self.aorusGifStatusNode {\n"
+                 "                statusNode = existing\n"
+                 "            } else {\n"
+                 "                statusNode = RadialStatusNode(backgroundNodeColor: UIColor(white: 0.0, alpha: 0.2), enableBlur: true)\n"
+                 "                statusNode.isUserInteractionEnabled = false\n"
+                 "                self.addSubnode(statusNode)\n"
+                 "                self.aorusGifStatusNode = statusNode\n"
+                 "            }\n"
+                 "            let aorusCheckDiameter: CGFloat = 50.0\n"
+                 "            statusNode.frame = CGRect(x: floorToScreenPixels((bounds.width - aorusCheckDiameter) / 2.0), y: floorToScreenPixels((bounds.height - aorusCheckDiameter) / 2.0), width: aorusCheckDiameter, height: aorusCheckDiameter)\n"
+                 "            statusNode.transitionToState(item.selected ? .check(.white) : .none, animated: false, completion: {})\n"
+                 "        } else if let item = self.item {\n"
+                 "            self.wallpaperNode.isHidden = false\n"
+                 "            self.aorusGifVideoView?.removeFromSuperview()\n"
+                 "            self.aorusGifVideoView = nil\n"
+                 "            self.aorusGifStatusNode?.removeFromSupernode()\n"
+                 "            self.aorusGifStatusNode = nil\n"
+                 "            self.wallpaperNode.setWallpaper(context: item.context, theme: item.theme, wallpaper: item.wallpaper, isEmpty: item.isEmpty, emojiFile: item.emojiFile, selected: !item.channelMode && item.selected, size: bounds.size, synchronousLoad: false)\n"
+                 "            self.selectionNode?.frame = CGRect(origin: CGPoint(), size: bounds.size)\n"
+                 "        }\n",
+                 "node-layout")
+
+            it += AORUS_GIF_GRID_VIDEO_SWIFT
+            item_f.write_text(it, encoding="utf-8")
+            print("GifWallpaper: patched ThemeGridControllerItem.swift")
+    else:
+        print("GifWallpaper: ThemeGridControllerItem.swift not found — skip grid cell render")
 
     # ── 2. Background node: self-contained looping-MP4 playback host ──────────
     bg = tg / "submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift"
@@ -8375,6 +8538,66 @@ def patch_gif_wallpaper(tg: Path) -> None:
     bt2 += AORUS_GIF_WALLPAPER_HOST_SWIFT
     bg.write_text(bt2, encoding="utf-8")
     print("GifWallpaper: patched WallpaperBackgroundNode.swift")
+
+
+AORUS_GIF_GRID_VIDEO_SWIFT = """
+
+// MARK: - AorusGram animated GIF grid cell (looping video host)
+//
+// Renders the active GIF wallpaper (pre-converted to a looping H.264 MP4) inside
+// its native wallpaper-grid cell. The cell is a real ThemeGridControllerEntry
+// injected at the top of the grid, so it scrolls and shows the native checkmark.
+
+final class AorusGifGridVideoView: UIView {
+    override class var layerClass: AnyClass {
+        return AVPlayerLayer.self
+    }
+    private var playerLayer: AVPlayerLayer {
+        return self.layer as! AVPlayerLayer
+    }
+    private let queuePlayer = AVQueuePlayer()
+    private var looper: AVPlayerLooper?
+    private var currentPath: String?
+
+    init() {
+        super.init(frame: .zero)
+        self.isUserInteractionEnabled = false
+        self.backgroundColor = .clear
+        self.playerLayer.videoGravity = .resizeAspectFill
+        self.playerLayer.player = self.queuePlayer
+        self.queuePlayer.isMuted = true
+        self.queuePlayer.actionAtItemEnd = .advance
+        NotificationCenter.default.addObserver(self, selector: #selector(self.resume), name: UIApplication.didBecomeActiveNotification, object: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        self.queuePlayer.pause()
+    }
+
+    @objc private func resume() {
+        self.queuePlayer.play()
+    }
+
+    func play(path: String) {
+        if self.currentPath == path {
+            if self.queuePlayer.timeControlStatus != .playing {
+                self.queuePlayer.play()
+            }
+            return
+        }
+        self.currentPath = path
+        self.looper = nil
+        let item = AVPlayerItem(url: URL(fileURLWithPath: path))
+        self.looper = AVPlayerLooper(player: self.queuePlayer, templateItem: item)
+        self.queuePlayer.play()
+    }
+}
+"""
 
 
 AORUS_GIF_WALLPAPER_HOST_SWIFT = """
