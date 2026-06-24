@@ -4794,6 +4794,174 @@ def patch_local_premium(tg: Path) -> None:
         print("Premium: AccountContext.swift not found — skipped")
 
 
+AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
+
+// AorusGram local "fake gifts" — collectible gifts the user pins to their OWN profile
+// purely locally. Nothing is sent to the server. The full ProfileGiftsContext.State.StarGift
+// (Codable) is stored so each gift renders with the native gift cell — real model,
+// pattern and backdrop. Persisted as JSON in UserDefaults (survives restarts; the gift
+// media re-downloads from Telegram as needed, so it also survives reinstalls).
+public enum AorusFakeGiftsStore {
+    public static let enabledKey = "aorusgram_fake_gifts_enabled"
+    private static let listKey = "aorusgram_fake_gifts_list"
+
+    public static var isEnabled: Bool {
+        return UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    public static func setEnabled(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: enabledKey)
+    }
+
+    public static func key(for gift: StarGift) -> String {
+        switch gift {
+        case let .unique(uniqueGift):
+            return "u_\\(uniqueGift.id)"
+        case let .generic(genericGift):
+            return "g_\\(genericGift.id)"
+        }
+    }
+
+    public static func all() -> [ProfileGiftsContext.State.StarGift] {
+        guard let data = UserDefaults.standard.data(forKey: listKey),
+              let gifts = try? JSONDecoder().decode([ProfileGiftsContext.State.StarGift].self, from: data) else {
+            return []
+        }
+        return gifts
+    }
+
+    private static func persist(_ gifts: [ProfileGiftsContext.State.StarGift]) {
+        if let data = try? JSONEncoder().encode(gifts) {
+            UserDefaults.standard.set(data, forKey: listKey)
+        }
+    }
+
+    public static func add(_ wrapper: ProfileGiftsContext.State.StarGift) {
+        var gifts = all()
+        let newKey = key(for: wrapper.gift)
+        gifts.removeAll(where: { key(for: $0.gift) == newKey })
+        gifts.insert(wrapper, at: 0)
+        persist(gifts)
+    }
+
+    public static func remove(key removeKey: String) {
+        var gifts = all()
+        gifts.removeAll(where: { key(for: $0.gift) == removeKey })
+        persist(gifts)
+    }
+
+    // Wrap a bare StarGift into a ProfileGiftsContext.State.StarGift. That struct has no
+    // public memberwise initializer, so we build the minimal required JSON (the same
+    // CodingKeys its Codable decoder reads) around the gift and decode it. Returns nil if
+    // the gift cannot be re-encoded.
+    public static func wrapper(for gift: StarGift) -> ProfileGiftsContext.State.StarGift? {
+        guard let giftData = try? JSONEncoder().encode(gift),
+              let giftObject = try? JSONSerialization.jsonObject(with: giftData, options: []) else {
+            return nil
+        }
+        let dict: [String: Any] = [
+            "gift": giftObject,
+            "date": 0,
+            "nameHidden": false,
+            "savedToProfile": true,
+            "canUpgrade": false
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
+              let wrapper = try? JSONDecoder().decode(ProfileGiftsContext.State.StarGift.self, from: data) else {
+            return nil
+        }
+        return wrapper
+    }
+}
+'''
+
+
+def patch_fake_gifts(tg: Path) -> None:
+    """Local "fake gifts" pinned to the user's own profile.
+
+    A "Добавить в профиль" item in another user's gift detail (...) menu stores the full
+    Codable gift; the profile gifts pane prepends the stored gifts for the user's own
+    profile so they render with the native gift cell. Everything is local — nothing is
+    sent to the server. The store lives in TelegramCore so the gift screen, the profile
+    pane and the AorusGram settings can all reach it.
+    """
+    # 1) Store in TelegramCore (globbed into the module; reachable from every consumer).
+    store = tg / "submodules/TelegramCore/Sources/AorusFakeGiftsStore.swift"
+    store.write_text(AORUS_FAKE_GIFTS_STORE_SWIFT, encoding="utf-8")
+    print("FakeGifts: wrote AorusFakeGiftsStore.swift")
+
+    # 2) Gift detail (...) menu — add "Добавить в профиль" after the Share item.
+    gv = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift"
+    if gv.is_file():
+        t = gv.read_text(encoding="utf-8")
+        if "AorusFakeGiftsStore.wrapper" in t:
+            print("FakeGifts: GiftViewScreen already patched")
+        else:
+            anchor = (
+                "                items.append(.action(ContextMenuActionItem(text: presentationData.strings.Gift_View_Context_Share, icon: { theme in\n"
+                "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Forward\"), color: theme.contextMenu.primaryColor)\n"
+                "                }, action: { [weak self] c, _ in\n"
+                "                    c?.dismiss(completion: nil)\n"
+                "                    \n"
+                "                    self?.shareGift()\n"
+                "                })))\n"
+            )
+            injection = anchor + (
+                "                let aorusGiftIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
+                "                items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"\\u{0414}\\u{043e}\\u{0431}\\u{0430}\\u{0432}\\u{0438}\\u{0442}\\u{044c} \\u{0432} \\u{043f}\\u{0440}\\u{043e}\\u{0444}\\u{0438}\\u{043b}\\u{044c}\" : \"Add to Profile\", icon: { theme in\n"
+                "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Gift\"), color: theme.contextMenu.primaryColor)\n"
+                "                }, action: { [weak controller] c, _ in\n"
+                "                    c?.dismiss(completion: nil)\n"
+                "                    if let aorusWrapper = AorusFakeGiftsStore.wrapper(for: arguments.gift) {\n"
+                "                        AorusFakeGiftsStore.add(aorusWrapper)\n"
+                "                        if !AorusFakeGiftsStore.isEnabled {\n"
+                "                            AorusFakeGiftsStore.setEnabled(true)\n"
+                "                        }\n"
+                "                    }\n"
+                "                    let aorusAddedText = aorusGiftIsRu ? \"\\u{041f}\\u{043e}\\u{0434}\\u{0430}\\u{0440}\\u{043e}\\u{043a} \\u{0434}\\u{043e}\\u{0431}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d} \\u{0432} \\u{043f}\\u{0440}\\u{043e}\\u{0444}\\u{0438}\\u{043b}\\u{044c}\" : \"Gift added to your profile\"\n"
+                "                    controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: aorusAddedText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
+                "                })))\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, injection, 1)
+                gv.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched GiftViewScreen (Add to Profile menu item)")
+            else:
+                print("FakeGifts: WARNING GiftViewScreen Share anchor not found")
+    else:
+        print("FakeGifts: GiftViewScreen.swift not found — skip menu item")
+
+    # 3) Profile gifts pane — prepend stored fake gifts for the user's OWN profile.
+    gl = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/GiftsListView.swift"
+    if gl.is_file():
+        t = gl.read_text(encoding="utf-8")
+        if "AorusFakeGiftsStore.all()" in t:
+            print("FakeGifts: GiftsListView already patched")
+        else:
+            anchor = (
+                "            } else {\n"
+                "                self.starsProducts = state.filteredGifts\n"
+                "                self.pinnedReferences = Array(state.gifts.filter { $0.pinnedToTop }.compactMap { $0.reference })\n"
+                "            }\n"
+            )
+            injection = anchor + (
+                "            if self.peerId == self.context.account.peerId, AorusFakeGiftsStore.isEnabled {\n"
+                "                let aorusFakeGifts = AorusFakeGiftsStore.all()\n"
+                "                if !aorusFakeGifts.isEmpty {\n"
+                "                    self.starsProducts = aorusFakeGifts + (self.starsProducts ?? [])\n"
+                "                }\n"
+                "            }\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, injection, 1)
+                gl.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched GiftsListView (own-profile injection)")
+            else:
+                print("FakeGifts: WARNING GiftsListView starsProducts anchor not found")
+    else:
+        print("FakeGifts: GiftsListView.swift not found — skip profile injection")
+
+
 def patch_bypass_copy_protection(tg: Path) -> None:
     """Gate copy-protection bypass on opaque UUID UserDefaults key (_AG_K_BYPASS_PAID).
 
@@ -9161,6 +9329,7 @@ def main() -> None:
     patch_intro_default_dark(tg)
     patch_aorus_badges(tg)
     patch_local_premium(tg)
+    patch_fake_gifts(tg)
     patch_bypass_copy_protection(tg)
     patch_bypass_channel_copy_protection(tg)
     patch_bypass_story_download(tg)

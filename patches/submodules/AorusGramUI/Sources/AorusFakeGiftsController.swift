@@ -2,96 +2,49 @@ import Foundation
 import UIKit
 import Display
 import SwiftSignalKit
+import TelegramCore
 import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
 import AccountContext
 
-// MARK: - Fake gifts model + persistent store
+// MARK: - Fake gifts manager screen
 //
-// Local-only "received gifts" the user pins to their own profile. Nothing is sent
-// to the server — the gifts are purely a local cosmetic, added from another user's
-// gift detail sheet via "Добавить в профиль". Persisted as JSON in UserDefaults so
-// they survive restarts. The list is keyed by `id` (the gift's unique slug/number).
+// Lists the local-only gifts the user pinned to their own profile (stored in
+// TelegramCore's AorusFakeGiftsStore as full Codable gifts). Nothing here is sent to
+// the server. Gifts are added from another user's gift detail "..." menu ("Добавить
+// в профиль"); this screen toggles the feature and manages the stored gifts.
 
-public struct AorusFakeGift: Codable, Equatable {
-    public var id: String
-    public var title: String
-    public var number: Int32
-    public var model: String
-    public var pattern: String
-    public var backdrop: String
-    public var senderName: String
-    public var anonymous: Bool
-    public var showInProfile: Bool
-    public var date: Double
-
-    public init(id: String, title: String, number: Int32, model: String, pattern: String, backdrop: String, senderName: String, anonymous: Bool, showInProfile: Bool, date: Double) {
-        self.id = id
-        self.title = title
-        self.number = number
-        self.model = model
-        self.pattern = pattern
-        self.backdrop = backdrop
-        self.senderName = senderName
-        self.anonymous = anonymous
-        self.showInProfile = showInProfile
-        self.date = date
+private func aorusGiftTitleAndNumber(_ gift: StarGift) -> (String, Int32?) {
+    switch gift {
+    case let .unique(uniqueGift):
+        return (uniqueGift.title, uniqueGift.number)
+    case let .generic(genericGift):
+        return (genericGift.title ?? "Gift", nil)
     }
 }
 
-public enum AorusFakeGiftsStore {
-    public static let enabledKey = "aorusgram_fake_gifts_enabled"
-    private static let listKey = "aorusgram_fake_gifts_list"
-
-    public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
+private func aorusGiftAttributes(_ gift: StarGift) -> (model: String?, pattern: String?, backdrop: String?) {
+    guard case let .unique(uniqueGift) = gift else {
+        return (nil, nil, nil)
     }
-
-    public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
-    }
-
-    public static func all() -> [AorusFakeGift] {
-        guard let data = UserDefaults.standard.data(forKey: listKey),
-              let gifts = try? JSONDecoder().decode([AorusFakeGift].self, from: data) else {
-            return []
-        }
-        return gifts
-    }
-
-    private static func save(_ gifts: [AorusFakeGift]) {
-        if let data = try? JSONEncoder().encode(gifts) {
-            UserDefaults.standard.set(data, forKey: listKey)
+    var model: String?
+    var pattern: String?
+    var backdrop: String?
+    for attribute in uniqueGift.attributes {
+        switch attribute {
+        case let .model(name, _, _, _):
+            if model == nil { model = name }
+        case let .pattern(name, _, _):
+            if pattern == nil { pattern = name }
+        case let .backdrop(name, _, _, _, _, _, _):
+            if backdrop == nil { backdrop = name }
+        default:
+            break
         }
     }
-
-    public static func add(_ gift: AorusFakeGift) {
-        var gifts = all()
-        if let index = gifts.firstIndex(where: { $0.id == gift.id }) {
-            gifts[index] = gift
-        } else {
-            gifts.insert(gift, at: 0)
-        }
-        save(gifts)
-    }
-
-    public static func remove(id: String) {
-        var gifts = all()
-        gifts.removeAll(where: { $0.id == id })
-        save(gifts)
-    }
-
-    public static func update(_ gift: AorusFakeGift) {
-        var gifts = all()
-        if let index = gifts.firstIndex(where: { $0.id == gift.id }) {
-            gifts[index] = gift
-            save(gifts)
-        }
-    }
+    return (model, pattern, backdrop)
 }
-
-// MARK: - Controller
 
 private enum FakeGiftsSection: Int32 {
     case toggle
@@ -105,9 +58,9 @@ private struct FakeGiftsState: Equatable {
 
 private final class FakeGiftsArguments {
     let setEnabled: (Bool) -> Void
-    let openGift: (AorusFakeGift) -> Void
+    let openGift: (ProfileGiftsContext.State.StarGift) -> Void
 
-    init(setEnabled: @escaping (Bool) -> Void, openGift: @escaping (AorusFakeGift) -> Void) {
+    init(setEnabled: @escaping (Bool) -> Void, openGift: @escaping (ProfileGiftsContext.State.StarGift) -> Void) {
         self.setEnabled = setEnabled
         self.openGift = openGift
     }
@@ -118,7 +71,7 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
     case enableInfo(PresentationTheme, String)
     case listHeader(PresentationTheme, String)
     case empty(PresentationTheme, String)
-    case gift(PresentationTheme, Int32, AorusFakeGift)
+    case gift(PresentationTheme, Int32, ProfileGiftsContext.State.StarGift)
 
     var section: ItemListSectionId {
         switch self {
@@ -171,8 +124,9 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
         case let .empty(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .gift(_, _, gift):
-            let label = "#\(gift.number)"
-            return ItemListDisclosureItem(presentationData: presentationData, title: gift.title, label: label, sectionId: section, style: .blocks, action: { args.openGift(gift) })
+            let (title, number) = aorusGiftTitleAndNumber(gift.gift)
+            let label = number.flatMap { "#\($0)" } ?? ""
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: { args.openGift(gift) })
         }
     }
 }
@@ -191,7 +145,7 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
     if gifts.isEmpty {
         entries.append(.empty(theme, isRu
             ? "Нет локальных подарков. Откройте подарок другого пользователя и нажмите «Добавить в профиль»."
-            : "No local gifts. Open another user's gift and tap \"Add to profile\"."))
+            : "No local gifts. Open another user's gift and tap \"Add to Profile\"."))
     } else {
         for (i, gift) in gifts.enumerated() {
             entries.append(.gift(theme, Int32(i), gift))
@@ -232,18 +186,23 @@ public func aorusFakeGiftsController(context: AccountContext) -> ViewController 
         openGift: { gift in
             guard let controller = weakController else { return }
             let isRu = AorusLang.current == .ru
+            let (title, number) = aorusGiftTitleAndNumber(gift.gift)
+            let attrs = aorusGiftAttributes(gift.gift)
+            var lines: [String] = []
+            if let model = attrs.model { lines.append((isRu ? "Модель: " : "Model: ") + model) }
+            if let pattern = attrs.pattern { lines.append((isRu ? "Узор: " : "Pattern: ") + pattern) }
+            if let backdrop = attrs.backdrop { lines.append((isRu ? "Фон: " : "Backdrop: ") + backdrop) }
+            let headerNumber = number.flatMap { " #\($0)" } ?? ""
             let alert = textAlertController(
                 context: context,
-                title: "\(gift.title) #\(gift.number)",
-                text: isRu
-                    ? "Модель: \(gift.model)\nУзор: \(gift.pattern)\nФон: \(gift.backdrop)\nОтправитель: \(gift.anonymous ? "Аноним" : gift.senderName)"
-                    : "Model: \(gift.model)\nPattern: \(gift.pattern)\nBackdrop: \(gift.backdrop)\nSender: \(gift.anonymous ? "Anonymous" : gift.senderName)",
+                title: title + headerNumber,
+                text: lines.isEmpty ? (isRu ? "Локальный подарок в вашем профиле." : "Local gift on your profile.") : lines.joined(separator: "\n"),
                 actions: [
+                    TextAlertAction(type: .genericAction, title: isRu ? "Закрыть" : "Close", action: {}),
                     TextAlertAction(type: .destructiveAction, title: isRu ? "Удалить подарок" : "Remove gift", action: {
-                        AorusFakeGiftsStore.remove(id: gift.id)
+                        AorusFakeGiftsStore.remove(key: AorusFakeGiftsStore.key(for: gift.gift))
                         refresh()
-                    }),
-                    TextAlertAction(type: .genericAction, title: isRu ? "Закрыть" : "Close", action: {})
+                    })
                 ]
             )
             controller.present(alert, in: .window(.root))
