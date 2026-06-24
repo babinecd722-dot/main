@@ -196,12 +196,49 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
     private var emptyLabel: UILabel?
     private let activity = UIActivityIndicatorView(style: .large)
 
+    // The picker lives in its own window so it always appears above Telegram's
+    // custom navigation/presentation system (a plain UIKit present can be swallowed
+    // by the host container).
+    private static var hostWindow: UIWindow?
+    private var onClose: (() -> Void)?
+
     public static func present(russian: Bool) {
-        guard let top = topViewController() else { return }
         let picker = AorusGifWallpaperPicker(russian: russian)
         let nav = UINavigationController(rootViewController: picker)
-        nav.modalPresentationStyle = .fullScreen
-        top.present(nav, animated: true)
+
+        let window: UIWindow
+        if let scene = activeScene() {
+            window = UIWindow(windowScene: scene)
+        } else {
+            window = UIWindow(frame: UIScreen.main.bounds)
+        }
+        window.rootViewController = nav
+        window.windowLevel = UIWindow.Level.alert + 1.0
+        window.alpha = 0.0
+        window.makeKeyAndVisible()
+        AorusGifWallpaperPicker.hostWindow = window
+
+        picker.onClose = {
+            UIView.animate(withDuration: 0.22, animations: {
+                window.alpha = 0.0
+            }, completion: { _ in
+                window.isHidden = true
+                window.rootViewController = nil
+                AorusGifWallpaperPicker.hostWindow = nil
+            })
+        }
+
+        UIView.animate(withDuration: 0.25) {
+            window.alpha = 1.0
+        }
+    }
+
+    private static func activeScene() -> UIWindowScene? {
+        let scenes = UIApplication.shared.connectedScenes
+        if let active = scenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+            return active
+        }
+        return scenes.first(where: { $0 is UIWindowScene }) as? UIWindowScene
     }
 
     private init(russian: Bool) {
@@ -309,7 +346,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
     }
 
     @objc private func cancelTapped() {
-        self.dismiss(animated: true)
+        self.onClose?()
     }
 
     // MARK: Collection view
@@ -361,7 +398,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
                 if ok {
                     AorusGifWallpaperStore.activate(mp4: AorusGifWallpaperStore.mp4URL)
                     self.activity.stopAnimating()
-                    self.dismiss(animated: true)
+                    self.onClose?()
                 } else {
                     self.finishWithError()
                 }
@@ -395,28 +432,6 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
             preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         self.present(alert, animated: true)
-    }
-
-    // MARK: Top VC resolution
-
-    private static func topViewController() -> UIViewController? {
-        var keyWindow: UIWindow?
-        for scene in UIApplication.shared.connectedScenes {
-            if let windowScene = scene as? UIWindowScene {
-                if let w = windowScene.windows.first(where: { $0.isKeyWindow }) {
-                    keyWindow = w
-                    break
-                }
-            }
-        }
-        if keyWindow == nil {
-            keyWindow = UIApplication.shared.windows.first(where: { $0.isKeyWindow })
-        }
-        var top = keyWindow?.rootViewController
-        while let presented = top?.presentedViewController {
-            top = presented
-        }
-        return top
     }
 }
 

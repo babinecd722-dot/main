@@ -8245,6 +8245,13 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        }\n",
             "addSubnode")
 
+        # merge the gallery row with the GIF row: in generic mode the gallery is no
+        # longer the last block item, so it must draw a separator (alwaysPlain: false)
+        # instead of rounding its bottom corners.
+        sub("            (galleryLayout, galleryApply) = makeGalleryLayout(galleryItem, params, ItemListNeighbors(top: isChannel ? .none : .sameSection(alwaysPlain: false), bottom: .sameSection(alwaysPlain: true)))\n",
+            "            (galleryLayout, galleryApply) = makeGalleryLayout(galleryItem, params, ItemListNeighbors(top: isChannel ? .none : .sameSection(alwaysPlain: false), bottom: .sameSection(alwaysPlain: false)))\n",
+            "gallery-neighbor")
+
         # layout: async layout maker
         sub("        let makeDescriptionLayout = self.descriptionItemNode.asyncLayout()\n",
             "        let makeDescriptionLayout = self.descriptionItemNode.asyncLayout()\n"
