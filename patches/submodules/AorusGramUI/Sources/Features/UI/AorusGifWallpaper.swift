@@ -435,6 +435,104 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
     }
 }
 
+// MARK: - GIF wallpaper preview cell (shown in the wallpaper selection grid when active)
+//
+// An ASDisplayNode that renders the active GIF as a looping square thumbnail with
+// a blue ✓ checkmark — matching the visual style of selected stock wallpaper cells.
+// ThemeGridControllerNode creates one of these in generic mode, hides it when no GIF
+// is active, and calls refreshDisplay() from each layout pass to start playback lazily.
+
+private final class AorusGifMiniPlayerView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    private var avLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    private let player = AVQueuePlayer()
+    private var looper: AVPlayerLooper?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        avLayer.videoGravity = .resizeAspectFill
+        avLayer.player = player
+        player.isMuted = true
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func play(url: URL) {
+        let item = AVPlayerItem(url: url)
+        looper = AVPlayerLooper(player: player, templateItem: item)
+        player.play()
+    }
+
+    func stop() { player.pause(); looper = nil }
+}
+
+public final class AorusGifPreviewNode: ASDisplayNode {
+    private var playerView: AorusGifMiniPlayerView?
+    private var activePath: String?
+
+    public override init() {
+        super.init()
+        self.isLayerBacked = false
+        self.clipsToBounds = true
+        self.cornerRadius = 12.0
+        self.backgroundColor = UIColor.secondarySystemBackground
+    }
+
+    // Called each layout pass from ThemeGridControllerNode.containerLayoutUpdated.
+    public func refreshDisplay() {
+        guard isNodeLoaded else { return }
+        guard AorusGifWallpaperStore.isActive,
+              let path = UserDefaults.standard.string(forKey: AorusGifWallpaperStore.pathKey),
+              FileManager.default.fileExists(atPath: path) else {
+            playerView?.stop()
+            return
+        }
+        guard path != activePath else { return }
+        activePath = path
+
+        // Tear down previous player if URL changed.
+        playerView?.stop()
+        playerView?.removeFromSuperview()
+
+        let pv = AorusGifMiniPlayerView(frame: view.bounds)
+        pv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.insertSubview(pv, at: 0)
+        pv.play(url: URL(fileURLWithPath: path))
+        playerView = pv
+
+        // Blue ✓ checkmark badge (top-right, matches Telegram selection style).
+        let d: CGFloat = 26.0
+        let circle = UIView(frame: CGRect(x: view.bounds.width - d - 6.0, y: 6.0, width: d, height: d))
+        circle.backgroundColor = UIColor(red: 0.20, green: 0.56, blue: 1.0, alpha: 1.0)
+        circle.clipsToBounds = true
+        circle.layer.cornerRadius = d / 2.0
+        circle.autoresizingMask = [.flexibleLeftMargin, .flexibleBottomMargin]
+        let checkLbl = UILabel(frame: circle.bounds)
+        checkLbl.text = "✓"
+        checkLbl.textColor = .white
+        checkLbl.font = .systemFont(ofSize: 13.0, weight: .bold)
+        checkLbl.textAlignment = .center
+        circle.addSubview(checkLbl)
+        view.addSubview(circle)
+
+        // "GIF" label badge (bottom-left).
+        let badge = UILabel()
+        badge.text = " GIF "
+        badge.textColor = .white
+        badge.font = .systemFont(ofSize: 10.0, weight: .heavy)
+        badge.backgroundColor = UIColor(white: 0.0, alpha: 0.55)
+        badge.layer.cornerRadius = 4.0
+        badge.clipsToBounds = true
+        badge.sizeToFit()
+        let bw = badge.frame.width + 4.0
+        let bh = badge.frame.height
+        badge.frame = CGRect(x: 6.0, y: view.bounds.height - bh - 6.0, width: bw, height: bh)
+        badge.textAlignment = .center
+        badge.autoresizingMask = [.flexibleRightMargin, .flexibleTopMargin]
+        view.addSubview(badge)
+    }
+}
+
 private final class AorusGifCell: UICollectionViewCell {
     let imageView = UIImageView()
     var representedAssetIdentifier: String?

@@ -8219,8 +8219,9 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "    private var galleryItem: ItemListItem\n",
             "    private let galleryItemNode: ListViewItemNode\n"
             "    private var galleryItem: ItemListItem\n"
-            "    private let gifItemNode: ItemListActionItemNode\n"
-            "    private var gifItem: ItemListActionItem\n",
+            "    private let gifItemNode: ItemListPeerActionItemNode\n"
+            "    private var gifItem: ItemListPeerActionItem\n"
+            "    private var aorusGifPreviewNode: AorusGifPreviewNode?\n",
             "props")
 
         # init: create the GIF action item (after the gallery switch block)
@@ -8231,10 +8232,10 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "\n"
             "        let aorusGifRussian = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") || (Locale.current.languageCode == \"ru\")\n"
             "        let aorusGifTitle = aorusGifRussian ? \"\\u{0412}\\u{044b}\\u{0431}\\u{0440}\\u{0430}\\u{0442}\\u{044c} GIF\" : \"Choose GIF\"\n"
-            "        self.gifItem = ItemListActionItem(presentationData: ItemListPresentationData(presentationData), systemStyle: .glass, title: aorusGifTitle, kind: .generic, alignment: .natural, sectionId: 0, style: .blocks, action: {\n"
+            "        self.gifItem = ItemListPeerActionItem(presentationData: ItemListPresentationData(presentationData), icon: nil, title: aorusGifTitle, additionalDetailLabel: nil, alwaysPlain: false, hasSeparator: false, sectionId: 0, height: .generic, color: .accent, editing: false, action: {\n"
             "            AorusGifWallpaperPicker.present(russian: aorusGifRussian)\n"
             "        })\n"
-            "        self.gifItemNode = ItemListActionItemNode()\n",
+            "        self.gifItemNode = ItemListPeerActionItemNode()\n",
             "init-item")
 
         # add the node to the grid (generic mode only)
@@ -8242,6 +8243,9 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        self.gridNode.addSubnode(self.galleryItemNode)\n"
             "        if case .generic = mode {\n"
             "            self.gridNode.addSubnode(self.gifItemNode)\n"
+            "            let aorusPreview = AorusGifPreviewNode()\n"
+            "            self.gridNode.addSubnode(aorusPreview)\n"
+            "            self.aorusGifPreviewNode = aorusPreview\n"
             "        }\n",
             "addSubnode")
 
@@ -8267,10 +8271,10 @@ def patch_gif_wallpaper(tg: Path) -> None:
         # layout: realize gif node
         sub("        descriptionApply()\n",
             "        descriptionApply()\n"
-            "        gifApply(false)\n",
+            "        gifApply()\n",
             "layout-apply")
 
-        # layout: reserve vertical space for the extra button (generic mode)
+        # layout: reserve vertical space for the extra button + gif preview (generic mode)
         sub("        var buttonInset: CGFloat = buttonTopInset + buttonHeight + buttonBottomInset\n"
             "        if !isChannel || hasCustomWallpaper {\n"
             "            buttonInset += buttonHeight\n"
@@ -8281,10 +8285,15 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        }\n"
             "        if case .generic = self.mode {\n"
             "            buttonInset += buttonHeight\n"
+            "        }\n"
+            "        let aorusGifIsActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")\n"
+            "        if case .generic = self.mode, aorusGifIsActive {\n"
+            "            let aorusCellSide = floor((params.width - 8.0) / 3.0)\n"
+            "            buttonInset += aorusCellSide + 8.0\n"
             "        }\n",
             "layout-inset")
 
-        # layout: frame the gif node right below the gallery button
+        # layout: frame the gif node + preview cell right below the gallery button
         sub("        transition.updateFrame(node: self.galleryItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: galleryLayout.contentSize))\n"
             "        originY += galleryLayout.contentSize.height\n",
             "        transition.updateFrame(node: self.galleryItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: galleryLayout.contentSize))\n"
@@ -8292,6 +8301,17 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        if case .generic = self.mode {\n"
             "            transition.updateFrame(node: self.gifItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: gifLayout.contentSize))\n"
             "            originY += gifLayout.contentSize.height\n"
+            "            if let previewNode = self.aorusGifPreviewNode {\n"
+            "                if aorusGifIsActive {\n"
+            "                    let cellSide = floor((params.width - 8.0) / 3.0)\n"
+            "                    previewNode.isHidden = false\n"
+            "                    transition.updateFrame(node: previewNode, frame: CGRect(x: 4.0, y: originY + 4.0, width: cellSide, height: cellSide))\n"
+            "                    previewNode.refreshDisplay()\n"
+            "                    originY += cellSide + 8.0\n"
+            "                } else {\n"
+            "                    previewNode.isHidden = true\n"
+            "                }\n"
+            "            }\n"
             "        }\n",
             "layout-frame")
 
