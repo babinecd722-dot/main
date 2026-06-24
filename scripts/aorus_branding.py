@@ -8700,6 +8700,187 @@ def patch_gif_wallpaper(tg: Path) -> None:
     else:
         print("GifWallpaper: ThemeSettingsChatPreviewItem.swift not found — skip preview refresh")
 
+    # ── 4. Appearance theme carousel: play the GIF in the selected theme cell ──
+    # Each carousel cell lives in a container rotated +90° that exactly cancels the
+    # horizontal list's -90° rotation, so content renders upright — a video added as a
+    # subnode of containerNode (next to the theme imageNode) also renders upright.
+    # When the GIF is active, the currently-selected theme cell plays it on top of the
+    # static theme preview, beneath the existing selection border.
+    carousel = tg / ("submodules/TelegramUI/Components/Settings/ThemeCarouselItem"
+                     "/Sources/ThemeCarouselItem.swift")
+    if carousel.is_file():
+        ct = carousel.read_text(encoding="utf-8")
+        if "AorusGifCarouselVideoNode" in ct:
+            print("GifWallpaper: theme carousel already patched")
+        else:
+            def csub(anchor: str, repl: str, label: str) -> None:
+                nonlocal ct
+                if anchor in ct:
+                    ct = ct.replace(anchor, repl, 1)
+                else:
+                    print(f"GifWallpaper: WARNING carousel anchor not found — {label}")
+
+            # import
+            csub("import ListItemComponentAdaptor\n",
+                 "import ListItemComponentAdaptor\nimport AVFoundation\n",
+                 "carousel-import")
+
+            # stored video node + observer on the icon node
+            csub("    var item: ThemeCarouselThemeIconItem?\n",
+                 "    var item: ThemeCarouselThemeIconItem?\n"
+                 "    private var aorusGifVideoNode: AorusGifCarouselVideoNode?\n"
+                 "    private var aorusGifObserver: NSObjectProtocol?\n",
+                 "carousel-prop")
+
+            # subscribe in init (refresh the overlay when the GIF state changes)
+            csub("        self.addSubnode(self.activateAreaNode)\n"
+                 "    }\n",
+                 "        self.addSubnode(self.activateAreaNode)\n"
+                 "        self.aorusGifObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil, queue: .main) { [weak self] _ in\n"
+                 "            self?.aorusUpdateGifOverlay()\n"
+                 "        }\n"
+                 "    }\n",
+                 "carousel-init")
+
+            # unsubscribe in deinit
+            csub("    deinit {\n"
+                 "        self.stickerFetchedDisposable.dispose()\n"
+                 "    }\n",
+                 "    deinit {\n"
+                 "        self.stickerFetchedDisposable.dispose()\n"
+                 "        if let observer = self.aorusGifObserver {\n"
+                 "            NotificationCenter.default.removeObserver(observer)\n"
+                 "        }\n"
+                 "    }\n",
+                 "carousel-deinit")
+
+            # drive the overlay from the layout pass (after imageNode/overlayNode framed)
+            csub("                    strongSelf.overlayNode.frame = strongSelf.imageNode.frame.insetBy(dx: -1.0, dy: -1.0)\n",
+                 "                    strongSelf.overlayNode.frame = strongSelf.imageNode.frame.insetBy(dx: -1.0, dy: -1.0)\n"
+                 "                    strongSelf.aorusUpdateGifOverlay()\n",
+                 "carousel-layout-call")
+
+            ct += AORUS_GIF_CAROUSEL_VIDEO_SWIFT
+            carousel.write_text(ct, encoding="utf-8")
+            print("GifWallpaper: patched ThemeCarouselItem.swift")
+    else:
+        print("GifWallpaper: ThemeCarouselItem.swift not found — skip carousel")
+
+
+AORUS_GIF_CAROUSEL_VIDEO_SWIFT = '''
+
+// MARK: - AorusGram animated GIF in the Appearance theme carousel
+//
+// Plays the active GIF (looping H.264 MP4) on top of the selected theme's static
+// preview. The host node sits inside the cell's +90°-rotated container (which cancels
+// the carousel list's -90° rotation), so the video renders upright like the theme
+// image. The existing overlayNode selection border stays above it.
+
+private final class AorusGifCarouselVideoView: UIView {
+    override class var layerClass: AnyClass {
+        return AVPlayerLayer.self
+    }
+    private var playerLayer: AVPlayerLayer {
+        return self.layer as! AVPlayerLayer
+    }
+    private let queuePlayer = AVQueuePlayer()
+    private var looper: AVPlayerLooper?
+    private var currentPath: String?
+
+    init() {
+        super.init(frame: .zero)
+        self.isUserInteractionEnabled = false
+        self.backgroundColor = .clear
+        self.playerLayer.videoGravity = .resizeAspectFill
+        self.playerLayer.player = self.queuePlayer
+        self.queuePlayer.isMuted = true
+        self.queuePlayer.actionAtItemEnd = .advance
+        if #available(iOS 13.0, *) {
+            self.layer.cornerCurve = .continuous
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(self.resume), name: UIApplication.didBecomeActiveNotification, object: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        self.queuePlayer.pause()
+    }
+
+    @objc private func resume() {
+        self.queuePlayer.play()
+    }
+
+    func play(path: String) {
+        if self.currentPath == path {
+            if self.queuePlayer.timeControlStatus != .playing {
+                self.queuePlayer.play()
+            }
+            return
+        }
+        self.currentPath = path
+        self.looper = nil
+        let item = AVPlayerItem(url: URL(fileURLWithPath: path))
+        self.looper = AVPlayerLooper(player: self.queuePlayer, templateItem: item)
+        self.queuePlayer.play()
+    }
+
+    func pause() {
+        self.queuePlayer.pause()
+    }
+}
+
+private final class AorusGifCarouselVideoNode: ASDisplayNode {
+    override init() {
+        super.init()
+        self.setViewBlock { AorusGifCarouselVideoView() }
+    }
+
+    func play(path: String) {
+        (self.view as? AorusGifCarouselVideoView)?.play(path: path)
+    }
+
+    func pause() {
+        (self.view as? AorusGifCarouselVideoView)?.pause()
+    }
+}
+
+extension ThemeCarouselThemeItemIconNode {
+    func aorusUpdateGifOverlay() {
+        guard let item = self.item else {
+            self.aorusGifVideoNode?.isHidden = true
+            self.aorusGifVideoNode?.pause()
+            return
+        }
+        let defaults = UserDefaults.standard
+        let active = defaults.bool(forKey: "aorusgram_gif_wallpaper_active")
+        let path = defaults.string(forKey: "aorusgram_gif_wallpaper_mp4")
+        if item.selected, active, let path = path, FileManager.default.fileExists(atPath: path) {
+            let videoNode: AorusGifCarouselVideoNode
+            if let existing = self.aorusGifVideoNode {
+                videoNode = existing
+            } else {
+                let created = AorusGifCarouselVideoNode()
+                created.clipsToBounds = true
+                created.cornerRadius = 14.0
+                self.containerNode.insertSubnode(created, aboveSubnode: self.imageNode)
+                self.aorusGifVideoNode = created
+                videoNode = created
+            }
+            videoNode.isHidden = false
+            videoNode.frame = self.imageNode.frame
+            videoNode.play(path: path)
+        } else {
+            self.aorusGifVideoNode?.isHidden = true
+            self.aorusGifVideoNode?.pause()
+        }
+    }
+}
+'''
+
 
 AORUS_GIF_GRID_VIDEO_SWIFT = """
 
