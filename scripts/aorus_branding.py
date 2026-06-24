@@ -8229,7 +8229,7 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "            self.galleryItemNode = ItemListPeerActionItemNode()\n"
             "        }\n"
             "\n"
-            "        let aorusGifRussian = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") || (Locale.current.languageCode == \"ru\")\n"
+            "        let aorusGifRussian = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
             "        let aorusGifTitle = aorusGifRussian ? \"\\u{0412}\\u{044b}\\u{0431}\\u{0440}\\u{0430}\\u{0442}\\u{044c} GIF\" : \"Choose GIF\"\n"
             "        self.gifItem = ItemListPeerActionItem(presentationData: ItemListPresentationData(presentationData), icon: nil, title: aorusGifTitle, alwaysPlain: false, hasSeparator: false, sectionId: 0, height: .generic, color: .accent, editing: false, action: {\n"
             "            AorusGifWallpaperPicker.present(russian: aorusGifRussian)\n"
@@ -8593,8 +8593,23 @@ def patch_gif_wallpaper(tg: Path) -> None:
          "    private var wallpaper: TelegramWallpaper?\n",
          "    private var validLayout: (CGSize, WallpaperDisplayMode)?\n"
          "    private var wallpaper: TelegramWallpaper?\n"
-         "    private var aorusGifHost: AorusGifWallpaperHost?\n",
+         "    private var aorusGifHost: AorusGifWallpaperHost?\n"
+         "    var aorusForChatDisplay: Bool = false\n",
          "bg-prop")
+
+    # Pass forChatDisplay through to the impl so only the real chat background drives
+    # GIF base-tracking / auto-clear. Preview nodes (forChatDisplay == false) render
+    # the GIF but never touch the shared state, so a preview rendering a different
+    # wallpaper can no longer wipe the active GIF.
+    bsub("public func createWallpaperBackgroundNode(context: AccountContext, forChatDisplay: Bool, useSharedAnimationPhase: Bool = false) -> WallpaperBackgroundNode {\n"
+         "    return WallpaperBackgroundNodeImpl(context: context, useSharedAnimationPhase: useSharedAnimationPhase)\n"
+         "}\n",
+         "public func createWallpaperBackgroundNode(context: AccountContext, forChatDisplay: Bool, useSharedAnimationPhase: Bool = false) -> WallpaperBackgroundNode {\n"
+         "    let node = WallpaperBackgroundNodeImpl(context: context, useSharedAnimationPhase: useSharedAnimationPhase)\n"
+         "    node.aorusForChatDisplay = forChatDisplay\n"
+         "    return node\n"
+         "}\n",
+         "bg-forchatdisplay")
 
     bsub("        let isFirstLayout = self.validLayout == nil\n"
          "        self.validLayout = (size, displayMode)\n",
@@ -8613,6 +8628,77 @@ def patch_gif_wallpaper(tg: Path) -> None:
     bt2 += AORUS_GIF_WALLPAPER_HOST_SWIFT
     bg.write_text(bt2, encoding="utf-8")
     print("GifWallpaper: patched WallpaperBackgroundNode.swift")
+
+    # ── 3. Appearance chat preview: refresh the wallpaper background on GIF change ──
+    # ThemeSettingsChatPreviewItem already renders the GIF via its WallpaperBackgroundNode
+    # (forChatDisplay: false), but its data signal does not observe UserDefaults, so a GIF
+    # set elsewhere only appears after the screen is fully reopened. Observe the change
+    # notification and re-run the background node's updateLayout to surface it immediately.
+    preview = tg / "submodules/SettingsUI/Sources/Themes/ThemeSettingsChatPreviewItem.swift"
+    if preview.is_file():
+        pt = preview.read_text(encoding="utf-8")
+        if "aorusGifObserver" in pt:
+            print("GifWallpaper: chat preview already patched")
+        else:
+            def psub(anchor: str, repl: str, label: str) -> None:
+                nonlocal pt
+                if anchor in pt:
+                    pt = pt.replace(anchor, repl, 1)
+                else:
+                    print(f"GifWallpaper: WARNING preview anchor not found — {label}")
+
+            # stored observer + last display mode
+            psub("    private var item: ThemeSettingsChatPreviewItem?\n"
+                 "    private var finalImage = true\n",
+                 "    private var item: ThemeSettingsChatPreviewItem?\n"
+                 "    private var finalImage = true\n"
+                 "    private var aorusGifObserver: NSObjectProtocol?\n"
+                 "    private var aorusLastDisplayMode: WallpaperDisplayMode = .aspectFill\n",
+                 "preview-prop")
+
+            # subscribe in init
+            psub("        self.clipsToBounds = true\n"
+                 "        \n"
+                 "        self.addSubnode(self.containerNode)\n"
+                 "    }\n",
+                 "        self.clipsToBounds = true\n"
+                 "        \n"
+                 "        self.addSubnode(self.containerNode)\n"
+                 "        self.aorusGifObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil, queue: .main) { [weak self] _ in\n"
+                 "            guard let self = self, let backgroundNode = self.backgroundNode else { return }\n"
+                 "            backgroundNode.updateLayout(size: backgroundNode.bounds.size, displayMode: self.aorusLastDisplayMode, transition: .immediate)\n"
+                 "        }\n"
+                 "    }\n",
+                 "preview-init")
+
+            # unsubscribe in deinit
+            psub("    deinit {\n"
+                 "        self.disposable.dispose()\n"
+                 "    }\n",
+                 "    deinit {\n"
+                 "        self.disposable.dispose()\n"
+                 "        if let observer = self.aorusGifObserver {\n"
+                 "            NotificationCenter.default.removeObserver(observer)\n"
+                 "        }\n"
+                 "    }\n",
+                 "preview-deinit")
+
+            # capture the display mode for the observer-driven refresh
+            psub("                    if let backgroundNode = strongSelf.backgroundNode {\n"
+                 "                        backgroundNode.frame = backgroundFrame.insetBy(dx: 0.0, dy: -100.0)\n"
+                 "                        backgroundNode.updateLayout(size: backgroundNode.bounds.size, displayMode: displayMode, transition: .immediate)\n"
+                 "                    }\n",
+                 "                    if let backgroundNode = strongSelf.backgroundNode {\n"
+                 "                        strongSelf.aorusLastDisplayMode = displayMode\n"
+                 "                        backgroundNode.frame = backgroundFrame.insetBy(dx: 0.0, dy: -100.0)\n"
+                 "                        backgroundNode.updateLayout(size: backgroundNode.bounds.size, displayMode: displayMode, transition: .immediate)\n"
+                 "                    }\n",
+                 "preview-capture-mode")
+
+            preview.write_text(pt, encoding="utf-8")
+            print("GifWallpaper: patched ThemeSettingsChatPreviewItem.swift")
+    else:
+        print("GifWallpaper: ThemeSettingsChatPreviewItem.swift not found — skip preview refresh")
 
 
 AORUS_GIF_GRID_VIDEO_SWIFT = """
@@ -8685,7 +8771,6 @@ AORUS_GIF_WALLPAPER_HOST_SWIFT = """
 // depends on the UI module. The base wallpaper present when the GIF was enabled
 // is remembered; selecting any other wallpaper clears the GIF.
 
-private var aorusGifLastWallpaper: TelegramWallpaper?
 private var aorusGifBaseWallpaper: TelegramWallpaper?
 
 final class AorusGifWallpaperHost: UIView {
@@ -8736,12 +8821,20 @@ final class AorusGifWallpaperHost: UIView {
 
 extension WallpaperBackgroundNodeImpl {
     func aorusNoteWallpaperChange(_ wallpaper: TelegramWallpaper) {
-        aorusGifLastWallpaper = wallpaper
+        // Only the REAL chat background drives GIF base-tracking and auto-clear.
+        // Preview nodes (forChatDisplay == false) render the GIF but must never touch
+        // the shared base state — otherwise a preview rendering a different wallpaper
+        // would wipe the active GIF.
+        guard self.aorusForChatDisplay else { return }
         if !UserDefaults.standard.bool(forKey: "aorusgram_gif_wallpaper_active") {
             aorusGifBaseWallpaper = nil
             return
         }
-        if let base = aorusGifBaseWallpaper, base != wallpaper {
+        if aorusGifBaseWallpaper == nil {
+            // First time the real chat renders with the GIF active: remember the base
+            // wallpaper sitting underneath, so we can detect a later user-initiated change.
+            aorusGifBaseWallpaper = wallpaper
+        } else if let base = aorusGifBaseWallpaper, base != wallpaper {
             AorusGifWallpaperHost.clearStore()
             aorusGifBaseWallpaper = nil
             if let size = self.validLayout?.0 {
@@ -8751,11 +8844,11 @@ extension WallpaperBackgroundNodeImpl {
     }
 
     func aorusLayoutGifWallpaper(size: CGSize) {
+        // Renders in EVERY background node when active (chat + previews). Base-tracking
+        // lives entirely in aorusNoteWallpaperChange (real chat only) so this stays a
+        // pure renderer and never contaminates the shared state from a preview.
         let defaults = UserDefaults.standard
         let active = defaults.bool(forKey: "aorusgram_gif_wallpaper_active")
-        if active && aorusGifBaseWallpaper == nil {
-            aorusGifBaseWallpaper = aorusGifLastWallpaper
-        }
         let path = defaults.string(forKey: "aorusgram_gif_wallpaper_mp4")
         if active, let path = path, FileManager.default.fileExists(atPath: path) {
             let host: AorusGifWallpaperHost
