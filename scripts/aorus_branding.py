@@ -4703,6 +4703,8 @@ def patch_local_premium(tg: Path) -> None:
     registry = tg / "submodules/TelegramCore/Sources/Utils/AorusGramPremium.swift"
     registry_src = (
         "import Foundation\n"
+        "import Postbox\n"
+        "import SwiftSignalKit\n"
         "\n"
         "// AorusGram local Telegram Premium.\n"
         "//\n"
@@ -4735,6 +4737,56 @@ def patch_local_premium(tg: Path) -> None:
         "        let result = accountPeerRawIds.contains(rawId)\n"
         "        lock.unlock()\n"
         "        return result\n"
+        "    }\n"
+        "\n"
+        "    // MARK: - Worn fake-gift emoji status persistence\n"
+        "    //\n"
+        "    // Wearing a local fake gift goes through the native setStarGiftStatus, which\n"
+        "    // writes a PeerEmojiStatus into Postbox and (harmlessly) fails the server call.\n"
+        "    // We persist that status here, keyed by account id, so the worn gift survives\n"
+        "    // app restarts; we re-apply it at launch and override the server value on every\n"
+        "    // user sync — otherwise the next sync would clear the worn gift.\n"
+        "    private static func emojiStatusKey(_ rawId: Int64) -> String {\n"
+        "        return \"aorusgram_emoji_status_\\(rawId)\"\n"
+        "    }\n"
+        "\n"
+        "    public static func persistEmojiStatus(_ status: PeerEmojiStatus?, rawId: Int64) {\n"
+        "        let key = emojiStatusKey(rawId)\n"
+        "        if let status, let data = try? JSONEncoder().encode(status) {\n"
+        "            UserDefaults.standard.set(data, forKey: key)\n"
+        "        } else {\n"
+        "            UserDefaults.standard.removeObject(forKey: key)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    public static func persistedEmojiStatus(_ rawId: Int64) -> PeerEmojiStatus? {\n"
+        "        guard isEnabled else { return nil }\n"
+        "        guard let data = UserDefaults.standard.data(forKey: emojiStatusKey(rawId)),\n"
+        "              let status = try? JSONDecoder().decode(PeerEmojiStatus.self, from: data) else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return status\n"
+        "    }\n"
+        "\n"
+        "    // Server-sync hook: keep a persisted worn fake gift instead of the server value.\n"
+        "    public static func resolveEmojiStatus(forRawId rawId: Int64, server: PeerEmojiStatus?) -> PeerEmojiStatus? {\n"
+        "        if let persisted = persistedEmojiStatus(rawId) {\n"
+        "            return persisted\n"
+        "        }\n"
+        "        return server\n"
+        "    }\n"
+        "\n"
+        "    // Re-apply the persisted worn status to the own user at launch.\n"
+        "    public static func restoreEmojiStatus(account: Account) {\n"
+        "        let rawId = account.peerId.id._internalGetInt64Value()\n"
+        "        guard let status = persistedEmojiStatus(rawId) else { return }\n"
+        "        let _ = (account.postbox.transaction { transaction -> Void in\n"
+        "            if let peer = transaction.getPeer(account.peerId) as? TelegramUser {\n"
+        "                updatePeersCustom(transaction: transaction, peers: [peer.withUpdatedEmojiStatus(status)], update: { _, updated in\n"
+        "                    updated\n"
+        "                })\n"
+        "            }\n"
+        "        }).startStandalone()\n"
         "    }\n"
         "}\n"
     )
@@ -4783,6 +4835,7 @@ def patch_local_premium(tg: Path) -> None:
             t = t.replace(
                 anchor,
                 "        AorusGramPremium.registerCurrentAccount(account.peerId.id._internalGetInt64Value()) // AorusGram local premium\n"
+                "        AorusGramPremium.restoreEmojiStatus(account: account) // AorusGram: restore worn fake gift\n"
                 "        self.isPremium = AorusGramPremium.isEnabled\n",
                 1,
             )
@@ -4792,6 +4845,120 @@ def patch_local_premium(tg: Path) -> None:
             print("Premium: WARNING self.isPremium = false anchor not found in AccountContext")
     else:
         print("Premium: AccountContext.swift not found — skipped")
+
+    # 4) Persist the emoji status set when wearing a fake gift (and drop the local
+    #    override when a real/empty status is set instead), so the worn gift survives
+    #    restarts. Hooks the two engine entry points that set the own emoji status.
+    eng = tg / "submodules/TelegramCore/Sources/TelegramEngine/AccountData/TelegramEngineAccountData.swift"
+    if eng.is_file():
+        t = eng.read_text(encoding="utf-8")
+        if "AorusGramPremium.persistEmojiStatus" in t:
+            print("Premium: TelegramEngineAccountData already patched")
+        else:
+            ok = True
+            # 4a) setStarGiftStatus — persist when the worn gift is a local fake gift.
+            star_anchor = (
+                "            let remoteApply = self.account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: apiEmojiStatus))\n"
+            )
+            star_inject = (
+                "            // AorusGram: persist a worn fake gift so it survives restarts; a real or\n"
+                "            // cleared status drops the local override so the server value wins again.\n"
+                "            if AorusFakeGiftsStore.contains(.unique(starGift)), let aorusEmojiStatus = emojiStatus {\n"
+                "                AorusGramPremium.persistEmojiStatus(aorusEmojiStatus, rawId: peerId.id._internalGetInt64Value())\n"
+                "                AorusFakeGiftsStore.setWorn(.unique(starGift), true)\n"
+                "            } else {\n"
+                "                AorusGramPremium.persistEmojiStatus(nil, rawId: peerId.id._internalGetInt64Value())\n"
+                "                AorusFakeGiftsStore.clearWorn()\n"
+                "            }\n"
+            ) + star_anchor
+            if star_anchor in t:
+                t = t.replace(star_anchor, star_inject, 1)
+            else:
+                ok = False
+                print("Premium: WARNING setStarGiftStatus anchor not found")
+
+            # 4b) setEmojiStatus — a regular emoji status replaces any worn fake gift.
+            emoji_anchor = (
+                "            let remoteApply = self.account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: file.flatMap({ file in\n"
+            )
+            emoji_inject = (
+                "            // AorusGram: a regular emoji status replaces any worn fake gift.\n"
+                "            AorusGramPremium.persistEmojiStatus(nil, rawId: peerId.id._internalGetInt64Value())\n"
+                "            AorusFakeGiftsStore.clearWorn()\n"
+            ) + emoji_anchor
+            if emoji_anchor in t:
+                t = t.replace(emoji_anchor, emoji_inject, 1)
+            else:
+                ok = False
+                print("Premium: WARNING setEmojiStatus anchor not found")
+
+            if ok:
+                eng.write_text(t, encoding="utf-8")
+                print("Premium: patched TelegramEngineAccountData (persist worn fake gift)")
+    else:
+        print("Premium: TelegramEngineAccountData.swift not found — skipped")
+
+    # 5) Server-sync interception: keep the persisted worn fake gift instead of the
+    #    value the server reports for the own account, on the incremental update path.
+    state_utils = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    if state_utils.is_file():
+        t = state_utils.read_text(encoding="utf-8")
+        if "AorusGramPremium.resolveEmojiStatus" in t:
+            print("Premium: AccountStateManagementUtils already patched")
+        else:
+            anchor = (
+                "                        return user.withUpdatedEmojiStatus(PeerEmojiStatus(apiStatus: updateUserEmojiStatusData.emojiStatus))\n"
+            )
+            injection = (
+                "                        return user.withUpdatedEmojiStatus(AorusGramPremium.resolveEmojiStatus(forRawId: user.id.id._internalGetInt64Value(), server: PeerEmojiStatus(apiStatus: updateUserEmojiStatusData.emojiStatus)))\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, injection, 1)
+                state_utils.write_text(t, encoding="utf-8")
+                print("Premium: patched AccountStateManagementUtils (updateUserEmojiStatus override)")
+            else:
+                print("Premium: WARNING updateUserEmojiStatus anchor not found")
+    else:
+        print("Premium: AccountStateManagementUtils.swift not found — skipped")
+
+    # 6) Server-sync interception on the full-user merge paths (getDifference / full
+    #    sync), which otherwise overwrite the own user's emoji status from the server.
+    tg_user = tg / "submodules/TelegramCore/Sources/ApiUtils/TelegramUser.swift"
+    if tg_user.is_file():
+        t = tg_user.read_text(encoding="utf-8")
+        if "AorusGramPremium.resolveEmojiStatus" in t:
+            print("Premium: TelegramUser merge already patched")
+        else:
+            ok = True
+            merge_api = (
+                "emojiStatus: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:)), usernames: lhs.usernames"
+            )
+            merge_api_new = (
+                "emojiStatus: AorusGramPremium.resolveEmojiStatus(forRawId: lhs.id.id._internalGetInt64Value(), server: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:))), usernames: lhs.usernames"
+            )
+            if merge_api in t:
+                t = t.replace(merge_api, merge_api_new, 1)
+            else:
+                ok = False
+                print("Premium: WARNING TelegramUser merge(Api.User) emojiStatus anchor not found")
+
+            merge_local = (
+                "emojiStatus: emojiStatus, usernames: lhs.usernames, storiesHidden: storiesHidden"
+            )
+            merge_local_new = (
+                "emojiStatus: AorusGramPremium.resolveEmojiStatus(forRawId: lhs.id.id._internalGetInt64Value(), server: emojiStatus), usernames: lhs.usernames, storiesHidden: storiesHidden"
+            )
+            if merge_local in t:
+                t = t.replace(merge_local, merge_local_new, 1)
+            else:
+                ok = False
+                print("Premium: WARNING TelegramUser merge(TelegramUser) emojiStatus anchor not found")
+
+            if ok:
+                tg_user.write_text(t, encoding="utf-8")
+                print("Premium: patched TelegramUser merge (preserve worn fake gift on sync)")
+    else:
+        print("Premium: TelegramUser.swift not found — skipped")
 
 
 AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
@@ -4810,13 +4977,33 @@ public struct AorusStoredGift: Codable, Equatable {
     public var date: Int32
     public var comment: String
     public var showInProfile: Bool
+    public var pinnedToTop: Bool
+    public var worn: Bool
 
-    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool) {
+    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false) {
         self.giftData = giftData
         self.senderPeerId = senderPeerId
         self.date = date
         self.comment = comment
         self.showInProfile = showInProfile
+        self.pinnedToTop = pinnedToTop
+        self.worn = worn
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn
+    }
+
+    // Tolerant decode so gifts stored before pinnedToTop/worn existed still load.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.giftData = try c.decode(Data.self, forKey: .giftData)
+        self.senderPeerId = try c.decode(Int64.self, forKey: .senderPeerId)
+        self.date = try c.decode(Int32.self, forKey: .date)
+        self.comment = try c.decode(String.self, forKey: .comment)
+        self.showInProfile = try c.decode(Bool.self, forKey: .showInProfile)
+        self.pinnedToTop = try c.decodeIfPresent(Bool.self, forKey: .pinnedToTop) ?? false
+        self.worn = try c.decodeIfPresent(Bool.self, forKey: .worn) ?? false
     }
 
     public var gift: StarGift? {
@@ -4833,12 +5020,16 @@ public enum AorusFakeGiftsStore {
     public static let enabledKey = "aorusgram_fake_gifts_enabled"
     private static let listKey = "aorusgram_fake_gifts_list_v2"
 
+    // Posted on every mutation so live UI (avatar cover, lists) can refresh.
+    public static let changedNotification = Notification.Name("AorusGramFakeGiftsChanged")
+
     public static var isEnabled: Bool {
         return UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
         UserDefaults.standard.set(value, forKey: enabledKey)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
     public static func key(for gift: StarGift) -> String {
@@ -4862,6 +5053,7 @@ public enum AorusFakeGiftsStore {
         if let data = try? JSONEncoder().encode(gifts) {
             UserDefaults.standard.set(data, forKey: listKey)
         }
+        NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
     public static func update(_ stored: AorusStoredGift) {
@@ -4876,6 +5068,58 @@ public enum AorusFakeGiftsStore {
         var gifts = all()
         gifts.removeAll(where: { $0.key == removeKey })
         persist(gifts)
+    }
+
+    public static func contains(_ gift: StarGift) -> Bool {
+        let k = key(for: gift)
+        return all().contains(where: { $0.key == k })
+    }
+
+    public static func stored(for gift: StarGift) -> AorusStoredGift? {
+        let k = key(for: gift)
+        return all().first(where: { $0.key == k })
+    }
+
+    public static func isPinned(_ gift: StarGift) -> Bool {
+        return stored(for: gift)?.pinnedToTop ?? false
+    }
+
+    public static func setPinned(_ gift: StarGift, _ value: Bool) {
+        let k = key(for: gift)
+        var gifts = all()
+        if let index = gifts.firstIndex(where: { $0.key == k }) {
+            gifts[index].pinnedToTop = value
+            persist(gifts)
+        }
+    }
+
+    public static func setWorn(_ gift: StarGift, _ value: Bool) {
+        // Only one gift can be worn at a time, like a real emoji status.
+        let k = key(for: gift)
+        var gifts = all()
+        var changed = false
+        for index in gifts.indices {
+            let shouldWear = value && gifts[index].key == k
+            if gifts[index].worn != shouldWear {
+                gifts[index].worn = shouldWear
+                changed = true
+            }
+        }
+        if changed {
+            persist(gifts)
+        }
+    }
+
+    public static func clearWorn() {
+        var gifts = all()
+        var changed = false
+        for index in gifts.indices where gifts[index].worn {
+            gifts[index].worn = false
+            changed = true
+        }
+        if changed {
+            persist(gifts)
+        }
     }
 
     // Add a freshly-opened gift, rewriting the unique gift's owner to the user so the
@@ -4931,6 +5175,7 @@ public enum AorusFakeGiftsStore {
             "date": Int(stored.date),
             "nameHidden": stored.senderPeerId == 0,
             "savedToProfile": true,
+            "pinnedToTop": stored.pinnedToTop,
             "canUpgrade": false
         ]
         if !stored.comment.isEmpty {
@@ -4947,8 +5192,23 @@ public enum AorusFakeGiftsStore {
     public static func profileWrappers() -> [ProfileGiftsContext.State.StarGift] {
         return all().filter { $0.showInProfile }.compactMap { wrapper(for: $0) }
     }
+
+    // Only the gifts pinned to top — drives the badges around the profile avatar.
+    public static func pinnedProfileWrappers() -> [ProfileGiftsContext.State.StarGift] {
+        return all().filter { $0.showInProfile && $0.pinnedToTop }.compactMap { wrapper(for: $0) }
+    }
+
+    // The unique gift the user chose to "wear" (set as emoji status), if any.
+    public static func wornGift() -> StarGift? {
+        return all().first(where: { $0.worn })?.gift
+    }
 }
 '''
+
+
+def _swift_uescape(s: str) -> str:
+    """Encode a string as Swift \\u{XXXX} escapes (keeps non-ASCII out of patched source)."""
+    return "".join("\\u{%04x}" % ord(ch) for ch in s)
 
 
 def patch_fake_gifts(tg: Path) -> None:
@@ -4965,14 +5225,48 @@ def patch_fake_gifts(tg: Path) -> None:
     store.write_text(AORUS_FAKE_GIFTS_STORE_SWIFT, encoding="utf-8")
     print("FakeGifts: wrote AorusFakeGiftsStore.swift")
 
-    # 2) Gift detail (...) menu — add "Добавить в профиль" after the Share item.
+    # 2) Gift detail (...) menu. Two behaviours, decided per gift:
+    #    - gift already in your profile (a stored fake gift)  -> Pin/Unpin + Transfer
+    #      (Copy link / Share stay native), exactly like a real owned gift.
+    #    - any other gift                                     -> "Add to Profile".
+    ru_add = _swift_uescape("Добавить в профиль")
+    ru_added = _swift_uescape("Подарок добавлен в профиль")
+    ru_view = _swift_uescape("Перейти")
+    ru_pin = _swift_uescape("Закрепить")
+    ru_unpin = _swift_uescape("Открепить")
+    ru_pinned = _swift_uescape("Подарок закреплён")
+    ru_unpinned = _swift_uescape("Подарок откреплён")
+    ru_transfer = _swift_uescape("Передать")
+
     gv = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift"
     if gv.is_file():
         t = gv.read_text(encoding="utf-8")
         if "AorusFakeGiftsStore.addGift" in t:
             print("FakeGifts: GiftViewScreen already patched")
         else:
-            anchor = (
+            # 2a) Pin/Unpin — injected BEFORE the native Copy Link item so it appears
+            #     at the top of the menu, like a real pinned gift.
+            copylink_anchor = (
+                "                items.append(.action(ContextMenuActionItem(text: presentationData.strings.Gift_View_Context_CopyLink, icon: { theme in\n"
+                "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Link\"), color: theme.contextMenu.primaryColor)\n"
+            )
+            pin_injection = (
+                "                if AorusFakeGiftsStore.contains(arguments.gift) {\n"
+                "                    let aorusFakeIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
+                "                    let aorusPinned = AorusFakeGiftsStore.isPinned(arguments.gift)\n"
+                "                    items.append(.action(ContextMenuActionItem(text: aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpin + "\" : \"Unpin\") : (aorusFakeIsRu ? \"" + ru_pin + "\" : \"Pin\"), icon: { theme in\n"
+                "                        return generateTintedImage(image: UIImage(bundleImageName: aorusPinned ? \"Chat/Context Menu/Unpin\" : \"Chat/Context Menu/Pin\"), color: theme.contextMenu.primaryColor)\n"
+                "                    }, action: { [weak controller] c, _ in\n"
+                "                        c?.dismiss(completion: nil)\n"
+                "                        AorusFakeGiftsStore.setPinned(arguments.gift, !aorusPinned)\n"
+                "                        let aorusToast = aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpinned + "\" : \"Gift unpinned\") : (aorusFakeIsRu ? \"" + ru_pinned + "\" : \"Gift pinned\")\n"
+                "                        controller?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusToast, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
+                "                    })))\n"
+                "                }\n"
+            ) + copylink_anchor
+
+            # 2b) Transfer (own fake gift) OR Add to Profile (any other gift), after Share.
+            share_anchor = (
                 "                items.append(.action(ContextMenuActionItem(text: presentationData.strings.Gift_View_Context_Share, icon: { theme in\n"
                 "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Forward\"), color: theme.contextMenu.primaryColor)\n"
                 "                }, action: { [weak self] c, _ in\n"
@@ -4981,27 +5275,78 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                    self?.shareGift()\n"
                 "                })))\n"
             )
-            injection = anchor + (
+            share_injection = share_anchor + (
                 "                let aorusGiftIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
-                "                items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"\\u{0414}\\u{043e}\\u{0431}\\u{0430}\\u{0432}\\u{0438}\\u{0442}\\u{044c} \\u{0432} \\u{043f}\\u{0440}\\u{043e}\\u{0444}\\u{0438}\\u{043b}\\u{044c}\" : \"Add to Profile\", icon: { theme in\n"
-                "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Gift\"), color: theme.contextMenu.primaryColor)\n"
-                "                }, action: { [weak self, weak controller] c, _ in\n"
-                "                    c?.dismiss(completion: nil)\n"
-                "                    guard let self else { return }\n"
-                "                    AorusFakeGiftsStore.addGift(arguments.gift, selfPeerId: self.context.account.peerId.toInt64(), date: Int32(Date().timeIntervalSince1970))\n"
-                "                    if !AorusFakeGiftsStore.isEnabled {\n"
-                "                        AorusFakeGiftsStore.setEnabled(true)\n"
+                "                if AorusFakeGiftsStore.contains(arguments.gift) {\n"
+                "                    items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"" + ru_transfer + "\" : \"Transfer\", icon: { theme in\n"
+                "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Replace\"), color: theme.contextMenu.primaryColor)\n"
+                "                    }, action: { [weak self, weak controller] c, _ in\n"
+                "                        c?.dismiss(completion: nil)\n"
+                "                        guard let self else { return }\n"
+                "                        AorusFakeGiftsStore.remove(key: AorusFakeGiftsStore.key(for: arguments.gift))\n"
+                "                        controller?.dismissAnimated()\n"
+                "                    })))\n"
+                "                } else {\n"
+                "                    var aorusGiftFile: TelegramMediaFile?\n"
+                "                    switch arguments.gift {\n"
+                "                    case let .unique(aorusUnique):\n"
+                "                        for aorusAttr in aorusUnique.attributes {\n"
+                "                            if case let .model(_, aorusFile, _, _) = aorusAttr {\n"
+                "                                aorusGiftFile = aorusFile\n"
+                "                                break\n"
+                "                            }\n"
+                "                        }\n"
+                "                    case let .generic(aorusGeneric):\n"
+                "                        aorusGiftFile = aorusGeneric.file\n"
                 "                    }\n"
-                "                    let aorusAddedText = aorusGiftIsRu ? \"\\u{041f}\\u{043e}\\u{0434}\\u{0430}\\u{0440}\\u{043e}\\u{043a} \\u{0434}\\u{043e}\\u{0431}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d} \\u{0432} \\u{043f}\\u{0440}\\u{043e}\\u{0444}\\u{0438}\\u{043b}\\u{044c}\" : \"Gift added to your profile\"\n"
-                "                    controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: aorusAddedText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
-                "                })))\n"
+                "                    items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"" + ru_add + "\" : \"Add to Profile\", icon: { theme in\n"
+                "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Gift\"), color: theme.contextMenu.primaryColor)\n"
+                "                    }, action: { [weak self, weak controller] c, _ in\n"
+                "                        c?.dismiss(completion: nil)\n"
+                "                        guard let self else { return }\n"
+                "                        AorusFakeGiftsStore.addGift(arguments.gift, selfPeerId: self.context.account.peerId.toInt64(), date: Int32(Date().timeIntervalSince1970))\n"
+                "                        if !AorusFakeGiftsStore.isEnabled {\n"
+                "                            AorusFakeGiftsStore.setEnabled(true)\n"
+                "                        }\n"
+                "                        let aorusAddedText = aorusGiftIsRu ? \"" + ru_added + "\" : \"Gift added to your profile\"\n"
+                "                        let aorusViewText = aorusGiftIsRu ? \"" + ru_view + "\" : \"View\"\n"
+                "                        let aorusOpenOwnGifts: () -> Void = { [weak self] in\n"
+                "                            guard let self else { return }\n"
+                "                            let _ = (self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: self.context.account.peerId))\n"
+                "                            |> deliverOnMainQueue).startStandalone(next: { [weak self] peer in\n"
+                "                                guard let self, let peer else { return }\n"
+                "                                self.openPeer(peer, gifts: true)\n"
+                "                            })\n"
+                "                        }\n"
+                "                        if let aorusGiftFile {\n"
+                "                            controller?.present(UndoOverlayController(presentationData: presentationData, content: .sticker(context: self.context, file: aorusGiftFile, loop: false, title: nil, text: aorusAddedText, undoText: aorusViewText, customAction: nil), elevatedLayout: false, animateInAsReplacement: false, action: { action in\n"
+                "                                if case .undo = action { aorusOpenOwnGifts() }\n"
+                "                                return true\n"
+                "                            }), in: .current)\n"
+                "                        } else {\n"
+                "                            controller?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusAddedText, cancel: aorusViewText, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { action in\n"
+                "                                if case .undo = action { aorusOpenOwnGifts() }\n"
+                "                                return true\n"
+                "                            }), in: .current)\n"
+                "                        }\n"
+                "                    })))\n"
+                "                }\n"
             )
-            if anchor in t:
-                t = t.replace(anchor, injection, 1)
-                gv.write_text(t, encoding="utf-8")
-                print("FakeGifts: patched GiftViewScreen (Add to Profile menu item)")
+
+            ok = True
+            if copylink_anchor in t:
+                t = t.replace(copylink_anchor, pin_injection, 1)
             else:
+                ok = False
+                print("FakeGifts: WARNING GiftViewScreen Copy Link anchor not found")
+            if share_anchor in t:
+                t = t.replace(share_anchor, share_injection, 1)
+            else:
+                ok = False
                 print("FakeGifts: WARNING GiftViewScreen Share anchor not found")
+            if ok:
+                gv.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched GiftViewScreen (Pin/Unpin/Transfer + Add to Profile)")
     else:
         print("FakeGifts: GiftViewScreen.swift not found — skip menu item")
 
@@ -5034,6 +5379,171 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING GiftsListView starsProducts anchor not found")
     else:
         print("FakeGifts: GiftsListView.swift not found — skip profile injection")
+
+    # 4) Profile avatar cover — render the user's pinned fake gifts as badges around
+    #    the avatar, exactly like real pinned gifts, and refresh live on change.
+    cover = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoCoverComponent/Sources/PeerInfoGiftsCoverComponent.swift"
+    if cover.is_file():
+        t = cover.read_text(encoding="utf-8")
+        if "aorusApplyGifts" in t:
+            print("FakeGifts: PeerInfoGiftsCoverComponent already patched")
+        else:
+            ok = True
+            # 4a) Stored properties for the local-gift overlay.
+            props_anchor = (
+                "        private var giftsDisposable: Disposable?\n"
+                "        private var gifts: [ProfileGiftsContext.State.StarGift] = []\n"
+                "        private var appliedGiftIds: [Int64] = []\n"
+            )
+            props_inject = props_anchor + (
+                "        private var aorusFakeObserver: NSObjectProtocol?\n"
+                "        private var aorusFakeCache: [ProfileGiftsContext.State.StarGift]?\n"
+                "        private var aorusLastServerPinned: [ProfileGiftsContext.State.StarGift] = []\n"
+                "        private var aorusLastGiftStatusId: Int64?\n"
+            )
+            if props_anchor in t:
+                t = t.replace(props_anchor, props_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING cover props anchor not found")
+
+            # 4b) Observe local changes inside init.
+            init_anchor = (
+                "            self.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tapped(_:))))\n"
+            )
+            init_inject = init_anchor + (
+                "\n"
+                "            self.aorusFakeObserver = NotificationCenter.default.addObserver(forName: AorusFakeGiftsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
+                "                guard let self else { return }\n"
+                "                self.aorusFakeCache = nil\n"
+                "                self.aorusApplyGifts()\n"
+                "                if !self.isUpdating {\n"
+                "                    self.state?.updated(transition: .spring(duration: 0.4))\n"
+                "                }\n"
+                "            }\n"
+            )
+            if init_anchor in t:
+                t = t.replace(init_anchor, init_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING cover init anchor not found")
+
+            # 4c) Clean up the observer.
+            deinit_anchor = (
+                "        deinit {\n"
+                "            self.giftsDisposable?.dispose()\n"
+                "        }\n"
+            )
+            deinit_inject = (
+                "        deinit {\n"
+                "            self.giftsDisposable?.dispose()\n"
+                "            if let aorusFakeObserver = self.aorusFakeObserver {\n"
+                "                NotificationCenter.default.removeObserver(aorusFakeObserver)\n"
+                "            }\n"
+                "        }\n"
+            )
+            if deinit_anchor in t:
+                t = t.replace(deinit_anchor, deinit_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING cover deinit anchor not found")
+
+            # 4d) Capture server-pinned gifts then merge local fakes.
+            assign_anchor = "                    self.gifts = pinnedGifts\n"
+            assign_inject = (
+                "                    self.aorusLastServerPinned = pinnedGifts\n"
+                "                    self.aorusLastGiftStatusId = giftStatusId\n"
+                "                    self.aorusApplyGifts()\n"
+            )
+            if assign_anchor in t:
+                t = t.replace(assign_anchor, assign_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING cover gifts-assign anchor not found")
+
+            # 4e) Apply on every layout (component available) + the merge helper.
+            update_anchor = (
+                "            let previousComponent = self.component\n"
+                "            self.component = component\n"
+                "            self.state = state\n"
+            )
+            update_inject = update_anchor + (
+                "            self.aorusApplyGifts()\n"
+            )
+            if update_anchor in t:
+                t = t.replace(update_anchor, update_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING cover update anchor not found")
+
+            helper_anchor = "        func updateAnimations() {\n"
+            helper_inject = (
+                "        private func aorusApplyGifts() {\n"
+                "            var fake: [ProfileGiftsContext.State.StarGift] = []\n"
+                "            if let component = self.component, component.peerId == component.context.account.peerId {\n"
+                "                let cached: [ProfileGiftsContext.State.StarGift]\n"
+                "                if let existing = self.aorusFakeCache {\n"
+                "                    cached = existing\n"
+                "                } else {\n"
+                "                    cached = AorusFakeGiftsStore.pinnedProfileWrappers()\n"
+                "                    self.aorusFakeCache = cached\n"
+                "                }\n"
+                "                fake = cached.filter { item in\n"
+                "                    if case let .unique(uniqueGift) = item.gift {\n"
+                "                        return uniqueGift.id != self.aorusLastGiftStatusId\n"
+                "                    }\n"
+                "                    return false\n"
+                "                }\n"
+                "            }\n"
+                "            self.gifts = fake + self.aorusLastServerPinned\n"
+                "        }\n"
+                "\n"
+            ) + helper_anchor
+            if helper_anchor in t:
+                t = t.replace(helper_anchor, helper_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING cover helper anchor not found")
+
+            if ok:
+                cover.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched PeerInfoGiftsCoverComponent (pinned gifts near avatar)")
+    else:
+        print("FakeGifts: PeerInfoGiftsCoverComponent.swift not found — skip avatar pins")
+
+    # 5) Profile pane tab strip — show fake gifts in the "Gifts" tab preview (first 3).
+    pane = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift"
+    if pane.is_file():
+        t = pane.read_text(encoding="utf-8")
+        if "AorusFakeGiftsStore.profileWrappers" in t:
+            print("FakeGifts: PeerInfoPaneContainerNode already patched")
+        else:
+            anchor = (
+                "                    case .gifts:\n"
+                "                        var icons: [ProfileGiftsContext.State.StarGift] = []\n"
+                "                        if let gifts = data?.profileGiftsContext?.currentState?.gifts.prefix(3) {\n"
+                "                            icons = Array(gifts)\n"
+                "                        }\n"
+            )
+            injection = (
+                "                    case .gifts:\n"
+                "                        var icons: [ProfileGiftsContext.State.StarGift] = []\n"
+                "                        if self.peerId == self.context.account.peerId, AorusFakeGiftsStore.isEnabled {\n"
+                "                            icons = AorusFakeGiftsStore.profileWrappers()\n"
+                "                        }\n"
+                "                        if let gifts = data?.profileGiftsContext?.currentState?.gifts {\n"
+                "                            icons += Array(gifts)\n"
+                "                        }\n"
+                "                        icons = Array(icons.prefix(3))\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, injection, 1)
+                pane.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched PeerInfoPaneContainerNode (gifts tab preview)")
+            else:
+                print("FakeGifts: WARNING PeerInfoPaneContainerNode gifts-tab anchor not found")
+    else:
+        print("FakeGifts: PeerInfoPaneContainerNode.swift not found — skip gifts tab preview")
 
 
 def patch_bypass_copy_protection(tg: Path) -> None:
