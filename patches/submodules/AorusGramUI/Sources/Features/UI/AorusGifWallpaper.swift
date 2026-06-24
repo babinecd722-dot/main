@@ -500,41 +500,24 @@ public final class AorusGifPreviewNode: ASDisplayNode {
         pv.play(url: URL(fileURLWithPath: path))
         playerView = pv
 
-        // Native-style ✓ checkmark (top-right): white circle, dark check — matches
-        // Telegram's own wallpaper selection indicator in the grid.
-        let d: CGFloat = 26.0
-        let circle = UIView(frame: CGRect(x: view.bounds.width - d - 6.0, y: 6.0, width: d, height: d))
-        circle.backgroundColor = UIColor.white
-        circle.clipsToBounds = true
-        circle.layer.cornerRadius = d / 2.0
-        circle.layer.shadowColor = UIColor.black.cgColor
-        circle.layer.shadowOpacity = 0.18
-        circle.layer.shadowRadius = 3.0
-        circle.layer.shadowOffset = CGSize(width: 0, height: 1)
-        circle.autoresizingMask = [.flexibleLeftMargin, .flexibleBottomMargin]
-        let checkLbl = UILabel(frame: circle.bounds)
+        // White ✓ centered on the cell — exactly like Telegram's native wallpaper
+        // selection indicator (no circle, no background, just text with shadow).
+        let checkSize: CGFloat = 44.0
+        let checkLbl = UILabel(frame: CGRect(
+            x: (view.bounds.width - checkSize) / 2.0,
+            y: (view.bounds.height - checkSize) / 2.0,
+            width: checkSize, height: checkSize))
         checkLbl.text = "✓"
-        checkLbl.textColor = UIColor(white: 0.12, alpha: 1.0)
-        checkLbl.font = .systemFont(ofSize: 13.0, weight: .semibold)
+        checkLbl.textColor = .white
+        checkLbl.font = .systemFont(ofSize: 26.0, weight: .bold)
         checkLbl.textAlignment = .center
-        circle.addSubview(checkLbl)
-        view.addSubview(circle)
-
-        // "GIF" label badge (bottom-left).
-        let badge = UILabel()
-        badge.text = " GIF "
-        badge.textColor = .white
-        badge.font = .systemFont(ofSize: 10.0, weight: .heavy)
-        badge.backgroundColor = UIColor(white: 0.0, alpha: 0.55)
-        badge.layer.cornerRadius = 4.0
-        badge.clipsToBounds = true
-        badge.sizeToFit()
-        let bw = badge.frame.width + 4.0
-        let bh = badge.frame.height
-        badge.frame = CGRect(x: 6.0, y: view.bounds.height - bh - 6.0, width: bw, height: bh)
-        badge.textAlignment = .center
-        badge.autoresizingMask = [.flexibleRightMargin, .flexibleTopMargin]
-        view.addSubview(badge)
+        checkLbl.layer.shadowColor = UIColor.black.cgColor
+        checkLbl.layer.shadowOpacity = 0.55
+        checkLbl.layer.shadowRadius = 2.5
+        checkLbl.layer.shadowOffset = CGSize(width: 0, height: 1)
+        checkLbl.autoresizingMask = [.flexibleLeftMargin, .flexibleRightMargin,
+                                     .flexibleTopMargin, .flexibleBottomMargin]
+        view.addSubview(checkLbl)
     }
 }
 
