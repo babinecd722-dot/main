@@ -5563,6 +5563,72 @@ public enum AorusFakeGiftsStore {
     public static func wornGift() -> StarGift? {
         return all().first(where: { $0.worn })?.gift
     }
+
+    // MARK: Collection membership (kept local — the server never stores a fake gift, so a
+    // fake's collection membership has to live here or it is lost on relaunch).
+
+    // Assign a fake gift to a native profile gift collection. Mirrors the native
+    // "add to collection" flow so the membership survives a relaunch.
+    public static func addToCollection(_ gift: StarGift, collectionId: Int32) {
+        let k = key(for: gift)
+        var gifts = all()
+        if let index = gifts.firstIndex(where: { $0.key == k }) {
+            if !gifts[index].collectionIds.contains(collectionId) {
+                gifts[index].collectionIds.append(collectionId)
+                persist(gifts)
+            }
+        }
+    }
+
+    // Remove a fake gift from a collection by gift.
+    public static func removeFromCollection(_ gift: StarGift, collectionId: Int32) {
+        let k = key(for: gift)
+        var gifts = all()
+        if let index = gifts.firstIndex(where: { $0.key == k }) {
+            if let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
+                gifts[index].collectionIds.remove(at: pos)
+                persist(gifts)
+            }
+        }
+    }
+
+    // Remove a fake gift from a collection addressed by a native gift reference (the native
+    // remove-from-collection flow hands back references, not gifts). Matches a fake unique
+    // gift by slug.
+    public static func removeFromCollection(reference: StarGiftReference, collectionId: Int32) {
+        var gifts = all()
+        var changed = false
+        for index in gifts.indices {
+            guard let gift = gifts[index].gift else { continue }
+            var matches = false
+            if case let .slug(slug) = reference, case let .unique(uniqueGift) = gift, uniqueGift.slug == slug {
+                matches = true
+            }
+            if matches, let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
+                gifts[index].collectionIds.remove(at: pos)
+                changed = true
+            }
+        }
+        if changed {
+            persist(gifts)
+        }
+    }
+
+    // Drop a deleted collection's id from every fake gift so a fake never points at a
+    // collection that no longer exists.
+    public static func purgeCollection(_ collectionId: Int32) {
+        var gifts = all()
+        var changed = false
+        for index in gifts.indices {
+            if let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
+                gifts[index].collectionIds.remove(at: pos)
+                changed = true
+            }
+        }
+        if changed {
+            persist(gifts)
+        }
+    }
 }
 '''
 
@@ -5872,7 +5938,12 @@ def patch_fake_gifts(tg: Path) -> None:
                 "        if aorusFakeGifts.isEmpty {\n"
                 "            self.starsProducts = baseline\n"
                 "        } else {\n"
-                "            self.starsProducts = aorusFakeGifts + baseline\n"
+                "            // Drop any baseline copy of a fake gift. The native add-to-collection\n"
+                "            // flow caches the gift inside the collection (Postbox), which would\n"
+                "            // otherwise render it twice until the server reply lands and clears it.\n"
+                "            let aorusFakeKeys = Set(aorusFakeGifts.map { AorusFakeGiftsStore.key(for: $0.gift) })\n"
+                "            let aorusBaseline = baseline.filter { !aorusFakeKeys.contains(AorusFakeGiftsStore.key(for: $0.gift)) }\n"
+                "            self.starsProducts = aorusFakeGifts + aorusBaseline\n"
                 "        }\n"
                 "    }\n"
                 "\n"
@@ -6157,6 +6228,110 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING StarGifts updateStarGiftResellPrice anchor not found")
     else:
         print("FakeGifts: StarGifts.swift not found — skip resell")
+
+    # 8) Collection membership sync. A fake gift never reaches the server, so when the user
+    #    adds it to a profile gift collection through the NATIVE flow ("+ Добавить" in the
+    #    collections row), Telegram inserts it visually and sends a server request that
+    #    silently ignores it — and our local store is never told. On relaunch the server
+    #    returns the collection without the fake, so it vanishes from the folder (the folder
+    #    itself, being a real server collection, stays). Mirror every native add / remove /
+    #    create / delete into AorusFakeGiftsStore so a fake's collection membership is durable.
+    coll_engine = tg / "submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGiftsCollections.swift"
+    if coll_engine.is_file():
+        t = coll_engine.read_text(encoding="utf-8")
+        if "AorusFakeGiftsStore.addToCollection" in t:
+            print("FakeGifts: StarGiftsCollections already patched")
+        else:
+            ok = True
+
+            # 8a) Add gifts to an existing collection — record membership for fakes.
+            add_anchor = (
+                "        case let .addGifts(gifts):\n"
+                "            let gifts = gifts.map { gift in\n"
+            )
+            add_inject = (
+                "        case let .addGifts(gifts):\n"
+                "            for aorusGift in gifts {\n"
+                "                if AorusFakeGiftsStore.contains(aorusGift.gift) {\n"
+                "                    AorusFakeGiftsStore.addToCollection(aorusGift.gift, collectionId: collectionId)\n"
+                "                }\n"
+                "            }\n"
+                "            let gifts = gifts.map { gift in\n"
+            )
+            if add_anchor in t:
+                t = t.replace(add_anchor, add_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING StarGiftsCollections addGifts anchor not found")
+
+            # 8b) Remove gifts from a collection — drop membership for fakes.
+            rm_anchor = (
+                "        case let .removeGifts(gifts):\n"
+                "            giftsContext?.removeStarGifts(references: gifts)\n"
+            )
+            rm_inject = (
+                "        case let .removeGifts(gifts):\n"
+                "            for aorusReference in gifts {\n"
+                "                AorusFakeGiftsStore.removeFromCollection(reference: aorusReference, collectionId: collectionId)\n"
+                "            }\n"
+                "            giftsContext?.removeStarGifts(references: gifts)\n"
+            )
+            if rm_anchor in t:
+                t = t.replace(rm_anchor, rm_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING StarGiftsCollections removeGifts anchor not found")
+
+            # 8c) Create a collection seeded with gifts — record membership for fakes once the
+            #     server hands back the new collection id.
+            create_anchor = (
+                "        |> beforeNext { collection in\n"
+                "            let _ = account.postbox.transaction { transaction in\n"
+            )
+            create_inject = (
+                "        |> beforeNext { collection in\n"
+                "            if let collection {\n"
+                "                for aorusGift in starGifts {\n"
+                "                    if AorusFakeGiftsStore.contains(aorusGift.gift) {\n"
+                "                        AorusFakeGiftsStore.addToCollection(aorusGift.gift, collectionId: collection.id)\n"
+                "                    }\n"
+                "                }\n"
+                "            }\n"
+                "            let _ = account.postbox.transaction { transaction in\n"
+            )
+            if create_anchor in t:
+                t = t.replace(create_anchor, create_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING StarGiftsCollections create anchor not found")
+
+            # 8d) Delete a collection — purge its id from every fake gift.
+            del_anchor = (
+                "        |> afterNext { [weak self] _ in\n"
+                "            guard let self else {\n"
+                "                return\n"
+                "            }\n"
+                "            self.giftsContexts.removeValue(forKey: id)\n"
+            )
+            del_inject = (
+                "        |> afterNext { [weak self] _ in\n"
+                "            guard let self else {\n"
+                "                return\n"
+                "            }\n"
+                "            AorusFakeGiftsStore.purgeCollection(id)\n"
+                "            self.giftsContexts.removeValue(forKey: id)\n"
+            )
+            if del_anchor in t:
+                t = t.replace(del_anchor, del_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING StarGiftsCollections delete anchor not found")
+
+            if ok:
+                coll_engine.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched StarGiftsCollections (durable fake-gift collection membership)")
+    else:
+        print("FakeGifts: StarGiftsCollections.swift not found — skip collection sync")
 
 
 def patch_bypass_copy_protection(tg: Path) -> None:
