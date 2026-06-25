@@ -6091,27 +6091,41 @@ def patch_fake_gifts(tg: Path) -> None:
     else:
         print("FakeGifts: PeerInfoScreen.swift not found — skip openUniqueGift owner fix")
 
-    # 6b) Gift tab visibility. Natively, a profile with no gifts has no "Gifts" tab. The
-    #     tab's presence is decided by peerInfoScreenData via forceHasGifts / the server
-    #     gift count; local fakes are invisible to it, so adding the first fake gift left
-    #     the tab missing. Force the gifts pane for the user's OWN profile whenever there
-    #     are visible local fakes — and, with fakes disabled or all removed (and no real
-    #     gifts), it falls back to hidden. "No gifts = no tab", now fake-aware.
-    screen2 = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
-    if screen2.is_file():
-        t = screen2.read_text(encoding="utf-8")
-        force_anchor = "forceHasGifts: initialPaneKey == .gifts,"
-        force_inject = "forceHasGifts: initialPaneKey == .gifts || (peerId == context.account.peerId && AorusFakeGiftsStore.isEnabled && !AorusFakeGiftsStore.profileWrappers().isEmpty),"
-        if force_inject in t:
-            print("FakeGifts: PeerInfoScreen forceHasGifts already patched")
-        elif force_anchor in t:
-            t = t.replace(force_anchor, force_inject, 1)
-            screen2.write_text(t, encoding="utf-8")
-            print("FakeGifts: patched PeerInfoScreen forceHasGifts (own fake gifts show the gifts tab)")
+    # 6b) Gift tab visibility on the user's OWN profile ("My Profile"). Natively the gifts
+    #     pane is added only when the server gift count is > 0 (PeerInfoData, isMyProfile
+    #     branch), so a profile with no real gifts had no "Gifts" tab and adding the first
+    #     local fake gift did not bring it back. Make the own-profile gifts pane appear
+    #     when there are visible local fakes too; with fakes disabled or all removed (and
+    #     no real gifts) it stays hidden — native "no gifts = no tab", now fake-aware. Only
+    #     the isMyProfile branch is touched, so other users' profiles are unaffected.
+    pdata = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift"
+    if pdata.is_file():
+        t = pdata.read_text(encoding="utf-8")
+        gifts_anchor = (
+            "                    if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {\n"
+            "                        if let starGiftsCount = cachedData.starGiftsCount, starGiftsCount > 0 {\n"
+            "                            availablePanes?.insert(.gifts, at: 1)\n"
+            "                        }\n"
+            "                    }\n"
+        )
+        gifts_inject = (
+            "                    if availablePanes != nil, profileGiftsContext != nil, let cachedData = peerView.cachedData as? CachedUserData {\n"
+            "                        if (cachedData.starGiftsCount ?? 0) > 0 || (AorusFakeGiftsStore.isEnabled && !AorusFakeGiftsStore.profileWrappers().isEmpty) {\n"
+            "                            availablePanes?.insert(.gifts, at: 1)\n"
+            "                        }\n"
+            "                    }\n"
+        )
+        marker = "(cachedData.starGiftsCount ?? 0) > 0 || (AorusFakeGiftsStore.isEnabled"
+        if marker in t:
+            print("FakeGifts: PeerInfoData own-profile gifts tab already patched")
+        elif gifts_anchor in t:
+            t = t.replace(gifts_anchor, gifts_inject, 1)
+            pdata.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched PeerInfoData (own fake gifts show the gifts tab)")
         else:
-            print("FakeGifts: WARNING PeerInfoScreen forceHasGifts anchor not found")
+            print("FakeGifts: WARNING PeerInfoData own-profile gifts anchor not found")
     else:
-        print("FakeGifts: PeerInfoScreen.swift not found — skip forceHasGifts patch")
+        print("FakeGifts: PeerInfoData.swift not found — skip gifts tab visibility")
 
     # 7) Resell ("выставить на продажу" / "Не продавать"). For a fake gift the server call
     #    errors; handle it locally instead — set/clear the resale price on the stored gift,
