@@ -107,6 +107,19 @@ private enum FakeGiftsEntry: ItemListNodeEntry {
     }
 }
 
+// Holds the store-change observer so its lifetime is bound to the controller: when the
+// controller (and the signal pipeline that retains this holder) is released, deinit
+// removes the observer. No retain cycle — NotificationCenter owns the block, the block
+// only touches the refresh closure, and the holder is what ties it to the screen.
+private final class FakeGiftsObserverHolder {
+    var token: NSObjectProtocol?
+    deinit {
+        if let token = self.token {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+}
+
 private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -> [FakeGiftsEntry] {
     let isRu = AorusLang.current == .ru
     var entries: [FakeGiftsEntry] = []
@@ -158,6 +171,14 @@ public func aorusFakeGiftsController(context: AccountContext) -> ViewController 
         }
     }
 
+    // Rebuild the list whenever the store changes (e.g. a gift is transferred away from
+    // the profile, sold, or its visibility toggled), so this screen always mirrors the
+    // store live — not only on the next time it is opened.
+    let observerHolder = FakeGiftsObserverHolder()
+    observerHolder.token = NotificationCenter.default.addObserver(forName: AorusFakeGiftsStore.changedNotification, object: nil, queue: .main) { _ in
+        refresh()
+    }
+
     weak var weakController: ItemListController?
 
     let arguments = FakeGiftsArguments(
@@ -183,6 +204,8 @@ public func aorusFakeGiftsController(context: AccountContext) -> ViewController 
     let signal = statePromise.get()
         |> deliverOnMainQueue
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
+            // Keep the store observer alive for as long as the screen's signal lives.
+            let _ = observerHolder
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = fakeGiftsEntries(state: state, theme: presentationData.theme)
             let isRu = AorusLang.current == .ru
