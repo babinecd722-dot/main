@@ -5666,26 +5666,108 @@ def patch_fake_gifts(tg: Path) -> None:
         if "AorusFakeGiftsStore.profileWrappers" in t:
             print("FakeGifts: GiftsListView already patched")
         else:
-            anchor = (
+            ok = True
+            # 3a) Track the server-side product list separately so a live store change
+            #     (pin / sell / unlist) can rebuild the merged list immediately, without
+            #     waiting for a new profileGifts.state emission (which never comes for a
+            #     purely-local fake-gift mutation).
+            props_anchor = "    private var starsProducts: [ProfileGiftsContext.State.StarGift]?\n"
+            props_inject = (
+                "    private var starsProducts: [ProfileGiftsContext.State.StarGift]?\n"
+                "    private var aorusServerProducts: [ProfileGiftsContext.State.StarGift]?\n"
+                "    private var aorusFakeObserver: NSObjectProtocol?\n"
+            )
+            if props_anchor in t:
+                t = t.replace(props_anchor, props_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView props anchor not found")
+
+            # 3b) On every state emission: snapshot the server list, then merge fakes.
+            state_anchor = (
                 "            } else {\n"
                 "                self.starsProducts = state.filteredGifts\n"
                 "                self.pinnedReferences = Array(state.gifts.filter { $0.pinnedToTop }.compactMap { $0.reference })\n"
                 "            }\n"
             )
-            injection = anchor + (
-                "            if self.peerId == self.context.account.peerId, AorusFakeGiftsStore.isEnabled {\n"
-                "                let aorusFakeGifts = AorusFakeGiftsStore.profileWrappers()\n"
-                "                if !aorusFakeGifts.isEmpty {\n"
-                "                    self.starsProducts = aorusFakeGifts + (self.starsProducts ?? [])\n"
-                "                }\n"
-                "            }\n"
+            state_inject = state_anchor + (
+                "            self.aorusServerProducts = self.starsProducts\n"
+                "            self.aorusApplyFakeGifts()\n"
             )
-            if anchor in t:
-                t = t.replace(anchor, injection, 1)
-                gl.write_text(t, encoding="utf-8")
-                print("FakeGifts: patched GiftsListView (own-profile injection)")
+            if state_anchor in t:
+                t = t.replace(state_anchor, state_inject, 1)
             else:
-                print("FakeGifts: WARNING GiftsListView starsProducts anchor not found")
+                ok = False
+                print("FakeGifts: WARNING GiftsListView state anchor not found")
+
+            # 3c) Observe local store changes and refresh the rendered list at once.
+            init_anchor = (
+                "        reorderRecognizer.isEnabled = false\n"
+                "    }\n"
+            )
+            init_inject = (
+                "        reorderRecognizer.isEnabled = false\n"
+                "\n"
+                "        self.aorusFakeObserver = NotificationCenter.default.addObserver(forName: AorusFakeGiftsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
+                "            guard let self else { return }\n"
+                "            self.aorusApplyFakeGifts()\n"
+                "            let _ = self.updateScrolling(transition: .easeInOut(duration: 0.25))\n"
+                "            Queue.mainQueue().justDispatch { self.onContentUpdated() }\n"
+                "        }\n"
+                "    }\n"
+            )
+            if init_anchor in t:
+                t = t.replace(init_anchor, init_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView init anchor not found")
+
+            # 3d) Clean up the observer.
+            deinit_anchor = (
+                "    deinit {\n"
+                "        self.dataDisposable?.dispose()\n"
+                "    }\n"
+            )
+            deinit_inject = (
+                "    deinit {\n"
+                "        self.dataDisposable?.dispose()\n"
+                "        if let aorusFakeObserver = self.aorusFakeObserver {\n"
+                "            NotificationCenter.default.removeObserver(aorusFakeObserver)\n"
+                "        }\n"
+                "    }\n"
+            )
+            if deinit_anchor in t:
+                t = t.replace(deinit_anchor, deinit_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView deinit anchor not found")
+
+            # 3e) The merge helper — own profile only; pinned-first fakes prepended.
+            helper_anchor = "    func item(at point: CGPoint) -> (AnyHashable, ComponentView<Empty>)? {\n"
+            helper_inject = (
+                "    private func aorusApplyFakeGifts() {\n"
+                "        guard self.peerId == self.context.account.peerId, AorusFakeGiftsStore.isEnabled else {\n"
+                "            return\n"
+                "        }\n"
+                "        let baseline = self.aorusServerProducts ?? self.starsProducts ?? []\n"
+                "        let aorusFakeGifts = AorusFakeGiftsStore.profileWrappers()\n"
+                "        if aorusFakeGifts.isEmpty {\n"
+                "            self.starsProducts = baseline\n"
+                "        } else {\n"
+                "            self.starsProducts = aorusFakeGifts + baseline\n"
+                "        }\n"
+                "    }\n"
+                "\n"
+            ) + helper_anchor
+            if helper_anchor in t:
+                t = t.replace(helper_anchor, helper_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView helper anchor not found")
+
+            if ok:
+                gl.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched GiftsListView (own-profile injection + live refresh)")
     else:
         print("FakeGifts: GiftsListView.swift not found — skip profile injection")
 
@@ -8791,6 +8873,25 @@ private final class AorusCallRecorder {
         }
     }
 
+    // Group / conference call (e.g. a call opened via a call link). These route audio
+    // through the SAME shared ADM as 1-to-1 calls, so the low-level mic+remote taps
+    // already capture every participant — we just drive the start/stop and skip the
+    // video PiP recorder (group video layout differs; audio is the proven path).
+    func onConnectedGroup(account: Account) {
+        guard UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        self.lock.lock()
+        if self.active { self.lock.unlock(); return }
+        self.active = true
+        self.account = account
+        let dir = NSTemporaryDirectory()
+        let stamp = Int(Date().timeIntervalSince1970)
+        self.micPath = dir + "aorus_call_mic_\(stamp).caf"
+        self.remotePath = dir + "aorus_call_rem_\(stamp).caf"
+        self.videoRecorder = nil
+        self.lock.unlock()
+        NotificationCenter.default.post(name: NSNotification.Name("aorusgram_call_rec_start"), object: nil, userInfo: ["mic": self.micPath, "remote": self.remotePath])
+    }
+
     // Called when the local camera capturer is set (call init or requestVideo). Stores
     // it for PiP capture and, if recording is already running, attaches it immediately.
     func onLocalCapturer(_ capturer: OngoingCallVideoCapturer) {
@@ -8962,6 +9063,20 @@ private final class AorusCallRecorder {
         )
         let message: EnqueueMessage = .message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: file), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
         let _ = enqueueMessages(account: account, peerId: account.peerId, messages: [message]).startStandalone()
+    }
+}
+
+// AorusGram: public bridge so the group-call lifecycle (PresentationGroupCall, in
+// the TelegramCallsUI module) can drive the same recorder. Conference/link calls
+// don't go through OngoingCallContext, but they share the tapped audio device, so
+// starting the recorder here is enough to capture them.
+public enum AorusGroupCallRecorder {
+    public static func onConnected(account: Account) {
+        AorusCallRecorder.shared.onConnectedGroup(account: account)
+    }
+
+    public static func onStop() {
+        AorusCallRecorder.shared.onStop()
     }
 }
 
@@ -9294,6 +9409,84 @@ def patch_call_recording(tg: Path) -> None:
         print("CallRec: patched OngoingCallContext.swift (lifecycle + mix/upload)")
     else:
         print("CallRec: OngoingCallContext.swift unchanged (already patched or drift)")
+
+
+def patch_call_recording_group(tg: Path) -> None:
+    """Extend call recording to group / conference calls (e.g. calls opened via a
+    call link). These don't go through OngoingCallContext, but they share the same
+    tapped audio device (SharedCallAudioDevice → WrappedAudioDeviceModuleIOS), so the
+    existing mic+remote taps already capture every participant. We just drive the
+    recorder's start (on first connect) and stop (on leave / deinit) from the group
+    call lifecycle in PresentationGroupCall.swift, via the public AorusGroupCallRecorder
+    bridge added to the OngoingCallContext.swift orchestrator. Gated on isConference so
+    only real link/conference calls record, not broadcasts or large public voice chats.
+    """
+    path = tg / "submodules/TelegramCallsUI/Sources/PresentationGroupCall.swift"
+    if not path.is_file():
+        print("CallRecGroup: PresentationGroupCall.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGroupCallRecorder" in t:
+        print("CallRecGroup: already patched")
+        return
+
+    ok = True
+
+    # 1) Start on first successful connect (conference calls only).
+    connect_anchor = (
+        "                if state.isConnected {\n"
+        "                    if !self.didConnectOnce {\n"
+        "                        self.didConnectOnce = true\n"
+        "                        \n"
+    )
+    connect_inject = (
+        "                if state.isConnected {\n"
+        "                    if !self.didConnectOnce {\n"
+        "                        self.didConnectOnce = true\n"
+        "                        if self.isConference { AorusGroupCallRecorder.onConnected(account: self.account) }\n"
+        "                        \n"
+    )
+    if connect_anchor in t:
+        t = t.replace(connect_anchor, connect_inject, 1)
+    else:
+        ok = False
+        print("CallRecGroup: WARNING connect anchor not found")
+
+    # 2) Stop when leaving the call.
+    leave_anchor = (
+        "    public func leave(terminateIfPossible: Bool) -> Signal<Bool, NoError> {\n"
+        "        self.leaving = true\n"
+    )
+    leave_inject = (
+        "    public func leave(terminateIfPossible: Bool) -> Signal<Bool, NoError> {\n"
+        "        AorusGroupCallRecorder.onStop()\n"
+        "        self.leaving = true\n"
+    )
+    if leave_anchor in t:
+        t = t.replace(leave_anchor, leave_inject, 1)
+    else:
+        ok = False
+        print("CallRecGroup: WARNING leave anchor not found")
+
+    # 3) Safety stop on deinit (idempotent — no double upload if leave() already fired).
+    deinit_anchor = (
+        "    deinit {\n"
+        "        assert(Queue.mainQueue().isCurrent())\n"
+    )
+    deinit_inject = (
+        "    deinit {\n"
+        "        assert(Queue.mainQueue().isCurrent())\n"
+        "        AorusGroupCallRecorder.onStop()\n"
+    )
+    if deinit_anchor in t:
+        t = t.replace(deinit_anchor, deinit_inject, 1)
+    else:
+        ok = False
+        print("CallRecGroup: WARNING deinit anchor not found")
+
+    if ok:
+        path.write_text(t, encoding="utf-8")
+        print("CallRecGroup: patched PreseentationGroupCall.swift (start/stop hooks)".replace("Preseentation", "Presentation"))
 
 
 def patch_account_limit(tg: Path) -> None:
@@ -10324,6 +10517,7 @@ def main() -> None:
     patch_app_badge(tg)
     patch_app_badge_switcher(tg)
     patch_call_recording(tg)
+    patch_call_recording_group(tg)
     patch_account_limit(tg)
     patch_gif_wallpaper(tg)
     for name in ("Info.plist", "InfoBazel.plist"):

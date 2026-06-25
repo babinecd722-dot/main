@@ -961,6 +961,9 @@ public func aorusGramController(context: AccountContext) -> ViewController {
                     UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_sysver")
                     updateState { s in var n = s; n.spoofedDeviceName = nil; return n }
                 }
+                // The device model reaches the server only when the network layer
+                // re-initialises, which happens at launch — prompt for a restart.
+                aorusPresentRestartNotice(context: context, controller: weakController)
             }
 
             // Position a popover (iPad) at the centre of the controller's view.

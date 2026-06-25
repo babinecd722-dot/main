@@ -122,6 +122,9 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 next.localPremium = value
                 return next
             }
+            // The premium flag is read at launch / account registration, so the
+            // change only fully applies after a restart — offer a native prompt.
+            aorusPresentRestartNotice(context: context, controller: weakController)
         },
         openFakeGifts: {
             guard let controller = weakController,
