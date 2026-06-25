@@ -4877,13 +4877,16 @@ def patch_local_premium(tg: Path) -> None:
                 ok = False
                 print("Premium: WARNING setStarGiftStatus anchor not found")
 
-            # 4b) setEmojiStatus — a regular emoji status replaces any worn fake gift.
+            # 4b) setEmojiStatus — persist the regular emoji status too. On a fake-premium
+            #     account the server drops it, so we must keep it locally to survive a sync /
+            #     restart. A non-gift status also clears any worn fake gift bookkeeping.
             emoji_anchor = (
                 "            let remoteApply = self.account.network.request(Api.functions.account.updateEmojiStatus(emojiStatus: file.flatMap({ file in\n"
             )
             emoji_inject = (
-                "            // AorusGram: a regular emoji status replaces any worn fake gift.\n"
-                "            AorusGramPremium.persistEmojiStatus(nil, rawId: peerId.id._internalGetInt64Value())\n"
+                "            // AorusGram: persist the regular emoji status (the server drops it on a\n"
+                "            // fake-premium account) so it survives sync / restart; clear gift bookkeeping.\n"
+                "            AorusGramPremium.persistEmojiStatus(file.flatMap({ PeerEmojiStatus(content: .emoji(fileId: $0.fileId.id), expirationDate: expirationDate) }), rawId: peerId.id._internalGetInt64Value())\n"
                 "            AorusFakeGiftsStore.clearWorn()\n"
             ) + emoji_anchor
             if emoji_anchor in t:
@@ -4954,6 +4957,20 @@ def patch_local_premium(tg: Path) -> None:
                 ok = False
                 print("Premium: WARNING TelegramUser merge(TelegramUser) emojiStatus anchor not found")
 
+            # THE main path: a full (non-min) user update builds via init?(_ user:), which
+            # the two merges above bypass. Override emojiStatus here too, keyed by the raw id.
+            init_api = (
+                "emojiStatus: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:)), usernames: usernames?.map(TelegramPeerUsername.init(apiUsername:))"
+            )
+            init_api_new = (
+                "emojiStatus: AorusGramPremium.resolveEmojiStatus(forRawId: id, server: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:))), usernames: usernames?.map(TelegramPeerUsername.init(apiUsername:))"
+            )
+            if init_api in t:
+                t = t.replace(init_api, init_api_new, 1)
+            else:
+                ok = False
+                print("Premium: WARNING TelegramUser init(Api.User) emojiStatus anchor not found")
+
             if ok:
                 tg_user.write_text(t, encoding="utf-8")
                 print("Premium: patched TelegramUser merge (preserve worn fake gift on sync)")
@@ -4979,8 +4996,9 @@ public struct AorusStoredGift: Codable, Equatable {
     public var showInProfile: Bool
     public var pinnedToTop: Bool
     public var worn: Bool
+    public var pinnedOrder: Int32   // pin sequence; lower = pinned earlier (0 = not pinned)
 
-    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false) {
+    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0) {
         self.giftData = giftData
         self.senderPeerId = senderPeerId
         self.date = date
@@ -4988,13 +5006,14 @@ public struct AorusStoredGift: Codable, Equatable {
         self.showInProfile = showInProfile
         self.pinnedToTop = pinnedToTop
         self.worn = worn
+        self.pinnedOrder = pinnedOrder
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn
+        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder
     }
 
-    // Tolerant decode so gifts stored before pinnedToTop/worn existed still load.
+    // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder existed still load.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.giftData = try c.decode(Data.self, forKey: .giftData)
@@ -5004,6 +5023,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.showInProfile = try c.decode(Bool.self, forKey: .showInProfile)
         self.pinnedToTop = try c.decodeIfPresent(Bool.self, forKey: .pinnedToTop) ?? false
         self.worn = try c.decodeIfPresent(Bool.self, forKey: .worn) ?? false
+        self.pinnedOrder = try c.decodeIfPresent(Int32.self, forKey: .pinnedOrder) ?? 0
     }
 
     public var gift: StarGift? {
@@ -5089,6 +5109,14 @@ public enum AorusFakeGiftsStore {
         var gifts = all()
         if let index = gifts.firstIndex(where: { $0.key == k }) {
             gifts[index].pinnedToTop = value
+            if value {
+                // Append to the end of the pinned sequence: 1, 2, 3, … so the first
+                // pinned gift stays first in the list.
+                let maxOrder = gifts.filter { $0.pinnedToTop && $0.key != k }.map { $0.pinnedOrder }.max() ?? 0
+                gifts[index].pinnedOrder = maxOrder + 1
+            } else {
+                gifts[index].pinnedOrder = 0
+            }
             persist(gifts)
         }
     }
@@ -5188,14 +5216,18 @@ public enum AorusFakeGiftsStore {
         return wrapper
     }
 
-    // The wrappers to inject into the user's own profile gifts pane.
+    // The wrappers to inject into the user's own profile gifts pane: pinned gifts first
+    // (in pin order 1, 2, 3…), then the rest in stored order — like real Telegram.
     public static func profileWrappers() -> [ProfileGiftsContext.State.StarGift] {
-        return all().filter { $0.showInProfile }.compactMap { wrapper(for: $0) }
+        let visible = all().filter { $0.showInProfile }
+        let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
+        let unpinned = visible.filter { !$0.pinnedToTop }
+        return (pinned + unpinned).compactMap { wrapper(for: $0) }
     }
 
-    // Only the gifts pinned to top — drives the badges around the profile avatar.
+    // Only the gifts pinned to top, in pin order — drives the badges around the avatar.
     public static func pinnedProfileWrappers() -> [ProfileGiftsContext.State.StarGift] {
-        return all().filter { $0.showInProfile && $0.pinnedToTop }.compactMap { wrapper(for: $0) }
+        return all().filter { $0.showInProfile && $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }.compactMap { wrapper(for: $0) }
     }
 
     // The unique gift the user chose to "wear" (set as emoji status), if any.
@@ -5543,6 +5575,43 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING PeerInfoPaneContainerNode gifts-tab anchor not found")
     else:
         print("FakeGifts: PeerInfoPaneContainerNode.swift not found — skip gifts tab preview")
+
+    # 6) Opening a unique gift by slug (tapping the pinned badge near the avatar, or the
+    #    worn-gift status icon by the name) looks it up only in the server-side
+    #    profileGiftsContext; our local fake gifts aren't there, so it falls back to
+    #    opening t.me/nft/<slug> from the server, which shows the ORIGINAL owner. Inject
+    #    our own fake gifts (owner already rewritten to the user) into that lookup so the
+    #    user is shown as the owner.
+    screen = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
+    if screen.is_file():
+        t = screen.read_text(encoding="utf-8")
+        if "aorusOwnGifts" in t:
+            print("FakeGifts: PeerInfoScreen openUniqueGift already patched")
+        else:
+            anchor = (
+                "            var found = false\n"
+                "            if let state = profileGifts.currentState {\n"
+                "                for gift in state.gifts {\n"
+            )
+            # Search across ALL stored gifts (pinned, worn, even hidden-from-profile) so
+            # the worn-gift status icon and pinned badge always resolve to the local copy.
+            injection = (
+                "            var found = false\n"
+                "            var aorusOwnGifts: [ProfileGiftsContext.State.StarGift] = []\n"
+                "            if self.peerId == self.context.account.peerId, AorusFakeGiftsStore.isEnabled {\n"
+                "                aorusOwnGifts = AorusFakeGiftsStore.all().compactMap { AorusFakeGiftsStore.wrapper(for: $0) }\n"
+                "            }\n"
+                "            if let state = profileGifts.currentState {\n"
+                "                for gift in (aorusOwnGifts + state.gifts) {\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, injection, 1)
+                screen.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched PeerInfoScreen openUniqueGift (local owner for badge/worn gift)")
+            else:
+                print("FakeGifts: WARNING PeerInfoScreen openUniqueGift anchor not found")
+    else:
+        print("FakeGifts: PeerInfoScreen.swift not found — skip openUniqueGift owner fix")
 
 
 def patch_bypass_copy_protection(tg: Path) -> None:
