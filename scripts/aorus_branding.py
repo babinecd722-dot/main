@@ -5547,6 +5547,8 @@ def patch_fake_gifts(tg: Path) -> None:
     ru_pinned = _swift_uescape("Подарок закреплён")
     ru_unpinned = _swift_uescape("Подарок откреплён")
     ru_transfer = _swift_uescape("Передать")
+    ru_transfer_title = _swift_uescape("Передать подарок")
+    ru_transferred = _swift_uescape("Подарок передан")
 
     gv = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift"
     if gv.is_file():
@@ -5590,10 +5592,37 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                if AorusFakeGiftsStore.contains(arguments.gift) {\n"
                 "                    items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"" + ru_transfer + "\" : \"Transfer\", icon: { theme in\n"
                 "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Replace\"), color: theme.contextMenu.primaryColor)\n"
-                "                    }, action: { [weak controller] c, _ in\n"
+                "                    }, action: { [weak self, weak controller] c, _ in\n"
                 "                        c?.dismiss(completion: nil)\n"
-                "                        AorusFakeGiftsStore.remove(key: AorusFakeGiftsStore.key(for: arguments.gift))\n"
-                "                        controller?.dismissAnimated()\n"
+                "                        guard let self else { return }\n"
+                "                        let aorusGiftForTransfer = arguments.gift\n"
+                "                        let aorusContext = self.context\n"
+                "                        let aorusPickerParams = PeerSelectionControllerParams(context: aorusContext, title: aorusGiftIsRu ? \"" + ru_transfer_title + "\" : \"Transfer Gift\")\n"
+                "                        let aorusPicker = aorusContext.sharedContext.makePeerSelectionController(aorusPickerParams)\n"
+                "                        aorusPicker.peerSelected = { [weak controller, weak aorusPicker] aorusPeer, _ in\n"
+                "                            let aorusRecipientId = aorusPeer.id\n"
+                "                            let aorusMyId = aorusContext.account.peerId\n"
+                "                            let aorusActionType: TelegramMediaActionType\n"
+                "                            switch aorusGiftForTransfer {\n"
+                "                            case .unique:\n"
+                "                                aorusActionType = .starGiftUnique(gift: aorusGiftForTransfer, isUpgrade: false, isTransferred: true, savedToProfile: false, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)\n"
+                "                            case .generic:\n"
+                "                                aorusActionType = .starGift(gift: aorusGiftForTransfer, convertStars: nil, text: nil, entities: nil, nameHidden: false, savedToProfile: false, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: aorusRecipientId, number: nil)\n"
+                "                            }\n"
+                "                            let aorusRandomId = Int64.random(in: Int64.min ... Int64.max)\n"
+                "                            let aorusTimestamp = Int32(Date().timeIntervalSince1970)\n"
+                "                            let aorusStoreMessage = StoreMessage(peerId: aorusRecipientId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: aorusRandomId, groupingKey: nil, threadId: nil, timestamp: aorusTimestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: aorusMyId, text: \"\", attributes: [], media: [TelegramMediaAction(action: aorusActionType)])\n"
+                "                            let _ = (aorusContext.account.postbox.transaction { transaction -> Void in\n"
+                "                                let _ = transaction.addMessages([aorusStoreMessage], location: .Random)\n"
+                "                            } |> deliverOnMainQueue).startStandalone(completed: {\n"
+                "                                AorusFakeGiftsStore.remove(key: AorusFakeGiftsStore.key(for: aorusGiftForTransfer))\n"
+                "                                let aorusDoneText = aorusGiftIsRu ? \"" + ru_transferred + "\" : \"Gift transferred\"\n"
+                "                                aorusPicker?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusDoneText, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
+                "                                aorusPicker?.dismiss()\n"
+                "                                controller?.dismissAnimated()\n"
+                "                            })\n"
+                "                        }\n"
+                "                        controller?.push(aorusPicker)\n"
                 "                    })))\n"
                 "                } else {\n"
                 "                    var aorusGiftFile: TelegramMediaFile?\n"
@@ -5654,8 +5683,35 @@ def patch_fake_gifts(tg: Path) -> None:
                 ok = False
                 print("FakeGifts: WARNING GiftViewScreen Share anchor not found")
             if ok:
+                # The Transfer flow constructs a StoreMessage (a Postbox type) to inject
+                # the local-only gift message; make sure the module is imported.
+                if "import Postbox" not in t:
+                    if "import TelegramCore\n" in t:
+                        t = t.replace("import TelegramCore\n", "import TelegramCore\nimport Postbox\n", 1)
+                    else:
+                        t = t.replace("import Foundation\n", "import Foundation\nimport Postbox\n", 1)
                 gv.write_text(t, encoding="utf-8")
                 print("FakeGifts: patched GiftViewScreen (Pin/Unpin/Transfer + Add to Profile)")
+                # GiftViewScreen's Bazel target depends on TelegramCore but NOT on Postbox,
+                # and TelegramCore does not re-export it — so `import Postbox` needs an
+                # explicit build dep or it fails with "No such module 'Postbox'".
+                bf = gv.parent.parent / "BUILD"
+                if bf.is_file():
+                    bt = bf.read_text(encoding="utf-8")
+                    if "//submodules/Postbox" not in bt:
+                        done = False
+                        for dep in ('"//submodules/TelegramCore:TelegramCore",', '"//submodules/TelegramCore",'):
+                            if dep in bt:
+                                newdep = dep.replace("TelegramCore", "Postbox")
+                                bt = bt.replace(dep, dep + "\n        " + newdep, 1)
+                                bf.write_text(bt, encoding="utf-8")
+                                print("FakeGifts: added Postbox BUILD dep to GiftViewScreen")
+                                done = True
+                                break
+                        if not done:
+                            print("FakeGifts: WARNING GiftViewScreen BUILD — TelegramCore dep anchor not found")
+                else:
+                    print("FakeGifts: WARNING GiftViewScreen BUILD not found")
     else:
         print("FakeGifts: GiftViewScreen.swift not found — skip menu item")
 
@@ -10163,6 +10219,18 @@ private final class AorusGifCarouselVideoView: UIView {
         self.playerLayer.player = self.queuePlayer
         self.queuePlayer.isMuted = true
         self.queuePlayer.actionAtItemEnd = .advance
+        // A GIF wallpaper is decoration, not media: it must never seize the audio
+        // session and silence the user's background music (Apple Music, podcasts, …).
+        // The MP4 carries no audio track and the player is muted, but starting playback
+        // can still implicitly activate the shared, non-mixable audio session. Relax it
+        // to a mixable .ambient session — but only while it is idle. Telegram switches
+        // the session to .playback / .playAndRecord before its own voice messages and
+        // calls, so leaving those categories untouched means real audio is never
+        // disturbed; we only soften the otherwise-interrupting default.
+        let aorusAudioSession = AVAudioSession.sharedInstance()
+        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
+            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
+        }
         if #available(iOS 13.0, *) {
             self.layer.cornerCurve = .continuous
         }
@@ -10277,6 +10345,18 @@ final class AorusGifGridVideoView: UIView {
         self.playerLayer.player = self.queuePlayer
         self.queuePlayer.isMuted = true
         self.queuePlayer.actionAtItemEnd = .advance
+        // A GIF wallpaper is decoration, not media: it must never seize the audio
+        // session and silence the user's background music (Apple Music, podcasts, …).
+        // The MP4 carries no audio track and the player is muted, but starting playback
+        // can still implicitly activate the shared, non-mixable audio session. Relax it
+        // to a mixable .ambient session — but only while it is idle. Telegram switches
+        // the session to .playback / .playAndRecord before its own voice messages and
+        // calls, so leaving those categories untouched means real audio is never
+        // disturbed; we only soften the otherwise-interrupting default.
+        let aorusAudioSession = AVAudioSession.sharedInstance()
+        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
+            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
+        }
         NotificationCenter.default.addObserver(self, selector: #selector(self.resume), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
@@ -10340,6 +10420,18 @@ final class AorusGifWallpaperHost: UIView {
         self.playerLayer.player = self.queuePlayer
         self.queuePlayer.isMuted = true
         self.queuePlayer.actionAtItemEnd = .advance
+        // A GIF wallpaper is decoration, not media: it must never seize the audio
+        // session and silence the user's background music (Apple Music, podcasts, …).
+        // The MP4 carries no audio track and the player is muted, but starting playback
+        // can still implicitly activate the shared, non-mixable audio session. Relax it
+        // to a mixable .ambient session — but only while it is idle. Telegram switches
+        // the session to .playback / .playAndRecord before its own voice messages and
+        // calls, so leaving those categories untouched means real audio is never
+        // disturbed; we only soften the otherwise-interrupting default.
+        let aorusAudioSession = AVAudioSession.sharedInstance()
+        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
+            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
+        }
         let item = AVPlayerItem(url: url)
         self.looper = AVPlayerLooper(player: self.queuePlayer, templateItem: item)
         self.queuePlayer.play()
