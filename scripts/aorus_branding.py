@@ -4788,6 +4788,92 @@ def patch_local_premium(tg: Path) -> None:
         "            }\n"
         "        }).startStandalone()\n"
         "    }\n"
+        "\n"
+        "    // MARK: - Profile appearance (name/profile color + background emoji) persistence\n"
+        "    //\n"
+        "    // On a fake-premium account the server rejects account.updateColor, so these\n"
+        "    // premium personalizations would error and get wiped on the next sync. Persist\n"
+        "    // them locally and re-apply / override them just like the emoji status.\n"
+        "    private struct StoredAppearance: Codable {\n"
+        "        var nameColorPreset: Int32?\n"
+        "        var nameColorCollectible: PeerCollectibleColor?\n"
+        "        var backgroundEmojiId: Int64?\n"
+        "        var profileColor: Int32?\n"
+        "        var profileBackgroundEmojiId: Int64?\n"
+        "\n"
+        "        var nameColor: PeerColor? {\n"
+        "            if let preset = nameColorPreset { return .preset(PeerNameColor(rawValue: preset)) }\n"
+        "            if let collectible = nameColorCollectible { return .collectible(collectible) }\n"
+        "            return nil\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private static func appearanceKey(_ rawId: Int64) -> String {\n"
+        "        return \"aorusgram_appearance_\\(rawId)\"\n"
+        "    }\n"
+        "\n"
+        "    public static func persistAppearance(nameColor: PeerColor?, backgroundEmojiId: Int64?, profileColor: PeerNameColor?, profileBackgroundEmojiId: Int64?, rawId: Int64) {\n"
+        "        var stored = StoredAppearance()\n"
+        "        if let nameColor {\n"
+        "            switch nameColor {\n"
+        "            case let .preset(color):\n"
+        "                stored.nameColorPreset = color.rawValue\n"
+        "            case let .collectible(color):\n"
+        "                stored.nameColorCollectible = color\n"
+        "            }\n"
+        "        }\n"
+        "        stored.backgroundEmojiId = backgroundEmojiId\n"
+        "        stored.profileColor = profileColor?.rawValue\n"
+        "        stored.profileBackgroundEmojiId = profileBackgroundEmojiId\n"
+        "        if let data = try? JSONEncoder().encode(stored) {\n"
+        "            UserDefaults.standard.set(data, forKey: appearanceKey(rawId))\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private static func storedAppearance(_ rawId: Int64) -> StoredAppearance? {\n"
+        "        guard isEnabled else { return nil }\n"
+        "        guard let data = UserDefaults.standard.data(forKey: appearanceKey(rawId)),\n"
+        "              let stored = try? JSONDecoder().decode(StoredAppearance.self, from: data) else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return stored\n"
+        "    }\n"
+        "\n"
+        "    public static func resolveNameColor(forRawId rawId: Int64, server: PeerColor?) -> PeerColor? {\n"
+        "        if let a = storedAppearance(rawId) { return a.nameColor ?? server }\n"
+        "        return server\n"
+        "    }\n"
+        "\n"
+        "    public static func resolveBackgroundEmojiId(forRawId rawId: Int64, server: Int64?) -> Int64? {\n"
+        "        if let a = storedAppearance(rawId) { return a.backgroundEmojiId }\n"
+        "        return server\n"
+        "    }\n"
+        "\n"
+        "    public static func resolveProfileColor(forRawId rawId: Int64, server: PeerNameColor?) -> PeerNameColor? {\n"
+        "        if let a = storedAppearance(rawId) { return a.profileColor.map { PeerNameColor(rawValue: $0) } }\n"
+        "        return server\n"
+        "    }\n"
+        "\n"
+        "    public static func resolveProfileBackgroundEmojiId(forRawId rawId: Int64, server: Int64?) -> Int64? {\n"
+        "        if let a = storedAppearance(rawId) { return a.profileBackgroundEmojiId }\n"
+        "        return server\n"
+        "    }\n"
+        "\n"
+        "    // Re-apply the persisted appearance to the own user at launch.\n"
+        "    public static func restoreAppearance(account: Account) {\n"
+        "        let rawId = account.peerId.id._internalGetInt64Value()\n"
+        "        guard let a = storedAppearance(rawId) else { return }\n"
+        "        let _ = (account.postbox.transaction { transaction -> Void in\n"
+        "            if let peer = transaction.getPeer(account.peerId) as? TelegramUser {\n"
+        "                var updated = peer\n"
+        "                if let nameColor = a.nameColor {\n"
+        "                    updated = updated.withUpdatedNameColor(nameColor)\n"
+        "                }\n"
+        "                updated = updated.withUpdatedBackgroundEmojiId(a.backgroundEmojiId).withUpdatedProfileColor(a.profileColor.map { PeerNameColor(rawValue: $0) }).withUpdatedProfileBackgroundEmojiId(a.profileBackgroundEmojiId)\n"
+        "                updatePeersCustom(transaction: transaction, peers: [updated], update: { _, u in u })\n"
+        "            }\n"
+        "        }).startStandalone()\n"
+        "    }\n"
         "}\n"
     )
     registry.write_text(registry_src, encoding="utf-8")
@@ -4836,6 +4922,7 @@ def patch_local_premium(tg: Path) -> None:
                 anchor,
                 "        AorusGramPremium.registerCurrentAccount(account.peerId.id._internalGetInt64Value()) // AorusGram local premium\n"
                 "        AorusGramPremium.restoreEmojiStatus(account: account) // AorusGram: restore worn fake gift\n"
+                "        AorusGramPremium.restoreAppearance(account: account) // AorusGram: restore profile colors\n"
                 "        self.isPremium = AorusGramPremium.isEnabled\n",
                 1,
             )
@@ -4971,11 +5058,87 @@ def patch_local_premium(tg: Path) -> None:
                 ok = False
                 print("Premium: WARNING TelegramUser init(Api.User) emojiStatus anchor not found")
 
+            # Preserve the own account's premium profile colors (name color, background
+            # emoji, profile color, profile background emoji) across server syncs at the
+            # same three sites — the server drops them on a fake-premium account.
+            color_sites = [
+                # init?(_ user:) — raw id is `id`; distinguished by `storiesHidden: storiesHidden`.
+                (
+                    "storiesHidden: storiesHidden, nameColor: nameColor, backgroundEmojiId: backgroundEmojiId, profileColor: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }, profileBackgroundEmojiId: profileBackgroundEmojiId, subscriberCount: subscriberCount, verificationIconFileId: verificationIconFileId",
+                    "storiesHidden: storiesHidden, nameColor: AorusGramPremium.resolveNameColor(forRawId: id, server: nameColor), backgroundEmojiId: AorusGramPremium.resolveBackgroundEmojiId(forRawId: id, server: backgroundEmojiId), profileColor: AorusGramPremium.resolveProfileColor(forRawId: id, server: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }), profileBackgroundEmojiId: AorusGramPremium.resolveProfileBackgroundEmojiId(forRawId: id, server: profileBackgroundEmojiId), subscriberCount: subscriberCount, verificationIconFileId: verificationIconFileId",
+                    "init(Api.User) colors",
+                ),
+                # merge(_ lhs:rhs:) min branch — distinguished by `lhs.storiesHidden` / `lhs.verificationIconFileId`.
+                (
+                    "storiesHidden: lhs.storiesHidden, nameColor: nameColor, backgroundEmojiId: backgroundEmojiId, profileColor: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }, profileBackgroundEmojiId: profileBackgroundEmojiId, subscriberCount: subscriberCount, verificationIconFileId: lhs.verificationIconFileId",
+                    "storiesHidden: lhs.storiesHidden, nameColor: AorusGramPremium.resolveNameColor(forRawId: lhs.id.id._internalGetInt64Value(), server: nameColor), backgroundEmojiId: AorusGramPremium.resolveBackgroundEmojiId(forRawId: lhs.id.id._internalGetInt64Value(), server: backgroundEmojiId), profileColor: AorusGramPremium.resolveProfileColor(forRawId: lhs.id.id._internalGetInt64Value(), server: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }), profileBackgroundEmojiId: AorusGramPremium.resolveProfileBackgroundEmojiId(forRawId: lhs.id.id._internalGetInt64Value(), server: profileBackgroundEmojiId), subscriberCount: subscriberCount, verificationIconFileId: lhs.verificationIconFileId",
+                    "merge(Api.User) colors",
+                ),
+                # merge(lhs:rhs:) — uses rhs.* values.
+                (
+                    "nameColor: rhs.nameColor, backgroundEmojiId: rhs.backgroundEmojiId, profileColor: rhs.profileColor, profileBackgroundEmojiId: rhs.profileBackgroundEmojiId",
+                    "nameColor: AorusGramPremium.resolveNameColor(forRawId: lhs.id.id._internalGetInt64Value(), server: rhs.nameColor), backgroundEmojiId: AorusGramPremium.resolveBackgroundEmojiId(forRawId: lhs.id.id._internalGetInt64Value(), server: rhs.backgroundEmojiId), profileColor: AorusGramPremium.resolveProfileColor(forRawId: lhs.id.id._internalGetInt64Value(), server: rhs.profileColor), profileBackgroundEmojiId: AorusGramPremium.resolveProfileBackgroundEmojiId(forRawId: lhs.id.id._internalGetInt64Value(), server: rhs.profileBackgroundEmojiId)",
+                    "merge(TelegramUser) colors",
+                ),
+            ]
+            for c_anchor, c_new, c_label in color_sites:
+                if c_anchor in t:
+                    t = t.replace(c_anchor, c_new, 1)
+                else:
+                    ok = False
+                    print(f"Premium: WARNING TelegramUser {c_label} anchor not found")
+
             if ok:
                 tg_user.write_text(t, encoding="utf-8")
-                print("Premium: patched TelegramUser merge (preserve worn fake gift on sync)")
+                print("Premium: patched TelegramUser merge (preserve worn fake gift + profile colors on sync)")
     else:
         print("Premium: TelegramUser.swift not found — skipped")
+
+    # 7) Profile colors apply screen: persist the chosen appearance locally and swallow the
+    #    server error (account.updateColor is rejected on a fake-premium account, which
+    #    otherwise shows "Произошла ошибка" and the colors revert on the next sync).
+    color_upd = tg / "submodules/TelegramCore/Sources/TelegramEngine/AccountData/UpdateAccountPeerName.swift"
+    if color_upd.is_file():
+        t = color_upd.read_text(encoding="utf-8")
+        if "AorusGramPremium.persistAppearance" in t:
+            print("Premium: UpdateAccountPeerName already patched")
+        else:
+            ok = True
+            persist_anchor = (
+                "        updatePeersCustom(transaction: transaction, peers: [peer.withUpdatedNameColor(nameColorValue).withUpdatedBackgroundEmojiId(backgroundEmojiIdValue).withUpdatedProfileColor(profileColor).withUpdatedProfileBackgroundEmojiId(profileBackgroundEmojiId)], update: { _, updated in\n"
+            )
+            persist_inject = (
+                "        // AorusGram: persist the chosen appearance so it survives sync / restart.\n"
+                "        AorusGramPremium.persistAppearance(nameColor: nameColorValue, backgroundEmojiId: backgroundEmojiIdValue, profileColor: profileColor, profileBackgroundEmojiId: profileBackgroundEmojiId, rawId: account.peerId.id._internalGetInt64Value())\n"
+            ) + persist_anchor
+            if persist_anchor in t:
+                t = t.replace(persist_anchor, persist_inject, 1)
+            else:
+                ok = False
+                print("Premium: WARNING UpdateAccountPeerName persist anchor not found")
+
+            error_anchor = (
+                "        |> mapToSignal { _, _ -> Signal<Void, UpdateNameColorAndEmojiError> in\n"
+                "            return .complete()\n"
+                "        }\n"
+            )
+            error_inject = error_anchor + (
+                "        // AorusGram: swallow the server rejection — the local change already applied.\n"
+                "        |> `catch` { _ -> Signal<Void, UpdateNameColorAndEmojiError> in\n"
+                "            return .complete()\n"
+                "        }\n"
+            )
+            if error_anchor in t:
+                t = t.replace(error_anchor, error_inject, 1)
+            else:
+                ok = False
+                print("Premium: WARNING UpdateAccountPeerName error-suppress anchor not found")
+
+            if ok:
+                color_upd.write_text(t, encoding="utf-8")
+                print("Premium: patched UpdateAccountPeerName (persist colors + suppress server error)")
+    else:
+        print("Premium: UpdateAccountPeerName.swift not found — skipped")
 
 
 AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
@@ -4997,8 +5160,9 @@ public struct AorusStoredGift: Codable, Equatable {
     public var pinnedToTop: Bool
     public var worn: Bool
     public var pinnedOrder: Int32   // pin sequence; lower = pinned earlier (0 = not pinned)
+    public var resellStars: Int64   // resale price in stars; 0 = not listed for sale
 
-    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0) {
+    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0) {
         self.giftData = giftData
         self.senderPeerId = senderPeerId
         self.date = date
@@ -5007,13 +5171,14 @@ public struct AorusStoredGift: Codable, Equatable {
         self.pinnedToTop = pinnedToTop
         self.worn = worn
         self.pinnedOrder = pinnedOrder
+        self.resellStars = resellStars
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder
+        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars
     }
 
-    // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder existed still load.
+    // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars existed still load.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.giftData = try c.decode(Data.self, forKey: .giftData)
@@ -5024,6 +5189,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.pinnedToTop = try c.decodeIfPresent(Bool.self, forKey: .pinnedToTop) ?? false
         self.worn = try c.decodeIfPresent(Bool.self, forKey: .worn) ?? false
         self.pinnedOrder = try c.decodeIfPresent(Int32.self, forKey: .pinnedOrder) ?? 0
+        self.resellStars = try c.decodeIfPresent(Int64.self, forKey: .resellStars) ?? 0
     }
 
     public var gift: StarGift? {
@@ -5150,6 +5316,31 @@ public enum AorusFakeGiftsStore {
         }
     }
 
+    // True if a unique gift with this slug is one of our local fake gifts.
+    public static func isFakeBySlug(_ slug: String) -> Bool {
+        return all().contains(where: {
+            if let gift = $0.gift, case let .unique(uniqueGift) = gift { return uniqueGift.slug == slug }
+            return false
+        })
+    }
+
+    // Local resale: 0 stars removes the gift from sale, > 0 lists it at that price.
+    public static func setResellBySlug(_ slug: String, stars: Int64) {
+        var gifts = all()
+        var changed = false
+        for index in gifts.indices {
+            if let gift = gifts[index].gift, case let .unique(uniqueGift) = gift, uniqueGift.slug == slug {
+                if gifts[index].resellStars != stars {
+                    gifts[index].resellStars = stars
+                    changed = true
+                }
+            }
+        }
+        if changed {
+            persist(gifts)
+        }
+    }
+
     // Add a freshly-opened gift, rewriting the unique gift's owner to the user so the
     // native detail shows them as the owner.
     public static func addGift(_ gift: StarGift, selfPeerId: Int64, date: Int32) {
@@ -5195,8 +5386,19 @@ public enum AorusFakeGiftsStore {
 
     // Build the native profile wrapper from a stored gift (date + comment applied).
     public static func wrapper(for stored: AorusStoredGift) -> ProfileGiftsContext.State.StarGift? {
-        guard let giftObject = try? JSONSerialization.jsonObject(with: stored.giftData, options: []) else {
+        guard var giftObject = try? JSONSerialization.jsonObject(with: stored.giftData, options: []) else {
             return nil
+        }
+        // Reflect the local resale state on the unique gift (nested under "value").
+        if var root = giftObject as? [String: Any], var value = root["value"] as? [String: Any] {
+            value.removeValue(forKey: "resellAmounts")
+            if stored.resellStars > 0 {
+                value["resellStars"] = stored.resellStars
+            } else {
+                value.removeValue(forKey: "resellStars")
+            }
+            root["value"] = value
+            giftObject = root
         }
         var dict: [String: Any] = [
             "gift": giftObject,
@@ -5612,6 +5814,37 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING PeerInfoScreen openUniqueGift anchor not found")
     else:
         print("FakeGifts: PeerInfoScreen.swift not found — skip openUniqueGift owner fix")
+
+    # 7) Resell ("выставить на продажу" / "Не продавать"). For a fake gift the server call
+    #    errors; handle it locally instead — set/clear the resale price on the stored gift,
+    #    with no server request and no error.
+    gifts_engine = tg / "submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift"
+    if gifts_engine.is_file():
+        t = gifts_engine.read_text(encoding="utf-8")
+        if "AorusFakeGiftsStore.setResellBySlug" in t:
+            print("FakeGifts: StarGifts resell already patched")
+        else:
+            anchor = (
+                "    public func updateStarGiftResellPrice(reference: StarGiftReference, price: CurrencyAmount?, id: Int64? = nil) -> Signal<Never, UpdateStarGiftPriceError> {\n"
+                "        return Signal { subscriber in\n"
+            )
+            injection = (
+                "    public func updateStarGiftResellPrice(reference: StarGiftReference, price: CurrencyAmount?, id: Int64? = nil) -> Signal<Never, UpdateStarGiftPriceError> {\n"
+                "        // AorusGram: fake gifts resell locally — no server call, no error. price == nil unlists.\n"
+                "        if case let .slug(slug) = reference, AorusFakeGiftsStore.isFakeBySlug(slug) {\n"
+                "            AorusFakeGiftsStore.setResellBySlug(slug, stars: price?.amount.value ?? 0)\n"
+                "            return .complete()\n"
+                "        }\n"
+                "        return Signal { subscriber in\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, injection, 1)
+                gifts_engine.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched StarGifts updateStarGiftResellPrice (local resell for fake gifts)")
+            else:
+                print("FakeGifts: WARNING StarGifts updateStarGiftResellPrice anchor not found")
+    else:
+        print("FakeGifts: StarGifts.swift not found — skip resell")
 
 
 def patch_bypass_copy_protection(tg: Path) -> None:
