@@ -5140,6 +5140,82 @@ def patch_local_premium(tg: Path) -> None:
     else:
         print("Premium: UpdateAccountPeerName.swift not found — skipped")
 
+    # 8) Chat wallpaper. The wallpaper is written to the local cached data before the
+    #    server request, so it already applies; on a fake-premium account the premium
+    #    "apply for both" request is rejected and shows "Произошла ошибка". Swallow that
+    #    error so the wallpaper applies without the dialog.
+    themes = tg / "submodules/TelegramCore/Sources/TelegramEngine/Themes/ChatThemes.swift"
+    if themes.is_file():
+        t = themes.read_text(encoding="utf-8")
+        if "AorusGram: wallpaper" in t:
+            print("Premium: ChatThemes wallpaper already patched")
+        else:
+            ok = True
+            # 8a) setChatWallpaper — swallow the network error after the local write.
+            set_anchor = (
+                "            |> mapToSignal { updates -> Signal<Api.Updates, SetChatWallpaperError> in\n"
+                "                if applyUpdates {\n"
+                "                    stateManager.addUpdates(updates)\n"
+                "                }\n"
+                "                return .single(updates)\n"
+                "            }\n"
+            )
+            set_inject = set_anchor + (
+                "            // AorusGram: wallpaper already applied locally — swallow server rejection.\n"
+                "            |> `catch` { _ -> Signal<Api.Updates, SetChatWallpaperError> in\n"
+                "                return .complete()\n"
+                "            }\n"
+            )
+            if set_anchor in t:
+                t = t.replace(set_anchor, set_inject, 1)
+            else:
+                ok = False
+                print("Premium: WARNING ChatThemes setChatWallpaper anchor not found")
+
+            # 8b) setExistingChatWallpaper — swallow the network error after the local write.
+            existing_anchor = (
+                "        |> mapToSignal { updates -> Signal<Void, SetExistingChatWallpaperError> in\n"
+                "            account.stateManager.addUpdates(updates)\n"
+                "            return .complete()\n"
+                "        }\n"
+            )
+            existing_inject = existing_anchor + (
+                "        // AorusGram: wallpaper already applied locally — swallow server rejection.\n"
+                "        |> `catch` { _ -> Signal<Void, SetExistingChatWallpaperError> in\n"
+                "            return .complete()\n"
+                "        }\n"
+            )
+            if existing_anchor in t:
+                t = t.replace(existing_anchor, existing_inject, 1)
+            else:
+                ok = False
+                print("Premium: WARNING ChatThemes setExistingChatWallpaper anchor not found")
+
+            # 8c) revertChatWallpaper — treat any error as "not found" so the local clear runs.
+            revert_anchor = (
+                "            if error.errorDescription == \"WALLPAPER_NOT_FOUND\" {\n"
+                "                return .single(nil)\n"
+                "            }\n"
+                "            return .fail(.generic)\n"
+            )
+            revert_inject = (
+                "            if error.errorDescription == \"WALLPAPER_NOT_FOUND\" {\n"
+                "                return .single(nil)\n"
+                "            }\n"
+                "            return .single(nil) // AorusGram: wallpaper revert always applies locally\n"
+            )
+            if revert_anchor in t:
+                t = t.replace(revert_anchor, revert_inject, 1)
+            else:
+                ok = False
+                print("Premium: WARNING ChatThemes revertChatWallpaper anchor not found")
+
+            if ok:
+                themes.write_text(t, encoding="utf-8")
+                print("Premium: patched ChatThemes (wallpaper applies without server error)")
+    else:
+        print("Premium: ChatThemes.swift not found — skipped")
+
 
 AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
 
