@@ -5237,8 +5237,9 @@ public struct AorusStoredGift: Codable, Equatable {
     public var worn: Bool
     public var pinnedOrder: Int32   // pin sequence; lower = pinned earlier (0 = not pinned)
     public var resellStars: Int64   // resale price in stars; 0 = not listed for sale
+    public var collectionIds: [Int32]   // ids of the user's gift collections this fake gift belongs to
 
-    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0) {
+    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, collectionIds: [Int32] = []) {
         self.giftData = giftData
         self.senderPeerId = senderPeerId
         self.date = date
@@ -5248,13 +5249,14 @@ public struct AorusStoredGift: Codable, Equatable {
         self.worn = worn
         self.pinnedOrder = pinnedOrder
         self.resellStars = resellStars
+        self.collectionIds = collectionIds
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars
+        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, collectionIds
     }
 
-    // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars existed still load.
+    // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars/collectionIds existed still load.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.giftData = try c.decode(Data.self, forKey: .giftData)
@@ -5266,6 +5268,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.worn = try c.decodeIfPresent(Bool.self, forKey: .worn) ?? false
         self.pinnedOrder = try c.decodeIfPresent(Int32.self, forKey: .pinnedOrder) ?? 0
         self.resellStars = try c.decodeIfPresent(Int64.self, forKey: .resellStars) ?? 0
+        self.collectionIds = try c.decodeIfPresent([Int32].self, forKey: .collectionIds) ?? []
     }
 
     public var gift: StarGift? {
@@ -5460,18 +5463,53 @@ public enum AorusFakeGiftsStore {
         return data
     }
 
+    // Public: return a copy of the gift whose owner is rewritten to ownerPeerId. Used when
+    // transferring a fake gift so the recipient becomes the new owner in the local message.
+    public static func giftWithOwner(_ gift: StarGift, ownerPeerId: Int64) -> StarGift {
+        guard let data = try? JSONEncoder().encode(gift),
+              let owned = dataWithOwner(data, ownerPeerId: ownerPeerId),
+              let result = try? JSONDecoder().decode(StarGift.self, from: owned) else {
+            return gift
+        }
+        return result
+    }
+
     // Build the native profile wrapper from a stored gift (date + comment applied).
     public static func wrapper(for stored: AorusStoredGift) -> ProfileGiftsContext.State.StarGift? {
         guard var giftObject = try? JSONSerialization.jsonObject(with: stored.giftData, options: []) else {
             return nil
         }
-        // Reflect the local resale state on the unique gift (nested under "value").
+        // Reflect the local resale state on the unique gift (nested under "value"), and
+        // rewrite its originalInfo attribute so the native gift detail shows the chosen
+        // sender, the user as recipient and the local comment — exactly like a real
+        // received collectible gift (unique gifts carry their message in originalInfo,
+        // never in the plain "text" field, which the gift screen forces to nil for them).
         if var root = giftObject as? [String: Any], var value = root["value"] as? [String: Any] {
             value.removeValue(forKey: "resellAmounts")
             if stored.resellStars > 0 {
                 value["resellStars"] = stored.resellStars
             } else {
                 value.removeValue(forKey: "resellStars")
+            }
+            if var attributes = value["attributes"] as? [[String: Any]],
+               let ownerId = (value["ownerPeerId"] as? NSNumber)?.int64Value,
+               stored.senderPeerId != 0 || !stored.comment.isEmpty {
+                // Drop any pre-existing originalInfo (type 3) so the original owner's
+                // sender/recipient does not leak through, then add ours.
+                attributes.removeAll { (($0["type"] as? NSNumber)?.intValue ?? -1) == 3 }
+                var originalInfo: [String: Any] = [
+                    "type": 3,
+                    "recipientPeerId": ownerId,
+                    "date": Int(stored.date)
+                ]
+                if stored.senderPeerId != 0 {
+                    originalInfo["sendPeerId"] = stored.senderPeerId
+                }
+                if !stored.comment.isEmpty {
+                    originalInfo["text"] = stored.comment
+                }
+                attributes.append(originalInfo)
+                value["attributes"] = attributes
             }
             root["value"] = value
             giftObject = root
@@ -5487,6 +5525,9 @@ public enum AorusFakeGiftsStore {
         if !stored.comment.isEmpty {
             dict["text"] = stored.comment
         }
+        if !stored.collectionIds.isEmpty {
+            dict["collectionIds"] = stored.collectionIds.map { Int($0) }
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
               let wrapper = try? JSONDecoder().decode(ProfileGiftsContext.State.StarGift.self, from: data) else {
             return nil
@@ -5498,6 +5539,16 @@ public enum AorusFakeGiftsStore {
     // (in pin order 1, 2, 3…), then the rest in stored order — like real Telegram.
     public static func profileWrappers() -> [ProfileGiftsContext.State.StarGift] {
         let visible = all().filter { $0.showInProfile }
+        let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
+        let unpinned = visible.filter { !$0.pinnedToTop }
+        return (pinned + unpinned).compactMap { wrapper(for: $0) }
+    }
+
+    // Fakes assigned to a specific collection (profile sub-tab), pinned-first like the
+    // "All gifts" view. Used so a fake only shows inside the collections it belongs to,
+    // never polluting every collection.
+    public static func profileWrappers(inCollection collectionId: Int32) -> [ProfileGiftsContext.State.StarGift] {
+        let visible = all().filter { $0.showInProfile && $0.collectionIds.contains(collectionId) }
         let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
         let unpinned = visible.filter { !$0.pinnedToTop }
         return (pinned + unpinned).compactMap { wrapper(for: $0) }
@@ -5602,12 +5653,16 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                        aorusPicker.peerSelected = { [weak controller, weak aorusPicker] aorusPeer, _ in\n"
                 "                            let aorusRecipientId = aorusPeer.id\n"
                 "                            let aorusMyId = aorusContext.account.peerId\n"
+                "                            // Rewrite the gift's owner to the recipient so that, after the\n"
+                "                            // transfer, the new owner shown on the gift is the person it was\n"
+                "                            // given to — not the sender.\n"
+                "                            let aorusOwnedGift = AorusFakeGiftsStore.giftWithOwner(aorusGiftForTransfer, ownerPeerId: aorusRecipientId.toInt64())\n"
                 "                            let aorusActionType: TelegramMediaActionType\n"
-                "                            switch aorusGiftForTransfer {\n"
+                "                            switch aorusOwnedGift {\n"
                 "                            case .unique:\n"
-                "                                aorusActionType = .starGiftUnique(gift: aorusGiftForTransfer, isUpgrade: false, isTransferred: true, savedToProfile: false, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)\n"
+                "                                aorusActionType = .starGiftUnique(gift: aorusOwnedGift, isUpgrade: false, isTransferred: true, savedToProfile: false, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)\n"
                 "                            case .generic:\n"
-                "                                aorusActionType = .starGift(gift: aorusGiftForTransfer, convertStars: nil, text: nil, entities: nil, nameHidden: false, savedToProfile: false, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: aorusRecipientId, number: nil)\n"
+                "                                aorusActionType = .starGift(gift: aorusOwnedGift, convertStars: nil, text: nil, entities: nil, nameHidden: false, savedToProfile: false, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: aorusRecipientId, number: nil)\n"
                 "                            }\n"
                 "                            let aorusRandomId = Int64.random(in: Int64.min ... Int64.max)\n"
                 "                            let aorusTimestamp = Int32(Date().timeIntervalSince1970)\n"
@@ -5806,7 +5861,14 @@ def patch_fake_gifts(tg: Path) -> None:
                 "            return\n"
                 "        }\n"
                 "        let baseline = self.aorusServerProducts ?? self.starsProducts ?? []\n"
-                "        let aorusFakeGifts = AorusFakeGiftsStore.profileWrappers()\n"
+                "        let aorusFakeGifts: [ProfileGiftsContext.State.StarGift]\n"
+                "        if let aorusCollectionId = self.profileGifts.collectionId {\n"
+                "            // A collection sub-tab: only fakes the user assigned to it.\n"
+                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers(inCollection: aorusCollectionId)\n"
+                "        } else {\n"
+                "            // The \"All gifts\" tab: every visible fake.\n"
+                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers()\n"
+                "        }\n"
                 "        if aorusFakeGifts.isEmpty {\n"
                 "            self.starsProducts = baseline\n"
                 "        } else {\n"
@@ -6028,6 +6090,28 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING PeerInfoScreen openUniqueGift anchor not found")
     else:
         print("FakeGifts: PeerInfoScreen.swift not found — skip openUniqueGift owner fix")
+
+    # 6b) Gift tab visibility. Natively, a profile with no gifts has no "Gifts" tab. The
+    #     tab's presence is decided by peerInfoScreenData via forceHasGifts / the server
+    #     gift count; local fakes are invisible to it, so adding the first fake gift left
+    #     the tab missing. Force the gifts pane for the user's OWN profile whenever there
+    #     are visible local fakes — and, with fakes disabled or all removed (and no real
+    #     gifts), it falls back to hidden. "No gifts = no tab", now fake-aware.
+    screen2 = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
+    if screen2.is_file():
+        t = screen2.read_text(encoding="utf-8")
+        force_anchor = "forceHasGifts: initialPaneKey == .gifts,"
+        force_inject = "forceHasGifts: initialPaneKey == .gifts || (peerId == context.account.peerId && AorusFakeGiftsStore.isEnabled && !AorusFakeGiftsStore.profileWrappers().isEmpty),"
+        if force_inject in t:
+            print("FakeGifts: PeerInfoScreen forceHasGifts already patched")
+        elif force_anchor in t:
+            t = t.replace(force_anchor, force_inject, 1)
+            screen2.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched PeerInfoScreen forceHasGifts (own fake gifts show the gifts tab)")
+        else:
+            print("FakeGifts: WARNING PeerInfoScreen forceHasGifts anchor not found")
+    else:
+        print("FakeGifts: PeerInfoScreen.swift not found — skip forceHasGifts patch")
 
     # 7) Resell ("выставить на продажу" / "Не продавать"). For a fake gift the server call
     #    errors; handle it locally instead — set/clear the resale price on the stored gift,
