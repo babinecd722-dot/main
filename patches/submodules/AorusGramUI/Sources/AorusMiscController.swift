@@ -18,12 +18,14 @@ private enum MiscSection: Int32 {
     case premium
     case fakeGifts
     case fakeStars
+    case antiSearch
 }
 
 private struct MiscState: Equatable {
     var localPremium: Bool
     var fakeStars: Bool
     var fakeStarsAmount: String
+    var antiSearch: Bool
 }
 
 private final class MiscArguments {
@@ -31,12 +33,14 @@ private final class MiscArguments {
     let openFakeGifts: () -> Void
     let setFakeStars: (Bool) -> Void
     let setFakeStarsAmount: (String) -> Void
+    let setAntiSearch: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
         self.setFakeStarsAmount = setFakeStarsAmount
+        self.setAntiSearch = setAntiSearch
     }
 }
 
@@ -49,6 +53,9 @@ private enum MiscEntry: ItemListNodeEntry {
     case fakeStars(PresentationTheme, String, Bool)
     case fakeStarsCount(PresentationTheme, String, String)
     case fakeStarsInfo(PresentationTheme, String)
+    case antiSearchHeader(PresentationTheme, String)
+    case antiSearch(PresentationTheme, String, Bool)
+    case antiSearchInfo(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -58,6 +65,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.fakeGifts.rawValue
         case .fakeStarsHeader, .fakeStars, .fakeStarsCount, .fakeStarsInfo:
             return MiscSection.fakeStars.rawValue
+        case .antiSearchHeader, .antiSearch, .antiSearchInfo:
+            return MiscSection.antiSearch.rawValue
         }
     }
 
@@ -71,6 +80,9 @@ private enum MiscEntry: ItemListNodeEntry {
         case .fakeStars:        return 21
         case .fakeStarsCount:   return 22
         case .fakeStarsInfo:    return 23
+        case .antiSearchHeader: return 30
+        case .antiSearch:       return 31
+        case .antiSearchInfo:   return 32
         }
     }
 
@@ -96,6 +108,12 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .fakeStarsCount(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .fakeStarsInfo(lt, ls):
             if case let .fakeStarsInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .antiSearchHeader(lt, ls):
+            if case let .antiSearchHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .antiSearch(lt, ls, lv):
+            if case let .antiSearch(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .antiSearchInfo(lt, ls):
+            if case let .antiSearchInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -118,6 +136,12 @@ private enum MiscEntry: ItemListNodeEntry {
         case let .fakeStarsCount(_, placeholder, value):
             return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .number, sectionId: section, textUpdated: { text in args.setFakeStarsAmount(text) }, action: {})
         case let .fakeStarsInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .antiSearchHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .antiSearch(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAntiSearch($0) })
+        case let .antiSearchInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
     }
@@ -145,13 +169,19 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
         ? "Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся."
         : "Shows the entered Stars balance locally, only for you. No real stars are created or spent."))
 
+    entries.append(.antiSearchHeader(theme, isRu ? "АНТИПОИСК" : "ANTI-SEARCH"))
+    entries.append(.antiSearch(theme, isRu ? "АнтиПоиск" : "AntiSearch", state.antiSearch))
+    entries.append(.antiSearchInfo(theme, isRu
+        ? "При отправке и редактировании сообщения похожие кириллические и латинские буквы в каждом слове приводятся к одной раскладке — без смешения вроде «прuвет». Действует только на кириллицу и латиницу."
+        : "When sending or editing a message, similar Cyrillic and Latin letters in each word are unified to one script — no mixed spellings like “pr\u{0069}vet” with a Latin i. Cyrillic and Latin only."))
+
     return entries
 }
 
 public func aorusMiscController(context: AccountContext) -> ViewController {
     let initialFakeStars = AorusFakeStarsStore.isEnabled
     let initialFakeStarsAmount = AorusFakeStarsStore.amount > 0 ? "\(AorusFakeStarsStore.amount)" : ""
-    let initialState = MiscState(localPremium: AorusLocalPremium.isEnabled, fakeStars: initialFakeStars, fakeStarsAmount: initialFakeStarsAmount)
+    let initialState = MiscState(localPremium: AorusLocalPremium.isEnabled, fakeStars: initialFakeStars, fakeStarsAmount: initialFakeStarsAmount, antiSearch: AorusAntiSearchStore.isEnabled)
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((MiscState) -> MiscState) -> Void = { f in
@@ -195,6 +225,14 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
             updateState { current in
                 var next = current
                 next.fakeStarsAmount = digits
+                return next
+            }
+        },
+        setAntiSearch: { value in
+            AorusAntiSearchStore.setEnabled(value)
+            updateState { current in
+                var next = current
+                next.antiSearch = value
                 return next
             }
         }

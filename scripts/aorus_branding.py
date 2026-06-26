@@ -6892,6 +6892,308 @@ def patch_fake_stars(tg: Path) -> None:
         print("FakeStars: patched Stars.swift (local balance override)")
 
 
+AORUS_ANTI_SEARCH_SWIFT = '''import Foundation
+import Postbox
+
+// AorusGram AntiSearch — unify visually similar Cyrillic / Latin letters on outgoing
+// text at send and edit time. Each word is normalized to a single script (whichever
+// already dominates that word), so mixed homoglyphs like "привeт" become "привет"
+// instead of awkward in-word Latin inserts. Only Cyrillic and Latin letter pairs are
+// touched; digits, emoji, punctuation and other scripts pass through unchanged.
+
+public enum AorusAntiSearchStore {
+    private static let enabledKey = "aorusgram_anti_search_enabled"
+
+    public static var isEnabled: Bool {
+        return UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    public static func setEnabled(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: enabledKey)
+    }
+}
+
+public enum AorusAntiSearch {
+  private static let latinToCyrillic: [Character: Character] = {
+        var map: [Character: Character] = [:]
+        let pairs: [(Character, Character)] = [
+            ("A", "А"), ("B", "В"), ("C", "С"), ("E", "Е"), ("H", "Н"), ("I", "И"), ("J", "Ј"), ("K", "К"), ("M", "М"), ("O", "О"), ("P", "Р"), ("S", "Ѕ"), ("T", "Т"), ("X", "Х"), ("Y", "У"),
+            ("a", "а"), ("b", "в"), ("c", "с"), ("e", "е"), ("h", "н"), ("i", "и"), ("j", "ј"), ("k", "к"), ("l", "л"), ("m", "м"), ("o", "о"), ("p", "р"), ("s", "ѕ"), ("t", "т"), ("x", "х"), ("y", "у"),
+        ]
+        for (latin, cyrillic) in pairs {
+            map[latin] = cyrillic
+        }
+        return map
+    }()
+
+    private static let cyrillicToLatin: [Character: Character] = {
+        var map: [Character: Character] = [:]
+        for (latin, cyrillic) in latinToCyrillic {
+            map[cyrillic] = latin
+        }
+        map["Ё"] = "E"
+        map["ё"] = "e"
+        return map
+    }()
+
+    public static func normalizeText(_ text: String) -> String {
+        guard AorusAntiSearchStore.isEnabled, !text.isEmpty else {
+            return text
+        }
+        var result = ""
+        result.reserveCapacity(text.count)
+        var word = ""
+        word.reserveCapacity(16)
+
+        func flushWord() {
+            guard !word.isEmpty else { return }
+            result.append(contentsOf: normalizeWord(word))
+            word.removeAll(keepingCapacity: true)
+        }
+
+        for scalar in text.unicodeScalars {
+            if isHomoglyphLetter(scalar) {
+                word.unicodeScalars.append(scalar)
+            } else {
+                flushWord()
+                result.unicodeScalars.append(scalar)
+            }
+        }
+        flushWord()
+        return result
+    }
+
+    public static func normalize(_ message: EnqueueMessage) -> EnqueueMessage {
+        switch message {
+        case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
+            return .message(
+                text: normalizeText(text),
+                attributes: attributes,
+                inlineStickers: inlineStickers,
+                mediaReference: mediaReference,
+                threadId: threadId,
+                replyToMessageId: replyToMessageId,
+                replyToStoryId: replyToStoryId,
+                localGroupingKey: localGroupingKey,
+                correlationId: correlationId,
+                bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets
+            )
+        case .forward:
+            return message
+        }
+    }
+
+    private static func normalizeWord(_ word: String) -> String {
+        var cyrillicCount = 0
+        var latinCount = 0
+        for scalar in word.unicodeScalars {
+            if isCyrillic(scalar) {
+                cyrillicCount += 1
+            } else if isLatin(scalar) {
+                latinCount += 1
+            }
+        }
+        if cyrillicCount == 0 && latinCount == 0 {
+            return word
+        }
+        let toCyrillic: Bool
+        if cyrillicCount > 0 && latinCount > 0 {
+            toCyrillic = cyrillicCount >= latinCount
+        } else if cyrillicCount > 0 {
+            toCyrillic = true
+        } else {
+            toCyrillic = false
+        }
+        let table = toCyrillic ? latinToCyrillic : cyrillicToLatin
+        var normalized = ""
+        normalized.reserveCapacity(word.count)
+        for character in word {
+            if let mapped = table[character] {
+                normalized.append(mapped)
+            } else {
+                normalized.append(character)
+            }
+        }
+        return normalized
+    }
+
+    private static func isHomoglyphLetter(_ scalar: UnicodeScalar) -> Bool {
+        return isCyrillic(scalar) || isLatin(scalar)
+    }
+
+    private static func isCyrillic(_ scalar: UnicodeScalar) -> Bool {
+        switch scalar.value {
+        case 0x0400...0x04FF, 0x0500...0x052F:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isLatin(_ scalar: UnicodeScalar) -> Bool {
+        switch scalar.value {
+        case 0x0041...0x005A, 0x0061...0x007A, 0x00C0...0x00FF, 0x0100...0x024F:
+            return true
+        default:
+            return false
+        }
+    }
+}
+'''
+
+
+def patch_anti_search(tg: Path) -> None:
+    """AntiSearch — unify Cyrillic/Latin homoglyphs on outgoing send and edit.
+
+    Settings toggle lives in AorusGram → Прочее (below Fake Stars). Normalization runs
+    in TelegramCore at enqueueMessages (send) and _internal_requestEditMessage (edit).
+    Each word is brought to one script (dominant letters in that word); pure Latin or
+    pure Cyrillic words stay internally consistent without awkward mixed glyphs.
+    """
+    store = tg / "submodules/TelegramCore/Sources/AorusAntiSearch.swift"
+    store.write_text(AORUS_ANTI_SEARCH_SWIFT, encoding="utf-8")
+    print("AntiSearch: wrote AorusAntiSearch.swift")
+
+    enqueue = tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift"
+    if enqueue.is_file():
+        t = enqueue.read_text(encoding="utf-8")
+        if "AorusAntiSearch.normalize" in t:
+            print("AntiSearch: EnqueueMessage already patched")
+        else:
+            anchor = (
+                "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
+                "    let signal: Signal<[(Bool, EnqueueMessage)], NoError>\n"
+            )
+            inject = (
+                "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
+                "    let outboundMessages: [EnqueueMessage]\n"
+                "    if AorusAntiSearchStore.isEnabled {\n"
+                "        outboundMessages = messages.map { AorusAntiSearch.normalize($0) }\n"
+                "    } else {\n"
+                "        outboundMessages = messages\n"
+                "    }\n"
+                "    let signal: Signal<[(Bool, EnqueueMessage)], NoError>\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
+                t = t.replace(
+                    "opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: messages, userInteractive: true)",
+                    "opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)",
+                    1,
+                )
+                t = t.replace(
+                    "signal = .single(messages.map { (false, $0) })",
+                    "signal = .single(outboundMessages.map { (false, $0) })",
+                    1,
+                )
+                enqueue.write_text(t, encoding="utf-8")
+                print("AntiSearch: patched EnqueueMessage.swift (send hook)")
+            else:
+                print("WARNING: AntiSearch EnqueueMessage anchor not found")
+    else:
+        print("AntiSearch: EnqueueMessage.swift not found — skip send hook")
+
+    edit = tg / "submodules/TelegramCore/Sources/PendingMessages/RequestEditMessage.swift"
+    if edit.is_file():
+        t = edit.read_text(encoding="utf-8")
+        if "AorusAntiSearch.normalizeText" in t:
+            print("AntiSearch: RequestEditMessage already patched")
+        else:
+            anchor = (
+                "func _internal_requestEditMessage(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, richText: RichTextMessageAttribute?, inlineStickers: [MediaId: Media], webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute?, invertMediaAttribute: InvertMediaMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {\n"
+                "    return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: text, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)\n"
+            )
+            inject = (
+                "func _internal_requestEditMessage(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, richText: RichTextMessageAttribute?, inlineStickers: [MediaId: Media], webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute?, invertMediaAttribute: InvertMediaMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {\n"
+                "    let normalizedText = AorusAntiSearchStore.isEnabled ? AorusAntiSearch.normalizeText(text) : text\n"
+                "    return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: normalizedText, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)\n"
+            )
+            if anchor in t:
+                edit.write_text(t.replace(anchor, inject, 1), encoding="utf-8")
+                print("AntiSearch: patched RequestEditMessage.swift (edit hook)")
+            else:
+                print("WARNING: AntiSearch RequestEditMessage anchor not found")
+    else:
+        print("AntiSearch: RequestEditMessage.swift not found — skip edit hook")
+
+
+def patch_wallpaper_remove_footer(tg: Path) -> None:
+    """Hide the stock footer under chat wallpapers ("set a custom background and share…").
+
+    The generic chat-wallpaper grid shows Wallpaper_SetCustomBackgroundInfo below the
+    gallery buttons. AorusGram removes that hint text and collapses the reserved height
+    so the layout stays tight. Channel-specific footer text is untouched.
+    """
+    grid = tg / "submodules/TelegramUI/Components/Settings/WallpaperGridScreen/Sources/ThemeGridControllerNode.swift"
+    if not grid.is_file():
+        print("WallpaperFooter: ThemeGridControllerNode.swift not found — skip")
+        return
+    t = grid.read_text(encoding="utf-8")
+    if "AorusGram: hide wallpaper footer" in t:
+        print("WallpaperFooter: already patched")
+        return
+    ok = True
+
+    init_old = (
+        "        case .generic:\n"
+        "            descriptionText = presentationData.strings.Wallpaper_SetCustomBackgroundInfo\n"
+    )
+    init_new = (
+        "        case .generic:\n"
+        "            descriptionText = \"\" // AorusGram: hide wallpaper footer\n"
+    )
+    if init_old in t:
+        t = t.replace(init_old, init_new, 1)
+    else:
+        ok = False
+        print("WARNING: WallpaperFooter init anchor not found")
+
+    update_old = (
+        "        self.descriptionItem = ItemListTextItem(presentationData: ItemListPresentationData(presentationData), text: .plain(presentationData.strings.Wallpaper_SetCustomBackgroundInfo), sectionId: 0)\n"
+    )
+    update_new = (
+        "        self.descriptionItem = ItemListTextItem(presentationData: ItemListPresentationData(presentationData), text: .plain(\"\"), sectionId: 0) // AorusGram: hide wallpaper footer\n"
+    )
+    if update_old in t:
+        t = t.replace(update_old, update_new, 1)
+    else:
+        ok = False
+        print("WARNING: WallpaperFooter updatePresentationData anchor not found")
+
+    inset_old = "        var buttonBottomInset: CGFloat = descriptionLayout.contentSize.height + 17.0\n"
+    inset_new = "        var buttonBottomInset: CGFloat = 17.0 // AorusGram: hide wallpaper footer\n"
+    if inset_old in t:
+        t = t.replace(inset_old, inset_new, 1)
+    else:
+        ok = False
+        print("WARNING: WallpaperFooter buttonBottomInset anchor not found")
+
+    hide_old = (
+        "        } else {\n"
+        "            self.descriptionItemNode.isHidden = false\n"
+        "            self.removeItemNode.isHidden = true\n"
+        "            transition.updateFrame(node: self.descriptionItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: descriptionLayout.contentSize))\n"
+        "        }\n"
+    )
+    hide_new = (
+        "        } else {\n"
+        "            self.descriptionItemNode.isHidden = true // AorusGram: hide wallpaper footer\n"
+        "            self.removeItemNode.isHidden = true\n"
+        "        }\n"
+    )
+    if hide_old in t:
+        t = t.replace(hide_old, hide_new, 1)
+    else:
+        ok = False
+        print("WARNING: WallpaperFooter layout anchor not found")
+
+    if ok:
+        grid.write_text(t, encoding="utf-8")
+        print("WallpaperFooter: patched ThemeGridControllerNode (footer hidden)")
+    else:
+        print("WARNING: WallpaperFooter patch incomplete")
+
+
 def patch_bypass_copy_protection(tg: Path) -> None:
     """Gate copy-protection bypass on opaque UUID UserDefaults key (_AG_K_BYPASS_PAID).
 
@@ -11408,6 +11710,8 @@ def main() -> None:
     patch_local_premium(tg)
     patch_fake_gifts(tg)
     patch_fake_stars(tg)
+    patch_anti_search(tg)
+    patch_wallpaper_remove_footer(tg)
     patch_bypass_copy_protection(tg)
     patch_bypass_channel_copy_protection(tg)
     patch_bypass_story_download(tg)
