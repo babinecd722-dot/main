@@ -172,8 +172,8 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.antiSearchHeader(theme, isRu ? "АНТИПОИСК" : "ANTI-SEARCH"))
     entries.append(.antiSearch(theme, isRu ? "АнтиПоиск" : "AntiSearch", state.antiSearch))
     entries.append(.antiSearchInfo(theme, isRu
-        ? "При отправке и редактировании сообщения похожие кириллические и латинские буквы в каждом слове приводятся к одной раскладке — без смешения вроде «прuвет». Действует только на кириллицу и латиницу."
-        : "When sending or editing a message, similar Cyrillic and Latin letters in each word are unified to one script — no mixed spellings like “pr\u{0069}vet” with a Latin i. Cyrillic and Latin only."))
+        ? "Буквы заменяются на визуально идентичные — текст выглядит так же, но не находится поиском."
+        : "Letters are swapped for visually identical ones — the text looks the same but won’t match a search."))
 
     return entries
 }

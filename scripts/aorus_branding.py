@@ -6895,11 +6895,16 @@ def patch_fake_stars(tg: Path) -> None:
 AORUS_ANTI_SEARCH_SWIFT = '''import Foundation
 import Postbox
 
-// AorusGram AntiSearch — unify visually similar Cyrillic / Latin letters on outgoing
-// text at send and edit time. Each word is normalized to a single script (whichever
-// already dominates that word), so mixed homoglyphs like "привeт" become "привет"
-// instead of awkward in-word Latin inserts. Only Cyrillic and Latin letter pairs are
-// touched; digits, emoji, punctuation and other scripts pass through unchanged.
+// AorusGram AntiSearch — swap visually identical Cyrillic <-> Latin letters on outgoing
+// text at send and edit time so the rendered message looks pixel-identical but no longer
+// matches a plain keyword search. Only true homoglyph pairs are used (А=A, е=e, …), so
+// there is never a mismatched glyph like a Latin "i" inside "привет".
+//
+// Safety:
+//  • Every swap stays inside the BMP and is one UTF-16 unit, so message entity offsets
+//    (bold/links/mentions) are preserved exactly.
+//  • Entity ranges (mentions, urls, code, emails, commands, …) and link/@-like tokens are
+//    protected and never altered, so functional text keeps working.
 
 public enum AorusAntiSearchStore {
     private static let enabledKey = "aorusgram_anti_search_enabled"
@@ -6914,60 +6919,51 @@ public enum AorusAntiSearchStore {
 }
 
 public enum AorusAntiSearch {
-  private static let latinToCyrillic: [Character: Character] = {
-        var map: [Character: Character] = [:]
+    // True homoglyph pairs only — identical glyphs in the standard UI font. Built once and
+    // expanded to a bidirectional map: Latin->Cyrillic and Cyrillic->Latin in a single
+    // table so one pass swaps every convertible letter to its twin in the other script.
+    private static let swapMap: [Character: Character] = {
         let pairs: [(Character, Character)] = [
-            ("A", "А"), ("B", "В"), ("C", "С"), ("E", "Е"), ("H", "Н"), ("I", "И"), ("J", "Ј"), ("K", "К"), ("M", "М"), ("O", "О"), ("P", "Р"), ("S", "Ѕ"), ("T", "Т"), ("X", "Х"), ("Y", "У"),
-            ("a", "а"), ("b", "в"), ("c", "с"), ("e", "е"), ("h", "н"), ("i", "и"), ("j", "ј"), ("k", "к"), ("l", "л"), ("m", "м"), ("o", "о"), ("p", "р"), ("s", "ѕ"), ("t", "т"), ("x", "х"), ("y", "у"),
+            // Uppercase
+            ("A", "А"), ("B", "В"), ("C", "С"), ("E", "Е"), ("H", "Н"), ("K", "К"),
+            ("M", "М"), ("O", "О"), ("P", "Р"), ("T", "Т"), ("X", "Х"), ("Y", "У"),
+            ("I", "І"), ("J", "Ј"), ("S", "Ѕ"),
+            // Lowercase
+            ("a", "а"), ("c", "с"), ("e", "е"), ("o", "о"), ("p", "р"), ("x", "х"),
+            ("y", "у"), ("i", "і"), ("j", "ј"), ("s", "ѕ"),
         ]
+        var map: [Character: Character] = [:]
+        map.reserveCapacity(pairs.count * 2)
         for (latin, cyrillic) in pairs {
             map[latin] = cyrillic
-        }
-        return map
-    }()
-
-    private static let cyrillicToLatin: [Character: Character] = {
-        var map: [Character: Character] = [:]
-        for (latin, cyrillic) in latinToCyrillic {
             map[cyrillic] = latin
         }
-        map["Ё"] = "E"
-        map["ё"] = "e"
         return map
     }()
 
-    public static func normalizeText(_ text: String) -> String {
-        guard AorusAntiSearchStore.isEnabled, !text.isEmpty else {
-            return text
+    // Entity types whose text must stay byte-exact (would break or change meaning).
+    private static func isProtectedEntityType(_ type: MessageTextEntityType) -> Bool {
+        switch type {
+        case .Mention, .Hashtag, .BotCommand, .Url, .Email, .TextUrl, .TextMention,
+             .PhoneNumber, .BankCard, .Code, .Pre, .CustomEmoji:
+            return true
+        default:
+            return false
         }
-        var result = ""
-        result.reserveCapacity(text.count)
-        var word = ""
-        word.reserveCapacity(16)
-
-        func flushWord() {
-            guard !word.isEmpty else { return }
-            result.append(contentsOf: normalizeWord(word))
-            word.removeAll(keepingCapacity: true)
-        }
-
-        for scalar in text.unicodeScalars {
-            if isHomoglyphLetter(scalar) {
-                word.unicodeScalars.append(scalar)
-            } else {
-                flushWord()
-                result.unicodeScalars.append(scalar)
-            }
-        }
-        flushWord()
-        return result
     }
 
     public static func normalize(_ message: EnqueueMessage) -> EnqueueMessage {
         switch message {
         case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
+            var entities: [MessageTextEntity] = []
+            for attribute in attributes {
+                if let textEntities = attribute as? TextEntitiesMessageAttribute {
+                    entities = textEntities.entities
+                    break
+                }
+            }
             return .message(
-                text: normalizeText(text),
+                text: normalizeText(text, entities: entities),
                 attributes: attributes,
                 inlineStickers: inlineStickers,
                 mediaReference: mediaReference,
@@ -6983,60 +6979,129 @@ public enum AorusAntiSearch {
         }
     }
 
-    private static func normalizeWord(_ word: String) -> String {
-        var cyrillicCount = 0
-        var latinCount = 0
-        for scalar in word.unicodeScalars {
-            if isCyrillic(scalar) {
-                cyrillicCount += 1
-            } else if isLatin(scalar) {
-                latinCount += 1
+    public static func normalizeText(_ text: String, entities: [MessageTextEntity] = []) -> String {
+        guard AorusAntiSearchStore.isEnabled, !text.isEmpty else {
+            return text
+        }
+
+        let utf16Count = text.utf16.count
+        var isProtected = [Bool](repeating: false, count: utf16Count)
+
+        // 1) Protect ranges covered by sensitive entities (UTF-16 offsets, matching the API).
+        for entity in entities where isProtectedEntityType(entity.type) {
+            let lower = max(0, entity.range.lowerBound)
+            let upper = min(utf16Count, entity.range.upperBound)
+            if lower < upper {
+                for i in lower ..< upper {
+                    isProtected[i] = true
+                }
             }
         }
-        if cyrillicCount == 0 && latinCount == 0 {
-            return word
-        }
-        let toCyrillic: Bool
-        if cyrillicCount > 0 && latinCount > 0 {
-            toCyrillic = cyrillicCount >= latinCount
-        } else if cyrillicCount > 0 {
-            toCyrillic = true
-        } else {
-            toCyrillic = false
-        }
-        let table = toCyrillic ? latinToCyrillic : cyrillicToLatin
-        var normalized = ""
-        normalized.reserveCapacity(word.count)
-        for character in word {
-            if let mapped = table[character] {
-                normalized.append(mapped)
+
+        // 2) Protect link / mention / hashtag / command / email-like whitespace tokens that
+        //    may not carry an entity yet (e.g. auto-detected on the server).
+        markHeuristicProtectedTokens(text, into: &isProtected)
+
+        // 3) Single pass: swap each convertible letter unless its UTF-16 slot is protected.
+        //    Replacements are length-preserving in UTF-16, so entity offsets stay valid.
+        var result = ""
+        result.reserveCapacity(text.count)
+        var utf16Index = 0
+        for character in text {
+            let width = character.utf16.count
+            if !isProtected[utf16Index], width == 1, let swapped = swapMap[character] {
+                result.append(swapped)
             } else {
-                normalized.append(character)
+                result.append(character)
+            }
+            utf16Index += width
+        }
+        return result
+    }
+
+    private static func markHeuristicProtectedTokens(_ text: String, into isProtected: inout [Bool]) {
+        let utf16Count = isProtected.count
+        var tokenStart = 0
+        var utf16Index = 0
+        var token = ""
+
+        func flushToken(endingAt end: Int) {
+            if !token.isEmpty, isProtectedToken(token) {
+                let lower = max(0, tokenStart)
+                let upper = min(utf16Count, end)
+                if lower < upper {
+                    for i in lower ..< upper {
+                        isProtected[i] = true
+                    }
+                }
+            }
+            token.removeAll(keepingCapacity: true)
+        }
+
+        for character in text {
+            let width = character.utf16.count
+            if character.isWhitespace || character.isNewline {
+                flushToken(endingAt: utf16Index)
+                tokenStart = utf16Index + width
+            } else {
+                if token.isEmpty {
+                    tokenStart = utf16Index
+                }
+                token.append(character)
+            }
+            utf16Index += width
+        }
+        flushToken(endingAt: utf16Index)
+    }
+
+    private static func isProtectedToken(_ token: String) -> Bool {
+        // Strip surrounding brackets / quotes / punctuation before classifying.
+        let trimSet = CharacterSet(charactersIn: "()[]{}<>\\"'«»“”.,!?;:…")
+        let core = token.trimmingCharacters(in: trimSet)
+        guard let first = core.first else {
+            return false
+        }
+        if first == "@" || first == "#" || first == "/" || first == "$" {
+            return true
+        }
+        let lower = core.lowercased()
+        if lower.contains("://") || lower.hasPrefix("www.") || lower.contains("t.me/") || lower.contains("telegram.me/") {
+            return true
+        }
+        // Email: name@host.tld
+        if let atIndex = core.firstIndex(of: "@"), atIndex != core.startIndex {
+            let afterAt = core[core.index(after: atIndex)...]
+            if afterAt.contains(".") {
+                return true
             }
         }
-        return normalized
+        return isLikelyDomain(core)
     }
 
-    private static func isHomoglyphLetter(_ scalar: UnicodeScalar) -> Bool {
-        return isCyrillic(scalar) || isLatin(scalar)
-    }
-
-    private static func isCyrillic(_ scalar: UnicodeScalar) -> Bool {
-        switch scalar.value {
-        case 0x0400...0x04FF, 0x0500...0x052F:
-            return true
-        default:
+    private static func isLikelyDomain(_ value: String) -> Bool {
+        let host = value.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? value
+        guard host.contains(".") else {
             return false
         }
-    }
-
-    private static func isLatin(_ scalar: UnicodeScalar) -> Bool {
-        switch scalar.value {
-        case 0x0041...0x005A, 0x0061...0x007A, 0x00C0...0x00FF, 0x0100...0x024F:
-            return true
-        default:
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2, let tld = labels.last else {
             return false
         }
+        for label in labels {
+            if label.isEmpty {
+                return false
+            }
+            for character in label where !(character.isLetter || character.isNumber || character == "-") {
+                return false
+            }
+        }
+        if tld.count < 2 || tld.count > 24 {
+            return false
+        }
+        for character in tld where !character.isLetter {
+            return false
+        }
+        return true
     }
 }
 '''
@@ -7105,7 +7170,7 @@ def patch_anti_search(tg: Path) -> None:
             )
             inject = (
                 "func _internal_requestEditMessage(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, richText: RichTextMessageAttribute?, inlineStickers: [MediaId: Media], webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute?, invertMediaAttribute: InvertMediaMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {\n"
-                "    let normalizedText = AorusAntiSearchStore.isEnabled ? AorusAntiSearch.normalizeText(text) : text\n"
+                "    let normalizedText = AorusAntiSearchStore.isEnabled ? AorusAntiSearch.normalizeText(text, entities: entities?.entities ?? []) : text\n"
                 "    return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: normalizedText, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)\n"
             )
             if anchor in t:
