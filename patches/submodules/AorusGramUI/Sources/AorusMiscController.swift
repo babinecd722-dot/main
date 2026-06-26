@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Display
 import SwiftSignalKit
+import TelegramCore
 import TelegramPresentationData
 import ItemListUI
 import PresentationDataUtils
@@ -16,19 +17,26 @@ import AccountContext
 private enum MiscSection: Int32 {
     case premium
     case fakeGifts
+    case fakeStars
 }
 
 private struct MiscState: Equatable {
     var localPremium: Bool
+    var fakeStars: Bool
+    var fakeStarsAmount: String
 }
 
 private final class MiscArguments {
     let setLocalPremium: (Bool) -> Void
     let openFakeGifts: () -> Void
+    let setFakeStars: (Bool) -> Void
+    let setFakeStarsAmount: (String) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
+        self.setFakeStars = setFakeStars
+        self.setFakeStarsAmount = setFakeStarsAmount
     }
 }
 
@@ -37,6 +45,10 @@ private enum MiscEntry: ItemListNodeEntry {
     case localPremium(PresentationTheme, String, Bool)
     case premiumInfo(PresentationTheme, String)
     case fakeGifts(PresentationTheme, String)
+    case fakeStarsHeader(PresentationTheme, String)
+    case fakeStars(PresentationTheme, String, Bool)
+    case fakeStarsCount(PresentationTheme, String, String)
+    case fakeStarsInfo(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -44,15 +56,21 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.premium.rawValue
         case .fakeGifts:
             return MiscSection.fakeGifts.rawValue
+        case .fakeStarsHeader, .fakeStars, .fakeStarsCount, .fakeStarsInfo:
+            return MiscSection.fakeStars.rawValue
         }
     }
 
     var stableId: Int32 {
         switch self {
-        case .premiumHeader: return 0
-        case .localPremium:  return 1
-        case .premiumInfo:   return 2
-        case .fakeGifts:     return 10
+        case .premiumHeader:    return 0
+        case .localPremium:     return 1
+        case .premiumInfo:      return 2
+        case .fakeGifts:        return 10
+        case .fakeStarsHeader:  return 20
+        case .fakeStars:        return 21
+        case .fakeStarsCount:   return 22
+        case .fakeStarsInfo:    return 23
         }
     }
 
@@ -70,6 +88,14 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .premiumInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .fakeGifts(lt, ls):
             if case let .fakeGifts(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .fakeStarsHeader(lt, ls):
+            if case let .fakeStarsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .fakeStars(lt, ls, lv):
+            if case let .fakeStars(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .fakeStarsCount(lt, ls, lv):
+            if case let .fakeStarsCount(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .fakeStarsInfo(lt, ls):
+            if case let .fakeStarsInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -85,6 +111,14 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .fakeGifts(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openFakeGifts)
+        case let .fakeStarsHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .fakeStars(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setFakeStars($0) })
+        case let .fakeStarsCount(_, placeholder, value):
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .number, sectionId: section, textUpdated: { text in args.setFakeStarsAmount(text) }, action: {})
+        case let .fakeStarsInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
     }
 }
@@ -101,11 +135,23 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
 
     entries.append(.fakeGifts(theme, isRu ? "Фейковые подарки" : "Fake Gifts"))
 
+    entries.append(.fakeStarsHeader(theme, isRu ? "ЗВЁЗДЫ" : "STARS"))
+    entries.append(.fakeStars(theme, isRu ? "Фейковые звёзды" : "Fake Stars", state.fakeStars))
+    // The amount row animates in/out with the toggle (the list uses animateChanges).
+    if state.fakeStars {
+        entries.append(.fakeStarsCount(theme, isRu ? "Количество" : "Amount", state.fakeStarsAmount))
+    }
+    entries.append(.fakeStarsInfo(theme, isRu
+        ? "Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся."
+        : "Shows the entered Stars balance locally, only for you. No real stars are created or spent."))
+
     return entries
 }
 
 public func aorusMiscController(context: AccountContext) -> ViewController {
-    let initialState = MiscState(localPremium: AorusLocalPremium.isEnabled)
+    let initialFakeStars = AorusFakeStarsStore.isEnabled
+    let initialFakeStarsAmount = AorusFakeStarsStore.amount > 0 ? "\(AorusFakeStarsStore.amount)" : ""
+    let initialState = MiscState(localPremium: AorusLocalPremium.isEnabled, fakeStars: initialFakeStars, fakeStarsAmount: initialFakeStarsAmount)
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((MiscState) -> MiscState) -> Void = { f in
@@ -132,6 +178,25 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 return
             }
             navigationController.pushViewController(aorusFakeGiftsController(context: context))
+        },
+        setFakeStars: { value in
+            AorusFakeStarsStore.setEnabled(value)
+            updateState { current in
+                var next = current
+                next.fakeStars = value
+                return next
+            }
+        },
+        setFakeStarsAmount: { text in
+            // Keep digits only; an empty field means zero.
+            let digits = text.filter { $0.isNumber }
+            let amount = Int64(digits) ?? 0
+            AorusFakeStarsStore.setAmount(amount)
+            updateState { current in
+                var next = current
+                next.fakeStarsAmount = digits
+                return next
+            }
         }
     )
 

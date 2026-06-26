@@ -5218,14 +5218,20 @@ def patch_local_premium(tg: Path) -> None:
 
 
 AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
+import Security
 
 // AorusGram local "fake gifts" — collectible gifts the user pins to their OWN profile
 // purely locally. Nothing is sent to the server. Each entry keeps the original gift
 // (JSON-encoded StarGift, with the owner rewritten to the user) plus editable local
 // metadata (sender, date, comment, visibility). The profile pane and the native gift
 // cell are driven by a ProfileGiftsContext.State.StarGift rebuilt from those values, so
-// the gift renders with its real model / pattern / backdrop. Persisted in UserDefaults
-// (survives restarts; gift media re-downloads from Telegram, so it survives reinstalls).
+// the gift renders with its real model / pattern / backdrop.
+//
+// Persistence: the live store is UserDefaults (fast, read on every list build), mirrored
+// to the device Keychain on every write. UserDefaults is wiped when the app is deleted,
+// but Keychain items survive an uninstall/reinstall — so on a fresh install with no
+// UserDefaults entry we re-seed from the Keychain mirror. The gift media itself
+// re-downloads from Telegram, so a reinstalled app fully restores the user's fake gifts.
 
 public struct AorusStoredGift: Codable, Equatable {
     public var giftData: Data
@@ -5285,15 +5291,32 @@ public enum AorusFakeGiftsStore {
     public static let enabledKey = "aorusgram_fake_gifts_enabled"
     private static let listKey = "aorusgram_fake_gifts_list_v2"
 
+    // Keychain mirror (survives app reinstall). Service is shared; accounts namespace the
+    // two values.
+    private static let keychainService = "aorusgram.fakegifts"
+    private static let keychainListAccount = "list_v2"
+    private static let keychainEnabledAccount = "enabled"
+
     // Posted on every mutation so live UI (avatar cover, lists) can refresh.
     public static let changedNotification = Notification.Name("AorusGramFakeGiftsChanged")
 
     public static var isEnabled: Bool {
+        // Fresh/reinstalled app: no UserDefaults entry yet — re-seed from the Keychain
+        // mirror so the toggle state survives a reinstall.
+        if UserDefaults.standard.object(forKey: enabledKey) == nil {
+            if let data = aorusKeychainGet(account: keychainEnabledAccount), let flag = data.first {
+                let value = flag != 0
+                UserDefaults.standard.set(value, forKey: enabledKey)
+                return value
+            }
+            return false
+        }
         return UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
         UserDefaults.standard.set(value, forKey: enabledKey)
+        aorusKeychainSet(Data([value ? 1 : 0]), account: keychainEnabledAccount)
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
@@ -5307,18 +5330,59 @@ public enum AorusFakeGiftsStore {
     }
 
     public static func all() -> [AorusStoredGift] {
-        guard let data = UserDefaults.standard.data(forKey: listKey),
-              let gifts = try? JSONDecoder().decode([AorusStoredGift].self, from: data) else {
-            return []
+        if let data = UserDefaults.standard.data(forKey: listKey) {
+            return (try? JSONDecoder().decode([AorusStoredGift].self, from: data)) ?? []
         }
-        return gifts
+        // No UserDefaults value at all (fresh install or reinstall — note this is distinct
+        // from an empty array, which is written when the user clears every gift). Restore
+        // from the Keychain mirror, which outlives an app deletion, and re-seed.
+        if let data = aorusKeychainGet(account: keychainListAccount),
+           let gifts = try? JSONDecoder().decode([AorusStoredGift].self, from: data) {
+            UserDefaults.standard.set(data, forKey: listKey)
+            return gifts
+        }
+        return []
     }
 
     private static func persist(_ gifts: [AorusStoredGift]) {
         if let data = try? JSONEncoder().encode(gifts) {
             UserDefaults.standard.set(data, forKey: listKey)
+            aorusKeychainSet(data, account: keychainListAccount)
         }
         NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    // MARK: Keychain mirror helpers (generic password items; persist across reinstall).
+
+    private static func aorusKeychainSet(_ data: Data, account: String) {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = data
+        // Available after first unlock, this device only — readable in the background,
+        // not synced to iCloud, and kept across an uninstall/reinstall.
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    private static func aorusKeychainGet(account: String) -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else {
+            return nil
+        }
+        return data
     }
 
     public static func update(_ stored: AorusStoredGift) {
@@ -5630,6 +5694,91 @@ public enum AorusFakeGiftsStore {
         }
     }
 }
+
+// AorusGram local "fake stars" — a purely local override of the displayed Telegram Stars
+// balance. When enabled, the user types an amount and the Stars balance shown across the
+// app reads that value instead of the real server balance. Nothing is sent to the server;
+// no real stars are created or spent. Persisted like the fake gifts store: UserDefaults for
+// the live value, mirrored to the Keychain so the setting survives an uninstall/reinstall.
+public enum AorusFakeStarsStore {
+    private static let enabledKey = "aorusgram_fake_stars_enabled"
+    private static let amountKey = "aorusgram_fake_stars_amount"
+
+    private static let keychainService = "aorusgram.fakestars"
+    private static let keychainEnabledAccount = "enabled"
+    private static let keychainAmountAccount = "amount"
+
+    // Posted on every change so a live StarsContext can re-publish its state at once.
+    public static let changedNotification = Notification.Name("AorusGramFakeStarsChanged")
+
+    public static var isEnabled: Bool {
+        if UserDefaults.standard.object(forKey: enabledKey) == nil {
+            if let data = aorusKeychainGet(account: keychainEnabledAccount), let flag = data.first {
+                let value = flag != 0
+                UserDefaults.standard.set(value, forKey: enabledKey)
+                return value
+            }
+            return false
+        }
+        return UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    public static func setEnabled(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: enabledKey)
+        aorusKeychainSet(Data([value ? 1 : 0]), account: keychainEnabledAccount)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    // The fake balance, in whole stars.
+    public static var amount: Int64 {
+        if UserDefaults.standard.object(forKey: amountKey) == nil {
+            if let data = aorusKeychainGet(account: keychainAmountAccount), data.count == 8 {
+                var value: Int64 = 0
+                withUnsafeMutableBytes(of: &value) { $0.copyBytes(from: data) }
+                UserDefaults.standard.set(value, forKey: amountKey)
+                return value
+            }
+            return 0
+        }
+        return Int64(UserDefaults.standard.integer(forKey: amountKey))
+    }
+
+    public static func setAmount(_ value: Int64) {
+        let clamped = max(0, value)
+        UserDefaults.standard.set(clamped, forKey: amountKey)
+        var v = clamped
+        let data = withUnsafeBytes(of: &v) { Data($0) }
+        aorusKeychainSet(data, account: keychainAmountAccount)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    private static func aorusKeychainSet(_ data: Data, account: String) {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    private static func aorusKeychainGet(account: String) -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        return data
+    }
+}
 '''
 
 
@@ -5861,11 +6010,11 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING GiftsListView props anchor not found")
 
             # 3b) On every state emission: snapshot the server list, then merge fakes.
+            #     Injected AFTER resultsAreEmpty is computed so the helper can clear the
+            #     native "empty collection" placeholder when a collection holds only fakes.
             state_anchor = (
-                "            } else {\n"
-                "                self.starsProducts = state.filteredGifts\n"
-                "                self.pinnedReferences = Array(state.gifts.filter { $0.pinnedToTop }.compactMap { $0.reference })\n"
-                "            }\n"
+                "            self.resultsAreEmpty = state.filter == .All && state.gifts.isEmpty && state.dataState != .loading\n"
+                "            self.filteredResultsAreEmpty = state.filter != .All && state.filteredGifts.isEmpty\n"
             )
             state_inject = state_anchor + (
                 "            self.aorusServerProducts = self.starsProducts\n"
@@ -5944,6 +6093,11 @@ def patch_fake_gifts(tg: Path) -> None:
                 "            let aorusFakeKeys = Set(aorusFakeGifts.map { AorusFakeGiftsStore.key(for: $0.gift) })\n"
                 "            let aorusBaseline = baseline.filter { !aorusFakeKeys.contains(AorusFakeGiftsStore.key(for: $0.gift)) }\n"
                 "            self.starsProducts = aorusFakeGifts + aorusBaseline\n"
+                "            // A collection (or the All tab) that holds local fakes must not render the\n"
+                "            // native \"empty collection\" placeholder, which is driven purely by the\n"
+                "            // server gift list and ignores our injected items.\n"
+                "            self.resultsAreEmpty = false\n"
+                "            self.filteredResultsAreEmpty = false\n"
                 "        }\n"
                 "    }\n"
                 "\n"
@@ -6332,6 +6486,122 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: patched StarGiftsCollections (durable fake-gift collection membership)")
     else:
         print("FakeGifts: StarGiftsCollections.swift not found — skip collection sync")
+
+
+def patch_fake_stars(tg: Path) -> None:
+    """Local "fake stars" — override the displayed Telegram Stars balance locally.
+
+    StarsContextImpl.updateState(_:) is the single choke point through which every Stars
+    balance update is published to the UI. When AorusFakeStarsStore is enabled, we rewrite
+    the published balance (stars context only, never TON) to the user-entered amount, and
+    observe the store so typing a new amount reflects immediately. Nothing is sent to the
+    server; no real stars are created or spent. The store lives in TelegramCore alongside
+    the fake gifts store, so AorusFakeStarsStore is already in this module.
+    """
+    stars = tg / "submodules/TelegramCore/Sources/TelegramEngine/Payments/Stars.swift"
+    if not stars.is_file():
+        print("FakeStars: Stars.swift not found — skip")
+        return
+    t = stars.read_text(encoding="utf-8")
+    if "AorusFakeStarsStore" in t:
+        print("FakeStars: Stars.swift already patched")
+        return
+    ok = True
+
+    # 1) Rewrite the published balance at the single choke point.
+    state_anchor = (
+        "    private func updateState(_ state: StarsContext.State) {\n"
+        "        self._state = state\n"
+        "        self._statePromise.set(.single(state))\n"
+        "    }\n"
+    )
+    state_inject = (
+        "    private func updateState(_ state: StarsContext.State) {\n"
+        "        var state = state\n"
+        "        if !self.ton, AorusFakeStarsStore.isEnabled {\n"
+        "            // Local-only override: show the user-entered amount instead of the\n"
+        "            // real server balance. Stars context only — never TON.\n"
+        "            state.balance = StarsAmount(value: AorusFakeStarsStore.amount, nanos: 0)\n"
+        "        }\n"
+        "        self._state = state\n"
+        "        self._statePromise.set(.single(state))\n"
+        "    }\n"
+    )
+    if state_anchor in t:
+        t = t.replace(state_anchor, state_inject, 1)
+    else:
+        ok = False
+        print("FakeStars: WARNING updateState anchor not found")
+
+    # 2) Observe the store so a live change (toggle / new amount) refreshes the balance at
+    #    once: re-publish the current state (re-applies the override) when enabled, or
+    #    refetch the real balance from the server when disabled.
+    obs_prop_anchor = (
+        "    private let disposable = MetaDisposable()\n"
+        "    private var updateDisposable: Disposable?\n"
+    )
+    obs_prop_inject = (
+        "    private let disposable = MetaDisposable()\n"
+        "    private var updateDisposable: Disposable?\n"
+        "    private var aorusFakeStarsObserver: NSObjectProtocol?\n"
+    )
+    if obs_prop_anchor in t:
+        t = t.replace(obs_prop_anchor, obs_prop_inject, 1)
+    else:
+        ok = False
+        print("FakeStars: WARNING property anchor not found")
+
+    obs_init_anchor = (
+        "            self.load(force: true)\n"
+        "        })\n"
+        "    }\n"
+        "    \n"
+        "    deinit {\n"
+    )
+    obs_init_inject = (
+        "            self.load(force: true)\n"
+        "        })\n"
+        "\n"
+        "        self.aorusFakeStarsObserver = NotificationCenter.default.addObserver(forName: AorusFakeStarsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
+        "            guard let self, !self.ton else { return }\n"
+        "            if AorusFakeStarsStore.isEnabled {\n"
+        "                if let state = self._state {\n"
+        "                    self.updateState(state)\n"
+        "                }\n"
+        "            } else {\n"
+        "                self.load(force: true)\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+        "    deinit {\n"
+    )
+    if obs_init_anchor in t:
+        t = t.replace(obs_init_anchor, obs_init_inject, 1)
+    else:
+        ok = False
+        print("FakeStars: WARNING init anchor not found")
+
+    obs_deinit_anchor = (
+        "        self.disposable.dispose()\n"
+        "        self.updateDisposable?.dispose()\n"
+    )
+    obs_deinit_inject = (
+        "        self.disposable.dispose()\n"
+        "        self.updateDisposable?.dispose()\n"
+        "        if let aorusFakeStarsObserver = self.aorusFakeStarsObserver {\n"
+        "            NotificationCenter.default.removeObserver(aorusFakeStarsObserver)\n"
+        "        }\n"
+    )
+    if obs_deinit_anchor in t:
+        t = t.replace(obs_deinit_anchor, obs_deinit_inject, 1)
+    else:
+        ok = False
+        print("FakeStars: WARNING deinit anchor not found")
+
+    if ok:
+        stars.write_text(t, encoding="utf-8")
+        print("FakeStars: patched Stars.swift (local balance override)")
 
 
 def patch_bypass_copy_protection(tg: Path) -> None:
@@ -10849,6 +11119,7 @@ def main() -> None:
     patch_aorus_badges(tg)
     patch_local_premium(tg)
     patch_fake_gifts(tg)
+    patch_fake_stars(tg)
     patch_bypass_copy_protection(tg)
     patch_bypass_channel_copy_protection(tg)
     patch_bypass_story_download(tg)

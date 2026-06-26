@@ -19,15 +19,8 @@ private enum ManageSection: Int32 {
     case sender
     case date
     case comment
-    case collections
     case visibility
     case delete
-}
-
-// A user gift collection (profile sub-tab) the fake gift can be assigned to.
-private struct AorusCollectionInfo: Equatable {
-    var id: Int32
-    var title: String
 }
 
 private struct ManageState: Equatable {
@@ -36,8 +29,6 @@ private struct ManageState: Equatable {
     var date: Int32
     var comment: String
     var showInProfile: Bool
-    var collectionIds: [Int32]
-    var collections: [AorusCollectionInfo]
     var displayingDateSelection: Bool
     var displayingTimeSelection: Bool
 }
@@ -50,10 +41,9 @@ private final class ManageArguments {
     let setDate: (Int32) -> Void
     let setComment: (String) -> Void
     let setShowInProfile: (Bool) -> Void
-    let toggleCollection: (Int32, Bool) -> Void
     let delete: () -> Void
 
-    init(pickSender: @escaping () -> Void, makeAnonymous: @escaping () -> Void, toggleDateSelection: @escaping () -> Void, toggleTimeSelection: @escaping () -> Void, setDate: @escaping (Int32) -> Void, setComment: @escaping (String) -> Void, setShowInProfile: @escaping (Bool) -> Void, toggleCollection: @escaping (Int32, Bool) -> Void, delete: @escaping () -> Void) {
+    init(pickSender: @escaping () -> Void, makeAnonymous: @escaping () -> Void, toggleDateSelection: @escaping () -> Void, toggleTimeSelection: @escaping () -> Void, setDate: @escaping (Int32) -> Void, setComment: @escaping (String) -> Void, setShowInProfile: @escaping (Bool) -> Void, delete: @escaping () -> Void) {
         self.pickSender = pickSender
         self.makeAnonymous = makeAnonymous
         self.toggleDateSelection = toggleDateSelection
@@ -61,7 +51,6 @@ private final class ManageArguments {
         self.setDate = setDate
         self.setComment = setComment
         self.setShowInProfile = setShowInProfile
-        self.toggleCollection = toggleCollection
         self.delete = delete
     }
 }
@@ -74,8 +63,6 @@ private enum ManageEntry: ItemListNodeEntry {
     case date(PresentationTheme, String, Int32, Bool, Bool)
     case commentHeader(PresentationTheme, String)
     case comment(PresentationTheme, String, String)
-    case collectionsHeader(PresentationTheme, String)
-    case collection(PresentationTheme, Int32, Int32, String, Bool)
     case visibility(PresentationTheme, String, Bool)
     case delete(PresentationTheme, String)
 
@@ -87,8 +74,6 @@ private enum ManageEntry: ItemListNodeEntry {
             return ManageSection.date.rawValue
         case .commentHeader, .comment:
             return ManageSection.comment.rawValue
-        case .collectionsHeader, .collection:
-            return ManageSection.collections.rawValue
         case .visibility:
             return ManageSection.visibility.rawValue
         case .delete:
@@ -105,8 +90,6 @@ private enum ManageEntry: ItemListNodeEntry {
         case .date:              return 11
         case .commentHeader:     return 20
         case .comment:           return 21
-        case .collectionsHeader: return 30
-        case let .collection(_, index, _, _, _): return 40 + index
         case .visibility:        return 100000
         case .delete:            return 100100
         }
@@ -132,10 +115,6 @@ private enum ManageEntry: ItemListNodeEntry {
             if case let .commentHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .comment(lt, ls, lv):
             if case let .comment(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .collectionsHeader(lt, ls):
-            if case let .collectionsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .collection(lt, li, lid, ltitle, lmember):
-            if case let .collection(rt, ri, rid, rtitle, rmember) = rhs { return lt === rt && li == ri && lid == rid && ltitle == rtitle && lmember == rmember }
         case let .visibility(lt, ls, lv):
             if case let .visibility(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .delete(lt, ls):
@@ -161,10 +140,6 @@ private enum ManageEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .comment(_, placeholder, value):
             return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, sectionId: section, textUpdated: { text in args.setComment(text) }, action: {})
-        case let .collectionsHeader(_, text):
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .collection(_, _, collectionId, title, isMember):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: isMember, sectionId: section, style: .blocks, updated: { args.toggleCollection(collectionId, $0) })
         case let .visibility(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setShowInProfile($0) })
         case let .delete(_, title):
@@ -190,16 +165,6 @@ private func manageEntries(state: ManageState, theme: PresentationTheme) -> [Man
     entries.append(.commentHeader(theme, isRu ? "ОПИСАНИЕ" : "DESCRIPTION"))
     entries.append(.comment(theme, isRu ? "Комментарий" : "Comment", state.comment))
 
-    // The user's own gift collections (profile sub-tabs) the gift can belong to. Shown
-    // only when at least one collection exists — created natively from the profile.
-    if !state.collections.isEmpty {
-        entries.append(.collectionsHeader(theme, isRu ? "КОЛЛЕКЦИИ" : "COLLECTIONS"))
-        for (i, collection) in state.collections.enumerated() {
-            let isMember = state.collectionIds.contains(collection.id)
-            entries.append(.collection(theme, Int32(i), collection.id, collection.title, isMember))
-        }
-    }
-
     entries.append(.visibility(theme, isRu ? "Показывать в профиле" : "Show on profile", state.showInProfile))
 
     entries.append(.delete(theme, isRu ? "Удалить подарок" : "Remove gift"))
@@ -214,7 +179,7 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
     if initialDate <= 0 {
         initialDate = Int32(Date().timeIntervalSince1970)
     }
-    let initialState = ManageState(senderPeerId: stored.senderPeerId, senderName: "", date: initialDate, comment: stored.comment, showInProfile: stored.showInProfile, collectionIds: stored.collectionIds, collections: [], displayingDateSelection: false, displayingTimeSelection: false)
+    let initialState = ManageState(senderPeerId: stored.senderPeerId, senderName: "", date: initialDate, comment: stored.comment, showInProfile: stored.showInProfile, displayingDateSelection: false, displayingTimeSelection: false)
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((ManageState) -> ManageState) -> Void = { f in
@@ -231,12 +196,14 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
     // would reset them).
     let persist: () -> Void = {
         let current = stateValue.with { $0 }
-        var updated = stored
+        // Start from the freshest stored copy so collection membership changed natively
+        // (from the profile's collection tabs) while this screen is open is preserved —
+        // this screen only edits sender / date / comment / visibility.
+        var updated = AorusFakeGiftsStore.all().first(where: { $0.key == giftKey }) ?? stored
         updated.senderPeerId = current.senderPeerId
         updated.date = current.date
         updated.comment = current.comment
         updated.showInProfile = current.showInProfile
-        updated.collectionIds = current.collectionIds
         AorusFakeGiftsStore.update(updated)
         onChanged()
     }
@@ -255,19 +222,6 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
         }))
     }
     resolveName(stored.senderPeerId)
-
-    // Load the user's own gift collections (profile sub-tabs) so the fake gift can be
-    // assigned to them, exactly like a real gift. The context is retained for the screen's
-    // lifetime by the signal closure below.
-    let collectionsContext = ProfileGiftsCollectionsContext(account: context.account, peerId: context.account.peerId, allGiftsContext: nil)
-    actionsDisposable.add((collectionsContext.state
-    |> deliverOnMainQueue).start(next: { collectionsState in
-        updateState { current in
-            var next = current
-            next.collections = collectionsState.collections.map { AorusCollectionInfo(id: $0.id, title: $0.title) }
-            return next
-        }
-    }))
 
     let arguments = ManageArguments(
         pickSender: {
@@ -346,22 +300,6 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
             }
             persist()
         },
-        toggleCollection: { collectionId, isOn in
-            updateState { current in
-                var next = current
-                var ids = next.collectionIds
-                if isOn {
-                    if !ids.contains(collectionId) {
-                        ids.append(collectionId)
-                    }
-                } else {
-                    ids.removeAll { $0 == collectionId }
-                }
-                next.collectionIds = ids
-                return next
-            }
-            persist()
-        },
         delete: {
             AorusFakeGiftsStore.remove(key: giftKey)
             onChanged()
@@ -376,8 +314,6 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
     let signal = statePromise.get()
         |> deliverOnMainQueue
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            // Keep the collections context alive for as long as the screen's signal lives.
-            let _ = collectionsContext
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = manageEntries(state: state, theme: presentationData.theme)
             let isRu = AorusLang.current == .ru
