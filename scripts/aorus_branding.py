@@ -3316,35 +3316,44 @@ def patch_unlimited_pinned_chats(tg: Path) -> None:
         if "AorusGram: unlimited pins icon" in t:
             print("Unlimited pins: ChatListViewState already patched")
         else:
-            strip_blocks = [
+            note = " // AorusGram: unlimited pins icon — keep pinningIndex so the pin badge shows for pins 6+ in folder tabs"
+            # Replace the whole `var updatedIndex = index` + includePinnedAsUnpinned reset with
+            # a plain `let updatedIndex = index`. This both preserves pinningIndex (so the pin
+            # icon renders inside folders) and avoids a "never mutated; use let" Swift warning
+            # that deleting only the reset block would leave behind. Three indent levels.
+            pin_blocks = [
                 (
+                    "                    var updatedIndex = index\n"
                     "                    if case .includePinnedAsUnpinned = pinned {\n"
                     "                        updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                    }\n"
+                    "                    }\n",
+                    "                    let updatedIndex = index" + note + "\n",
                 ),
                 (
+                    "                        var updatedIndex = index\n"
                     "                        if case .includePinnedAsUnpinned = pinned {\n"
                     "                            updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                        }\n"
+                    "                        }\n",
+                    "                        let updatedIndex = index" + note + "\n",
                 ),
                 (
+                    "                                var updatedIndex = index\n"
                     "                                if case .includePinnedAsUnpinned = pinned {\n"
                     "                                    updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                                }\n"
+                    "                                }\n",
+                    "                                let updatedIndex = index" + note + "\n",
                 ),
             ]
             changed = 0
-            for block in strip_blocks:
-                if block in t:
-                    t = t.replace(block, "", 1)
+            for old, new in pin_blocks:
+                if old in t:
+                    t = t.replace(old, new, 1)
                     changed += 1
-            if changed > 0:
-                marker = "// AorusGram: unlimited pins icon — keep pinningIndex in folder tabs.\n\n"
-                t = marker + t
+            if changed == 3:
                 view_state.write_text(t, encoding="utf-8")
-                print(f"Unlimited pins: patched ChatListViewState ({changed} strip site(s) removed)")
+                print("Unlimited pins: patched ChatListViewState (3 sites, var→let, pinningIndex kept)")
             else:
-                print("WARNING: ChatListViewState includePinnedAsUnpinned strip not found")
+                print(f"WARNING: ChatListViewState pin-icon sites: only {changed}/3 matched")
     else:
         print("ChatListViewState.swift not found, skip pin icon UI")
 
