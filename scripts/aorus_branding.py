@@ -5243,10 +5243,11 @@ public struct AorusStoredGift: Codable, Equatable {
     public var pinnedToTop: Bool
     public var worn: Bool
     public var pinnedOrder: Int32   // pin sequence; lower = pinned earlier (0 = not pinned)
-    public var resellStars: Int64   // resale price in stars; 0 = not listed for sale
+    public var resellStars: Int64   // resale price amount (stars count, or TON in nanotons); 0 = not listed
+    public var resellCurrency: Int32   // resale currency: 0 = stars, 1 = TON (matches CurrencyAmount.Currency)
     public var collectionIds: [Int32]   // ids of the user's gift collections this fake gift belongs to
 
-    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, collectionIds: [Int32] = []) {
+    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = []) {
         self.giftData = giftData
         self.senderPeerId = senderPeerId
         self.date = date
@@ -5256,11 +5257,12 @@ public struct AorusStoredGift: Codable, Equatable {
         self.worn = worn
         self.pinnedOrder = pinnedOrder
         self.resellStars = resellStars
+        self.resellCurrency = resellCurrency
         self.collectionIds = collectionIds
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, collectionIds
+        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds
     }
 
     // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars/collectionIds existed still load.
@@ -5275,6 +5277,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.worn = try c.decodeIfPresent(Bool.self, forKey: .worn) ?? false
         self.pinnedOrder = try c.decodeIfPresent(Int32.self, forKey: .pinnedOrder) ?? 0
         self.resellStars = try c.decodeIfPresent(Int64.self, forKey: .resellStars) ?? 0
+        self.resellCurrency = try c.decodeIfPresent(Int32.self, forKey: .resellCurrency) ?? 0
         self.collectionIds = try c.decodeIfPresent([Int32].self, forKey: .collectionIds) ?? []
     }
 
@@ -5468,14 +5471,17 @@ public enum AorusFakeGiftsStore {
         })
     }
 
-    // Local resale: 0 stars removes the gift from sale, > 0 lists it at that price.
-    public static func setResellBySlug(_ slug: String, stars: Int64) {
+    // Local resale: amount == 0 removes the gift from sale, > 0 lists it at that price in the
+    // given currency (0 = stars, 1 = TON in nanotons — matches CurrencyAmount.Currency.rawValue).
+    public static func setResellBySlug(_ slug: String, amount: Int64, currency: Int32) {
         var gifts = all()
         var changed = false
         for index in gifts.indices {
             if let gift = gifts[index].gift, case let .unique(uniqueGift) = gift, uniqueGift.slug == slug {
-                if gifts[index].resellStars != stars {
-                    gifts[index].resellStars = stars
+                let newCurrency = amount > 0 ? currency : 0
+                if gifts[index].resellStars != amount || gifts[index].resellCurrency != newCurrency {
+                    gifts[index].resellStars = amount
+                    gifts[index].resellCurrency = newCurrency
                     changed = true
                 }
             }
@@ -5550,11 +5556,19 @@ public enum AorusFakeGiftsStore {
         // received collectible gift (unique gifts carry their message in originalInfo,
         // never in the plain "text" field, which the gift screen forces to nil for them).
         if var root = giftObject as? [String: Any], var value = root["value"] as? [String: Any] {
-            value.removeValue(forKey: "resellAmounts")
+            // Reflect local resale as a proper currency-tagged resellAmounts entry (stars or TON),
+            // exactly like a server-listed gift — instead of the legacy currency-less "resellStars"
+            // field. A TON price stored under "resellStars" would decode as a huge STARS amount and
+            // trap on Int32(resellPrice) in the native gift cell. resellForTonOnly mirrors the currency.
+            value.removeValue(forKey: "resellStars")
             if stored.resellStars > 0 {
-                value["resellStars"] = stored.resellStars
+                let aorusAmount: [String: Any] = ["value": stored.resellStars, "nanos": 0]
+                let aorusCurrencyAmount: [String: Any] = ["a": aorusAmount, "c": Int(stored.resellCurrency)]
+                value["resellAmounts"] = [aorusCurrencyAmount]
+                value["resellForTonOnly"] = stored.resellCurrency == 1
             } else {
-                value.removeValue(forKey: "resellStars")
+                value.removeValue(forKey: "resellAmounts")
+                value["resellForTonOnly"] = false
             }
             if var attributes = value["attributes"] as? [[String: Any]],
                let ownerId = (value["ownerPeerId"] as? NSNumber)?.int64Value,
@@ -5587,6 +5601,12 @@ public enum AorusFakeGiftsStore {
             "pinnedToTop": stored.pinnedToTop,
             "canUpgrade": false
         ]
+        // Give every fake a stable, unique reference (.slug -> {"type":2,"slug":...}). Without it
+        // reference == nil for all fakes, and the native collection "add gifts" picker keys its
+        // selection on reference.stringValue (nil -> ""), so selecting one fake selects them all.
+        if let giftValue = stored.gift, case let .unique(uniqueGift) = giftValue {
+            dict["reference"] = ["type": 2, "slug": uniqueGift.slug] as [String: Any]
+        }
         if !stored.comment.isEmpty {
             dict["text"] = stored.comment
         }
@@ -6404,7 +6424,7 @@ def patch_fake_gifts(tg: Path) -> None:
                 "    public func updateStarGiftResellPrice(reference: StarGiftReference, price: CurrencyAmount?, id: Int64? = nil) -> Signal<Never, UpdateStarGiftPriceError> {\n"
                 "        // AorusGram: fake gifts resell locally — no server call, no error. price == nil unlists.\n"
                 "        if case let .slug(slug) = reference, AorusFakeGiftsStore.isFakeBySlug(slug) {\n"
-                "            AorusFakeGiftsStore.setResellBySlug(slug, stars: price?.amount.value ?? 0)\n"
+                "            AorusFakeGiftsStore.setResellBySlug(slug, amount: price?.amount.value ?? 0, currency: price?.currency.rawValue ?? 0)\n"
                 "            return .complete()\n"
                 "        }\n"
                 "        return Signal { subscriber in\n"
@@ -6553,6 +6573,25 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections anchor not found")
     else:
         print("FakeGifts: PeerInfoGiftsPaneNode.swift not found — skip collection thumbnails")
+
+    # 10) Defense-in-depth for the resale price label. The gift cell formats the resale price via
+    #     presentationStringsFormattedNumber(Int32(resellPrice), ...). A non-stars (TON) price is
+    #     a huge nanoton value, so an unchecked Int32() conversion traps and crashes. Our store now
+    #     tags resale with the correct currency (so the stars-only label never receives a TON value),
+    #     but we also clamp the conversion here so no out-of-range value can ever crash the client.
+    gic = tg / "submodules/TelegramUI/Components/Gifts/GiftItemComponent/Sources/GiftItemComponent.swift"
+    if gic.is_file():
+        t = gic.read_text(encoding="utf-8")
+        if "Int32(clamping: resellPrice)" in t:
+            print("FakeGifts: GiftItemComponent resale price already clamped")
+        elif "Int32(resellPrice)" in t:
+            t = t.replace("Int32(resellPrice)", "Int32(clamping: resellPrice)")
+            gic.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched GiftItemComponent (clamp resale price to avoid Int32 overflow)")
+        else:
+            print("FakeGifts: WARNING GiftItemComponent Int32(resellPrice) anchor not found")
+    else:
+        print("FakeGifts: GiftItemComponent.swift not found — skip resale clamp")
 
 
 def patch_fake_stars(tg: Path) -> None:
