@@ -3349,11 +3349,27 @@ def patch_unlimited_pinned_chats(tg: Path) -> None:
                 if old in t:
                     t = t.replace(old, new, 1)
                     changed += 1
-            if changed == 3:
+            # In the .RemoveEntry branch `pinned` was bound only to feed the now-removed
+            # includePinnedAsUnpinned reset; without it the build trips on the strict
+            # "immutable value 'pinned' was never used" error, so silence that one binding.
+            remove_old = (
+                "                case let .RemoveEntry(indices):\n"
+                "                    switch self.space {\n"
+                "                    case let .group(spaceGroupId, pinned, _):\n"
+            )
+            remove_new = (
+                "                case let .RemoveEntry(indices):\n"
+                "                    switch self.space {\n"
+                "                    case let .group(spaceGroupId, _, _):\n"
+            )
+            remove_fixed = remove_old in t
+            if remove_fixed:
+                t = t.replace(remove_old, remove_new, 1)
+            if changed == 3 and remove_fixed:
                 view_state.write_text(t, encoding="utf-8")
                 print("Unlimited pins: patched ChatListViewState (3 sites, var→let, pinningIndex kept)")
             else:
-                print(f"WARNING: ChatListViewState pin-icon sites: only {changed}/3 matched")
+                print(f"WARNING: ChatListViewState pin-icon sites: only {changed}/3 matched, remove-binding fixed={remove_fixed}")
     else:
         print("ChatListViewState.swift not found, skip pin icon UI")
 
