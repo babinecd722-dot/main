@@ -3243,38 +3243,110 @@ def patch_conversation_export(tg: Path) -> None:
 
 
 def patch_unlimited_pinned_chats(tg: Path) -> None:
-    """Remove the client-side cap on the number of pinned chats/channels (main list
-    and archive). Stock behaviour, no UI surface.
+    """Unlimited pinned chats: lift the toggle cap, keep pin icons past the stock limit
+    of 5, and stop server sync from dropping extra local pins.
 
-    _internal_toggleItemPinned returns .limitExceeded once the pinned count passes
-    userLimitsConfiguration.maxPinnedChatCount / maxArchivedPinnedChatCount. Forcing
-    that local cap to Int.max means the engine never reports the limit, so the chat
-    list pins without the premium/limit wall. (Idempotent.)
+    Stock Telegram ties the pin *icon* to pinningIndex in the chat-list index. The toggle
+    cap (maxPinnedChatCount = 5) is only one piece: sync can still replace a 6+ local pin
+    list with the server's ~5 dialogs, and folder filters strip pinningIndex in the
+    includePinnedAsUnpinned space. All three are patched here. (Idempotent.)
     """
-    path = tg / "submodules/TelegramCore/Sources/TelegramEngine/Peers/TogglePeerChatPinned.swift"
-    if not path.is_file():
-        print("TogglePeerChatPinned.swift not found, skip unlimited pins")
-        return
-    t = path.read_text(encoding="utf-8")
-    if "AorusGram: unlimited pins" in t:
-        print("Unlimited pins: already patched")
-        return
-    replacements = [
-        ("limitCount = Int(userLimitsConfiguration.maxPinnedChatCount)",
-         "limitCount = Int.max // AorusGram: unlimited pins"),
-        ("limitCount = Int(userLimitsConfiguration.maxArchivedPinnedChatCount)",
-         "limitCount = Int.max // AorusGram: unlimited pins"),
-    ]
-    changed = 0
-    for old, new in replacements:
-        if old in t:
-            t = t.replace(old, new, 1)
-            changed += 1
-    if changed > 0:
-        path.write_text(t, encoding="utf-8")
-        print(f"Unlimited pins: patched {changed} limit assignment(s) → Int.max")
+    # 1) Lift the client-side cap when pinning / unpinning.
+    toggle = tg / "submodules/TelegramCore/Sources/TelegramEngine/Peers/TogglePeerChatPinned.swift"
+    if toggle.is_file():
+        t = toggle.read_text(encoding="utf-8")
+        if "AorusGram: unlimited pins" in t:
+            print("Unlimited pins: TogglePeerChatPinned already patched")
+        else:
+            replacements = [
+                ("limitCount = Int(userLimitsConfiguration.maxPinnedChatCount)",
+                 "limitCount = Int.max // AorusGram: unlimited pins"),
+                ("limitCount = Int(userLimitsConfiguration.maxArchivedPinnedChatCount)",
+                 "limitCount = Int.max // AorusGram: unlimited pins"),
+            ]
+            changed = 0
+            for old, new in replacements:
+                if old in t:
+                    t = t.replace(old, new, 1)
+                    changed += 1
+            if changed > 0:
+                toggle.write_text(t, encoding="utf-8")
+                print(f"Unlimited pins: patched {changed} toggle limit(s) → Int.max")
+            else:
+                print("WARNING: TogglePeerChatPinned limit assignments not found")
     else:
-        print("WARNING: TogglePeerChatPinned limit assignments not found — unlimited pins NOT applied")
+        print("TogglePeerChatPinned.swift not found, skip toggle cap")
+
+    # 2) Sync: when local and remote baselines match but the server returns fewer pins
+    #    (dialogs_pinned_limit ≈ 5), keep the longer local list so pinningIndex survives.
+    sync = tg / "submodules/TelegramCore/Sources/State/ManagedSynchronizePinnedChatsOperations.swift"
+    if sync.is_file():
+        t = sync.read_text(encoding="utf-8")
+        if "AorusGram: unlimited pins sync" in t:
+            print("Unlimited pins: sync already patched")
+        else:
+            anchor = (
+                "            if initialRemoteItemIds == localItemIds {\n"
+                "                resultingItemIds = remoteItemIds\n"
+            )
+            inject = (
+                "            if initialRemoteItemIds == localItemIds {\n"
+                "                // AorusGram: unlimited pins sync — server caps at ~5; never drop extra local pins.\n"
+                "                if remoteItemIds.count < localItemIds.count {\n"
+                "                    resultingItemIds = localItemIds\n"
+                "                } else {\n"
+                "                    resultingItemIds = remoteItemIds\n"
+                "                }\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
+                sync.write_text(t, encoding="utf-8")
+                print("Unlimited pins: patched ManagedSynchronizePinnedChatsOperations (keep local overflow)")
+            else:
+                print("WARNING: ManagedSynchronizePinnedChatsOperations sync anchor not found")
+    else:
+        print("ManagedSynchronizePinnedChatsOperations.swift not found, skip sync")
+
+    # 3) UI: folder filters load global pins through includePinnedAsUnpinned, which stock
+    #    code forces pinningIndex = nil (chat stays on top, pin icon hidden). Keep the
+    #    postbox pinningIndex so the badge renders for pins 6+ inside folders too.
+    view_state = tg / "submodules/Postbox/Sources/ChatListViewState.swift"
+    if view_state.is_file():
+        t = view_state.read_text(encoding="utf-8")
+        if "AorusGram: unlimited pins icon" in t:
+            print("Unlimited pins: ChatListViewState already patched")
+        else:
+            strip_blocks = [
+                (
+                    "                    if case .includePinnedAsUnpinned = pinned {\n"
+                    "                        updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
+                    "                    }\n"
+                ),
+                (
+                    "                        if case .includePinnedAsUnpinned = pinned {\n"
+                    "                            updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
+                    "                        }\n"
+                ),
+                (
+                    "                                if case .includePinnedAsUnpinned = pinned {\n"
+                    "                                    updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
+                    "                                }\n"
+                ),
+            ]
+            changed = 0
+            for block in strip_blocks:
+                if block in t:
+                    t = t.replace(block, "", 1)
+                    changed += 1
+            if changed > 0:
+                marker = "// AorusGram: unlimited pins icon — keep pinningIndex in folder tabs.\n\n"
+                t = marker + t
+                view_state.write_text(t, encoding="utf-8")
+                print(f"Unlimited pins: patched ChatListViewState ({changed} strip site(s) removed)")
+            else:
+                print("WARNING: ChatListViewState includePinnedAsUnpinned strip not found")
+    else:
+        print("ChatListViewState.swift not found, skip pin icon UI")
 
 
 def patch_user_messages_feature(tg: Path) -> None:
@@ -6544,19 +6616,32 @@ def patch_fake_gifts(tg: Path) -> None:
 
     # 9) Collection tab thumbnails. The server leaves collection.icon nil and count 0 for a
     #    collection that holds only local fakes, so its tab shows no preview gift (and can
-    #    be hidden as "empty"). Enrich each collection with a fake-derived icon + count when
-    #    the server values are empty — at the single assignment point so every consumer (tab
-    #    visibility, the empty-collection skip, the tab icon) stays consistent. A live add
-    #    re-emits the collections state from the server, and a relaunch reloads it, so the
-    #    enriched values are recomputed and the thumbnail appears.
+    #    be hidden as "empty"). Enrich each collection with a fake-derived icon + count.
+    #    GiftsListView already refreshes on AorusFakeGiftsStore.changedNotification, but
+    #    the tab strip only listened to profileGiftsCollections.state — so adding a fake
+    #    to a folder updated the grid but not the tab icon until profile re-entry. Mirror
+    #    the list-view pattern: snapshot server collections, enrich, and re-enrich live.
     pane = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift"
     if pane.is_file():
         t = pane.read_text(encoding="utf-8")
-        if "AorusFakeGiftsStore.collectionCount" in t:
-            print("FakeGifts: PeerInfoGiftsPaneNode already patched")
+        if "aorusEnrichCollections" in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode already patched (live collection icons)")
         else:
-            anchor = "            self.collections = state.collections\n"
-            inject = (
+            ok = True
+
+            props_anchor = "    private var collections: [StarGiftCollection]?\n"
+            props_inject = (
+                "    private var collections: [StarGiftCollection]?\n"
+                "    private var aorusServerCollections: [StarGiftCollection]?\n"
+                "    private var aorusFakeCollectionsObserver: NSObjectProtocol?\n"
+            )
+            if props_anchor in t:
+                t = t.replace(props_anchor, props_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections property anchor not found")
+
+            old_inline = (
                 "            self.collections = state.collections.map { aorusCollection in\n"
                 "                guard AorusFakeGiftsStore.isEnabled else { return aorusCollection }\n"
                 "                let aorusFakeCount = AorusFakeGiftsStore.collectionCount(collectionId: aorusCollection.id)\n"
@@ -6564,13 +6649,85 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                let aorusIcon = aorusCollection.icon ?? AorusFakeGiftsStore.collectionIconFile(collectionId: aorusCollection.id)\n"
                 "                return StarGiftCollection(id: aorusCollection.id, title: aorusCollection.title, icon: aorusIcon, count: aorusCollection.count + aorusFakeCount, hash: aorusCollection.hash)\n"
                 "            }\n"
+                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
             )
-            if anchor in t:
-                t = t.replace(anchor, inject, 1)
-                pane.write_text(t, encoding="utf-8")
-                print("FakeGifts: patched PeerInfoGiftsPaneNode (collection tab thumbnails for fakes)")
+            state_anchor = (
+                "            self.collections = state.collections\n"
+                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
+            )
+            state_inject = (
+                "            self.aorusServerCollections = state.collections\n"
+                "            self.collections = self.aorusEnrichCollections(state.collections)\n"
+                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
+            )
+            if old_inline in t:
+                t = t.replace(old_inline, state_inject, 1)
+            elif state_anchor in t:
+                t = t.replace(state_anchor, state_inject, 1)
             else:
-                print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections anchor not found")
+                ok = False
+                print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections state anchor not found")
+
+            observer_anchor = (
+                "        if let initialGiftCollectionId {\n"
+                "            self.setCurrentCollection(collection: .collection(Int32(initialGiftCollectionId)))\n"
+                "        }\n"
+            )
+            observer_inject = (
+                "        self.aorusFakeCollectionsObserver = NotificationCenter.default.addObserver(forName: AorusFakeGiftsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
+                "            guard let self, let server = self.aorusServerCollections else { return }\n"
+                "            self.collections = self.aorusEnrichCollections(server)\n"
+                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
+                "        }\n"
+                "\n"
+            ) + observer_anchor
+            if observer_anchor in t:
+                t = t.replace(observer_anchor, observer_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING PeerInfoGiftsPaneNode observer anchor not found")
+
+            deinit_anchor = (
+                "    deinit {\n"
+                "        self.collectionsDisposable?.dispose()\n"
+                "    }\n"
+            )
+            deinit_inject = (
+                "    deinit {\n"
+                "        self.collectionsDisposable?.dispose()\n"
+                "        if let aorusFakeCollectionsObserver = self.aorusFakeCollectionsObserver {\n"
+                "            NotificationCenter.default.removeObserver(aorusFakeCollectionsObserver)\n"
+                "        }\n"
+                "    }\n"
+            )
+            if deinit_anchor in t:
+                t = t.replace(deinit_anchor, deinit_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING PeerInfoGiftsPaneNode deinit anchor not found")
+
+            helper_anchor = "    func updateScrolling(interactive: Bool = false, transition: ComponentTransition) {\n"
+            helper_inject = (
+                "    private func aorusEnrichCollections(_ collections: [StarGiftCollection]) -> [StarGiftCollection] {\n"
+                "        guard AorusFakeGiftsStore.isEnabled else { return collections }\n"
+                "        return collections.map { aorusCollection in\n"
+                "            let aorusFakeCount = AorusFakeGiftsStore.collectionCount(collectionId: aorusCollection.id)\n"
+                "            if aorusFakeCount == 0 { return aorusCollection }\n"
+                "            let aorusIcon = aorusCollection.icon ?? AorusFakeGiftsStore.collectionIconFile(collectionId: aorusCollection.id)\n"
+                "            return StarGiftCollection(id: aorusCollection.id, title: aorusCollection.title, icon: aorusIcon, count: aorusCollection.count + aorusFakeCount, hash: aorusCollection.hash)\n"
+                "        }\n"
+                "    }\n"
+                "\n"
+            ) + helper_anchor
+            if helper_anchor in t:
+                t = t.replace(helper_anchor, helper_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING PeerInfoGiftsPaneNode helper anchor not found")
+
+            if ok:
+                pane.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched PeerInfoGiftsPaneNode (live collection tab icons)")
     else:
         print("FakeGifts: PeerInfoGiftsPaneNode.swift not found — skip collection thumbnails")
 
