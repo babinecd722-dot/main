@@ -5219,6 +5219,7 @@ def patch_local_premium(tg: Path) -> None:
 
 AORUS_FAKE_GIFTS_STORE_SWIFT = '''import Foundation
 import Security
+import Postbox
 
 // AorusGram local "fake gifts" — collectible gifts the user pins to their OWN profile
 // purely locally. Nothing is sent to the server. Each entry keeps the original gift
@@ -5692,6 +5693,40 @@ public enum AorusFakeGiftsStore {
         if changed {
             persist(gifts)
         }
+    }
+
+    // The gift's visual file (the animated sticker shown in the gift cell). Used as a
+    // collection's tab thumbnail when the collection holds only local fakes.
+    public static func file(for gift: StarGift) -> TelegramMediaFile? {
+        switch gift {
+        case let .generic(generic):
+            return generic.file
+        case let .unique(unique):
+            for attribute in unique.attributes {
+                if case let .model(_, file, _, _) = attribute {
+                    return file
+                }
+            }
+            return nil
+        }
+    }
+
+    // First visible fake gift's file in a collection — the server leaves collection.icon
+    // nil for a collection that only contains local fakes, so the tab would show no
+    // thumbnail; this fills it from the fake itself.
+    public static func collectionIconFile(collectionId: Int32) -> TelegramMediaFile? {
+        for stored in all() where stored.showInProfile && stored.collectionIds.contains(collectionId) {
+            if let gift = stored.gift, let file = file(for: gift) {
+                return file
+            }
+        }
+        return nil
+    }
+
+    // Number of visible fakes assigned to a collection — added to the server count so the
+    // tab strip treats a fake-only collection as non-empty.
+    public static func collectionCount(collectionId: Int32) -> Int32 {
+        return Int32(all().filter { $0.showInProfile && $0.collectionIds.contains(collectionId) }.count)
     }
 }
 
@@ -6486,6 +6521,38 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: patched StarGiftsCollections (durable fake-gift collection membership)")
     else:
         print("FakeGifts: StarGiftsCollections.swift not found — skip collection sync")
+
+    # 9) Collection tab thumbnails. The server leaves collection.icon nil and count 0 for a
+    #    collection that holds only local fakes, so its tab shows no preview gift (and can
+    #    be hidden as "empty"). Enrich each collection with a fake-derived icon + count when
+    #    the server values are empty — at the single assignment point so every consumer (tab
+    #    visibility, the empty-collection skip, the tab icon) stays consistent. A live add
+    #    re-emits the collections state from the server, and a relaunch reloads it, so the
+    #    enriched values are recomputed and the thumbnail appears.
+    pane = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift"
+    if pane.is_file():
+        t = pane.read_text(encoding="utf-8")
+        if "AorusFakeGiftsStore.collectionCount" in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode already patched")
+        else:
+            anchor = "            self.collections = state.collections\n"
+            inject = (
+                "            self.collections = state.collections.map { aorusCollection in\n"
+                "                guard AorusFakeGiftsStore.isEnabled else { return aorusCollection }\n"
+                "                let aorusFakeCount = AorusFakeGiftsStore.collectionCount(collectionId: aorusCollection.id)\n"
+                "                if aorusFakeCount == 0 { return aorusCollection }\n"
+                "                let aorusIcon = aorusCollection.icon ?? AorusFakeGiftsStore.collectionIconFile(collectionId: aorusCollection.id)\n"
+                "                return StarGiftCollection(id: aorusCollection.id, title: aorusCollection.title, icon: aorusIcon, count: aorusCollection.count + aorusFakeCount, hash: aorusCollection.hash)\n"
+                "            }\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
+                pane.write_text(t, encoding="utf-8")
+                print("FakeGifts: patched PeerInfoGiftsPaneNode (collection tab thumbnails for fakes)")
+            else:
+                print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections anchor not found")
+    else:
+        print("FakeGifts: PeerInfoGiftsPaneNode.swift not found — skip collection thumbnails")
 
 
 def patch_fake_stars(tg: Path) -> None:
