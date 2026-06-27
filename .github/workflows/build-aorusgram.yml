@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v138-release-12.8
+          key: tg-ios-src-v139-release-12.8
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -52,24 +52,49 @@ jobs:
           fi
           echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
 
-      # Cosmetic: a few upstream icons ship as 16-bit PNGs, which makes CopyPng emit
-      # "Input PNG does not have an 8 bit input depth" warnings (and a 16-bit asset can
-      # decode to ~2x RAM). Re-encode just those to 8-bit. Non-fatal: if the tool is
-      # missing or a file is already 8-bit, we skip it without failing the build.
-      - name: Normalize 16-bit PNGs to 8-bit (silence libpng warnings)
+      # Cosmetic: a few upstream LegacyComponents icons ship as 1-bit/2-bit PNGs, which
+      # makes CopyPng emit "Input PNG does not have an 8 bit input depth" warnings. Re-encode
+      # just those to 8-bit, mode-aware so pixels stay byte-identical (verified locally):
+      # 1-bit grayscale -> 8-bit L, palette -> 8-bit RGBA. Non-fatal: if Pillow is
+      # unavailable or a file is missing we skip it without failing the build.
+      - name: Normalize sub-8-bit PNGs to 8-bit (silence libpng warnings)
         run: |
           cd telegram-ios
-          if command -v magick >/dev/null 2>&1; then TOOL="magick"
-          elif command -v convert >/dev/null 2>&1; then TOOL="convert"
-          else echo "ImageMagick not found — skipping (non-fatal)"; exit 0; fi
-          for name in PhotoEditorCropCorners MediaGroupBurst MediaGroupAll CameraFocusCrosshairs; do
-            find submodules -type f -name "${name}*.png" 2>/dev/null | while read -r f; do
-              if file "$f" | grep -qiE "16-bit"; then
-                "$TOOL" "$f" -depth 8 "$f" && echo "8-bit: $f"
-              fi
-            done
-          done
-          echo "PNG normalization done"
+          python3 -m pip install --quiet --disable-pip-version-check Pillow >/dev/null 2>&1 || pip3 install --quiet Pillow >/dev/null 2>&1 || true
+          python3 << 'PYEOF'
+          import os
+          try:
+              from PIL import Image
+          except Exception as e:
+              print("Pillow unavailable — skipping (non-fatal):", e)
+              raise SystemExit(0)
+          names = {"PhotoEditorCropCorners", "MediaGroupBurst", "MediaGroupAll", "CameraFocusCrosshairs", "ModernMediaEmptyAlbumIcon"}
+          count = 0
+          for root, _, files in os.walk("submodules"):
+              for fn in files:
+                  if not fn.endswith(".png"):
+                      continue
+                  base = fn.split("@", 1)[0].rsplit(".", 1)[0]
+                  if base not in names:
+                      continue
+                  p = os.path.join(root, fn)
+                  try:
+                      im = Image.open(p)
+                      if im.mode == "1":
+                          im2 = im.convert("L")
+                      elif im.mode == "P":
+                          im2 = im.convert("RGBA")
+                      elif im.mode in ("L", "LA", "RGB", "RGBA"):
+                          im2 = im
+                      else:
+                          im2 = im.convert("RGBA")
+                      im2.save(p, format="PNG", optimize=True)
+                      count += 1
+                      print("8-bit:", p)
+                  except Exception as e:
+                      print("skip", p, e)
+          print("PNG normalization done, converted", count)
+          PYEOF
 
       # Must run on every SDK: on iOS 26+ the "Fix Icon Composer" step is skipped and
       # these lines were never appended — Bazel then enables index-while-building (slow,

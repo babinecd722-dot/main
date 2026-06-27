@@ -6104,6 +6104,18 @@ def patch_fake_gifts(tg: Path) -> None:
             else:
                 ok = False
                 print("FakeGifts: WARNING GiftViewScreen Share anchor not found")
+
+            # 2c) Suppress the NATIVE Pin/Unpin item for fake gifts. Our pinned-icon work
+            #     gives fake gifts a reference + pinnedToTop, which satisfies the stock
+            #     condition and renders a second, dead "Pin/Unpin" (it talks to the server)
+            #     above our working one. Skip it when the gift is one of ours.
+            native_pin_old = "                if let reference = arguments.reference, case .unique = arguments.gift, let togglePinnedToTop = controller.togglePinnedToTop, let pinnedToTop = arguments.pinnedToTop {\n"
+            native_pin_new = "                if let reference = arguments.reference, case .unique = arguments.gift, let togglePinnedToTop = controller.togglePinnedToTop, let pinnedToTop = arguments.pinnedToTop, !AorusFakeGiftsStore.contains(arguments.gift) {\n"
+            if native_pin_old in t:
+                t = t.replace(native_pin_old, native_pin_new, 1)
+            else:
+                print("FakeGifts: WARNING GiftViewScreen native pin anchor not found")
+
             if ok:
                 # The Transfer flow constructs a StoreMessage (a Postbox type) to inject
                 # the local-only gift message; make sure the module is imported.
