@@ -194,6 +194,7 @@ private final class AorusPerformanceHUDView: UIView {
             label.removeFromSuperview()
         }
         rows = rows.filter { visibleKeys.contains($0.key) }
+        reorderVisibleRows(visibleKeys)
 
         let graphVisible = settings.performanceShowGraph && !visibleKeys.isEmpty
         if graphVisible != isGraphVisible {
@@ -208,6 +209,22 @@ private final class AorusPerformanceHUDView: UIView {
         if graphVisible {
             graphView.append(snapshot: snapshot)
         }
+    }
+
+    private func reorderVisibleRows(_ visibleKeys: [String]) {
+        for key in visibleKeys {
+            if let label = rows[key] {
+                stackView.removeArrangedSubview(label)
+            }
+        }
+        stackView.removeArrangedSubview(graphView)
+
+        for key in visibleKeys {
+            if let label = rows[key] {
+                stackView.addArrangedSubview(label)
+            }
+        }
+        stackView.addArrangedSubview(graphView)
     }
 
     private enum RowStyle {
