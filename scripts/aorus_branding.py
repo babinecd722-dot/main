@@ -7252,6 +7252,16 @@ def patch_wallpaper_remove_footer(tg: Path) -> None:
         ok = False
         print("WARNING: WallpaperFooter layout anchor not found")
 
+    # After hiding the footer, descriptionLayout is no longer read anywhere; drop the
+    # binding so the compiler does not flag it as an unused immutable value (CI = error).
+    layout_old = "        let (descriptionLayout, descriptionApply) = makeDescriptionLayout(self.descriptionItem, params, ItemListNeighbors(top: .none, bottom: .none))\n"
+    layout_new = "        let (_, descriptionApply) = makeDescriptionLayout(self.descriptionItem, params, ItemListNeighbors(top: .none, bottom: .none)) // AorusGram: hide wallpaper footer\n"
+    if layout_old in t:
+        t = t.replace(layout_old, layout_new, 1)
+    else:
+        ok = False
+        print("WARNING: WallpaperFooter descriptionLayout anchor not found")
+
     if ok:
         grid.write_text(t, encoding="utf-8")
         print("WallpaperFooter: patched ThemeGridControllerNode (footer hidden)")
