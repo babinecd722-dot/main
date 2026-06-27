@@ -12,29 +12,42 @@ import AccountContext
 
 // MARK: - Interval slider
 
-// Discrete snap points (hours) for the cache cleanup interval: 6 h, 24 h, 7 d, 30 d.
-private let _aorusIntervalPresets = [6, 24, 168, 720]
+// Discrete snap points for performance sliders.
+private let _aorusCacheIntervalPresets = [6, 24, 168, 720]       // hours
+private let _aorusRAMIntervalPresets = [30, 60, 300, 900]        // seconds
 
 // Format an hours value for the slider's trailing label.
-private func _aorusIntervalText(_ hours: Int, isRu: Bool) -> String {
+private func _aorusCacheIntervalText(_ hours: Int, isRu: Bool) -> String {
     if hours % 24 == 0 { let d = hours / 24; return isRu ? "\(d) дн" : "\(d) d" }
     return isRu ? "\(hours) ч" : "\(hours) h"
 }
 
-/// A settings row that embeds a UISlider for selecting from `_aorusIntervalPresets`.
+private func _aorusRAMIntervalText(_ seconds: Int, isRu: Bool) -> String {
+    if seconds < 60 { return isRu ? "\(seconds) сек" : "\(seconds) sec" }
+    let minutes = seconds / 60
+    return isRu ? "\(minutes) мин" : "\(minutes) min"
+}
+
+/// A settings row that embeds a discrete UISlider for cleanup intervals.
 private final class AorusIntervalSliderItem: ListViewItem, ItemListItem {
     let theme: PresentationTheme
     let title: String
     let value: Int
+    let presets: [Int]
+    let valueText: (Int, Bool) -> String
     let sectionId: ItemListSectionId
     let requestsNoInset: Bool = false
     let updated: (Int) -> Void
 
     init(theme: PresentationTheme, title: String, value: Int,
+         presets: [Int] = _aorusCacheIntervalPresets,
+         valueText: @escaping (Int, Bool) -> String = _aorusCacheIntervalText,
          sectionId: ItemListSectionId, updated: @escaping (Int) -> Void) {
         self.theme = theme
         self.title = title
         self.value = value
+        self.presets = presets
+        self.valueText = valueText
         self.sectionId = sectionId
         self.updated = updated
     }
@@ -137,7 +150,7 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
 
         let sl = UISlider()
         sl.minimumValue = 0
-        sl.maximumValue = Float(_aorusIntervalPresets.count - 1)
+        sl.maximumValue = 0
         sl.isContinuous = true
         sl.addTarget(self, action: #selector(sliderMoved(_:)), for: .valueChanged)
         sl.addTarget(self, action: #selector(sliderEnded(_:)),
@@ -151,11 +164,12 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
 
     private func applyItem(_ item: AorusIntervalSliderItem) {
         let isRu = UserDefaults.standard.string(forKey: "aorusgram_lang") == "ru"
-        let idx = _aorusIntervalPresets.firstIndex(of: item.value) ?? 1
+        let idx = item.presets.firstIndex(of: item.value) ?? min(1, max(0, item.presets.count - 1))
         titleLabel?.text = item.title
         titleLabel?.textColor = item.theme.list.itemPrimaryTextColor
-        valueLabel?.text = _aorusIntervalText(_aorusIntervalPresets[idx], isRu: isRu)
+        valueLabel?.text = item.valueText(item.presets[idx], isRu)
         valueLabel?.textColor = item.theme.list.itemSecondaryTextColor
+        sliderView?.maximumValue = Float(max(0, item.presets.count - 1))
         sliderView?.value = Float(idx)
         sliderView?.tintColor = item.theme.list.itemAccentColor
     }
@@ -171,16 +185,18 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
     }
 
     @objc private func sliderMoved(_ sender: UISlider) {
-        let idx = max(0, min(Int(sender.value.rounded()), _aorusIntervalPresets.count - 1))
+        guard let item = item else { return }
+        let idx = max(0, min(Int(sender.value.rounded()), item.presets.count - 1))
         sender.value = Float(idx)
         let isRu = UserDefaults.standard.string(forKey: "aorusgram_lang") == "ru"
-        valueLabel?.text = _aorusIntervalText(_aorusIntervalPresets[idx], isRu: isRu)
+        valueLabel?.text = item.valueText(item.presets[idx], isRu)
     }
 
     @objc private func sliderEnded(_ sender: UISlider) {
-        let idx = max(0, min(Int(sender.value.rounded()), _aorusIntervalPresets.count - 1))
+        guard let item = item else { return }
+        let idx = max(0, min(Int(sender.value.rounded()), item.presets.count - 1))
         sender.value = Float(idx)
-        item?.updated(_aorusIntervalPresets[idx])
+        item.updated(item.presets[idx])
     }
 
     func asyncLayout() -> (AorusIntervalSliderItem, ListViewItemLayoutParams, ItemListNeighbors)
@@ -274,6 +290,17 @@ private struct AorusState: Equatable {
     var autoReply: Bool
     var downloadAccel: Bool
     var antiSpamEnabled: Bool
+    var performanceStatsEnabled: Bool
+    var performanceShowRAM: Bool
+    var performanceShowCPU: Bool
+    var performanceShowFPS: Bool
+    var performanceShowBattery: Bool
+    var performanceShowNetwork: Bool
+    var performanceShowDisk: Bool
+    var performanceShowThermal: Bool
+    var performanceShowGraph: Bool
+    var ramAutoClean: Bool
+    var ramCleanInterval: Int
     var cacheAutoClean: Bool
     var cacheCleanInterval: Int
     var editLocally: Bool
@@ -306,6 +333,7 @@ private final class AorusArguments {
     let openMisc: () -> Void
     let openDeviceSpoof: () -> Void
     let openVoiceTwin: () -> Void
+    let setRAMCleanInterval: (Int) -> Void
     let setCacheInterval: (Int) -> Void
     let openProxyDiagnostics: () -> Void // AORUS-DIAG
     let openAppBadgePicker: () -> Void
@@ -318,6 +346,7 @@ private final class AorusArguments {
          openMisc: @escaping () -> Void,
          openDeviceSpoof: @escaping () -> Void,
          openVoiceTwin: @escaping () -> Void,
+         setRAMCleanInterval: @escaping (Int) -> Void,
          setCacheInterval: @escaping (Int) -> Void,
          openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
          openAppBadgePicker: @escaping () -> Void) {
@@ -329,6 +358,7 @@ private final class AorusArguments {
         self.openMisc = openMisc
         self.openDeviceSpoof = openDeviceSpoof
         self.openVoiceTwin = openVoiceTwin
+        self.setRAMCleanInterval = setRAMCleanInterval
         self.setCacheInterval = setCacheInterval
         self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
         self.openAppBadgePicker = openAppBadgePicker
@@ -357,6 +387,17 @@ private enum AorusEntry: ItemListNodeEntry {
     case perfHeader(PresentationTheme, String)
     case downloadAccel(PresentationTheme, String, Bool)
     case antiSpam(PresentationTheme, String, Bool)
+    case performanceStats(PresentationTheme, String, Bool)
+    case performanceRAM(PresentationTheme, String, Bool)
+    case performanceCPU(PresentationTheme, String, Bool)
+    case performanceFPS(PresentationTheme, String, Bool)
+    case performanceBattery(PresentationTheme, String, Bool)
+    case performanceNetwork(PresentationTheme, String, Bool)
+    case performanceDisk(PresentationTheme, String, Bool)
+    case performanceThermal(PresentationTheme, String, Bool)
+    case performanceGraph(PresentationTheme, String, Bool)
+    case ramAutoClean(PresentationTheme, String, Bool)
+    case ramInterval(PresentationTheme, String, Int)
     case cacheAutoClean(PresentationTheme, String, Bool)
     case cacheInterval(PresentationTheme, String, Int)
 
@@ -403,7 +444,10 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.privacy.rawValue
         case .aiHeader, .voiceTranscription, .chatSummary, .translator, .autoReply, .voiceTwin:
             return AorusSection.ai.rawValue
-        case .perfHeader, .downloadAccel, .antiSpam, .cacheAutoClean, .cacheInterval:
+        case .perfHeader, .downloadAccel, .antiSpam, .performanceStats, .performanceRAM,
+             .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
+             .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
+             .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
         case .uiHeader, .glassUI, .amoledMode, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge:
             return AorusSection.ui.rawValue
@@ -444,37 +488,48 @@ private enum AorusEntry: ItemListNodeEntry {
         case .perfHeader:           return 20
         case .downloadAccel:        return 21
         case .antiSpam:             return 22
-        case .cacheAutoClean:       return 24
-        case .cacheInterval:        return 25
-        case .uiHeader:             return 30
-        case .glassUI:              return 31
-        case .amoledMode:           return 32
-        case .hideCallsTab:         return 33
-        case .hideContactsTab:      return 34
-        case .siriShortcuts:        return 35
-        case .appBadge:             return 36
-        case .editLocalHeader:      return 43
-        case .messagesDoubleCopy:   return 44
-        case .messagesTripleDelete: return 45
-        case .editLocalEnabled:     return 46
-        case .userMessagesEnabled:  return 47
-        case .deviceSpoofHeader:    return 48
-        case .deviceSpoof:          return 49
-        case .bypassHeader:         return 50
-        case .bypassSavePaid:       return 51
-        case .bypassSaveViewOnce:   return 52
-        case .bypassStoryDownload:  return 53
-        case .antiSpoofHeader:      return 60
-        case .antiSpoofDeleted:     return 61
-        case .antiSpoofOnline:      return 62
-        case .accountBackupHeader:  return 65
-        case .accountBackup:        return 66
-        case .misc:                 return 67
-        case .aorusCodeHeader:      return 70
-        case .aorusCodeEnabled:     return 71
-        case .subscription:         return 79
-        case .officialChannel:      return 80
-        case .proxyDiagnostics:     return 90 // AORUS-DIAG
+        case .performanceStats:     return 23
+        case .performanceRAM:       return 24
+        case .performanceCPU:       return 25
+        case .performanceFPS:       return 26
+        case .performanceBattery:   return 27
+        case .performanceNetwork:   return 28
+        case .performanceDisk:      return 29
+        case .performanceThermal:   return 30
+        case .performanceGraph:     return 31
+        case .ramAutoClean:         return 32
+        case .ramInterval:          return 33
+        case .cacheAutoClean:       return 34
+        case .cacheInterval:        return 35
+        case .uiHeader:             return 50
+        case .glassUI:              return 51
+        case .amoledMode:           return 52
+        case .hideCallsTab:         return 53
+        case .hideContactsTab:      return 54
+        case .siriShortcuts:        return 55
+        case .appBadge:             return 56
+        case .editLocalHeader:      return 63
+        case .messagesDoubleCopy:   return 64
+        case .messagesTripleDelete: return 65
+        case .editLocalEnabled:     return 66
+        case .userMessagesEnabled:  return 67
+        case .deviceSpoofHeader:    return 68
+        case .deviceSpoof:          return 69
+        case .bypassHeader:         return 70
+        case .bypassSavePaid:       return 71
+        case .bypassSaveViewOnce:   return 72
+        case .bypassStoryDownload:  return 73
+        case .antiSpoofHeader:      return 80
+        case .antiSpoofDeleted:     return 81
+        case .antiSpoofOnline:      return 82
+        case .accountBackupHeader:  return 85
+        case .accountBackup:        return 86
+        case .misc:                 return 87
+        case .aorusCodeHeader:      return 90
+        case .aorusCodeEnabled:     return 91
+        case .subscription:         return 99
+        case .officialChannel:      return 100
+        case .proxyDiagnostics:     return 110 // AORUS-DIAG
         }
     }
 
@@ -516,6 +571,28 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .downloadAccel(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .antiSpam(lt, ls, lv):
             if case let .antiSpam(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceStats(lt, ls, lv):
+            if case let .performanceStats(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceRAM(lt, ls, lv):
+            if case let .performanceRAM(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceCPU(lt, ls, lv):
+            if case let .performanceCPU(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceFPS(lt, ls, lv):
+            if case let .performanceFPS(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceBattery(lt, ls, lv):
+            if case let .performanceBattery(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceNetwork(lt, ls, lv):
+            if case let .performanceNetwork(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceDisk(lt, ls, lv):
+            if case let .performanceDisk(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceThermal(lt, ls, lv):
+            if case let .performanceThermal(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceGraph(lt, ls, lv):
+            if case let .performanceGraph(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .ramAutoClean(lt, ls, lv):
+            if case let .ramAutoClean(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .ramInterval(lt, ls, lv):
+            if case let .ramInterval(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .cacheAutoClean(lt, ls, lv):
             if case let .cacheAutoClean(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .cacheInterval(lt, ls, lv):
@@ -617,6 +694,31 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.downloadAccel, $0) })
         case let .antiSpam(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiSpamEnabled, $0) })
+        case let .performanceStats(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceStatsEnabled, $0) })
+        case let .performanceRAM(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowRAM, $0) })
+        case let .performanceCPU(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowCPU, $0) })
+        case let .performanceFPS(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowFPS, $0) })
+        case let .performanceBattery(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowBattery, $0) })
+        case let .performanceNetwork(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowNetwork, $0) })
+        case let .performanceDisk(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowDisk, $0) })
+        case let .performanceThermal(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowThermal, $0) })
+        case let .performanceGraph(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowGraph, $0) })
+        case let .ramAutoClean(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.ramAutoClean, $0) })
+        case let .ramInterval(theme, title, value):
+            return AorusIntervalSliderItem(theme: theme, title: title, value: value,
+                                           presets: _aorusRAMIntervalPresets,
+                                           valueText: _aorusRAMIntervalText,
+                                           sectionId: section, updated: args.setRAMCleanInterval)
         case let .cacheAutoClean(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.cacheAutoClean, $0) })
         case let .cacheInterval(theme, title, value):
@@ -724,8 +826,9 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .perfHeader(theme, l10n.perfHeader),
         .downloadAccel(theme, l10n.downloadAccel, state.downloadAccel),
         .antiSpam(theme, l10n.antiSpam, state.antiSpamEnabled),
-        .cacheAutoClean(theme, l10n.cacheAutoClean, state.cacheAutoClean),
-        // .cacheInterval is appended below, only when auto-clean is enabled.
+        .performanceStats(theme, l10n.performanceStats, state.performanceStatsEnabled),
+        // Detailed metric switches, RAM auto-clean and cache auto-clean are appended
+        // below so they animate in/out directly under their parent toggles.
 
         .uiHeader(theme, l10n.uiHeader),
         .glassUI(theme, l10n.glassUI, state.glassUI),
@@ -767,7 +870,52 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
     ]
 
-    // The cleanup-interval slider only appears once auto-clean is switched on.
+    if state.performanceStatsEnabled, let idx = entries.firstIndex(where: {
+        if case .performanceStats = $0 { return true }; return false
+    }) {
+        entries.insert(contentsOf: [
+            .performanceRAM(theme, l10n.performanceRAM, state.performanceShowRAM),
+            .performanceCPU(theme, l10n.performanceCPU, state.performanceShowCPU),
+            .performanceFPS(theme, l10n.performanceFPS, state.performanceShowFPS),
+            .performanceBattery(theme, l10n.performanceBattery, state.performanceShowBattery),
+            .performanceNetwork(theme, l10n.performanceNetwork, state.performanceShowNetwork),
+            .performanceDisk(theme, l10n.performanceDisk, state.performanceShowDisk),
+            .performanceThermal(theme, l10n.performanceThermal, state.performanceShowThermal),
+            .performanceGraph(theme, l10n.performanceGraph, state.performanceShowGraph),
+        ], at: idx + 1)
+    }
+
+    if let idx = entries.firstIndex(where: {
+        if case .performanceStats = $0 { return true }; return false
+    }) {
+        var insertAt = idx + 1
+        var scanningMetrics = true
+        while scanningMetrics && insertAt < entries.count {
+            switch entries[insertAt] {
+            case .performanceRAM, .performanceCPU, .performanceFPS, .performanceBattery,
+                 .performanceNetwork, .performanceDisk, .performanceThermal, .performanceGraph:
+                insertAt += 1
+            default:
+                scanningMetrics = false
+            }
+        }
+        entries.insert(.ramAutoClean(theme, l10n.ramAutoClean, state.ramAutoClean), at: insertAt)
+    }
+
+    if state.ramAutoClean, let idx = entries.firstIndex(where: {
+        if case .ramAutoClean = $0 { return true }; return false
+    }) {
+        entries.insert(.ramInterval(theme, l10n.ramCleanInterval, state.ramCleanInterval), at: idx + 1)
+    }
+
+    if let idx = entries.firstIndex(where: {
+        if case .ramAutoClean = $0 { return true }; return false
+    }) {
+        let insertAt = state.ramAutoClean ? idx + 2 : idx + 1
+        entries.insert(.cacheAutoClean(theme, l10n.cacheAutoClean, state.cacheAutoClean), at: insertAt)
+    }
+
+    // The cache cleanup-interval slider only appears once cache auto-clean is switched on.
     if state.cacheAutoClean, let idx = entries.firstIndex(where: {
         if case .cacheAutoClean = $0 { return true }; return false
     }) {
@@ -798,6 +946,17 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         autoReply:          mgr.autoReply,
         downloadAccel:      mgr.downloadAccel,
         antiSpamEnabled:    mgr.antiSpamEnabled,
+        performanceStatsEnabled: mgr.performanceStatsEnabled,
+        performanceShowRAM:      mgr.performanceShowRAM,
+        performanceShowCPU:      mgr.performanceShowCPU,
+        performanceShowFPS:      mgr.performanceShowFPS,
+        performanceShowBattery:  mgr.performanceShowBattery,
+        performanceShowNetwork:  mgr.performanceShowNetwork,
+        performanceShowDisk:     mgr.performanceShowDisk,
+        performanceShowThermal:  mgr.performanceShowThermal,
+        performanceShowGraph:    mgr.performanceShowGraph,
+        ramAutoClean:       mgr.ramAutoClean,
+        ramCleanInterval:   mgr.ramCleanInterval,
         cacheAutoClean:     mgr.cacheAutoClean,
         cacheCleanInterval: mgr.cacheCleanInterval,
         editLocally:        mgr.editLocally,
@@ -850,6 +1009,17 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.autoReply           = s.autoReply
             mgr.downloadAccel       = s.downloadAccel
             mgr.antiSpamEnabled     = s.antiSpamEnabled
+            mgr.performanceStatsEnabled = s.performanceStatsEnabled
+            mgr.performanceShowRAM      = s.performanceShowRAM
+            mgr.performanceShowCPU      = s.performanceShowCPU
+            mgr.performanceShowFPS      = s.performanceShowFPS
+            mgr.performanceShowBattery  = s.performanceShowBattery
+            mgr.performanceShowNetwork  = s.performanceShowNetwork
+            mgr.performanceShowDisk     = s.performanceShowDisk
+            mgr.performanceShowThermal  = s.performanceShowThermal
+            mgr.performanceShowGraph    = s.performanceShowGraph
+            mgr.ramAutoClean       = s.ramAutoClean
+            mgr.ramCleanInterval   = s.ramCleanInterval
             mgr.cacheAutoClean      = s.cacheAutoClean
             mgr.cacheCleanInterval  = s.cacheCleanInterval
             mgr.editLocally         = s.editLocally
@@ -1047,6 +1217,10 @@ public func aorusGramController(context: AccountContext) -> ViewController {
                 return
             }
             navigationController.pushViewController(voiceTwinController(context: context))
+        },
+        setRAMCleanInterval: { seconds in
+            AorusGramManager.shared.ramCleanInterval = seconds
+            updateState { s in var n = s; n.ramCleanInterval = seconds; return n }
         },
         setCacheInterval: { hours in
             AorusGramManager.shared.cacheCleanInterval = hours

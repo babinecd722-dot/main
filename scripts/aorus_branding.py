@@ -6909,8 +6909,9 @@ import Postbox
 
 // AorusGram AntiSearch — swap visually identical Cyrillic <-> Latin letters on outgoing
 // text at send and edit time so the rendered message looks pixel-identical but no longer
-// matches a plain keyword search. Only true homoglyph pairs are used (А=A, е=e, …), so
-// there is never a mismatched glyph like a Latin "i" inside "привет".
+// matches a plain keyword search. Only conservative true homoglyph pairs are used
+// (А=A, е=e, …), so there is never a visibly different uppercase glyph like Latin
+// "Y" for Cyrillic "У" inside Russian text.
 //
 // Safety:
 //  • Every swap stays inside the BMP and is one UTF-16 unit, so message entity offsets
@@ -6938,7 +6939,7 @@ public enum AorusAntiSearch {
         let pairs: [(Character, Character)] = [
             // Uppercase
             ("A", "А"), ("B", "В"), ("C", "С"), ("E", "Е"), ("H", "Н"), ("K", "К"),
-            ("M", "М"), ("O", "О"), ("P", "Р"), ("T", "Т"), ("X", "Х"), ("Y", "У"),
+            ("M", "М"), ("O", "О"), ("P", "Р"), ("T", "Т"), ("X", "Х"),
             ("I", "І"), ("J", "Ј"), ("S", "Ѕ"),
             // Lowercase
             ("a", "а"), ("c", "с"), ("e", "е"), ("o", "о"), ("p", "р"), ("x", "х"),

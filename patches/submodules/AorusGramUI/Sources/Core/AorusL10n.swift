@@ -90,12 +90,32 @@ public struct AorusL10n {
     public var autoReply: String { t("Автоответчик", "Auto-Reply") }
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
     public var antiSpam: String { t("Анти-спам", "Anti-Spam") }
+    public var performanceStats: String { t("Показывать статистику", "Show Statistics") }
+    public var performanceRAM: String { t("RAM", "RAM") }
+    public var performanceCPU: String { t("CPU", "CPU") }
+    public var performanceFPS: String { t("FPS", "FPS") }
+    public var performanceBattery: String { t("Батарея", "Battery") }
+    public var performanceNetwork: String { t("Сеть", "Network") }
+    public var performanceDisk: String { t("Диск", "Disk") }
+    public var performanceThermal: String { t("Нагрев", "Thermal") }
+    public var performanceGraph: String { t("График", "Graph") }
+    public var ramAutoClean: String { t("Автоочистка RAM", "Auto-Clean RAM") }
+    public var ramCleanInterval: String { t("Интервал очистки RAM", "RAM Cleanup Interval") }
+    public var thermalNominal: String { t("Норма", "Normal") }
+    public var thermalFair: String { t("Тепло", "Warm") }
+    public var thermalSerious: String { t("ГОРЯЧО", "HOT") }
+    public var thermalCritical: String { t("Критично", "Critical") }
     public var cacheAutoClean: String { t("Автоочистка кэша", "Auto-Clean Cache") }
     public var cacheInterval: String { t("Интервал очистки", "Cleanup Interval") }
     // Interval value in hours: "6 ч"/"6 h", or whole days as "7 дн"/"7 d".
     public func cacheIntervalValue(_ hours: Int) -> String {
         if hours % 24 == 0 { let d = hours / 24; return t("\(d) дн", "\(d) d") }
         return t("\(hours) ч", "\(hours) h")
+    }
+    public func ramIntervalValue(_ seconds: Int) -> String {
+        if seconds < 60 { return t("\(seconds) сек", "\(seconds) sec") }
+        let minutes = seconds / 60
+        return t("\(minutes) мин", "\(minutes) min")
     }
     public var glassUI: String { t("Glass UI", "Glass UI") }
     public var siriShortcuts: String { t("Siri Shortcuts", "Siri Shortcuts") }

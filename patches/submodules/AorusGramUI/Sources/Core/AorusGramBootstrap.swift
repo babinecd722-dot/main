@@ -61,6 +61,9 @@ public final class AorusGramBootstrap {
         // Cache auto-cleaning — periodic wipe of deleted-messages + URL caches
         AorusCacheManager.shared.refresh()
 
+        // Performance HUD — transparent pass-through overlay and RAM cleanup timer
+        AorusPerformanceHUDManager.shared.refresh()
+
         // Auto-reply
         AutoReplyManager.shared.load()
 
@@ -169,6 +172,7 @@ public final class AorusGramBootstrap {
     @objc private func appDidBecomeActive() {
         DeletedMessagesCache.shared.scheduleBackgroundSync()
         AorusCacheManager.shared.refresh()
+        AorusPerformanceHUDManager.shared.refresh()
     }
 
     @objc private func appDidEnterBackground() {

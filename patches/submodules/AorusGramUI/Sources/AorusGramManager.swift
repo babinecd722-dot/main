@@ -49,6 +49,20 @@ public final class AorusGramManager {
     public var cacheAutoClean: Bool    = false { didSet { save() } }
     public var cacheCleanInterval: Int = 24    { didSet { save() } }   // hours
 
+    // Performance HUD (Performance section). The main switch is opt-in, while
+    // individual metrics default on so the first enable shows a useful dashboard.
+    public var performanceStatsEnabled: Bool = false { didSet { save() } }
+    public var performanceShowRAM: Bool      = true  { didSet { save() } }
+    public var performanceShowCPU: Bool      = true  { didSet { save() } }
+    public var performanceShowFPS: Bool      = true  { didSet { save() } }
+    public var performanceShowBattery: Bool  = true  { didSet { save() } }
+    public var performanceShowNetwork: Bool  = true  { didSet { save() } }
+    public var performanceShowDisk: Bool     = true  { didSet { save() } }
+    public var performanceShowThermal: Bool  = true  { didSet { save() } }
+    public var performanceShowGraph: Bool    = true  { didSet { save() } }
+    public var ramAutoClean: Bool            = false { didSet { save() } }
+    public var ramCleanInterval: Int         = 60    { didSet { save() } }   // seconds
+
     // Voice Twin — pitch/character transform applied to OUTGOING voice messages.
     // preset ∈ {"anonymous","male","female","robot","high"}.
     public var voiceTwinEnabled: Bool  = false        { didSet { save() } }
@@ -93,6 +107,17 @@ public final class AorusGramManager {
         tripleTapDelete     = d["tripleTapDelete"]     as? Bool ?? false
         cacheAutoClean      = d["cacheAutoClean"]      as? Bool ?? false
         cacheCleanInterval  = d["cacheCleanInterval"]  as? Int  ?? 24
+        performanceStatsEnabled = d["performanceStatsEnabled"] as? Bool ?? false
+        performanceShowRAM      = d["performanceShowRAM"]      as? Bool ?? true
+        performanceShowCPU      = d["performanceShowCPU"]      as? Bool ?? true
+        performanceShowFPS      = d["performanceShowFPS"]      as? Bool ?? true
+        performanceShowBattery  = d["performanceShowBattery"]  as? Bool ?? true
+        performanceShowNetwork  = d["performanceShowNetwork"]  as? Bool ?? true
+        performanceShowDisk     = d["performanceShowDisk"]     as? Bool ?? true
+        performanceShowThermal  = d["performanceShowThermal"]  as? Bool ?? true
+        performanceShowGraph    = d["performanceShowGraph"]    as? Bool ?? true
+        ramAutoClean            = d["ramAutoClean"]            as? Bool ?? false
+        ramCleanInterval        = d["ramCleanInterval"]        as? Int  ?? 60
         voiceTwinEnabled    = d["voiceTwinEnabled"]    as? Bool   ?? false
         voiceTwinPreset     = d["voiceTwinPreset"]     as? String ?? "anonymous"
     }
@@ -124,6 +149,17 @@ public final class AorusGramManager {
             "tripleTapDelete":     tripleTapDelete,
             "cacheAutoClean":      cacheAutoClean,
             "cacheCleanInterval":  cacheCleanInterval,
+            "performanceStatsEnabled": performanceStatsEnabled,
+            "performanceShowRAM":      performanceShowRAM,
+            "performanceShowCPU":      performanceShowCPU,
+            "performanceShowFPS":      performanceShowFPS,
+            "performanceShowBattery":  performanceShowBattery,
+            "performanceShowNetwork":  performanceShowNetwork,
+            "performanceShowDisk":     performanceShowDisk,
+            "performanceShowThermal":  performanceShowThermal,
+            "performanceShowGraph":    performanceShowGraph,
+            "ramAutoClean":            ramAutoClean,
+            "ramCleanInterval":        ramCleanInterval,
             "voiceTwinEnabled":    voiceTwinEnabled,
             "voiceTwinPreset":     voiceTwinPreset,
         ], forKey: key)
