@@ -52,6 +52,25 @@ jobs:
           fi
           echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
 
+      # Cosmetic: a few upstream icons ship as 16-bit PNGs, which makes CopyPng emit
+      # "Input PNG does not have an 8 bit input depth" warnings (and a 16-bit asset can
+      # decode to ~2x RAM). Re-encode just those to 8-bit. Non-fatal: if the tool is
+      # missing or a file is already 8-bit, we skip it without failing the build.
+      - name: Normalize 16-bit PNGs to 8-bit (silence libpng warnings)
+        run: |
+          cd telegram-ios
+          if command -v magick >/dev/null 2>&1; then TOOL="magick"
+          elif command -v convert >/dev/null 2>&1; then TOOL="convert"
+          else echo "ImageMagick not found — skipping (non-fatal)"; exit 0; fi
+          for name in PhotoEditorCropCorners MediaGroupBurst MediaGroupAll CameraFocusCrosshairs; do
+            find submodules -type f -name "${name}*.png" 2>/dev/null | while read -r f; do
+              if file "$f" | grep -qiE "16-bit"; then
+                "$TOOL" "$f" -depth 8 "$f" && echo "8-bit: $f"
+              fi
+            done
+          done
+          echo "PNG normalization done"
+
       # Must run on every SDK: on iOS 26+ the "Fix Icon Composer" step is skipped and
       # these lines were never appended — Bazel then enables index-while-building (slow,
       # extra GitHub downloads) and can hit 502/timeouts during repo fetch.
