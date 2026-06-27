@@ -7183,11 +7183,14 @@ def patch_anti_search(tg: Path) -> None:
 
 
 def patch_wallpaper_remove_footer(tg: Path) -> None:
-    """Hide the stock footer under chat wallpapers ("set a custom background and share…").
+    """Hide the stock footer text under chat wallpapers ("set a custom background…").
 
     The generic chat-wallpaper grid shows Wallpaper_SetCustomBackgroundInfo below the
-    gallery buttons. AorusGram removes that hint text and collapses the reserved height
-    so the layout stays tight. Channel-specific footer text is untouched.
+    gallery buttons. AorusGram hides that hint *text* but keeps its reserved height, so
+    the spacing between the action buttons and the wallpaper grid stays exactly like
+    upstream (collapsing it made the panel and grid stick together). We only flip the
+    description node to hidden; the layout math is left untouched, which also keeps the
+    descriptionLayout binding (the anchor patch_gif_wallpaper relies on) intact.
     """
     grid = tg / "submodules/TelegramUI/Components/Settings/WallpaperGridScreen/Sources/ThemeGridControllerNode.swift"
     if not grid.is_file():
@@ -7198,40 +7201,6 @@ def patch_wallpaper_remove_footer(tg: Path) -> None:
         print("WallpaperFooter: already patched")
         return
     ok = True
-
-    init_old = (
-        "        case .generic:\n"
-        "            descriptionText = presentationData.strings.Wallpaper_SetCustomBackgroundInfo\n"
-    )
-    init_new = (
-        "        case .generic:\n"
-        "            descriptionText = \"\" // AorusGram: hide wallpaper footer\n"
-    )
-    if init_old in t:
-        t = t.replace(init_old, init_new, 1)
-    else:
-        ok = False
-        print("WARNING: WallpaperFooter init anchor not found")
-
-    update_old = (
-        "        self.descriptionItem = ItemListTextItem(presentationData: ItemListPresentationData(presentationData), text: .plain(presentationData.strings.Wallpaper_SetCustomBackgroundInfo), sectionId: 0)\n"
-    )
-    update_new = (
-        "        self.descriptionItem = ItemListTextItem(presentationData: ItemListPresentationData(presentationData), text: .plain(\"\"), sectionId: 0) // AorusGram: hide wallpaper footer\n"
-    )
-    if update_old in t:
-        t = t.replace(update_old, update_new, 1)
-    else:
-        ok = False
-        print("WARNING: WallpaperFooter updatePresentationData anchor not found")
-
-    inset_old = "        var buttonBottomInset: CGFloat = descriptionLayout.contentSize.height + 17.0\n"
-    inset_new = "        var buttonBottomInset: CGFloat = 17.0 // AorusGram: hide wallpaper footer\n"
-    if inset_old in t:
-        t = t.replace(inset_old, inset_new, 1)
-    else:
-        ok = False
-        print("WARNING: WallpaperFooter buttonBottomInset anchor not found")
 
     hide_old = (
         "        } else {\n"
