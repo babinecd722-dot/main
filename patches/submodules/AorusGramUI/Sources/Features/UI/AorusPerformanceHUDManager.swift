@@ -329,6 +329,7 @@ public final class AorusPerformanceHUDManager {
     private var frameCount = 0
     private var fpsWindowStart = CACurrentMediaTime()
     private var currentFPS = 0
+    private var scheduledHUDRetryCount = 0
     private var previousNetworkBytes: (rx: UInt64, tx: UInt64, time: TimeInterval)?
 
     public func refresh() {
@@ -350,6 +351,10 @@ public final class AorusPerformanceHUDManager {
                                                    name: UIDevice.orientationDidChangeNotification, object: nil)
             NotificationCenter.default.addObserver(self, selector: #selector(onThermalChanged),
                                                    name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
+            if #available(iOS 13.0, *) {
+                NotificationCenter.default.addObserver(self, selector: #selector(onSceneDidActivate),
+                                                       name: UIScene.didActivateNotification, object: nil)
+            }
         }
 
         let manager = AorusGramManager.shared
@@ -367,8 +372,13 @@ public final class AorusPerformanceHUDManager {
     @objc private func onDidBecomeActive() {
         refresh()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?._refresh()
             self?.updateSnapshot()
         }
+    }
+
+    @objc private func onSceneDidActivate() {
+        refresh()
     }
 
     @objc private func onDidEnterBackground() {
@@ -390,7 +400,10 @@ public final class AorusPerformanceHUDManager {
 
     private func applyHUD(enabled: Bool) {
         if enabled {
-            ensureHUD()
+            guard ensureHUD() else {
+                scheduleHUDStartupRetry()
+                return
+            }
             startDisplayLink()
             if statsTimer == nil {
                 let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -402,6 +415,7 @@ public final class AorusPerformanceHUDManager {
             UIDevice.current.isBatteryMonitoringEnabled = true
             updateSnapshot()
         } else {
+            scheduledHUDRetryCount = 0
             statsTimer?.invalidate()
             statsTimer = nil
             stopDisplayLink()
@@ -428,16 +442,19 @@ public final class AorusPerformanceHUDManager {
         NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
     }
 
-    private func ensureHUD() {
+    @discardableResult
+    private func ensureHUD() -> Bool {
         if let window = window, !isWindowUsable(window) {
             discardHUDWindow()
         }
 
         if window == nil {
+            guard let window = makeWindow() else {
+                return false
+            }
             let host = UIViewController()
             host.view.backgroundColor = .clear
 
-            let window = makeWindow()
             window.backgroundColor = .clear
             window.rootViewController = host
             window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1.0)
@@ -458,6 +475,19 @@ public final class AorusPerformanceHUDManager {
             window?.isHidden = false
             layoutHUD()
         }
+        scheduledHUDRetryCount = 0
+        return true
+    }
+
+    private func scheduleHUDStartupRetry() {
+        guard AorusGramManager.shared.performanceStatsEnabled, scheduledHUDRetryCount < 6 else { return }
+        let delays: [TimeInterval] = [0.15, 0.35, 0.75, 1.5, 3.0, 6.0]
+        let delay = delays[min(scheduledHUDRetryCount, delays.count - 1)]
+        scheduledHUDRetryCount += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard AorusGramManager.shared.performanceStatsEnabled else { return }
+            self?._refresh()
+        }
     }
 
     private func isWindowUsable(_ window: UIWindow) -> Bool {
@@ -468,17 +498,18 @@ public final class AorusPerformanceHUDManager {
         return true
     }
 
-    private func makeWindow() -> UIWindow {
+    private func makeWindow() -> UIWindow? {
         if #available(iOS 13.0, *) {
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             let activeScene = scenes.first(where: { scene in
                 scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden && $0.isKeyWindow })
             }) ?? scenes.first(where: { scene in
                 scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden })
-            }) ?? scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
+            }) ?? scenes.first(where: { $0.activationState == .foregroundActive })
             if let scene = activeScene {
                 return UIWindow(windowScene: scene)
             }
+            return nil
         }
         return UIWindow(frame: UIScreen.main.bounds)
     }
