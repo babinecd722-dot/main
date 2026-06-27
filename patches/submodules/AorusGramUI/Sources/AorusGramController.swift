@@ -977,9 +977,6 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         bypassSaveViewOnce: UserDefaults.standard.object(forKey: "aorusgram_bypass_view_once") as? Bool ?? true,
         bypassStoryDownload: UserDefaults.standard.object(forKey: "aorusgram_bypass_story_dl") as? Bool ?? true
     )
-    if initialState.performanceStatsEnabled {
-        AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()
-    }
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue   = Atomic(value: initialState)
 

@@ -1028,14 +1028,19 @@ def patch_deleted_messages_interception(tg: Path) -> None:
 
 
 def patch_app_delegate_import_aorusgram(tg: Path) -> None:
-    """TelegramUI and AorusGram are separate Swift modules — AppDelegate must import AorusGram."""
+    """TelegramUI, AorusGram and AorusGramUI are separate Swift modules used by AppDelegate."""
     path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
     if not path.is_file():
         return
     t = path.read_text(encoding="utf-8")
-    if "import AorusGram" in t:
+    missing_imports = []
+    if "import AorusGram\n" not in t:
+        missing_imports.append("import AorusGram\n")
+    if "import AorusGramUI\n" not in t:
+        missing_imports.append("import AorusGramUI\n")
+    if not missing_imports:
         return
-    if "AorusGramBootstrap" not in t and "ClientSpoofManager" not in t:
+    if "AorusGramBootstrap" not in t and "ClientSpoofManager" not in t and "AorusPerformanceHUDManager" not in t:
         return
     # Do not rely on exact "\n" after UIKit — runners may use CRLF; insert after first import UIKit line.
     needle = "import UIKit"
@@ -1044,11 +1049,11 @@ def patch_app_delegate_import_aorusgram(tg: Path) -> None:
         line_end = t.find("\n", pos)
         if line_end != -1:
             insert_at = line_end + 1
-            t = t[:insert_at] + "import AorusGram\n" + t[insert_at:]
+            t = t[:insert_at] + "".join(missing_imports) + t[insert_at:]
             path.write_text(t, encoding="utf-8")
-            print("AppDelegate: added import AorusGram after import UIKit")
+            print("AppDelegate: added AorusGram imports after import UIKit")
             return
-    print("WARNING: AppDelegate: could not insert import AorusGram (import UIKit not found)")
+    print("WARNING: AppDelegate: could not insert AorusGram imports (import UIKit not found)")
 
 
 def patch_app_delegate_bootstrap(tg: Path) -> None:
@@ -1066,22 +1071,40 @@ def patch_app_delegate_bootstrap(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     orig = t
 
-    if "AorusGramBootstrap" in t:
+    if "AorusGramBootstrap.shared.setup(accountPath:" in t:
         print("AppDelegate: AorusGram bootstrap already injected")
-        return
-
-    # Anchor: the call that happens once the encryption params are ready — this is
-    # a stable, version-robust marker present in all recent Telegram iOS builds.
-    anchor = "let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters(rootPath, baseAppBundleId: baseAppBundleId)"
-    bootstrap_call = (
-        "\n        // AorusGram: initialise all custom features\n"
-        "        AorusGramBootstrap.shared.setup(accountPath: rootPath)\n"
-    )
-    if anchor in t:
-        t = t.replace(anchor, anchor + bootstrap_call, 1)
-        print("AppDelegate: AorusGramBootstrap.shared.setup() injected after encryption params")
     else:
-        print("WARNING: AppDelegate encryption params anchor not found — bootstrap not injected")
+        # Anchor: the call that happens once the encryption params are ready — this is
+        # a stable, version-robust marker present in all recent Telegram iOS builds.
+        anchor = "let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters(rootPath, baseAppBundleId: baseAppBundleId)"
+        bootstrap_call = (
+            "\n        // AorusGram: initialise all custom features\n"
+            "        AorusGramBootstrap.shared.setup(accountPath: rootPath)\n"
+        )
+        if anchor in t:
+            t = t.replace(anchor, anchor + bootstrap_call, 1)
+            print("AppDelegate: AorusGramBootstrap.shared.setup() injected after encryption params")
+        else:
+            print("WARNING: AppDelegate encryption params anchor not found — bootstrap not injected")
+
+    active_anchor = (
+        "    func applicationDidBecomeActive(_ application: UIApplication) {\n"
+        "        self.isInForegroundValue = true\n"
+    )
+    active_repl = (
+        "    func applicationDidBecomeActive(_ application: UIApplication) {\n"
+        "        if let aorusSettings = UserDefaults.standard.dictionary(forKey: \"aorusgram_settings_v1\"), (aorusSettings[\"performanceStatsEnabled\"] as? Bool) == true {\n"
+        "            AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()\n"
+        "        }\n"
+        "        self.isInForegroundValue = true\n"
+    )
+    if "AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()" in t:
+        print("AppDelegate: AorusPerformanceHUD restore already injected")
+    elif active_anchor in t:
+        t = t.replace(active_anchor, active_repl, 1)
+        print("AppDelegate: AorusPerformanceHUD restore injected in applicationDidBecomeActive")
+    else:
+        print("WARNING: AppDelegate applicationDidBecomeActive anchor not found — HUD restore not injected")
 
     if t != orig:
         path.write_text(t, encoding="utf-8")
@@ -10870,29 +10893,6 @@ def patch_gif_wallpaper(tg: Path) -> None:
         # routes both the press-highlight and the action by frame hit-testing. The GIF
         # button must be wired into BOTH closures or it is dead (no highlight, no action).
 
-        # Opening any normal wallpaper preview must clear the active GIF immediately.
-        # Otherwise the GIF overlay stays active and hides the candidate wallpaper,
-        # which makes regular wallpapers look gray/unselectable while GIF still works.
-        sub("        let interaction = ThemeGridControllerInteraction(openWallpaper: { [weak self] wallpaper in\n"
-            "            if let strongSelf = self, !strongSelf.currentState.editing {\n",
-            "        let interaction = ThemeGridControllerInteraction(openWallpaper: { [weak self] wallpaper in\n"
-            "            if let strongSelf = self, !strongSelf.currentState.editing {\n"
-            "                if AorusGifWallpaperStore.isActive {\n"
-            "                    AorusGifWallpaperStore.clear()\n"
-            "                }\n",
-            "interaction-open-clear-gif")
-
-        sub("                            if self.colorItemNode.frame.contains(location) {\n"
-            "                                self.colorItem.action()\n"
-            "                            } else if self.galleryItemNode.frame.contains(location) {\n",
-            "                            if self.colorItemNode.frame.contains(location) {\n"
-            "                                if AorusGifWallpaperStore.isActive {\n"
-            "                                    AorusGifWallpaperStore.clear()\n"
-            "                                }\n"
-            "                                self.colorItem.action()\n"
-            "                            } else if self.galleryItemNode.frame.contains(location) {\n",
-            "tap-action-color-clear-gif")
-
         # tapAction: route the tap to gifItem.action (place after the gallery branch)
         sub("                            } else if self.galleryItemNode.frame.contains(location) {\n"
             "                                if let galleryItem = self.galleryItem as? ItemListActionItem {\n"
@@ -10902,9 +10902,6 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "                                }\n"
             "                            } else if self.resetItemNode.frame.contains(location) {\n",
             "                            } else if self.galleryItemNode.frame.contains(location) {\n"
-            "                                if AorusGifWallpaperStore.isActive {\n"
-            "                                    AorusGifWallpaperStore.clear()\n"
-            "                                }\n"
             "                                if let galleryItem = self.galleryItem as? ItemListActionItem {\n"
             "                                    galleryItem.action()\n"
             "                                } else if let galleryItem = self.galleryItem as? ItemListPeerActionItem {\n"
@@ -10914,22 +10911,6 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "                                self.gifItem.action?()\n"
             "                            } else if self.resetItemNode.frame.contains(location) {\n",
             "tap-action-route")
-
-        sub("                            } else if self.resetItemNode.frame.contains(location) {\n"
-            "                                self.resetItem.action()\n"
-            "                            } else if self.removeItemNode.frame.contains(location) {\n"
-            "                                self.removeItem.action?()\n",
-            "                            } else if self.resetItemNode.frame.contains(location) {\n"
-            "                                if AorusGifWallpaperStore.isActive {\n"
-            "                                    AorusGifWallpaperStore.clear()\n"
-            "                                }\n"
-            "                                self.resetItem.action()\n"
-            "                            } else if self.removeItemNode.frame.contains(location) {\n"
-            "                                if AorusGifWallpaperStore.isActive {\n"
-            "                                    AorusGifWallpaperStore.clear()\n"
-            "                                }\n"
-            "                                self.removeItem.action?()\n",
-            "tap-action-reset-remove-clear-gif")
 
         # highlight: light up the GIF button on touch-down (place after the gallery branch)
         sub("                    } else if strongSelf.galleryItemNode.frame.contains(point) {\n"

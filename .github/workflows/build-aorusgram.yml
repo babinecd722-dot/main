@@ -344,16 +344,23 @@ jobs:
           from pathlib import Path
           p = Path("telegram-ios/submodules/TelegramUI/BUILD")
           t = p.read_text()
-          dep = '        "//submodules/AorusGram:AorusGram",\n'
-          if "//submodules/AorusGram:AorusGram" in t:
-              print("TelegramUI BUILD: AorusGram dep already present")
-          else:
-              needle = '        "//submodules/TelegramUIPreferences:TelegramUIPreferences",\n'
-              if needle not in t:
-                  raise SystemExit("TelegramUI BUILD: needle for AorusGram insert not found")
-              t = t.replace(needle, needle + dep, 1)
+          needle = '        "//submodules/TelegramUIPreferences:TelegramUIPreferences",\n'
+          if needle not in t:
+              raise SystemExit("TelegramUI BUILD: needle for AorusGram insert not found")
+          deps = [
+              ('//submodules/AorusGram:AorusGram', '        "//submodules/AorusGram:AorusGram",\n'),
+              ('//submodules/AorusGramUI:AorusGramUI', '        "//submodules/AorusGramUI:AorusGramUI",\n'),
+          ]
+          insert = ""
+          for label, dep in deps:
+              if label in t:
+                  print(f"TelegramUI BUILD: {label} dep already present")
+              else:
+                  insert += dep
+                  print(f"TelegramUI BUILD: added {label}")
+          if insert:
+              t = t.replace(needle, needle + insert, 1)
               p.write_text(t)
-              print("TelegramUI BUILD: added //submodules/AorusGram:AorusGram")
           PY
 
           # 1. Copy AorusGramUI module (all new code, no conflicts)
