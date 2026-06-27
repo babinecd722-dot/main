@@ -1037,6 +1037,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             UserDefaults.standard.set(s.bypassSavePaid,      forKey: "aorusgram_bypass_save_paid")
             UserDefaults.standard.set(s.bypassSaveViewOnce,  forKey: "aorusgram_bypass_view_once")
             UserDefaults.standard.set(s.bypassStoryDownload, forKey: "aorusgram_bypass_story_dl")
+            AorusPerformanceHUDManager.shared.refresh()
         },
         openChannel: {
             // Resolve @aorusgram and navigate to the channel inside AorusGram.
@@ -1221,6 +1222,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         setRAMCleanInterval: { seconds in
             AorusGramManager.shared.ramCleanInterval = seconds
             updateState { s in var n = s; n.ramCleanInterval = seconds; return n }
+            AorusPerformanceHUDManager.shared.refresh()
         },
         setCacheInterval: { hours in
             AorusGramManager.shared.cacheCleanInterval = hours

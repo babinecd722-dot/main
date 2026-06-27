@@ -335,8 +335,10 @@ public final class AorusPerformanceHUDManager {
     }
 
     @objc private func onSettingsChanged() {
-        _refresh()
-        updateSnapshot()
+        refresh()
+        DispatchQueue.main.async { [weak self] in
+            self?.updateSnapshot()
+        }
     }
 
     @objc private func onDidBecomeActive() {
@@ -408,7 +410,7 @@ public final class AorusPerformanceHUDManager {
             let window = makeWindow()
             window.backgroundColor = .clear
             window.rootViewController = host
-            window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.statusBar.rawValue + 8.0)
+            window.windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1.0)
             window.isUserInteractionEnabled = false
             window.isHidden = false
             self.window = window
@@ -431,7 +433,12 @@ public final class AorusPerformanceHUDManager {
     private func makeWindow() -> UIWindow {
         if #available(iOS 13.0, *) {
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            if let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first {
+            let activeScene = scenes.first(where: { scene in
+                scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden && $0.isKeyWindow })
+            }) ?? scenes.first(where: { scene in
+                scene.activationState == .foregroundActive && scene.windows.contains(where: { !$0.isHidden })
+            }) ?? scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
+            if let scene = activeScene {
                 return UIWindow(windowScene: scene)
             }
         }
