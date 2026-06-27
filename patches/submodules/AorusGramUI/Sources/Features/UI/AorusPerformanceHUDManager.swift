@@ -164,13 +164,11 @@ private final class AorusPerformanceHUDView: UIView {
             visibleKeys.append("fps")
         }
         if settings.performanceShowBattery {
-            let batteryValue: String
             if let battery = snapshot.batteryPercent {
-                batteryValue = snapshot.batteryCharging ? "\(battery)% ⚡" : "\(battery)%"
+                setRow("battery", title: l10n.performanceBattery, value: "\(battery)%", style: .normal, trailingSymbolName: snapshot.batteryCharging ? "bolt.fill" : nil)
             } else {
-                batteryValue = "-"
+                setRow("battery", title: l10n.performanceBattery, value: "-", style: .normal)
             }
-            setRow("battery", title: l10n.performanceBattery, value: batteryValue, style: .normal)
             visibleKeys.append("battery")
         }
         if settings.performanceShowNetwork {
@@ -233,7 +231,7 @@ private final class AorusPerformanceHUDView: UIView {
         case critical
     }
 
-    private func setRow(_ key: String, title: String, value: String, style: RowStyle) {
+    private func setRow(_ key: String, title: String, value: String, style: RowStyle, trailingSymbolName: String? = nil) {
         let label = rows[key] ?? makeLabel(key)
         let color: UIColor
         switch style {
@@ -245,7 +243,32 @@ private final class AorusPerformanceHUDView: UIView {
             color = UIColor(red: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
         }
         label.textColor = color
-        label.text = "\(title): \(value)"
+        if let trailingSymbolName = trailingSymbolName,
+           let attributedText = attributedRow(title: title, value: value, color: color, trailingSymbolName: trailingSymbolName) {
+            label.attributedText = attributedText
+        } else {
+            label.attributedText = nil
+            label.text = "\(title): \(value)"
+        }
+    }
+
+    private func attributedRow(title: String, value: String, color: UIColor, trailingSymbolName: String) -> NSAttributedString? {
+        let font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
+            for: UIFont.systemFont(ofSize: 12.0, weight: .semibold)
+        )
+        let text = NSMutableAttributedString(string: "\(title): \(value) ", attributes: [
+            .font: font,
+            .foregroundColor: color,
+        ])
+        if #available(iOS 13.0, *),
+           let image = UIImage(systemName: trailingSymbolName, withConfiguration: UIImage.SymbolConfiguration(pointSize: 10.5, weight: .bold)) {
+            let attachment = NSTextAttachment()
+            attachment.image = image.withTintColor(color, renderingMode: .alwaysOriginal)
+            attachment.bounds = CGRect(x: 0.0, y: -1.0, width: 8.5, height: 10.5)
+            text.append(NSAttributedString(attachment: attachment))
+            return text
+        }
+        return nil
     }
 
     private func makeLabel(_ key: String) -> UILabel {
@@ -342,14 +365,17 @@ public final class AorusPerformanceHUDManager {
     }
 
     @objc private func onDidBecomeActive() {
-        _refresh()
-        updateSnapshot()
+        refresh()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.updateSnapshot()
+        }
     }
 
     @objc private func onDidEnterBackground() {
         stopDisplayLink()
         statsTimer?.invalidate()
         statsTimer = nil
+        discardHUDWindow()
     }
 
     @objc private func onOrientationChanged() {
@@ -403,6 +429,10 @@ public final class AorusPerformanceHUDManager {
     }
 
     private func ensureHUD() {
+        if let window = window, !isWindowUsable(window) {
+            discardHUDWindow()
+        }
+
         if window == nil {
             let host = UIViewController()
             host.view.backgroundColor = .clear
@@ -428,6 +458,14 @@ public final class AorusPerformanceHUDManager {
             window?.isHidden = false
             layoutHUD()
         }
+    }
+
+    private func isWindowUsable(_ window: UIWindow) -> Bool {
+        guard !window.isHidden else { return false }
+        if #available(iOS 13.0, *), let scene = window.windowScene {
+            return scene.activationState == .foregroundActive
+        }
+        return true
     }
 
     private func makeWindow() -> UIWindow {
@@ -465,17 +503,21 @@ public final class AorusPerformanceHUDManager {
 
     private func hideHUD() {
         guard let hud = hudView else {
-            window?.isHidden = true
-            window = nil
+            discardHUDWindow()
             return
         }
         UIView.animate(withDuration: 0.16, animations: {
             hud.alpha = 0.0
         }, completion: { [weak self] _ in
-            self?.window?.isHidden = true
-            self?.window = nil
-            self?.hudView = nil
+            self?.discardHUDWindow()
         })
+    }
+
+    private func discardHUDWindow() {
+        window?.isHidden = true
+        window?.rootViewController = nil
+        window = nil
+        hudView = nil
     }
 
     private func startDisplayLink() {
