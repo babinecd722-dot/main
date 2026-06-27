@@ -80,6 +80,9 @@ public final class AorusGramManager {
             ud.set(saveDeletedMessages, forKey: "aorusgram_feature_deleted_messages")
             ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
             ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
+            if performanceStatsEnabled {
+                AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()
+            }
         }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
         ghostMode           = d["ghostMode"]           as? Bool ?? false

@@ -10870,6 +10870,29 @@ def patch_gif_wallpaper(tg: Path) -> None:
         # routes both the press-highlight and the action by frame hit-testing. The GIF
         # button must be wired into BOTH closures or it is dead (no highlight, no action).
 
+        # Opening any normal wallpaper preview must clear the active GIF immediately.
+        # Otherwise the GIF overlay stays active and hides the candidate wallpaper,
+        # which makes regular wallpapers look gray/unselectable while GIF still works.
+        sub("        let interaction = ThemeGridControllerInteraction(openWallpaper: { [weak self] wallpaper in\n"
+            "            if let strongSelf = self, !strongSelf.currentState.editing {\n",
+            "        let interaction = ThemeGridControllerInteraction(openWallpaper: { [weak self] wallpaper in\n"
+            "            if let strongSelf = self, !strongSelf.currentState.editing {\n"
+            "                if AorusGifWallpaperStore.isActive {\n"
+            "                    AorusGifWallpaperStore.clear()\n"
+            "                }\n",
+            "interaction-open-clear-gif")
+
+        sub("                            if self.colorItemNode.frame.contains(location) {\n"
+            "                                self.colorItem.action()\n"
+            "                            } else if self.galleryItemNode.frame.contains(location) {\n",
+            "                            if self.colorItemNode.frame.contains(location) {\n"
+            "                                if AorusGifWallpaperStore.isActive {\n"
+            "                                    AorusGifWallpaperStore.clear()\n"
+            "                                }\n"
+            "                                self.colorItem.action()\n"
+            "                            } else if self.galleryItemNode.frame.contains(location) {\n",
+            "tap-action-color-clear-gif")
+
         # tapAction: route the tap to gifItem.action (place after the gallery branch)
         sub("                            } else if self.galleryItemNode.frame.contains(location) {\n"
             "                                if let galleryItem = self.galleryItem as? ItemListActionItem {\n"
@@ -10879,6 +10902,9 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "                                }\n"
             "                            } else if self.resetItemNode.frame.contains(location) {\n",
             "                            } else if self.galleryItemNode.frame.contains(location) {\n"
+            "                                if AorusGifWallpaperStore.isActive {\n"
+            "                                    AorusGifWallpaperStore.clear()\n"
+            "                                }\n"
             "                                if let galleryItem = self.galleryItem as? ItemListActionItem {\n"
             "                                    galleryItem.action()\n"
             "                                } else if let galleryItem = self.galleryItem as? ItemListPeerActionItem {\n"
@@ -10888,6 +10914,22 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "                                self.gifItem.action?()\n"
             "                            } else if self.resetItemNode.frame.contains(location) {\n",
             "tap-action-route")
+
+        sub("                            } else if self.resetItemNode.frame.contains(location) {\n"
+            "                                self.resetItem.action()\n"
+            "                            } else if self.removeItemNode.frame.contains(location) {\n"
+            "                                self.removeItem.action?()\n",
+            "                            } else if self.resetItemNode.frame.contains(location) {\n"
+            "                                if AorusGifWallpaperStore.isActive {\n"
+            "                                    AorusGifWallpaperStore.clear()\n"
+            "                                }\n"
+            "                                self.resetItem.action()\n"
+            "                            } else if self.removeItemNode.frame.contains(location) {\n"
+            "                                if AorusGifWallpaperStore.isActive {\n"
+            "                                    AorusGifWallpaperStore.clear()\n"
+            "                                }\n"
+            "                                self.removeItem.action?()\n",
+            "tap-action-reset-remove-clear-gif")
 
         # highlight: light up the GIF button on touch-down (place after the gallery branch)
         sub("                    } else if strongSelf.galleryItemNode.frame.contains(point) {\n"

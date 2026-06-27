@@ -330,11 +330,20 @@ public final class AorusPerformanceHUDManager {
     private var fpsWindowStart = CACurrentMediaTime()
     private var currentFPS = 0
     private var scheduledHUDRetryCount = 0
+    private var launchRestorationToken = 0
     private var previousNetworkBytes: (rx: UInt64, tx: UInt64, time: TimeInterval)?
 
     public func refresh() {
         DispatchQueue.main.async { [weak self] in
             self?._refresh()
+        }
+    }
+
+    public func restorePersistedHUDAfterLaunch() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self._refresh()
+            self.scheduleLaunchRestorationPasses()
         }
     }
 
@@ -370,15 +379,11 @@ public final class AorusPerformanceHUDManager {
     }
 
     @objc private func onDidBecomeActive() {
-        refresh()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?._refresh()
-            self?.updateSnapshot()
-        }
+        restorePersistedHUDAfterLaunch()
     }
 
     @objc private func onSceneDidActivate() {
-        refresh()
+        restorePersistedHUDAfterLaunch()
     }
 
     @objc private func onDidEnterBackground() {
@@ -420,6 +425,7 @@ public final class AorusPerformanceHUDManager {
             statsTimer = nil
             stopDisplayLink()
             UIDevice.current.isBatteryMonitoringEnabled = false
+            launchRestorationToken += 1
             hideHUD()
         }
     }
@@ -487,6 +493,24 @@ public final class AorusPerformanceHUDManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard AorusGramManager.shared.performanceStatsEnabled else { return }
             self?._refresh()
+        }
+    }
+
+    private func scheduleLaunchRestorationPasses() {
+        guard AorusGramManager.shared.performanceStatsEnabled else { return }
+        launchRestorationToken += 1
+        let token = launchRestorationToken
+        let delays: [TimeInterval] = [0.2, 0.6, 1.2, 2.5, 5.0, 10.0, 20.0, 40.0, 60.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self,
+                      token == self.launchRestorationToken,
+                      AorusGramManager.shared.performanceStatsEnabled else {
+                    return
+                }
+                self._refresh()
+                self.updateSnapshot()
+            }
         }
     }
 
