@@ -110,10 +110,11 @@ private func voiceTwinEntries(state: VTState, theme: PresentationTheme, l10n: Ao
             ("male",      l10n.voiceMale),
             ("female",    l10n.voiceFemale),
             ("robot",     l10n.voiceRobot),
-            ("high",      l10n.voiceHigh),
+            ("child",     l10n.voiceChild),
         ]
         for (i, p) in presets.enumerated() {
-            entries.append(.preset(theme, i, p.0, p.1, state.preset == p.0))
+            let selected = state.preset == p.0 || (state.preset == "high" && p.0 == "child")
+            entries.append(.preset(theme, i, p.0, p.1, selected))
         }
     }
     return entries

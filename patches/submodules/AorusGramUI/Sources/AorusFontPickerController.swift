@@ -726,7 +726,6 @@ public func aorusFontPickerController(context: AccountContext) -> ViewController
     }, delete: { choice in
         if AorusFontStore.delete(choice) {
             updateSelected(AorusFontStore.selectedId)
-            aorusPresentRestartNotice(context: context, controller: weakController)
         }
     }, importFont: {
         guard let controller = weakController else { return }

@@ -155,7 +155,7 @@ public struct AorusL10n {
     public var voiceMale: String { t("Мужской", "Male") }
     public var voiceFemale: String { t("Женский", "Female") }
     public var voiceRobot: String { t("Робот", "Robot") }
-    public var voiceHigh: String { t("Высокий", "High") }
+    public var voiceChild: String { t("Ребёнок", "Child") }
 
     // MARK: Device Spoof
     public var deviceSpoofHeader: String { t("ДЕВАЙС-СПУФ", "DEVICE SPOOF") }

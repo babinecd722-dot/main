@@ -65,7 +65,7 @@ public final class AorusGramManager {
     public var ramCleanInterval: Int         = 60    { didSet { save() } }   // seconds
 
     // Voice Twin — pitch/character transform applied to OUTGOING voice messages.
-    // preset ∈ {"anonymous","male","female","robot","high"}.
+    // preset ∈ {"anonymous","male","female","robot","child"}; "high" is accepted as legacy child.
     public var voiceTwinEnabled: Bool  = false        { didSet { save() } }
     public var voiceTwinPreset: String = "anonymous"  { didSet { save() } }
 

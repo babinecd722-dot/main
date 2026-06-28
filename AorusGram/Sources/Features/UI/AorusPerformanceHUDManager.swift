@@ -438,6 +438,7 @@ public final class AorusPerformanceHUDManager {
     private weak var hudView: AorusPerformanceHUDView?
     private var statsTimer: Timer?
     private var cleanupTimer: Timer?
+    private var cleanupIntervalSeconds: Int?
     private var displayLink: CADisplayLink?
     private var observing = false
     private var frameCount = 0
@@ -446,6 +447,16 @@ public final class AorusPerformanceHUDManager {
     private var scheduledHUDRetryCount = 0
     private var launchRestorationToken = 0
     private var previousNetworkBytes: (rx: UInt64, tx: UInt64, time: TimeInterval)?
+
+    private func onMain(_ f: @escaping () -> Void) {
+        if Thread.isMainThread {
+            f()
+        } else {
+            DispatchQueue.main.async {
+                f()
+            }
+        }
+    }
 
     public func refresh() {
         DispatchQueue.main.async { [weak self] in
@@ -501,10 +512,12 @@ public final class AorusPerformanceHUDManager {
     }
 
     @objc private func onDidEnterBackground() {
-        stopDisplayLink()
-        statsTimer?.invalidate()
-        statsTimer = nil
-        discardHUDWindow()
+        onMain { [weak self] in
+            self?.stopDisplayLink()
+            self?.statsTimer?.invalidate()
+            self?.statsTimer = nil
+            self?.discardHUDWindow()
+        }
     }
 
     @objc private func onOrientationChanged() {
@@ -514,7 +527,9 @@ public final class AorusPerformanceHUDManager {
     }
 
     @objc private func onThermalChanged() {
-        updateSnapshot()
+        onMain { [weak self] in
+            self?.updateSnapshot()
+        }
     }
 
     private func applyHUD(settings: AorusPerformanceHUDSettings) {
@@ -529,7 +544,7 @@ public final class AorusPerformanceHUDManager {
                 stopDisplayLink()
             }
             if statsTimer == nil {
-                let timer = Timer.scheduledTimer(withTimeInterval: 1.25, repeats: true) { [weak self] _ in
+                let timer = Timer(timeInterval: 1.25, repeats: true) { [weak self] _ in
                     self?.updateSnapshot()
                 }
                 statsTimer = timer
@@ -549,21 +564,28 @@ public final class AorusPerformanceHUDManager {
     }
 
     private func applyCleanup(enabled: Bool, intervalSeconds: Int) {
-        cleanupTimer?.invalidate()
-        cleanupTimer = nil
-        guard enabled else { return }
         let seconds = max(30, intervalSeconds)
-        let timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(seconds), repeats: true) { _ in
+        if !enabled {
+            cleanupTimer?.invalidate()
+            cleanupTimer = nil
+            cleanupIntervalSeconds = nil
+            return
+        }
+        if cleanupTimer != nil, cleanupIntervalSeconds == seconds {
+            return
+        }
+        cleanupTimer?.invalidate()
+        let timer = Timer(timeInterval: TimeInterval(seconds), repeats: true) { _ in
             AorusPerformanceHUDManager.performRAMCleanup()
         }
         cleanupTimer = timer
+        cleanupIntervalSeconds = seconds
         RunLoop.main.add(timer, forMode: .common)
     }
 
     public static func performRAMCleanup() {
         URLCache.shared.removeAllCachedResponses()
         URLSession.shared.configuration.urlCache?.removeAllCachedResponses()
-        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
     }
 
     @discardableResult
@@ -681,6 +703,10 @@ public final class AorusPerformanceHUDManager {
             discardHUDWindow()
             return
         }
+        guard UIApplication.shared.applicationState != .background else {
+            discardHUDWindow()
+            return
+        }
         UIView.animate(withDuration: 0.16, animations: {
             hud.alpha = 0.0
         }, completion: { [weak self] _ in
@@ -689,6 +715,13 @@ public final class AorusPerformanceHUDManager {
     }
 
     private func discardHUDWindow() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.discardHUDWindow()
+            }
+            return
+        }
+        hudView?.removeFromSuperview()
         window?.isHidden = true
         window?.rootViewController = nil
         window = nil
@@ -722,6 +755,13 @@ public final class AorusPerformanceHUDManager {
     }
 
     private func updateSnapshot() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.updateSnapshot()
+            }
+            return
+        }
+        guard UIApplication.shared.applicationState != .background else { return }
         let settings = AorusPerformanceHUDSettings.current
         guard settings.hasVisibleMetric else {
             if hudView != nil || window != nil {
@@ -730,6 +770,10 @@ public final class AorusPerformanceHUDManager {
             return
         }
         guard let hud = hudView else { return }
+        guard let root = window?.rootViewController?.view, hud.superview === root else {
+            discardHUDWindow()
+            return
+        }
         let snapshot = collectSnapshot(settings: settings)
         hud.update(snapshot: snapshot, settings: settings, l10n: AorusPerformanceHUDL10n.current)
         layoutHUD()
@@ -790,7 +834,7 @@ public final class AorusPerformanceHUDManager {
                 total += Double(info.cpu_usage) / Double(TH_USAGE_SCALE) * 100.0
             }
         }
-        return min(999.0, max(0.0, total))
+        return min(100.0, max(0.0, total))
     }
 
     private func batteryPercent() -> Int? {

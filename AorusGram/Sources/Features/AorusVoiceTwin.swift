@@ -87,19 +87,37 @@ public final class AorusVoiceTwin {
         UserDefaults.standard.bool(forKey: "aorusgram_voice_twin_enabled")
     }
 
-    // Resolve the active preset to (pitch ratio, ring-mod frequency in Hz).
-    private func params() -> (ratio: Float, ringHz: Float) {
+    private struct PresetParams {
+        let ratio: Float
+        let ringHz: Float
+        let ringMix: Float
+        let wetMix: Float
+        let tone: Float
+        let drive: Float
+    }
+
+    // Resolve the active preset to a full voice character, not just pitch.
+    private func params() -> PresetParams {
         let preset = UserDefaults.standard.string(forKey: "aorusgram_voice_twin_preset") ?? "anonymous"
-        var semis: Float = -5.0   // anonymous: deep, masked, identity-hiding (formants preserved)
+        var semis: Float = -6.0
         var ringHz: Float = 0
+        var ringMix: Float = 0
+        var wetMix: Float = 0.84
+        var tone: Float = 0.96
+        var drive: Float = 1.04
         switch preset {
-        case "male":   semis = -3.0
-        case "female": semis = 3.5
-        case "robot":  semis = 0.0; ringHz = 110.0
-        case "high":   semis = 7.0
-        default:       break
+        case "male":
+            semis = -4.2; wetMix = 0.78; tone = 0.88; drive = 1.05
+        case "female":
+            semis = 5.0; wetMix = 0.72; tone = 1.08; drive = 0.98
+        case "robot":
+            semis = 0.0; ringHz = 92.0; ringMix = 0.82; wetMix = 1.0; tone = 0.82; drive = 1.16
+        case "child", "high":
+            semis = 8.7; wetMix = 0.86; tone = 1.18; drive = 0.96
+        default:
+            ringHz = 38.0; ringMix = 0.10; wetMix = 0.90; tone = 0.90; drive = 1.08
         }
-        return (powf(2.0, semis / 12.0), ringHz)
+        return PresetParams(ratio: powf(2.0, semis / 12.0), ringHz: ringHz, ringMix: ringMix, wetMix: wetMix, tone: tone, drive: drive)
     }
 
     // Voice-message path: process the recorder's Int16 mono 48 kHz buffer in place.
@@ -107,12 +125,12 @@ public final class AorusVoiceTwin {
         guard isEnabled, let raw = buffer.mData else { return }
         let count = Int(buffer.mDataByteSize) / 2
         guard count > 0 else { return }
-        let (ratio, ringHz) = params()
-        guard ratio != 1.0 || ringHz > 0 else { return }
+        let params = params()
+        guard params.ratio != 1.0 || params.ringMix > 0 else { return }
         let p = raw.assumingMemoryBound(to: Int16.self)
-        let ringStep: Float = ringHz > 0 ? (2.0 * Float.pi * ringHz / sampleRate) : 0
+        let ringStep: Float = params.ringHz > 0 ? (2.0 * Float.pi * params.ringHz / sampleRate) : 0
         for i in 0 ..< count {
-            let y = transformSample(Float(p[i]) / 32768.0, ratio: ratio, ringStep: ringStep)
+            let y = transformSample(Float(p[i]) / 32768.0, params: params, ringStep: ringStep)
             p[i] = Int16(y * 32767.0)
         }
     }
@@ -122,8 +140,8 @@ public final class AorusVoiceTwin {
     // it can never corrupt the recording or crash the camera pipeline.
     public func processSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
         guard isEnabled else { return }
-        let (ratio, ringHz) = params()
-        guard ratio != 1.0 || ringHz > 0 else { return }
+        let params = params()
+        guard params.ratio != 1.0 || params.ringMix > 0 else { return }
         guard let fmt = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(fmt) else { return }
         let asbd = asbdPtr.pointee
@@ -136,7 +154,7 @@ public final class AorusVoiceTwin {
                                           totalLengthOut: &total, dataPointerOut: &dp) == noErr,
               let base = dp, lenAt == total, total > 0 else { return }
         let sr = Float(asbd.mSampleRate > 0 ? asbd.mSampleRate : 48000)
-        let ringStep: Float = ringHz > 0 ? (2.0 * Float.pi * ringHz / sr) : 0
+        let ringStep: Float = params.ringHz > 0 ? (2.0 * Float.pi * params.ringHz / sr) : 0
         let isFloat = (asbd.mFormatFlags & kAudioFormatFlagIsFloat) != 0
         let isSint = (asbd.mFormatFlags & kAudioFormatFlagIsSignedInteger) != 0
 
@@ -144,7 +162,7 @@ public final class AorusVoiceTwin {
             let count = total / 2
             base.withMemoryRebound(to: Int16.self, capacity: count) { p in
                 for i in 0 ..< count {
-                    let y = transformSample(Float(p[i]) / 32768.0, ratio: ratio, ringStep: ringStep)
+                    let y = transformSample(Float(p[i]) / 32768.0, params: params, ringStep: ringStep)
                     p[i] = Int16(y * 32767.0)
                 }
             }
@@ -152,23 +170,42 @@ public final class AorusVoiceTwin {
             let count = total / 4
             base.withMemoryRebound(to: Float.self, capacity: count) { p in
                 for i in 0 ..< count {
-                    p[i] = transformSample(p[i], ratio: ratio, ringStep: ringStep)
+                    p[i] = transformSample(p[i], params: params, ringStep: ringStep)
                 }
             }
         }
     }
 
     // Shared per-sample core: input/output in [-1, 1].
-    private func transformSample(_ x0: Float, ratio: Float, ringStep: Float) -> Float {
-        var y: Float = (ratio == 1.0) ? x0 : formantStep(x0, ratio)
-        if ringStep > 0 {
-            y *= cosf(ringModPhase)
+    private func transformSample(_ x0: Float, params: PresetParams, ringStep: Float) -> Float {
+        var y: Float = (params.ratio == 1.0) ? x0 : formantStep(x0, params.ratio)
+        y = x0 * (1.0 - params.wetMix) + y * params.wetMix
+        y = applyTone(y, tone: params.tone)
+        if ringStep > 0, params.ringMix > 0 {
+            let modulated = y * cosf(ringModPhase)
+            y = y * (1.0 - params.ringMix) + modulated * params.ringMix
             ringModPhase += ringStep
             if ringModPhase > 2.0 * Float.pi { ringModPhase -= 2.0 * Float.pi }
+        }
+        if params.drive > 1.0 {
+            y = tanhf(y * params.drive) / tanhf(params.drive)
+        } else {
+            y *= params.drive
         }
         if y > 1.0 { y = 1.0 }
         if y < -1.0 { y = -1.0 }
         return y
+    }
+
+    private var toneLP: Float = 0
+
+    private func applyTone(_ x: Float, tone: Float) -> Float {
+        toneLP = 0.86 * toneLP + 0.14 * x
+        if tone >= 1.0 {
+            return x + (x - toneLP) * (tone - 1.0)
+        } else {
+            return toneLP + (x - toneLP) * tone
+        }
     }
 
     // MARK: - Formant-preserving pitch shift (one sample)

@@ -8375,14 +8375,23 @@ public:
         NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
         _enabled = [d boolForKey:@"aorusgram_voice_twin_enabled"];
         NSString *preset = [d stringForKey:@"aorusgram_voice_twin_preset"];
-        float semis = -5.0f;   // anonymous (default): deep, identity-masking
+        float semis = -6.0f;
         float ringHz = 0.0f;
-        if ([preset isEqualToString:@"male"]) { semis = -3.0f; }
-        else if ([preset isEqualToString:@"female"]) { semis = 3.5f; }
-        else if ([preset isEqualToString:@"robot"]) { semis = 0.0f; ringHz = 110.0f; }
-        else if ([preset isEqualToString:@"high"]) { semis = 7.0f; }
+        float ringMix = 0.0f;
+        float wetMix = 0.84f;
+        float tone = 0.96f;
+        float drive = 1.04f;
+        if ([preset isEqualToString:@"male"]) { semis = -4.2f; wetMix = 0.78f; tone = 0.88f; drive = 1.05f; }
+        else if ([preset isEqualToString:@"female"]) { semis = 5.0f; wetMix = 0.72f; tone = 1.08f; drive = 0.98f; }
+        else if ([preset isEqualToString:@"robot"]) { semis = 0.0f; ringHz = 92.0f; ringMix = 0.82f; wetMix = 1.0f; tone = 0.82f; drive = 1.16f; }
+        else if ([preset isEqualToString:@"child"] || [preset isEqualToString:@"high"]) { semis = 8.7f; wetMix = 0.86f; tone = 1.18f; drive = 0.96f; }
+        else { ringHz = 38.0f; ringMix = 0.10f; wetMix = 0.90f; tone = 0.90f; drive = 1.08f; }
         _ratio = std::pow(2.0f, semis / 12.0f);
         _ringHz = ringHz;
+        _ringMix = ringMix;
+        _wetMix = wetMix;
+        _tone = tone;
+        _drive = drive;
 #endif
     }
 
@@ -8393,12 +8402,12 @@ public:
     void process(void *samples, size_t nSamples, size_t nBytesPerSample, size_t nChannels, uint32_t sampleRate) {
         if (!_enabled) { return; }
         if (samples == nullptr || nSamples == 0 || nChannels != 1 || nBytesPerSample != 2) { return; }
-        if (_ratio == 1.0f && _ringHz <= 0.0f) { return; }
+        if (_ratio == 1.0f && _ringMix <= 0.0f) { return; }
         const float sr = sampleRate > 0 ? (float)sampleRate : 48000.0f;
         const float ringStep = _ringHz > 0.0f ? (2.0f * (float)M_PI * _ringHz / sr) : 0.0f;
         int16_t *p = (int16_t *)samples;
         for (size_t i = 0; i < nSamples; i++) {
-            float y = transformSample((float)p[i] / 32768.0f, _ratio, ringStep);
+            float y = transformSample((float)p[i] / 32768.0f, ringStep);
             float v = y * 32767.0f;
             if (v > 32767.0f) { v = 32767.0f; }
             if (v < -32768.0f) { v = -32768.0f; }
@@ -8415,16 +8424,33 @@ private:
     static constexpr int kRingSize = 8192;
     static constexpr float kGrain = 1024.0f;
 
-    float transformSample(float x0, float ratio, float ringStep) {
-        float y = (ratio == 1.0f) ? x0 : formantStep(x0, ratio);
-        if (ringStep > 0.0f) {
-            y *= std::cos(ringModPhase);
+    float transformSample(float x0, float ringStep) {
+        float y = (_ratio == 1.0f) ? x0 : formantStep(x0, _ratio);
+        y = x0 * (1.0f - _wetMix) + y * _wetMix;
+        y = applyTone(y);
+        if (ringStep > 0.0f && _ringMix > 0.0f) {
+            const float modulated = y * std::cos(ringModPhase);
+            y = y * (1.0f - _ringMix) + modulated * _ringMix;
             ringModPhase += ringStep;
             if (ringModPhase > 2.0f * (float)M_PI) { ringModPhase -= 2.0f * (float)M_PI; }
+        }
+        if (_drive > 1.0f) {
+            y = std::tanh(y * _drive) / std::tanh(_drive);
+        } else {
+            y *= _drive;
         }
         if (y > 1.0f) { y = 1.0f; }
         if (y < -1.0f) { y = -1.0f; }
         return y;
+    }
+
+    float applyTone(float x) {
+        toneLP = 0.86f * toneLP + 0.14f * x;
+        if (_tone >= 1.0f) {
+            return x + (x - toneLP) * (_tone - 1.0f);
+        } else {
+            return toneLP + (x - toneLP) * _tone;
+        }
     }
 
     float formantStep(float x0, float ratio) {
@@ -8567,11 +8593,16 @@ private:
 
     // Ring modulation phase (robot).
     float ringModPhase = 0.0f;
+    float toneLP = 0.0f;
 
     // Active configuration (refreshed from UserDefaults).
     bool _enabled = false;
     float _ratio = 1.0f;
     float _ringHz = 0.0f;
+    float _ringMix = 0.0f;
+    float _wetMix = 0.84f;
+    float _tone = 0.96f;
+    float _drive = 1.04f;
 };
 
 #endif /* AorusCallVoiceTwin_h */
