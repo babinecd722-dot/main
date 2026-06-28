@@ -168,6 +168,7 @@ private final class AorusPerformanceGraphView: UIView {
 
 private final class AorusPerformanceHUDView: UIView {
     private let blurView: UIVisualEffectView
+    private let tintView = UIView()
     private let stackView = UIStackView()
     private let graphView = AorusPerformanceGraphView()
     private var rows: [String: UILabel] = [:]
@@ -176,7 +177,7 @@ private final class AorusPerformanceHUDView: UIView {
 
     override init(frame: CGRect) {
         if #available(iOS 13.0, *) {
-            blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+            blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
         } else {
             blurView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
         }
@@ -190,12 +191,17 @@ private final class AorusPerformanceHUDView: UIView {
         blurView.clipsToBounds = true
         blurView.layer.cornerRadius = 13.0
         blurView.layer.borderWidth = 0.5
-        blurView.layer.borderColor = UIColor.white.withAlphaComponent(0.18).cgColor
+        blurView.layer.borderColor = UIColor.white.withAlphaComponent(0.22).cgColor
         blurView.layer.shadowColor = UIColor.black.cgColor
-        blurView.layer.shadowOpacity = 0.22
-        blurView.layer.shadowRadius = 12.0
+        blurView.layer.shadowOpacity = 0.18
+        blurView.layer.shadowRadius = 10.0
         blurView.layer.shadowOffset = CGSize(width: 0.0, height: 4.0)
         addSubview(blurView)
+
+        tintView.translatesAutoresizingMaskIntoConstraints = false
+        tintView.isUserInteractionEnabled = false
+        tintView.backgroundColor = UIColor.black.withAlphaComponent(0.16)
+        blurView.contentView.addSubview(tintView)
 
         stackView.axis = .vertical
         stackView.alignment = .fill
@@ -219,6 +225,11 @@ private final class AorusPerformanceHUDView: UIView {
             stackView.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor, constant: -10.0),
             stackView.topAnchor.constraint(equalTo: blurView.contentView.topAnchor, constant: 8.0),
             stackView.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor, constant: -8.0),
+
+            tintView.leadingAnchor.constraint(equalTo: blurView.contentView.leadingAnchor),
+            tintView.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor),
+            tintView.topAnchor.constraint(equalTo: blurView.contentView.topAnchor),
+            tintView.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor),
         ])
     }
 
@@ -251,7 +262,7 @@ private final class AorusPerformanceHUDView: UIView {
         if settings.performanceShowNetwork {
             let down = formatRate(snapshot.rxBytesPerSecond)
             let up = formatRate(snapshot.txBytesPerSecond)
-            setRow("network", title: l10n.performanceNetwork, value: "↓ \(down) ↑ \(up)", style: .normal)
+            setRow("network", title: l10n.performanceNetwork, value: "↓\(down) ↑\(up)", style: .normal)
             visibleKeys.append("network")
         }
         if settings.performanceShowDisk {
@@ -352,13 +363,16 @@ private final class AorusPerformanceHUDView: UIView {
         let label = UILabel()
         label.numberOfLines = 1
         label.adjustsFontForContentSizeCategory = true
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.72
+        label.lineBreakMode = .byClipping
         label.font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
             for: UIFont.systemFont(ofSize: 12.0, weight: .semibold)
         )
         label.textColor = .white
         label.shadowColor = UIColor.black.withAlphaComponent(0.55)
         label.shadowOffset = CGSize(width: 0.0, height: 1.0)
-        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         rows[key] = label
 
         let insertIndex = max(0, stackView.arrangedSubviews.count - 1)
@@ -623,11 +637,13 @@ public final class AorusPerformanceHUDManager {
         })
 
         let guide = root.safeAreaLayoutGuide
+        let availableWidth = max(140.0, root.bounds.width - 24.0)
+        let preferredWidth: CGFloat = root.bounds.width > root.bounds.height ? 270.0 : 188.0
+        let fixedWidth = min(preferredWidth, availableWidth)
         NSLayoutConstraint.activate([
             hud.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -12.0),
             hud.topAnchor.constraint(equalTo: guide.topAnchor, constant: 14.0),
-            hud.widthAnchor.constraint(lessThanOrEqualToConstant: 228.0),
-            hud.widthAnchor.constraint(greaterThanOrEqualToConstant: 132.0),
+            hud.widthAnchor.constraint(equalToConstant: fixedWidth),
         ])
         root.setNeedsLayout()
         root.layoutIfNeeded()

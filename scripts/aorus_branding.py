@@ -10795,6 +10795,382 @@ def patch_account_limit(tg: Path) -> None:
         print("AccountLimit: AccountUtils.swift not found — skipped")
 
 
+def patch_aorus_custom_font(tg: Path) -> None:
+    """Global client font picker.
+
+    The UI lives in AorusGramUI, but the actual font override belongs in
+    Display/Font.swift because Telegram routes nearly all text through Font.with().
+    The selected id is also mirrored to Keychain by AorusGramUI so it survives app
+    reinstall; Display can restore it on a fresh launch before settings are opened.
+    """
+    font_path = tg / "submodules/Display/Source/Font.swift"
+    if font_path.is_file():
+        t = font_path.read_text(encoding="utf-8")
+        if "AorusRuntimeFont" in t:
+            print("CustomFont: Display Font.swift already patched")
+        else:
+            if "import CoreText\n" not in t:
+                t = t.replace("import UIKit\n", "import UIKit\nimport CoreText\n", 1)
+            if "import Security\n" not in t:
+                t = t.replace("import UIKit\n", "import UIKit\nimport Security\n", 1)
+
+            runtime = r'''
+private enum AorusRuntimeFont {
+    private static let choiceKey = "aorusgram_font_choice"
+    private static let importedNameKey = "aorusgram_font_imported_name"
+    private static let keychainService = "AorusGramFont"
+    private static var didRegisterImported = false
+
+    static var cacheKey: String {
+        let choice = selectedChoice
+        if choice == "imported" {
+            return "\(choice)_\(importedFontName() ?? "")"
+        }
+        return choice
+    }
+
+    static func font(size: CGFloat, designKey: String, weight: UIFont.Weight, traitsRaw: Int32) -> UIFont? {
+        let choice = selectedChoice
+        guard choice != "system" else { return nil }
+
+        if #available(iOS 13.0, *) {
+            let systemDesign: UIFontDescriptor.SystemDesign?
+            switch choice {
+            case "rounded":
+                systemDesign = .rounded
+            case "serif":
+                systemDesign = .serif
+            case "mono":
+                systemDesign = .monospaced
+            default:
+                systemDesign = nil
+            }
+            if let systemDesign {
+                let base = UIFont.systemFont(ofSize: size, weight: weight)
+                if var descriptor = base.fontDescriptor.withDesign(systemDesign) {
+                    descriptor = applyTraits(to: descriptor, traitsRaw: traitsRaw)
+                    return UIFont(descriptor: descriptor, size: size)
+                }
+                return base
+            }
+        }
+
+        guard let name = fontName(for: choice), let base = UIFont(name: name, size: size) else {
+            return nil
+        }
+        let descriptor = applyTraits(to: base.fontDescriptor, traitsRaw: traitsRaw)
+        return UIFont(descriptor: descriptor, size: size)
+    }
+
+    private static var selectedChoice: String {
+        if let value = UserDefaults.standard.string(forKey: choiceKey), !value.isEmpty {
+            return value
+        }
+        if let value = keychainString(account: "choice"), !value.isEmpty {
+            UserDefaults.standard.set(value, forKey: choiceKey)
+            return value
+        }
+        return "system"
+    }
+
+    private static func fontName(for choice: String) -> String? {
+        switch choice {
+        case "avenir":
+            return "AvenirNext-Regular"
+        case "helvetica":
+            return "HelveticaNeue"
+        case "arial":
+            return "ArialMT"
+        case "arialRounded":
+            return "ArialRoundedMTBold"
+        case "georgia":
+            return "Georgia"
+        case "times":
+            return "TimesNewRomanPSMT"
+        case "courier":
+            return "CourierNewPSMT"
+        case "menlo":
+            return "Menlo-Regular"
+        case "trebuchet":
+            return "TrebuchetMS"
+        case "verdana":
+            return "Verdana"
+        case "futura":
+            return "Futura-Medium"
+        case "gill":
+            return "GillSans"
+        case "palatino":
+            return "Palatino-Roman"
+        case "baskerville":
+            return "Baskerville"
+        case "didot":
+            return "Didot"
+        case "chalkboard":
+            return "ChalkboardSE-Regular"
+        case "imported":
+            return importedFontName()
+        default:
+            return nil
+        }
+    }
+
+    private static func importedFontName() -> String? {
+        if !didRegisterImported, let data = keychainData(account: "importedData"), let provider = CGDataProvider(data: data as CFData), let cgFont = CGFont(provider) {
+            var error: Unmanaged<CFError>?
+            _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
+            didRegisterImported = true
+        }
+        if let value = UserDefaults.standard.string(forKey: importedNameKey), !value.isEmpty {
+            return value
+        }
+        if let value = keychainString(account: "importedName"), !value.isEmpty {
+            UserDefaults.standard.set(value, forKey: importedNameKey)
+            return value
+        }
+        return nil
+    }
+
+    private static func applyTraits(to descriptor: UIFontDescriptor, traitsRaw: Int32) -> UIFontDescriptor {
+        var result = descriptor
+        var symbolicTraits = result.symbolicTraits
+        if (traitsRaw & 1) != 0 {
+            symbolicTraits.insert(.traitItalic)
+        }
+        if let updated = result.withSymbolicTraits(symbolicTraits) {
+            result = updated
+        }
+        if (traitsRaw & 2) != 0 {
+            result = result.addingAttributes([
+                UIFontDescriptor.AttributeName.featureSettings: [
+                    [
+                        UIFontDescriptor.FeatureKey.featureIdentifier: kNumberSpacingType,
+                        UIFontDescriptor.FeatureKey.typeIdentifier: kMonospacedNumbersSelector
+                    ]
+                ]
+            ])
+        }
+        return result
+    }
+
+    private static func keychainQuery(account: String) -> [String: Any] {
+        return [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account
+        ]
+    }
+
+    private static func keychainString(account: String) -> String? {
+        guard let data = keychainData(account: account) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func keychainData(account: String) -> Data? {
+        var query = keychainQuery(account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess else { return nil }
+        return result as? Data
+    }
+}
+
+'''
+            t = t.replace("public struct Font {\n", runtime + "public struct Font {\n", 1)
+            old_key = '        let key = "\\(size)_\\(design.key)_\\(weight.key)_\\(width.key)_\\(traits.rawValue)"\n'
+            new_key = '        let key = "\\(size)_\\(design.key)_\\(weight.key)_\\(width.key)_\\(traits.rawValue)_\\(AorusRuntimeFont.cacheKey)"\n'
+            if old_key in t:
+                t = t.replace(old_key, new_key, 1)
+            else:
+                print("CustomFont: WARNING Font.with cache key anchor not found")
+            cache_anchor = (
+                "        if let cachedFont = self.cache.get(key) {\n"
+                "            return cachedFont\n"
+                "        }\n"
+            )
+            cache_insert = (
+                "        if let cachedFont = self.cache.get(key) {\n"
+                "            return cachedFont\n"
+                "        }\n"
+                "        if design != .camera, let aorusFont = AorusRuntimeFont.font(size: size, designKey: design.key, weight: weight.weight, traitsRaw: traits.rawValue) {\n"
+                "            self.cache.set(aorusFont, key: key)\n"
+                "            return aorusFont\n"
+                "        }\n"
+            )
+            if cache_anchor in t:
+                t = t.replace(cache_anchor, cache_insert, 1)
+            else:
+                print("CustomFont: WARNING Font.with cache anchor not found")
+            font_path.write_text(t, encoding="utf-8")
+            print("CustomFont: patched Display Font.swift")
+    else:
+        print("CustomFont: Display Font.swift not found — skip")
+
+    settings = tg / "submodules/SettingsUI/Sources/Themes/ThemeSettingsController.swift"
+    if settings.is_file():
+        t = settings.read_text(encoding="utf-8")
+        if "aorusFontPickerController" in t:
+            print("CustomFont: ThemeSettingsController already patched")
+        else:
+            def sub(anchor: str, repl: str, label: str) -> None:
+                nonlocal t
+                if anchor in t:
+                    t = t.replace(anchor, repl, 1)
+                else:
+                    print(f"CustomFont: WARNING ThemeSettingsController anchor not found — {label}")
+
+            if "import AorusGramUI\n" not in t:
+                sub("import DeviceModel\n", "import DeviceModel\nimport AorusGramUI\n", "import")
+
+            sub("    let openAutoNightTheme: () -> Void\n"
+                "    let openTextSize: () -> Void\n",
+                "    let openAutoNightTheme: () -> Void\n"
+                "    let openAorusFont: () -> Void\n"
+                "    let openTextSize: () -> Void\n",
+                "args-prop")
+
+            sub("        openAutoNightTheme: @escaping () -> Void,\n"
+                "        openTextSize: @escaping () -> Void,\n",
+                "        openAutoNightTheme: @escaping () -> Void,\n"
+                "        openAorusFont: @escaping () -> Void,\n"
+                "        openTextSize: @escaping () -> Void,\n",
+                "args-init-param")
+
+            sub("        self.openAutoNightTheme = openAutoNightTheme\n"
+                "        self.openTextSize = openTextSize\n",
+                "        self.openAutoNightTheme = openAutoNightTheme\n"
+                "        self.openAorusFont = openAorusFont\n"
+                "        self.openTextSize = openTextSize\n",
+                "args-assign")
+
+            sub("    case autoNightTheme(PresentationTheme, String, String)\n"
+                "    case textSize(PresentationTheme, String, String)\n",
+                "    case autoNightTheme(PresentationTheme, String, String)\n"
+                "    case aorusFont(PresentationTheme, String, String)\n"
+                "    case textSize(PresentationTheme, String, String)\n",
+                "entry-case")
+
+            sub("            case .textSize, .bubbleSettings:\n"
+                "                return ThemeSettingsControllerSection.message.rawValue\n",
+                "            case .aorusFont, .textSize, .bubbleSettings:\n"
+                "                return ThemeSettingsControllerSection.message.rawValue\n",
+                "entry-section")
+
+            stable_old = (
+                "        case .autoNightTheme:\n"
+                "            return 7\n"
+                "        case .textSize:\n"
+                "            return 8\n"
+                "        case .bubbleSettings:\n"
+                "            return 9\n"
+                "        case .powerSaving:\n"
+                "            return 10\n"
+                "        case .stickersAndEmoji:\n"
+                "            return 11\n"
+                "        case .iconHeader:\n"
+                "            return 12\n"
+                "        case .iconItem:\n"
+                "            return 13\n"
+                "        case .otherHeader:\n"
+                "            return 14\n"
+                "        case .sendWithCmdEnter:\n"
+                "            return 15\n"
+                "        case .showNextMediaOnTap:\n"
+                "            return 16\n"
+                "        case .showNextMediaOnTapInfo:\n"
+                "            return 17\n"
+            )
+            stable_new = (
+                "        case .autoNightTheme:\n"
+                "            return 7\n"
+                "        case .aorusFont:\n"
+                "            return 8\n"
+                "        case .textSize:\n"
+                "            return 9\n"
+                "        case .bubbleSettings:\n"
+                "            return 10\n"
+                "        case .powerSaving:\n"
+                "            return 11\n"
+                "        case .stickersAndEmoji:\n"
+                "            return 12\n"
+                "        case .iconHeader:\n"
+                "            return 20\n"
+                "        case .iconItem:\n"
+                "            return 21\n"
+                "        case .otherHeader:\n"
+                "            return 30\n"
+                "        case .sendWithCmdEnter:\n"
+                "            return 31\n"
+                "        case .showNextMediaOnTap:\n"
+                "            return 32\n"
+                "        case .showNextMediaOnTapInfo:\n"
+                "            return 33\n"
+            )
+            sub(stable_old, stable_new, "stable-id")
+
+            sub("            case let .textSize(lhsTheme, lhsText, lhsValue):\n"
+                "                if case let .textSize(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n",
+                "            case let .aorusFont(lhsTheme, lhsText, lhsValue):\n"
+                "                if case let .aorusFont(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n"
+                "                    return true\n"
+                "                } else {\n"
+                "                    return false\n"
+                "                }\n"
+                "            case let .textSize(lhsTheme, lhsText, lhsValue):\n"
+                "                if case let .textSize(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n",
+                "eq-case")
+
+            sub("            case let .textSize(_, text, value):\n"
+                "                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: nil, title: text, label: value, labelStyle: .text, sectionId: self.section, style: .blocks, disclosureStyle: .arrow, action: {\n"
+                "                    arguments.openTextSize()\n"
+                "                })\n",
+                "            case let .aorusFont(_, text, value):\n"
+                "                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: nil, title: text, label: value, labelStyle: .text, sectionId: self.section, style: .blocks, disclosureStyle: .arrow, action: {\n"
+                "                    arguments.openAorusFont()\n"
+                "                })\n"
+                "            case let .textSize(_, text, value):\n"
+                "                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: nil, title: text, label: value, labelStyle: .text, sectionId: self.section, style: .blocks, disclosureStyle: .arrow, action: {\n"
+                "                    arguments.openTextSize()\n"
+                "                })\n",
+                "item-case")
+
+            sub("    entries.append(.textSize(presentationData.theme, strings.Appearance_TextSizeSetting, textSizeValue))\n",
+                "    let aorusFontTitle = (strings.baseLanguageCode == \"ru\" || strings.baseLanguageCode.hasPrefix(\"ru\")) ? \"Шрифт\" : \"Font\"\n"
+                "    entries.append(.aorusFont(presentationData.theme, aorusFontTitle, AorusFontStore.selectedTitle))\n"
+                "    entries.append(.textSize(presentationData.theme, strings.Appearance_TextSizeSetting, textSizeValue))\n",
+                "entries")
+
+            sub("    }, openAutoNightTheme: {\n"
+                "        pushControllerImpl?(themeAutoNightSettingsController(context: context))\n"
+                "    }, openTextSize: {\n",
+                "    }, openAutoNightTheme: {\n"
+                "        pushControllerImpl?(themeAutoNightSettingsController(context: context))\n"
+                "    }, openAorusFont: {\n"
+                "        pushControllerImpl?(aorusFontPickerController(context: context))\n"
+                "    }, openTextSize: {\n",
+                "open-action")
+
+            settings.write_text(t, encoding="utf-8")
+            print("CustomFont: patched ThemeSettingsController")
+    else:
+        print("CustomFont: ThemeSettingsController.swift not found — skip")
+
+    settings_build = tg / "submodules/SettingsUI/BUILD"
+    if settings_build.is_file():
+        bt = settings_build.read_text(encoding="utf-8")
+        if "//submodules/AorusGramUI" not in bt:
+            needle = '        "//submodules/AccountContext:AccountContext",\n'
+            if needle in bt:
+                bt = bt.replace(needle, needle + '        "//submodules/AorusGramUI",\n', 1)
+                print("CustomFont: added AorusGramUI dep to SettingsUI BUILD")
+            else:
+                print("CustomFont: WARNING SettingsUI BUILD dep anchor not found")
+        settings_build.write_text(bt, encoding="utf-8")
+    else:
+        print("CustomFont: SettingsUI BUILD not found — skip")
+
+
 def patch_gif_wallpaper(tg: Path) -> None:
     """Animated GIF chat wallpaper.
 
@@ -11821,6 +12197,7 @@ def main() -> None:
     patch_call_recording(tg)
     patch_call_recording_group(tg)
     patch_account_limit(tg)
+    patch_aorus_custom_font(tg)
     patch_gif_wallpaper(tg)
     for name in ("Info.plist", "InfoBazel.plist"):
         patch_plist_icons_and_urls(tg / "Telegram/Telegram-iOS" / name)
