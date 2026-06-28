@@ -10807,7 +10807,7 @@ def patch_aorus_custom_font(tg: Path) -> None:
     if font_path.is_file():
         t = font_path.read_text(encoding="utf-8")
         orig = t
-        if "AorusRuntimeFont" in t and "fontNames(for choice" in t and "weight.rawValue != UIFont.Weight.regular.rawValue" in t:
+        if "AorusRuntimeFont" in t and "fontNames(for choice" in t and "weight.rawValue != UIFont.Weight.regular.rawValue" in t and "importedFontsKey" in t:
             print("CustomFont: Display Font.swift already patched")
         else:
             if "AorusRuntimeFont" in t:
@@ -10827,13 +10827,20 @@ def patch_aorus_custom_font(tg: Path) -> None:
 private enum AorusRuntimeFont {
     private static let choiceKey = "aorusgram_font_choice"
     private static let importedNameKey = "aorusgram_font_imported_name"
+    private static let importedFontsKey = "aorusgram_font_imported_fonts"
     private static let keychainService = "AorusGramFont"
     private static var didRegisterImported = false
 
+    private struct ImportedFontRecord: Codable {
+        let id: String
+        let postScriptName: String
+        let displayName: String
+    }
+
     static var cacheKey: String {
         let choice = selectedChoice
-        if choice == "imported" {
-            return "\(choice)_\(importedFontName() ?? "")"
+        if isImportedChoice(choice) {
+            return "\(choice)_\(importedFontName(for: choice) ?? "")"
         }
         return choice
     }
@@ -10875,11 +10882,16 @@ private enum AorusRuntimeFont {
 
     private static var selectedChoice: String {
         if let value = UserDefaults.standard.string(forKey: choiceKey), !value.isEmpty {
+            if value == "imported", let migrated = importedRecords().first?.id {
+                UserDefaults.standard.set(migrated, forKey: choiceKey)
+                return migrated
+            }
             return value
         }
         if let value = keychainString(account: "choice"), !value.isEmpty {
-            UserDefaults.standard.set(value, forKey: choiceKey)
-            return value
+            let resolved = value == "imported" ? (importedRecords().first?.id ?? value) : value
+            UserDefaults.standard.set(resolved, forKey: choiceKey)
+            return resolved
         }
         return "system"
     }
@@ -10920,11 +10932,14 @@ private enum AorusRuntimeFont {
         case "chalkboard":
             return bold ? ["ChalkboardSE-Bold", "ChalkboardSE-Regular"] : ["ChalkboardSE-Regular"]
         case "imported":
-            if let name = importedFontName() {
+            if let name = importedFontName(for: choice) {
                 return [name]
             }
             return []
         default:
+            if isImportedChoice(choice), let name = importedFontName(for: choice) {
+                return [name]
+            }
             return []
         }
     }
@@ -10944,11 +10959,10 @@ private enum AorusRuntimeFont {
         return names
     }
 
-    private static func importedFontName() -> String? {
-        if !didRegisterImported, let data = keychainData(account: "importedData"), let provider = CGDataProvider(data: data as CFData), let cgFont = CGFont(provider) {
-            var error: Unmanaged<CFError>?
-            _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
-            didRegisterImported = true
+    private static func importedFontName(for choice: String) -> String? {
+        registerImportedFontsIfNeeded()
+        if isImportedChoice(choice), let record = importedRecords().first(where: { $0.id == choice }) {
+            return record.postScriptName
         }
         if let value = UserDefaults.standard.string(forKey: importedNameKey), !value.isEmpty {
             return value
@@ -10958,6 +10972,46 @@ private enum AorusRuntimeFont {
             return value
         }
         return nil
+    }
+
+    private static func registerImportedFontsIfNeeded() {
+        guard !didRegisterImported else { return }
+        didRegisterImported = true
+        for record in importedRecords() {
+            if let data = keychainData(account: importedDataAccount(record.id)),
+               let provider = CGDataProvider(data: data as CFData),
+               let cgFont = CGFont(provider) {
+                var error: Unmanaged<CFError>?
+                _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
+            }
+        }
+        if let data = keychainData(account: "importedData"),
+           let provider = CGDataProvider(data: data as CFData),
+           let cgFont = CGFont(provider) {
+            var error: Unmanaged<CFError>?
+            _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
+        }
+    }
+
+    private static func importedRecords() -> [ImportedFontRecord] {
+        if let data = UserDefaults.standard.data(forKey: importedFontsKey),
+           let records = try? JSONDecoder().decode([ImportedFontRecord].self, from: data) {
+            return records
+        }
+        if let data = keychainData(account: "importedFonts"),
+           let records = try? JSONDecoder().decode([ImportedFontRecord].self, from: data) {
+            UserDefaults.standard.set(data, forKey: importedFontsKey)
+            return records
+        }
+        return []
+    }
+
+    private static func isImportedChoice(_ choice: String) -> Bool {
+        return choice == "imported" || choice.hasPrefix("imported:")
+    }
+
+    private static func importedDataAccount(_ id: String) -> String {
+        return "importedData:\(id)"
     }
 
     private static func applyTraits(to descriptor: UIFontDescriptor, weight: UIFont.Weight, traitsRaw: Int32) -> UIFontDescriptor {

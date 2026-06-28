@@ -23,17 +23,35 @@ fileprivate struct AorusFontChoice: Equatable {
     let kind: Kind
 }
 
+private struct AorusImportedFontRecord: Codable, Equatable {
+    let id: String
+    let postScriptName: String
+    let displayName: String
+}
+
 public enum AorusFontStore {
     public static let choiceKey = "aorusgram_font_choice"
     private static let importedNameKey = "aorusgram_font_imported_name"
     private static let importedDisplayKey = "aorusgram_font_imported_display"
+    private static let importedFontsKey = "aorusgram_font_imported_fonts"
+    private static let legacyMigrationKey = "aorusgram_font_legacy_imported_migrated"
     private static let keychainService = "AorusGramFont"
 
-    private static var importedURL: URL {
+    private static var importedFontsDirectory: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("AorusGram/Fonts", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("Imported.ttf")
+        return dir
+    }
+
+    private static var legacyImportedURL: URL {
+        return importedFontsDirectory.appendingPathComponent("Imported.ttf")
+    }
+
+    private static func importedURL(id: String) -> URL {
+        let safeId = id.replacingOccurrences(of: ":", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+        return importedFontsDirectory.appendingPathComponent("\(safeId).ttf")
     }
 
     fileprivate static var presets: [AorusFontChoice] {
@@ -63,7 +81,7 @@ public enum AorusFontStore {
 
     fileprivate static var choices: [AorusFontChoice] {
         var result = presets
-        if let imported = importedChoice {
+        for imported in importedChoices {
             result.append(imported)
         }
         return result
@@ -71,11 +89,19 @@ public enum AorusFontStore {
 
     fileprivate static var selectedId: String {
         if let value = UserDefaults.standard.string(forKey: choiceKey), !value.isEmpty {
+            if value == "imported", let migrated = importedRecords().first?.id {
+                selectId(migrated)
+                return migrated
+            }
             return value
         }
         if let value = keychainString(account: "choice"), !value.isEmpty {
-            UserDefaults.standard.set(value, forKey: choiceKey)
-            return value
+            let resolved = value == "imported" ? (importedRecords().first?.id ?? value) : value
+            UserDefaults.standard.set(resolved, forKey: choiceKey)
+            if resolved != value {
+                keychainSetString(resolved, account: "choice")
+            }
+            return resolved
         }
         return "system"
     }
@@ -86,8 +112,8 @@ public enum AorusFontStore {
     }
 
     fileprivate static func stableId(for choice: AorusFontChoice) -> Int32 {
-        if choice.id == "imported" {
-            return 1000
+        if isImportedId(choice.id) {
+            return 1000 + Int32(deterministicHash(choice.id) % 18000)
         }
         if let index = presets.firstIndex(where: { $0.id == choice.id }) {
             return Int32(index)
@@ -96,8 +122,36 @@ public enum AorusFontStore {
     }
 
     fileprivate static func select(_ choice: AorusFontChoice) {
-        UserDefaults.standard.set(choice.id, forKey: choiceKey)
-        keychainSetString(choice.id, account: "choice")
+        selectId(choice.id)
+    }
+
+    fileprivate static func delete(_ choice: AorusFontChoice) -> Bool {
+        guard isImportedId(choice.id) else { return false }
+        var records = importedRecords()
+        guard let index = records.firstIndex(where: { $0.id == choice.id }) else { return false }
+        records.remove(at: index)
+        persistImportedRecords(records)
+        try? FileManager.default.removeItem(at: importedURL(id: choice.id))
+        keychainDelete(account: importedDataAccount(choice.id))
+        if choice.id == "imported:legacy" {
+            UserDefaults.standard.removeObject(forKey: importedNameKey)
+            UserDefaults.standard.removeObject(forKey: importedDisplayKey)
+            keychainDelete(account: "importedName")
+            keychainDelete(account: "importedDisplay")
+            keychainDelete(account: "importedData")
+            markLegacyMigrationDone()
+        }
+        if selectedId == choice.id {
+            selectId("system")
+        } else {
+            NotificationCenter.default.post(name: NSNotification.Name("aorusgram_font_changed"), object: nil)
+        }
+        return true
+    }
+
+    private static func selectId(_ id: String) {
+        UserDefaults.standard.set(id, forKey: choiceKey)
+        keychainSetString(id, account: "choice")
         NotificationCenter.default.post(name: NSNotification.Name("aorusgram_font_changed"), object: nil)
     }
 
@@ -146,39 +200,144 @@ public enum AorusFontStore {
         var error: Unmanaged<CFError>?
         _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
 
-        try? data.write(to: importedURL, options: [.atomic])
-        UserDefaults.standard.set(postScriptName, forKey: importedNameKey)
-        UserDefaults.standard.set(url.deletingPathExtension().lastPathComponent, forKey: importedDisplayKey)
-        keychainSetString(postScriptName, account: "importedName")
-        keychainSetString(url.deletingPathExtension().lastPathComponent, account: "importedDisplay")
-        keychainSetData(data, account: "importedData")
+        let id = "imported:\(UUID().uuidString)"
+        let displayName = url.deletingPathExtension().lastPathComponent
+        let record = AorusImportedFontRecord(id: id, postScriptName: postScriptName, displayName: displayName)
+        try? data.write(to: importedURL(id: id), options: [.atomic])
+        keychainSetData(data, account: importedDataAccount(id))
+        var records = importedRecords()
+        records.removeAll(where: { $0.id == id })
+        records.append(record)
+        persistImportedRecords(records)
 
-        let choice = AorusFontChoice(id: "imported", title: url.deletingPathExtension().lastPathComponent, kind: .imported(postScriptName))
+        let choice = AorusFontChoice(id: id, title: displayName, kind: .imported(postScriptName))
         select(choice)
         return choice
     }
 
-    private static var importedChoice: AorusFontChoice? {
-        restoreImportedFontIfNeeded()
+    private static var importedChoices: [AorusFontChoice] {
+        return importedRecords().map { record in
+            AorusFontChoice(id: record.id, title: record.displayName, kind: .imported(record.postScriptName))
+        }
+    }
+
+    private static func importedRecords() -> [AorusImportedFontRecord] {
+        migrateLegacyImportedFontIfNeeded()
+        var records = loadImportedRecords()
+        var changed = false
+        records.removeAll(where: { record in
+            if record.id.isEmpty || record.postScriptName.isEmpty {
+                changed = true
+                return true
+            }
+            return false
+        })
+        var seenIds = Set<String>()
+        records = records.filter { record in
+            if seenIds.contains(record.id) {
+                changed = true
+                return false
+            }
+            seenIds.insert(record.id)
+            return true
+        }
+        if changed {
+            persistImportedRecords(records)
+        }
+        restoreImportedFonts(records)
+        return records
+    }
+
+    private static func loadImportedRecords() -> [AorusImportedFontRecord] {
+        if let data = UserDefaults.standard.data(forKey: importedFontsKey),
+           let records = try? JSONDecoder().decode([AorusImportedFontRecord].self, from: data) {
+            return records
+        }
+        if let data = keychainData(account: "importedFonts"),
+           let records = try? JSONDecoder().decode([AorusImportedFontRecord].self, from: data) {
+            UserDefaults.standard.set(data, forKey: importedFontsKey)
+            return records
+        }
+        return []
+    }
+
+    private static func persistImportedRecords(_ records: [AorusImportedFontRecord]) {
+        guard let data = try? JSONEncoder().encode(records) else { return }
+        UserDefaults.standard.set(data, forKey: importedFontsKey)
+        keychainSetData(data, account: "importedFonts")
+    }
+
+    private static func migrateLegacyImportedFontIfNeeded() {
+        if UserDefaults.standard.bool(forKey: legacyMigrationKey) || keychainString(account: "legacyImportedMigrated") == "1" {
+            return
+        }
+        if let data = UserDefaults.standard.data(forKey: importedFontsKey),
+           let records = try? JSONDecoder().decode([AorusImportedFontRecord].self, from: data),
+           !records.isEmpty {
+            markLegacyMigrationDone()
+            return
+        }
+        if let data = keychainData(account: "importedFonts"),
+           let records = try? JSONDecoder().decode([AorusImportedFontRecord].self, from: data),
+           !records.isEmpty {
+            UserDefaults.standard.set(data, forKey: importedFontsKey)
+            markLegacyMigrationDone()
+            return
+        }
         let postScriptName = UserDefaults.standard.string(forKey: importedNameKey) ?? keychainString(account: "importedName")
-        guard let postScriptName, !postScriptName.isEmpty else { return nil }
+        guard let postScriptName, !postScriptName.isEmpty else { return }
         let display = UserDefaults.standard.string(forKey: importedDisplayKey)
             ?? keychainString(account: "importedDisplay")
             ?? "Imported Font"
-        return AorusFontChoice(id: "imported", title: display, kind: .imported(postScriptName))
+        let id = "imported:legacy"
+        let record = AorusImportedFontRecord(id: id, postScriptName: postScriptName, displayName: display)
+        if let data = keychainData(account: "importedData") ?? (try? Data(contentsOf: legacyImportedURL)) {
+            try? data.write(to: importedURL(id: id), options: [.atomic])
+            keychainSetData(data, account: importedDataAccount(id))
+        }
+        persistImportedRecords([record])
+        if UserDefaults.standard.string(forKey: choiceKey) == "imported" || keychainString(account: "choice") == "imported" {
+            selectId(id)
+        }
+        markLegacyMigrationDone()
     }
 
-    private static func restoreImportedFontIfNeeded() {
-        if !FileManager.default.fileExists(atPath: importedURL.path), let data = keychainData(account: "importedData") {
-            try? data.write(to: importedURL, options: [.atomic])
+    private static func restoreImportedFonts(_ records: [AorusImportedFontRecord]) {
+        for record in records {
+            let url = importedURL(id: record.id)
+            if !FileManager.default.fileExists(atPath: url.path), let data = keychainData(account: importedDataAccount(record.id)) {
+                try? data.write(to: url, options: [.atomic])
+            }
+            guard let data = try? Data(contentsOf: url),
+                  let provider = CGDataProvider(data: data as CFData),
+                  let cgFont = CGFont(provider) else {
+                continue
+            }
+            var error: Unmanaged<CFError>?
+            _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
         }
-        guard let data = try? Data(contentsOf: importedURL),
-              let provider = CGDataProvider(data: data as CFData),
-              let cgFont = CGFont(provider) else {
-            return
+    }
+
+    private static func isImportedId(_ id: String) -> Bool {
+        return id.hasPrefix("imported:")
+    }
+
+    private static func importedDataAccount(_ id: String) -> String {
+        return "importedData:\(id)"
+    }
+
+    private static func markLegacyMigrationDone() {
+        UserDefaults.standard.set(true, forKey: legacyMigrationKey)
+        keychainSetString("1", account: "legacyImportedMigrated")
+    }
+
+    private static func deterministicHash(_ value: String) -> UInt32 {
+        var hash: UInt32 = 2166136261
+        for byte in value.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16777619
         }
-        var error: Unmanaged<CFError>?
-        _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
+        return hash
     }
 
     private static func keychainQuery(account: String) -> [String: Any] {
@@ -206,6 +365,10 @@ public enum AorusFontStore {
         SecItemAdd(query as CFDictionary, nil)
     }
 
+    private static func keychainDelete(account: String) {
+        SecItemDelete(keychainQuery(account: account) as CFDictionary)
+    }
+
     private static func keychainData(account: String) -> Data? {
         var query = keychainQuery(account: account)
         query[kSecReturnData as String] = true
@@ -219,10 +382,12 @@ public enum AorusFontStore {
 
 private final class AorusFontArguments {
     let select: (AorusFontChoice) -> Void
+    let delete: (AorusFontChoice) -> Void
     let importFont: () -> Void
 
-    init(select: @escaping (AorusFontChoice) -> Void, importFont: @escaping () -> Void) {
+    init(select: @escaping (AorusFontChoice) -> Void, delete: @escaping (AorusFontChoice) -> Void, importFont: @escaping () -> Void) {
         self.select = select
+        self.delete = delete
         self.importFont = importFont
     }
 }
@@ -279,7 +444,9 @@ private enum AorusFontEntry: ItemListNodeEntry {
         case let .header(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .font(theme, choice, selected):
-            return AorusFontPreviewItem(theme: theme, choice: choice, selected: selected, sectionId: section, action: {
+            return AorusFontPreviewItem(theme: theme, choice: choice, selected: selected, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: choice.id.hasPrefix("imported:") ? {
+                args.delete(choice)
+            } : nil, action: {
                 args.select(choice)
             })
         case let .importFont(_, title):
@@ -294,15 +461,19 @@ private final class AorusFontPreviewItem: ListViewItem, ItemListItem {
     let theme: PresentationTheme
     let choice: AorusFontChoice
     let selected: Bool
+    let deleteTitle: String
     let sectionId: ItemListSectionId
     let requestsNoInset: Bool = false
+    let deleteAction: (() -> Void)?
     let action: () -> Void
 
-    init(theme: PresentationTheme, choice: AorusFontChoice, selected: Bool, sectionId: ItemListSectionId, action: @escaping () -> Void) {
+    init(theme: PresentationTheme, choice: AorusFontChoice, selected: Bool, deleteTitle: String, sectionId: ItemListSectionId, deleteAction: (() -> Void)?, action: @escaping () -> Void) {
         self.theme = theme
         self.choice = choice
         self.selected = selected
+        self.deleteTitle = deleteTitle
         self.sectionId = sectionId
+        self.deleteAction = deleteAction
         self.action = action
     }
 
@@ -342,7 +513,7 @@ private final class AorusFontPreviewItem: ListViewItem, ItemListItem {
     }
 }
 
-private final class AorusFontPreviewItemNode: ListViewItemNode {
+private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
     private let backgroundNode = ASDisplayNode()
     private let topStripeNode = ASDisplayNode()
     private let bottomStripeNode = ASDisplayNode()
@@ -407,19 +578,37 @@ private final class AorusFontPreviewItemNode: ListViewItemNode {
 
     private func layoutSubviews() {
         guard let params = layoutParams else { return }
-        let left = params.leftInset + 16.0
+        let offset = self.revealOffset
+        let baseLeft = params.leftInset + 16.0
+        let left = offset + baseLeft
         let right = params.rightInset + 48.0
         let width = params.width
-        titleLabel?.frame = CGRect(x: left, y: 9.0, width: width - left - right, height: 24.0)
-        sampleLabel?.frame = CGRect(x: left, y: 34.0, width: width - left - right, height: 20.0)
-        checkLabel?.frame = CGRect(x: width - params.rightInset - 36.0, y: 18.0, width: 22.0, height: 24.0)
+        titleLabel?.frame = CGRect(x: left, y: 9.0, width: width - baseLeft - right, height: 24.0)
+        sampleLabel?.frame = CGRect(x: left, y: 34.0, width: width - baseLeft - right, height: 20.0)
+        checkLabel?.frame = CGRect(x: offset + width - params.rightInset - 36.0, y: 18.0, width: 22.0, height: 24.0)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if self.isDisplayingRevealedOptions {
+            self.setRevealOptionsOpened(false, animated: true)
+            self.revealOptionsInteractivelyClosed()
+            return
+        }
         guard let touch = touches.first, self.bounds.contains(touch.location(in: self.view)) else {
             return
         }
         item?.action()
+    }
+
+    override func updateRevealOffset(offset: CGFloat, transition: ContainedViewLayoutTransition) {
+        super.updateRevealOffset(offset: offset, transition: transition)
+        self.layoutSubviews()
+    }
+
+    override func revealOptionSelected(_ option: ItemListRevealOption, animated: Bool) {
+        self.setRevealOptionsOpened(false, animated: true)
+        self.revealOptionsInteractivelyClosed()
+        item?.deleteAction?()
     }
 
     func asyncLayout() -> (AorusFontPreviewItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
@@ -467,6 +656,20 @@ private final class AorusFontPreviewItemNode: ListViewItemNode {
                 self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
                 self.applyItem(item)
                 self.layoutSubviews()
+                self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
+                self.updateRevealOptionsSeparatorNodes(top: self.topStripeNode, bottom: self.bottomStripeNode, topIsHidden: self.topStripeNode.isHidden, bottomIsHidden: self.bottomStripeNode.isHidden, topHiddenByPreviousRevealOptions: neighbors.topHasActiveRevealOptions, bottomHiddenByNextRevealOptions: neighbors.bottomHasActiveRevealOptions)
+                if let _ = item.deleteAction {
+                    let trashIcon: UIImage?
+                    if #available(iOS 13.0, *) {
+                        trashIcon = UIImage(systemName: "trash.fill")
+                    } else {
+                        trashIcon = nil
+                    }
+                    let revealIcon: ItemListRevealOptionIcon = trashIcon.map { .image(image: $0) } ?? .none
+                    self.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.deleteTitle, icon: revealIcon, color: item.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor)]))
+                } else {
+                    self.setRevealOptions((left: [], right: []))
+                }
             })
         }
     }
@@ -520,6 +723,11 @@ public func aorusFontPickerController(context: AccountContext) -> ViewController
         AorusFontStore.select(choice)
         updateSelected(choice.id)
         aorusPresentRestartNotice(context: context, controller: weakController)
+    }, delete: { choice in
+        if AorusFontStore.delete(choice) {
+            updateSelected(AorusFontStore.selectedId)
+            aorusPresentRestartNotice(context: context, controller: weakController)
+        }
     }, importFont: {
         guard let controller = weakController else { return }
         let picker = UIDocumentPickerViewController(documentTypes: ["public.truetype-ttf-font", "com.apple.truetype-ttf-font"], in: .import)
