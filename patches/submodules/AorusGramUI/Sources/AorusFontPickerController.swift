@@ -38,7 +38,7 @@ public enum AorusFontStore {
 
     fileprivate static var presets: [AorusFontChoice] {
         return [
-            AorusFontChoice(id: "system", title: "Telegram Default", kind: .system),
+            AorusFontChoice(id: "system", title: AorusLang.current == .ru ? "Системный" : "Default", kind: .system),
             AorusFontChoice(id: "rounded", title: "SF Rounded", kind: .systemDesign("rounded")),
             AorusFontChoice(id: "serif", title: "New York Serif", kind: .systemDesign("serif")),
             AorusFontChoice(id: "mono", title: "SF Mono", kind: .systemDesign("monospace")),

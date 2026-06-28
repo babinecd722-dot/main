@@ -60,7 +60,9 @@ private struct AorusPerformanceHUDL10n {
     let thermalCritical: String
 
     static var current: AorusPerformanceHUDL10n {
-        let code = Locale.preferredLanguages.first?.lowercased() ?? Locale.current.identifier.lowercased()
+        let code = (UserDefaults.standard.string(forKey: "aorusgram_lang")
+            ?? Locale.preferredLanguages.first
+            ?? Locale.current.identifier).lowercased()
         if code.hasPrefix("ru") {
             return AorusPerformanceHUDL10n(
                 performanceRAM: "RAM",

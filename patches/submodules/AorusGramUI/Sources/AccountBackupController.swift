@@ -25,6 +25,74 @@ private struct BackupState: Equatable {
     var busy: Bool
 }
 
+private struct BackupL10n {
+    let isRu: Bool
+
+    private func t(_ ru: String, _ en: String) -> String {
+        return isRu ? ru : en
+    }
+
+    var title: String { t("Бэкап аккаунтов", "Account Backup") }
+    var backupAction: String { t("Бэкап в Keychain", "Back Up to Keychain") }
+    var restoreAction: String { t("Восстановить из Keychain", "Restore from Keychain") }
+    var deleteAction: String { t("Удалить бэкап из Keychain", "Delete Keychain Backup") }
+    var info: String {
+        t(
+            "Сессии шифруются (AES-256) и хранятся в Keychain устройства. "
+            + "Сессии никогда не покидают ваше устройство.\n\n"
+            + "ВАЖНО: Чтобы восстановить сессии на новом устройстве или после "
+            + "сброса системы, ОБЯЗАТЕЛЬНО включите шифрование резервных копий ОС, "
+            + "иначе Keychain будет утерян при восстановлении.\n\n"
+            + "ПРИМЕЧАНИЕ: Сессии всё ещё могут быть разлогинены самим Telegram "
+            + "или с другого устройства.",
+            "Sessions are encrypted with AES-256 and stored in this device's Keychain. "
+            + "Sessions never leave your device.\n\n"
+            + "IMPORTANT: To restore sessions on a new device or after an OS reset, "
+            + "encrypted OS backups must be enabled, otherwise Keychain data will be lost.\n\n"
+            + "NOTE: Sessions can still be logged out by Telegram or from another device."
+        )
+    }
+    var statusHeader: String { t("СОСТОЯНИЕ", "STATUS") }
+    var busy: String { t("Выполняется операция...", "Operation in progress...") }
+    var restorePending: String { t("Бэкап подготовлен к восстановлению.\nПерезапустите приложение для применения.", "Backup is ready to restore.\nRestart the app to apply it.") }
+    var noBackup: String { t("Бэкап ещё не создан.", "No backup has been created yet.") }
+    var sessionsHeader: String { t("СЕССИИ", "SESSIONS") }
+    var noSessions: String { t("Нет активных сессий", "No active sessions") }
+    func account(_ id: String) -> String { t("Аккаунт", "Account") + " · \(id)" }
+    func backupStatus(date: String, accountCount: Int, size: String) -> String {
+        return t("Бэкап от", "Backup from") + " \(date)\n"
+            + t("Аккаунтов", "Accounts") + ": \(accountCount) · "
+            + t("Размер", "Size") + ": \(size)"
+    }
+
+    var createBackupTitle: String { t("Создать бэкап?", "Create Backup?") }
+    var createBackupText: String { t("Текущие сессии будут зашифрованы и сохранены в Keychain устройства.", "Current sessions will be encrypted and saved to this device's Keychain.") }
+    var cancel: String { t("Отмена", "Cancel") }
+    var create: String { t("Создать", "Create") }
+    var done: String { t("Готово", "Done") }
+    var error: String { t("Ошибка", "Error") }
+    func backupCreated(_ count: Int) -> String { t("Бэкап создан. Аккаунтов", "Backup created. Accounts") + ": \(count)." }
+
+    var restoreTitle: String { t("Восстановить из бэкапа?", "Restore from Backup?") }
+    var restoreText: String {
+        t(
+            "Текущие данные аккаунтов будут заменены данными из бэкапа. "
+            + "Перед заменой создаётся защитный снимок. После подготовки "
+            + "потребуется перезапуск приложения.",
+            "Current account data will be replaced with backup data. "
+            + "A safety snapshot is created before replacement. "
+            + "After preparation, the app must be restarted."
+        )
+    }
+    var restore: String { t("Восстановить", "Restore") }
+    var restorePreparedTitle: String { t("Бэкап подготовлен", "Backup Ready") }
+    var restorePreparedText: String { t("Полностью закройте и перезапустите приложение, чтобы завершить восстановление.", "Fully close and restart the app to finish restoring.") }
+
+    var deleteTitle: String { t("Удалить бэкап?", "Delete Backup?") }
+    var deleteText: String { t("Зашифрованный бэкап и ключ из Keychain будут удалены. Действие необратимо.", "The encrypted backup and Keychain key will be deleted. This cannot be undone.") }
+    var delete: String { t("Удалить", "Delete") }
+}
+
 // MARK: - Arguments
 
 private final class BackupArguments {
@@ -133,46 +201,39 @@ private enum BackupEntry: ItemListNodeEntry {
 
 // MARK: - Entries builder
 
-private func backupEntries(state: BackupState, theme: PresentationTheme) -> [BackupEntry] {
+private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: BackupL10n) -> [BackupEntry] {
     let mgr = AccountBackupManager.shared
     let hasBackup = mgr.hasBackup()
     var entries: [BackupEntry] = []
 
-    entries.append(.backupAction(theme, "Бэкап в Keychain", !state.busy))
-    entries.append(.restoreAction(theme, "Восстановить из Keychain", hasBackup && !state.busy))
-    entries.append(.deleteAction(theme, "Удалить Бэкап из Keychain", hasBackup && !state.busy))
+    entries.append(.backupAction(theme, l10n.backupAction, !state.busy))
+    entries.append(.restoreAction(theme, l10n.restoreAction, hasBackup && !state.busy))
+    entries.append(.deleteAction(theme, l10n.deleteAction, hasBackup && !state.busy))
 
-    entries.append(.info(theme,
-        "Сессии шифруются (AES-256) и хранятся в Keychain устройства. "
-        + "Сессии никогда не покидают ваше устройство.\n\n"
-        + "ВАЖНО: Чтобы восстановить сессии на новом устройстве или после "
-        + "сброса системы, ОБЯЗАТЕЛЬНО включите шифрование резервных копий ОС, "
-        + "иначе Keychain будет утерян при восстановлении.\n\n"
-        + "ПРИМЕЧАНИЕ: Сессии всё ещё могут быть разлогинены самим Telegram "
-        + "или с другого устройства."))
+    entries.append(.info(theme, l10n.info))
 
-    entries.append(.statusHeader(theme, "СОСТОЯНИЕ"))
+    entries.append(.statusHeader(theme, l10n.statusHeader))
     if state.busy {
-        entries.append(.status(theme, "Выполняется операция…"))
+        entries.append(.status(theme, l10n.busy))
     } else if mgr.isRestorePending() {
-        entries.append(.status(theme, "Бэкап подготовлен к восстановлению.\nПерезапустите приложение для применения."))
+        entries.append(.status(theme, l10n.restorePending))
     } else if let info = mgr.backupInfo() {
         let df = DateFormatter()
+        df.locale = l10n.isRu ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US_POSIX")
         df.dateFormat = "dd.MM.yyyy HH:mm"
         let size = ByteCountFormatter.string(fromByteCount: info.sizeBytes, countStyle: .file)
-        entries.append(.status(theme,
-            "Бэкап от \(df.string(from: info.date))\nАккаунтов: \(info.accountCount) · Размер: \(size)"))
+        entries.append(.status(theme, l10n.backupStatus(date: df.string(from: info.date), accountCount: info.accountCount, size: size)))
     } else {
-        entries.append(.status(theme, "Бэкап ещё не создан."))
+        entries.append(.status(theme, l10n.noBackup))
     }
 
-    entries.append(.sessionsHeader(theme, "СЕССИИ"))
+    entries.append(.sessionsHeader(theme, l10n.sessionsHeader))
     let ids = mgr.localAccountIds()
     if ids.isEmpty {
-        entries.append(.session(theme, 0, "Нет активных сессий"))
+        entries.append(.session(theme, 0, l10n.noSessions))
     } else {
         for (i, id) in ids.enumerated() {
-            entries.append(.session(theme, Int32(i), "Аккаунт · \(id)"))
+            entries.append(.session(theme, Int32(i), l10n.account(id)))
         }
     }
 
@@ -223,25 +284,31 @@ public func accountBackupController(context: AccountContext) -> ViewController {
         }
     }
 
+    let currentL10n: () -> BackupL10n = {
+        return BackupL10n(isRu: AorusLang.current == .ru)
+    }
+
     let arguments = BackupArguments(
         backup: {
             guard let controller = weakController else { return }
+            let l10n = currentL10n()
             let confirm = textAlertController(
                 context: context,
-                title: "Создать бэкап?",
-                text: "Текущие сессии будут зашифрованы и сохранены в Keychain устройства.",
+                title: l10n.createBackupTitle,
+                text: l10n.createBackupText,
                 actions: [
-                    TextAlertAction(type: .genericAction, title: "Отмена", action: {}),
-                    TextAlertAction(type: .defaultAction, title: "Создать", action: {
+                    TextAlertAction(type: .genericAction, title: l10n.cancel, action: {}),
+                    TextAlertAction(type: .defaultAction, title: l10n.create, action: {
                         runBusy {
                             let result = AccountBackupManager.shared.performBackup()
                             DispatchQueue.main.async {
+                                let l10n = currentL10n()
                                 refresh()
                                 switch result {
                                 case let .success(info):
-                                    presentAlert("Готово", "Бэкап создан. Аккаунтов: \(info.accountCount).")
+                                    presentAlert(l10n.done, l10n.backupCreated(info.accountCount))
                                 case let .failure(message):
-                                    presentAlert("Ошибка", message)
+                                    presentAlert(l10n.error, message)
                                 }
                             }
                         }
@@ -252,26 +319,24 @@ public func accountBackupController(context: AccountContext) -> ViewController {
         },
         restore: {
             guard let controller = weakController else { return }
+            let l10n = currentL10n()
             let confirm = textAlertController(
                 context: context,
-                title: "Восстановить из бэкапа?",
-                text: "Текущие данные аккаунтов будут заменены данными из бэкапа. "
-                    + "Перед заменой создаётся защитный снимок. После подготовки "
-                    + "потребуется перезапуск приложения.",
+                title: l10n.restoreTitle,
+                text: l10n.restoreText,
                 actions: [
-                    TextAlertAction(type: .genericAction, title: "Отмена", action: {}),
-                    TextAlertAction(type: .defaultAction, title: "Восстановить", action: {
+                    TextAlertAction(type: .genericAction, title: l10n.cancel, action: {}),
+                    TextAlertAction(type: .defaultAction, title: l10n.restore, action: {
                         runBusy {
                             let result = AccountBackupManager.shared.prepareRestore()
                             DispatchQueue.main.async {
+                                let l10n = currentL10n()
                                 refresh()
                                 switch result {
                                 case .success:
-                                    presentAlert("Бэкап подготовлен",
-                                                 "Полностью закройте и перезапустите приложение, "
-                                                 + "чтобы завершить восстановление.")
+                                    presentAlert(l10n.restorePreparedTitle, l10n.restorePreparedText)
                                 case let .failure(message):
-                                    presentAlert("Ошибка", message)
+                                    presentAlert(l10n.error, message)
                                 }
                             }
                         }
@@ -282,13 +347,14 @@ public func accountBackupController(context: AccountContext) -> ViewController {
         },
         delete: {
             guard let controller = weakController else { return }
+            let l10n = currentL10n()
             let confirm = textAlertController(
                 context: context,
-                title: "Удалить бэкап?",
-                text: "Зашифрованный бэкап и ключ из Keychain будут удалены. Действие необратимо.",
+                title: l10n.deleteTitle,
+                text: l10n.deleteText,
                 actions: [
-                    TextAlertAction(type: .genericAction, title: "Отмена", action: {}),
-                    TextAlertAction(type: .destructiveAction, title: "Удалить", action: {
+                    TextAlertAction(type: .genericAction, title: l10n.cancel, action: {}),
+                    TextAlertAction(type: .destructiveAction, title: l10n.delete, action: {
                         AccountBackupManager.shared.deleteBackup()
                         refresh()
                     })
@@ -302,10 +368,11 @@ public func accountBackupController(context: AccountContext) -> ViewController {
         |> deliverOnMainQueue
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let entries = backupEntries(state: state, theme: presentationData.theme)
+            let l10n = BackupL10n(isRu: AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru)
+            let entries = backupEntries(state: state, theme: presentationData.theme, l10n: l10n)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text("Бэкап аккаунтов"),
+                title: .text(l10n.title),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

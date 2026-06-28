@@ -39,6 +39,13 @@ public final class AccountBackupManager {
 
     private enum BackupError: Error { case truncated, corrupt }
 
+    private func localized(_ ru: String, _ en: String) -> String {
+        let code = (UserDefaults.standard.string(forKey: "aorusgram_lang")
+            ?? Locale.preferredLanguages.first
+            ?? Locale.current.identifier).lowercased()
+        return code.hasPrefix("ru") ? ru : en
+    }
+
     // MARK: - Root path
 
     // Mirrored to UserDefaults so the AorusGramUI copy of this manager reads the
@@ -102,12 +109,12 @@ public final class AccountBackupManager {
     // MARK: - Backup
 
     public func performBackup() -> BackupOutcome {
-        guard !rootPath.isEmpty else { return .failure("Путь к данным аккаунтов недоступен") }
+        guard !rootPath.isEmpty else { return .failure(localized("Путь к данным аккаунтов недоступен", "Account data path is unavailable")) }
         let fm = FileManager.default
 
         var files: [(abs: String, rel: String)] = []
         collectBackupFiles(into: &files)
-        guard !files.isEmpty else { return .failure("Нет данных аккаунтов для бэкапа") }
+        guard !files.isEmpty else { return .failure(localized("Нет данных аккаунтов для бэкапа", "No account data available for backup")) }
 
         let key = loadKey() ?? SymmetricKey(size: .bits256)
 
@@ -116,7 +123,7 @@ public final class AccountBackupManager {
         try? fm.removeItem(at: tmpURL)
         guard fm.createFile(atPath: tmpURL.path, contents: nil),
               let handle = try? FileHandle(forWritingTo: tmpURL) else {
-            return .failure("Не удалось создать файл бэкапа")
+            return .failure(localized("Не удалось создать файл бэкапа", "Failed to create backup file"))
         }
 
         handle.write(Data(magic))
@@ -126,7 +133,7 @@ public final class AccountBackupManager {
                   let encBody = (try? AES.GCM.seal(content, using: key))?.combined else {
                 handle.closeFile()
                 try? fm.removeItem(at: tmpURL)
-                return .failure("Ошибка шифрования данных")
+                return .failure(localized("Ошибка шифрования данных", "Data encryption failed"))
             }
             handle.write(uint32LE(UInt32(encPath.count)))
             handle.write(encPath)
@@ -141,12 +148,12 @@ public final class AccountBackupManager {
             try fm.moveItem(at: tmpURL, to: archiveURL)
         } catch {
             try? fm.removeItem(at: tmpURL)
-            return .failure("Не удалось сохранить бэкап")
+            return .failure(localized("Не удалось сохранить бэкап", "Failed to save backup"))
         }
 
         guard saveKey(key) else {
             try? fm.removeItem(at: archiveURL)
-            return .failure("Не удалось сохранить ключ в Keychain")
+            return .failure(localized("Не удалось сохранить ключ в Keychain", "Failed to save key in Keychain"))
         }
 
         let attrs = try? fm.attributesOfItem(atPath: archiveURL.path)
@@ -201,27 +208,27 @@ public final class AccountBackupManager {
     // MARK: - Restore phase 1: prepare
 
     public func prepareRestore() -> BackupOutcome {
-        guard !rootPath.isEmpty else { return .failure("Путь к данным аккаунтов недоступен") }
-        guard hasBackup(), let key = loadKey() else { return .failure("Бэкап не найден") }
+        guard !rootPath.isEmpty else { return .failure(localized("Путь к данным аккаунтов недоступен", "Account data path is unavailable")) }
+        guard hasBackup(), let key = loadKey() else { return .failure(localized("Бэкап не найден", "Backup not found")) }
         let fm = FileManager.default
 
         try? fm.removeItem(at: stagingURL)
         do {
             try fm.createDirectory(at: stagingURL, withIntermediateDirectories: true)
         } catch {
-            return .failure("Не удалось создать папку восстановления")
+            return .failure(localized("Не удалось создать папку восстановления", "Failed to create restore folder"))
         }
 
         guard let handle = try? FileHandle(forReadingFrom: archiveURL) else {
             try? fm.removeItem(at: stagingURL)
-            return .failure("Не удалось открыть бэкап")
+            return .failure(localized("Не удалось открыть бэкап", "Failed to open backup"))
         }
 
         let head = handle.readData(ofLength: magic.count)
         guard Array(head) == magic else {
             handle.closeFile()
             try? fm.removeItem(at: stagingURL)
-            return .failure("Файл бэкапа повреждён")
+            return .failure(localized("Файл бэкапа повреждён", "Backup file is corrupted"))
         }
 
         do {
@@ -252,7 +259,7 @@ public final class AccountBackupManager {
         } catch {
             handle.closeFile()
             try? fm.removeItem(at: stagingURL)
-            return .failure("Ошибка расшифровки бэкапа")
+            return .failure(localized("Ошибка расшифровки бэкапа", "Backup decryption failed"))
         }
         handle.closeFile()
 
