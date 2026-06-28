@@ -65,6 +65,10 @@ public final class AorusGramBootstrap {
         // Streaks
         StreakManager.shared.tick()
 
+        // Performance HUD — transparent pass-through overlay and RAM cleanup timer.
+        // Lives in core AorusGram so AppDelegate does not need to import AorusGramUI.
+        AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()
+
         // Auto-reply
         AutoReplyManager.shared.load()
 
@@ -197,6 +201,7 @@ public final class AorusGramBootstrap {
         StreakManager.shared.tick()
         // Re-validate the system proxy on every foreground (TTL-aware inside).
         AorusProxyManager.shared.refresh()
+        AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()
     }
 
     @objc private func appDidEnterBackground() {

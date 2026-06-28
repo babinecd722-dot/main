@@ -349,7 +349,6 @@ jobs:
               raise SystemExit("TelegramUI BUILD: needle for AorusGram insert not found")
           deps = [
               ('//submodules/AorusGram:AorusGram', '        "//submodules/AorusGram:AorusGram",\n'),
-              ('//submodules/AorusGramUI:AorusGramUI', '        "//submodules/AorusGramUI:AorusGramUI",\n'),
           ]
           insert = ""
           for label, dep in deps:

@@ -1028,7 +1028,12 @@ def patch_deleted_messages_interception(tg: Path) -> None:
 
 
 def patch_app_delegate_import_aorusgram(tg: Path) -> None:
-    """TelegramUI, AorusGram and AorusGramUI are separate Swift modules used by AppDelegate."""
+    """Ensure AppDelegate can see the core AorusGram module.
+
+    Keep AorusGramUI out of AppDelegate: that UI module contains mirror copies of
+    several core types, and importing both modules makes Swift resolve calls like
+    AorusGramBootstrap.shared ambiguously.
+    """
     path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
     if not path.is_file():
         return
@@ -1036,8 +1041,6 @@ def patch_app_delegate_import_aorusgram(tg: Path) -> None:
     missing_imports = []
     if "import AorusGram\n" not in t:
         missing_imports.append("import AorusGram\n")
-    if "import AorusGramUI\n" not in t:
-        missing_imports.append("import AorusGramUI\n")
     if not missing_imports:
         return
     if "AorusGramBootstrap" not in t and "ClientSpoofManager" not in t and "AorusPerformanceHUDManager" not in t:
