@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Subscription management screen (opened from the entry banner for an ACTIVE user).
 //
@@ -25,7 +26,7 @@ final class PurchaseController: SubscriptionBaseController {
         // Status pill.
         let statusLabel = UILabel()
         statusLabel.text = isTrial ? SubL10n.statusTrial : SubL10n.statusActive
-        statusLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        statusLabel.font = Font.semibold(16)
         statusLabel.textColor = isTrial ? SubscriptionStyle.accent : SubscriptionStyle.success
         statusLabel.textAlignment = .center
         addContent(statusLabel)
@@ -93,7 +94,7 @@ final class PurchaseController: SubscriptionBaseController {
         if let days = snap?.daysLeft {
             let big = UILabel()
             big.text = SubL10n.remaining(days: max(days, 0))
-            big.font = UIFont.systemFont(ofSize: 22, weight: .bold)
+            big.font = Font.bold(22)
             big.textColor = SubscriptionStyle.primaryText
             big.textAlignment = .center
             big.numberOfLines = 0
@@ -105,7 +106,7 @@ final class PurchaseController: SubscriptionBaseController {
             let dateStr = PurchaseController.formatDate(until)
             let line = UILabel()
             line.text = isTrial ? SubL10n.trialUntil(dateStr) : SubL10n.activeUntil(dateStr)
-            line.font = UIFont.systemFont(ofSize: 15, weight: .regular)
+            line.font = Font.regular(15)
             line.textColor = SubscriptionStyle.secondaryText
             line.textAlignment = .center
             line.numberOfLines = 0
@@ -115,7 +116,7 @@ final class PurchaseController: SubscriptionBaseController {
         // Price hint.
         let price = UILabel()
         price.text = SubL10n.price
-        price.font = UIFont.systemFont(ofSize: 14, weight: .regular)
+        price.font = Font.regular(14)
         price.textColor = SubscriptionStyle.secondaryText
         price.textAlignment = .center
         rows.append(price)

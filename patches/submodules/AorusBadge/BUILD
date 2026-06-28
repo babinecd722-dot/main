@@ -10,5 +10,6 @@ swift_library(
         "//visibility:public",
     ],
     deps = [
+        "//submodules/Display:Display",
     ],
 )

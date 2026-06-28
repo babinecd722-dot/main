@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Anti-screenshot / anti-screen-recording.
 //
@@ -191,14 +192,14 @@ final class AntiScreenshotManager {
 
         let brand = UILabel()
         brand.text = "AORUSGRAM"
-        brand.font = UIFont.systemFont(ofSize: 40, weight: .black)
+        brand.font = Font.heavy(40)
         brand.textAlignment = .center
         brand.textColor = .white
         brand.translatesAutoresizingMaskIntoConstraints = false
 
         let handle = UILabel()
         handle.text = "Защищённый контент"
-        handle.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+        handle.font = Font.medium(15)
         handle.textAlignment = .center
         handle.textColor = UIColor(white: 0.55, alpha: 1.0)
         handle.translatesAutoresizingMaskIntoConstraints = false

@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Activation confirmation screen, opened from an aorusgram://activate?key=… deep link.
 //
@@ -103,7 +104,7 @@ final class ActivateConfirmController: SubscriptionBaseController {
         if let days = response.daysLeft {
             let info = SubscriptionStyle.body(SubL10n.remaining(days: max(days, 0)),
                                               color: SubscriptionStyle.success, size: 16)
-            info.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+            info.font = Font.semibold(16)
             addSpacing(2)
             addContent(info)
         }
@@ -135,13 +136,13 @@ final class ActivateConfirmController: SubscriptionBaseController {
     private func keyView() -> UIView {
         let caption = UILabel()
         caption.text = SubL10n.keyLabel
-        caption.font = UIFont.systemFont(ofSize: 13, weight: .regular)
+        caption.font = Font.regular(13)
         caption.textColor = SubscriptionStyle.secondaryText
         caption.textAlignment = .center
 
         let value = UILabel()
         value.text = key
-        value.font = UIFont.monospacedSystemFont(ofSize: 17, weight: .semibold)
+        value.font = Font.semiboldMonospace(17)
         value.textColor = SubscriptionStyle.primaryText
         value.textAlignment = .center
         value.adjustsFontSizeToFitWidth = true

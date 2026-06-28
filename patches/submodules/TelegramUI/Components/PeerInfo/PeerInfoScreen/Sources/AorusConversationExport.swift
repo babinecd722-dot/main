@@ -190,13 +190,13 @@ public enum AorusConversationExport {
         let imageMaxHeight: CGFloat = 280.0
         let textMaxWidth = bubbleMaxWidth - bubblePad * 2.0
 
-        let bodyFont = UIFont.systemFont(ofSize: 12.0)
-        let authorFont = UIFont.boldSystemFont(ofSize: 11.0)
-        let labelFont = UIFont.systemFont(ofSize: 11.0)
-        let timeFont = UIFont.systemFont(ofSize: 9.0)
-        let dateFont = UIFont.systemFont(ofSize: 10.0, weight: .medium)
-        let titleFont = UIFont.boldSystemFont(ofSize: 18.0)
-        let subtitleFont = UIFont.systemFont(ofSize: 11.0)
+        let bodyFont = Font.regular(12.0)
+        let authorFont = Font.bold(11.0)
+        let labelFont = Font.regular(11.0)
+        let timeFont = Font.regular(9.0)
+        let dateFont = Font.medium(10.0)
+        let titleFont = Font.bold(18.0)
+        let subtitleFont = Font.regular(11.0)
 
         let incomingColor = UIColor(red: 0.93, green: 0.93, blue: 0.94, alpha: 1.0)
         let outgoingColor = UIColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1.0)

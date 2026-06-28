@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Shared Telegram-style dark / AMOLED look for every subscription screen.
 enum SubscriptionStyle {
@@ -14,7 +15,7 @@ enum SubscriptionStyle {
     static func title(_ text: String) -> UILabel {
         let label = UILabel()
         label.text = text
-        label.font = UIFont.systemFont(ofSize: 24, weight: .bold)
+        label.font = Font.bold(24)
         label.textColor = primaryText
         label.textAlignment = .center
         label.numberOfLines = 0
@@ -25,7 +26,7 @@ enum SubscriptionStyle {
     static func body(_ text: String, color: UIColor? = nil, size: CGFloat = 16) -> UILabel {
         let label = UILabel()
         label.text = text
-        label.font = UIFont.systemFont(ofSize: size, weight: .regular)
+        label.font = Font.regular(size)
         label.textColor = color ?? secondaryText
         label.textAlignment = .center
         label.numberOfLines = 0
@@ -35,7 +36,7 @@ enum SubscriptionStyle {
     static func primaryButton(_ title: String) -> UIButton {
         let button = UIButton(type: .system)
         button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        button.titleLabel?.font = Font.semibold(17)
         button.setTitleColor(.white, for: .normal)
         button.backgroundColor = accent
         button.layer.cornerRadius = 12
@@ -48,7 +49,7 @@ enum SubscriptionStyle {
     static func secondaryButton(_ title: String) -> UIButton {
         let button = UIButton(type: .system)
         button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .regular)
+        button.titleLabel?.font = Font.regular(16)
         button.setTitleColor(accent, for: .normal)
         button.translatesAutoresizingMaskIntoConstraints = false
         button.heightAnchor.constraint(equalToConstant: 44).isActive = true
@@ -74,13 +75,13 @@ enum SubscriptionStyle {
     static func featureRow(_ text: String) -> UIView {
         let check = UILabel()
         check.text = "✓"
-        check.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+        check.font = Font.bold(16)
         check.textColor = success
         check.setContentHuggingPriority(.required, for: .horizontal)
 
         let label = UILabel()
         label.text = text
-        label.font = UIFont.systemFont(ofSize: 16, weight: .regular)
+        label.font = Font.regular(16)
         label.textColor = primaryText
         label.numberOfLines = 0
 

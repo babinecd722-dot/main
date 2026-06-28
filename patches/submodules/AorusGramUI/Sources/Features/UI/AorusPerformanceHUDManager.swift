@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import QuartzCore
 import Darwin
+import Display
 
 private struct AorusPerformanceSnapshot {
     var ramMB: Double
@@ -253,9 +254,7 @@ private final class AorusPerformanceHUDView: UIView {
     }
 
     private func attributedRow(title: String, value: String, color: UIColor, trailingSymbolName: String) -> NSAttributedString? {
-        let font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
-            for: UIFont.systemFont(ofSize: 12.0, weight: .semibold)
-        )
+        let font = Font.with(size: 12.0, weight: .semibold)
         let text = NSMutableAttributedString(string: "\(title): \(value) ", attributes: [
             .font: font,
             .foregroundColor: color,
@@ -275,9 +274,7 @@ private final class AorusPerformanceHUDView: UIView {
         let label = UILabel()
         label.numberOfLines = 1
         label.adjustsFontForContentSizeCategory = true
-        label.font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
-            for: UIFont.systemFont(ofSize: 12.0, weight: .semibold)
-        )
+        label.font = Font.with(size: 12.0, weight: .semibold)
         label.textColor = .white
         label.shadowColor = UIColor.black.withAlphaComponent(0.55)
         label.shadowOffset = CGSize(width: 0.0, height: 1.0)

@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // MARK: - AorusCode first-run hint overlay
 //
@@ -89,11 +90,11 @@ public final class AorusCodeHintOverlay: UIView {
         let lead = russian ? "Зажми скрепку, чтобы открыть " : "Hold the paperclip to open "
         let attr = NSMutableAttributedString(string: lead, attributes: [
             .foregroundColor: UIColor.white.withAlphaComponent(0.95),
-            .font: UIFont.systemFont(ofSize: 15.5, weight: .medium)
+            .font: Font.medium(15.5)
         ])
         attr.append(NSAttributedString(string: "AorusCode", attributes: [
             .foregroundColor: UIColor.white,
-            .font: UIFont.systemFont(ofSize: 15.5, weight: .heavy)
+            .font: Font.heavy(15.5)
         ]))
 
         let label = UILabel()

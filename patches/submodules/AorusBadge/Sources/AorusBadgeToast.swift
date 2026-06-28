@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Display
 
 // Bottom toast in the Telegram-iOS / .nightAccent style: a dark blur capsule
 // with the badge icon on the left and a single line of text on the right.
@@ -40,7 +41,7 @@ public enum AorusBadgeToast {
         label.translatesAutoresizingMaskIntoConstraints = false
         label.text = text
         label.textColor = .white
-        label.font = UIFont.systemFont(ofSize: 15.0, weight: .semibold)
+        label.font = Font.semibold(15.0)
         label.numberOfLines = 1
 
         blur.contentView.addSubview(iconView)

@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Display
 
 // AorusGram local badge system.
 //
@@ -91,7 +92,7 @@ public enum AorusBadge {
         let h = max(12.0, height)
         let tagH = floor(h * 0.9)
         let fontSize = floor(tagH * 0.62)
-        let font = UIFont.systemFont(ofSize: fontSize, weight: .medium)
+        let font = Font.medium(fontSize)
         let text = "DEV" as NSString
         let textAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: accent, .kern: 0.3]
         let textSize = text.size(withAttributes: textAttrs)

@@ -52,12 +52,12 @@ jobs:
           fi
           echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
 
-      # Cosmetic: a few upstream LegacyComponents icons ship as 1-bit/2-bit PNGs, which
-      # makes CopyPng emit "Input PNG does not have an 8 bit input depth" warnings. Re-encode
-      # just those to 8-bit, mode-aware so pixels stay byte-identical (verified locally):
-      # 1-bit grayscale -> 8-bit L, palette -> 8-bit RGBA. Non-fatal: if Pillow is
+      # Cosmetic: a few upstream icons ship as sub-8-bit or 16-bit PNGs, which makes
+      # CopyPng emit "Input PNG does not have an 8 bit input depth" warnings. Re-encode
+      # just those known assets to 8-bit, mode-aware so pixels stay visually identical:
+      # 1-bit grayscale -> 8-bit L, palette/16-bit/etc. -> 8-bit RGBA. Non-fatal: if Pillow is
       # unavailable or a file is missing we skip it without failing the build.
-      - name: Normalize sub-8-bit PNGs to 8-bit (silence libpng warnings)
+      - name: Normalize non-8-bit PNGs to 8-bit (silence libpng warnings)
         run: |
           cd telegram-ios
           python3 -m pip install --quiet --disable-pip-version-check Pillow >/dev/null 2>&1 || pip3 install --quiet Pillow >/dev/null 2>&1 || true
@@ -68,9 +68,17 @@ jobs:
           except Exception as e:
               print("Pillow unavailable — skipping (non-fatal):", e)
               raise SystemExit(0)
-          names = {"PhotoEditorCropCorners", "MediaGroupBurst", "MediaGroupAll", "CameraFocusCrosshairs", "ModernMediaEmptyAlbumIcon"}
+          names = {
+              "VideoRecordArrow",
+              "PhotoEditorCropCorners",
+              "ModernMediaEmptyAlbumIcon",
+              "MediaGroupBurst",
+              "MediaGroupAll",
+              "CameraFocusCrosshairs",
+              "CameraAutoFocusCrosshairs",
+          }
           count = 0
-          for root, _, files in os.walk("submodules"):
+          for root, _, files in os.walk("."):
               for fn in files:
                   if not fn.endswith(".png"):
                       continue

@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Transient UI for the subscription layer:
 //  • SubscriptionBanner — a small rounded top card (not an alert/modal) that slides
@@ -53,13 +54,13 @@ final class SubscriptionBanner: UIView {
 
         let titleLabel = UILabel()
         titleLabel.text = title
-        titleLabel.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.font = Font.semibold(15)
         titleLabel.textColor = .white
         titleLabel.numberOfLines = 1
 
         let subtitleLabel = UILabel()
         subtitleLabel.text = subtitle
-        subtitleLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
+        subtitleLabel.font = Font.regular(13)
         subtitleLabel.textColor = UIColor(white: 0.78, alpha: 1.0)
         subtitleLabel.numberOfLines = 1
 
@@ -208,7 +209,7 @@ final class SubscriptionBanner: UIView {
 
         let label = UILabel()
         label.text = text
-        label.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+        label.font = Font.medium(15)
         label.textColor = .white
 
         let row = UIStackView(arrangedSubviews: [iconView, label])

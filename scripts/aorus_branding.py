@@ -11190,6 +11190,127 @@ private enum AorusRuntimeFont {
     else:
         print("CustomFont: Display Font.swift not found — skip")
 
+    direct_font_replacements = [
+        (
+            "submodules/Display/Source/TextNode.swift",
+            [
+                ("private let defaultFont = UIFont.systemFont(ofSize: 15.0)\n",
+                 "private let defaultFont = Font.regular(15.0)\n"),
+            ],
+        ),
+        (
+            "submodules/Display/Source/NavigationBackButtonNode.swift",
+            [
+                ("        return UIFont.systemFont(ofSize: 17.0)\n",
+                 "        return Font.regular(17.0)\n"),
+            ],
+        ),
+        (
+            "submodules/Display/Source/NavigationTitleNode.swift",
+            [
+                ("        titleAttributes[NSAttributedString.Key.font] = UIFont.boldSystemFont(ofSize: 17.0)\n",
+                 "        titleAttributes[NSAttributedString.Key.font] = Font.bold(17.0)\n"),
+            ],
+        ),
+        (
+            "submodules/Display/Source/StatusBarProxyNode.swift",
+            [
+                ("NSAttributedString.Key.font: UIFont.boldSystemFont(ofSize: 12.0)",
+                 "NSAttributedString.Key.font: Font.bold(12.0)"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatReplyCountItem.swift",
+            [
+                ("private let titleFont = UIFont.systemFont(ofSize: 13.0)\n",
+                 "private let titleFont = Font.regular(13.0)\n"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatUnreadItem.swift",
+            [
+                ("private let titleFont = UIFont.systemFont(ofSize: 13.0)\n",
+                 "private let titleFont = Font.regular(13.0)\n"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerAllowedReactionsScreen/Sources/PeerAllowedReactionsScreen.swift",
+            [
+                ("let body = MarkdownAttributeSet(font: UIFont.systemFont(ofSize: 13.0), textColor: environment.theme.list.freeTextColor)",
+                 "let body = MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.freeTextColor)"),
+                ("let link = MarkdownAttributeSet(font: UIFont.systemFont(ofSize: 13.0), textColor: environment.theme.list.itemAccentColor, additionalAttributes: [:])",
+                 "let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.itemAccentColor, additionalAttributes: [:])"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/InteractiveTextComponent/Sources/InteractiveTextComponent.swift",
+            [
+                ("private let defaultFont = UIFont.systemFont(ofSize: 15.0)\n",
+                 "private let defaultFont = Font.regular(15.0)\n"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/Stories/LiveChat/StoryLiveChatMessageComponent/Sources/StoryLiveChatMessageComponent.swift",
+            [
+                ("descriptor = UIFont.systemFont(ofSize: 10.0).fontDescriptor",
+                 "descriptor = Font.regular(10.0).fontDescriptor"),
+                ("descriptor = UIFont.systemFont(ofSize: 10.0, weight: UIFont.Weight.semibold).fontDescriptor",
+                 "descriptor = Font.semibold(10.0).fontDescriptor"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift",
+            [
+                ("descriptor = UIFont.systemFont(ofSize: 10.0).fontDescriptor",
+                 "descriptor = Font.regular(10.0).fontDescriptor"),
+                ("descriptor = UIFont.systemFont(ofSize: 10.0, weight: UIFont.Weight.semibold).fontDescriptor",
+                 "descriptor = Font.semibold(10.0).fontDescriptor"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/Stories/StoryContainerScreen/Sources/LiveChatReactionStreamView.swift",
+            [
+                ("NSAttributedString.Key.font: UIFont.systemFont(ofSize: 8.0)",
+                 "NSAttributedString.Key.font: Font.regular(8.0)"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/Calls/CallScreen/Sources/Components/TitleView.swift",
+            [
+                ("font = UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: UIFont.Weight(fontWeight))",
+                 "font = Font.with(size: fontSize, weight: fontWeight >= 0.2 ? .medium : .regular, traits: .monospacedNumbers)"),
+                ("font = UIFont.systemFont(ofSize: fontSize, weight: UIFont.Weight(fontWeight))",
+                 "font = Font.with(size: fontSize, weight: fontWeight >= 0.2 ? .medium : .regular)"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/Chat/ChatBotInfoItem/Sources/ChatBotInfoItem.swift",
+            [
+                ("private let messageFixedFont = UIFont(name: \"Menlo-Regular\", size: 16.0) ?? UIFont.systemFont(ofSize: 17.0)\n",
+                 "private let messageFixedFont = Font.monospace(16.0)\n"),
+            ],
+        ),
+        (
+            "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataUsageScreen.swift",
+            [
+                ("Text(text: \"0\", font: UIFont.systemFont(ofSize: 50.0, weight: UIFont.Weight(0.25)), color: checkColor)",
+                 "Text(text: \"0\", font: Font.medium(50.0), color: checkColor)"),
+            ],
+        ),
+    ]
+    for rel_path, replacements in direct_font_replacements:
+        path = tg / rel_path
+        if not path.is_file():
+            continue
+        t = path.read_text(encoding="utf-8")
+        orig = t
+        for old, new in replacements:
+            if old in t:
+                t = t.replace(old, new, 1)
+        if t != orig:
+            path.write_text(t, encoding="utf-8")
+            print(f"CustomFont: patched direct UIKit fonts in {rel_path}")
+
     settings = tg / "submodules/SettingsUI/Sources/Themes/ThemeSettingsController.swift"
     if settings.is_file():
         t = settings.read_text(encoding="utf-8")

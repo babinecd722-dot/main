@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Key activation screen. Owns the POST /license/activate call, loading / error
 // states and error-code mapping; reports the activated license up via onActivated.
@@ -69,7 +70,7 @@ final class ActivateKeyController: SubscriptionBaseController {
         field.attributedPlaceholder = NSAttributedString(
             string: "AORUS-XXXX-XXXX-XXXX",
             attributes: [.foregroundColor: UIColor(white: 0.4, alpha: 1.0)])
-        field.font = UIFont.monospacedSystemFont(ofSize: 18, weight: .semibold)
+        field.font = Font.semiboldMonospace(18)
         field.textColor = SubscriptionStyle.primaryText
         field.tintColor = SubscriptionStyle.accent
         field.textAlignment = .center

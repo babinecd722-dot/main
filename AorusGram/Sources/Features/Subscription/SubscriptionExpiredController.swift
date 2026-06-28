@@ -1,4 +1,5 @@
 import UIKit
+import Display
 
 // Hard-lock screen (status == expired / banned / trial finished). Also reused for
 // the offline "no connection" state. Root-swapped in by the gate so no Telegram UI
@@ -26,7 +27,7 @@ final class SubscriptionExpiredController: SubscriptionBaseController {
         if !hidePriceCard {
             let price = UILabel()
             price.text = SubL10n.price
-            price.font = UIFont.systemFont(ofSize: 20, weight: .bold)
+            price.font = Font.bold(20)
             price.textColor = SubscriptionStyle.primaryText
             price.textAlignment = .center
             addSpacing(4)
