@@ -91,6 +91,7 @@ public struct AorusL10n {
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
     public var antiSpam: String { t("Анти-спам", "Anti-Spam") }
     public var performanceStats: String { t("Показывать статистику", "Show Statistics") }
+    public var performanceUptime: String { t("Uptime", "Uptime") }
     public var performanceRAM: String { t("RAM", "RAM") }
     public var performanceCPU: String { t("CPU", "CPU") }
     public var performanceFPS: String { t("FPS", "FPS") }

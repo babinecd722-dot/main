@@ -291,6 +291,7 @@ private struct AorusState: Equatable {
     var downloadAccel: Bool
     var antiSpamEnabled: Bool
     var performanceStatsEnabled: Bool
+    var performanceShowUptime: Bool
     var performanceShowRAM: Bool
     var performanceShowCPU: Bool
     var performanceShowFPS: Bool
@@ -388,6 +389,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case downloadAccel(PresentationTheme, String, Bool)
     case antiSpam(PresentationTheme, String, Bool)
     case performanceStats(PresentationTheme, String, Bool)
+    case performanceUptime(PresentationTheme, String, Bool)
     case performanceRAM(PresentationTheme, String, Bool)
     case performanceCPU(PresentationTheme, String, Bool)
     case performanceFPS(PresentationTheme, String, Bool)
@@ -444,7 +446,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.privacy.rawValue
         case .aiHeader, .voiceTranscription, .chatSummary, .translator, .autoReply, .voiceTwin:
             return AorusSection.ai.rawValue
-        case .perfHeader, .downloadAccel, .antiSpam, .performanceStats, .performanceRAM,
+        case .perfHeader, .downloadAccel, .antiSpam, .performanceStats, .performanceUptime, .performanceRAM,
              .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
@@ -489,18 +491,19 @@ private enum AorusEntry: ItemListNodeEntry {
         case .downloadAccel:        return 21
         case .antiSpam:             return 22
         case .performanceStats:     return 23
-        case .performanceRAM:       return 24
-        case .performanceCPU:       return 25
-        case .performanceFPS:       return 26
-        case .performanceBattery:   return 27
-        case .performanceNetwork:   return 28
-        case .performanceDisk:      return 29
-        case .performanceThermal:   return 30
-        case .performanceGraph:     return 31
-        case .ramAutoClean:         return 32
-        case .ramInterval:          return 33
-        case .cacheAutoClean:       return 34
-        case .cacheInterval:        return 35
+        case .performanceUptime:    return 24
+        case .performanceRAM:       return 25
+        case .performanceCPU:       return 26
+        case .performanceFPS:       return 27
+        case .performanceBattery:   return 28
+        case .performanceNetwork:   return 29
+        case .performanceDisk:      return 30
+        case .performanceThermal:   return 31
+        case .performanceGraph:     return 32
+        case .ramAutoClean:         return 33
+        case .ramInterval:          return 34
+        case .cacheAutoClean:       return 35
+        case .cacheInterval:        return 36
         case .uiHeader:             return 50
         case .glassUI:              return 51
         case .amoledMode:           return 52
@@ -573,6 +576,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .antiSpam(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .performanceStats(lt, ls, lv):
             if case let .performanceStats(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .performanceUptime(lt, ls, lv):
+            if case let .performanceUptime(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .performanceRAM(lt, ls, lv):
             if case let .performanceRAM(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .performanceCPU(lt, ls, lv):
@@ -696,6 +701,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiSpamEnabled, $0) })
         case let .performanceStats(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceStatsEnabled, $0) })
+        case let .performanceUptime(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowUptime, $0) })
         case let .performanceRAM(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceShowRAM, $0) })
         case let .performanceCPU(_, title, value):
@@ -874,6 +881,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         if case .performanceStats = $0 { return true }; return false
     }) {
         entries.insert(contentsOf: [
+            .performanceUptime(theme, l10n.performanceUptime, state.performanceShowUptime),
             .performanceRAM(theme, l10n.performanceRAM, state.performanceShowRAM),
             .performanceCPU(theme, l10n.performanceCPU, state.performanceShowCPU),
             .performanceFPS(theme, l10n.performanceFPS, state.performanceShowFPS),
@@ -892,7 +900,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         var scanningMetrics = true
         while scanningMetrics && insertAt < entries.count {
             switch entries[insertAt] {
-            case .performanceRAM, .performanceCPU, .performanceFPS, .performanceBattery,
+            case .performanceUptime, .performanceRAM, .performanceCPU, .performanceFPS, .performanceBattery,
                  .performanceNetwork, .performanceDisk, .performanceThermal, .performanceGraph:
                 insertAt += 1
             default:
@@ -947,6 +955,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         downloadAccel:      mgr.downloadAccel,
         antiSpamEnabled:    mgr.antiSpamEnabled,
         performanceStatsEnabled: mgr.performanceStatsEnabled,
+        performanceShowUptime:   mgr.performanceShowUptime,
         performanceShowRAM:      mgr.performanceShowRAM,
         performanceShowCPU:      mgr.performanceShowCPU,
         performanceShowFPS:      mgr.performanceShowFPS,
@@ -1010,6 +1019,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.downloadAccel       = s.downloadAccel
             mgr.antiSpamEnabled     = s.antiSpamEnabled
             mgr.performanceStatsEnabled = s.performanceStatsEnabled
+            mgr.performanceShowUptime   = s.performanceShowUptime
             mgr.performanceShowRAM      = s.performanceShowRAM
             mgr.performanceShowCPU      = s.performanceShowCPU
             mgr.performanceShowFPS      = s.performanceShowFPS

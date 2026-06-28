@@ -10806,6 +10806,7 @@ def patch_aorus_custom_font(tg: Path) -> None:
     font_path = tg / "submodules/Display/Source/Font.swift"
     if font_path.is_file():
         t = font_path.read_text(encoding="utf-8")
+        orig = t
         if "AorusRuntimeFont" in t:
             print("CustomFont: Display Font.swift already patched")
         else:
@@ -11002,8 +11003,190 @@ private enum AorusRuntimeFont {
                 t = t.replace(cache_anchor, cache_insert, 1)
             else:
                 print("CustomFont: WARNING Font.with cache anchor not found")
+
+        shortcut_replacements = [
+            (
+                "    public static func regular(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.systemFont(ofSize: size)\n"
+                "    }\n",
+                "    public static func regular(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .regular)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.systemFont(ofSize: size, weight: .medium)\n"
+                "    }\n",
+                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .medium)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.medium)\n"
+                "    }\n",
+                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .medium)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.systemFont(ofSize: size, weight: .semibold)\n"
+                "    }\n",
+                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .semibold)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.semibold)\n"
+                "    }\n",
+                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .semibold)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
+                "        if #available(iOS 8.2, *) {\n"
+                "            return UIFont.systemFont(ofSize: size, weight: .bold)\n"
+                "        } else {\n"
+                "            return UIFont.boldSystemFont(ofSize: size)\n"
+                "        }\n"
+                "    }\n",
+                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .bold)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
+                "        if #available(iOS 8.2, *) {\n"
+                "            return UIFont.boldSystemFont(ofSize: size)\n"
+                "        } else {\n"
+                "            return CTFontCreateWithName(\"HelveticaNeue-Bold\" as CFString, size, nil)\n"
+                "        }\n"
+                "    }\n",
+                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .bold)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func light(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.systemFont(ofSize: size, weight: .light)\n"
+                "    }\n",
+                "    public static func light(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .light)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func light(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.light)\n"
+                "    }\n",
+                "    public static func light(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .light)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.italicSystemFont(ofSize: size).withWeight(.semibold)\n"
+                "    }\n",
+                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .semibold, traits: [.italic])\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
+                "        if let descriptor = UIFont.systemFont(ofSize: size).fontDescriptor.withSymbolicTraits([.traitBold, .traitItalic]) {\n"
+                "            return UIFont(descriptor: descriptor, size: size)\n"
+                "        } else {\n"
+                "            return UIFont.italicSystemFont(ofSize: size)\n"
+                "        }\n"
+                "    }\n",
+                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .semibold, traits: [.italic])\n"
+                "    }\n",
+            ),
+            (
+                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .regular)\n"
+                "    }\n",
+                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .regular)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont(name: \"Menlo-Regular\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
+                "    }\n",
+                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .regular)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .semibold)\n"
+                "    }\n",
+                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .semibold)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont(name: \"Menlo-Bold\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
+                "    }\n",
+                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .semibold)\n"
+                "    }\n",
+            ),
+            (
+                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .regular).withTraits(.traitItalic)\n"
+                "    }\n",
+                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .regular, traits: [.italic])\n"
+                "    }\n",
+            ),
+            (
+                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont(name: \"Menlo-Italic\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
+                "    }\n",
+                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .regular, traits: [.italic])\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .semibold).withTraits(.traitItalic)\n"
+                "    }\n",
+                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .semibold, traits: [.italic])\n"
+                "    }\n",
+            ),
+            (
+                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont(name: \"Menlo-BoldItalic\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
+                "    }\n",
+                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .monospace, weight: .semibold, traits: [.italic])\n"
+                "    }\n",
+            ),
+            (
+                "    public static func italic(_ size: CGFloat) -> UIFont {\n"
+                "        return UIFont.italicSystemFont(ofSize: size)\n"
+                "    }\n",
+                "    public static func italic(_ size: CGFloat) -> UIFont {\n"
+                "        return self.with(size: size, design: .regular, weight: .regular, traits: [.italic])\n"
+                "    }\n",
+            ),
+        ]
+        patched_shortcuts = 0
+        for old, new in shortcut_replacements:
+            if old in t:
+                t = t.replace(old, new, 1)
+                patched_shortcuts += 1
+
+        if t != orig:
             font_path.write_text(t, encoding="utf-8")
-            print("CustomFont: patched Display Font.swift")
+            print(f"CustomFont: patched Display Font.swift ({patched_shortcuts} shortcut overrides)")
     else:
         print("CustomFont: Display Font.swift not found — skip")
 

@@ -52,6 +52,7 @@ public final class AorusGramManager {
     // Performance HUD (Performance section). The main switch is opt-in, while
     // individual metrics default on so the first enable shows a useful dashboard.
     public var performanceStatsEnabled: Bool = false { didSet { save() } }
+    public var performanceShowUptime: Bool   = true  { didSet { save() } }
     public var performanceShowRAM: Bool      = true  { didSet { save() } }
     public var performanceShowCPU: Bool      = true  { didSet { save() } }
     public var performanceShowFPS: Bool      = true  { didSet { save() } }
@@ -108,6 +109,7 @@ public final class AorusGramManager {
         cacheAutoClean      = d["cacheAutoClean"]      as? Bool ?? false
         cacheCleanInterval  = d["cacheCleanInterval"]  as? Int  ?? 24
         performanceStatsEnabled = d["performanceStatsEnabled"] as? Bool ?? false
+        performanceShowUptime   = d["performanceShowUptime"]   as? Bool ?? true
         performanceShowRAM      = d["performanceShowRAM"]      as? Bool ?? true
         performanceShowCPU      = d["performanceShowCPU"]      as? Bool ?? true
         performanceShowFPS      = d["performanceShowFPS"]      as? Bool ?? true
@@ -150,6 +152,7 @@ public final class AorusGramManager {
             "cacheAutoClean":      cacheAutoClean,
             "cacheCleanInterval":  cacheCleanInterval,
             "performanceStatsEnabled": performanceStatsEnabled,
+            "performanceShowUptime":   performanceShowUptime,
             "performanceShowRAM":      performanceShowRAM,
             "performanceShowCPU":      performanceShowCPU,
             "performanceShowFPS":      performanceShowFPS,

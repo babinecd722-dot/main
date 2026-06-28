@@ -2,8 +2,10 @@ import Foundation
 import UIKit
 import QuartzCore
 import Darwin
+import Display
 
 private struct AorusPerformanceSnapshot {
+    var uptimeSeconds: TimeInterval
     var ramMB: Double
     var cpuPercent: Double
     var fps: Int
@@ -17,6 +19,7 @@ private struct AorusPerformanceSnapshot {
 
 private struct AorusPerformanceHUDSettings {
     var performanceStatsEnabled: Bool
+    var performanceShowUptime: Bool
     var performanceShowRAM: Bool
     var performanceShowCPU: Bool
     var performanceShowFPS: Bool
@@ -32,6 +35,7 @@ private struct AorusPerformanceHUDSettings {
         let d = UserDefaults.standard.dictionary(forKey: "aorusgram_settings_v1") ?? [:]
         return AorusPerformanceHUDSettings(
             performanceStatsEnabled: d["performanceStatsEnabled"] as? Bool ?? false,
+            performanceShowUptime: d["performanceShowUptime"] as? Bool ?? true,
             performanceShowRAM: d["performanceShowRAM"] as? Bool ?? true,
             performanceShowCPU: d["performanceShowCPU"] as? Bool ?? true,
             performanceShowFPS: d["performanceShowFPS"] as? Bool ?? true,
@@ -44,9 +48,31 @@ private struct AorusPerformanceHUDSettings {
             ramCleanInterval: d["ramCleanInterval"] as? Int ?? 60
         )
     }
+
+    var hasVisibleMetric: Bool {
+        return performanceStatsEnabled && (
+            performanceShowUptime ||
+            performanceShowRAM ||
+            performanceShowCPU ||
+            performanceShowFPS ||
+            performanceShowBattery ||
+            performanceShowNetwork ||
+            performanceShowDisk ||
+            performanceShowThermal
+        )
+    }
+
+    var needsGraphSamples: Bool {
+        return performanceStatsEnabled && performanceShowGraph && (performanceShowRAM || performanceShowCPU || performanceShowFPS)
+    }
+
+    var needsFPSSampling: Bool {
+        return performanceShowFPS || needsGraphSamples
+    }
 }
 
 private struct AorusPerformanceHUDL10n {
+    let performanceUptime: String
     let performanceRAM: String
     let performanceCPU: String
     let performanceFPS: String
@@ -65,6 +91,7 @@ private struct AorusPerformanceHUDL10n {
             ?? Locale.current.identifier).lowercased()
         if code.hasPrefix("ru") {
             return AorusPerformanceHUDL10n(
+                performanceUptime: "Uptime",
                 performanceRAM: "RAM",
                 performanceCPU: "CPU",
                 performanceFPS: "FPS",
@@ -79,6 +106,7 @@ private struct AorusPerformanceHUDL10n {
             )
         }
         return AorusPerformanceHUDL10n(
+            performanceUptime: "Uptime",
             performanceRAM: "RAM",
             performanceCPU: "CPU",
             performanceFPS: "FPS",
@@ -101,7 +129,7 @@ private final class AorusPerformanceGraphView: UIView {
     private var ramSamples: [CGFloat] = []
     private var cpuSamples: [CGFloat] = []
     private var fpsSamples: [CGFloat] = []
-    private let maxSamples = 36
+    private let maxSamples = 24
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -110,7 +138,7 @@ private final class AorusPerformanceGraphView: UIView {
 
         for layer in [ramLayer, cpuLayer, fpsLayer] {
             layer.fillColor = UIColor.clear.cgColor
-            layer.lineWidth = 1.4
+            layer.lineWidth = 1.0
             layer.lineCap = .round
             layer.lineJoin = .round
             self.layer.addSublayer(layer)
@@ -141,7 +169,7 @@ private final class AorusPerformanceGraphView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let rect = bounds.insetBy(dx: 1.0, dy: 3.0)
+        let rect = bounds.insetBy(dx: 1.0, dy: 2.0)
         ramLayer.frame = bounds
         cpuLayer.frame = bounds
         fpsLayer.frame = bounds
@@ -169,8 +197,7 @@ private final class AorusPerformanceGraphView: UIView {
 }
 
 private final class AorusPerformanceHUDView: UIView {
-    private let blurView: UIVisualEffectView
-    private let tintView = UIView()
+    private let panelView = UIView()
     private let stackView = UIStackView()
     private let graphView = AorusPerformanceGraphView()
     private var rows: [String: UILabel] = [:]
@@ -178,38 +205,25 @@ private final class AorusPerformanceHUDView: UIView {
     private var isGraphVisible = false
 
     override init(frame: CGRect) {
-        if #available(iOS 13.0, *) {
-            blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
-        } else {
-            blurView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        }
         super.init(frame: frame)
         isUserInteractionEnabled = false
         isOpaque = false
         backgroundColor = .clear
 
-        blurView.translatesAutoresizingMaskIntoConstraints = false
-        blurView.isUserInteractionEnabled = false
-        blurView.clipsToBounds = true
-        blurView.layer.cornerRadius = 13.0
-        blurView.layer.borderWidth = 0.5
-        blurView.layer.borderColor = UIColor.white.withAlphaComponent(0.22).cgColor
-        blurView.layer.shadowColor = UIColor.black.cgColor
-        blurView.layer.shadowOpacity = 0.18
-        blurView.layer.shadowRadius = 10.0
-        blurView.layer.shadowOffset = CGSize(width: 0.0, height: 4.0)
-        addSubview(blurView)
-
-        tintView.translatesAutoresizingMaskIntoConstraints = false
-        tintView.isUserInteractionEnabled = false
-        tintView.backgroundColor = UIColor.black.withAlphaComponent(0.16)
-        blurView.contentView.addSubview(tintView)
+        panelView.translatesAutoresizingMaskIntoConstraints = false
+        panelView.isUserInteractionEnabled = false
+        panelView.clipsToBounds = true
+        panelView.backgroundColor = UIColor(white: 0.20, alpha: 0.58)
+        panelView.layer.cornerRadius = 8.0
+        panelView.layer.borderWidth = 0.4
+        panelView.layer.borderColor = UIColor.white.withAlphaComponent(0.16).cgColor
+        addSubview(panelView)
 
         stackView.axis = .vertical
         stackView.alignment = .fill
-        stackView.spacing = 3.0
+        stackView.spacing = 1.0
         stackView.translatesAutoresizingMaskIntoConstraints = false
-        blurView.contentView.addSubview(stackView)
+        panelView.addSubview(stackView)
 
         graphView.translatesAutoresizingMaskIntoConstraints = false
         graphHeightConstraint = graphView.heightAnchor.constraint(equalToConstant: 0.0)
@@ -218,20 +232,15 @@ private final class AorusPerformanceHUDView: UIView {
         graphView.isHidden = true
 
         NSLayoutConstraint.activate([
-            blurView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            blurView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            blurView.topAnchor.constraint(equalTo: topAnchor),
-            blurView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            panelView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            panelView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            panelView.topAnchor.constraint(equalTo: topAnchor),
+            panelView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            stackView.leadingAnchor.constraint(equalTo: blurView.contentView.leadingAnchor, constant: 10.0),
-            stackView.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor, constant: -10.0),
-            stackView.topAnchor.constraint(equalTo: blurView.contentView.topAnchor, constant: 8.0),
-            stackView.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor, constant: -8.0),
-
-            tintView.leadingAnchor.constraint(equalTo: blurView.contentView.leadingAnchor),
-            tintView.trailingAnchor.constraint(equalTo: blurView.contentView.trailingAnchor),
-            tintView.topAnchor.constraint(equalTo: blurView.contentView.topAnchor),
-            tintView.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor),
+            stackView.leadingAnchor.constraint(equalTo: panelView.leadingAnchor, constant: 7.0),
+            stackView.trailingAnchor.constraint(equalTo: panelView.trailingAnchor, constant: -7.0),
+            stackView.topAnchor.constraint(equalTo: panelView.topAnchor, constant: 4.0),
+            stackView.bottomAnchor.constraint(equalTo: panelView.bottomAnchor, constant: -5.0),
         ])
     }
 
@@ -241,6 +250,10 @@ private final class AorusPerformanceHUDView: UIView {
 
     func update(snapshot: AorusPerformanceSnapshot, settings: AorusPerformanceHUDSettings, l10n: AorusPerformanceHUDL10n) {
         var visibleKeys: [String] = []
+        if settings.performanceShowUptime {
+            setRow("uptime", title: l10n.performanceUptime, value: formatUptime(snapshot.uptimeSeconds), style: .normal)
+            visibleKeys.append("uptime")
+        }
         if settings.performanceShowRAM {
             setRow("ram", title: l10n.performanceRAM, value: "\(Int(snapshot.ramMB.rounded())) MB", style: .normal)
             visibleKeys.append("ram")
@@ -284,11 +297,11 @@ private final class AorusPerformanceHUDView: UIView {
         rows = rows.filter { visibleKeys.contains($0.key) }
         reorderVisibleRows(visibleKeys)
 
-        let graphVisible = settings.performanceShowGraph && !visibleKeys.isEmpty
+        let graphVisible = settings.needsGraphSamples && !visibleKeys.isEmpty
         if graphVisible != isGraphVisible {
             isGraphVisible = graphVisible
             graphView.isHidden = !graphVisible
-            graphHeightConstraint?.constant = graphVisible ? 34.0 : 0.0
+            graphHeightConstraint?.constant = graphVisible ? 18.0 : 0.0
             UIView.animate(withDuration: 0.22) {
                 self.layoutIfNeeded()
                 self.graphView.alpha = graphVisible ? 1.0 : 0.0
@@ -343,9 +356,7 @@ private final class AorusPerformanceHUDView: UIView {
     }
 
     private func attributedRow(title: String, value: String, color: UIColor, trailingSymbolName: String) -> NSAttributedString? {
-        let font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
-            for: UIFont.systemFont(ofSize: 12.0, weight: .semibold)
-        )
+        let font = Font.with(size: 9.5, weight: .semibold)
         let text = NSMutableAttributedString(string: "\(title): \(value) ", attributes: [
             .font: font,
             .foregroundColor: color,
@@ -364,16 +375,11 @@ private final class AorusPerformanceHUDView: UIView {
     private func makeLabel(_ key: String) -> UILabel {
         let label = UILabel()
         label.numberOfLines = 1
-        label.adjustsFontForContentSizeCategory = true
         label.adjustsFontSizeToFitWidth = true
-        label.minimumScaleFactor = 0.72
+        label.minimumScaleFactor = 0.68
         label.lineBreakMode = .byClipping
-        label.font = UIFontMetrics(forTextStyle: .caption1).scaledFont(
-            for: UIFont.systemFont(ofSize: 12.0, weight: .semibold)
-        )
+        label.font = Font.with(size: 9.5, weight: .semibold)
         label.textColor = .white
-        label.shadowColor = UIColor.black.withAlphaComponent(0.55)
-        label.shadowOffset = CGSize(width: 0.0, height: 1.0)
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         rows[key] = label
 
@@ -399,13 +405,28 @@ private final class AorusPerformanceHUDView: UIView {
 
     private func formatRate(_ bytes: UInt64) -> String {
         if bytes >= 1024 * 1024 {
-            return String(format: "%.1f MB/s", Double(bytes) / 1024.0 / 1024.0)
+            return String(format: "%.1f MB", Double(bytes) / 1024.0 / 1024.0)
         }
-        return "\(Int(Double(bytes) / 1024.0)) KB/s"
+        return "\(Int(Double(bytes) / 1024.0)) KB"
     }
 
     private func formatDisk(_ bytes: UInt64) -> String {
         return String(format: "%.1f GB", Double(bytes) / 1024.0 / 1024.0 / 1024.0)
+    }
+
+    private func formatUptime(_ secondsValue: TimeInterval) -> String {
+        let seconds = max(0, Int(secondsValue.rounded(.down)))
+        let days = seconds / 86400
+        let hours = (seconds % 86400) / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        if days > 0 {
+            return String(format: "%dд %d:%02d:%02d", days, hours, minutes, secs)
+        }
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%d:%02d", minutes, secs)
     }
 }
 
@@ -460,7 +481,7 @@ public final class AorusPerformanceHUDManager {
         }
 
         let manager = AorusPerformanceHUDSettings.current
-        applyHUD(enabled: manager.performanceStatsEnabled)
+        applyHUD(settings: manager)
         applyCleanup(enabled: manager.ramAutoClean, intervalSeconds: manager.ramCleanInterval)
     }
 
@@ -496,21 +517,25 @@ public final class AorusPerformanceHUDManager {
         updateSnapshot()
     }
 
-    private func applyHUD(enabled: Bool) {
-        if enabled {
+    private func applyHUD(settings: AorusPerformanceHUDSettings) {
+        if settings.hasVisibleMetric {
             guard ensureHUD() else {
                 scheduleHUDStartupRetry()
                 return
             }
-            startDisplayLink()
+            if settings.needsFPSSampling {
+                startDisplayLink()
+            } else {
+                stopDisplayLink()
+            }
             if statsTimer == nil {
-                let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                let timer = Timer.scheduledTimer(withTimeInterval: 1.25, repeats: true) { [weak self] _ in
                     self?.updateSnapshot()
                 }
                 statsTimer = timer
                 RunLoop.main.add(timer, forMode: .common)
             }
-            UIDevice.current.isBatteryMonitoringEnabled = true
+            UIDevice.current.isBatteryMonitoringEnabled = settings.performanceShowBattery
             updateSnapshot()
         } else {
             scheduledHUDRetryCount = 0
@@ -579,18 +604,18 @@ public final class AorusPerformanceHUDManager {
     }
 
     private func scheduleHUDStartupRetry() {
-        guard AorusPerformanceHUDSettings.current.performanceStatsEnabled, scheduledHUDRetryCount < 6 else { return }
+        guard AorusPerformanceHUDSettings.current.hasVisibleMetric, scheduledHUDRetryCount < 6 else { return }
         let delays: [TimeInterval] = [0.15, 0.35, 0.75, 1.5, 3.0, 6.0]
         let delay = delays[min(scheduledHUDRetryCount, delays.count - 1)]
         scheduledHUDRetryCount += 1
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard AorusPerformanceHUDSettings.current.performanceStatsEnabled else { return }
+            guard AorusPerformanceHUDSettings.current.hasVisibleMetric else { return }
             self?._refresh()
         }
     }
 
     private func scheduleLaunchRestorationPasses() {
-        guard AorusPerformanceHUDSettings.current.performanceStatsEnabled else { return }
+        guard AorusPerformanceHUDSettings.current.hasVisibleMetric else { return }
         launchRestorationToken += 1
         let token = launchRestorationToken
         let delays: [TimeInterval] = [0.2, 0.6, 1.2, 2.5, 5.0, 10.0, 20.0, 40.0, 60.0]
@@ -598,7 +623,7 @@ public final class AorusPerformanceHUDManager {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self,
                       token == self.launchRestorationToken,
-                      AorusPerformanceHUDSettings.current.performanceStatsEnabled else {
+                      AorusPerformanceHUDSettings.current.hasVisibleMetric else {
                     return
                 }
                 self._refresh()
@@ -639,12 +664,12 @@ public final class AorusPerformanceHUDManager {
         })
 
         let guide = root.safeAreaLayoutGuide
-        let availableWidth = max(140.0, root.bounds.width - 24.0)
-        let preferredWidth: CGFloat = root.bounds.width > root.bounds.height ? 270.0 : 188.0
+        let availableWidth = max(96.0, root.bounds.width - 16.0)
+        let preferredWidth: CGFloat = root.bounds.width > root.bounds.height ? 150.0 : 136.0
         let fixedWidth = min(preferredWidth, availableWidth)
         NSLayoutConstraint.activate([
-            hud.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -12.0),
-            hud.topAnchor.constraint(equalTo: guide.topAnchor, constant: 14.0),
+            hud.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -8.0),
+            hud.topAnchor.constraint(equalTo: guide.topAnchor, constant: 8.0),
             hud.widthAnchor.constraint(equalToConstant: fixedWidth),
         ])
         root.setNeedsLayout()
@@ -698,24 +723,33 @@ public final class AorusPerformanceHUDManager {
 
     private func updateSnapshot() {
         let settings = AorusPerformanceHUDSettings.current
-        guard let hud = hudView, settings.performanceStatsEnabled else { return }
-        let snapshot = collectSnapshot()
+        guard settings.hasVisibleMetric else {
+            if hudView != nil || window != nil {
+                hideHUD()
+            }
+            return
+        }
+        guard let hud = hudView else { return }
+        let snapshot = collectSnapshot(settings: settings)
         hud.update(snapshot: snapshot, settings: settings, l10n: AorusPerformanceHUDL10n.current)
         layoutHUD()
     }
 
-    private func collectSnapshot() -> AorusPerformanceSnapshot {
-        let network = networkRate()
+    private func collectSnapshot(settings: AorusPerformanceHUDSettings) -> AorusPerformanceSnapshot {
+        let needsRAM = settings.performanceShowRAM
+        let needsCPU = settings.performanceShowCPU
+        let network: (rx: UInt64, tx: UInt64) = settings.performanceShowNetwork ? networkRate() : (0, 0)
         return AorusPerformanceSnapshot(
-            ramMB: memoryFootprintMB(),
-            cpuPercent: processCPUPercent(),
-            fps: currentFPS,
-            batteryPercent: batteryPercent(),
-            batteryCharging: UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full,
+            uptimeSeconds: settings.performanceShowUptime ? ProcessInfo.processInfo.systemUptime : 0,
+            ramMB: needsRAM ? memoryFootprintMB() : 0.0,
+            cpuPercent: needsCPU ? processCPUPercent() : 0.0,
+            fps: settings.needsFPSSampling ? currentFPS : 0,
+            batteryPercent: settings.performanceShowBattery ? batteryPercent() : nil,
+            batteryCharging: settings.performanceShowBattery && (UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full),
             rxBytesPerSecond: network.rx,
             txBytesPerSecond: network.tx,
-            freeDiskBytes: freeDiskBytes(),
-            thermalState: ProcessInfo.processInfo.thermalState
+            freeDiskBytes: settings.performanceShowDisk ? freeDiskBytes() : 0,
+            thermalState: settings.performanceShowThermal ? ProcessInfo.processInfo.thermalState : .nominal
         )
     }
 
