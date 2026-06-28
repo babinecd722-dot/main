@@ -11298,6 +11298,9 @@ private enum AorusRuntimeFont {
             ],
         ),
     ]
+    display_import_paths = {
+        "submodules/TelegramUI/Components/Calls/CallScreen/Sources/Components/TitleView.swift",
+    }
     for rel_path, replacements in direct_font_replacements:
         path = tg / rel_path
         if not path.is_file():
@@ -11307,6 +11310,13 @@ private enum AorusRuntimeFont {
         for old, new in replacements:
             if old in t:
                 t = t.replace(old, new, 1)
+        if rel_path in display_import_paths and "Font." in t and "import Display\n" not in t:
+            if "import UIKit\n" in t:
+                t = t.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
+            elif "import Foundation\n" in t:
+                t = t.replace("import Foundation\n", "import Foundation\nimport Display\n", 1)
+            else:
+                t = "import Display\n" + t
         if t != orig:
             path.write_text(t, encoding="utf-8")
             print(f"CustomFont: patched direct UIKit fonts in {rel_path}")
