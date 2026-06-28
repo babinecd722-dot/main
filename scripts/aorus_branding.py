@@ -10807,9 +10807,17 @@ def patch_aorus_custom_font(tg: Path) -> None:
     if font_path.is_file():
         t = font_path.read_text(encoding="utf-8")
         orig = t
-        if "AorusRuntimeFont" in t:
+        if "AorusRuntimeFont" in t and "fontNames(for choice" in t and "weight.rawValue != UIFont.Weight.regular.rawValue" in t:
             print("CustomFont: Display Font.swift already patched")
         else:
+            if "AorusRuntimeFont" in t:
+                start = t.find("private enum AorusRuntimeFont")
+                end = t.find("public struct Font", start)
+                if start != -1 and end != -1:
+                    t = t[:start] + t[end:]
+                    print("CustomFont: upgraded Display Font.swift runtime")
+                else:
+                    print("CustomFont: WARNING old runtime block not replaced cleanly")
             if "import CoreText\n" not in t:
                 t = t.replace("import UIKit\n", "import UIKit\nimport CoreText\n", 1)
             if "import Security\n" not in t:
@@ -10849,18 +10857,20 @@ private enum AorusRuntimeFont {
             if let systemDesign {
                 let base = UIFont.systemFont(ofSize: size, weight: weight)
                 if var descriptor = base.fontDescriptor.withDesign(systemDesign) {
-                    descriptor = applyTraits(to: descriptor, traitsRaw: traitsRaw)
+                    descriptor = applyTraits(to: descriptor, weight: weight, traitsRaw: traitsRaw)
                     return UIFont(descriptor: descriptor, size: size)
                 }
                 return base
             }
         }
 
-        guard let name = fontName(for: choice), let base = UIFont(name: name, size: size) else {
-            return nil
+        for name in fontNames(for: choice, weight: weight, italic: (traitsRaw & 1) != 0) {
+            if let base = UIFont(name: name, size: size) {
+                let descriptor = applyTraits(to: base.fontDescriptor, weight: weight, traitsRaw: traitsRaw)
+                return UIFont(descriptor: descriptor, size: size)
+            }
         }
-        let descriptor = applyTraits(to: base.fontDescriptor, traitsRaw: traitsRaw)
-        return UIFont(descriptor: descriptor, size: size)
+        return nil
     }
 
     private static var selectedChoice: String {
@@ -10874,45 +10884,64 @@ private enum AorusRuntimeFont {
         return "system"
     }
 
-    private static func fontName(for choice: String) -> String? {
+    private static func fontNames(for choice: String, weight: UIFont.Weight, italic: Bool) -> [String] {
+        let bold = weight.rawValue >= UIFont.Weight.semibold.rawValue
         switch choice {
         case "avenir":
-            return "AvenirNext-Regular"
+            return ranked(regular: "AvenirNext-Regular", bold: "AvenirNext-Bold", italic: "AvenirNext-Italic", boldItalic: "AvenirNext-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "helvetica":
-            return "HelveticaNeue"
+            return ranked(regular: "HelveticaNeue", bold: "HelveticaNeue-Bold", italic: "HelveticaNeue-Italic", boldItalic: "HelveticaNeue-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "arial":
-            return "ArialMT"
+            return ranked(regular: "ArialMT", bold: "Arial-BoldMT", italic: "Arial-ItalicMT", boldItalic: "Arial-BoldItalicMT", wantsBold: bold, wantsItalic: italic)
         case "arialRounded":
-            return "ArialRoundedMTBold"
+            return ["ArialRoundedMTBold"]
         case "georgia":
-            return "Georgia"
+            return ranked(regular: "Georgia", bold: "Georgia-Bold", italic: "Georgia-Italic", boldItalic: "Georgia-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "times":
-            return "TimesNewRomanPSMT"
+            return ranked(regular: "TimesNewRomanPSMT", bold: "TimesNewRomanPS-BoldMT", italic: "TimesNewRomanPS-ItalicMT", boldItalic: "TimesNewRomanPS-BoldItalicMT", wantsBold: bold, wantsItalic: italic)
         case "courier":
-            return "CourierNewPSMT"
+            return ranked(regular: "CourierNewPSMT", bold: "CourierNewPS-BoldMT", italic: "CourierNewPS-ItalicMT", boldItalic: "CourierNewPS-BoldItalicMT", wantsBold: bold, wantsItalic: italic)
         case "menlo":
-            return "Menlo-Regular"
+            return ranked(regular: "Menlo-Regular", bold: "Menlo-Bold", italic: "Menlo-Italic", boldItalic: "Menlo-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "trebuchet":
-            return "TrebuchetMS"
+            return ranked(regular: "TrebuchetMS", bold: "TrebuchetMS-Bold", italic: "TrebuchetMS-Italic", boldItalic: "TrebuchetMS-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "verdana":
-            return "Verdana"
+            return ranked(regular: "Verdana", bold: "Verdana-Bold", italic: "Verdana-Italic", boldItalic: "Verdana-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "futura":
-            return "Futura-Medium"
+            return bold ? ["Futura-CondensedExtraBold", "Futura-Medium"] : ["Futura-Medium"]
         case "gill":
-            return "GillSans"
+            return ranked(regular: "GillSans", bold: "GillSans-Bold", italic: "GillSans-Italic", boldItalic: "GillSans-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "palatino":
-            return "Palatino-Roman"
+            return ranked(regular: "Palatino-Roman", bold: "Palatino-Bold", italic: "Palatino-Italic", boldItalic: "Palatino-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "baskerville":
-            return "Baskerville"
+            return ranked(regular: "Baskerville", bold: "Baskerville-Bold", italic: "Baskerville-Italic", boldItalic: "Baskerville-BoldItalic", wantsBold: bold, wantsItalic: italic)
         case "didot":
-            return "Didot"
+            return ranked(regular: "Didot", bold: "Didot-Bold", italic: "Didot-Italic", boldItalic: nil, wantsBold: bold, wantsItalic: italic)
         case "chalkboard":
-            return "ChalkboardSE-Regular"
+            return bold ? ["ChalkboardSE-Bold", "ChalkboardSE-Regular"] : ["ChalkboardSE-Regular"]
         case "imported":
-            return importedFontName()
+            if let name = importedFontName() {
+                return [name]
+            }
+            return []
         default:
-            return nil
+            return []
         }
+    }
+
+    private static func ranked(regular: String, bold: String?, italic: String?, boldItalic: String?, wantsBold: Bool, wantsItalic: Bool) -> [String] {
+        var names: [String] = []
+        if wantsBold && wantsItalic, let boldItalic {
+            names.append(boldItalic)
+        }
+        if wantsBold, let bold {
+            names.append(bold)
+        }
+        if wantsItalic, let italic {
+            names.append(italic)
+        }
+        names.append(regular)
+        return names
     }
 
     private static func importedFontName() -> String? {
@@ -10931,9 +10960,19 @@ private enum AorusRuntimeFont {
         return nil
     }
 
-    private static func applyTraits(to descriptor: UIFontDescriptor, traitsRaw: Int32) -> UIFontDescriptor {
+    private static func applyTraits(to descriptor: UIFontDescriptor, weight: UIFont.Weight, traitsRaw: Int32) -> UIFontDescriptor {
         var result = descriptor
+        if weight.rawValue != UIFont.Weight.regular.rawValue {
+            result = result.addingAttributes([
+                UIFontDescriptor.AttributeName.traits: [
+                    UIFontDescriptor.TraitKey.weight: weight.rawValue
+                ]
+            ])
+        }
         var symbolicTraits = result.symbolicTraits
+        if weight.rawValue >= UIFont.Weight.semibold.rawValue {
+            symbolicTraits.insert(.traitBold)
+        }
         if (traitsRaw & 1) != 0 {
             symbolicTraits.insert(.traitItalic)
         }
@@ -10999,7 +11038,9 @@ private enum AorusRuntimeFont {
                 "            return aorusFont\n"
                 "        }\n"
             )
-            if cache_anchor in t:
+            if "AorusRuntimeFont.font(size:" in t:
+                pass
+            elif cache_anchor in t:
                 t = t.replace(cache_anchor, cache_insert, 1)
             else:
                 print("CustomFont: WARNING Font.with cache anchor not found")

@@ -5,6 +5,7 @@ import AsyncDisplayKit
 import SwiftSignalKit
 import AnimatedStickerNode
 import MediaResources
+import Display
 
 // MARK: - Data Model
 
@@ -182,7 +183,7 @@ private final class ATunnelFlowView: UIView {
         centerBadge.layer.cornerRadius = 18
         centerBadge.backgroundColor = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1)
         centerLabel.text = "A"
-        centerLabel.font = .systemFont(ofSize: 14, weight: .bold)
+        centerLabel.font = Font.bold(14.0)
         centerLabel.textColor = .white
         centerLabel.textAlignment = .center
         centerBadge.addSubview(centerLabel)
@@ -512,7 +513,7 @@ final class ATunnelStatusViewController: UIViewController {
 
         // Title
         titleLabel.text = "ATunnel"
-        titleLabel.font = .systemFont(ofSize: 26, weight: .bold)
+        titleLabel.font = Font.bold(26.0)
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -520,7 +521,7 @@ final class ATunnelStatusViewController: UIViewController {
 
         // Subtitle
         subtitleLabel.text = isRu ? "Скоростная безопасная маршрутизация" : "Fast secure routing"
-        subtitleLabel.font = .systemFont(ofSize: 15, weight: .regular)
+        subtitleLabel.font = Font.regular(15.0)
         subtitleLabel.textColor = UIColor(white: 0.6, alpha: 1)
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 2
@@ -545,7 +546,7 @@ final class ATunnelStatusViewController: UIViewController {
 
     private func setupServerSection() {
         serversSectionLabel.text = isRu ? "СЕРВЕРЫ" : "SERVERS"
-        serversSectionLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        serversSectionLabel.font = Font.semibold(12.0)
         serversSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
         serversSectionLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(serversSectionLabel)
@@ -568,7 +569,7 @@ final class ATunnelStatusViewController: UIViewController {
 
     private func setupCallSection() {
         callsSectionLabel.text = isRu ? "ЗВОНКИ" : "CALLS"
-        callsSectionLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        callsSectionLabel.font = Font.semibold(12.0)
         callsSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
         callsSectionLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(callsSectionLabel)
@@ -587,7 +588,7 @@ final class ATunnelStatusViewController: UIViewController {
         callCard.addSubview(callPhoneIcon)
 
         callTitleLabel.text = isRu ? "Маршрутизация звонков" : "Call routing"
-        callTitleLabel.font = .systemFont(ofSize: 15, weight: .medium)
+        callTitleLabel.font = Font.medium(15.0)
         callTitleLabel.textColor = .white
         callTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         callCard.addSubview(callTitleLabel)
@@ -626,14 +627,14 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     private func setupFooter() {
-        updatedLabel.font = .systemFont(ofSize: 13, weight: .regular)
+        updatedLabel.font = Font.regular(13.0)
         updatedLabel.textColor = UIColor(white: 0.4, alpha: 1)
         updatedLabel.textAlignment = .center
         updatedLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(updatedLabel)
 
         diagButton.setTitle(isRu ? "Запустить диагностику" : "Run diagnostics", for: .normal)
-        diagButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        diagButton.titleLabel?.font = Font.semibold(16.0)
         diagButton.setTitleColor(purple, for: .normal)
         diagButton.backgroundColor = purple.withAlphaComponent(0.15)
         diagButton.layer.cornerRadius = 14
@@ -729,7 +730,7 @@ final class ATunnelStatusViewController: UIViewController {
         // Region full name
         let regionLabel = UILabel()
         regionLabel.text = localizedRegion(server.region)
-        regionLabel.font = .systemFont(ofSize: 16, weight: .semibold)
+        regionLabel.font = Font.semibold(16.0)
         regionLabel.textColor = .white
         regionLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -744,7 +745,7 @@ final class ATunnelStatusViewController: UIViewController {
 
         // Detail
         let detail = UILabel()
-        detail.font = .systemFont(ofSize: 13, weight: .regular)
+        detail.font = Font.regular(13.0)
         detail.translatesAutoresizingMaskIntoConstraints = false
         if server.available, let lat = server.latencyMs, let jit = server.jitterMs {
             detail.textColor = UIColor(white: 0.55, alpha: 1)
@@ -792,7 +793,7 @@ final class ATunnelStatusViewController: UIViewController {
         dot.translatesAutoresizingMaskIntoConstraints = false
 
         let label = UILabel()
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
+        label.font = Font.semibold(11.0)
         label.translatesAutoresizingMaskIntoConstraints = false
 
         if server.active {
@@ -931,14 +932,14 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         view.addSubview(handleBar)
 
         titleLabel.text = isRu ? "Диагностика" : "Diagnostics"
-        titleLabel.font = .systemFont(ofSize: 20, weight: .bold)
+        titleLabel.font = Font.bold(20.0)
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)
 
         subtitleLabel.text = isRu ? "Проверка и восстановление ATunnel" : "Checking and restoring ATunnel"
-        subtitleLabel.font = .systemFont(ofSize: 14)
+        subtitleLabel.font = Font.regular(14.0)
         subtitleLabel.textColor = UIColor(white: 0.55, alpha: 1)
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 2
@@ -970,18 +971,18 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         resultIcon.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultIcon)
 
-        resultTitle.font = .systemFont(ofSize: 16, weight: .semibold)
+        resultTitle.font = Font.semibold(16.0)
         resultTitle.textColor = .white; resultTitle.numberOfLines = 2
         resultTitle.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultTitle)
 
-        resultBody.font = .systemFont(ofSize: 13)
+        resultBody.font = Font.regular(13.0)
         resultBody.textColor = UIColor(white: 0.55, alpha: 1); resultBody.numberOfLines = 3
         resultBody.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultBody)
 
         closeButton.setTitle(isRu ? "Закрыть" : "Close", for: .normal)
-        closeButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        closeButton.titleLabel?.font = Font.semibold(17.0)
         closeButton.setTitleColor(purple, for: .normal)
         closeButton.backgroundColor = purple.withAlphaComponent(0.15)
         closeButton.layer.cornerRadius = 14; closeButton.layer.cornerCurve = .continuous
@@ -1149,7 +1150,7 @@ private final class DiagStepRow: UIView {
         iconBg.addSubview(iconView)
 
         titleLbl.text = title
-        titleLbl.font = .systemFont(ofSize: 15, weight: .medium)
+        titleLbl.font = Font.medium(15.0)
         titleLbl.textColor = .white
         titleLbl.translatesAutoresizingMaskIntoConstraints = false
         addSubview(titleLbl)

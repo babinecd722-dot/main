@@ -657,7 +657,7 @@ public final class AorusPerformanceHUDManager {
                 total += Double(info.cpu_usage) / Double(TH_USAGE_SCALE) * 100.0
             }
         }
-        return min(999.0, max(0.0, total))
+        return min(100.0, max(0.0, total))
     }
 
     private func batteryPercent() -> Int? {
