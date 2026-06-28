@@ -528,7 +528,7 @@ private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
         backgroundNode.isLayerBacked = true
         topStripeNode.isLayerBacked = true
         bottomStripeNode.isLayerBacked = true
-        super.init(layerBacked: false)
+        super.init(layerBacked: false, rotated: false, seeThrough: false)
         addSubnode(backgroundNode)
         addSubnode(topStripeNode)
         addSubnode(bottomStripeNode)
