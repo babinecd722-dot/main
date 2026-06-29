@@ -7020,6 +7020,7 @@ public enum AorusAnonymousStickerStore {
 
 public enum AorusProfileLinkStore {
     private static let enabledKey = "aorusgram_profile_link_enabled"
+    private static let targetPeerIdKey = "aorusgram_profile_link_target_peer_id"
 
     public static var isEnabled: Bool {
         return UserDefaults.standard.bool(forKey: enabledKey)
@@ -7027,6 +7028,120 @@ public enum AorusProfileLinkStore {
 
     public static func setEnabled(_ value: Bool) {
         UserDefaults.standard.set(value, forKey: enabledKey)
+    }
+
+    public static func targetPeerId(default accountPeerId: PeerId) -> PeerId {
+        guard let raw = UserDefaults.standard.string(forKey: targetPeerIdKey), let value = Int64(raw), value != 0 else {
+            return accountPeerId
+        }
+        return PeerId(value)
+    }
+}
+
+public enum AorusPhoneSpoofStore {
+    private struct PhoneRule {
+        let countryCode: String
+        let nationalLength: Int
+    }
+
+    private static let enabledKey = "aorusgram_phone_spoof_enabled"
+    private static let numberKey = "aorusgram_phone_spoof_number"
+
+    private static let regionRules: [String: PhoneRule] = [
+        "US": PhoneRule(countryCode: "1", nationalLength: 10), "CA": PhoneRule(countryCode: "1", nationalLength: 10),
+        "RU": PhoneRule(countryCode: "7", nationalLength: 10), "KZ": PhoneRule(countryCode: "7", nationalLength: 10),
+        "GE": PhoneRule(countryCode: "995", nationalLength: 9), "UA": PhoneRule(countryCode: "380", nationalLength: 9),
+        "BY": PhoneRule(countryCode: "375", nationalLength: 9), "AM": PhoneRule(countryCode: "374", nationalLength: 8),
+        "AZ": PhoneRule(countryCode: "994", nationalLength: 9), "TR": PhoneRule(countryCode: "90", nationalLength: 10),
+        "DE": PhoneRule(countryCode: "49", nationalLength: 10), "FR": PhoneRule(countryCode: "33", nationalLength: 9),
+        "GB": PhoneRule(countryCode: "44", nationalLength: 10), "ES": PhoneRule(countryCode: "34", nationalLength: 9),
+        "IT": PhoneRule(countryCode: "39", nationalLength: 10), "NL": PhoneRule(countryCode: "31", nationalLength: 9),
+        "PL": PhoneRule(countryCode: "48", nationalLength: 9), "CZ": PhoneRule(countryCode: "420", nationalLength: 9),
+        "SK": PhoneRule(countryCode: "421", nationalLength: 9), "RO": PhoneRule(countryCode: "40", nationalLength: 9),
+        "BG": PhoneRule(countryCode: "359", nationalLength: 9), "GR": PhoneRule(countryCode: "30", nationalLength: 10),
+        "IL": PhoneRule(countryCode: "972", nationalLength: 9), "AE": PhoneRule(countryCode: "971", nationalLength: 9),
+        "SA": PhoneRule(countryCode: "966", nationalLength: 9), "IN": PhoneRule(countryCode: "91", nationalLength: 10),
+        "CN": PhoneRule(countryCode: "86", nationalLength: 11), "JP": PhoneRule(countryCode: "81", nationalLength: 10),
+        "KR": PhoneRule(countryCode: "82", nationalLength: 10), "BR": PhoneRule(countryCode: "55", nationalLength: 11),
+        "MX": PhoneRule(countryCode: "52", nationalLength: 10), "AR": PhoneRule(countryCode: "54", nationalLength: 10),
+        "AU": PhoneRule(countryCode: "61", nationalLength: 9), "NZ": PhoneRule(countryCode: "64", nationalLength: 9)
+    ]
+
+    private static var defaultRule: PhoneRule {
+        if let region = Locale.current.regionCode?.uppercased(), let rule = regionRules[region] {
+            return rule
+        }
+        return PhoneRule(countryCode: "1", nationalLength: 10)
+    }
+
+    public static var isEnabled: Bool {
+        return UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    public static func setEnabled(_ value: Bool) {
+        if value {
+            _ = ensureNumber()
+        }
+        UserDefaults.standard.set(value, forKey: enabledKey)
+    }
+
+    public static func ensureNumber() -> String {
+        if let stored = UserDefaults.standard.string(forKey: numberKey), isComplete(stored) {
+            return stored
+        }
+        return randomize()
+    }
+
+    public static func setNumber(_ rawValue: String) -> String {
+        let normalized = normalize(rawValue)
+        UserDefaults.standard.set(normalized, forKey: numberKey)
+        return normalized
+    }
+
+    public static func randomize() -> String {
+        let rule = defaultRule
+        var digits = ""
+        digits.reserveCapacity(rule.nationalLength)
+        for index in 0 ..< rule.nationalLength {
+            let minDigit = index == 0 ? 1 : 0
+            digits.append(String(Int.random(in: minDigit ... 9)))
+        }
+        let value = "+\\(rule.countryCode)\\(digits)"
+        UserDefaults.standard.set(value, forKey: numberKey)
+        return value
+    }
+
+    private static func normalize(_ rawValue: String) -> String {
+        var digits = rawValue.filter { $0.isNumber }
+        if digits.isEmpty {
+            return randomize()
+        }
+        let rule = ruleForDigits(digits)
+        let maxLength = rule.countryCode.count + rule.nationalLength
+        if digits.count > maxLength {
+            digits = String(digits.prefix(maxLength))
+        }
+        return "+\\(digits)"
+    }
+
+    private static func isComplete(_ value: String) -> Bool {
+        let digits = value.filter { $0.isNumber }
+        let rule = ruleForDigits(digits)
+        return digits.count == rule.countryCode.count + rule.nationalLength
+    }
+
+    private static func ruleForDigits(_ digits: String) -> PhoneRule {
+        let knownRules = Array(Set(regionRules.values.map { $0.countryCode })).sorted { $0.count > $1.count }
+        for code in knownRules {
+            if digits.hasPrefix(code), let rule = regionRules.values.first(where: { $0.countryCode == code }) {
+                return rule
+            }
+        }
+        return defaultRule
+    }
+
+    public static var number: String {
+        return ensureNumber()
     }
 }
 
@@ -7077,11 +7192,18 @@ public enum AorusAntiSearch {
             let anonymousSticker = AorusAnonymousStickerStore.isEnabled && isStickerReference(mediaReference)
             let normalizedText = normalizeText(text, entities: entities)
             let normalizedAttributes = AorusProfileLinkStore.isEnabled ? profileLinkedAttributes(text: normalizedText, attributes: attributes, accountPeerId: accountPeerId) : attributes
+            var updatedMediaReference = mediaReference
+            if anonymousSticker {
+                updatedMediaReference = anonymizedMediaReference(updatedMediaReference, mediaBox: mediaBox)
+            }
+            if AorusPhoneSpoofStore.isEnabled {
+                updatedMediaReference = spoofedContactMediaReference(updatedMediaReference)
+            }
             return .message(
                 text: normalizedText,
                 attributes: normalizedAttributes,
                 inlineStickers: inlineStickers,
-                mediaReference: anonymousSticker ? anonymizedMediaReference(mediaReference, mediaBox: mediaBox) : mediaReference,
+                mediaReference: updatedMediaReference,
                 threadId: threadId,
                 replyToMessageId: replyToMessageId,
                 replyToStoryId: replyToStoryId,
@@ -7099,6 +7221,7 @@ public enum AorusAntiSearch {
         guard textLength > 0 else {
             return attributes
         }
+        let targetPeerId = AorusProfileLinkStore.targetPeerId(default: accountPeerId)
 
         var entities: [MessageTextEntity] = []
         var resultAttributes: [MessageAttribute] = []
@@ -7112,7 +7235,7 @@ public enum AorusAntiSearch {
             }
         }
 
-        entities.append(MessageTextEntity(range: 0 ..< textLength, type: .TextMention(peerId: accountPeerId)))
+        entities.append(MessageTextEntity(range: 0 ..< textLength, type: .TextMention(peerId: targetPeerId)))
         resultAttributes.append(TextEntitiesMessageAttribute(entities: entities))
         return resultAttributes
     }
@@ -7176,6 +7299,29 @@ public enum AorusAntiSearch {
             return false
         }
         return file.isSticker || file.isAnimatedSticker || file.isVideoSticker
+    }
+
+    private static func spoofedContactMediaReference(_ reference: AnyMediaReference?) -> AnyMediaReference? {
+        guard let reference = reference else {
+            return nil
+        }
+        switch reference {
+        case let .standalone(media):
+            return .standalone(media: spoofedContactMedia(media))
+        case let .message(_, media):
+            return .standalone(media: spoofedContactMedia(media))
+        case let .webPage(_, media):
+            return .standalone(media: spoofedContactMedia(media))
+        default:
+            return reference
+        }
+    }
+
+    private static func spoofedContactMedia(_ media: Media) -> Media {
+        guard let contact = media as? TelegramMediaContact else {
+            return media
+        }
+        return TelegramMediaContact(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: AorusPhoneSpoofStore.number, peerId: nil, vCardData: nil)
     }
 
     private static func anonymizedMedia(_ media: Media, mediaBox: MediaBox) -> Media {
@@ -7384,7 +7530,11 @@ def patch_anti_search(tg: Path) -> None:
         if "AorusAntiSearch.normalize" in t:
             t = t.replace(
                 "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled {",
+                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled {",
+            )
+            t = t.replace(
                 "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled {",
+                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled {",
             )
             t = t.replace(
                 "outboundMessages = messages.map { AorusAntiSearch.normalize($0) }",
@@ -7404,7 +7554,7 @@ def patch_anti_search(tg: Path) -> None:
             inject = (
                 "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
                 "    let outboundMessages: [EnqueueMessage]\n"
-                "    if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled {\n"
+                "    if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled {\n"
                 "        outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }\n"
                 "    } else {\n"
                 "        outboundMessages = messages\n"

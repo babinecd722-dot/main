@@ -28,6 +28,10 @@ private struct MiscState: Equatable {
     var antiSearch: Bool
     var anonymousStickers: Bool
     var profileLink: Bool
+    var profileLinkTargetPeerId: Int64
+    var profileLinkTargetName: String
+    var phoneSpoof: Bool
+    var phoneSpoofNumber: String
     var mediaMetadata: Bool
 }
 
@@ -39,9 +43,14 @@ private final class MiscArguments {
     let setAntiSearch: (Bool) -> Void
     let setAnonymousStickers: (Bool) -> Void
     let setProfileLink: (Bool) -> Void
+    let selectProfileLinkSelf: () -> Void
+    let selectProfileLinkPeer: () -> Void
+    let setPhoneSpoof: (Bool) -> Void
+    let setPhoneSpoofNumber: (String) -> Void
+    let randomizePhoneSpoof: () -> Void
     let setMediaMetadata: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, setMediaMetadata: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -49,6 +58,11 @@ private final class MiscArguments {
         self.setAntiSearch = setAntiSearch
         self.setAnonymousStickers = setAnonymousStickers
         self.setProfileLink = setProfileLink
+        self.selectProfileLinkSelf = selectProfileLinkSelf
+        self.selectProfileLinkPeer = selectProfileLinkPeer
+        self.setPhoneSpoof = setPhoneSpoof
+        self.setPhoneSpoofNumber = setPhoneSpoofNumber
+        self.randomizePhoneSpoof = randomizePhoneSpoof
         self.setMediaMetadata = setMediaMetadata
     }
 }
@@ -68,7 +82,13 @@ private enum MiscEntry: ItemListNodeEntry {
     case anonymousStickers(PresentationTheme, String, Bool)
     case anonymousStickersInfo(PresentationTheme, String)
     case profileLink(PresentationTheme, String, Bool)
+    case profileLinkSelf(PresentationTheme, String, String)
+    case profileLinkPeer(PresentationTheme, String, String)
     case profileLinkInfo(PresentationTheme, String)
+    case phoneSpoof(PresentationTheme, String, Bool)
+    case phoneSpoofNumber(PresentationTheme, String, String)
+    case phoneSpoofRandomize(PresentationTheme, String)
+    case phoneSpoofInfo(PresentationTheme, String)
     case mediaMetadata(PresentationTheme, String, Bool)
     case mediaMetadataInfo(PresentationTheme, String)
 
@@ -81,7 +101,8 @@ private enum MiscEntry: ItemListNodeEntry {
         case .fakeStarsHeader, .fakeStars, .fakeStarsCount, .fakeStarsInfo:
             return MiscSection.fakeStars.rawValue
         case .antiSearchHeader, .antiSearch, .antiSearchInfo, .anonymousStickers, .anonymousStickersInfo,
-             .profileLink, .profileLinkInfo, .mediaMetadata, .mediaMetadataInfo:
+             .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
+             .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
         }
     }
@@ -102,9 +123,15 @@ private enum MiscEntry: ItemListNodeEntry {
         case .anonymousStickers:return 33
         case .anonymousStickersInfo: return 34
         case .profileLink:      return 35
-        case .profileLinkInfo:  return 36
-        case .mediaMetadata:    return 37
-        case .mediaMetadataInfo:return 38
+        case .profileLinkSelf:  return 36
+        case .profileLinkPeer:  return 37
+        case .profileLinkInfo:  return 38
+        case .phoneSpoof:       return 39
+        case .phoneSpoofNumber: return 40
+        case .phoneSpoofRandomize: return 41
+        case .phoneSpoofInfo:   return 42
+        case .mediaMetadata:    return 43
+        case .mediaMetadataInfo:return 44
         }
     }
 
@@ -142,8 +169,20 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .anonymousStickersInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .profileLink(lt, ls, lv):
             if case let .profileLink(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .profileLinkSelf(lt, ls, lv):
+            if case let .profileLinkSelf(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .profileLinkPeer(lt, ls, lv):
+            if case let .profileLinkPeer(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .profileLinkInfo(lt, ls):
             if case let .profileLinkInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .phoneSpoof(lt, ls, lv):
+            if case let .phoneSpoof(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .phoneSpoofNumber(lt, ls, lv):
+            if case let .phoneSpoofNumber(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .phoneSpoofRandomize(lt, ls):
+            if case let .phoneSpoofRandomize(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .phoneSpoofInfo(lt, ls):
+            if case let .phoneSpoofInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .mediaMetadata(lt, ls, lv):
             if case let .mediaMetadata(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .mediaMetadataInfo(lt, ls):
@@ -183,7 +222,19 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .profileLink(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setProfileLink($0) })
+        case let .profileLinkSelf(_, title, value):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: args.selectProfileLinkSelf)
+        case let .profileLinkPeer(_, title, value):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, action: args.selectProfileLinkPeer)
         case let .profileLinkInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .phoneSpoof(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setPhoneSpoof($0) })
+        case let .phoneSpoofNumber(_, title, value):
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: title), text: value, placeholder: "+", sectionId: section, textUpdated: { text in args.setPhoneSpoofNumber(text) }, action: {})
+        case let .phoneSpoofRandomize(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, disclosureStyle: .none, action: args.randomizePhoneSpoof)
+        case let .phoneSpoofInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .mediaMetadata(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setMediaMetadata($0) })
@@ -225,9 +276,21 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
         ? "Отправляет ваши стикеры без ссылки на набор: клиент переупаковывает файл и убирает привязку к стикерпаку."
         : "Sends your stickers without a sticker-pack link: the client repacks the file and removes pack attribution."))
     entries.append(.profileLink(theme, isRu ? "Гиперссылка на профиль" : "Profile Link", state.profileLink))
+    if state.profileLink {
+        entries.append(.profileLinkSelf(theme, isRu ? "Мой профиль" : "My Profile", state.profileLinkTargetPeerId == 0 ? (isRu ? "Выбрано" : "Selected") : ""))
+        entries.append(.profileLinkPeer(theme, isRu ? "Чужой профиль" : "Other Profile", state.profileLinkTargetPeerId == 0 ? (isRu ? "Выбрать" : "Choose") : state.profileLinkTargetName))
+    }
     entries.append(.profileLinkInfo(theme, isRu
-        ? "Делает весь текст ваших исходящих сообщений кликабельным упоминанием вашего профиля."
-        : "Makes the whole text of your outgoing messages a clickable mention of your profile."))
+        ? "Делает весь текст ваших исходящих сообщений кликабельным упоминанием выбранного профиля."
+        : "Makes the whole text of your outgoing messages a clickable mention of the selected profile."))
+    entries.append(.phoneSpoof(theme, isRu ? "Подмена номера" : "Phone Spoofing", state.phoneSpoof))
+    if state.phoneSpoof {
+        entries.append(.phoneSpoofNumber(theme, isRu ? "Номер" : "Number", state.phoneSpoofNumber))
+        entries.append(.phoneSpoofRandomize(theme, isRu ? "Рандомизировать" : "Randomize"))
+    }
+    entries.append(.phoneSpoofInfo(theme, isRu
+        ? "Когда бот просит номер телефона, клиент отправляет защищённый номер вместо настоящего. Telegram ID аккаунта бот всё равно видит."
+        : "When a bot asks for your phone number, the client sends a protected number instead of your real one. The bot can still see your Telegram ID."))
     entries.append(.mediaMetadata(theme, isRu ? "Метаданные медиа" : "Media Metadata", state.mediaMetadata))
     entries.append(.mediaMetadataInfo(theme, isRu
         ? "Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл."
@@ -239,6 +302,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
 public func aorusMiscController(context: AccountContext) -> ViewController {
     let initialFakeStars = AorusFakeStarsStore.isEnabled
     let initialFakeStarsAmount = AorusFakeStarsStore.amount > 0 ? "\(AorusFakeStarsStore.amount)" : ""
+    let initialProfileLinkTargetPeerId = Int64(UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_peer_id") ?? "") ?? 0
     let initialState = MiscState(
         localPremium: AorusLocalPremium.isEnabled,
         fakeStars: initialFakeStars,
@@ -246,6 +310,10 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
         antiSearch: AorusAntiSearchStore.isEnabled,
         anonymousStickers: UserDefaults.standard.bool(forKey: "aorusgram_anonymous_stickers_enabled"),
         profileLink: UserDefaults.standard.bool(forKey: "aorusgram_profile_link_enabled"),
+        profileLinkTargetPeerId: initialProfileLinkTargetPeerId,
+        profileLinkTargetName: UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_name") ?? "",
+        phoneSpoof: AorusPhoneSpoofStore.isEnabled,
+        phoneSpoofNumber: AorusPhoneSpoofStore.ensureNumber(),
         mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled")
     )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
@@ -255,6 +323,7 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
     }
 
     weak var weakController: ItemListController?
+    let actionsDisposable = DisposableSet()
 
     let arguments = MiscArguments(
         setLocalPremium: { value in
@@ -318,6 +387,66 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 return next
             }
         },
+        selectProfileLinkSelf: {
+            UserDefaults.standard.removeObject(forKey: "aorusgram_profile_link_target_peer_id")
+            UserDefaults.standard.removeObject(forKey: "aorusgram_profile_link_target_name")
+            updateState { current in
+                var next = current
+                next.profileLinkTargetPeerId = 0
+                next.profileLinkTargetName = ""
+                return next
+            }
+        },
+        selectProfileLinkPeer: {
+            let selectionController = context.sharedContext.makeContactSelectionController(ContactSelectionControllerParams(
+                context: context,
+                autoDismiss: false,
+                title: { strings in return strings.Contacts_Title }
+            ))
+            actionsDisposable.add((selectionController.result
+            |> deliverOnMainQueue).start(next: { [weak selectionController] result in
+                selectionController?.dismiss()
+                if let (peers, _, _, _, _, _) = result, let first = peers.first, case let .peer(peer, _, _) = first {
+                    let peerId = peer.id.toInt64()
+                    let peerName = peer.compactDisplayTitle
+                    UserDefaults.standard.set("\(peerId)", forKey: "aorusgram_profile_link_target_peer_id")
+                    UserDefaults.standard.set(peerName, forKey: "aorusgram_profile_link_target_name")
+                    updateState { current in
+                        var next = current
+                        next.profileLinkTargetPeerId = peerId
+                        next.profileLinkTargetName = peerName
+                        return next
+                    }
+                }
+            }))
+            weakController?.push(selectionController)
+        },
+        setPhoneSpoof: { value in
+            AorusPhoneSpoofStore.setEnabled(value)
+            let number = AorusPhoneSpoofStore.ensureNumber()
+            updateState { current in
+                var next = current
+                next.phoneSpoof = value
+                next.phoneSpoofNumber = number
+                return next
+            }
+        },
+        setPhoneSpoofNumber: { text in
+            let number = AorusPhoneSpoofStore.setNumber(text)
+            updateState { current in
+                var next = current
+                next.phoneSpoofNumber = number
+                return next
+            }
+        },
+        randomizePhoneSpoof: {
+            let number = AorusPhoneSpoofStore.randomize()
+            updateState { current in
+                var next = current
+                next.phoneSpoofNumber = number
+                return next
+            }
+        },
         setMediaMetadata: { value in
             UserDefaults.standard.set(value, forKey: "aorusgram_media_metadata_enabled")
             updateState { current in
@@ -347,6 +476,9 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 style: .blocks
             )
             return (controllerState, (listState, arguments))
+        }
+        |> afterDisposed {
+            actionsDisposable.dispose()
         }
 
     let controller = ItemListController(context: context, state: signal)

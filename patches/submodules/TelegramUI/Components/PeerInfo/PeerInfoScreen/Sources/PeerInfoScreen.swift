@@ -2141,7 +2141,8 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                     return
                 }
                 var actions: [ContextMenuAction] = []
-                if copyPhone, let phone = user.phone, !phone.isEmpty {
+                if copyPhone, let rawPhone = user.phone, !rawPhone.isEmpty {
+                    let phone = AorusPhoneSpoofStore.isEnabled ? AorusPhoneSpoofStore.number : rawPhone
                     actions.append(ContextMenuAction(content: .text(title: strongSelf.presentationData.strings.Settings_CopyPhoneNumber, accessibilityLabel: strongSelf.presentationData.strings.Settings_CopyPhoneNumber), action: { [weak self] in
                         if let strongSelf = self {
                             UIPasteboard.general.string = formatPhoneNumber(context: strongSelf.context, number: phone)
