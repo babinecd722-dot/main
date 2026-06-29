@@ -331,8 +331,8 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
         entries.append(.phoneSpoofRandomize(theme, isRu ? "Рандомизировать" : "Randomize"))
     }
     entries.append(.phoneSpoofInfo(theme, isRu
-        ? "Когда бот просит номер телефона, клиент отправляет защищённый номер вместо настоящего. Telegram ID аккаунта бот всё равно видит."
-        : "When a bot asks for your phone number, the client sends a protected number instead of your real one. The bot can still see your Telegram ID."))
+        ? "Когда бот просит номер телефона, клиент отправляет защищённый номер вместо настоящего."
+        : "When a bot asks for your phone number, the client sends a protected number instead of your real one."))
     entries.append(.mediaMetadata(theme, isRu ? "Метаданные медиа" : "Media Metadata", state.mediaMetadata))
     entries.append(.mediaMetadataInfo(theme, isRu
         ? "Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл."
