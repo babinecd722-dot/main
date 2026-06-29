@@ -2628,6 +2628,72 @@ def patch_app_delegate_activate_deeplink(tg: Path) -> None:
         print("ActivateDeeplink: OpenUrl.swift not found, skip")
 
 
+def patch_link_protection_open_url(tg: Path) -> None:
+    """AorusGram link protection: warn before opening suspicious URLs.
+
+    The analyzer and UI live in AorusGramUI. This hook sits at the central
+    openExternalUrlImpl entry point so normal Telegram URL resolution remains
+    untouched unless the user explicitly enabled Link Protection.
+    """
+    path = tg / "submodules/TelegramUI/Sources/OpenUrl.swift"
+    if not path.is_file():
+        print("LinkProtection: OpenUrl.swift not found, skip")
+        return
+
+    t = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: link protection"
+    if sentinel in t:
+        print("LinkProtection: OpenUrl already injected")
+        return
+
+    if "import AorusGramUI\n" not in t:
+        if "import AccountContext\n" in t:
+            t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+        elif "import Foundation\n" in t:
+            t = t.replace("import Foundation\n", "import Foundation\nimport AorusGramUI\n", 1)
+        else:
+            t = "import AorusGramUI\n" + t
+        print("LinkProtection: added import AorusGramUI")
+
+    anchor = "func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, url: String, forceExternal: Bool, presentationData: PresentationData, navigationController: NavigationController?, dismissInput: @escaping () -> Void) {\n"
+    if anchor not in t:
+        print("LinkProtection: openExternalUrlImpl anchor not found — skipped")
+        path.write_text(t, encoding="utf-8")
+        return
+
+    injection = (
+        anchor
+        + "    " + sentinel + "\n"
+        + "    let aorusLinkProtectionURL = URL(string: url)\n"
+        + "    let aorusLinkProtectionBypass = (aorusLinkProtectionURL?.scheme == \"aorusgram\" || aorusLinkProtectionURL?.scheme == \"tg\") && aorusLinkProtectionURL?.host == \"activate\"\n"
+        + "    if !aorusLinkProtectionBypass, !AorusLinkProtection.consumeAllowed(url), AorusLinkProtection.shouldIntercept(url) {\n"
+        + "        AorusLinkProtection.presentWarning(url: url, languageCode: presentationData.strings.baseLanguageCode, openAnyway: {\n"
+        + "            AorusLinkProtection.allowOnce(url)\n"
+        + "            context.sharedContext.openExternalUrl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
+        + "        })\n"
+        + "        return\n"
+        + "    }\n"
+    )
+    t = t.replace(anchor, injection, 1)
+    path.write_text(t, encoding="utf-8")
+
+    build = tg / "submodules/TelegramUI/BUILD"
+    if build.is_file():
+        bt = build.read_text(encoding="utf-8")
+        if "//submodules/AorusGramUI" not in bt:
+            dep_anchor = '        "//submodules/AccountContext:AccountContext",\n'
+            if dep_anchor in bt:
+                bt = bt.replace(dep_anchor, dep_anchor + '        "//submodules/AorusGramUI",\n', 1)
+                print("LinkProtection: added AorusGramUI dep to TelegramUI BUILD")
+            else:
+                print("LinkProtection: WARNING TelegramUI BUILD dep anchor not found")
+            build.write_text(bt, encoding="utf-8")
+    else:
+        print("LinkProtection: TelegramUI BUILD not found — dep patch skipped")
+
+    print("LinkProtection: injected OpenUrl warning gate")
+
+
 def patch_app_delegate_open_purchase_bot(tg: Path) -> None:
     """Open the purchase bot INSIDE AorusGram, above the lock screen.
 
@@ -13169,6 +13235,7 @@ def main() -> None:
     patch_app_delegate_publish_account_id(tg)
     patch_app_delegate_open_purchase_bot(tg)
     patch_app_delegate_activate_deeplink(tg)
+    patch_link_protection_open_url(tg)
     patch_app_delegate_import_telegram_api(tg)
     patch_app_delegate_account_restore_hook(tg)
     patch_app_delegate_siri_continue_activity(tg)

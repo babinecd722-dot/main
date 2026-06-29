@@ -19,6 +19,7 @@ private enum MiscSection: Int32 {
     case fakeGifts
     case fakeStars
     case antiSearch
+    case security
 }
 
 private struct MiscState: Equatable {
@@ -33,6 +34,9 @@ private struct MiscState: Equatable {
     var phoneSpoof: Bool
     var phoneSpoofNumber: String
     var mediaMetadata: Bool
+    var linkProtection: Bool
+    var linkProtectionRedirects: Bool
+    var linkProtectionBlockFiles: Bool
 }
 
 private final class MiscArguments {
@@ -49,8 +53,11 @@ private final class MiscArguments {
     let setPhoneSpoofNumber: (String) -> Void
     let randomizePhoneSpoof: () -> Void
     let setMediaMetadata: (Bool) -> Void
+    let setLinkProtection: (Bool) -> Void
+    let setLinkProtectionRedirects: (Bool) -> Void
+    let setLinkProtectionBlockFiles: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -64,6 +71,9 @@ private final class MiscArguments {
         self.setPhoneSpoofNumber = setPhoneSpoofNumber
         self.randomizePhoneSpoof = randomizePhoneSpoof
         self.setMediaMetadata = setMediaMetadata
+        self.setLinkProtection = setLinkProtection
+        self.setLinkProtectionRedirects = setLinkProtectionRedirects
+        self.setLinkProtectionBlockFiles = setLinkProtectionBlockFiles
     }
 }
 
@@ -91,6 +101,11 @@ private enum MiscEntry: ItemListNodeEntry {
     case phoneSpoofInfo(PresentationTheme, String)
     case mediaMetadata(PresentationTheme, String, Bool)
     case mediaMetadataInfo(PresentationTheme, String)
+    case securityHeader(PresentationTheme, String)
+    case linkProtection(PresentationTheme, String, Bool)
+    case linkProtectionRedirects(PresentationTheme, String, Bool)
+    case linkProtectionBlockFiles(PresentationTheme, String, Bool)
+    case linkProtectionInfo(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -104,6 +119,8 @@ private enum MiscEntry: ItemListNodeEntry {
              .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
              .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
+        case .securityHeader, .linkProtection, .linkProtectionRedirects, .linkProtectionBlockFiles, .linkProtectionInfo:
+            return MiscSection.security.rawValue
         }
     }
 
@@ -132,6 +149,11 @@ private enum MiscEntry: ItemListNodeEntry {
         case .phoneSpoofInfo:   return 42
         case .mediaMetadata:    return 43
         case .mediaMetadataInfo:return 44
+        case .securityHeader:   return 50
+        case .linkProtection:   return 51
+        case .linkProtectionRedirects: return 52
+        case .linkProtectionBlockFiles: return 53
+        case .linkProtectionInfo: return 54
         }
     }
 
@@ -187,6 +209,16 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .mediaMetadata(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .mediaMetadataInfo(lt, ls):
             if case let .mediaMetadataInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .securityHeader(lt, ls):
+            if case let .securityHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .linkProtection(lt, ls, lv):
+            if case let .linkProtection(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .linkProtectionRedirects(lt, ls, lv):
+            if case let .linkProtectionRedirects(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .linkProtectionBlockFiles(lt, ls, lv):
+            if case let .linkProtectionBlockFiles(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .linkProtectionInfo(lt, ls):
+            if case let .linkProtectionInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -239,6 +271,16 @@ private enum MiscEntry: ItemListNodeEntry {
         case let .mediaMetadata(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setMediaMetadata($0) })
         case let .mediaMetadataInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .securityHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .linkProtection(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setLinkProtection($0) })
+        case let .linkProtectionRedirects(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setLinkProtectionRedirects($0) })
+        case let .linkProtectionBlockFiles(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setLinkProtectionBlockFiles($0) })
+        case let .linkProtectionInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
     }
@@ -296,6 +338,16 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
         ? "Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл."
         : "Adds a Metadata item to photos, videos and GIFs and shows available EXIF, GPS, camera, container and file data."))
 
+    entries.append(.securityHeader(theme, isRu ? "БЕЗОПАСНОСТЬ" : "SECURITY"))
+    entries.append(.linkProtection(theme, isRu ? "Защита ссылок" : "Link Protection", state.linkProtection))
+    if state.linkProtection {
+        entries.append(.linkProtectionRedirects(theme, isRu ? "Проверять редиректы" : "Check Redirects", state.linkProtectionRedirects))
+        entries.append(.linkProtectionBlockFiles(theme, isRu ? "Блокировать опасные файлы" : "Block Dangerous Files", state.linkProtectionBlockFiles))
+    }
+    entries.append(.linkProtectionInfo(theme, isRu
+        ? "Предупреждает о подмене доменов, Punycode, сокращателях, редиректах, опасных схемах и файлах до открытия ссылки."
+        : "Warns about spoofed domains, Punycode, shorteners, redirects, dangerous schemes and files before opening a link."))
+
     return entries
 }
 
@@ -314,7 +366,10 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
         profileLinkTargetName: UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_name") ?? "",
         phoneSpoof: AorusPhoneSpoofStore.isEnabled,
         phoneSpoofNumber: AorusPhoneSpoofStore.ensureNumber(),
-        mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled")
+        mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),
+        linkProtection: AorusLinkProtection.isEnabled,
+        linkProtectionRedirects: AorusLinkProtection.checksRedirects,
+        linkProtectionBlockFiles: AorusLinkProtection.blocksDangerousFiles
     )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
@@ -452,6 +507,30 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
             updateState { current in
                 var next = current
                 next.mediaMetadata = value
+                return next
+            }
+        },
+        setLinkProtection: { value in
+            AorusLinkProtection.setEnabled(value)
+            updateState { current in
+                var next = current
+                next.linkProtection = value
+                return next
+            }
+        },
+        setLinkProtectionRedirects: { value in
+            AorusLinkProtection.setChecksRedirects(value)
+            updateState { current in
+                var next = current
+                next.linkProtectionRedirects = value
+                return next
+            }
+        },
+        setLinkProtectionBlockFiles: { value in
+            AorusLinkProtection.setBlocksDangerousFiles(value)
+            updateState { current in
+                var next = current
+                next.linkProtectionBlockFiles = value
                 return next
             }
         }
