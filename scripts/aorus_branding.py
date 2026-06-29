@@ -2029,7 +2029,9 @@ def patch_chat_context_menu_media_metadata(tg: Path) -> None:
         "            let aorusMetaMsg = messages[0]\n"
         "            if AorusMediaMetadata.hasSupportedMedia(aorusMetaMsg) {\n"
         "                let aorusMetaRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-        "                actions.append(.action(ContextMenuActionItem(text: aorusMetaRu ? \"Метаданные\" : \"Metadata\", icon: { _ in nil }, action: { [weak context] action in\n"
+        "                actions.append(.action(ContextMenuActionItem(text: aorusMetaRu ? \"Метаданные\" : \"Metadata\", icon: { theme in\n"
+        "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/ImageEnlarge\"), color: theme.actionSheet.primaryTextColor)\n"
+        "                }, action: { [weak context] action in\n"
         "                    action.dismissWithResult(.default)\n"
         "                    guard let context = context else { return }\n"
         "                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {\n"
@@ -7062,7 +7064,7 @@ public enum AorusAntiSearch {
         }
     }
 
-    public static func normalize(_ message: EnqueueMessage, accountPeerId: PeerId) -> EnqueueMessage {
+    public static func normalize(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox) -> EnqueueMessage {
         switch message {
         case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
             var entities: [MessageTextEntity] = []
@@ -7079,7 +7081,7 @@ public enum AorusAntiSearch {
                 text: normalizedText,
                 attributes: normalizedAttributes,
                 inlineStickers: inlineStickers,
-                mediaReference: anonymousSticker ? anonymizedMediaReference(mediaReference) : mediaReference,
+                mediaReference: anonymousSticker ? anonymizedMediaReference(mediaReference, mediaBox: mediaBox) : mediaReference,
                 threadId: threadId,
                 replyToMessageId: replyToMessageId,
                 replyToStoryId: replyToStoryId,
@@ -7147,23 +7149,23 @@ public enum AorusAntiSearch {
         }
     }
 
-    private static func anonymizedMediaReference(_ reference: AnyMediaReference?) -> AnyMediaReference? {
+    private static func anonymizedMediaReference(_ reference: AnyMediaReference?, mediaBox: MediaBox) -> AnyMediaReference? {
         guard let reference = reference else {
             return nil
         }
         switch reference {
         case let .standalone(media):
-            return .standalone(media: anonymizedMedia(media))
+            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
         case let .message(_, media):
-            return .standalone(media: anonymizedMedia(media))
+            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
         case let .webPage(_, media):
-            return .standalone(media: anonymizedMedia(media))
+            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
         case let .stickerPack(_, media):
-            return .standalone(media: anonymizedMedia(media))
+            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
         case let .savedGif(media):
-            return .standalone(media: anonymizedMedia(media))
+            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
         case let .recentSticker(media):
-            return .standalone(media: anonymizedMedia(media))
+            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
         default:
             return reference
         }
@@ -7176,7 +7178,7 @@ public enum AorusAntiSearch {
         return file.isSticker || file.isAnimatedSticker || file.isVideoSticker
     }
 
-    private static func anonymizedMedia(_ media: Media) -> Media {
+    private static func anonymizedMedia(_ media: Media, mediaBox: MediaBox) -> Media {
         guard let file = media as? TelegramMediaFile, isStickerMedia(file) else {
             return media
         }
@@ -7188,10 +7190,14 @@ public enum AorusAntiSearch {
                 return attribute
             }
         }
+        let resource = anonymousResource(for: file, mediaBox: mediaBox) ?? file.resource
+        let fileId = (resource is LocalFileReferenceMediaResource)
+            ? MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max))
+            : file.fileId
         return TelegramMediaFile(
-            fileId: file.fileId,
-            partialReference: file.partialReference,
-            resource: file.resource,
+            fileId: fileId,
+            partialReference: nil,
+            resource: resource,
             previewRepresentations: file.previewRepresentations,
             videoThumbnails: file.videoThumbnails,
             immediateThumbnailData: file.immediateThumbnailData,
@@ -7200,6 +7206,32 @@ public enum AorusAntiSearch {
             attributes: attributes,
             alternativeRepresentations: file.alternativeRepresentations
         )
+    }
+
+    private static func anonymousResource(for file: TelegramMediaFile, mediaBox: MediaBox) -> MediaResource? {
+        guard let path = completedStickerPath(for: file, mediaBox: mediaBox) else {
+            return nil
+        }
+        return LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: false)
+    }
+
+    private static func completedStickerPath(for file: TelegramMediaFile, mediaBox: MediaBox) -> String? {
+        if let path = mediaBox.completedResourcePath(file.resource) {
+            return path
+        }
+        if let fileName = file.fileName, let ext = fileName.split(separator: ".").last, !ext.isEmpty {
+            return mediaBox.completedResourcePath(file.resource, pathExtension: String(ext))
+        }
+        if file.mimeType == "image/webp" {
+            return mediaBox.completedResourcePath(file.resource, pathExtension: "webp")
+        }
+        if file.mimeType == "application/x-tgsticker" {
+            return mediaBox.completedResourcePath(file.resource, pathExtension: "tgs")
+        }
+        if file.mimeType == "video/webm" {
+            return mediaBox.completedResourcePath(file.resource, pathExtension: "webm")
+        }
+        return nil
     }
 
     public static func normalizeText(_ text: String, entities: [MessageTextEntity] = []) -> String {
@@ -7354,6 +7386,10 @@ def patch_anti_search(tg: Path) -> None:
                 "outboundMessages = messages.map { AorusAntiSearch.normalize($0) }",
                 "outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }",
             )
+            t = t.replace(
+                "outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }",
+                "outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
+            )
             enqueue.write_text(t, encoding="utf-8")
             print("AntiSearch: EnqueueMessage already patched")
         else:
@@ -7365,7 +7401,7 @@ def patch_anti_search(tg: Path) -> None:
                 "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
                 "    let outboundMessages: [EnqueueMessage]\n"
                 "    if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled {\n"
-                "        outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }\n"
+                "        outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }\n"
                 "    } else {\n"
                 "        outboundMessages = messages\n"
                 "    }\n"

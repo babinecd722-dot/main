@@ -105,7 +105,7 @@ public enum AorusMediaMetadata {
             ]
             if let representation = largestImageRepresentation(image.representations) {
                 rows.append(AorusMetadataRow(title: title("Разрешение", "Resolution", isRu), value: "\(representation.dimensions.width) x \(representation.dimensions.height)"))
-                if let path = mediaBox.completedResourcePath(representation.resource) {
+                if let path = bestImageMetadataPath(image: image, mediaBox: mediaBox, isRu: isRu) ?? mediaBox.completedResourcePath(representation.resource) {
                     appendFileRows(path: path, rows: &rows, isRu: isRu)
                     let parsed = parseImageMetadata(path: path, isRu: isRu)
                     sections.append(AorusMetadataSection(title: title("Основное", "Summary", isRu), rows: rows))
@@ -158,6 +158,21 @@ public enum AorusMediaMetadata {
         return AorusMetadataResult(sections: sections, coordinate: coordinate)
     }
 
+    private static func bestImageMetadataPath(image: TelegramMediaImage, mediaBox: MediaBox, isRu: Bool) -> String? {
+        var best: (path: String, score: Int)?
+        for representation in image.representations {
+            guard let path = mediaBox.completedResourcePath(representation.resource) else {
+                continue
+            }
+            let parsed = parseImageMetadata(path: path, isRu: isRu)
+            let score = parsed.sections.reduce(0) { $0 + $1.rows.count } + (parsed.coordinate == nil ? 0 : 1000)
+            if best == nil || score > best!.score {
+                best = (path, score)
+            }
+        }
+        return best?.path
+    }
+
     private static func completedPath(for file: TelegramMediaFile, mediaBox: MediaBox) -> String? {
         if let path = mediaBox.completedResourcePath(file.resource) {
             return path
@@ -206,26 +221,46 @@ public enum AorusMediaMetadata {
             sections.append(AorusMetadataSection(title: title("Изображение", "Image", isRu), rows: technical))
         }
 
+        var cameraRows: [AorusMetadataRow] = []
         if let tiff = properties[kCGImagePropertyTIFFDictionary as String] as? [String: Any] {
-            let rows = friendlyRows(from: tiff, isRu: isRu)
-            if !rows.isEmpty {
-                sections.append(AorusMetadataSection(title: title("Камера", "Camera", isRu), rows: rows))
-            }
+            let rows = flattenedRows(from: tiff, isRu: isRu)
+            cameraRows.append(contentsOf: rows)
         }
+        if !cameraRows.isEmpty {
+            sections.append(AorusMetadataSection(title: title("Камера", "Camera", isRu), rows: cameraRows))
+        } else {
+            sections.append(AorusMetadataSection(title: title("Камера", "Camera", isRu), rows: [
+                AorusMetadataRow(title: title("Данные камеры", "Camera Data", isRu), value: title("нет данных", "no data", isRu))
+            ]))
+        }
+
         if let exif = properties[kCGImagePropertyExifDictionary as String] as? [String: Any] {
-            let rows = friendlyRows(from: exif, isRu: isRu)
+            let rows = flattenedRows(from: exif, isRu: isRu)
             if !rows.isEmpty {
                 sections.append(AorusMetadataSection(title: "EXIF", rows: rows))
+            } else {
+                sections.append(AorusMetadataSection(title: "EXIF", rows: [
+                    AorusMetadataRow(title: title("EXIF", "EXIF", isRu), value: title("нет данных", "no data", isRu))
+                ]))
             }
+        } else {
+            sections.append(AorusMetadataSection(title: "EXIF", rows: [
+                AorusMetadataRow(title: title("EXIF", "EXIF", isRu), value: title("нет данных", "no data", isRu))
+            ]))
         }
 
         var coordinate: CLLocationCoordinate2D?
         if let gps = properties[kCGImagePropertyGPSDictionary as String] as? [String: Any] {
             let parsed = gpsRows(from: gps, isRu: isRu)
-            if !parsed.rows.isEmpty {
-                sections.append(AorusMetadataSection(title: "GPS", rows: parsed.rows))
-            }
+            sections.append(AorusMetadataSection(title: "GPS", rows: parsed.rows.isEmpty ? noGPSRows(isRu: isRu) : parsed.rows))
             coordinate = parsed.coordinate
+        } else {
+            sections.append(AorusMetadataSection(title: "GPS", rows: noGPSRows(isRu: isRu)))
+        }
+
+        let allRows = flattenedRows(from: properties, isRu: isRu)
+        if !allRows.isEmpty {
+            sections.append(AorusMetadataSection(title: title("Все поля", "All Fields", isRu), rows: allRows))
         }
 
         return AorusMetadataResult(sections: sections, coordinate: coordinate)
@@ -311,11 +346,38 @@ public enum AorusMediaMetadata {
         }
     }
 
-    private static func friendlyRows(from dict: [String: Any], isRu: Bool) -> [AorusMetadataRow] {
-        return dict.keys.sorted().compactMap { key in
-            guard let value = dict[key], !isNested(value) else { return nil }
-            return AorusMetadataRow(title: friendlyKey(key, isRu: isRu), value: cleanValue(value))
+    private static func noGPSRows(isRu: Bool) -> [AorusMetadataRow] {
+        return [
+            AorusMetadataRow(title: title("Координаты", "Coordinates", isRu), value: title("нет данных", "no data", isRu)),
+            AorusMetadataRow(title: title("Город", "City", isRu), value: title("нет данных", "no data", isRu))
+        ]
+    }
+
+    private static func flattenedRows(from dict: [String: Any], prefix: String? = nil, isRu: Bool) -> [AorusMetadataRow] {
+        var rows: [AorusMetadataRow] = []
+        for key in dict.keys.sorted() {
+            guard let value = dict[key] else { continue }
+            let label = prefix.map { "\($0) / \(friendlyKey(key, isRu: isRu))" } ?? friendlyKey(key, isRu: isRu)
+            if let nested = value as? [String: Any] {
+                rows.append(contentsOf: flattenedRows(from: nested, prefix: label, isRu: isRu))
+            } else if let dictionary = value as? NSDictionary {
+                var nested: [String: Any] = [:]
+                for (rawKey, rawValue) in dictionary {
+                    if let rawKey = rawKey as? String {
+                        nested[rawKey] = rawValue
+                    }
+                }
+                if !nested.isEmpty {
+                    rows.append(contentsOf: flattenedRows(from: nested, prefix: label, isRu: isRu))
+                }
+            } else {
+                let text = cleanValue(value)
+                if !text.isEmpty {
+                    rows.append(AorusMetadataRow(title: label, value: text))
+                }
+            }
         }
+        return rows
     }
 
     private static func add(_ value: Any?, _ name: String, to rows: inout [AorusMetadataRow]) {
@@ -324,10 +386,6 @@ public enum AorusMediaMetadata {
         if !text.isEmpty {
             rows.append(AorusMetadataRow(title: name, value: text))
         }
-    }
-
-    private static func isNested(_ value: Any) -> Bool {
-        return value is [String: Any] || value is NSArray || value is NSDictionary
     }
 
     private static func number(_ value: Any?) -> Double? {
@@ -351,6 +409,9 @@ public enum AorusMediaMetadata {
             .replacingOccurrences(of: "{Exif}", with: "")
             .replacingOccurrences(of: "{TIFF}", with: "")
             .replacingOccurrences(of: "{GPS}", with: "")
+            .replacingOccurrences(of: "{IPTC}", with: "")
+            .replacingOccurrences(of: "{PNG}", with: "")
+            .replacingOccurrences(of: "{JFIF}", with: "")
             .replacingOccurrences(of: "kCGImageProperty", with: "")
         let map: [String: String] = [
             "Make": title("Производитель", "Make", isRu),
@@ -363,8 +424,21 @@ public enum AorusMediaMetadata {
             "ExposureTime": title("Выдержка", "Exposure", isRu),
             "FNumber": title("Диафрагма", "Aperture", isRu),
             "FocalLength": title("Фокусное расстояние", "Focal Length", isRu),
+            "DigitalZoomRatio": title("Цифровой зум", "Digital Zoom", isRu),
+            "LensMake": title("Производитель объектива", "Lens Make", isRu),
+            "LensSpecification": title("Параметры объектива", "Lens Specification", isRu),
             "Flash": title("Вспышка", "Flash", isRu),
             "Orientation": title("Ориентация", "Orientation", isRu),
+            "PixelWidth": title("Ширина", "Width", isRu),
+            "PixelHeight": title("Высота", "Height", isRu),
+            "ColorModel": title("Цвет", "Color", isRu),
+            "Depth": title("Глубина цвета", "Color Depth", isRu),
+            "ProfileName": title("Цветовой профиль", "Color Profile", isRu),
+            "Latitude": title("Широта", "Latitude", isRu),
+            "Longitude": title("Долгота", "Longitude", isRu),
+            "Altitude": title("Высота", "Altitude", isRu),
+            "Speed": title("Скорость", "Speed", isRu),
+            "ImgDirection": title("Направление", "Direction", isRu),
             "title": title("Название", "Title", isRu),
             "artist": title("Автор", "Artist", isRu),
             "creationDate": title("Дата создания", "Creation Date", isRu),

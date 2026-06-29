@@ -64,10 +64,13 @@ private enum MiscEntry: ItemListNodeEntry {
     case fakeStarsInfo(PresentationTheme, String)
     case antiSearchHeader(PresentationTheme, String)
     case antiSearch(PresentationTheme, String, Bool)
-    case anonymousStickers(PresentationTheme, String, Bool)
-    case profileLink(PresentationTheme, String, Bool)
-    case mediaMetadata(PresentationTheme, String, Bool)
     case antiSearchInfo(PresentationTheme, String)
+    case anonymousStickers(PresentationTheme, String, Bool)
+    case anonymousStickersInfo(PresentationTheme, String)
+    case profileLink(PresentationTheme, String, Bool)
+    case profileLinkInfo(PresentationTheme, String)
+    case mediaMetadata(PresentationTheme, String, Bool)
+    case mediaMetadataInfo(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -77,7 +80,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.fakeGifts.rawValue
         case .fakeStarsHeader, .fakeStars, .fakeStarsCount, .fakeStarsInfo:
             return MiscSection.fakeStars.rawValue
-        case .antiSearchHeader, .antiSearch, .anonymousStickers, .profileLink, .mediaMetadata, .antiSearchInfo:
+        case .antiSearchHeader, .antiSearch, .antiSearchInfo, .anonymousStickers, .anonymousStickersInfo,
+             .profileLink, .profileLinkInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
         }
     }
@@ -94,10 +98,13 @@ private enum MiscEntry: ItemListNodeEntry {
         case .fakeStarsInfo:    return 23
         case .antiSearchHeader: return 30
         case .antiSearch:       return 31
-        case .anonymousStickers:return 32
-        case .profileLink:      return 33
-        case .mediaMetadata:    return 34
-        case .antiSearchInfo:   return 35
+        case .antiSearchInfo:   return 32
+        case .anonymousStickers:return 33
+        case .anonymousStickersInfo: return 34
+        case .profileLink:      return 35
+        case .profileLinkInfo:  return 36
+        case .mediaMetadata:    return 37
+        case .mediaMetadataInfo:return 38
         }
     }
 
@@ -127,14 +134,20 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .antiSearchHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .antiSearch(lt, ls, lv):
             if case let .antiSearch(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .anonymousStickers(lt, ls, lv):
-            if case let .anonymousStickers(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .profileLink(lt, ls, lv):
-            if case let .profileLink(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .mediaMetadata(lt, ls, lv):
-            if case let .mediaMetadata(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .antiSearchInfo(lt, ls):
             if case let .antiSearchInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .anonymousStickers(lt, ls, lv):
+            if case let .anonymousStickers(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .anonymousStickersInfo(lt, ls):
+            if case let .anonymousStickersInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .profileLink(lt, ls, lv):
+            if case let .profileLink(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .profileLinkInfo(lt, ls):
+            if case let .profileLinkInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .mediaMetadata(lt, ls, lv):
+            if case let .mediaMetadata(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .mediaMetadataInfo(lt, ls):
+            if case let .mediaMetadataInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -162,13 +175,19 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .antiSearch(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAntiSearch($0) })
+        case let .antiSearchInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .anonymousStickers(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAnonymousStickers($0) })
+        case let .anonymousStickersInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .profileLink(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setProfileLink($0) })
+        case let .profileLinkInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .mediaMetadata(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setMediaMetadata($0) })
-        case let .antiSearchInfo(_, text):
+        case let .mediaMetadataInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
     }
@@ -198,12 +217,21 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
 
     entries.append(.antiSearchHeader(theme, isRu ? "АНТИПОИСК" : "ANTI-SEARCH"))
     entries.append(.antiSearch(theme, isRu ? "АнтиПоиск" : "AntiSearch", state.antiSearch))
-    entries.append(.anonymousStickers(theme, isRu ? "Анонимные стикеры" : "Anonymous Stickers", state.anonymousStickers))
-    entries.append(.profileLink(theme, isRu ? "Гиперссылка на профиль" : "Profile Link", state.profileLink))
-    entries.append(.mediaMetadata(theme, isRu ? "Метаданные медиа" : "Media Metadata", state.mediaMetadata))
     entries.append(.antiSearchInfo(theme, isRu
-        ? "АнтиПоиск меняет только визуально идентичные буквы. Анонимные стикеры отправляются без привязки к набору. Гиперссылка делает весь текст кликабельной ссылкой на ваш профиль. Метаданные добавляют пункт в меню фото, видео и GIF."
-        : "AntiSearch swaps only visually identical letters. Anonymous stickers are sent without sticker-pack attribution. Profile Link makes the whole text open your profile. Metadata adds a menu item for photos, videos and GIFs."))
+        ? "Заменяет только визуально идентичные буквы, чтобы текст выглядел так же, но хуже находился поиском."
+        : "Swaps only visually identical letters so the text looks the same but is harder to match in search."))
+    entries.append(.anonymousStickers(theme, isRu ? "Анонимные стикеры" : "Anonymous Stickers", state.anonymousStickers))
+    entries.append(.anonymousStickersInfo(theme, isRu
+        ? "Отправляет ваши стикеры без ссылки на набор: клиент переупаковывает файл и убирает привязку к стикерпаку."
+        : "Sends your stickers without a sticker-pack link: the client repacks the file and removes pack attribution."))
+    entries.append(.profileLink(theme, isRu ? "Гиперссылка на профиль" : "Profile Link", state.profileLink))
+    entries.append(.profileLinkInfo(theme, isRu
+        ? "Делает весь текст ваших исходящих сообщений кликабельным упоминанием вашего профиля."
+        : "Makes the whole text of your outgoing messages a clickable mention of your profile."))
+    entries.append(.mediaMetadata(theme, isRu ? "Метаданные медиа" : "Media Metadata", state.mediaMetadata))
+    entries.append(.mediaMetadataInfo(theme, isRu
+        ? "Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл."
+        : "Adds a Metadata item to photos, videos and GIFs and shows available EXIF, GPS, camera, container and file data."))
 
     return entries
 }
