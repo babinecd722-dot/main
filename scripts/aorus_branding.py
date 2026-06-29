@@ -7041,37 +7041,181 @@ public enum AorusProfileLinkStore {
 public enum AorusPhoneSpoofStore {
     private struct PhoneRule {
         let countryCode: String
-        let nationalLength: Int
+        let nationalLengths: [Int]
+
+        var preferredLength: Int {
+            return nationalLengths.last ?? 10
+        }
+
+        var maxNationalLength: Int {
+            return nationalLengths.max() ?? preferredLength
+        }
     }
 
     private static let enabledKey = "aorusgram_phone_spoof_enabled"
     private static let numberKey = "aorusgram_phone_spoof_number"
 
     private static let regionRules: [String: PhoneRule] = [
-        "US": PhoneRule(countryCode: "1", nationalLength: 10), "CA": PhoneRule(countryCode: "1", nationalLength: 10),
-        "RU": PhoneRule(countryCode: "7", nationalLength: 10), "KZ": PhoneRule(countryCode: "7", nationalLength: 10),
-        "GE": PhoneRule(countryCode: "995", nationalLength: 9), "UA": PhoneRule(countryCode: "380", nationalLength: 9),
-        "BY": PhoneRule(countryCode: "375", nationalLength: 9), "AM": PhoneRule(countryCode: "374", nationalLength: 8),
-        "AZ": PhoneRule(countryCode: "994", nationalLength: 9), "TR": PhoneRule(countryCode: "90", nationalLength: 10),
-        "DE": PhoneRule(countryCode: "49", nationalLength: 10), "FR": PhoneRule(countryCode: "33", nationalLength: 9),
-        "GB": PhoneRule(countryCode: "44", nationalLength: 10), "ES": PhoneRule(countryCode: "34", nationalLength: 9),
-        "IT": PhoneRule(countryCode: "39", nationalLength: 10), "NL": PhoneRule(countryCode: "31", nationalLength: 9),
-        "PL": PhoneRule(countryCode: "48", nationalLength: 9), "CZ": PhoneRule(countryCode: "420", nationalLength: 9),
-        "SK": PhoneRule(countryCode: "421", nationalLength: 9), "RO": PhoneRule(countryCode: "40", nationalLength: 9),
-        "BG": PhoneRule(countryCode: "359", nationalLength: 9), "GR": PhoneRule(countryCode: "30", nationalLength: 10),
-        "IL": PhoneRule(countryCode: "972", nationalLength: 9), "AE": PhoneRule(countryCode: "971", nationalLength: 9),
-        "SA": PhoneRule(countryCode: "966", nationalLength: 9), "IN": PhoneRule(countryCode: "91", nationalLength: 10),
-        "CN": PhoneRule(countryCode: "86", nationalLength: 11), "JP": PhoneRule(countryCode: "81", nationalLength: 10),
-        "KR": PhoneRule(countryCode: "82", nationalLength: 10), "BR": PhoneRule(countryCode: "55", nationalLength: 11),
-        "MX": PhoneRule(countryCode: "52", nationalLength: 10), "AR": PhoneRule(countryCode: "54", nationalLength: 10),
-        "AU": PhoneRule(countryCode: "61", nationalLength: 9), "NZ": PhoneRule(countryCode: "64", nationalLength: 9)
+        "AC": PhoneRule(countryCode: "247", nationalLengths: [4]), "AD": PhoneRule(countryCode: "376", nationalLengths: [6]),
+        "AE": PhoneRule(countryCode: "971", nationalLengths: [9]), "AF": PhoneRule(countryCode: "93", nationalLengths: [9]),
+        "AG": PhoneRule(countryCode: "1", nationalLengths: [10]), "AI": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "AL": PhoneRule(countryCode: "355", nationalLengths: [9]), "AM": PhoneRule(countryCode: "374", nationalLengths: [8]),
+        "AO": PhoneRule(countryCode: "244", nationalLengths: [9]), "AR": PhoneRule(countryCode: "54", nationalLengths: [10]),
+        "AS": PhoneRule(countryCode: "1", nationalLengths: [10]), "AT": PhoneRule(countryCode: "43", nationalLengths: [10, 11, 12, 13]),
+        "AU": PhoneRule(countryCode: "61", nationalLengths: [9]), "AW": PhoneRule(countryCode: "297", nationalLengths: [7]),
+        "AX": PhoneRule(countryCode: "358", nationalLengths: [6, 7, 8, 9, 10]), "AZ": PhoneRule(countryCode: "994", nationalLengths: [9]),
+        "BA": PhoneRule(countryCode: "387", nationalLengths: [8]), "BB": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "BD": PhoneRule(countryCode: "880", nationalLengths: [10]), "BE": PhoneRule(countryCode: "32", nationalLengths: [9]),
+        "BF": PhoneRule(countryCode: "226", nationalLengths: [8]), "BG": PhoneRule(countryCode: "359", nationalLengths: [9]),
+        "BH": PhoneRule(countryCode: "973", nationalLengths: [8]), "BI": PhoneRule(countryCode: "257", nationalLengths: [8]),
+        "BJ": PhoneRule(countryCode: "229", nationalLengths: [8, 10]), "BL": PhoneRule(countryCode: "590", nationalLengths: [9]),
+        "BM": PhoneRule(countryCode: "1", nationalLengths: [10]), "BN": PhoneRule(countryCode: "673", nationalLengths: [7]),
+        "BO": PhoneRule(countryCode: "591", nationalLengths: [8]), "BQ": PhoneRule(countryCode: "599", nationalLengths: [7]),
+        "BR": PhoneRule(countryCode: "55", nationalLengths: [10, 11]), "BS": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "BT": PhoneRule(countryCode: "975", nationalLengths: [8]), "BW": PhoneRule(countryCode: "267", nationalLengths: [7, 8]),
+        "BY": PhoneRule(countryCode: "375", nationalLengths: [9]), "BZ": PhoneRule(countryCode: "501", nationalLengths: [7]),
+        "CA": PhoneRule(countryCode: "1", nationalLengths: [10]), "CC": PhoneRule(countryCode: "61", nationalLengths: [9]),
+        "CD": PhoneRule(countryCode: "243", nationalLengths: [9]), "CF": PhoneRule(countryCode: "236", nationalLengths: [8]),
+        "CG": PhoneRule(countryCode: "242", nationalLengths: [9]), "CH": PhoneRule(countryCode: "41", nationalLengths: [9]),
+        "CI": PhoneRule(countryCode: "225", nationalLengths: [10]), "CK": PhoneRule(countryCode: "682", nationalLengths: [5]),
+        "CL": PhoneRule(countryCode: "56", nationalLengths: [9]), "CM": PhoneRule(countryCode: "237", nationalLengths: [9]),
+        "CN": PhoneRule(countryCode: "86", nationalLengths: [11]), "CO": PhoneRule(countryCode: "57", nationalLengths: [10]),
+        "CR": PhoneRule(countryCode: "506", nationalLengths: [8]), "CU": PhoneRule(countryCode: "53", nationalLengths: [8]),
+        "CV": PhoneRule(countryCode: "238", nationalLengths: [7]), "CW": PhoneRule(countryCode: "599", nationalLengths: [7]),
+        "CX": PhoneRule(countryCode: "61", nationalLengths: [9]), "CY": PhoneRule(countryCode: "357", nationalLengths: [8]),
+        "CZ": PhoneRule(countryCode: "420", nationalLengths: [9]), "DE": PhoneRule(countryCode: "49", nationalLengths: [10, 11]),
+        "DJ": PhoneRule(countryCode: "253", nationalLengths: [8]), "DK": PhoneRule(countryCode: "45", nationalLengths: [8]),
+        "DM": PhoneRule(countryCode: "1", nationalLengths: [10]), "DO": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "DZ": PhoneRule(countryCode: "213", nationalLengths: [9]), "EC": PhoneRule(countryCode: "593", nationalLengths: [9]),
+        "EE": PhoneRule(countryCode: "372", nationalLengths: [7, 8]), "EG": PhoneRule(countryCode: "20", nationalLengths: [10]),
+        "EH": PhoneRule(countryCode: "212", nationalLengths: [9]), "ER": PhoneRule(countryCode: "291", nationalLengths: [7]),
+        "ES": PhoneRule(countryCode: "34", nationalLengths: [9]), "ET": PhoneRule(countryCode: "251", nationalLengths: [9]),
+        "FI": PhoneRule(countryCode: "358", nationalLengths: [8, 9, 10]), "FJ": PhoneRule(countryCode: "679", nationalLengths: [7]),
+        "FK": PhoneRule(countryCode: "500", nationalLengths: [5]), "FM": PhoneRule(countryCode: "691", nationalLengths: [7]),
+        "FO": PhoneRule(countryCode: "298", nationalLengths: [6]), "FR": PhoneRule(countryCode: "33", nationalLengths: [9]),
+        "GA": PhoneRule(countryCode: "241", nationalLengths: [7, 8]), "GB": PhoneRule(countryCode: "44", nationalLengths: [10]),
+        "GD": PhoneRule(countryCode: "1", nationalLengths: [10]), "GE": PhoneRule(countryCode: "995", nationalLengths: [9]),
+        "GF": PhoneRule(countryCode: "594", nationalLengths: [9]), "GG": PhoneRule(countryCode: "44", nationalLengths: [10]),
+        "GH": PhoneRule(countryCode: "233", nationalLengths: [9]), "GI": PhoneRule(countryCode: "350", nationalLengths: [8]),
+        "GL": PhoneRule(countryCode: "299", nationalLengths: [6]), "GM": PhoneRule(countryCode: "220", nationalLengths: [7]),
+        "GN": PhoneRule(countryCode: "224", nationalLengths: [9]), "GP": PhoneRule(countryCode: "590", nationalLengths: [9]),
+        "GQ": PhoneRule(countryCode: "240", nationalLengths: [9]), "GR": PhoneRule(countryCode: "30", nationalLengths: [10]),
+        "GT": PhoneRule(countryCode: "502", nationalLengths: [8]), "GU": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "GW": PhoneRule(countryCode: "245", nationalLengths: [7]), "GY": PhoneRule(countryCode: "592", nationalLengths: [7]),
+        "HK": PhoneRule(countryCode: "852", nationalLengths: [8]), "HN": PhoneRule(countryCode: "504", nationalLengths: [8]),
+        "HR": PhoneRule(countryCode: "385", nationalLengths: [8, 9]), "HT": PhoneRule(countryCode: "509", nationalLengths: [8]),
+        "HU": PhoneRule(countryCode: "36", nationalLengths: [9]), "ID": PhoneRule(countryCode: "62", nationalLengths: [9, 10, 11, 12]),
+        "IE": PhoneRule(countryCode: "353", nationalLengths: [9]), "IL": PhoneRule(countryCode: "972", nationalLengths: [9]),
+        "IM": PhoneRule(countryCode: "44", nationalLengths: [10]), "IN": PhoneRule(countryCode: "91", nationalLengths: [10]),
+        "IO": PhoneRule(countryCode: "246", nationalLengths: [7]), "IQ": PhoneRule(countryCode: "964", nationalLengths: [10]),
+        "IR": PhoneRule(countryCode: "98", nationalLengths: [10]), "IS": PhoneRule(countryCode: "354", nationalLengths: [7]),
+        "IT": PhoneRule(countryCode: "39", nationalLengths: [9, 10, 11]), "JE": PhoneRule(countryCode: "44", nationalLengths: [10]),
+        "JM": PhoneRule(countryCode: "1", nationalLengths: [10]), "JO": PhoneRule(countryCode: "962", nationalLengths: [9]),
+        "JP": PhoneRule(countryCode: "81", nationalLengths: [10]), "KE": PhoneRule(countryCode: "254", nationalLengths: [9]),
+        "KG": PhoneRule(countryCode: "996", nationalLengths: [9]), "KH": PhoneRule(countryCode: "855", nationalLengths: [8, 9]),
+        "KI": PhoneRule(countryCode: "686", nationalLengths: [5, 8]), "KM": PhoneRule(countryCode: "269", nationalLengths: [7]),
+        "KN": PhoneRule(countryCode: "1", nationalLengths: [10]), "KP": PhoneRule(countryCode: "850", nationalLengths: [10]),
+        "KR": PhoneRule(countryCode: "82", nationalLengths: [9, 10]), "KW": PhoneRule(countryCode: "965", nationalLengths: [8]),
+        "KY": PhoneRule(countryCode: "1", nationalLengths: [10]), "KZ": PhoneRule(countryCode: "7", nationalLengths: [10]),
+        "LA": PhoneRule(countryCode: "856", nationalLengths: [8, 10]), "LB": PhoneRule(countryCode: "961", nationalLengths: [7, 8]),
+        "LC": PhoneRule(countryCode: "1", nationalLengths: [10]), "LI": PhoneRule(countryCode: "423", nationalLengths: [7]),
+        "LK": PhoneRule(countryCode: "94", nationalLengths: [9]), "LR": PhoneRule(countryCode: "231", nationalLengths: [7, 8]),
+        "LS": PhoneRule(countryCode: "266", nationalLengths: [8]), "LT": PhoneRule(countryCode: "370", nationalLengths: [8]),
+        "LU": PhoneRule(countryCode: "352", nationalLengths: [9]), "LV": PhoneRule(countryCode: "371", nationalLengths: [8]),
+        "LY": PhoneRule(countryCode: "218", nationalLengths: [9]), "MA": PhoneRule(countryCode: "212", nationalLengths: [9]),
+        "MC": PhoneRule(countryCode: "377", nationalLengths: [8, 9]), "MD": PhoneRule(countryCode: "373", nationalLengths: [8]),
+        "ME": PhoneRule(countryCode: "382", nationalLengths: [8]), "MF": PhoneRule(countryCode: "590", nationalLengths: [9]),
+        "MG": PhoneRule(countryCode: "261", nationalLengths: [9]), "MH": PhoneRule(countryCode: "692", nationalLengths: [7]),
+        "MK": PhoneRule(countryCode: "389", nationalLengths: [8]), "ML": PhoneRule(countryCode: "223", nationalLengths: [8]),
+        "MM": PhoneRule(countryCode: "95", nationalLengths: [8, 9, 10]), "MN": PhoneRule(countryCode: "976", nationalLengths: [8]),
+        "MO": PhoneRule(countryCode: "853", nationalLengths: [8]), "MP": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "MQ": PhoneRule(countryCode: "596", nationalLengths: [9]), "MR": PhoneRule(countryCode: "222", nationalLengths: [8]),
+        "MS": PhoneRule(countryCode: "1", nationalLengths: [10]), "MT": PhoneRule(countryCode: "356", nationalLengths: [8]),
+        "MU": PhoneRule(countryCode: "230", nationalLengths: [8]), "MV": PhoneRule(countryCode: "960", nationalLengths: [7]),
+        "MW": PhoneRule(countryCode: "265", nationalLengths: [9]), "MX": PhoneRule(countryCode: "52", nationalLengths: [10]),
+        "MY": PhoneRule(countryCode: "60", nationalLengths: [9, 10]), "MZ": PhoneRule(countryCode: "258", nationalLengths: [9]),
+        "NA": PhoneRule(countryCode: "264", nationalLengths: [9]), "NC": PhoneRule(countryCode: "687", nationalLengths: [6]),
+        "NE": PhoneRule(countryCode: "227", nationalLengths: [8]), "NF": PhoneRule(countryCode: "672", nationalLengths: [6]),
+        "NG": PhoneRule(countryCode: "234", nationalLengths: [10]), "NI": PhoneRule(countryCode: "505", nationalLengths: [8]),
+        "NL": PhoneRule(countryCode: "31", nationalLengths: [9]), "NO": PhoneRule(countryCode: "47", nationalLengths: [8]),
+        "NP": PhoneRule(countryCode: "977", nationalLengths: [10]), "NR": PhoneRule(countryCode: "674", nationalLengths: [7]),
+        "NU": PhoneRule(countryCode: "683", nationalLengths: [4]), "NZ": PhoneRule(countryCode: "64", nationalLengths: [8, 9]),
+        "OM": PhoneRule(countryCode: "968", nationalLengths: [8]), "PA": PhoneRule(countryCode: "507", nationalLengths: [8]),
+        "PE": PhoneRule(countryCode: "51", nationalLengths: [9]), "PF": PhoneRule(countryCode: "689", nationalLengths: [6]),
+        "PG": PhoneRule(countryCode: "675", nationalLengths: [8]), "PH": PhoneRule(countryCode: "63", nationalLengths: [10]),
+        "PK": PhoneRule(countryCode: "92", nationalLengths: [10]), "PL": PhoneRule(countryCode: "48", nationalLengths: [9]),
+        "PM": PhoneRule(countryCode: "508", nationalLengths: [6]), "PR": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "PS": PhoneRule(countryCode: "970", nationalLengths: [9]), "PT": PhoneRule(countryCode: "351", nationalLengths: [9]),
+        "PW": PhoneRule(countryCode: "680", nationalLengths: [7]), "PY": PhoneRule(countryCode: "595", nationalLengths: [9]),
+        "QA": PhoneRule(countryCode: "974", nationalLengths: [8]), "RE": PhoneRule(countryCode: "262", nationalLengths: [9]),
+        "RO": PhoneRule(countryCode: "40", nationalLengths: [9]), "RS": PhoneRule(countryCode: "381", nationalLengths: [8, 9]),
+        "RU": PhoneRule(countryCode: "7", nationalLengths: [10]), "RW": PhoneRule(countryCode: "250", nationalLengths: [9]),
+        "SA": PhoneRule(countryCode: "966", nationalLengths: [9]), "SB": PhoneRule(countryCode: "677", nationalLengths: [5, 7]),
+        "SC": PhoneRule(countryCode: "248", nationalLengths: [7]), "SD": PhoneRule(countryCode: "249", nationalLengths: [9]),
+        "SE": PhoneRule(countryCode: "46", nationalLengths: [9]), "SG": PhoneRule(countryCode: "65", nationalLengths: [8]),
+        "SH": PhoneRule(countryCode: "290", nationalLengths: [4]), "SI": PhoneRule(countryCode: "386", nationalLengths: [8]),
+        "SJ": PhoneRule(countryCode: "47", nationalLengths: [8]), "SK": PhoneRule(countryCode: "421", nationalLengths: [9]),
+        "SL": PhoneRule(countryCode: "232", nationalLengths: [8]), "SM": PhoneRule(countryCode: "378", nationalLengths: [10]),
+        "SN": PhoneRule(countryCode: "221", nationalLengths: [9]), "SO": PhoneRule(countryCode: "252", nationalLengths: [8, 9]),
+        "SR": PhoneRule(countryCode: "597", nationalLengths: [6, 7]), "SS": PhoneRule(countryCode: "211", nationalLengths: [9]),
+        "ST": PhoneRule(countryCode: "239", nationalLengths: [7]), "SV": PhoneRule(countryCode: "503", nationalLengths: [8]),
+        "SX": PhoneRule(countryCode: "1", nationalLengths: [10]), "SY": PhoneRule(countryCode: "963", nationalLengths: [9]),
+        "SZ": PhoneRule(countryCode: "268", nationalLengths: [8]), "TA": PhoneRule(countryCode: "290", nationalLengths: [4]),
+        "TC": PhoneRule(countryCode: "1", nationalLengths: [10]), "TD": PhoneRule(countryCode: "235", nationalLengths: [8]),
+        "TG": PhoneRule(countryCode: "228", nationalLengths: [8]), "TH": PhoneRule(countryCode: "66", nationalLengths: [9]),
+        "TJ": PhoneRule(countryCode: "992", nationalLengths: [9]), "TK": PhoneRule(countryCode: "690", nationalLengths: [4]),
+        "TL": PhoneRule(countryCode: "670", nationalLengths: [7, 8]), "TM": PhoneRule(countryCode: "993", nationalLengths: [8]),
+        "TN": PhoneRule(countryCode: "216", nationalLengths: [8]), "TO": PhoneRule(countryCode: "676", nationalLengths: [5, 7]),
+        "TR": PhoneRule(countryCode: "90", nationalLengths: [10]), "TT": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "TV": PhoneRule(countryCode: "688", nationalLengths: [5, 6]), "TW": PhoneRule(countryCode: "886", nationalLengths: [9]),
+        "TZ": PhoneRule(countryCode: "255", nationalLengths: [9]), "UA": PhoneRule(countryCode: "380", nationalLengths: [9]),
+        "UG": PhoneRule(countryCode: "256", nationalLengths: [9]), "US": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "UY": PhoneRule(countryCode: "598", nationalLengths: [8]), "UZ": PhoneRule(countryCode: "998", nationalLengths: [9]),
+        "VA": PhoneRule(countryCode: "39", nationalLengths: [10]), "VC": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "VE": PhoneRule(countryCode: "58", nationalLengths: [10]), "VG": PhoneRule(countryCode: "1", nationalLengths: [10]),
+        "VI": PhoneRule(countryCode: "1", nationalLengths: [10]), "VN": PhoneRule(countryCode: "84", nationalLengths: [9, 10]),
+        "VU": PhoneRule(countryCode: "678", nationalLengths: [5, 7]), "WF": PhoneRule(countryCode: "681", nationalLengths: [6]),
+        "WS": PhoneRule(countryCode: "685", nationalLengths: [5, 7]), "XK": PhoneRule(countryCode: "383", nationalLengths: [8]),
+        "YE": PhoneRule(countryCode: "967", nationalLengths: [9]), "YT": PhoneRule(countryCode: "262", nationalLengths: [9]),
+        "ZA": PhoneRule(countryCode: "27", nationalLengths: [9]), "ZM": PhoneRule(countryCode: "260", nationalLengths: [9]),
+        "ZW": PhoneRule(countryCode: "263", nationalLengths: [9])
+    ]
+
+    private static let codeRules: [String: [Int]] = [
+        "1": [10], "7": [10], "20": [10], "27": [9], "30": [10], "31": [9], "32": [9], "33": [9], "34": [9],
+        "36": [9], "39": [9, 10, 11], "40": [9], "41": [9], "43": [10, 11, 12, 13], "44": [10], "45": [8],
+        "46": [9], "47": [8], "48": [9], "49": [10, 11], "51": [9], "52": [10], "53": [8], "54": [10],
+        "55": [10, 11], "56": [9], "57": [10], "58": [10], "60": [9, 10], "61": [9], "62": [9, 10, 11, 12],
+        "63": [10], "64": [8, 9], "65": [8], "66": [9], "81": [10], "82": [9, 10], "84": [9, 10], "86": [11],
+        "90": [10], "91": [10], "92": [10], "93": [9], "94": [9], "95": [8, 9, 10], "98": [10],
+        "211": [9], "212": [9], "213": [9], "216": [8], "218": [9], "220": [7], "221": [9], "222": [8],
+        "223": [8], "224": [9], "225": [10], "226": [8], "227": [8], "228": [8], "229": [8, 10],
+        "230": [8], "231": [7, 8], "232": [8], "233": [9], "234": [10], "235": [8], "236": [8], "237": [9],
+        "238": [7], "239": [7], "240": [9], "241": [7, 8], "242": [9], "243": [9], "244": [9], "245": [7],
+        "246": [7], "247": [4], "248": [7], "249": [9], "250": [9], "251": [9], "252": [8, 9], "253": [8],
+        "254": [9], "255": [9], "256": [9], "257": [8], "258": [9], "260": [9], "261": [9], "262": [9],
+        "263": [9], "264": [9], "265": [9], "266": [8], "267": [7, 8], "268": [8], "269": [7], "290": [4],
+        "291": [7], "297": [7], "298": [6], "299": [6], "350": [8], "351": [9], "352": [9], "353": [9],
+        "354": [7], "355": [9], "356": [8], "357": [8], "358": [6, 7, 8, 9, 10], "359": [9], "370": [8],
+        "371": [8], "372": [7, 8], "373": [8], "374": [8], "375": [9], "376": [6], "377": [8, 9], "378": [10],
+        "380": [9], "381": [8, 9], "382": [8], "383": [8], "385": [8, 9], "386": [8], "387": [8], "389": [8],
+        "420": [9], "421": [9], "423": [7], "500": [5], "501": [7], "502": [8], "503": [8], "504": [8],
+        "505": [8], "506": [8], "507": [8], "508": [6], "509": [8], "590": [9], "591": [8], "592": [7],
+        "593": [9], "594": [9], "595": [9], "596": [9], "597": [6, 7], "598": [8], "599": [7], "670": [7, 8],
+        "672": [6], "673": [7], "674": [7], "675": [8], "676": [5, 7], "677": [5, 7], "678": [5, 7],
+        "679": [7], "680": [7], "681": [6], "682": [5], "683": [4], "685": [5, 7], "686": [5, 8],
+        "687": [6], "688": [5, 6], "689": [6], "690": [4], "691": [7], "692": [7], "850": [10],
+        "852": [8], "853": [8], "855": [8, 9], "856": [8, 10], "880": [10], "886": [9], "960": [7],
+        "961": [7, 8], "962": [9], "963": [9], "964": [10], "965": [8], "966": [9], "967": [9], "968": [8],
+        "970": [9], "971": [9], "972": [9], "973": [8], "974": [8], "975": [8], "976": [8], "977": [10],
+        "992": [9], "993": [8], "994": [9], "995": [9], "996": [9], "998": [9]
     ]
 
     private static var defaultRule: PhoneRule {
         if let region = Locale.current.regionCode?.uppercased(), let rule = regionRules[region] {
             return rule
         }
-        return PhoneRule(countryCode: "1", nationalLength: 10)
+        return PhoneRule(countryCode: "1", nationalLengths: [10])
     }
 
     public static var isEnabled: Bool {
@@ -7101,8 +7245,8 @@ public enum AorusPhoneSpoofStore {
     public static func randomize() -> String {
         let rule = defaultRule
         var digits = ""
-        digits.reserveCapacity(rule.nationalLength)
-        for index in 0 ..< rule.nationalLength {
+        digits.reserveCapacity(rule.preferredLength)
+        for index in 0 ..< rule.preferredLength {
             let minDigit = index == 0 ? 1 : 0
             digits.append(String(Int.random(in: minDigit ... 9)))
         }
@@ -7117,7 +7261,7 @@ public enum AorusPhoneSpoofStore {
             return randomize()
         }
         let rule = ruleForDigits(digits)
-        let maxLength = rule.countryCode.count + rule.nationalLength
+        let maxLength = rule.countryCode.count + rule.maxNationalLength
         if digits.count > maxLength {
             digits = String(digits.prefix(maxLength))
         }
@@ -7127,14 +7271,15 @@ public enum AorusPhoneSpoofStore {
     private static func isComplete(_ value: String) -> Bool {
         let digits = value.filter { $0.isNumber }
         let rule = ruleForDigits(digits)
-        return digits.count == rule.countryCode.count + rule.nationalLength
+        let nationalLength = max(0, digits.count - rule.countryCode.count)
+        return digits.hasPrefix(rule.countryCode) && rule.nationalLengths.contains(nationalLength)
     }
 
     private static func ruleForDigits(_ digits: String) -> PhoneRule {
-        let knownRules = Array(Set(regionRules.values.map { $0.countryCode })).sorted { $0.count > $1.count }
-        for code in knownRules {
-            if digits.hasPrefix(code), let rule = regionRules.values.first(where: { $0.countryCode == code }) {
-                return rule
+        let knownCodes = codeRules.keys.sorted { $0.count > $1.count }
+        for code in knownCodes {
+            if digits.hasPrefix(code), let lengths = codeRules[code] {
+                return PhoneRule(countryCode: code, nationalLengths: lengths)
             }
         }
         return defaultRule
