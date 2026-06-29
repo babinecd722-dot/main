@@ -7190,14 +7190,25 @@ public enum AorusAntiSearch {
                 return attribute
             }
         }
-        let resource = anonymousResource(for: file, mediaBox: mediaBox) ?? file.resource
-        let fileId = (resource is LocalFileReferenceMediaResource)
-            ? MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max))
-            : file.fileId
+        if let path = completedStickerPath(for: file, mediaBox: mediaBox) {
+            let resource = LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: false)
+            return TelegramMediaFile(
+                fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max)),
+                partialReference: nil,
+                resource: resource,
+                previewRepresentations: file.previewRepresentations,
+                videoThumbnails: file.videoThumbnails,
+                immediateThumbnailData: file.immediateThumbnailData,
+                mimeType: file.mimeType,
+                size: file.size,
+                attributes: attributes,
+                alternativeRepresentations: file.alternativeRepresentations
+            )
+        }
         return TelegramMediaFile(
-            fileId: fileId,
+            fileId: file.fileId,
             partialReference: nil,
-            resource: resource,
+            resource: file.resource,
             previewRepresentations: file.previewRepresentations,
             videoThumbnails: file.videoThumbnails,
             immediateThumbnailData: file.immediateThumbnailData,
@@ -7206,13 +7217,6 @@ public enum AorusAntiSearch {
             attributes: attributes,
             alternativeRepresentations: file.alternativeRepresentations
         )
-    }
-
-    private static func anonymousResource(for file: TelegramMediaFile, mediaBox: MediaBox) -> MediaResource? {
-        guard let path = completedStickerPath(for: file, mediaBox: mediaBox) else {
-            return nil
-        }
-        return LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: false)
     }
 
     private static func completedStickerPath(for file: TelegramMediaFile, mediaBox: MediaBox) -> String? {
