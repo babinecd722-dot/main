@@ -26,6 +26,8 @@ private struct MiscState: Equatable {
     var fakeStars: Bool
     var fakeStarsAmount: String
     var antiSearch: Bool
+    var anonymousStickers: Bool
+    var mediaMetadata: Bool
 }
 
 private final class MiscArguments {
@@ -34,13 +36,17 @@ private final class MiscArguments {
     let setFakeStars: (Bool) -> Void
     let setFakeStarsAmount: (String) -> Void
     let setAntiSearch: (Bool) -> Void
+    let setAnonymousStickers: (Bool) -> Void
+    let setMediaMetadata: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setMediaMetadata: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
         self.setFakeStarsAmount = setFakeStarsAmount
         self.setAntiSearch = setAntiSearch
+        self.setAnonymousStickers = setAnonymousStickers
+        self.setMediaMetadata = setMediaMetadata
     }
 }
 
@@ -55,6 +61,8 @@ private enum MiscEntry: ItemListNodeEntry {
     case fakeStarsInfo(PresentationTheme, String)
     case antiSearchHeader(PresentationTheme, String)
     case antiSearch(PresentationTheme, String, Bool)
+    case anonymousStickers(PresentationTheme, String, Bool)
+    case mediaMetadata(PresentationTheme, String, Bool)
     case antiSearchInfo(PresentationTheme, String)
 
     var section: ItemListSectionId {
@@ -65,7 +73,7 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.fakeGifts.rawValue
         case .fakeStarsHeader, .fakeStars, .fakeStarsCount, .fakeStarsInfo:
             return MiscSection.fakeStars.rawValue
-        case .antiSearchHeader, .antiSearch, .antiSearchInfo:
+        case .antiSearchHeader, .antiSearch, .anonymousStickers, .mediaMetadata, .antiSearchInfo:
             return MiscSection.antiSearch.rawValue
         }
     }
@@ -82,7 +90,9 @@ private enum MiscEntry: ItemListNodeEntry {
         case .fakeStarsInfo:    return 23
         case .antiSearchHeader: return 30
         case .antiSearch:       return 31
-        case .antiSearchInfo:   return 32
+        case .anonymousStickers:return 32
+        case .mediaMetadata:    return 33
+        case .antiSearchInfo:   return 34
         }
     }
 
@@ -112,6 +122,10 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .antiSearchHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .antiSearch(lt, ls, lv):
             if case let .antiSearch(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .anonymousStickers(lt, ls, lv):
+            if case let .anonymousStickers(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .mediaMetadata(lt, ls, lv):
+            if case let .mediaMetadata(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .antiSearchInfo(lt, ls):
             if case let .antiSearchInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         }
@@ -141,6 +155,10 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .antiSearch(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAntiSearch($0) })
+        case let .anonymousStickers(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAnonymousStickers($0) })
+        case let .mediaMetadata(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setMediaMetadata($0) })
         case let .antiSearchInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
@@ -171,9 +189,11 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
 
     entries.append(.antiSearchHeader(theme, isRu ? "АНТИПОИСК" : "ANTI-SEARCH"))
     entries.append(.antiSearch(theme, isRu ? "АнтиПоиск" : "AntiSearch", state.antiSearch))
+    entries.append(.anonymousStickers(theme, isRu ? "Анонимные стикеры" : "Anonymous Stickers", state.anonymousStickers))
+    entries.append(.mediaMetadata(theme, isRu ? "Метаданные медиа" : "Media Metadata", state.mediaMetadata))
     entries.append(.antiSearchInfo(theme, isRu
-        ? "Буквы заменяются на визуально идентичные — текст выглядит так же, но не находится поиском."
-        : "Letters are swapped for visually identical ones — the text looks the same but won’t match a search."))
+        ? "АнтиПоиск меняет только визуально идентичные буквы. Анонимные стикеры отправляются без привязки к набору. Метаданные добавляют пункт в меню фото, видео и GIF."
+        : "AntiSearch swaps only visually identical letters. Anonymous stickers are sent without sticker-pack attribution. Metadata adds a menu item for photos, videos and GIFs."))
 
     return entries
 }
@@ -181,7 +201,14 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
 public func aorusMiscController(context: AccountContext) -> ViewController {
     let initialFakeStars = AorusFakeStarsStore.isEnabled
     let initialFakeStarsAmount = AorusFakeStarsStore.amount > 0 ? "\(AorusFakeStarsStore.amount)" : ""
-    let initialState = MiscState(localPremium: AorusLocalPremium.isEnabled, fakeStars: initialFakeStars, fakeStarsAmount: initialFakeStarsAmount, antiSearch: AorusAntiSearchStore.isEnabled)
+    let initialState = MiscState(
+        localPremium: AorusLocalPremium.isEnabled,
+        fakeStars: initialFakeStars,
+        fakeStarsAmount: initialFakeStarsAmount,
+        antiSearch: AorusAntiSearchStore.isEnabled,
+        anonymousStickers: UserDefaults.standard.bool(forKey: "aorusgram_anonymous_stickers_enabled"),
+        mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled")
+    )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((MiscState) -> MiscState) -> Void = { f in
@@ -233,6 +260,22 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
             updateState { current in
                 var next = current
                 next.antiSearch = value
+                return next
+            }
+        },
+        setAnonymousStickers: { value in
+            UserDefaults.standard.set(value, forKey: "aorusgram_anonymous_stickers_enabled")
+            updateState { current in
+                var next = current
+                next.anonymousStickers = value
+                return next
+            }
+        },
+        setMediaMetadata: { value in
+            UserDefaults.standard.set(value, forKey: "aorusgram_media_metadata_enabled")
+            updateState { current in
+                var next = current
+                next.mediaMetadata = value
                 return next
             }
         }

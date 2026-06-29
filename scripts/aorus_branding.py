@@ -1998,6 +1998,53 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
     print("EditLocally: injected AorusGram edit-locally action above Delete")
 
 
+def patch_chat_context_menu_media_metadata(tg: Path) -> None:
+    """Add a media metadata action above Edit Locally for photos, videos and GIFs."""
+    path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
+    if not path.is_file():
+        print("MediaMetadata: ChatInterfaceStateContextMenus.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: media metadata v1"
+    if sentinel in t:
+        print("MediaMetadata: already injected")
+        return
+
+    if "import AorusGramUI\n" not in t:
+        if "import AccountContext\n" in t:
+            t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+        else:
+            t = t.replace("import Foundation\n", "import Foundation\nimport AorusGramUI\n", 1)
+        print("MediaMetadata: added import AorusGramUI")
+
+    anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {"
+    if anchor not in t:
+        print("MediaMetadata: delete-block anchor not found — skipped")
+        path.write_text(t, encoding="utf-8")
+        return
+
+    injection = (
+        "        " + sentinel + "\n"
+        "        if UserDefaults.standard.bool(forKey: \"aorusgram_media_metadata_enabled\") {\n"
+        "            let aorusMetaMsg = messages[0]\n"
+        "            if AorusMediaMetadata.hasSupportedMedia(aorusMetaMsg) {\n"
+        "                let aorusMetaRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
+        "                actions.append(.action(ContextMenuActionItem(text: aorusMetaRu ? \"Метаданные\" : \"Metadata\", icon: { _ in nil }, action: { [weak context] action in\n"
+        "                    action.dismissWithResult(.default)\n"
+        "                    guard let context = context else { return }\n"
+        "                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {\n"
+        "                        AorusMediaMetadata.present(context: context, message: aorusMetaMsg)\n"
+        "                    }\n"
+        "                })))\n"
+        "            }\n"
+        "        }\n"
+        "\n"
+    )
+    t = t.replace(anchor, injection + anchor, 1)
+    path.write_text(t, encoding="utf-8")
+    print("MediaMetadata: injected metadata action above Edit Locally")
+
+
 def patch_chat_message_tap_gestures(tg: Path) -> None:
     """Double-tap-to-copy and triple-tap-to-delete on message bubbles.
 
@@ -6957,6 +7004,18 @@ public enum AorusAntiSearchStore {
     }
 }
 
+public enum AorusAnonymousStickerStore {
+    private static let enabledKey = "aorusgram_anonymous_stickers_enabled"
+
+    public static var isEnabled: Bool {
+        return UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    public static func setEnabled(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: enabledKey)
+    }
+}
+
 public enum AorusAntiSearch {
     // True homoglyph pairs only — identical glyphs in the standard UI font. Built once and
     // expanded to a bidirectional map: Latin->Cyrillic and Cyrillic->Latin in a single
@@ -7001,21 +7060,99 @@ public enum AorusAntiSearch {
                     break
                 }
             }
+            let anonymousSticker = AorusAnonymousStickerStore.isEnabled && isStickerReference(mediaReference)
             return .message(
                 text: normalizeText(text, entities: entities),
                 attributes: attributes,
                 inlineStickers: inlineStickers,
-                mediaReference: mediaReference,
+                mediaReference: anonymousSticker ? anonymizedMediaReference(mediaReference) : mediaReference,
                 threadId: threadId,
                 replyToMessageId: replyToMessageId,
                 replyToStoryId: replyToStoryId,
                 localGroupingKey: localGroupingKey,
                 correlationId: correlationId,
-                bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets
+                bubbleUpEmojiOrStickersets: anonymousSticker ? [] : bubbleUpEmojiOrStickersets
             )
         case .forward:
             return message
         }
+    }
+
+    private static func isStickerReference(_ reference: AnyMediaReference?) -> Bool {
+        guard let reference = reference else {
+            return false
+        }
+        switch reference {
+        case let .standalone(media):
+            return isStickerMedia(media)
+        case let .message(_, media):
+            return isStickerMedia(media)
+        case let .webPage(_, media):
+            return isStickerMedia(media)
+        case let .stickerPack(_, media):
+            return isStickerMedia(media)
+        case let .savedGif(media):
+            return isStickerMedia(media)
+        case let .recentSticker(media):
+            return isStickerMedia(media)
+        default:
+            return false
+        }
+    }
+
+    private static func anonymizedMediaReference(_ reference: AnyMediaReference?) -> AnyMediaReference? {
+        guard let reference = reference else {
+            return nil
+        }
+        switch reference {
+        case let .standalone(media):
+            return .standalone(media: anonymizedMedia(media))
+        case let .message(_, media):
+            return .standalone(media: anonymizedMedia(media))
+        case let .webPage(_, media):
+            return .standalone(media: anonymizedMedia(media))
+        case let .stickerPack(_, media):
+            return .standalone(media: anonymizedMedia(media))
+        case let .savedGif(media):
+            return .standalone(media: anonymizedMedia(media))
+        case let .recentSticker(media):
+            return .standalone(media: anonymizedMedia(media))
+        default:
+            return reference
+        }
+    }
+
+    private static func isStickerMedia(_ media: Media) -> Bool {
+        guard let file = media as? TelegramMediaFile else {
+            return false
+        }
+        return file.isSticker || file.isAnimatedSticker || file.isVideoSticker
+    }
+
+    private static func anonymizedMedia(_ media: Media) -> Media {
+        guard let file = media as? TelegramMediaFile, isStickerMedia(file) else {
+            return media
+        }
+        let attributes = file.attributes.map { attribute -> TelegramMediaFileAttribute in
+            switch attribute {
+            case let .Sticker(displayText, _, maskData):
+                return .Sticker(displayText: displayText, packReference: nil, maskData: maskData)
+            default:
+                return attribute
+            }
+        }
+        return TelegramMediaFile(
+            fileId: file.fileId,
+            partialReference: file.partialReference,
+            resource: file.resource,
+            previewRepresentations: file.previewRepresentations,
+            videoThumbnails: file.videoThumbnails,
+            immediateThumbnailData: file.immediateThumbnailData,
+            mimeType: file.mimeType,
+            size: file.size,
+            attributes: attributes,
+            alternativeRepresentations: file.alternativeRepresentations
+        )
     }
 
     public static func normalizeText(_ text: String, entities: [MessageTextEntity] = []) -> String {
@@ -7171,7 +7308,7 @@ def patch_anti_search(tg: Path) -> None:
             inject = (
                 "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
                 "    let outboundMessages: [EnqueueMessage]\n"
-                "    if AorusAntiSearchStore.isEnabled {\n"
+                "    if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled {\n"
                 "        outboundMessages = messages.map { AorusAntiSearch.normalize($0) }\n"
                 "    } else {\n"
                 "        outboundMessages = messages\n"
@@ -12622,6 +12759,7 @@ def main() -> None:
     patch_view_once_direct_save_button(tg)
     patch_view_once_no_consume(tg)
     patch_license_key_provider(tg)
+    patch_chat_context_menu_media_metadata(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)
     patch_chat_context_menu_hide_name_forward(tg)
