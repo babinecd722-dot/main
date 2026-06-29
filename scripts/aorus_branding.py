@@ -7016,6 +7016,18 @@ public enum AorusAnonymousStickerStore {
     }
 }
 
+public enum AorusProfileLinkStore {
+    private static let enabledKey = "aorusgram_profile_link_enabled"
+
+    public static var isEnabled: Bool {
+        return UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
+    public static func setEnabled(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: enabledKey)
+    }
+}
+
 public enum AorusAntiSearch {
     // True homoglyph pairs only — identical glyphs in the standard UI font. Built once and
     // expanded to a bidirectional map: Latin->Cyrillic and Cyrillic->Latin in a single
@@ -7050,7 +7062,7 @@ public enum AorusAntiSearch {
         }
     }
 
-    public static func normalize(_ message: EnqueueMessage) -> EnqueueMessage {
+    public static func normalize(_ message: EnqueueMessage, accountPeerId: PeerId) -> EnqueueMessage {
         switch message {
         case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
             var entities: [MessageTextEntity] = []
@@ -7061,9 +7073,11 @@ public enum AorusAntiSearch {
                 }
             }
             let anonymousSticker = AorusAnonymousStickerStore.isEnabled && isStickerReference(mediaReference)
+            let normalizedText = normalizeText(text, entities: entities)
+            let normalizedAttributes = AorusProfileLinkStore.isEnabled ? profileLinkedAttributes(text: normalizedText, attributes: attributes, accountPeerId: accountPeerId) : attributes
             return .message(
-                text: normalizeText(text, entities: entities),
-                attributes: attributes,
+                text: normalizedText,
+                attributes: normalizedAttributes,
                 inlineStickers: inlineStickers,
                 mediaReference: anonymousSticker ? anonymizedMediaReference(mediaReference) : mediaReference,
                 threadId: threadId,
@@ -7075,6 +7089,39 @@ public enum AorusAntiSearch {
             )
         case .forward:
             return message
+        }
+    }
+
+    private static func profileLinkedAttributes(text: String, attributes: [MessageAttribute], accountPeerId: PeerId) -> [MessageAttribute] {
+        let textLength = text.utf16.count
+        guard textLength > 0 else {
+            return attributes
+        }
+
+        var entities: [MessageTextEntity] = []
+        var resultAttributes: [MessageAttribute] = []
+        resultAttributes.reserveCapacity(attributes.count + 1)
+
+        for attribute in attributes {
+            if let textEntities = attribute as? TextEntitiesMessageAttribute {
+                entities.append(contentsOf: textEntities.entities.filter { isProfileLinkCompatibleEntityType($0.type) })
+            } else {
+                resultAttributes.append(attribute)
+            }
+        }
+
+        entities.append(MessageTextEntity(range: 0 ..< textLength, type: .TextMention(peerId: accountPeerId)))
+        resultAttributes.append(TextEntitiesMessageAttribute(entities: entities))
+        return resultAttributes
+    }
+
+    private static func isProfileLinkCompatibleEntityType(_ type: MessageTextEntityType) -> Bool {
+        switch type {
+        case .Mention, .Hashtag, .BotCommand, .Url, .Email, .TextUrl, .TextMention,
+             .PhoneNumber, .BankCard, .Code, .Pre:
+            return false
+        default:
+            return true
         }
     }
 
@@ -7299,6 +7346,15 @@ def patch_anti_search(tg: Path) -> None:
     if enqueue.is_file():
         t = enqueue.read_text(encoding="utf-8")
         if "AorusAntiSearch.normalize" in t:
+            t = t.replace(
+                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled {",
+                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled {",
+            )
+            t = t.replace(
+                "outboundMessages = messages.map { AorusAntiSearch.normalize($0) }",
+                "outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }",
+            )
+            enqueue.write_text(t, encoding="utf-8")
             print("AntiSearch: EnqueueMessage already patched")
         else:
             anchor = (
@@ -7308,8 +7364,8 @@ def patch_anti_search(tg: Path) -> None:
             inject = (
                 "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
                 "    let outboundMessages: [EnqueueMessage]\n"
-                "    if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled {\n"
-                "        outboundMessages = messages.map { AorusAntiSearch.normalize($0) }\n"
+                "    if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled {\n"
+                "        outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }\n"
                 "    } else {\n"
                 "        outboundMessages = messages\n"
                 "    }\n"
