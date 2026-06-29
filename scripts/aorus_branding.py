@@ -7339,6 +7339,16 @@ public enum AorusPhoneSpoofStore {
     }
 }
 
+public enum AorusOutgoingPrivacy {
+    public static var hasActiveTransforms: Bool {
+        return AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled
+    }
+
+    public static func transform(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox) -> EnqueueMessage {
+        return AorusAntiSearch.normalize(message, accountPeerId: accountPeerId, mediaBox: mediaBox)
+    }
+}
+
 public enum AorusAntiSearch {
     // True homoglyph pairs only — identical glyphs in the standard UI font. Built once and
     // expanded to a bidirectional map: Latin->Cyrillic and Cyrillic->Latin in a single
@@ -7721,25 +7731,28 @@ def patch_anti_search(tg: Path) -> None:
     enqueue = tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift"
     if enqueue.is_file():
         t = enqueue.read_text(encoding="utf-8")
-        if "AorusAntiSearch.normalize" in t:
-            t = t.replace(
-                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled {",
-                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled {",
+        if "AorusOutgoingPrivacy.transform" in t:
+            print("OutgoingPrivacy: EnqueueMessage already patched")
+        elif "AorusAntiSearch.normalize" in t:
+            t = re.sub(
+                r"if AorusAntiSearchStore\.isEnabled[^\n]*\{",
+                "if AorusOutgoingPrivacy.hasActiveTransforms {",
+                t,
             )
             t = t.replace(
-                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled {",
-                "if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled {",
+                "messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
+                "messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
             )
             t = t.replace(
-                "outboundMessages = messages.map { AorusAntiSearch.normalize($0) }",
-                "outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }",
+                "messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }",
+                "messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
             )
             t = t.replace(
-                "outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }",
-                "outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
+                "messages.map { AorusAntiSearch.normalize($0) }",
+                "messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
             )
             enqueue.write_text(t, encoding="utf-8")
-            print("AntiSearch: EnqueueMessage already patched")
+            print("OutgoingPrivacy: upgraded EnqueueMessage transform hook")
         else:
             anchor = (
                 "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
@@ -7748,8 +7761,8 @@ def patch_anti_search(tg: Path) -> None:
             inject = (
                 "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
                 "    let outboundMessages: [EnqueueMessage]\n"
-                "    if AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled {\n"
-                "        outboundMessages = messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }\n"
+                "    if AorusOutgoingPrivacy.hasActiveTransforms {\n"
+                "        outboundMessages = messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }\n"
                 "    } else {\n"
                 "        outboundMessages = messages\n"
                 "    }\n"
@@ -7768,11 +7781,11 @@ def patch_anti_search(tg: Path) -> None:
                     1,
                 )
                 enqueue.write_text(t, encoding="utf-8")
-                print("AntiSearch: patched EnqueueMessage.swift (send hook)")
+                print("OutgoingPrivacy: patched EnqueueMessage.swift (send hook)")
             else:
-                print("WARNING: AntiSearch EnqueueMessage anchor not found")
+                print("WARNING: OutgoingPrivacy EnqueueMessage anchor not found")
     else:
-        print("AntiSearch: EnqueueMessage.swift not found — skip send hook")
+        print("OutgoingPrivacy: EnqueueMessage.swift not found — skip send hook")
 
     edit = tg / "submodules/TelegramCore/Sources/PendingMessages/RequestEditMessage.swift"
     if edit.is_file():
