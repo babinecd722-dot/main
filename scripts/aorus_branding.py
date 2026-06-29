@@ -2962,6 +2962,51 @@ def patch_peer_info_account_details(tg: Path) -> None:
     print("PeerInfoAccountDetails: injected Подробнее row for " + ", ".join(applied))
 
 
+def patch_phone_spoof_profile_display(tg: Path) -> None:
+    """Show the protected number in the local profile phone row."""
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoProfileItems.swift"
+    if not path.is_file():
+        print("PhoneSpoofProfile: PeerInfoProfileItems.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusPhoneSpoofDisplayNumber" in t:
+        print("PhoneSpoofProfile: already injected")
+        return
+
+    if "import TelegramCore\n" not in t:
+        t = t.replace("import Foundation\n", "import Foundation\nimport TelegramCore\n", 1)
+
+    helper = (
+        "\n"
+        "private func aorusPhoneSpoofDisplayNumber(_ phone: String) -> String {\n"
+        "    guard AorusPhoneSpoofStore.isEnabled else {\n"
+        "        return phone\n"
+        "    }\n"
+        "    let protectedNumber = AorusPhoneSpoofStore.number\n"
+        "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
+        "}\n"
+    )
+    if "func infoItems(" in t:
+        t = t.replace("func infoItems(", helper + "\nfunc infoItems(", 1)
+    else:
+        t = helper + "\n" + t
+
+    replacements = [
+        ("formatPhoneNumber(context: context, number: phone)", "formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(phone))"),
+        ("formatPhoneNumber(context: context, number: user.phone)", "formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(user.phone))"),
+        ("formatPhoneNumber(context: context, number: peer.phone)", "formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(peer.phone))"),
+        (".phone(phone)", ".phone(aorusPhoneSpoofDisplayNumber(phone))"),
+    ]
+    applied = 0
+    for old, new in replacements:
+        if old in t:
+            t = t.replace(old, new)
+            applied += 1
+
+    path.write_text(t, encoding="utf-8")
+    print(f"PhoneSpoofProfile: injected local profile phone override ({applied} replacements)")
+
+
 def patch_info_plist_bgtask(tg: Path) -> None:
     """Add BGTaskSchedulerPermittedIdentifiers key to Info.plist so iOS allows BGAppRefreshTask."""
     for name in ("Info.plist", "InfoBazel.plist"):
@@ -7237,6 +7282,10 @@ public enum AorusPhoneSpoofStore {
     }
 
     public static func setNumber(_ rawValue: String) -> String {
+        if rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            UserDefaults.standard.set("", forKey: numberKey)
+            return ""
+        }
         let normalized = normalize(rawValue)
         UserDefaults.standard.set(normalized, forKey: numberKey)
         return normalized
@@ -7258,7 +7307,7 @@ public enum AorusPhoneSpoofStore {
     private static func normalize(_ rawValue: String) -> String {
         var digits = rawValue.filter { $0.isNumber }
         if digits.isEmpty {
-            return randomize()
+            return ""
         }
         let rule = ruleForDigits(digits)
         let maxLength = rule.countryCode.count + rule.maxNationalLength
@@ -13111,6 +13160,7 @@ def main() -> None:
     patch_app_delegate_account_restore_hook(tg)
     patch_app_delegate_siri_continue_activity(tg)
     patch_peer_info_account_details(tg)
+    patch_phone_spoof_profile_display(tg)
     patch_chat_title_anti_spoof_status(tg)
     patch_client_spoof_app_version(tg)
     patch_app_delegate_import_aorusgram(tg)

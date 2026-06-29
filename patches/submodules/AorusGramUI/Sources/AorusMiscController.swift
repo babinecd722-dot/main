@@ -46,11 +46,11 @@ private final class MiscArguments {
     let selectProfileLinkSelf: () -> Void
     let selectProfileLinkPeer: () -> Void
     let setPhoneSpoof: (Bool) -> Void
-    let setPhoneSpoofNumber: (String) -> Void
+    let editPhoneSpoofNumber: () -> Void
     let randomizePhoneSpoof: () -> Void
     let setMediaMetadata: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, editPhoneSpoofNumber: @escaping () -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -61,7 +61,7 @@ private final class MiscArguments {
         self.selectProfileLinkSelf = selectProfileLinkSelf
         self.selectProfileLinkPeer = selectProfileLinkPeer
         self.setPhoneSpoof = setPhoneSpoof
-        self.setPhoneSpoofNumber = setPhoneSpoofNumber
+        self.editPhoneSpoofNumber = editPhoneSpoofNumber
         self.randomizePhoneSpoof = randomizePhoneSpoof
         self.setMediaMetadata = setMediaMetadata
     }
@@ -231,7 +231,7 @@ private enum MiscEntry: ItemListNodeEntry {
         case let .phoneSpoof(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setPhoneSpoof($0) })
         case let .phoneSpoofNumber(_, title, value):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: title), text: value, placeholder: "+", sectionId: section, textUpdated: { text in args.setPhoneSpoofNumber(text) }, action: {})
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value.isEmpty ? "—" : value, sectionId: section, style: .blocks, action: args.editPhoneSpoofNumber)
         case let .phoneSpoofRandomize(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, disclosureStyle: .none, action: args.randomizePhoneSpoof)
         case let .phoneSpoofInfo(_, text):
@@ -431,13 +431,31 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 return next
             }
         },
-        setPhoneSpoofNumber: { text in
-            let number = AorusPhoneSpoofStore.setNumber(text)
-            updateState { current in
-                var next = current
-                next.phoneSpoofNumber = number
-                return next
+        editPhoneSpoofNumber: {
+            guard let controller = weakController else { return }
+            let isRu = AorusLang.current == .ru
+            let alert = UIAlertController(
+                title: isRu ? "Номер" : "Number",
+                message: isRu ? "Можно удалить номер полностью и ввести код другой страны. Если оставить пустым, новый номер создастся автоматически позже." : "You can delete the whole number and enter another country code. If left empty, a new number will be generated automatically later.",
+                preferredStyle: .alert
+            )
+            alert.addTextField { textField in
+                textField.text = stateValue.with { $0.phoneSpoofNumber }
+                textField.placeholder = "+"
+                textField.keyboardType = .phonePad
+                textField.clearButtonMode = .whileEditing
             }
+            alert.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
+            alert.addAction(UIAlertAction(title: isRu ? "Сохранить" : "Save", style: .default) { _ in
+                let rawValue = alert.textFields?.first?.text ?? ""
+                let number = AorusPhoneSpoofStore.setNumber(rawValue)
+                updateState { current in
+                    var next = current
+                    next.phoneSpoofNumber = number
+                    return next
+                }
+            })
+            controller.present(alert, animated: true)
         },
         randomizePhoneSpoof: {
             let number = AorusPhoneSpoofStore.randomize()
