@@ -3035,14 +3035,22 @@ def patch_phone_spoof_profile_display(tg: Path) -> None:
         print("PhoneSpoofProfile: PeerInfoProfileItems.swift not found, skip")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusPhoneSpoofDisplayNumber" in t:
-        print("PhoneSpoofProfile: already injected")
-        return
 
     if "import TelegramCore\n" not in t:
         t = t.replace("import Foundation\n", "import Foundation\nimport TelegramCore\n", 1)
 
     helper = (
+        "\n"
+        "private func aorusPhoneSpoofDisplayNumber(isOwnAccount: Bool, phone: String) -> String {\n"
+        "    guard isOwnAccount, AorusPhoneSpoofStore.isEnabled else {\n"
+        "        return phone\n"
+        "    }\n"
+        "    let protectedNumber = AorusPhoneSpoofStore.number\n"
+        "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
+        "}\n"
+    )
+
+    legacy_helper = (
         "\n"
         "private func aorusPhoneSpoofDisplayNumber(_ phone: String) -> String {\n"
         "    guard AorusPhoneSpoofStore.isEnabled else {\n"
@@ -3052,25 +3060,83 @@ def patch_phone_spoof_profile_display(tg: Path) -> None:
         "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
         "}\n"
     )
-    if "func infoItems(" in t:
+    if legacy_helper in t:
+        t = t.replace(legacy_helper, helper, 1)
+    elif "private func aorusPhoneSpoofDisplayNumber(isOwnAccount: Bool, phone: String) -> String" not in t:
         t = t.replace("func infoItems(", helper + "\nfunc infoItems(", 1)
-    else:
-        t = helper + "\n" + t
 
-    replacements = [
-        ("formatPhoneNumber(context: context, number: phone)", "formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(phone))"),
-        ("formatPhoneNumber(context: context, number: user.phone)", "formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(user.phone))"),
-        ("formatPhoneNumber(context: context, number: peer.phone)", "formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(peer.phone))"),
-        (".phone(phone)", ".phone(aorusPhoneSpoofDisplayNumber(phone))"),
+    # Repair older cached trees where the spoof helper was applied to every profile.
+    legacy_replacements = [
+        ("formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(phone))", "formatPhoneNumber(context: context, number: phone)"),
+        ("formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(user.phone))", "formatPhoneNumber(context: context, number: user.phone)"),
+        ("formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(peer.phone))", "formatPhoneNumber(context: context, number: peer.phone)"),
+        (".phone(aorusPhoneSpoofDisplayNumber(phone))", ".phone(phone)"),
     ]
+    for old, new in legacy_replacements:
+        t = t.replace(old, new)
+
+    source_block = (
+        "        if let phone = user.phone {\n"
+        "            let formattedPhone = formatPhoneNumber(context: context, number: phone)\n"
+        "            let label: String\n"
+        "            if formattedPhone.hasPrefix(\"+888 \") {\n"
+        "                label = presentationData.strings.UserInfo_AnonymousNumberLabel\n"
+        "            } else {\n"
+        "                label = presentationData.strings.ContactInfo_PhoneLabelMobile\n"
+        "            }\n"
+        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemPhoneNumber, label: label, text: formattedPhone, textColor: .accent, action: { node, progress in\n"
+        "                interaction.openPhone(phone, node, nil, progress)\n"
+        "            }, longTapAction: nil, contextAction: { node, gesture, _ in\n"
+        "                interaction.openPhone(phone, node, gesture, nil)\n"
+        "            }, requestLayout: { animated in\n"
+        "                interaction.requestLayout(animated)\n"
+        "            }))\n"
+        "        }\n"
+    )
+    patched_block = (
+        "        if let phone = user.phone {\n"
+        "            let aorusDisplayPhone = aorusPhoneSpoofDisplayNumber(isOwnAccount: user.id == context.account.peerId, phone: phone)\n"
+        "            let formattedPhone = formatPhoneNumber(context: context, number: aorusDisplayPhone)\n"
+        "            let label: String\n"
+        "            if formattedPhone.hasPrefix(\"+888 \") {\n"
+        "                label = presentationData.strings.UserInfo_AnonymousNumberLabel\n"
+        "            } else {\n"
+        "                label = presentationData.strings.ContactInfo_PhoneLabelMobile\n"
+        "            }\n"
+        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemPhoneNumber, label: label, text: formattedPhone, textColor: .accent, action: { node, progress in\n"
+        "                interaction.openPhone(aorusDisplayPhone, node, nil, progress)\n"
+        "            }, longTapAction: nil, contextAction: { node, gesture, _ in\n"
+        "                interaction.openPhone(aorusDisplayPhone, node, gesture, nil)\n"
+        "            }, requestLayout: { animated in\n"
+        "                interaction.requestLayout(animated)\n"
+        "            }))\n"
+        "        }\n"
+    )
+
     applied = 0
-    for old, new in replacements:
-        if old in t:
-            t = t.replace(old, new)
-            applied += 1
+    if patched_block in t:
+        print("PhoneSpoofProfile: already scoped to local account")
+    elif source_block in t:
+        t = t.replace(source_block, patched_block, 1)
+        applied = 1
+    else:
+        t, applied = re.subn(
+            r"(        if let phone = user\.phone \{\n)(\s*)let formattedPhone = formatPhoneNumber\(context: context, number: phone\)",
+            r"\1\2let aorusDisplayPhone = aorusPhoneSpoofDisplayNumber(isOwnAccount: user.id == context.account.peerId, phone: phone)\n\2let formattedPhone = formatPhoneNumber(context: context, number: aorusDisplayPhone)",
+            t,
+            count=1,
+        )
+        if applied:
+            phone_block_start = t.find("        if let phone = user.phone {")
+            phone_block_end = t.find("        if let mainUsername = user.addressName {", phone_block_start)
+            if phone_block_start != -1 and phone_block_end != -1:
+                phone_block = t[phone_block_start:phone_block_end]
+                phone_block = phone_block.replace("interaction.openPhone(phone, node, nil, progress)", "interaction.openPhone(aorusDisplayPhone, node, nil, progress)")
+                phone_block = phone_block.replace("interaction.openPhone(phone, node, gesture, nil)", "interaction.openPhone(aorusDisplayPhone, node, gesture, nil)")
+                t = t[:phone_block_start] + phone_block + t[phone_block_end:]
 
     path.write_text(t, encoding="utf-8")
-    print(f"PhoneSpoofProfile: injected local profile phone override ({applied} replacements)")
+    print(f"PhoneSpoofProfile: scoped local profile phone override ({applied} replacements)")
 
 
 def patch_phone_spoof_profile_header(tg: Path) -> None:
