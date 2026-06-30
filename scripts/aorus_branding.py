@@ -2623,7 +2623,7 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         )
         upgraded = upgraded.replace(
             "        return editPreflight |> then(normalDelete)\n",
-            "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.85, queue: Queue.mainQueue())\n"
+            "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.35, queue: Queue.mainQueue())\n"
             "        return editPreflight |> then(serverPropagationDelay) |> then(normalDelete)\n",
         )
         if upgraded != t:
@@ -2686,7 +2686,7 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "            |> `catch` { _ -> Signal<Void, NoError> in .complete() }\n"
         "            return acc |> then(editSignal)\n"
         "        }\n"
-        "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.85, queue: Queue.mainQueue())\n"
+        "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.35, queue: Queue.mainQueue())\n"
         "        return editPreflight |> then(serverPropagationDelay) |> then(normalDelete)\n"
         "    }\n"
         "}"
