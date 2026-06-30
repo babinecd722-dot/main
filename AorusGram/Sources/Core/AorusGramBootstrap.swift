@@ -72,9 +72,6 @@ public final class AorusGramBootstrap {
         // Auto-reply
         AutoReplyManager.shared.load()
 
-        // Anti-spam
-        AntiSpamManager.shared.setEnabled(AorusGramConfig.isEnabled(.antiSpam))
-
         // Anti-spoof — touch shared instance so load() runs and mirrors current
         // dictionary state to flat UserDefaults keys that TelegramCore patches read.
         _ = AntiSpoofManager.shared
@@ -154,7 +151,7 @@ public final class AorusGramBootstrap {
         observeAppLifecycle()
     }
 
-    // MARK: - Incoming message handler (anti-spam + auto-reply)
+    // MARK: - Incoming message handler (auto-reply + activity cache)
 
     private func handleIncomingMessage(_ note: Notification) {
         guard let info = note.userInfo else { return }
@@ -170,15 +167,6 @@ public final class AorusGramBootstrap {
         // proof they were online at that moment.
         let senderId = (note.userInfo?["senderId"] as? NSNumber)?.int64Value ?? peerId
         AntiSpoofManager.shared.recordActivity(peerId: senderId, kind: .message)
-
-        // Anti-spam gate
-        if AorusGramConfig.isEnabled(.antiSpam) {
-            let verdict = AntiSpamManager.shared.check(peerId: peerId, text: text)
-            if verdict.isSpam {
-                AntiSpamManager.shared.processIncoming(peerId: peerId, text: text)
-                return
-            }
-        }
 
         // Auto-reply
         if AorusGramConfig.isEnabled(.autoReply) {

@@ -1282,6 +1282,132 @@ def patch_download_accelerator(tg: Path) -> None:
     print("DownloadAccelerator: parallelParts 8 -> 16 when accelerator enabled")
 
 
+def patch_max_media_quality(tg: Path) -> None:
+    """Raise outgoing media quality when the Aorus max-media switch is enabled.
+
+    This deliberately avoids "send as file" behavior. It keeps Telegram's normal
+    media pipeline, but reduces avoidable compression in two central places:
+      1. TransformOutgoingMessageMedia previews / photo representations.
+      2. MediaEditorValues video export dimensions and bitrate.
+    """
+    transform = tg / "submodules/TelegramUI/Sources/TransformOutgoingMessageMedia.swift"
+    if transform.is_file():
+        t = transform.read_text(encoding="utf-8")
+        orig = t
+        sentinel = "// AorusGram: maximum media quality helpers"
+        if sentinel not in t:
+            import_anchor = "import ImageCompression\n"
+            helper = (
+                "\n" + sentinel + "\n"
+                "private func aorusMaxMediaQualityEnabled() -> Bool {\n"
+                "    return UserDefaults.standard.bool(forKey: \"aorusgram_feature_max_media_quality\")\n"
+                "}\n\n"
+                "private func aorusMediaPreviewMaxDimensions() -> CGSize {\n"
+                "    return aorusMaxMediaQualityEnabled() ? CGSize(width: 640.0, height: 640.0) : CGSize(width: 320, height: 320)\n"
+                "}\n\n"
+                "private func aorusMediaJPEGQuality(_ standard: CGFloat) -> CGFloat {\n"
+                "    return aorusMaxMediaQualityEnabled() ? max(standard, 0.92) : standard\n"
+                "}\n"
+            )
+            if import_anchor in t:
+                t = t.replace(import_anchor, import_anchor + helper, 1)
+        t = t.replace(
+            "return aorusMaxMediaQualityEnabled() ? CGSize(width: 640.0, height: 640.0) : aorusMediaPreviewMaxDimensions()",
+            "return aorusMaxMediaQualityEnabled() ? CGSize(width: 640.0, height: 640.0) : CGSize(width: 320, height: 320)",
+        )
+        t = t.replace("CGSize(width: 320.0, height: 320.0)", "aorusMediaPreviewMaxDimensions()")
+        t = t.replace("jpegData(compressionQuality: 0.6)", "jpegData(compressionQuality: aorusMediaJPEGQuality(0.6))")
+        if t != orig:
+            transform.write_text(t, encoding="utf-8")
+            print("MaxMediaQuality: patched TransformOutgoingMessageMedia.swift")
+        else:
+            print("MaxMediaQuality: TransformOutgoingMessageMedia.swift already patched")
+    else:
+        print("MaxMediaQuality: TransformOutgoingMessageMedia.swift not found — skip")
+
+    values = tg / "submodules/TelegramUI/Components/MediaEditor/Sources/MediaEditorValues.swift"
+    if values.is_file():
+        t = values.read_text(encoding="utf-8")
+        orig = t
+        sentinel = "// AorusGram: maximum media quality export"
+        if sentinel not in t:
+            needle = "    if let qualityPreset = values.qualityPreset {\n"
+            replacement = (
+                "    " + sentinel + "\n"
+                "    let aorusMaxMediaQuality = UserDefaults.standard.bool(forKey: \"aorusgram_feature_max_media_quality\")\n"
+                "    if let qualityPreset = values.qualityPreset {\n"
+            )
+            t = t.replace(needle, replacement, 1)
+            t = t.replace(
+                "        let maxSize = CGSize(width: qualityPreset.maximumDimensions, height: qualityPreset.maximumDimensions)\n",
+                "        let maxDimension: CGFloat = (aorusMaxMediaQuality && qualityPreset == .compressedVeryHigh) ? 2160.0 : qualityPreset.maximumDimensions\n"
+                "        let maxSize = CGSize(width: maxDimension, height: maxDimension)\n",
+                1,
+            )
+            t = t.replace(
+                "        audioNumberOfChannels = qualityPreset.audioChannelsCount\n"
+                "        \n"
+                "        useHEVC = false\n"
+                "    } else {\n"
+                "        if isAvatar {\n",
+                "        audioNumberOfChannels = qualityPreset.audioChannelsCount\n"
+                "        if aorusMaxMediaQuality && qualityPreset == .compressedVeryHigh {\n"
+                "            videoBitrate = max(videoBitrate, 12000)\n"
+                "            audioBitrate = max(audioBitrate, 128)\n"
+                "            audioNumberOfChannels = max(audioNumberOfChannels, 2)\n"
+                "        }\n"
+                "        \n"
+                "        useHEVC = false\n"
+                "    } else {\n"
+                "        if aorusMaxMediaQuality && !isAvatar && !isSticker {\n"
+                "            let maxSize = CGSize(width: 2160.0, height: 2160.0)\n"
+                "            var resultSize = values.originalDimensions.cgSize\n"
+                "            if let cropRect = values.cropRect, !cropRect.isEmpty {\n"
+                "                resultSize = targetSize(cropSize: cropRect.size.aspectFitted(maxSize), rotateSideward: values.cropOrientation?.isSideward ?? false)\n"
+                "            } else {\n"
+                "                resultSize = targetSize(cropSize: resultSize.aspectFitted(maxSize), rotateSideward: values.cropOrientation?.isSideward ?? false)\n"
+                "            }\n"
+                "            width = Int(resultSize.width)\n"
+                "            height = Int(resultSize.height)\n"
+                "            videoBitrate = max(videoBitrate, 12000)\n"
+                "            audioBitrate = max(audioBitrate, 128)\n"
+                "            audioNumberOfChannels = max(audioNumberOfChannels, 2)\n"
+                "        } else if isAvatar {\n",
+                1,
+            )
+        if t != orig:
+            values.write_text(t, encoding="utf-8")
+            print("MaxMediaQuality: patched MediaEditorValues.swift")
+        else:
+            print("MaxMediaQuality: MediaEditorValues.swift already patched")
+    else:
+        print("MaxMediaQuality: MediaEditorValues.swift not found — skip")
+
+    root_controller = tg / "submodules/TelegramUI/Sources/TelegramRootController.swift"
+    if root_controller.is_file():
+        t = root_controller.read_text(encoding="utf-8")
+        orig = t
+        if "// AorusGram: maximum media quality camera export" not in t:
+            t = t.replace(
+                "                        if let imageData = compressImageToJPEG(image, quality: 0.7, tempFilePath: tempFile.path) {\n",
+                "                        // AorusGram: maximum media quality camera export\n"
+                "                        if let imageData = compressImageToJPEG(image, quality: UserDefaults.standard.bool(forKey: \"aorusgram_feature_max_media_quality\") ? 0.92 : 0.7, tempFilePath: tempFile.path) {\n",
+                1,
+            )
+            t = t.replace(
+                "                            let imageData = firstFrameImage.flatMap { compressImageToJPEG($0, quality: 0.6, tempFilePath: tempFile.path) }\n",
+                "                            let imageData = firstFrameImage.flatMap { compressImageToJPEG($0, quality: UserDefaults.standard.bool(forKey: \"aorusgram_feature_max_media_quality\") ? 0.9 : 0.6, tempFilePath: tempFile.path) }\n",
+                1,
+            )
+        if t != orig:
+            root_controller.write_text(t, encoding="utf-8")
+            print("MaxMediaQuality: patched TelegramRootController camera export")
+        else:
+            print("MaxMediaQuality: TelegramRootController camera export already patched")
+    else:
+        print("MaxMediaQuality: TelegramRootController.swift not found — skip")
+
+
 def patch_ghost_mode_hooks(tg: Path) -> None:
     """Inject UserDefaults ghost-mode guards around presence/typing/read-receipt API calls.
 
@@ -2380,7 +2506,27 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: anti-spoof presence override"
     if sentinel in t:
-        print("ChatTitleAntiSpoof: already injected")
+        import re as _re
+        upgraded = t
+        upgraded = _re.sub(
+            r"^([ \t]*)if ago < 60 \{ return \"в сети • AORUS\" \}\n"
+            r"^\1if ago < 3600 \{ return \"был\(а\) \\\(Int\(ago / 60\)\) мин назад • AORUS\" \}\n",
+            lambda m: (
+                f"{m.group(1)}let isRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
+                f"{m.group(1)}if ago < 120 {{ return isRu ? \"в сети • AORUS\" : \"online • AORUS\" }}\n"
+                f"{m.group(1)}if ago < 3600 {{\n"
+                f"{m.group(1)}    let minutes = max(1, Int(ago / 60))\n"
+                f"{m.group(1)}    return isRu ? \"был(а) \\(minutes) мин назад • AORUS\" : \"last seen \\(minutes) min ago • AORUS\"\n"
+                f"{m.group(1)}}}\n"
+            ),
+            upgraded,
+            flags=_re.MULTILINE,
+        )
+        if upgraded != t:
+            path.write_text(upgraded, encoding="utf-8")
+            print("ChatTitleAntiSpoof: upgraded cached presence override")
+        else:
+            print("ChatTitleAntiSpoof: already injected")
         return
 
     # Match the entire source line that contains this binding — using ^ / $ with
@@ -2418,8 +2564,12 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
         + indent + "    let aorusTs = UserDefaults.standard.double(forKey: \"aorusgram_peer_last_seen_\\(peer.id.toInt64())\")\n"
         + indent + "    guard aorusTs > 0 else { return string }\n"
         + indent + "    let ago = Date().timeIntervalSince1970 - aorusTs\n"
-        + indent + "    if ago < 60 { return \"в сети • AORUS\" }\n"
-        + indent + "    if ago < 3600 { return \"был(а) \\(Int(ago / 60)) мин назад • AORUS\" }\n"
+        + indent + "    let isRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
+        + indent + "    if ago < 120 { return isRu ? \"в сети • AORUS\" : \"online • AORUS\" }\n"
+        + indent + "    if ago < 3600 {\n"
+        + indent + "        let minutes = max(1, Int(ago / 60))\n"
+        + indent + "        return isRu ? \"был(а) \\(minutes) мин назад • AORUS\" : \"last seen \\(minutes) min ago • AORUS\"\n"
+        + indent + "    }\n"
         + indent + "    return string\n"
         + indent + "}()"
     )
@@ -2453,7 +2603,21 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: anti-spoof deleted preflight"
     if sentinel in t:
-        print("AntiSpoofDeletePreflight: already injected")
+        upgraded = t
+        upgraded = upgraded.replace(
+            "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n",
+            "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
+            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n",
+        )
+        upgraded = upgraded.replace(
+            "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
+            "        let decoy = \"\\u{2063}\"\n",
+        )
+        if upgraded != t:
+            path.write_text(upgraded, encoding="utf-8")
+            print("AntiSpoofDeletePreflight: upgraded cached preflight decoy")
+        else:
+            print("AntiSpoofDeletePreflight: already injected")
         return
 
     needle = (
@@ -2483,12 +2647,13 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "    return account.postbox.transaction { transaction -> [MessageId] in\n"
         "        return messageIds.filter { id in\n"
         "            guard let msg = transaction.getMessage(id) else { return false }\n"
-        "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n"
+        "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
+        "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n"
         "        }\n"
         "    }\n"
         "    |> mapToSignal { (outgoingIds: [MessageId]) -> Signal<Void, NoError> in\n"
         "        guard !outgoingIds.isEmpty else { return normalDelete }\n"
-        "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n"
+        "        let decoy = \"\\u{2063}\"\n"
         "        let initial: Signal<Void, NoError> = .complete()\n"
         "        let editPreflight: Signal<Void, NoError> = outgoingIds.reduce(initial) { acc, msgId -> Signal<Void, NoError> in\n"
         "            let editSignal: Signal<Void, NoError> = _internal_requestEditMessage(\n"
@@ -2837,7 +3002,15 @@ def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusgram.antiSpoofDelete" in t:
-        print("AntiSpoofDeleteObserver: already injected")
+        upgraded = t.replace(
+            "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
+            "            let decoy = \"\\u{2063}\"\n",
+        )
+        if upgraded != t:
+            path.write_text(upgraded, encoding="utf-8")
+            print("AntiSpoofDeleteObserver: upgraded cached decoy")
+        else:
+            print("AntiSpoofDeleteObserver: already injected")
         return
     sentinel = "// AorusGram: anti-spoof delete observer"
     hook = (
@@ -2852,7 +3025,7 @@ def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
         "            let peerId = PeerId(peerIdNum.int64Value)\n"
         "            let msgId  = msgIdNum.int32Value\n"
         "            let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: msgId)\n"
-        "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n"
+        "            let decoy = \"\\u{2063}\"\n"
         "            let _ = app.context.engine.messages.requestEditMessage(\n"
         "                messageId: messageId,\n"
         "                text: decoy,\n"
@@ -13549,6 +13722,7 @@ def main() -> None:
     patch_primary_app_icon(tg)
     patch_settings_entry_point(tg)
     patch_download_accelerator(tg)
+    patch_max_media_quality(tg)
     patch_deleted_messages_interception(tg)
     patch_anti_spoof_delete_preflight(tg)
     patch_block_ads(tg)

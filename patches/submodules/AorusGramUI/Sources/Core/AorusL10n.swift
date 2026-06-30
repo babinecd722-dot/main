@@ -89,7 +89,7 @@ public struct AorusL10n {
     public var translator: String { t("Переводчик", "Translator") }
     public var autoReply: String { t("Автоответчик", "Auto-Reply") }
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
-    public var antiSpam: String { t("Анти-спам", "Anti-Spam") }
+    public var maxMediaQuality: String { t("Максимальное качество медиа", "Maximum Media Quality") }
     public var performanceStats: String { t("Показывать статистику", "Show Statistics") }
     public var performanceUptime: String { t("Uptime", "Uptime") }
     public var performanceRAM: String { t("RAM", "RAM") }

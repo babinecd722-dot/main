@@ -9,7 +9,7 @@ enum AorusGramConfig {
     enum Feature: String, CaseIterable {
         case ghostMode          = "ghost_mode"
         case deletedMessages    = "deleted_messages"
-        case antiSpam           = "anti_spam"
+        case maxMediaQuality    = "max_media_quality"
         case downloadAccel      = "download_accel"
         case siriShortcuts      = "siri_shortcuts"
         case unlimitedAccounts  = "unlimited_accounts"
@@ -39,7 +39,7 @@ enum AorusGramConfig {
 
     private static func defaultEnabled(_ feature: Feature) -> Bool {
         switch feature {
-        case .glassUI, .downloadAccel, .antiSpam, .deletedMessages: return true
+        case .glassUI, .downloadAccel, .maxMediaQuality, .deletedMessages: return true
         default: return false
         }
     }

@@ -18,7 +18,7 @@ public final class AorusGramManager {
     public var hideTyping: Bool        = true  { didSet { save() } }
     public var saveDeletedMessages: Bool = true { didSet { save() } }
     public var saveEditedMessages: Bool = true { didSet { save() } }
-    public var antiSpamEnabled: Bool   = true  { didSet { save() } }
+    public var maxMediaQuality: Bool   = true  { didSet { save() } }
     public var downloadAccel: Bool     = true  { didSet { save() } }
     public var glassUI: Bool           = true  { didSet { save() } }
     public var amoledMode: Bool        = false { didSet { save() } }
@@ -81,6 +81,7 @@ public final class AorusGramManager {
             ud.set(saveDeletedMessages, forKey: "aorusgram_feature_deleted_messages")
             ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
             ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
+            ud.set(maxMediaQuality,     forKey: "aorusgram_feature_max_media_quality")
         }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
         ghostMode           = d["ghostMode"]           as? Bool ?? false
@@ -88,7 +89,7 @@ public final class AorusGramManager {
         hideTyping          = d["hideTyping"]          as? Bool ?? true
         saveDeletedMessages = d["saveDeletedMessages"] as? Bool ?? true
         saveEditedMessages  = d["saveEditedMessages"]  as? Bool ?? true
-        antiSpamEnabled     = d["antiSpamEnabled"]     as? Bool ?? true
+        maxMediaQuality     = d["maxMediaQuality"]     as? Bool ?? (d["antiSpamEnabled"] as? Bool ?? true)
         downloadAccel       = d["downloadAccel"]       as? Bool ?? true
         glassUI             = d["glassUI"]             as? Bool ?? true
         amoledMode          = d["amoledMode"]          as? Bool ?? false
@@ -131,7 +132,7 @@ public final class AorusGramManager {
             "hideTyping":          hideTyping,
             "saveDeletedMessages": saveDeletedMessages,
             "saveEditedMessages":  saveEditedMessages,
-            "antiSpamEnabled":     antiSpamEnabled,
+            "maxMediaQuality":     maxMediaQuality,
             "downloadAccel":       downloadAccel,
             "glassUI":             glassUI,
             "amoledMode":          amoledMode,
@@ -177,7 +178,7 @@ public final class AorusGramManager {
         ud.set(translator,          forKey: "aorusgram_feature_translator")
         ud.set(chatSummary,         forKey: "aorusgram_feature_chat_summary")
         ud.set(autoReply,           forKey: "aorusgram_feature_auto_reply")
-        ud.set(antiSpamEnabled,     forKey: "aorusgram_feature_anti_spam")
+        ud.set(maxMediaQuality,     forKey: "aorusgram_feature_max_media_quality")
         ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
         ud.set(glassUI,             forKey: "aorusgram_feature_glass_ui")
         ud.set(amoledMode,          forKey: "aorusgram_amoled")
