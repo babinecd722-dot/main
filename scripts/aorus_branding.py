@@ -3106,19 +3106,19 @@ def patch_phone_spoof_profile_header(tg: Path) -> None:
     replacements = [
         (
             "formatPhoneNumber(context: context, number: phone)",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == context.account.peerId } ?? false, isSettings: isSettings, phone: phone))",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: phone))",
         ),
         (
             "formatPhoneNumber(context: self.context, number: phone)",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == self.context.account.peerId } ?? false, isSettings: isSettings, phone: phone))",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: phone))",
         ),
         (
             "formatPhoneNumber(context: context, number: user.phone)",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == context.account.peerId } ?? false, isSettings: isSettings, phone: user.phone))",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: user.phone))",
         ),
         (
             "formatPhoneNumber(context: self.context, number: user.phone)",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == self.context.account.peerId } ?? false, isSettings: isSettings, phone: user.phone))",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: user.phone))",
         ),
         (
             "formatPhoneNumber(context: context, number: peer.phone)",
