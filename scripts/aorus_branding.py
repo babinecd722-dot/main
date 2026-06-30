@@ -8188,9 +8188,7 @@ def patch_anti_search(tg: Path) -> None:
         }
         return false
     }
-    |> mapError { _ -> RequestEditMessageError in
-        return .generic
-    }
+    |> castError(RequestEditMessageError.self)
     |> mapToSignal { aorusIsBotChat -> Signal<RequestEditMessageResult, RequestEditMessageError> in
         let normalizedText = aorusIsBotChat ? text : AorusAntiSearch.normalizeText(text, entities: entities?.entities ?? [])
         return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: normalizedText, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)
