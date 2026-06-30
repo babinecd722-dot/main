@@ -3073,6 +3073,73 @@ def patch_phone_spoof_profile_display(tg: Path) -> None:
     print(f"PhoneSpoofProfile: injected local profile phone override ({applied} replacements)")
 
 
+def patch_phone_spoof_profile_header(tg: Path) -> None:
+    """Show the protected number in the Settings/Profile header preview."""
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    if not path.is_file():
+        print("PhoneSpoofHeader: PeerInfoHeaderNode.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusPhoneSpoofHeaderNumber" in t:
+        print("PhoneSpoofHeader: already injected")
+        return
+
+    helper = (
+        "\n"
+        "private func aorusPhoneSpoofHeaderNumber(context: AccountContext, peer: Peer?, isSettings: Bool, phone: String) -> String {\n"
+        "    guard isSettings, AorusPhoneSpoofStore.isEnabled, let peer = peer, peer.id == context.account.peerId else {\n"
+        "        return phone\n"
+        "    }\n"
+        "    let protectedNumber = AorusPhoneSpoofStore.number\n"
+        "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
+        "}\n"
+    )
+    inserted_helper = False
+    for anchor in ("final class PeerInfoHeaderNode", "class PeerInfoHeaderNode"):
+        if anchor in t:
+            t = t.replace(anchor, helper + "\n" + anchor, 1)
+            inserted_helper = True
+            break
+    if not inserted_helper:
+        t = helper + "\n" + t
+
+    replacements = [
+        (
+            "formatPhoneNumber(context: context, number: phone)",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: phone)",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: phone))",
+        ),
+        (
+            "formatPhoneNumber(context: context, number: user.phone)",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: user.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: user.phone)",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: user.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: context, number: peer.phone)",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: peer.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: peer.phone)",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: peer.phone))",
+        ),
+    ]
+    applied = 0
+    for old, new in replacements:
+        count = t.count(old)
+        if count:
+            t = t.replace(old, new)
+            applied += count
+
+    path.write_text(t, encoding="utf-8")
+    print(f"PhoneSpoofHeader: injected settings header phone override ({applied} replacements)")
+
+
 def patch_info_plist_bgtask(tg: Path) -> None:
     """Add BGTaskSchedulerPermittedIdentifiers key to Info.plist so iOS allows BGAppRefreshTask."""
     for name in ("Info.plist", "InfoBazel.plist"):
@@ -13241,6 +13308,7 @@ def main() -> None:
     patch_app_delegate_siri_continue_activity(tg)
     patch_peer_info_account_details(tg)
     patch_phone_spoof_profile_display(tg)
+    patch_phone_spoof_profile_header(tg)
     patch_chat_title_anti_spoof_status(tg)
     patch_client_spoof_app_version(tg)
     patch_app_delegate_import_aorusgram(tg)
