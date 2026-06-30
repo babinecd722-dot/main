@@ -7777,22 +7777,45 @@ public enum AorusAntiSearch {
             return media
         }
         let spoofedPhoneNumber = AorusPhoneSpoofStore.number.isEmpty ? contact.phoneNumber : AorusPhoneSpoofStore.number
-        return TelegramMediaContact(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: spoofedPhoneNumber, peerId: contact.peerId, vCardData: sanitizedContactVCard(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: spoofedPhoneNumber))
+        return TelegramMediaContact(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: spoofedPhoneNumber, peerId: contact.peerId, vCardData: spoofedContactVCard(contact.vCardData, phoneNumber: spoofedPhoneNumber))
     }
 
-    private static func sanitizedContactVCard(firstName: String, lastName: String, phoneNumber: String) -> String {
-        let escapedFirstName = escapedVCardValue(firstName)
-        let escapedLastName = escapedVCardValue(lastName)
-        let displayName = escapedVCardValue([firstName, lastName].filter { !$0.isEmpty }.joined(separator: " "))
-        let escapedPhoneNumber = escapedVCardValue(phoneNumber)
-        return [
-            "BEGIN:VCARD",
-            "VERSION:3.0",
-            "N:\\(escapedLastName);\\(escapedFirstName);;;",
-            "FN:\\(displayName.isEmpty ? escapedPhoneNumber : displayName)",
-            "TEL;TYPE=CELL:\\(escapedPhoneNumber)",
-            "END:VCARD"
-        ].joined(separator: "\\r\\n")
+    private static func spoofedContactVCard(_ vCardData: String?, phoneNumber: String) -> String? {
+        guard let vCardData = vCardData, !vCardData.isEmpty else {
+            return vCardData
+        }
+        var updatedLines: [String] = []
+        updatedLines.reserveCapacity(vCardData.count / 24)
+
+        var skippingFoldedTelContinuation = false
+        let normalizedVCardData = vCardData
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        for rawLine in normalizedVCardData.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine)
+            if skippingFoldedTelContinuation && (line.hasPrefix(" ") || line.hasPrefix("\t")) {
+                continue
+            }
+            skippingFoldedTelContinuation = false
+
+            if isVCardTelLine(line), let colonIndex = line.firstIndex(of: ":") {
+                let prefix = String(line[...colonIndex])
+                updatedLines.append(prefix + escapedVCardValue(phoneNumber))
+                skippingFoldedTelContinuation = true
+            } else {
+                updatedLines.append(line)
+            }
+        }
+        return updatedLines.joined(separator: "\\r\\n")
+    }
+
+    private static func isVCardTelLine(_ line: String) -> Bool {
+        guard let propertyEnd = line.firstIndex(where: { $0 == ":" || $0 == ";" }) else {
+            return false
+        }
+        let property = line[..<propertyEnd].uppercased()
+        let propertyName = property.split(separator: ".").last ?? Substring(property)
+        return propertyName == "TEL"
     }
 
     private static func escapedVCardValue(_ value: String) -> String {
