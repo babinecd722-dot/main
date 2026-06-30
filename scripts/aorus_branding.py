@@ -2643,7 +2643,20 @@ def patch_link_protection_open_url(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: link protection"
     if sentinel in t:
-        print("LinkProtection: OpenUrl already injected")
+        old_open_anyway = (
+            "            AorusLinkProtection.allowOnce(url)\n"
+            "            context.sharedContext.openExternalUrl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
+        )
+        new_open_anyway = (
+            "            AorusLinkProtection.allowOnce(url)\n"
+            "            openExternalUrlImpl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
+        )
+        if old_open_anyway in t:
+            t = t.replace(old_open_anyway, new_open_anyway, 1)
+            path.write_text(t, encoding="utf-8")
+            print("LinkProtection: upgraded OpenUrl bypass routing")
+        else:
+            print("LinkProtection: OpenUrl already injected")
         return
 
     if "import AorusGramUI\n" not in t:
@@ -2669,7 +2682,7 @@ def patch_link_protection_open_url(tg: Path) -> None:
         + "    if !aorusLinkProtectionBypass, !AorusLinkProtection.consumeAllowed(url), AorusLinkProtection.shouldIntercept(url) {\n"
         + "        AorusLinkProtection.presentWarning(url: url, languageCode: presentationData.strings.baseLanguageCode, openAnyway: {\n"
         + "            AorusLinkProtection.allowOnce(url)\n"
-        + "            context.sharedContext.openExternalUrl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
+        + "            openExternalUrlImpl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
         + "        })\n"
         + "        return\n"
         + "    }\n"
@@ -7544,15 +7557,52 @@ public enum AorusPhoneSpoofStore {
 
     public static func randomize() -> String {
         let rule = defaultRule
+        let digits = randomNationalNumber(rule: rule)
+        let value = "+\\(rule.countryCode)\\(digits)"
+        UserDefaults.standard.set(value, forKey: numberKey)
+        return value
+    }
+
+    private static func randomNationalNumber(rule: PhoneRule) -> String {
+        if rule.countryCode == "7", rule.preferredLength == 10 {
+            let prefixes = [
+                "900", "901", "902", "903", "904", "905", "906", "908", "909",
+                "910", "911", "912", "913", "914", "915", "916", "917", "918", "919",
+                "920", "921", "922", "923", "924", "925", "926", "927", "928", "929",
+                "930", "931", "932", "933", "934", "936", "937", "938", "939",
+                "950", "951", "952", "953", "958", "960", "961", "962", "963", "964",
+                "965", "966", "967", "968", "969", "970", "971", "977", "978", "980",
+                "981", "982", "983", "984", "985", "986", "987", "988", "989", "991",
+                "992", "993", "994", "995", "996", "997", "999",
+                "700", "701", "702", "705", "707", "708", "747", "750", "751", "760",
+                "761", "762", "763", "764", "771", "775", "776", "777", "778"
+            ]
+            var digits = prefixes.randomElement() ?? "900"
+            while digits.count < 10 {
+                digits.append(String(Int.random(in: 0 ... 9)))
+            }
+            return digits
+        }
+
+        if rule.countryCode == "1", rule.preferredLength == 10 {
+            var digits = ""
+            for index in 0 ..< 10 {
+                if index == 0 || index == 3 {
+                    digits.append(String(Int.random(in: 2 ... 9)))
+                } else {
+                    digits.append(String(Int.random(in: 0 ... 9)))
+                }
+            }
+            return digits
+        }
+
         var digits = ""
         digits.reserveCapacity(rule.preferredLength)
         for index in 0 ..< rule.preferredLength {
             let minDigit = index == 0 ? 1 : 0
             digits.append(String(Int.random(in: minDigit ... 9)))
         }
-        let value = "+\\(rule.countryCode)\\(digits)"
-        UserDefaults.standard.set(value, forKey: numberKey)
-        return value
+        return digits
     }
 
     private static func normalize(_ rawValue: String) -> String {
@@ -7572,7 +7622,7 @@ public enum AorusPhoneSpoofStore {
         let digits = value.filter { $0.isNumber }
         let rule = ruleForDigits(digits)
         let nationalLength = max(0, digits.count - rule.countryCode.count)
-        return digits.hasPrefix(rule.countryCode) && rule.nationalLengths.contains(nationalLength)
+        return digits.hasPrefix(rule.countryCode) && rule.nationalLengths.contains(nationalLength) && isPlausible(rule: rule, digits: digits)
     }
 
     private static func ruleForDigits(_ digits: String) -> PhoneRule {
@@ -7585,6 +7635,21 @@ public enum AorusPhoneSpoofStore {
         return defaultRule
     }
 
+    private static func isPlausible(rule: PhoneRule, digits: String) -> Bool {
+        let national = String(digits.dropFirst(rule.countryCode.count))
+        if rule.countryCode == "7", national.count == 10 {
+            return national.hasPrefix("9") || national.hasPrefix("7")
+        }
+        if rule.countryCode == "1", national.count == 10 {
+            let values = Array(national)
+            guard let area = values.first, let exchange = values.dropFirst(3).first else {
+                return false
+            }
+            return ("2"..."9").contains(String(area)) && ("2"..."9").contains(String(exchange))
+        }
+        return true
+    }
+
     public static var number: String {
         return ensureNumber()
     }
@@ -7595,8 +7660,8 @@ public enum AorusOutgoingPrivacy {
         return AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled
     }
 
-    public static func transform(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox) -> EnqueueMessage {
-        return AorusAntiSearch.normalize(message, accountPeerId: accountPeerId, mediaBox: mediaBox)
+    public static func transform(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox, disableAntiSearch: Bool = false) -> EnqueueMessage {
+        return AorusAntiSearch.normalize(message, accountPeerId: accountPeerId, mediaBox: mediaBox, disableAntiSearch: disableAntiSearch)
     }
 }
 
@@ -7634,7 +7699,7 @@ public enum AorusAntiSearch {
         }
     }
 
-    public static func normalize(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox) -> EnqueueMessage {
+    public static func normalize(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox, disableAntiSearch: Bool = false) -> EnqueueMessage {
         switch message {
         case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
             var entities: [MessageTextEntity] = []
@@ -7645,7 +7710,7 @@ public enum AorusAntiSearch {
                 }
             }
             let anonymousSticker = AorusAnonymousStickerStore.isEnabled && isStickerReference(mediaReference)
-            let normalizedText = normalizeText(text, entities: entities)
+            let normalizedText = disableAntiSearch ? text : normalizeText(text, entities: entities)
             let normalizedAttributes = AorusProfileLinkStore.isEnabled ? profileLinkedAttributes(text: normalizedText, attributes: attributes, accountPeerId: accountPeerId) : attributes
             var updatedMediaReference = mediaReference
             if anonymousSticker {
@@ -8041,54 +8106,67 @@ def patch_anti_search(tg: Path) -> None:
     enqueue = tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift"
     if enqueue.is_file():
         t = enqueue.read_text(encoding="utf-8")
-        if "AorusOutgoingPrivacy.transform" in t:
-            print("OutgoingPrivacy: EnqueueMessage already patched")
-        elif "AorusAntiSearch.normalize" in t:
-            t = re.sub(
-                r"if AorusAntiSearchStore\.isEnabled[^\n]*\{",
-                "if AorusOutgoingPrivacy.hasActiveTransforms {",
+        enqueue_function = """public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {
+    let aorusIsBotChatSignal: Signal<Bool, NoError>
+    if AorusAntiSearchStore.isEnabled {
+        aorusIsBotChatSignal = account.postbox.transaction { transaction -> Bool in
+            if let user = transaction.getPeer(peerId) as? TelegramUser, user.botInfo != nil {
+                return true
+            }
+            return false
+        }
+    } else {
+        aorusIsBotChatSignal = .single(false)
+    }
+
+    return aorusIsBotChatSignal
+    |> mapToSignal { aorusIsBotChat -> Signal<[MessageId?], NoError> in
+        let outboundMessages: [EnqueueMessage]
+        if AorusOutgoingPrivacy.hasActiveTransforms {
+            outboundMessages = messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox, disableAntiSearch: aorusIsBotChat) }
+        } else {
+            outboundMessages = messages
+        }
+        let signal: Signal<[(Bool, EnqueueMessage)], NoError>
+        if let transformOutgoingMessageMedia = account.transformOutgoingMessageMedia {
+            signal = opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)
+        } else {
+            signal = .single(outboundMessages.map { (false, $0) })
+        }
+        return signal
+        |> mapToSignal { messages -> Signal<[MessageId?], NoError> in
+            return account.postbox.transaction { transaction -> [MessageId?] in
+                return enqueueMessages(transaction: transaction, account: account, peerId: peerId, messages: messages)
+            }
+        }
+    }
+}
+"""
+        if "AorusOutgoingPrivacy.transform" in t or "AorusAntiSearch.normalize" in t:
+            upgraded, count = re.subn(
+                r"public func enqueueMessages\(account: Account, peerId: PeerId, messages: \[EnqueueMessage\]\) -> Signal<\[MessageId\?\], NoError> \{.*?\n\}\n\npublic func resendMessages",
+                enqueue_function + "\npublic func resendMessages",
                 t,
+                count=1,
+                flags=re.S,
             )
-            t = t.replace(
-                "messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
-                "messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
-            )
-            t = t.replace(
-                "messages.map { AorusAntiSearch.normalize($0, accountPeerId: account.peerId) }",
-                "messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
-            )
-            t = t.replace(
-                "messages.map { AorusAntiSearch.normalize($0) }",
-                "messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }",
-            )
-            enqueue.write_text(t, encoding="utf-8")
-            print("OutgoingPrivacy: upgraded EnqueueMessage transform hook")
+            if count:
+                enqueue.write_text(upgraded, encoding="utf-8")
+                print("OutgoingPrivacy: upgraded EnqueueMessage transform hook")
+            else:
+                print("WARNING: OutgoingPrivacy EnqueueMessage upgrade anchor not found")
         else:
             anchor = (
                 "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
                 "    let signal: Signal<[(Bool, EnqueueMessage)], NoError>\n"
             )
-            inject = (
-                "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
-                "    let outboundMessages: [EnqueueMessage]\n"
-                "    if AorusOutgoingPrivacy.hasActiveTransforms {\n"
-                "        outboundMessages = messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox) }\n"
-                "    } else {\n"
-                "        outboundMessages = messages\n"
-                "    }\n"
-                "    let signal: Signal<[(Bool, EnqueueMessage)], NoError>\n"
-            )
             if anchor in t:
-                t = t.replace(anchor, inject, 1)
-                t = t.replace(
-                    "opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: messages, userInteractive: true)",
-                    "opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)",
-                    1,
-                )
-                t = t.replace(
-                    "signal = .single(messages.map { (false, $0) })",
-                    "signal = .single(outboundMessages.map { (false, $0) })",
-                    1,
+                t = re.sub(
+                    r"public func enqueueMessages\(account: Account, peerId: PeerId, messages: \[EnqueueMessage\]\) -> Signal<\[MessageId\?\], NoError> \{.*?\n\}\n\npublic func resendMessages",
+                    enqueue_function + "\npublic func resendMessages",
+                    t,
+                    count=1,
+                    flags=re.S,
                 )
                 enqueue.write_text(t, encoding="utf-8")
                 print("OutgoingPrivacy: patched EnqueueMessage.swift (send hook)")
@@ -8100,23 +8178,34 @@ def patch_anti_search(tg: Path) -> None:
     edit = tg / "submodules/TelegramCore/Sources/PendingMessages/RequestEditMessage.swift"
     if edit.is_file():
         t = edit.read_text(encoding="utf-8")
-        if "AorusAntiSearch.normalizeText" in t:
-            print("AntiSearch: RequestEditMessage already patched")
+        edit_function = """func _internal_requestEditMessage(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, richText: RichTextMessageAttribute?, inlineStickers: [MediaId: Media], webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute?, invertMediaAttribute: InvertMediaMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {
+    if !AorusAntiSearchStore.isEnabled {
+        return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: text, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)
+    }
+    return account.postbox.transaction { transaction -> Bool in
+        if let user = transaction.getPeer(messageId.peerId) as? TelegramUser, user.botInfo != nil {
+            return true
+        }
+        return false
+    }
+    |> mapToSignal { aorusIsBotChat -> Signal<RequestEditMessageResult, RequestEditMessageError> in
+        let normalizedText = aorusIsBotChat ? text : AorusAntiSearch.normalizeText(text, entities: entities?.entities ?? [])
+        return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: normalizedText, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)
+    }
+}
+"""
+        upgraded, count = re.subn(
+            r"func _internal_requestEditMessage\(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute\?, richText: RichTextMessageAttribute\?, inlineStickers: \[MediaId: Media\], webpagePreviewAttribute: WebpagePreviewMessageAttribute\?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute\?, invertMediaAttribute: InvertMediaMessageAttribute\?\) -> Signal<RequestEditMessageResult, RequestEditMessageError> \{.*?\n\}\n\nfunc requestEditMessage",
+            edit_function + "\nfunc requestEditMessage",
+            t,
+            count=1,
+            flags=re.S,
+        )
+        if count:
+            edit.write_text(upgraded, encoding="utf-8")
+            print("AntiSearch: patched RequestEditMessage.swift (edit hook)")
         else:
-            anchor = (
-                "func _internal_requestEditMessage(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, richText: RichTextMessageAttribute?, inlineStickers: [MediaId: Media], webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute?, invertMediaAttribute: InvertMediaMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {\n"
-                "    return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: text, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)\n"
-            )
-            inject = (
-                "func _internal_requestEditMessage(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, richText: RichTextMessageAttribute?, inlineStickers: [MediaId: Media], webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute?, invertMediaAttribute: InvertMediaMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {\n"
-                "    let normalizedText = AorusAntiSearchStore.isEnabled ? AorusAntiSearch.normalizeText(text, entities: entities?.entities ?? []) : text\n"
-                "    return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: normalizedText, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)\n"
-            )
-            if anchor in t:
-                edit.write_text(t.replace(anchor, inject, 1), encoding="utf-8")
-                print("AntiSearch: patched RequestEditMessage.swift (edit hook)")
-            else:
-                print("WARNING: AntiSearch RequestEditMessage anchor not found")
+            print("WARNING: AntiSearch RequestEditMessage anchor not found")
     else:
         print("AntiSearch: RequestEditMessage.swift not found — skip edit hook")
 
