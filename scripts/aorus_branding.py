@@ -7789,11 +7789,11 @@ public enum AorusAntiSearch {
 
         var skippingFoldedTelContinuation = false
         let normalizedVCardData = vCardData
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-        for rawLine in normalizedVCardData.split(separator: "\n", omittingEmptySubsequences: false) {
+            .replacingOccurrences(of: "\\r\\n", with: "\\n")
+            .replacingOccurrences(of: "\\r", with: "\\n")
+        for rawLine in normalizedVCardData.split(separator: "\\n", omittingEmptySubsequences: false) {
             let line = String(rawLine)
-            if skippingFoldedTelContinuation && (line.hasPrefix(" ") || line.hasPrefix("\t")) {
+            if skippingFoldedTelContinuation && (line.hasPrefix(" ") || line.hasPrefix("\\t")) {
                 continue
             }
             skippingFoldedTelContinuation = false
@@ -7823,14 +7823,14 @@ public enum AorusAntiSearch {
         result.reserveCapacity(value.count)
         for scalar in value.unicodeScalars {
             switch scalar {
-            case "\\":
-                result.append("\\\\")
+            case "\\\\":
+                result.append("\\\\\\\\")
             case ";":
-                result.append("\\;")
+                result.append("\\\\;")
             case ",":
-                result.append("\\,")
-            case "\n", "\r":
-                result.append("\\n")
+                result.append("\\\\,")
+            case "\\n", "\\r":
+                result.append("\\\\n")
             default:
                 result.unicodeScalars.append(scalar)
             }
