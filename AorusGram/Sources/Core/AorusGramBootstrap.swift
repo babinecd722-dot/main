@@ -175,7 +175,7 @@ public final class AorusGramBootstrap {
         if AorusGramConfig.isEnabled(.antiSpam) {
             let verdict = AntiSpamManager.shared.check(peerId: peerId, text: text)
             if verdict.isSpam {
-                AntiSpamManager.shared.processIncoming(peerId: peerId, text: text)
+                AntiSpamManager.shared.processIncoming(peerId: peerId, text: text, verdict: verdict)
                 return
             }
         }

@@ -10,7 +10,7 @@ public final class AntiSpoofManager {
 
     public var antiSpoofOnline: Bool    = false { didSet { save() } }
     public var antiSpoofDeleted: Bool   = true  { didSet { save() } }
-    public let decoyText = "\u{2063}"
+    public let decoyText = "\u{3164}"
 
     private let key = "aorusgram_antispoof_v1"
 

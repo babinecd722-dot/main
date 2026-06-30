@@ -2607,15 +2607,28 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         upgraded = upgraded.replace(
             "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n",
             "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
-            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n",
+            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\") && !text.contains(\"\\u{3164}\")\n",
         )
         upgraded = upgraded.replace(
             "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
+            "        let decoy = \"\\u{3164}\"\n",
+        )
+        upgraded = upgraded.replace(
             "        let decoy = \"\\u{2063}\"\n",
+            "        let decoy = \"\\u{3164}\"\n",
+        )
+        upgraded = upgraded.replace(
+            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n",
+            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\") && !text.contains(\"\\u{3164}\")\n",
+        )
+        upgraded = upgraded.replace(
+            "        return editPreflight |> then(normalDelete)\n",
+            "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.85, queue: Queue.mainQueue())\n"
+            "        return editPreflight |> then(serverPropagationDelay) |> then(normalDelete)\n",
         )
         if upgraded != t:
             path.write_text(upgraded, encoding="utf-8")
-            print("AntiSpoofDeletePreflight: upgraded cached preflight decoy")
+            print("AntiSpoofDeletePreflight: upgraded cached preflight timing/decoy")
         else:
             print("AntiSpoofDeletePreflight: already injected")
         return
@@ -2648,12 +2661,12 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "        return messageIds.filter { id in\n"
         "            guard let msg = transaction.getMessage(id) else { return false }\n"
         "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
-        "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n"
+        "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\") && !text.contains(\"\\u{3164}\")\n"
         "        }\n"
         "    }\n"
         "    |> mapToSignal { (outgoingIds: [MessageId]) -> Signal<Void, NoError> in\n"
         "        guard !outgoingIds.isEmpty else { return normalDelete }\n"
-        "        let decoy = \"\\u{2063}\"\n"
+        "        let decoy = \"\\u{3164}\"\n"
         "        let initial: Signal<Void, NoError> = .complete()\n"
         "        let editPreflight: Signal<Void, NoError> = outgoingIds.reduce(initial) { acc, msgId -> Signal<Void, NoError> in\n"
         "            let editSignal: Signal<Void, NoError> = _internal_requestEditMessage(\n"
@@ -2673,7 +2686,8 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "            |> `catch` { _ -> Signal<Void, NoError> in .complete() }\n"
         "            return acc |> then(editSignal)\n"
         "        }\n"
-        "        return editPreflight |> then(normalDelete)\n"
+        "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.85, queue: Queue.mainQueue())\n"
+        "        return editPreflight |> then(serverPropagationDelay) |> then(normalDelete)\n"
         "    }\n"
         "}"
     )
@@ -3004,7 +3018,11 @@ def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
     if "aorusgram.antiSpoofDelete" in t:
         upgraded = t.replace(
             "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
+            "            let decoy = \"\\u{3164}\"\n",
+        )
+        upgraded = upgraded.replace(
             "            let decoy = \"\\u{2063}\"\n",
+            "            let decoy = \"\\u{3164}\"\n",
         )
         if upgraded != t:
             path.write_text(upgraded, encoding="utf-8")
@@ -3025,7 +3043,7 @@ def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
         "            let peerId = PeerId(peerIdNum.int64Value)\n"
         "            let msgId  = msgIdNum.int32Value\n"
         "            let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: msgId)\n"
-        "            let decoy = \"\\u{2063}\"\n"
+        "            let decoy = \"\\u{3164}\"\n"
         "            let _ = app.context.engine.messages.requestEditMessage(\n"
         "                messageId: messageId,\n"
         "                text: decoy,\n"
