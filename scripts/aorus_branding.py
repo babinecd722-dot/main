@@ -7776,7 +7776,43 @@ public enum AorusAntiSearch {
         guard let contact = media as? TelegramMediaContact else {
             return media
         }
-        return TelegramMediaContact(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: AorusPhoneSpoofStore.number, peerId: nil, vCardData: nil)
+        let spoofedPhoneNumber = AorusPhoneSpoofStore.number.isEmpty ? contact.phoneNumber : AorusPhoneSpoofStore.number
+        return TelegramMediaContact(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: spoofedPhoneNumber, peerId: contact.peerId, vCardData: sanitizedContactVCard(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: spoofedPhoneNumber))
+    }
+
+    private static func sanitizedContactVCard(firstName: String, lastName: String, phoneNumber: String) -> String {
+        let escapedFirstName = escapedVCardValue(firstName)
+        let escapedLastName = escapedVCardValue(lastName)
+        let displayName = escapedVCardValue([firstName, lastName].filter { !$0.isEmpty }.joined(separator: " "))
+        let escapedPhoneNumber = escapedVCardValue(phoneNumber)
+        return [
+            "BEGIN:VCARD",
+            "VERSION:3.0",
+            "N:\\(escapedLastName);\\(escapedFirstName);;;",
+            "FN:\\(displayName.isEmpty ? escapedPhoneNumber : displayName)",
+            "TEL;TYPE=CELL:\\(escapedPhoneNumber)",
+            "END:VCARD"
+        ].joined(separator: "\\r\\n")
+    }
+
+    private static func escapedVCardValue(_ value: String) -> String {
+        var result = ""
+        result.reserveCapacity(value.count)
+        for scalar in value.unicodeScalars {
+            switch scalar {
+            case "\\":
+                result.append("\\\\")
+            case ";":
+                result.append("\\;")
+            case ",":
+                result.append("\\,")
+            case "\n", "\r":
+                result.append("\\n")
+            default:
+                result.unicodeScalars.append(scalar)
+            }
+        }
+        return result
     }
 
     private static func anonymizedMedia(_ media: Media, mediaBox: MediaBox) -> Media {
