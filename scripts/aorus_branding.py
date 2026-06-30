@@ -2364,15 +2364,62 @@ def patch_incoming_message_hook(tg: Path) -> None:
         return
 
     t = path.read_text(encoding="utf-8")
-    if "aorusgram.didReceiveMessage" in t:
-        print("IncomingMessageHook: already injected")
-        return
-
     sentinel = "// AorusGram: incoming message hook"
+    visible_anchor = "let _ = transaction.addMessages(messages, location: location)"
+
+    prefilter_code = (
+        "                // AorusGram: native anti-spam prefilter (runs before messages enter local history)\n"
+        "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n"
+        "                let aorusBlockedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_blocked_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
+        "                let aorusUserKeywords = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_keywords\") ?? []\n"
+        "                func aorusNormalizeSpamText(_ value: String) -> String {\n"
+        "                    let folded = value.replacingOccurrences(of: \"ё\", with: \"е\").folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: \"ru_RU\")).lowercased()\n"
+        "                    return folded.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: \" \").trimmingCharacters(in: .whitespacesAndNewlines)\n"
+        "                }\n"
+        "                func aorusSpamLinkCount(_ text: String) -> Int {\n"
+        "                    let markers = [\"http://\", \"https://\", \"t.me/\", \"telegram.me/\", \"bit.ly/\", \"tinyurl.com/\", \"wa.me/\"]\n"
+        "                    return markers.reduce(0) { result, marker in result + text.components(separatedBy: marker).count - 1 }\n"
+        "                }\n"
+        "                func aorusShouldHideIncomingSpam(identity: Int64, text rawText: String) -> Bool {\n"
+        "                    if aorusBlockedPeerIds.contains(identity) { return true }\n"
+        "                    let text = aorusNormalizeSpamText(rawText)\n"
+        "                    if text.isEmpty { return false }\n"
+        "                    for keyword in aorusUserKeywords {\n"
+        "                        let cleanKeyword = aorusNormalizeSpamText(keyword)\n"
+        "                        if !cleanKeyword.isEmpty && text.contains(cleanKeyword) { return true }\n"
+        "                    }\n"
+        "                    let strongPatterns = [\"быстрый доход\", \"пассивный доход\", \"без вложений\", \"free bitcoin\", \"nft drop\", \"airdrop\", \"переведи деньги\", \"срочно нужна помощь\", \"онлайн casino\", \"крипто раздача\", \"гарантированный доход\"]\n"
+        "                    if strongPatterns.contains(where: { text.contains($0) }) { return true }\n"
+        "                    let weightedPatterns = [\"заработ\", \"крипт\", \"инвест\", \"казино\", \"букмекер\", \"розыгрыш\", \"приз\", \"доход\", \"трейдинг\", \"сигналы\"]\n"
+        "                    var score = 0\n"
+        "                    for pattern in weightedPatterns where text.contains(pattern) { score += 1 }\n"
+        "                    let links = aorusSpamLinkCount(text)\n"
+        "                    if text.contains(\"t.me/+\") || text.contains(\"telegram.me/+\") { score += 3 }\n"
+        "                    else if links >= 3 { score += 2 }\n"
+        "                    else if links >= 1 && score > 0 { score += 1 }\n"
+        "                    return score >= 3\n"
+        "                }\n"
+        "                let aorusVisibleMessages = aorusAntiSpamEnabled ? messages.filter { storeMsg in\n"
+        "                    guard storeMsg.flags.contains(.Incoming) else { return true }\n"
+        "                    guard case let .Id(mid) = storeMsg.id else { return true }\n"
+        "                    let identity = storeMsg.authorId?.toInt64() ?? mid.peerId.toInt64()\n"
+        "                    return !aorusShouldHideIncomingSpam(identity: identity, text: storeMsg.text)\n"
+        "                } : messages\n"
+    )
+
+    if "aorusgram.didReceiveMessage" in t:
+        if "let aorusVisibleMessages =" not in t and visible_anchor in t:
+            t = t.replace(sentinel + "\n", sentinel + "\n" + prefilter_code, 1)
+            t = t.replace(visible_anchor, "let _ = transaction.addMessages(aorusVisibleMessages, location: location)", 1)
+            path.write_text(t, encoding="utf-8")
+            print("IncomingMessageHook: upgraded with native anti-spam prefilter")
+        else:
+            print("IncomingMessageHook: already injected")
+        return
 
     # Anchor is intentionally precise — this line exists in current upstream and
     # gives us `messages: [StoreMessage]` in scope.
-    anchor = "let _ = transaction.addMessages(messages, location: location)"
+    anchor = visible_anchor
     if anchor not in t:
         print("IncomingMessageHook: addMessages(messages, location: location) anchor not found — skipped")
         return
@@ -2382,7 +2429,8 @@ def patch_incoming_message_hook(tg: Path) -> None:
     # author/text/timestamp. Filter for .Incoming flag.
     hook_code = (
         sentinel + "\n"
-        "                for storeMsg in messages {\n"
+        + prefilter_code
+        + "                for storeMsg in messages {\n"
         "                    guard storeMsg.flags.contains(.Incoming) else { continue }\n"
         "                    guard case let .Id(mid) = storeMsg.id else { continue }\n"
         "                    var userInfo: [String: Any] = [\n"
@@ -2401,7 +2449,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                "
     )
 
-    t = t.replace(anchor, hook_code + anchor, 1)
+    t = t.replace(anchor, hook_code + "let _ = transaction.addMessages(aorusVisibleMessages, location: location)", 1)
     path.write_text(t, encoding="utf-8")
     print("IncomingMessageHook: injected at addMessages(messages, location: location)")
 
@@ -2484,6 +2532,86 @@ def patch_auto_reply_send_hook(tg: Path) -> None:
         print("AutoReplySend: observer injected into AppDelegate after bootstrap call")
     else:
         print("AutoReplySend: bootstrap anchor not found — skipped gracefully")
+
+
+def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
+    """Show a native Telegram-style toast when the client hides/blocks spam.
+
+    Detection lives in AorusGram. UI presentation must stay in TelegramUI/AppDelegate:
+    importing AorusGramUI here causes ambiguous mirrored symbols, so this hook uses
+    Telegram's own UndoOverlayController directly.
+    """
+    path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    if not path.is_file():
+        print("AntiSpamToast: AppDelegate.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusgram_spam_detected" in t:
+        print("AntiSpamToast: already injected")
+        return
+
+    if "import UndoUI\n" not in t:
+        if "import UIKit\n" in t:
+            t = t.replace("import UIKit\n", "import UIKit\nimport UndoUI\n", 1)
+        else:
+            t = "import UndoUI\n" + t
+        print("AntiSpamToast: added import UndoUI")
+
+    sentinel = "// AorusGram: anti-spam native toast"
+    hook = (
+        "\n        " + sentinel + "\n"
+        "        NotificationCenter.default.addObserver(forName: NSNotification.Name(\"aorusgram_spam_detected\"),\n"
+        "            object: nil, queue: .main) { [weak self] note in\n"
+        "            guard let app = self?.contextValue else { return }\n"
+        "            let now = Date().timeIntervalSince1970\n"
+        "            let lastToast = UserDefaults.standard.double(forKey: \"aorusgram_antispam_last_toast\")\n"
+        "            guard now - lastToast > 1.8 else { return }\n"
+        "            UserDefaults.standard.set(now, forKey: \"aorusgram_antispam_last_toast\")\n"
+        "            let presentationData = app.context.sharedContext.currentPresentationData.with { $0 }\n"
+        "            let lang = presentationData.strings.baseLanguageCode.lowercased()\n"
+        "            let isRu = lang == \"ru\" || lang.hasPrefix(\"ru-\")\n"
+        "            let reason = (note.userInfo?[\"reason\"] as? String) ?? \"\"\n"
+        "            let text: String\n"
+        "            if reason == \"blockedUser\" {\n"
+        "                text = isRu ? \"Спам от заблокированного отправителя скрыт\" : \"Spam from a blocked sender was hidden\"\n"
+        "            } else if reason == \"flood\" || reason == \"repeatedMessage\" {\n"
+        "                text = isRu ? \"Повторяющийся спам скрыт\" : \"Repeated spam was hidden\"\n"
+        "            } else {\n"
+        "                text = isRu ? \"Спам скрыт\" : \"Spam was hidden\"\n"
+        "            }\n"
+        "            app.rootController.present(\n"
+        "                UndoOverlayController(\n"
+        "                    presentationData: presentationData,\n"
+        "                    content: .info(title: nil, text: text, timeout: 3.0, customUndoText: nil),\n"
+        "                    elevatedLayout: false,\n"
+        "                    position: .bottom,\n"
+        "                    animateInAsReplacement: true,\n"
+        "                    action: { _ in return false }\n"
+        "                ),\n"
+        "                in: .window(.root)\n"
+        "            )\n"
+        "        }\n"
+    )
+
+    anchor = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
+    if anchor in t:
+        t = t.replace(anchor, anchor + hook, 1)
+        path.write_text(t, encoding="utf-8")
+        print("AntiSpamToast: observer injected into AppDelegate")
+    else:
+        print("AntiSpamToast: bootstrap anchor not found — skipped gracefully")
+
+    build = tg / "submodules/TelegramUI/BUILD"
+    if build.is_file():
+        bt = build.read_text(encoding="utf-8")
+        if "//submodules/UndoUI:UndoUI" not in bt:
+            dep_anchor = '        "//submodules/AccountContext:AccountContext",\n'
+            if dep_anchor in bt:
+                bt = bt.replace(dep_anchor, dep_anchor + '        "//submodules/UndoUI:UndoUI",\n', 1)
+                build.write_text(bt, encoding="utf-8")
+                print("AntiSpamToast: added UndoUI dep to TelegramUI BUILD")
+            else:
+                print("AntiSpamToast: TelegramUI BUILD dep anchor not found")
 
 
 def patch_chat_title_anti_spoof_status(tg: Path) -> None:
@@ -13758,6 +13886,7 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
+    patch_app_delegate_anti_spam_toast(tg)
     patch_app_delegate_publish_account_id(tg)
     patch_app_delegate_open_purchase_bot(tg)
     patch_app_delegate_activate_deeplink(tg)

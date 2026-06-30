@@ -146,9 +146,9 @@ public final class AorusGramBootstrap {
 
         // Anti-spam gate
         if AorusGramConfig.isEnabled(.antiSpam) {
-            let verdict = AntiSpamManager.shared.check(peerId: peerId, text: text)
+            let verdict = AntiSpamManager.shared.check(peerId: senderId, text: text)
             if verdict.isSpam {
-                AntiSpamManager.shared.processIncoming(peerId: peerId, text: text, verdict: verdict)
+                AntiSpamManager.shared.processIncoming(peerId: senderId, text: text, verdict: verdict)
                 return
             }
         }

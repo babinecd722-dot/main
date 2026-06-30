@@ -27,21 +27,32 @@ final class AntiSpamManager {
 
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-              let saved = try? JSONDecoder().decode(SavedState.self, from: data) else { return }
+              let saved = try? JSONDecoder().decode(SavedState.self, from: data) else {
+            mirrorFlatState()
+            return
+        }
         isEnabled  = saved.isEnabled
         autoBlock  = saved.autoBlock
         keywords   = saved.keywords
         blockedPeerIds = Set(saved.blockedPeerIds)
+        mirrorFlatState()
     }
 
     private func save() {
+        let blockedIds = Array(blockedPeerIds)
         let state = SavedState(
             isEnabled:      isEnabled,
             autoBlock:      autoBlock,
             keywords:       keywords,
-            blockedPeerIds: Array(blockedPeerIds)
+            blockedPeerIds: blockedIds
         )
         UserDefaults.standard.set(try? JSONEncoder().encode(state), forKey: defaultsKey)
+        mirrorFlatState()
+    }
+
+    private func mirrorFlatState() {
+        UserDefaults.standard.set(Array(blockedPeerIds).map { NSNumber(value: $0) }, forKey: "aorusgram_antispam_blocked_peer_ids")
+        UserDefaults.standard.set(keywords, forKey: "aorusgram_antispam_keywords")
     }
 
     // MARK: - API
@@ -102,7 +113,7 @@ final class AntiSpamManager {
     }
 
     func check(peerId: Int64, text: String?) -> SpamVerdict {
-        guard isEnabled else { return SpamVerdict(isSpam: false, reason: .clean) }
+        guard effectiveEnabled else { return SpamVerdict(isSpam: false, reason: .clean) }
 
         if blockedPeerIds.contains(peerId) {
             return SpamVerdict(isSpam: true, reason: .blockedUser)
@@ -152,7 +163,7 @@ final class AntiSpamManager {
 
     // Вызывается из перехватчика входящих сообщений
     func processIncoming(peerId: Int64, text: String?, verdict existingVerdict: SpamVerdict? = nil) {
-        guard isEnabled else { return }
+        guard effectiveEnabled else { return }
         let verdict = existingVerdict ?? check(peerId: peerId, text: text)
         guard verdict.isSpam else { return }
 
@@ -174,6 +185,13 @@ final class AntiSpamManager {
         var autoBlock: Bool
         var keywords: [String]
         var blockedPeerIds: [Int64]
+    }
+
+    private var effectiveEnabled: Bool {
+        if let value = UserDefaults.standard.object(forKey: "aorusgram_feature_anti_spam") as? Bool {
+            return value
+        }
+        return isEnabled
     }
 
     private struct PeerWindow {
