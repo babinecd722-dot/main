@@ -3080,9 +3080,6 @@ def patch_phone_spoof_profile_header(tg: Path) -> None:
         print("PhoneSpoofHeader: PeerInfoHeaderNode.swift not found, skip")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusPhoneSpoofHeaderNumber" in t:
-        print("PhoneSpoofHeader: already injected")
-        return
 
     helper = (
         "\n"
@@ -3094,16 +3091,63 @@ def patch_phone_spoof_profile_header(tg: Path) -> None:
         "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
         "}\n"
     )
-    inserted_helper = False
-    for anchor in ("final class PeerInfoHeaderNode", "class PeerInfoHeaderNode"):
-        if anchor in t:
-            t = t.replace(anchor, helper + "\n" + anchor, 1)
-            inserted_helper = True
-            break
-    if not inserted_helper:
-        t = helper + "\n" + t
+    if "aorusPhoneSpoofHeaderNumber" not in t:
+        inserted_helper = False
+        for anchor in ("final class PeerInfoHeaderNode", "class PeerInfoHeaderNode"):
+            if anchor in t:
+                t = t.replace(anchor, helper + "\n" + anchor, 1)
+                inserted_helper = True
+                break
+        if not inserted_helper:
+            t = helper + "\n" + t
 
     replacements = [
+        (
+            "private func aorusPhoneSpoofHeaderNumber(context: AccountContext, peer: Peer?, isSettings: Bool, phone: String) -> String {\n"
+            "    guard isSettings, AorusPhoneSpoofStore.isEnabled, let peer = peer, peer.id == context.account.peerId else {\n",
+            "private func aorusPhoneSpoofHeaderNumber(isOwnAccount: Bool, isSettings: Bool, phone: String) -> String {\n"
+            "    guard isSettings, isOwnAccount, AorusPhoneSpoofStore.isEnabled else {\n",
+        ),
+        (
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: phone))",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: phone))",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: phone))",
+        ),
+        (
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: user.phone))",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: user.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: user.phone))",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: user.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: peer.phone))",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: peer.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: peer.phone))",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: peer.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == context.account.peerId } ?? false, isSettings: isSettings, phone: phone))",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == self.context.account.peerId } ?? false, isSettings: isSettings, phone: phone))",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: phone))",
+        ),
+        (
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == context.account.peerId } ?? false, isSettings: isSettings, phone: user.phone))",
+            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: user.phone))",
+        ),
+        (
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == self.context.account.peerId } ?? false, isSettings: isSettings, phone: user.phone))",
+            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: user.phone))",
+        ),
         (
             "formatPhoneNumber(context: context, number: phone)",
             "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: phone))",
