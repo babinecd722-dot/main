@@ -290,6 +290,7 @@ private struct AorusState: Equatable {
     var autoReply: Bool
     var downloadAccel: Bool
     var maxMediaQuality: Bool
+    var antiSpamEnabled: Bool
     var performanceStatsEnabled: Bool
     var performanceShowUptime: Bool
     var performanceShowRAM: Bool
@@ -388,6 +389,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case perfHeader(PresentationTheme, String)
     case downloadAccel(PresentationTheme, String, Bool)
     case maxMediaQuality(PresentationTheme, String, Bool)
+    case antiSpam(PresentationTheme, String, Bool)
     case performanceStats(PresentationTheme, String, Bool)
     case performanceUptime(PresentationTheme, String, Bool)
     case performanceRAM(PresentationTheme, String, Bool)
@@ -446,7 +448,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.privacy.rawValue
         case .aiHeader, .voiceTranscription, .chatSummary, .translator, .autoReply, .voiceTwin:
             return AorusSection.ai.rawValue
-        case .perfHeader, .downloadAccel, .maxMediaQuality, .performanceStats, .performanceUptime, .performanceRAM,
+        case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .performanceStats, .performanceUptime, .performanceRAM,
              .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
@@ -489,21 +491,22 @@ private enum AorusEntry: ItemListNodeEntry {
         case .voiceTwin:            return 17
         case .perfHeader:           return 20
         case .downloadAccel:        return 21
-        case .maxMediaQuality:             return 22
-        case .performanceStats:     return 23
-        case .performanceUptime:    return 24
-        case .performanceRAM:       return 25
-        case .performanceCPU:       return 26
-        case .performanceFPS:       return 27
-        case .performanceBattery:   return 28
-        case .performanceNetwork:   return 29
-        case .performanceDisk:      return 30
-        case .performanceThermal:   return 31
-        case .performanceGraph:     return 32
-        case .ramAutoClean:         return 33
-        case .ramInterval:          return 34
-        case .cacheAutoClean:       return 35
-        case .cacheInterval:        return 36
+        case .maxMediaQuality:      return 22
+        case .antiSpam:             return 23
+        case .performanceStats:     return 24
+        case .performanceUptime:    return 25
+        case .performanceRAM:       return 26
+        case .performanceCPU:       return 27
+        case .performanceFPS:       return 28
+        case .performanceBattery:   return 29
+        case .performanceNetwork:   return 30
+        case .performanceDisk:      return 31
+        case .performanceThermal:   return 32
+        case .performanceGraph:     return 33
+        case .ramAutoClean:         return 34
+        case .ramInterval:          return 35
+        case .cacheAutoClean:       return 36
+        case .cacheInterval:        return 37
         case .uiHeader:             return 50
         case .glassUI:              return 51
         case .amoledMode:           return 52
@@ -574,6 +577,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .downloadAccel(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .maxMediaQuality(lt, ls, lv):
             if case let .maxMediaQuality(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .antiSpam(lt, ls, lv):
+            if case let .antiSpam(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .performanceStats(lt, ls, lv):
             if case let .performanceStats(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .performanceUptime(lt, ls, lv):
@@ -699,6 +704,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.downloadAccel, $0) })
         case let .maxMediaQuality(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.maxMediaQuality, $0) })
+        case let .antiSpam(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiSpamEnabled, $0) })
         case let .performanceStats(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceStatsEnabled, $0) })
         case let .performanceUptime(_, title, value):
@@ -833,6 +840,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .perfHeader(theme, l10n.perfHeader),
         .downloadAccel(theme, l10n.downloadAccel, state.downloadAccel),
         .maxMediaQuality(theme, l10n.maxMediaQuality, state.maxMediaQuality),
+        .antiSpam(theme, l10n.antiSpam, state.antiSpamEnabled),
         .performanceStats(theme, l10n.performanceStats, state.performanceStatsEnabled),
         // Detailed metric switches, RAM auto-clean and cache auto-clean are appended
         // below so they animate in/out directly under their parent toggles.
@@ -954,6 +962,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         autoReply:          mgr.autoReply,
         downloadAccel:      mgr.downloadAccel,
         maxMediaQuality:    mgr.maxMediaQuality,
+        antiSpamEnabled:    mgr.antiSpamEnabled,
         performanceStatsEnabled: mgr.performanceStatsEnabled,
         performanceShowUptime:   mgr.performanceShowUptime,
         performanceShowRAM:      mgr.performanceShowRAM,
@@ -1018,6 +1027,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.autoReply           = s.autoReply
             mgr.downloadAccel       = s.downloadAccel
             mgr.maxMediaQuality     = s.maxMediaQuality
+            mgr.antiSpamEnabled     = s.antiSpamEnabled
             mgr.performanceStatsEnabled = s.performanceStatsEnabled
             mgr.performanceShowUptime   = s.performanceShowUptime
             mgr.performanceShowRAM      = s.performanceShowRAM
