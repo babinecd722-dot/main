@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Display
+import AsyncDisplayKit
 import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
@@ -190,11 +191,11 @@ private enum ASEntry: ItemListNodeEntry {
         case let .blockedEmpty(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .blockedPeer(_, _, peerId, name):
-            return ItemListActionItem(presentationData: presentationData, title: name, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: { args.unblock(peerId) })
+            return ASRevealTextItem(theme: presentationData.theme, title: name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.unblock(peerId) })
         case let .keywordsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .keyword(_, _, word):
-            return ItemListActionItem(presentationData: presentationData, title: word, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: { args.removeKeyword(word) })
+            return ASRevealTextItem(theme: presentationData.theme, title: word, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeKeyword(word) })
         case let .keywordInput(_, placeholder, value):
             return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, returnKeyType: .done, sectionId: section, textUpdated: { args.setNewKeyword($0) }, action: { args.commitNewKeyword() })
         case let .keywordsInfo(_, text):
@@ -202,11 +203,178 @@ private enum ASEntry: ItemListNodeEntry {
         case let .exceptionsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .exceptionPeer(_, _, peerId, name):
-            return ItemListActionItem(presentationData: presentationData, title: name, kind: .destructive, alignment: .natural, sectionId: section, style: .blocks, action: { args.removeException(peerId) })
+            return ASRevealTextItem(theme: presentationData.theme, title: name, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeException(peerId) })
         case let .addException(_, text):
             return ItemListActionItem(presentationData: presentationData, title: text, kind: .neutral, alignment: .natural, sectionId: section, style: .blocks, action: { args.addException() })
         case let .exceptionsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        }
+    }
+}
+
+private final class ASRevealTextItem: ListViewItem, ItemListItem {
+    let theme: PresentationTheme
+    let title: String
+    let deleteTitle: String
+    let sectionId: ItemListSectionId
+    let requestsNoInset: Bool = false
+    let deleteAction: () -> Void
+
+    init(theme: PresentationTheme, title: String, deleteTitle: String, sectionId: ItemListSectionId, deleteAction: @escaping () -> Void) {
+        self.theme = theme
+        self.title = title
+        self.deleteTitle = deleteTitle
+        self.sectionId = sectionId
+        self.deleteAction = deleteAction
+    }
+
+    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void,
+                                 params: ListViewItemLayoutParams,
+                                 synchronousLoads: Bool,
+                                 previousItem: ListViewItem?,
+                                 nextItem: ListViewItem?,
+                                 completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
+        async {
+            let node = ASRevealTextItemNode()
+            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+            node.contentSize = layout.contentSize
+            node.insets = layout.insets
+            Queue.mainQueue().async {
+                completion(node, { return (nil, { _ in apply() }) })
+            }
+        }
+    }
+
+    func updateNode(async: @escaping (@escaping () -> Void) -> Void,
+                    node: @escaping () -> ListViewItemNode,
+                    params: ListViewItemLayoutParams,
+                    previousItem: ListViewItem?,
+                    nextItem: ListViewItem?,
+                    animation: ListViewItemUpdateAnimation,
+                    completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
+        Queue.mainQueue().async {
+            if let nodeValue = node() as? ASRevealTextItemNode {
+                let makeLayout = nodeValue.asyncLayout()
+                async {
+                    let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+                    Queue.mainQueue().async { completion(layout, { _ in apply() }) }
+                }
+            }
+        }
+    }
+}
+
+private final class ASRevealTextItemNode: ItemListRevealOptionsItemNode {
+    private let backgroundNode = ASDisplayNode()
+    private let topStripeNode = ASDisplayNode()
+    private let bottomStripeNode = ASDisplayNode()
+    private let maskNode = ASImageNode()
+    private weak var titleLabel: UILabel?
+    private var item: ASRevealTextItem?
+    private var layoutParams: ListViewItemLayoutParams?
+
+    init() {
+        backgroundNode.isLayerBacked = true
+        topStripeNode.isLayerBacked = true
+        bottomStripeNode.isLayerBacked = true
+        super.init(layerBacked: false, rotated: false, seeThrough: false)
+        addSubnode(backgroundNode)
+        addSubnode(topStripeNode)
+        addSubnode(bottomStripeNode)
+        addSubnode(maskNode)
+    }
+
+    override func didLoad() {
+        super.didLoad()
+        let title = UILabel()
+        title.numberOfLines = 1
+        title.adjustsFontSizeToFitWidth = true
+        title.minimumScaleFactor = 0.75
+        view.addSubview(title)
+        titleLabel = title
+        if let item {
+            applyItem(item)
+        }
+        layoutText()
+    }
+
+    private func applyItem(_ item: ASRevealTextItem) {
+        titleLabel?.text = item.title
+        titleLabel?.textColor = item.theme.list.itemPrimaryTextColor
+        titleLabel?.font = Font.regular(17.0)
+    }
+
+    private func layoutText() {
+        guard let params = layoutParams else { return }
+        let offset = self.revealOffset
+        let left = params.leftInset + 16.0
+        titleLabel?.frame = CGRect(x: offset + left, y: 12.0, width: params.width - left - params.rightInset - 16.0, height: 24.0)
+    }
+
+    override func updateRevealOffset(offset: CGFloat, transition: ContainedViewLayoutTransition) {
+        super.updateRevealOffset(offset: offset, transition: transition)
+        layoutText()
+    }
+
+    override func revealOptionSelected(_ option: ItemListRevealOption, animated: Bool) {
+        setRevealOptionsOpened(false, animated: true)
+        revealOptionsInteractivelyClosed()
+        item?.deleteAction()
+    }
+
+    func asyncLayout() -> (ASRevealTextItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
+        return { item, params, neighbors in
+            let contentSize = CGSize(width: params.width, height: 48.0)
+            let insets = itemListNeighborsGroupedInsets(neighbors, params)
+            let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
+            return (layout, { [weak self] in
+                guard let self else { return }
+                self.item = item
+                self.layoutParams = params
+                self.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
+                self.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
+                self.bottomStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
+
+                let hasCorners = itemListHasRoundedBlockLayout(params)
+                var topCorners = false
+                var bottomCorners = false
+                switch neighbors.top {
+                case .sameSection(false):
+                    self.topStripeNode.isHidden = true
+                default:
+                    topCorners = true
+                    self.topStripeNode.isHidden = hasCorners
+                }
+                let bottomInset: CGFloat
+                let bottomOffset: CGFloat
+                switch neighbors.bottom {
+                case .sameSection(false):
+                    bottomInset = params.leftInset + 16.0
+                    bottomOffset = -UIScreenPixel
+                    self.bottomStripeNode.isHidden = false
+                default:
+                    bottomInset = 0.0
+                    bottomOffset = 0.0
+                    bottomCorners = true
+                    self.bottomStripeNode.isHidden = hasCorners
+                }
+
+                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
+                let bgY = -min(insets.top, UIScreenPixel)
+                let bgH = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
+                self.backgroundNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: bgH)
+                self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                self.topStripeNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: UIScreenPixel)
+                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
+
+                self.applyItem(item)
+                self.layoutText()
+                self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
+                self.updateRevealOptionsSeparatorNodes(top: self.topStripeNode, bottom: self.bottomStripeNode, topIsHidden: self.topStripeNode.isHidden, bottomIsHidden: self.bottomStripeNode.isHidden, topHiddenByPreviousRevealOptions: neighbors.topHasActiveRevealOptions, bottomHiddenByNextRevealOptions: neighbors.bottomHasActiveRevealOptions)
+                let trashIcon = UIImage(systemName: "trash.fill")
+                let revealIcon: ItemListRevealOptionIcon = trashIcon.map { .image(image: $0) } ?? .none
+                self.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.deleteTitle, icon: revealIcon, color: item.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.theme.list.itemDisclosureActions.destructive.foregroundColor)]))
+            })
         }
     }
 }
@@ -240,8 +408,8 @@ private func asEntries(state: ASState, theme: PresentationTheme) -> [ASEntry] {
     }
     entries.append(.keywordInput(theme, isRu ? "Добавить слово" : "Add a word", state.newKeyword))
     entries.append(.keywordsInfo(theme, isRu
-        ? "Сообщения с этими словами скрываются автоматически. Нажмите на слово, чтобы удалить."
-        : "Messages containing these words are hidden automatically. Tap a word to remove it."))
+        ? "Сообщения с этими словами скрываются автоматически. Для удаления свайпните строку влево."
+        : "Messages containing these words are hidden automatically. Swipe left to delete."))
 
     entries.append(.exceptionsHeader(theme, isRu ? "ИСКЛЮЧЕНИЯ" : "EXCEPTIONS"))
     for (i, peer) in state.allowed.enumerated() {
@@ -249,8 +417,8 @@ private func asEntries(state: ASState, theme: PresentationTheme) -> [ASEntry] {
     }
     entries.append(.addException(theme, isRu ? "Добавить исключение" : "Add exception"))
     entries.append(.exceptionsInfo(theme, isRu
-        ? "Эти контакты никогда не фильтруются антиспамом. Нажмите, чтобы убрать из списка."
-        : "These contacts are never filtered by anti-spam. Tap to remove from the list."))
+        ? "Эти контакты никогда не фильтруются антиспамом. Для удаления свайпните строку влево."
+        : "These contacts are never filtered by anti-spam. Swipe left to remove."))
 
     return entries
 }

@@ -189,6 +189,7 @@ final class AntiSpamManager {
         UserDefaults.standard.set(spamProtection, forKey: "aorusgram_antispam_spam_protection")
         UserDefaults.standard.set(stopWordsProtection, forKey: "aorusgram_antispam_stopwords_protection")
         UserDefaults.standard.set(textCleanup, forKey: "aorusgram_antispam_text_cleanup")
+        UserDefaults.standard.set(autoBlock, forKey: "aorusgram_antispam_auto_block")
     }
 
     // MARK: - API
@@ -300,7 +301,7 @@ final class AntiSpamManager {
             return SpamVerdict(isSpam: false, reason: .clean)
         }
 
-        if blockedPeerIds.contains(peerId) {
+        if autoBlock && blockedPeerIds.contains(peerId) {
             return SpamVerdict(isSpam: true, reason: .blockedUser)
         }
 

@@ -641,7 +641,7 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
     peer. We keep the NATIVE reply experience while composing (the usual "In reply to X"
     bar), and only at send time — in ChatController.sendMessages, the single funnel all
     sends pass through — do we detect a reply whose target was deleted and rewrite it:
-    the server reply is dropped and the deleted text is prepended as a collapsed
+    the server reply is dropped and the deleted text is prepended as an inline
     blockquote entity. The message then sends as an ordinary message whose quote is
     visible to everyone. Replies to normal (non-deleted) messages are untouched.
     """
@@ -665,7 +665,7 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
         "            var shouldOpenScheduledMessages = false\n"
         "            // AorusGram: deleted-message quote reply on send — a reply target that was\n"
         "            // deleted no longer exists on the server, so replace the server reply with\n"
-        "            // an inline collapsed blockquote of its text. The message then sends normally\n"
+        "            // an inline blockquote of its text. The message then sends normally\n"
         "            // and the quote is visible to everyone.\n"
         "            messages = messages.map { aorusMessage -> EnqueueMessage in\n"
         "                guard case let .message(aorusText, aorusAttributes, aorusInlineStickers, aorusMediaReference, aorusThreadId, aorusReplyToMessageId, aorusReplyToStoryId, aorusLocalGroupingKey, aorusCorrelationId, aorusBubbleUp) = aorusMessage else { return aorusMessage }\n"
@@ -684,7 +684,7 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
         "                for aorusAttr in aorusAttributes {\n"
         "                    if let aorusEntities = aorusAttr as? TextEntitiesMessageAttribute {\n"
         "                        aorusHadEntities = true\n"
-        "                        var aorusShifted: [MessageTextEntity] = [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: true))]\n"
+        "                        var aorusShifted: [MessageTextEntity] = [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: false))]\n"
         "                        for aorusE in aorusEntities.entities {\n"
         "                            aorusShifted.append(MessageTextEntity(range: (aorusE.range.lowerBound + aorusShift) ..< (aorusE.range.upperBound + aorusShift), type: aorusE.type))\n"
         "                        }\n"
@@ -694,7 +694,7 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
         "                    }\n"
         "                }\n"
         "                if !aorusHadEntities {\n"
-        "                    aorusNewAttributes.append(TextEntitiesMessageAttribute(entities: [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: true))]))\n"
+        "                    aorusNewAttributes.append(TextEntitiesMessageAttribute(entities: [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: false))]))\n"
         "                }\n"
         "                return .message(text: aorusNewText, attributes: aorusNewAttributes, inlineStickers: aorusInlineStickers, mediaReference: aorusMediaReference, threadId: aorusThreadId, replyToMessageId: nil, replyToStoryId: aorusReplyToStoryId, localGroupingKey: aorusLocalGroupingKey, correlationId: aorusCorrelationId, bubbleUpEmojiOrStickersets: aorusBubbleUp)\n"
         "            }\n"
@@ -2448,6 +2448,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
         "                let aorusStopWordsOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_stopwords_protection\") as? Bool) ?? true\n"
         "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
+        "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
         "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n"
         "                let aorusThreatTokensLatin = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_tokens_latin\") ?? []\n"
         "                let aorusDeobMap: [Character: Character] = [\"0\": \"o\", \"1\": \"i\", \"3\": \"e\", \"4\": \"a\", \"5\": \"s\", \"6\": \"b\", \"7\": \"t\", \"8\": \"b\", \"9\": \"g\", \"@\": \"a\", \"$\": \"s\", \"а\": \"a\", \"в\": \"b\", \"е\": \"e\", \"к\": \"k\", \"м\": \"m\", \"н\": \"h\", \"о\": \"o\", \"р\": \"p\", \"с\": \"c\", \"т\": \"t\", \"у\": \"y\", \"х\": \"x\", \"і\": \"i\"]\n"
@@ -2477,7 +2478,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                }\n"
         "                func aorusShouldHideIncomingSpam(identity: Int64, text rawText: String) -> Bool {\n"
         "                    if identity == 777000 || aorusAllowedPeerIds.contains(identity) { return false }\n"
-        "                    if aorusBlockedPeerIds.contains(identity) { return true }\n"
+        "                    if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) { return true }\n"
         "                    let text = aorusNormalizeSpamText(rawText)\n"
         "                    if text.isEmpty { return false }\n"
         "                    let compacted = aorusCompactSpamText(text)\n"
@@ -2553,6 +2554,17 @@ def patch_incoming_message_hook(tg: Path) -> None:
 
     if "aorusgram.didReceiveMessage" in t:
         upgraded = t
+        upgraded = upgraded.replace(
+            "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
+            "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
+            "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
+            "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
+            "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
+        )
+        upgraded = upgraded.replace(
+            "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
+            "                    if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) { return true }\n",
+        )
         upgraded = upgraded.replace(
             "                        if aorusThreatPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return true }\n"
             "                        let deob = aorusDeobfuscate(rawText)\n"
@@ -2760,8 +2772,8 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            let iconName: String\n"
         "            let iconColor: UIColor\n"
         "            if isThreat {\n"
-        "                title = isRu ? \"Угроза заблокирована\" : \"Threat blocked\"\n"
-        "                text = isRu ? \"Сообщение с угрозами скрыто\" : \"A threatening message was hidden\"\n"
+        "                title = isRu ? \"Обнаружена угроза\" : \"Threat detected\"\n"
+        "                text = isRu ? \"Нажмите «Пожаловаться», чтобы отправить жалобу\" : \"Tap Report to send a complaint\"\n"
         "                iconName = \"exclamationmark.shield.fill\"\n"
         "                iconColor = UIColor.white\n"
         "            } else if isBlocked {\n"
@@ -2780,13 +2792,25 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "                iconName = \"hand.raised.slash.fill\"\n"
         "                iconColor = UIColor.white\n"
         "            }\n"
-        "            let aorusSpamIcon = (UIImage(systemName: iconName, withConfiguration: UIImage.SymbolConfiguration(pointSize: 30.0, weight: .medium))?.withTintColor(iconColor, renderingMode: .alwaysOriginal)) ?? UIImage()\n"
+        "            let aorusSpamIcon: UIImage = {\n"
+        "                let cfg = UIImage.SymbolConfiguration(pointSize: 30.0, weight: .medium)\n"
+        "                guard let symbol = UIImage(systemName: iconName, withConfiguration: cfg) else { return UIImage() }\n"
+        "                let size = CGSize(width: 38.0, height: 38.0)\n"
+        "                let format = UIGraphicsImageRendererFormat()\n"
+        "                format.scale = UIScreen.main.scale\n"
+        "                format.opaque = false\n"
+        "                return UIGraphicsImageRenderer(size: size, format: format).image { _ in\n"
+        "                    let image = symbol.withTintColor(iconColor, renderingMode: .alwaysOriginal)\n"
+        "                    let rect = CGRect(x: (size.width - image.size.width) / 2.0, y: (size.height - image.size.height) / 2.0, width: image.size.width, height: image.size.height)\n"
+        "                    image.draw(in: rect)\n"
+        "                }\n"
+        "            }()\n"
         "            let aorusReportText: String? = isThreat ? (isRu ? \"Пожаловаться\" : \"Report\") : nil\n"
         "            if let controller = app.rootController.viewControllers.last as? ViewController {\n"
         "                controller.present(\n"
         "                    UndoOverlayController(\n"
         "                    presentationData: presentationData,\n"
-        "                    content: .image(image: aorusSpamIcon, title: title, text: text, round: false, undoText: aorusReportText),\n"
+        "                    content: .universalImage(image: aorusSpamIcon, size: CGSize(width: 34.0, height: 34.0), title: title, text: text, customUndoText: aorusReportText, timeout: isThreat ? 7.0 : 5.0),\n"
         "                    elevatedLayout: false,\n"
         "                    position: .bottom,\n"
         "                    animateInAsReplacement: true,\n"
@@ -14127,9 +14151,7 @@ def main() -> None:
     patch_download_accelerator(tg)
     patch_max_media_quality(tg)
     patch_deleted_messages_interception(tg)
-    # patch_deleted_message_quote_reply(tg)  # disabled: rewriting the send broke delivery
-    # (message flashed and vanished). Native reply to a preserved deleted message works
-    # as-is, so we no longer touch the send path.
+    patch_deleted_message_quote_reply(tg)
     patch_anti_spoof_delete_preflight(tg)
     patch_block_ads(tg)
     patch_ghost_mode_hide_typing(tg)
