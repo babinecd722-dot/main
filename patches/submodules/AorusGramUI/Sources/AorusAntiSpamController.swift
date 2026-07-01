@@ -33,6 +33,7 @@ private struct ASState: Equatable {
     var stopWordsProtection: Bool
     var autoBlock: Bool
     var textCleanup: Bool
+    var autoReport: Bool
     var blocked: [ASPeer]
     var allowed: [ASPeer]
     var keywords: [String]
@@ -45,6 +46,7 @@ private final class ASArguments {
     let setStopWordsProtection: (Bool) -> Void
     let setAutoBlock: (Bool) -> Void
     let setTextCleanup: (Bool) -> Void
+    let setAutoReport: (Bool) -> Void
     let unblock: (Int64) -> Void
     let removeException: (Int64) -> Void
     let addException: () -> Void
@@ -52,12 +54,13 @@ private final class ASArguments {
     let commitNewKeyword: () -> Void
     let removeKeyword: (String) -> Void
 
-    init(setThreatProtection: @escaping (Bool) -> Void, setSpamProtection: @escaping (Bool) -> Void, setStopWordsProtection: @escaping (Bool) -> Void, setAutoBlock: @escaping (Bool) -> Void, setTextCleanup: @escaping (Bool) -> Void, unblock: @escaping (Int64) -> Void, removeException: @escaping (Int64) -> Void, addException: @escaping () -> Void, setNewKeyword: @escaping (String) -> Void, commitNewKeyword: @escaping () -> Void, removeKeyword: @escaping (String) -> Void) {
+    init(setThreatProtection: @escaping (Bool) -> Void, setSpamProtection: @escaping (Bool) -> Void, setStopWordsProtection: @escaping (Bool) -> Void, setAutoBlock: @escaping (Bool) -> Void, setTextCleanup: @escaping (Bool) -> Void, setAutoReport: @escaping (Bool) -> Void, unblock: @escaping (Int64) -> Void, removeException: @escaping (Int64) -> Void, addException: @escaping () -> Void, setNewKeyword: @escaping (String) -> Void, commitNewKeyword: @escaping () -> Void, removeKeyword: @escaping (String) -> Void) {
         self.setThreatProtection = setThreatProtection
         self.setSpamProtection = setSpamProtection
         self.setStopWordsProtection = setStopWordsProtection
         self.setAutoBlock = setAutoBlock
         self.setTextCleanup = setTextCleanup
+        self.setAutoReport = setAutoReport
         self.unblock = unblock
         self.removeException = removeException
         self.addException = addException
@@ -74,6 +77,7 @@ private enum ASEntry: ItemListNodeEntry {
     case stopWordsProtection(PresentationTheme, String, Bool)
     case autoBlock(PresentationTheme, String, Bool)
     case textCleanup(PresentationTheme, String, Bool)
+    case autoReport(PresentationTheme, String, Bool)
     case protectionInfo(PresentationTheme, String)
     case blockedHeader(PresentationTheme, String)
     case blockedEmpty(PresentationTheme, String)
@@ -89,7 +93,7 @@ private enum ASEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
-        case .protectionHeader, .threatProtection, .spamProtection, .stopWordsProtection, .autoBlock, .textCleanup, .protectionInfo:
+        case .protectionHeader, .threatProtection, .spamProtection, .stopWordsProtection, .autoBlock, .textCleanup, .autoReport, .protectionInfo:
             return ASSection.protection.rawValue
         case .blockedHeader, .blockedEmpty, .blockedPeer:
             return ASSection.blocked.rawValue
@@ -104,11 +108,12 @@ private enum ASEntry: ItemListNodeEntry {
         switch self {
         case .protectionHeader: return -100
         case .threatProtection: return -99
-        case .spamProtection: return -98
-        case .stopWordsProtection: return -97
-        case .autoBlock: return -96
-        case .textCleanup: return -95
-        case .protectionInfo: return -94
+        case .autoReport: return -98
+        case .spamProtection: return -97
+        case .stopWordsProtection: return -96
+        case .autoBlock: return -95
+        case .textCleanup: return -94
+        case .protectionInfo: return -93
         case .blockedHeader: return 0
         case .blockedEmpty: return 1
         case let .blockedPeer(_, index, _, _): return 100 + index
@@ -141,6 +146,8 @@ private enum ASEntry: ItemListNodeEntry {
             if case let .autoBlock(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .textCleanup(lt, ls, lv):
             if case let .textCleanup(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .autoReport(lt, ls, lv):
+            if case let .autoReport(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .protectionInfo(lt, ls):
             if case let .protectionInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .blockedHeader(lt, ls):
@@ -184,6 +191,8 @@ private enum ASEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoBlock($0) })
         case let .textCleanup(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setTextCleanup($0) })
+        case let .autoReport(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoReport($0) })
         case let .protectionInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .blockedHeader(_, text):
@@ -385,6 +394,10 @@ private func asEntries(state: ASState, theme: PresentationTheme) -> [ASEntry] {
 
     entries.append(.protectionHeader(theme, isRu ? "ЗАЩИТА" : "PROTECTION"))
     entries.append(.threatProtection(theme, isRu ? "Защита от угроз" : "Threat protection", state.threatProtection))
+    // Auto-report sits right under threat protection and only when it is enabled.
+    if state.threatProtection {
+        entries.append(.autoReport(theme, isRu ? "Авто-жалоба на угрозы" : "Auto-report threats", state.autoReport))
+    }
     entries.append(.spamProtection(theme, isRu ? "Защита от спама" : "Spam protection", state.spamProtection))
     entries.append(.stopWordsProtection(theme, isRu ? "Стоп-слова" : "Stop words", state.stopWordsProtection))
     entries.append(.autoBlock(theme, isRu ? "Автоблокировка" : "Auto-block", state.autoBlock))
@@ -424,7 +437,7 @@ private func asEntries(state: ASState, theme: PresentationTheme) -> [ASEntry] {
 }
 
 public func aorusAntiSpamController(context: AccountContext) -> ViewController {
-    let initialState = ASState(threatProtection: AntiSpamManager.shared.threatProtection, spamProtection: AntiSpamManager.shared.spamProtection, stopWordsProtection: AntiSpamManager.shared.stopWordsProtection, autoBlock: AntiSpamManager.shared.autoBlock, textCleanup: AntiSpamManager.shared.textCleanup, blocked: [], allowed: [], keywords: AntiSpamManager.shared.keywords, newKeyword: "")
+    let initialState = ASState(threatProtection: AntiSpamManager.shared.threatProtection, spamProtection: AntiSpamManager.shared.spamProtection, stopWordsProtection: AntiSpamManager.shared.stopWordsProtection, autoBlock: AntiSpamManager.shared.autoBlock, textCleanup: AntiSpamManager.shared.textCleanup, autoReport: AntiSpamManager.shared.autoReport, blocked: [], allowed: [], keywords: AntiSpamManager.shared.keywords, newKeyword: "")
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((ASState) -> ASState) -> Void = { f in
@@ -490,6 +503,10 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
         setTextCleanup: { value in
             AntiSpamManager.shared.setTextCleanup(value)
             updateState { current in var next = current; next.textCleanup = value; return next }
+        },
+        setAutoReport: { value in
+            AntiSpamManager.shared.setAutoReport(value)
+            updateState { current in var next = current; next.autoReport = value; return next }
         },
         unblock: { peerId in
             AntiSpamManager.shared.unblockPeer(peerId)

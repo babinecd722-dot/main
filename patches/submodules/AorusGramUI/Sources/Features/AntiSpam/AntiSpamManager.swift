@@ -10,6 +10,9 @@ final class AntiSpamManager {
     // a manual choice (or an explicit action from a notification). This is the single most
     // important safeguard against false positives ever cutting off real contacts/channels.
     private(set) var autoBlock = false
+    // Auto-send the threat report when the alert times out (the alert shows "Cancel").
+    // OFF by default: without it the alert shows a manual "Report" button, as before.
+    private(set) var autoReport = false
     private(set) var keywords: [String] = []
     private(set) var blockedPeerIds: Set<Int64> = []
     private(set) var allowedPeerIds: Set<Int64> = []
@@ -150,6 +153,7 @@ final class AntiSpamManager {
         }
         isEnabled  = saved.isEnabled
         autoBlock  = saved.autoBlock
+        autoReport = saved.autoReport ?? false
         keywords   = saved.keywords
         blockedPeerIds = Set(saved.blockedPeerIds)
         allowedPeerIds = Set(saved.allowedPeerIds ?? [])
@@ -173,6 +177,7 @@ final class AntiSpamManager {
         let state = SavedState(
             isEnabled:      isEnabled,
             autoBlock:      autoBlock,
+            autoReport:     autoReport,
             keywords:       keywords,
             blockedPeerIds: Array(blockedPeerIds),
             allowedPeerIds: Array(allowedPeerIds),
@@ -196,12 +201,14 @@ final class AntiSpamManager {
         UserDefaults.standard.set(stopWordsProtection, forKey: "aorusgram_antispam_stopwords_protection")
         UserDefaults.standard.set(textCleanup, forKey: "aorusgram_antispam_text_cleanup")
         UserDefaults.standard.set(autoBlock, forKey: "aorusgram_antispam_auto_block")
+        UserDefaults.standard.set(autoReport, forKey: "aorusgram_antispam_auto_report")
     }
 
     // MARK: - API
 
     func setEnabled(_ value: Bool)   { isEnabled = value; save() }
     func setAutoBlock(_ value: Bool) { autoBlock = value; save() }
+    func setAutoReport(_ value: Bool) { autoReport = value; save() }
     func setThreatProtection(_ value: Bool)   { threatProtection = value; save() }
     func setSpamProtection(_ value: Bool)      { spamProtection = value; save() }
     func setStopWordsProtection(_ value: Bool) { stopWordsProtection = value; save() }
@@ -415,6 +422,7 @@ final class AntiSpamManager {
     private struct SavedState: Codable {
         var isEnabled: Bool
         var autoBlock: Bool
+        var autoReport: Bool?
         var keywords: [String]
         var blockedPeerIds: [Int64]
         var allowedPeerIds: [Int64]?   // optional: tolerant decode of states saved before exceptions existed
