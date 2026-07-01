@@ -15,12 +15,42 @@ final class AntiSpamManager {
     private let highConfidencePatterns: [String] = [
         "быстрый доход", "пассивный доход", "без вложений", "free bitcoin",
         "nft drop", "airdrop", "переведи деньги", "срочно нужна помощь",
-        "онлайн casino", "крипто раздача", "гарантированный доход"
+        "онлайн casino", "крипто раздача", "гарантированный доход",
+        "быстрый заработок", "легкие деньги", "гарантия выплат",
+        "доход каждый день", "без риска", "100% доход", "работа без опыта",
+        "удаленная работа без опыта", "пиши в лс заработок",
+        "введите код", "код подтверждения", "код из sms", "код из смс",
+        "verify your account", "login code", "seed phrase", "recovery phrase",
+        "wallet connect", "подключите кошелек", "подключи кошелек",
+        "служба поддержки telegram", "telegram support"
     ]
 
     private let weightedPatterns: [String] = [
         "заработ", "крипт", "инвест", "казино", "букмекер",
-        "розыгрыш", "приз", "доход", "трейдинг", "сигналы"
+        "розыгрыш", "приз", "доход", "трейдинг", "сигналы",
+        "подработка", "удаленная работа", "арбитраж", "ставки",
+        "промокод", "слоты", "forex", "binance", "usdt", "btc",
+        "crypto", "wallet", "giveaway", "bonus",
+        "верификация", "подтвердите", "аккаунт заблокирован",
+        "support", "поддержка", "кошелек", "сид фраза", "мнемоническая фраза"
+    ]
+
+    private let contactBaitPatterns: [String] = [
+        "пиши в лс", "пиши в личку", "напиши мне", "подробности в лс",
+        "за деталями", "write me", "dm me", "pm me"
+    ]
+
+    private let moneyPatterns: [String] = [
+        "₽", "$", "€", "руб", "доллар", "оплата", "выплата",
+        "прибыль", "процент", "x2", "x3", "икс"
+    ]
+
+    private let shortLinkMarkers: [String] = [
+        "bit.ly/", "tinyurl.com/", "clck.ru/", "goo.gl/", "cutt.ly/", "is.gd/"
+    ]
+
+    private let phishingLinkHints: [String] = [
+        "login", "verify", "wallet", "airdrop", "bonus", "gift", "support", "security"
     ]
 
     // MARK: - Persistence
@@ -129,14 +159,16 @@ final class AntiSpamManager {
             }
         }
 
-        for pattern in highConfidencePatterns where normalized.contains(pattern) {
+        let compacted = compact(normalized)
+
+        for pattern in highConfidencePatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
             return SpamVerdict(isSpam: true, reason: .builtinPattern(pattern))
         }
 
         var score = 0
         var matchedPattern: String?
 
-        for pattern in weightedPatterns where normalized.contains(pattern) {
+        for pattern in weightedPatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
             score += 1
             matchedPattern = matchedPattern ?? pattern
         }
@@ -144,10 +176,22 @@ final class AntiSpamManager {
         let linkCount = countLinks(in: normalized)
         if normalized.contains("t.me/+") || normalized.contains("telegram.me/+") {
             score += 3
+        } else if shortLinkMarkers.contains(where: { normalized.contains($0) }) {
+            score += 2
         } else if linkCount >= 3 {
             score += 2
         } else if linkCount >= 1 && matchedPattern != nil {
             score += 1
+        }
+
+        if contactBaitPatterns.contains(where: { containsPattern($0, normalized: normalized, compacted: compacted) }) {
+            score += linkCount > 0 ? 2 : 1
+        }
+        if moneyPatterns.contains(where: { normalized.contains($0) }) {
+            score += 1
+        }
+        if linkCount > 0 && phishingLinkHints.contains(where: { normalized.contains($0) }) {
+            score += 2
         }
 
         if let rateReason = updatePeerWindow(peerId: peerId, normalizedText: normalized) {
@@ -203,6 +247,13 @@ final class AntiSpamManager {
         guard let value else { return "" }
         let folded = value
             .replacingOccurrences(of: "ё", with: "е")
+            .replacingOccurrences(of: "\u{200B}", with: "")
+            .replacingOccurrences(of: "\u{200C}", with: "")
+            .replacingOccurrences(of: "\u{200D}", with: "")
+            .replacingOccurrences(of: "\u{2060}", with: "")
+            .replacingOccurrences(of: "\u{2063}", with: "")
+            .replacingOccurrences(of: "\u{2064}", with: "")
+            .replacingOccurrences(of: "\u{FEFF}", with: "")
             .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "ru_RU"))
             .lowercased()
         return folded
@@ -212,10 +263,23 @@ final class AntiSpamManager {
     }
 
     private func countLinks(in text: String) -> Int {
-        let markers = ["http://", "https://", "t.me/", "telegram.me/", "bit.ly/", "tinyurl.com/", "wa.me/"]
+        let markers = ["http://", "https://", "t.me/", "telegram.me/", "bit.ly/", "tinyurl.com/", "wa.me/", "clck.ru/", "cutt.ly/"]
         return markers.reduce(0) { result, marker in
             result + text.components(separatedBy: marker).count - 1
         }
+    }
+
+    private func compact(_ text: String) -> String {
+        let scalars = text.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
+    private func containsPattern(_ pattern: String, normalized: String, compacted: String) -> Bool {
+        if normalized.contains(pattern) {
+            return true
+        }
+        let patternCompact = compact(normalize(pattern))
+        return !patternCompact.isEmpty && compacted.contains(patternCompact)
     }
 
     private func updatePeerWindow(peerId: Int64, normalizedText: String) -> SpamReason? {

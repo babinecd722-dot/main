@@ -133,6 +133,18 @@ public final class AorusGramBootstrap {
         guard let info = note.userInfo else { return }
         let peerId = (info["peerId"] as? NSNumber)?.int64Value ?? 0
         let text   = info["text"]   as? String ?? ""
+        let senderId = (note.userInfo?["senderId"] as? NSNumber)?.int64Value ?? peerId
+
+        // Anti-spam gate must run before any local Aorus caches. If a message is
+        // classified as spam, it should not be stored by deleted-message recovery,
+        // auto-reply, or presence heuristics.
+        if AorusGramConfig.isEnabled(.antiSpam) {
+            let verdict = AntiSpamManager.shared.check(peerId: senderId, text: text)
+            if verdict.isSpam {
+                AntiSpamManager.shared.processIncoming(peerId: senderId, text: text, verdict: verdict)
+                return
+            }
+        }
 
         // Pre-cache for deleted-messages feature — captures content before any deletion.
         // Without this the cache only sees messages whose delete-hook fires, which is unreliable.
@@ -141,17 +153,7 @@ public final class AorusGramBootstrap {
         // Anti-spoof online — record peer activity so we can show real "last seen"
         // even when the peer hides it client-side. Each incoming message is direct
         // proof they were online at that moment.
-        let senderId = (note.userInfo?["senderId"] as? NSNumber)?.int64Value ?? peerId
         AntiSpoofManager.shared.recordActivity(peerId: senderId, kind: .message)
-
-        // Anti-spam gate
-        if AorusGramConfig.isEnabled(.antiSpam) {
-            let verdict = AntiSpamManager.shared.check(peerId: senderId, text: text)
-            if verdict.isSpam {
-                AntiSpamManager.shared.processIncoming(peerId: senderId, text: text, verdict: verdict)
-                return
-            }
-        }
 
         // Auto-reply
         if AorusGramConfig.isEnabled(.autoReply) {

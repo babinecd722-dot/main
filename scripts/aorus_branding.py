@@ -2373,30 +2373,46 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                let aorusBlockedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_blocked_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "                let aorusUserKeywords = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_keywords\") ?? []\n"
         "                func aorusNormalizeSpamText(_ value: String) -> String {\n"
-        "                    let folded = value.replacingOccurrences(of: \"ё\", with: \"е\").folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: \"ru_RU\")).lowercased()\n"
+        "                    let folded = value.replacingOccurrences(of: \"ё\", with: \"е\").replacingOccurrences(of: \"\\u{200B}\", with: \"\").replacingOccurrences(of: \"\\u{200C}\", with: \"\").replacingOccurrences(of: \"\\u{200D}\", with: \"\").replacingOccurrences(of: \"\\u{2060}\", with: \"\").replacingOccurrences(of: \"\\u{2063}\", with: \"\").replacingOccurrences(of: \"\\u{2064}\", with: \"\").replacingOccurrences(of: \"\\u{FEFF}\", with: \"\").folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: \"ru_RU\")).lowercased()\n"
         "                    return folded.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).joined(separator: \" \").trimmingCharacters(in: .whitespacesAndNewlines)\n"
         "                }\n"
+        "                func aorusCompactSpamText(_ value: String) -> String {\n"
+        "                    return String(String.UnicodeScalarView(value.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }))\n"
+        "                }\n"
+        "                func aorusSpamContains(_ pattern: String, normalized: String, compacted: String) -> Bool {\n"
+        "                    if normalized.contains(pattern) { return true }\n"
+        "                    let patternCompact = aorusCompactSpamText(aorusNormalizeSpamText(pattern))\n"
+        "                    return !patternCompact.isEmpty && compacted.contains(patternCompact)\n"
+        "                }\n"
         "                func aorusSpamLinkCount(_ text: String) -> Int {\n"
-        "                    let markers = [\"http://\", \"https://\", \"t.me/\", \"telegram.me/\", \"bit.ly/\", \"tinyurl.com/\", \"wa.me/\"]\n"
+        "                    let markers = [\"http://\", \"https://\", \"t.me/\", \"telegram.me/\", \"bit.ly/\", \"tinyurl.com/\", \"wa.me/\", \"clck.ru/\", \"cutt.ly/\"]\n"
         "                    return markers.reduce(0) { result, marker in result + text.components(separatedBy: marker).count - 1 }\n"
         "                }\n"
         "                func aorusShouldHideIncomingSpam(identity: Int64, text rawText: String) -> Bool {\n"
         "                    if aorusBlockedPeerIds.contains(identity) { return true }\n"
         "                    let text = aorusNormalizeSpamText(rawText)\n"
         "                    if text.isEmpty { return false }\n"
+        "                    let compacted = aorusCompactSpamText(text)\n"
         "                    for keyword in aorusUserKeywords {\n"
         "                        let cleanKeyword = aorusNormalizeSpamText(keyword)\n"
-        "                        if !cleanKeyword.isEmpty && text.contains(cleanKeyword) { return true }\n"
+        "                        if !cleanKeyword.isEmpty && aorusSpamContains(cleanKeyword, normalized: text, compacted: compacted) { return true }\n"
         "                    }\n"
-        "                    let strongPatterns = [\"быстрый доход\", \"пассивный доход\", \"без вложений\", \"free bitcoin\", \"nft drop\", \"airdrop\", \"переведи деньги\", \"срочно нужна помощь\", \"онлайн casino\", \"крипто раздача\", \"гарантированный доход\"]\n"
-        "                    if strongPatterns.contains(where: { text.contains($0) }) { return true }\n"
-        "                    let weightedPatterns = [\"заработ\", \"крипт\", \"инвест\", \"казино\", \"букмекер\", \"розыгрыш\", \"приз\", \"доход\", \"трейдинг\", \"сигналы\"]\n"
+        "                    let strongPatterns = [\"быстрый доход\", \"пассивный доход\", \"без вложений\", \"free bitcoin\", \"nft drop\", \"airdrop\", \"переведи деньги\", \"срочно нужна помощь\", \"онлайн casino\", \"крипто раздача\", \"гарантированный доход\", \"быстрый заработок\", \"легкие деньги\", \"гарантия выплат\", \"доход каждый день\", \"без риска\", \"100% доход\", \"работа без опыта\", \"удаленная работа без опыта\", \"пиши в лс заработок\", \"введите код\", \"код подтверждения\", \"код из sms\", \"код из смс\", \"verify your account\", \"login code\", \"seed phrase\", \"recovery phrase\", \"wallet connect\", \"подключите кошелек\", \"подключи кошелек\", \"служба поддержки telegram\", \"telegram support\"]\n"
+        "                    if strongPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return true }\n"
+        "                    let weightedPatterns = [\"заработ\", \"крипт\", \"инвест\", \"казино\", \"букмекер\", \"розыгрыш\", \"приз\", \"доход\", \"трейдинг\", \"сигналы\", \"подработка\", \"удаленная работа\", \"арбитраж\", \"ставки\", \"промокод\", \"слоты\", \"forex\", \"binance\", \"usdt\", \"btc\", \"crypto\", \"wallet\", \"giveaway\", \"bonus\", \"верификация\", \"подтвердите\", \"аккаунт заблокирован\", \"support\", \"поддержка\", \"кошелек\", \"сид фраза\", \"мнемоническая фраза\"]\n"
         "                    var score = 0\n"
-        "                    for pattern in weightedPatterns where text.contains(pattern) { score += 1 }\n"
+        "                    for pattern in weightedPatterns where aorusSpamContains(pattern, normalized: text, compacted: compacted) { score += 1 }\n"
         "                    let links = aorusSpamLinkCount(text)\n"
         "                    if text.contains(\"t.me/+\") || text.contains(\"telegram.me/+\") { score += 3 }\n"
+        "                    else if [\"bit.ly/\", \"tinyurl.com/\", \"clck.ru/\", \"goo.gl/\", \"cutt.ly/\", \"is.gd/\"].contains(where: { text.contains($0) }) { score += 2 }\n"
         "                    else if links >= 3 { score += 2 }\n"
         "                    else if links >= 1 && score > 0 { score += 1 }\n"
+        "                    let contactBait = [\"пиши в лс\", \"пиши в личку\", \"напиши мне\", \"подробности в лс\", \"за деталями\", \"write me\", \"dm me\", \"pm me\"]\n"
+        "                    if contactBait.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { score += links > 0 ? 2 : 1 }\n"
+        "                    let moneySignals = [\"₽\", \"$\", \"€\", \"руб\", \"доллар\", \"оплата\", \"выплата\", \"прибыль\", \"процент\", \"x2\", \"x3\", \"икс\"]\n"
+        "                    if moneySignals.contains(where: { text.contains($0) }) { score += 1 }\n"
+        "                    let phishingLinkHints = [\"login\", \"verify\", \"wallet\", \"airdrop\", \"bonus\", \"gift\", \"support\", \"security\"]\n"
+        "                    if links > 0 && phishingLinkHints.contains(where: { text.contains($0) }) { score += 2 }\n"
         "                    return score >= 3\n"
         "                }\n"
         "                let aorusVisibleMessages = aorusAntiSpamEnabled ? messages.filter { storeMsg in\n"
@@ -2547,7 +2563,27 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusgram_spam_detected" in t:
-        print("AntiSpamToast: already injected")
+        upgraded = t.replace(
+            "            app.rootController.present(\n"
+            "                UndoOverlayController(\n",
+            "            if let controller = app.rootController.viewControllers.last {\n"
+            "                controller.present(\n"
+            "                    UndoOverlayController(\n",
+        )
+        upgraded = upgraded.replace(
+            "                ),\n"
+            "                in: .window(.root)\n"
+            "            )",
+            "                    ),\n"
+            "                    in: .window(.root)\n"
+            "                )\n"
+            "            }",
+        )
+        if upgraded != t:
+            path.write_text(upgraded, encoding="utf-8")
+            print("AntiSpamToast: upgraded rootController presenter")
+        else:
+            print("AntiSpamToast: already injected")
         return
 
     if "import UndoUI\n" not in t:
@@ -2579,17 +2615,19 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            } else {\n"
         "                text = isRu ? \"Спам скрыт\" : \"Spam was hidden\"\n"
         "            }\n"
-        "            app.rootController.present(\n"
-        "                UndoOverlayController(\n"
+        "            if let controller = app.rootController.viewControllers.last {\n"
+        "                controller.present(\n"
+        "                    UndoOverlayController(\n"
         "                    presentationData: presentationData,\n"
         "                    content: .info(title: nil, text: text, timeout: 3.0, customUndoText: nil),\n"
         "                    elevatedLayout: false,\n"
         "                    position: .bottom,\n"
         "                    animateInAsReplacement: true,\n"
         "                    action: { _ in return false }\n"
-        "                ),\n"
-        "                in: .window(.root)\n"
-        "            )\n"
+        "                    ),\n"
+        "                    in: .window(.root)\n"
+        "                )\n"
+        "            }\n"
         "        }\n"
     )
 
