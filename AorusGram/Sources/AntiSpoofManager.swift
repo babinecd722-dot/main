@@ -10,7 +10,7 @@ public final class AntiSpoofManager {
 
     public var antiSpoofOnline: Bool    = false { didSet { save() } }
     public var antiSpoofDeleted: Bool   = true  { didSet { save() } }
-    public let decoyText = "\u{3164}"
+    public let decoyText = "Ты не увидишь это сообщение. Привет от AORUS! 🔥"
 
     private let key = "aorusgram_antispoof_v1"
 

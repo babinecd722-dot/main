@@ -2690,24 +2690,23 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
     sentinel = "// AorusGram: anti-spoof presence override"
     if sentinel in t:
         import re as _re
-        upgraded = t
         upgraded = _re.sub(
-            r"^([ \t]*)if ago < 60 \{ return \"в сети • AORUS\" \}\n"
-            r"^\1if ago < 3600 \{ return \"был\(а\) \\\(Int\(ago / 60\)\) мин назад • AORUS\" \}\n",
+            r"^([ \t]*)let isRu = \(UserDefaults\.standard\.string\(forKey: \"aorusgram_lang\"\) == \"ru\"\)\n"
+            r"^\1if ago < 120 \{ return isRu \? \"в сети • AORUS\" : \"online • AORUS\" \}\n"
+            r"^\1if ago < 3600 \{\n"
+            r"^\1    let minutes = max\(1, Int\(ago / 60\)\)\n"
+            r"^\1    return isRu \? \"был\(а\) \\\(minutes\) мин назад • AORUS\" : \"last seen \\\(minutes\) min ago • AORUS\"\n"
+            r"^\1\}\n",
             lambda m: (
-                f"{m.group(1)}let isRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
-                f"{m.group(1)}if ago < 120 {{ return isRu ? \"в сети • AORUS\" : \"online • AORUS\" }}\n"
-                f"{m.group(1)}if ago < 3600 {{\n"
-                f"{m.group(1)}    let minutes = max(1, Int(ago / 60))\n"
-                f"{m.group(1)}    return isRu ? \"был(а) \\(minutes) мин назад • AORUS\" : \"last seen \\(minutes) min ago • AORUS\"\n"
-                f"{m.group(1)}}}\n"
+                f"{m.group(1)}if ago < 60 {{ return \"в сети • AORUS\" }}\n"
+                f"{m.group(1)}if ago < 3600 {{ return \"был(а) \\(Int(ago / 60)) мин назад • AORUS\" }}\n"
             ),
-            upgraded,
+            t,
             flags=_re.MULTILINE,
         )
         if upgraded != t:
             path.write_text(upgraded, encoding="utf-8")
-            print("ChatTitleAntiSpoof: upgraded cached presence override")
+            print("ChatTitleAntiSpoof: restored previous presence override")
         else:
             print("ChatTitleAntiSpoof: already injected")
         return
@@ -2747,12 +2746,8 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
         + indent + "    let aorusTs = UserDefaults.standard.double(forKey: \"aorusgram_peer_last_seen_\\(peer.id.toInt64())\")\n"
         + indent + "    guard aorusTs > 0 else { return string }\n"
         + indent + "    let ago = Date().timeIntervalSince1970 - aorusTs\n"
-        + indent + "    let isRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
-        + indent + "    if ago < 120 { return isRu ? \"в сети • AORUS\" : \"online • AORUS\" }\n"
-        + indent + "    if ago < 3600 {\n"
-        + indent + "        let minutes = max(1, Int(ago / 60))\n"
-        + indent + "        return isRu ? \"был(а) \\(minutes) мин назад • AORUS\" : \"last seen \\(minutes) min ago • AORUS\"\n"
-        + indent + "    }\n"
+        + indent + "    if ago < 60 { return \"в сети • AORUS\" }\n"
+        + indent + "    if ago < 3600 { return \"был(а) \\(Int(ago / 60)) мин назад • AORUS\" }\n"
         + indent + "    return string\n"
         + indent + "}()"
     )
@@ -2788,30 +2783,31 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
     if sentinel in t:
         upgraded = t
         upgraded = upgraded.replace(
-            "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n",
             "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
             "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\") && !text.contains(\"\\u{3164}\")\n",
+            "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n",
         )
         upgraded = upgraded.replace(
-            "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
-            "        let decoy = \"\\u{3164}\"\n",
+            "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
+            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n",
+            "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n",
         )
         upgraded = upgraded.replace(
             "        let decoy = \"\\u{2063}\"\n",
+            "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
+        )
+        upgraded = upgraded.replace(
             "        let decoy = \"\\u{3164}\"\n",
+            "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
         )
         upgraded = upgraded.replace(
-            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n",
-            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\") && !text.contains(\"\\u{3164}\")\n",
-        )
-        upgraded = upgraded.replace(
-            "        return editPreflight |> then(normalDelete)\n",
             "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.35, queue: Queue.mainQueue())\n"
             "        return editPreflight |> then(serverPropagationDelay) |> then(normalDelete)\n",
+            "        return editPreflight |> then(normalDelete)\n",
         )
         if upgraded != t:
             path.write_text(upgraded, encoding="utf-8")
-            print("AntiSpoofDeletePreflight: upgraded cached preflight timing/decoy")
+            print("AntiSpoofDeletePreflight: restored previous preflight timing/decoy")
         else:
             print("AntiSpoofDeletePreflight: already injected")
         return
@@ -2843,13 +2839,12 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "    return account.postbox.transaction { transaction -> [MessageId] in\n"
         "        return messageIds.filter { id in\n"
         "            guard let msg = transaction.getMessage(id) else { return false }\n"
-        "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
-        "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\") && !text.contains(\"\\u{3164}\")\n"
+        "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n"
         "        }\n"
         "    }\n"
         "    |> mapToSignal { (outgoingIds: [MessageId]) -> Signal<Void, NoError> in\n"
         "        guard !outgoingIds.isEmpty else { return normalDelete }\n"
-        "        let decoy = \"\\u{3164}\"\n"
+        "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n"
         "        let initial: Signal<Void, NoError> = .complete()\n"
         "        let editPreflight: Signal<Void, NoError> = outgoingIds.reduce(initial) { acc, msgId -> Signal<Void, NoError> in\n"
         "            let editSignal: Signal<Void, NoError> = _internal_requestEditMessage(\n"
@@ -2869,8 +2864,7 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "            |> `catch` { _ -> Signal<Void, NoError> in .complete() }\n"
         "            return acc |> then(editSignal)\n"
         "        }\n"
-        "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.35, queue: Queue.mainQueue())\n"
-        "        return editPreflight |> then(serverPropagationDelay) |> then(normalDelete)\n"
+        "        return editPreflight |> then(normalDelete)\n"
         "    }\n"
         "}"
     )
@@ -3200,16 +3194,16 @@ def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     if "aorusgram.antiSpoofDelete" in t:
         upgraded = t.replace(
-            "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
             "            let decoy = \"\\u{3164}\"\n",
+            "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
         )
         upgraded = upgraded.replace(
             "            let decoy = \"\\u{2063}\"\n",
-            "            let decoy = \"\\u{3164}\"\n",
+            "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
         )
         if upgraded != t:
             path.write_text(upgraded, encoding="utf-8")
-            print("AntiSpoofDeleteObserver: upgraded cached decoy")
+            print("AntiSpoofDeleteObserver: restored previous decoy")
         else:
             print("AntiSpoofDeleteObserver: already injected")
         return
@@ -3226,7 +3220,7 @@ def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
         "            let peerId = PeerId(peerIdNum.int64Value)\n"
         "            let msgId  = msgIdNum.int32Value\n"
         "            let messageId = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: msgId)\n"
-        "            let decoy = \"\\u{3164}\"\n"
+        "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n"
         "            let _ = app.context.engine.messages.requestEditMessage(\n"
         "                messageId: messageId,\n"
         "                text: decoy,\n"
