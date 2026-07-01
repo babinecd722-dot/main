@@ -20,8 +20,11 @@ final class AntiSpamManager {
         "быстрый заработок", "легкие деньги", "гарантия выплат",
         "доход каждый день", "без риска", "100% доход", "работа без опыта",
         "удаленная работа без опыта", "пиши в лс заработок",
-        "введите код", "код подтверждения", "код из sms", "код из смс",
-        "verify your account", "login code", "seed phrase", "recovery phrase",
+        // Only the phishing *request* to hand over a code — never a legitimate
+        // "your confirmation code: …" delivery, which real services (banks,
+        // couriers) send and which must not be auto-hidden.
+        "введите код", "отправьте код", "пришлите код", "код никому не сообщайте",
+        "verify your account", "seed phrase", "recovery phrase",
         "wallet connect", "подключите кошелек", "подключи кошелек",
         "служба поддержки telegram", "telegram support"
     ]
@@ -43,7 +46,7 @@ final class AntiSpamManager {
 
     private let moneyPatterns: [String] = [
         "₽", "$", "€", "руб", "доллар", "оплата", "выплата",
-        "прибыль", "процент", "x2", "x3", "икс"
+        "прибыль", "процент", "x2", "x3"
     ]
 
     private let shortLinkMarkers: [String] = [
