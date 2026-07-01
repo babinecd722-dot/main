@@ -160,16 +160,22 @@ public final class AorusGramBootstrap {
         guard let info = note.userInfo else { return }
         let peerId = (info["peerId"] as? NSNumber)?.int64Value ?? 0
         let text   = info["text"]   as? String ?? ""
+        let msgId = (info["msgId"] as? NSNumber)?.int32Value
         let senderId = (note.userInfo?["senderId"] as? NSNumber)?.int64Value ?? peerId
 
         // Anti-spam gate must run before any local Aorus caches. If a message is
         // classified as spam, it should not be stored by deleted-message recovery,
         // auto-reply, or presence heuristics.
-        if AorusGramConfig.isEnabled(.antiSpam) {
+        // Only gate one-on-one private chats from non-contacts (the native
+        // prefilter injected into AccountStateManager computes this the same way).
+        let spamEligible = (info["spamEligible"] as? NSNumber)?.boolValue ?? false
+        if spamEligible, AorusGramConfig.isEnabled(.antiSpam) {
             let verdict = AntiSpamManager.shared.check(peerId: senderId, text: text)
             if verdict.isSpam {
-                AntiSpamManager.shared.processIncoming(peerId: senderId, text: text, verdict: verdict)
-                return
+                AntiSpamManager.shared.processIncoming(peerId: senderId, text: text, messageId: msgId, verdict: verdict)
+                if !verdict.isThreat {
+                    return
+                }
             }
         }
 

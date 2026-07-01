@@ -2482,9 +2482,9 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    if text.isEmpty { return false }\n"
         "                    let compacted = aorusCompactSpamText(text)\n"
         "                    if aorusThreatProtection {\n"
-        "                        if aorusThreatPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return true }\n"
+        "                        if aorusThreatPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return false }\n"
         "                        let deob = aorusDeobfuscate(rawText)\n"
-        "                        if !deob.isEmpty && aorusThreatTokensLatin.contains(where: { !$0.isEmpty && deob.contains($0) }) { return true }\n"
+        "                        if !deob.isEmpty && aorusThreatTokensLatin.contains(where: { !$0.isEmpty && deob.contains($0) }) { return false }\n"
         "                    }\n"
         "                    if aorusStopWordsOn {\n"
         "                        for keyword in aorusUserKeywords {\n"
@@ -2552,6 +2552,19 @@ def patch_incoming_message_hook(tg: Path) -> None:
     )
 
     if "aorusgram.didReceiveMessage" in t:
+        upgraded = t
+        upgraded = upgraded.replace(
+            "                        if aorusThreatPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return true }\n"
+            "                        let deob = aorusDeobfuscate(rawText)\n"
+            "                        if !deob.isEmpty && aorusThreatTokensLatin.contains(where: { !$0.isEmpty && deob.contains($0) }) { return true }\n",
+            "                        if aorusThreatPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return false }\n"
+            "                        let deob = aorusDeobfuscate(rawText)\n"
+            "                        if !deob.isEmpty && aorusThreatTokensLatin.contains(where: { !$0.isEmpty && deob.contains($0) }) { return false }\n",
+        )
+        if upgraded != t:
+            path.write_text(upgraded, encoding="utf-8")
+            print("IncomingMessageHook: restored threat messages visibility in cached prefilter")
+            return
         if "let aorusVisibleMessages =" not in t and visible_anchor in t:
             t = t.replace(sentinel + "\n", sentinel + "\n" + prefilter_code, 1)
             t = t.replace(visible_anchor, "let _ = transaction.addMessages(aorusVisibleMessages, location: location)", 1)
@@ -2692,38 +2705,6 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         print("AntiSpamToast: AppDelegate.swift not found, skip")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusgram_spam_detected" in t:
-        upgraded = t.replace(
-            "            app.rootController.present(\n"
-            "                UndoOverlayController(\n",
-            "            if let controller = app.rootController.viewControllers.last {\n"
-            "                controller.present(\n"
-            "                    UndoOverlayController(\n",
-        )
-        upgraded = upgraded.replace(
-            "            if let controller = app.rootController.viewControllers.last {\n",
-            "            if let controller = app.rootController.viewControllers.last as? ViewController {\n",
-        )
-        upgraded = upgraded.replace(
-            "                ),\n"
-            "                in: .window(.root)\n"
-            "            )",
-            "                    ),\n"
-            "                    in: .window(.root)\n"
-            "                )\n"
-            "            }",
-        )
-        if "as? ViewController" in upgraded and "import Display\n" not in upgraded:
-            if "import UIKit\n" in upgraded:
-                upgraded = upgraded.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
-            else:
-                upgraded = "import Display\n" + upgraded
-        if upgraded != t:
-            path.write_text(upgraded, encoding="utf-8")
-            print("AntiSpamToast: upgraded rootController presenter")
-        else:
-            print("AntiSpamToast: already injected")
-        return
 
     if "import Display\n" not in t:
         if "import UIKit\n" in t:
@@ -2739,11 +2720,19 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
             t = "import UndoUI\n" + t
         print("AntiSpamToast: added import UndoUI")
 
-    # File-level holder so an auto-report RPC outlives the toast action closure — a
-    # bare `.start()` whose disposable is dropped immediately can cancel the request
-    # before it reaches the server.
-    if "aorusAntiSpamReportDisposables" not in t:
-        t = t.replace("import AccountContext\n", "import AccountContext\nprivate let aorusAntiSpamReportDisposables = DisposableSet()\n", 1)
+    if "import SwiftSignalKit\n" not in t:
+        if "import UIKit\n" in t:
+            t = t.replace("import UIKit\n", "import UIKit\nimport SwiftSignalKit\n", 1)
+        else:
+            t = "import SwiftSignalKit\n" + t
+        print("AntiSpamToast: added import SwiftSignalKit")
+
+    if "import TelegramCore\n" not in t:
+        if "import UIKit\n" in t:
+            t = t.replace("import UIKit\n", "import UIKit\nimport TelegramCore\n", 1)
+        else:
+            t = "import TelegramCore\n" + t
+        print("AntiSpamToast: added import TelegramCore")
 
     sentinel = "// AorusGram: anti-spam native toast"
     hook = (
@@ -2752,17 +2741,20 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            object: nil, queue: .main) { [weak self] note in\n"
         "            guard let app = self?.contextValue else { return }\n"
         "            let now = Date().timeIntervalSince1970\n"
-        "            let lastToast = UserDefaults.standard.double(forKey: \"aorusgram_antispam_last_toast\")\n"
-        "            guard now - lastToast > 1.8 else { return }\n"
-        "            UserDefaults.standard.set(now, forKey: \"aorusgram_antispam_last_toast\")\n"
         "            let presentationData = app.context.sharedContext.currentPresentationData.with { $0 }\n"
         "            let lang = presentationData.strings.baseLanguageCode.lowercased()\n"
         "            let isRu = lang == \"ru\" || lang.hasPrefix(\"ru-\")\n"
         "            let reason = (note.userInfo?[\"reason\"] as? String) ?? \"\"\n"
         "            let aorusPeerId = (note.userInfo?[\"peerId\"] as? NSNumber)?.int64Value ?? 0\n"
+        "            let aorusMsgId = (note.userInfo?[\"msgId\"] as? NSNumber)?.int32Value ?? 0\n"
         "            let isThreat = reason.hasPrefix(\"threat\")\n"
         "            let isBlocked = reason == \"blockedUser\"\n"
         "            let isFlood = reason == \"flood\" || reason == \"repeatedMessage\"\n"
+        "            let cooldownKey = isThreat ? \"aorusgram_antispam_last_threat_toast\" : \"aorusgram_antispam_last_toast\"\n"
+        "            let cooldown: TimeInterval = isThreat ? 0.35 : 1.8\n"
+        "            let lastToast = UserDefaults.standard.double(forKey: cooldownKey)\n"
+        "            guard now - lastToast > cooldown else { return }\n"
+        "            UserDefaults.standard.set(now, forKey: cooldownKey)\n"
         "            let title: String\n"
         "            let text: String\n"
         "            let iconName: String\n"
@@ -2771,7 +2763,7 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "                title = isRu ? \"Угроза заблокирована\" : \"Threat blocked\"\n"
         "                text = isRu ? \"Сообщение с угрозами скрыто\" : \"A threatening message was hidden\"\n"
         "                iconName = \"exclamationmark.shield.fill\"\n"
-        "                iconColor = UIColor(red: 1.0, green: 0.30, blue: 0.30, alpha: 1.0)\n"
+        "                iconColor = UIColor.white\n"
         "            } else if isBlocked {\n"
         "                title = isRu ? \"Заблокировано\" : \"Blocked\"\n"
         "                text = isRu ? \"Спам от заблокированного отправителя скрыт\" : \"Spam from a blocked sender was hidden\"\n"
@@ -2801,24 +2793,42 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "                    action: { [weak self] action in\n"
         "                        if case .undo = action, isThreat, aorusPeerId != 0, let app = self?.contextValue {\n"
         "                            // Pick the report reason + a clear English description of the abuse so\n"
-        "                            // Telegram moderation understands the case, then auto-report with no\n"
-        "                            // extra confirmation. English is used because moderation review is in English.\n"
+        "                            // Telegram moderation understands the case. Multiple variants avoid\n"
+        "                            // identical automated-looking report text.\n"
         "                            let aorusReportReason: ReportReason\n"
-        "                            let aorusReportMessage: String\n"
+        "                            let aorusReportMessages: [String]\n"
         "                            if reason.contains(\"swat\") || reason.contains(\"сват\") {\n"
         "                                aorusReportReason = .violence\n"
-        "                                aorusReportMessage = \"This user is threatening to organize a swatting attack against me — a fake emergency call to send armed police to my home address. This is a threat of serious physical harm and a criminal act. Please take action.\"\n"
+        "                                aorusReportMessages = [\n"
+        "                                    \"This user is threatening to organize a swatting attack against me — a fake emergency call intended to send armed police to my home address. This is targeted intimidation and a serious physical-safety threat.\",\n"
+        "                                    \"The message contains a swatting threat. The sender is trying to intimidate me by threatening to send emergency services or police to my address. Please review this as a real-world safety risk.\",\n"
+        "                                    \"I am being threatened with swatting. This is not ordinary spam: it is a threat to use false emergency reporting against my home or identity. Please take action.\"\n"
+        "                                ]\n"
         "                            } else if reason.contains(\"kill\") || reason.contains(\"dead\") || reason.contains(\"убь\") || reason.contains(\"конец\") || reason.contains(\"закопа\") || reason.contains(\"найд\") {\n"
         "                                aorusReportReason = .violence\n"
-        "                                aorusReportMessage = \"This user is sending direct threats of physical violence and death threats against me. I feel unsafe and consider this credible intimidation. Please review and take action.\"\n"
+        "                                aorusReportMessages = [\n"
+        "                                    \"This user is sending direct threats of physical violence and death threats against me. I feel unsafe and consider this targeted intimidation.\",\n"
+        "                                    \"The message includes violent threats directed at me personally. This is harassment and a real-world safety concern, not normal spam.\",\n"
+        "                                    \"Please review this account for threats of physical harm. The sender is using violent intimidation against me.\"\n"
+        "                                ]\n"
         "                            } else if reason.contains(\"osint\") || reason.contains(\"deanon\") || reason.contains(\"деанон\") {\n"
         "                                aorusReportReason = .personalDetails\n"
-        "                                aorusReportMessage = \"This user is attempting to deanonymize me and is threatening to expose my real identity and private information gathered through OSINT. This is targeted harassment and a privacy violation. Please take action.\"\n"
+        "                                aorusReportMessages = [\n"
+        "                                    \"This user is threatening to deanonymize me and expose private personal information gathered through OSINT. This is targeted harassment and a privacy violation.\",\n"
+        "                                    \"The message threatens to identify me, connect my account to real-life information, and publish private details. Please treat this as doxxing/deanonymization harassment.\",\n"
+        "                                    \"I am being threatened with OSINT-based deanonymization. The sender is trying to expose my identity and private data to intimidate me.\"\n"
+        "                                ]\n"
         "                            } else {\n"
         "                                aorusReportReason = .personalDetails\n"
-        "                                aorusReportMessage = \"This user is threatening to publish my private personal data (doxxing) — such as my home address, passport details or phone number — in order to intimidate and harass me. This is a serious privacy violation. Please take action.\"\n"
+        "                                aorusReportMessages = [\n"
+        "                                    \"This user is threatening to publish my private personal data (doxxing), such as my home address, phone number, passport details, or other identifying information, to intimidate and harass me.\",\n"
+        "                                    \"The message contains a doxxing threat: the sender says they will expose or leak private personal information about me. This is a serious privacy violation.\",\n"
+        "                                    \"Please review this user for targeted doxxing harassment. They are threatening to reveal private details about me and use them for intimidation.\"\n"
+        "                                ]\n"
         "                            }\n"
-        "                            aorusAntiSpamReportDisposables.add(app.context.engine.peers.reportPeer(peerId: PeerId(aorusPeerId), reason: aorusReportReason, message: aorusReportMessage).start())\n"
+        "                            let aorusReportMessage = aorusReportMessages[Int.random(in: 0 ..< aorusReportMessages.count)]\n"
+        "                            let aorusSourceMessageId: MessageId? = aorusMsgId != 0 ? MessageId(peerId: PeerId(aorusPeerId), namespace: Namespaces.Message.Cloud, id: aorusMsgId) : nil\n"
+        "                            let _ = app.context.engine.peers.reportPeer(peerId: PeerId(aorusPeerId), reason: aorusReportReason, message: aorusReportMessage, sourceMessageId: aorusSourceMessageId).startStandalone()\n"
         "                        }\n"
         "                        return false\n"
         "                    }\n"
@@ -2828,6 +2838,23 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            }\n"
         "        }\n"
     )
+
+    if "aorusgram_spam_detected" in t:
+        import re as _re
+        observer_pattern = _re.compile(
+            r"\n        // AorusGram: anti-spam native toast\n"
+            r"        NotificationCenter\.default\.addObserver\(forName: NSNotification\.Name\(\"aorusgram_spam_detected\"\),"
+            r".*?\n        \}\n",
+            flags=_re.DOTALL,
+        )
+        upgraded, count = observer_pattern.subn(hook, t, count=1)
+        if count == 0:
+            print("AntiSpamToast: existing observer found but exact block was not replaceable — skipped")
+            return
+        t = upgraded
+        path.write_text(t, encoding="utf-8")
+        print("AntiSpamToast: replaced cached observer with threat/report toast")
+        return
 
     anchor = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
     if anchor in t:

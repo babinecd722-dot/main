@@ -29,7 +29,7 @@ final class AntiSpamManager {
     // Report action) instead of a plain spam notice.
     private let threatPatterns: [String] = [
         // RU — doxxing / deanon / OSINT
-        "деанон", "сдеанон", "задокс", "задокш", "докс тебя", "пробью", "пробив по",
+        "деанон", "сдеанон", "докс", "доксинг", "докс тебя", "задокс", "задокш", "пробью", "пробив по",
         "пробить человека", "вычислю по ip", "вычислю тебя", "найду твой адрес",
         "твой домашний адрес", "знаю где ты живешь", "знаю твой адрес", "найду где ты живешь",
         "слил твои данные", "сольём данные", "сольем данные", "разошлю твои", "паспортные данные",
@@ -38,7 +38,7 @@ final class AntiSpamManager {
         "сваткну", "закажу сват", "приедет сват", "отправлю сват", "закажу тебя",
         "приеду к тебе домой", "приеду по адресу", "тебя закопаю", "тебя найдут", "тебе конец",
         // EN — doxxing / OSINT
-        "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
+        "dox", "doxx", "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
         "leak your info", "your home address", "your ip address", "track your ip",
         "i know where you live", "i have your address", "i will find you",
         // EN — swatting / physical threats
@@ -50,7 +50,7 @@ final class AntiSpamManager {
     // Cyrillic "О"/"Х"), and separators (d.o.x, d o x). All tokens are stored already
     // de-obfuscated (lowercase latin, no separators).
     private let threatTokensLatin: [String] = [
-        "dox", "doxx", "doxxing", "doxx", "deanon", "deanonim", "swat", "swatting",
+        "dox", "doxx", "doxxing", "deanon", "deanonim", "swat", "swatting",
         "osint", "probiv", "proboj", "slivdannyh", "tvojadres", "znajugdezivesh",
         "iknowwhereyoulive", "ihaveyouraddress", "iwillfindyou", "iwillkillyou",
         "youaredead", "leakyourdata", "youripaddress", "trackyourip"
@@ -245,6 +245,13 @@ final class AntiSpamManager {
     struct SpamVerdict {
         let isSpam: Bool
         let reason: SpamReason
+
+        var isThreat: Bool {
+            if case .threat = reason {
+                return true
+            }
+            return false
+        }
     }
 
     enum SpamReason: CustomStringConvertible {
@@ -299,6 +306,7 @@ final class AntiSpamManager {
 
         let normalized = normalize(text)
         guard !normalized.isEmpty else { return SpamVerdict(isSpam: false, reason: .clean) }
+        let linkCount = countLinks(in: normalized)
 
         let compacted = compact(normalized)
 
@@ -338,7 +346,6 @@ final class AntiSpamManager {
                 matchedPattern = matchedPattern ?? pattern
             }
 
-            let linkCount = countLinks(in: normalized)
             if normalized.contains("t.me/+") || normalized.contains("telegram.me/+") {
                 score += 3
             } else if shortLinkMarkers.contains(where: { normalized.contains($0) }) {
@@ -363,6 +370,10 @@ final class AntiSpamManager {
                 return SpamVerdict(isSpam: true, reason: rateReason)
             }
 
+            if normalized.count < 24 && linkCount == 0 {
+                return SpamVerdict(isSpam: false, reason: .clean)
+            }
+
             if score >= 3 {
                 return SpamVerdict(isSpam: true, reason: matchedPattern.map { .builtinPattern($0) } ?? .linkBurst)
             }
@@ -372,15 +383,19 @@ final class AntiSpamManager {
     }
 
     // Вызывается из перехватчика входящих сообщений
-    func processIncoming(peerId: Int64, text: String?, verdict existingVerdict: SpamVerdict? = nil) {
+    func processIncoming(peerId: Int64, text: String?, messageId: Int32? = nil, verdict existingVerdict: SpamVerdict? = nil) {
         guard effectiveEnabled else { return }
         let verdict = existingVerdict ?? check(peerId: peerId, text: text)
         guard verdict.isSpam else { return }
 
+        var userInfo: [String: Any] = ["peerId": peerId, "reason": verdict.reason.description]
+        if let messageId {
+            userInfo["msgId"] = NSNumber(value: messageId)
+        }
         NotificationCenter.default.post(
             name: .aorusSpamDetected,
             object: nil,
-            userInfo: ["peerId": peerId, "reason": verdict.reason.description]
+            userInfo: userInfo
         )
 
         if autoBlock {
