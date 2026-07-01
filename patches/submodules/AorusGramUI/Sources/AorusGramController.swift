@@ -333,6 +333,7 @@ private final class AorusArguments {
     let clearCache: () -> Void
     let openAccountBackup: () -> Void
     let openMisc: () -> Void
+    let openAntiSpamManage: () -> Void
     let openDeviceSpoof: () -> Void
     let openVoiceTwin: () -> Void
     let setRAMCleanInterval: (Int) -> Void
@@ -346,6 +347,7 @@ private final class AorusArguments {
          clearCache: @escaping () -> Void,
          openAccountBackup: @escaping () -> Void,
          openMisc: @escaping () -> Void,
+         openAntiSpamManage: @escaping () -> Void,
          openDeviceSpoof: @escaping () -> Void,
          openVoiceTwin: @escaping () -> Void,
          setRAMCleanInterval: @escaping (Int) -> Void,
@@ -358,6 +360,7 @@ private final class AorusArguments {
         self.clearCache = clearCache
         self.openAccountBackup = openAccountBackup
         self.openMisc = openMisc
+        self.openAntiSpamManage = openAntiSpamManage
         self.openDeviceSpoof = openDeviceSpoof
         self.openVoiceTwin = openVoiceTwin
         self.setRAMCleanInterval = setRAMCleanInterval
@@ -390,6 +393,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case downloadAccel(PresentationTheme, String, Bool)
     case maxMediaQuality(PresentationTheme, String, Bool)
     case antiSpam(PresentationTheme, String, Bool)
+    case antiSpamManage(PresentationTheme, String)
     case performanceStats(PresentationTheme, String, Bool)
     case performanceUptime(PresentationTheme, String, Bool)
     case performanceRAM(PresentationTheme, String, Bool)
@@ -448,7 +452,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.privacy.rawValue
         case .aiHeader, .voiceTranscription, .chatSummary, .translator, .autoReply, .voiceTwin:
             return AorusSection.ai.rawValue
-        case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .performanceStats, .performanceUptime, .performanceRAM,
+        case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .antiSpamManage, .performanceStats, .performanceUptime, .performanceRAM,
              .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
@@ -493,20 +497,21 @@ private enum AorusEntry: ItemListNodeEntry {
         case .downloadAccel:        return 21
         case .maxMediaQuality:      return 22
         case .antiSpam:             return 23
-        case .performanceStats:     return 24
-        case .performanceUptime:    return 25
-        case .performanceRAM:       return 26
-        case .performanceCPU:       return 27
-        case .performanceFPS:       return 28
-        case .performanceBattery:   return 29
-        case .performanceNetwork:   return 30
-        case .performanceDisk:      return 31
-        case .performanceThermal:   return 32
-        case .performanceGraph:     return 33
-        case .ramAutoClean:         return 34
-        case .ramInterval:          return 35
-        case .cacheAutoClean:       return 36
-        case .cacheInterval:        return 37
+        case .antiSpamManage:       return 24
+        case .performanceStats:     return 25
+        case .performanceUptime:    return 26
+        case .performanceRAM:       return 27
+        case .performanceCPU:       return 28
+        case .performanceFPS:       return 29
+        case .performanceBattery:   return 30
+        case .performanceNetwork:   return 31
+        case .performanceDisk:      return 32
+        case .performanceThermal:   return 33
+        case .performanceGraph:     return 34
+        case .ramAutoClean:         return 35
+        case .ramInterval:          return 36
+        case .cacheAutoClean:       return 37
+        case .cacheInterval:        return 38
         case .uiHeader:             return 50
         case .glassUI:              return 51
         case .amoledMode:           return 52
@@ -579,6 +584,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .maxMediaQuality(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .antiSpam(lt, ls, lv):
             if case let .antiSpam(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .antiSpamManage(lt, ls):
+            if case let .antiSpamManage(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .performanceStats(lt, ls, lv):
             if case let .performanceStats(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .performanceUptime(lt, ls, lv):
@@ -706,6 +713,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.maxMediaQuality, $0) })
         case let .antiSpam(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.antiSpamEnabled, $0) })
+        case let .antiSpamManage(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openAntiSpamManage)
         case let .performanceStats(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.performanceStatsEnabled, $0) })
         case let .performanceUptime(_, title, value):
@@ -884,6 +893,13 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .officialChannel(theme, l10n.officialChannel),
         .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
     ]
+
+    if state.antiSpamEnabled, let idx = entries.firstIndex(where: {
+        if case .antiSpam = $0 { return true }; return false
+    }) {
+        let isRu = AorusLang.current == .ru
+        entries.insert(.antiSpamManage(theme, isRu ? "Управление" : "Manage"), at: idx + 1)
+    }
 
     if state.performanceStatsEnabled, let idx = entries.firstIndex(where: {
         if case .performanceStats = $0 { return true }; return false
@@ -1120,6 +1136,13 @@ public func aorusGramController(context: AccountContext) -> ViewController {
                 return
             }
             navigationController.pushViewController(aorusMiscController(context: context))
+        },
+        openAntiSpamManage: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            navigationController.pushViewController(aorusAntiSpamController(context: context))
         },
         openDeviceSpoof: {
             guard let controller = weakController else { return }

@@ -9,9 +9,49 @@ final class AntiSpamManager {
     private(set) var autoBlock = true
     private(set) var keywords: [String] = []
     private(set) var blockedPeerIds: Set<Int64> = []
+    private(set) var allowedPeerIds: Set<Int64> = []
+
+    // Per-category protection switches (all default ON). Let the user disable a class of
+    // detection without turning anti-spam off entirely.
+    private(set) var threatProtection = true      // doxxing / OSINT / swatting
+    private(set) var spamProtection = true        // built-in spam patterns + scoring
+    private(set) var stopWordsProtection = true   // the user's own stop-word list
+    private(set) var textCleanup = true           // fold ALL CAPS + capitalize first letter
 
     private var peerWindows: [Int64: PeerWindow] = [:]
     private let trustedTelegramServiceIds: Set<Int64> = [777000]
+
+    // Threats: doxxing / OSINT / swatting / physical-harm intimidation. Matched before
+    // ordinary spam so such messages raise the dedicated "threat" alert (with a one-tap
+    // Report action) instead of a plain spam notice.
+    private let threatPatterns: [String] = [
+        // RU — doxxing / deanon / OSINT
+        "деанон", "сдеанон", "задокс", "задокш", "докс тебя", "пробью", "пробив по",
+        "пробить человека", "вычислю по ip", "вычислю тебя", "найду твой адрес",
+        "твой домашний адрес", "знаю где ты живешь", "знаю твой адрес", "найду где ты живешь",
+        "слил твои данные", "сольём данные", "сольем данные", "разошлю твои", "паспортные данные",
+        "твой паспорт", "осинт",
+        // RU — swatting / physical threats
+        "сваткну", "закажу сват", "приедет сват", "отправлю сват", "закажу тебя",
+        "приеду к тебе домой", "приеду по адресу", "тебя закопаю", "тебя найдут", "тебе конец",
+        // EN — doxxing / OSINT
+        "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
+        "leak your info", "your home address", "your ip address", "track your ip",
+        "i know where you live", "i have your address", "i will find you",
+        // EN — swatting / physical threats
+        "swat you", "swatting", "i will swat", "send swat", "i will kill you", "you are dead"
+    ]
+
+    // Short threat keywords matched against a DE-OBFUSCATED form of the text, so common
+    // evasions are still caught: leetspeak (D0X, 5WAT), Cyrillic homoglyphs (DОX with a
+    // Cyrillic "О"/"Х"), and separators (d.o.x, d o x). All tokens are stored already
+    // de-obfuscated (lowercase latin, no separators).
+    private let threatTokensLatin: [String] = [
+        "dox", "doxx", "doxxing", "doxx", "deanon", "deanonim", "swat", "swatting",
+        "osint", "probiv", "proboj", "slivdannyh", "tvojadres", "znajugdezivesh",
+        "iknowwhereyoulive", "ihaveyouraddress", "iwillfindyou", "iwillkillyou",
+        "youaredead", "leakyourdata", "youripaddress", "trackyourip"
+    ]
 
     private let highConfidencePatterns: [String] = [
         "гарантированный доход", "гарантированная прибыль", "гарантия выплат", "доход каждый день",
@@ -103,16 +143,25 @@ final class AntiSpamManager {
         autoBlock  = saved.autoBlock
         keywords   = saved.keywords
         blockedPeerIds = Set(saved.blockedPeerIds)
+        allowedPeerIds = Set(saved.allowedPeerIds ?? [])
+        threatProtection = saved.threatProtection ?? true
+        spamProtection = saved.spamProtection ?? true
+        stopWordsProtection = saved.stopWordsProtection ?? true
+        textCleanup = saved.textCleanup ?? true
         mirrorFlatState()
     }
 
     private func save() {
-        let blockedIds = Array(blockedPeerIds)
         let state = SavedState(
             isEnabled:      isEnabled,
             autoBlock:      autoBlock,
             keywords:       keywords,
-            blockedPeerIds: blockedIds
+            blockedPeerIds: Array(blockedPeerIds),
+            allowedPeerIds: Array(allowedPeerIds),
+            threatProtection: threatProtection,
+            spamProtection: spamProtection,
+            stopWordsProtection: stopWordsProtection,
+            textCleanup: textCleanup
         )
         UserDefaults.standard.set(try? JSONEncoder().encode(state), forKey: defaultsKey)
         mirrorFlatState()
@@ -120,13 +169,24 @@ final class AntiSpamManager {
 
     private func mirrorFlatState() {
         UserDefaults.standard.set(Array(blockedPeerIds).map { NSNumber(value: $0) }, forKey: "aorusgram_antispam_blocked_peer_ids")
+        UserDefaults.standard.set(Array(allowedPeerIds).map { NSNumber(value: $0) }, forKey: "aorusgram_antispam_allowed_peer_ids")
         UserDefaults.standard.set(keywords, forKey: "aorusgram_antispam_keywords")
+        UserDefaults.standard.set(threatPatterns, forKey: "aorusgram_antispam_threat_patterns")
+        UserDefaults.standard.set(threatTokensLatin, forKey: "aorusgram_antispam_threat_tokens_latin")
+        UserDefaults.standard.set(threatProtection, forKey: "aorusgram_antispam_threat_protection")
+        UserDefaults.standard.set(spamProtection, forKey: "aorusgram_antispam_spam_protection")
+        UserDefaults.standard.set(stopWordsProtection, forKey: "aorusgram_antispam_stopwords_protection")
+        UserDefaults.standard.set(textCleanup, forKey: "aorusgram_antispam_text_cleanup")
     }
 
     // MARK: - API
 
     func setEnabled(_ value: Bool)   { isEnabled = value; save() }
     func setAutoBlock(_ value: Bool) { autoBlock = value; save() }
+    func setThreatProtection(_ value: Bool)   { threatProtection = value; save() }
+    func setSpamProtection(_ value: Bool)      { spamProtection = value; save() }
+    func setStopWordsProtection(_ value: Bool) { stopWordsProtection = value; save() }
+    func setTextCleanup(_ value: Bool)         { textCleanup = value; save() }
 
     func addKeyword(_ kw: String) {
         let clean = kw.lowercased().trimmingCharacters(in: .whitespaces)
@@ -151,6 +211,23 @@ final class AntiSpamManager {
         save()
     }
 
+    // Exceptions (trusted peers) — never filtered or auto-blocked, even if their text
+    // matches a pattern. Adding a peer here also lifts any existing block on them.
+    func allowPeer(_ peerId: Int64) {
+        allowedPeerIds.insert(peerId)
+        blockedPeerIds.remove(peerId)
+        save()
+    }
+
+    func removeAllowedPeer(_ peerId: Int64) {
+        allowedPeerIds.remove(peerId)
+        save()
+    }
+
+    func isAllowed(_ peerId: Int64) -> Bool {
+        return allowedPeerIds.contains(peerId)
+    }
+
     // MARK: - Check
 
     struct SpamVerdict {
@@ -159,7 +236,7 @@ final class AntiSpamManager {
     }
 
     enum SpamReason: CustomStringConvertible {
-        case blockedUser, keyword(String), builtinPattern(String), linkBurst, repeatedMessage, flood, clean
+        case blockedUser, keyword(String), builtinPattern(String), linkBurst, repeatedMessage, flood, threat(String), clean
 
         var description: String {
             switch self {
@@ -175,8 +252,24 @@ final class AntiSpamManager {
                 return "repeatedMessage"
             case .flood:
                 return "flood"
+            case let .threat(value):
+                return "threat:\(value)"
             case .clean:
                 return "clean"
+            }
+        }
+
+        // Coarse notification category → drives the toast icon + title + Report action.
+        var category: String {
+            switch self {
+            case .threat:
+                return "threat"
+            case .blockedUser:
+                return "blocked"
+            case .flood, .repeatedMessage:
+                return "flood"
+            default:
+                return "spam"
             }
         }
     }
@@ -184,7 +277,7 @@ final class AntiSpamManager {
     func check(peerId: Int64, text: String?) -> SpamVerdict {
         guard effectiveEnabled else { return SpamVerdict(isSpam: false, reason: .clean) }
 
-        if trustedTelegramServiceIds.contains(peerId) {
+        if trustedTelegramServiceIds.contains(peerId) || allowedPeerIds.contains(peerId) {
             return SpamVerdict(isSpam: false, reason: .clean)
         }
 
@@ -195,54 +288,72 @@ final class AntiSpamManager {
         let normalized = normalize(text)
         guard !normalized.isEmpty else { return SpamVerdict(isSpam: false, reason: .clean) }
 
-        for keyword in keywords {
-            let cleanKeyword = normalize(keyword)
-            if !cleanKeyword.isEmpty && normalized.contains(cleanKeyword) {
-                return SpamVerdict(isSpam: true, reason: .keyword(cleanKeyword))
+        let compacted = compact(normalized)
+
+        // Threats (doxxing / OSINT / swatting / physical harm) take priority over spam.
+        if threatProtection {
+            for pattern in threatPatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
+                return SpamVerdict(isSpam: true, reason: .threat(pattern))
+            }
+            // Obfuscation-resistant pass (D0X, DОX, d.o.x, …).
+            let deobfuscated = deobfuscateLatin(text ?? "")
+            if !deobfuscated.isEmpty {
+                for token in threatTokensLatin where !token.isEmpty && deobfuscated.contains(token) {
+                    return SpamVerdict(isSpam: true, reason: .threat(token))
+                }
             }
         }
 
-        let compacted = compact(normalized)
-
-        for pattern in highConfidencePatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
-            return SpamVerdict(isSpam: true, reason: .builtinPattern(pattern))
+        if stopWordsProtection {
+            for keyword in keywords {
+                let cleanKeyword = normalize(keyword)
+                if !cleanKeyword.isEmpty && normalized.contains(cleanKeyword) {
+                    return SpamVerdict(isSpam: true, reason: .keyword(cleanKeyword))
+                }
+            }
         }
 
-        var score = 0
-        var matchedPattern: String?
+        if spamProtection {
+            for pattern in highConfidencePatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
+                return SpamVerdict(isSpam: true, reason: .builtinPattern(pattern))
+            }
 
-        for pattern in weightedPatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
-            score += 1
-            matchedPattern = matchedPattern ?? pattern
-        }
+            var score = 0
+            var matchedPattern: String?
 
-        let linkCount = countLinks(in: normalized)
-        if normalized.contains("t.me/+") || normalized.contains("telegram.me/+") {
-            score += 3
-        } else if shortLinkMarkers.contains(where: { normalized.contains($0) }) {
-            score += 2
-        } else if linkCount >= 3 {
-            score += 2
-        } else if linkCount >= 1 && matchedPattern != nil {
-            score += 1
-        }
+            for pattern in weightedPatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
+                score += 1
+                matchedPattern = matchedPattern ?? pattern
+            }
 
-        if contactBaitPatterns.contains(where: { containsPattern($0, normalized: normalized, compacted: compacted) }) {
-            score += linkCount > 0 ? 2 : 1
-        }
-        if moneyPatterns.contains(where: { normalized.contains($0) }) {
-            score += 1
-        }
-        if linkCount > 0 && phishingLinkHints.contains(where: { normalized.contains($0) }) {
-            score += 2
-        }
+            let linkCount = countLinks(in: normalized)
+            if normalized.contains("t.me/+") || normalized.contains("telegram.me/+") {
+                score += 3
+            } else if shortLinkMarkers.contains(where: { normalized.contains($0) }) {
+                score += 2
+            } else if linkCount >= 3 {
+                score += 2
+            } else if linkCount >= 1 && matchedPattern != nil {
+                score += 1
+            }
 
-        if let rateReason = updatePeerWindow(peerId: peerId, normalizedText: normalized) {
-            return SpamVerdict(isSpam: true, reason: rateReason)
-        }
+            if contactBaitPatterns.contains(where: { containsPattern($0, normalized: normalized, compacted: compacted) }) {
+                score += linkCount > 0 ? 2 : 1
+            }
+            if moneyPatterns.contains(where: { normalized.contains($0) }) {
+                score += 1
+            }
+            if linkCount > 0 && phishingLinkHints.contains(where: { normalized.contains($0) }) {
+                score += 2
+            }
 
-        if score >= 3 {
-            return SpamVerdict(isSpam: true, reason: matchedPattern.map { .builtinPattern($0) } ?? .linkBurst)
+            if let rateReason = updatePeerWindow(peerId: peerId, normalizedText: normalized) {
+                return SpamVerdict(isSpam: true, reason: rateReason)
+            }
+
+            if score >= 3 {
+                return SpamVerdict(isSpam: true, reason: matchedPattern.map { .builtinPattern($0) } ?? .linkBurst)
+            }
         }
 
         return SpamVerdict(isSpam: false, reason: .clean)
@@ -272,6 +383,11 @@ final class AntiSpamManager {
         var autoBlock: Bool
         var keywords: [String]
         var blockedPeerIds: [Int64]
+        var allowedPeerIds: [Int64]?   // optional: tolerant decode of states saved before exceptions existed
+        var threatProtection: Bool?
+        var spamProtection: Bool?
+        var stopWordsProtection: Bool?
+        var textCleanup: Bool?
     }
 
     private var effectiveEnabled: Bool {
@@ -315,6 +431,30 @@ final class AntiSpamManager {
     private func compact(_ text: String) -> String {
         let scalars = text.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }
         return String(String.UnicodeScalarView(scalars))
+    }
+
+    // Fold leetspeak digits and Cyrillic homoglyphs to latin, drop every separator, so
+    // "D0X", "D.О.Х", "d o x" all collapse to "dox" for threat-token matching.
+    private static let aorusDeobfuscationMap: [Character: Character] = [
+        "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "6": "b", "7": "t", "8": "b", "9": "g",
+        "@": "a", "$": "s",
+        // Cyrillic → latin homoglyphs
+        "а": "a", "в": "b", "е": "e", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p",
+        "с": "c", "т": "t", "у": "y", "х": "x", "і": "i", "ѕ": "s", "ԁ": "d", "ј": "j", "ԛ": "q"
+    ]
+
+    private func deobfuscateLatin(_ text: String) -> String {
+        var result = ""
+        result.reserveCapacity(text.count)
+        for ch in text.lowercased() {
+            if let mapped = AntiSpamManager.aorusDeobfuscationMap[ch] {
+                result.append(mapped)
+            } else if (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") {
+                result.append(ch)
+            }
+            // everything else (separators, remaining non-latin letters) is dropped
+        }
+        return result
     }
 
     private func containsPattern(_ pattern: String, normalized: String, compacted: String) -> Bool {
