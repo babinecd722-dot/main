@@ -2739,6 +2739,12 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
             t = "import UndoUI\n" + t
         print("AntiSpamToast: added import UndoUI")
 
+    # File-level holder so an auto-report RPC outlives the toast action closure — a
+    # bare `.start()` whose disposable is dropped immediately can cancel the request
+    # before it reaches the server.
+    if "aorusAntiSpamReportDisposables" not in t:
+        t = t.replace("import AccountContext\n", "import AccountContext\nprivate let aorusAntiSpamReportDisposables = DisposableSet()\n", 1)
+
     sentinel = "// AorusGram: anti-spam native toast"
     hook = (
         "\n        " + sentinel + "\n"
@@ -2794,10 +2800,25 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "                    animateInAsReplacement: true,\n"
         "                    action: { [weak self] action in\n"
         "                        if case .undo = action, isThreat, aorusPeerId != 0, let app = self?.contextValue {\n"
-        "                            // Determine the threat kind and auto-report the peer with no extra confirmation.\n"
-        "                            let aorusViolent = reason.contains(\"swat\") || reason.contains(\"kill\") || reason.contains(\"dead\") || reason.contains(\"сват\") || reason.contains(\"убь\") || reason.contains(\"конец\") || reason.contains(\"закопа\") || reason.contains(\"найд\")\n"
-        "                            let aorusReportReason: ReportReason = aorusViolent ? .violence : .personalDetails\n"
-        "                            let _ = app.context.engine.peers.reportPeer(peerId: PeerId(aorusPeerId), reason: aorusReportReason, message: isRu ? \"Автоматическая жалоба AorusGram: угрозы / деанон\" : \"AorusGram auto-report: threats / doxxing\").start()\n"
+        "                            // Pick the report reason + a clear English description of the abuse so\n"
+        "                            // Telegram moderation understands the case, then auto-report with no\n"
+        "                            // extra confirmation. English is used because moderation review is in English.\n"
+        "                            let aorusReportReason: ReportReason\n"
+        "                            let aorusReportMessage: String\n"
+        "                            if reason.contains(\"swat\") || reason.contains(\"сват\") {\n"
+        "                                aorusReportReason = .violence\n"
+        "                                aorusReportMessage = \"This user is threatening to organize a swatting attack against me — a fake emergency call to send armed police to my home address. This is a threat of serious physical harm and a criminal act. Please take action.\"\n"
+        "                            } else if reason.contains(\"kill\") || reason.contains(\"dead\") || reason.contains(\"убь\") || reason.contains(\"конец\") || reason.contains(\"закопа\") || reason.contains(\"найд\") {\n"
+        "                                aorusReportReason = .violence\n"
+        "                                aorusReportMessage = \"This user is sending direct threats of physical violence and death threats against me. I feel unsafe and consider this credible intimidation. Please review and take action.\"\n"
+        "                            } else if reason.contains(\"osint\") || reason.contains(\"deanon\") || reason.contains(\"деанон\") {\n"
+        "                                aorusReportReason = .personalDetails\n"
+        "                                aorusReportMessage = \"This user is attempting to deanonymize me and is threatening to expose my real identity and private information gathered through OSINT. This is targeted harassment and a privacy violation. Please take action.\"\n"
+        "                            } else {\n"
+        "                                aorusReportReason = .personalDetails\n"
+        "                                aorusReportMessage = \"This user is threatening to publish my private personal data (doxxing) — such as my home address, passport details or phone number — in order to intimidate and harass me. This is a serious privacy violation. Please take action.\"\n"
+        "                            }\n"
+        "                            aorusAntiSpamReportDisposables.add(app.context.engine.peers.reportPeer(peerId: PeerId(aorusPeerId), reason: aorusReportReason, message: aorusReportMessage).start())\n"
         "                        }\n"
         "                        return false\n"
         "                    }\n"
