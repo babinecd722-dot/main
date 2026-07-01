@@ -2389,6 +2389,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    return markers.reduce(0) { result, marker in result + text.components(separatedBy: marker).count - 1 }\n"
         "                }\n"
         "                func aorusShouldHideIncomingSpam(identity: Int64, text rawText: String) -> Bool {\n"
+        "                    if identity == 777000 { return false }\n"
         "                    if aorusBlockedPeerIds.contains(identity) { return true }\n"
         "                    let text = aorusNormalizeSpamText(rawText)\n"
         "                    if text.isEmpty { return false }\n"
@@ -2571,6 +2572,10 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
             "                    UndoOverlayController(\n",
         )
         upgraded = upgraded.replace(
+            "            if let controller = app.rootController.viewControllers.last {\n",
+            "            if let controller = app.rootController.viewControllers.last as? ViewController {\n",
+        )
+        upgraded = upgraded.replace(
             "                ),\n"
             "                in: .window(.root)\n"
             "            )",
@@ -2579,12 +2584,24 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
             "                )\n"
             "            }",
         )
+        if "as? ViewController" in upgraded and "import Display\n" not in upgraded:
+            if "import UIKit\n" in upgraded:
+                upgraded = upgraded.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
+            else:
+                upgraded = "import Display\n" + upgraded
         if upgraded != t:
             path.write_text(upgraded, encoding="utf-8")
             print("AntiSpamToast: upgraded rootController presenter")
         else:
             print("AntiSpamToast: already injected")
         return
+
+    if "import Display\n" not in t:
+        if "import UIKit\n" in t:
+            t = t.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
+        else:
+            t = "import Display\n" + t
+        print("AntiSpamToast: added import Display")
 
     if "import UndoUI\n" not in t:
         if "import UIKit\n" in t:
@@ -2615,7 +2632,7 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            } else {\n"
         "                text = isRu ? \"Спам скрыт\" : \"Spam was hidden\"\n"
         "            }\n"
-        "            if let controller = app.rootController.viewControllers.last {\n"
+        "            if let controller = app.rootController.viewControllers.last as? ViewController {\n"
         "                controller.present(\n"
         "                    UndoOverlayController(\n"
         "                    presentationData: presentationData,\n"

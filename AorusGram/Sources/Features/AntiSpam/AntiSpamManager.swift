@@ -11,6 +11,7 @@ final class AntiSpamManager {
     private(set) var blockedPeerIds: Set<Int64> = []
 
     private var peerWindows: [Int64: PeerWindow] = [:]
+    private let trustedTelegramServiceIds: Set<Int64> = [777000]
 
     private let highConfidencePatterns: [String] = [
         "быстрый доход", "пассивный доход", "без вложений", "free bitcoin",
@@ -103,6 +104,7 @@ final class AntiSpamManager {
     }
 
     func blockPeer(_ peerId: Int64) {
+        guard !trustedTelegramServiceIds.contains(peerId) else { return }
         blockedPeerIds.insert(peerId)
         save()
     }
@@ -144,6 +146,10 @@ final class AntiSpamManager {
 
     func check(peerId: Int64, text: String?) -> SpamVerdict {
         guard effectiveEnabled else { return SpamVerdict(isSpam: false, reason: .clean) }
+
+        if trustedTelegramServiceIds.contains(peerId) {
+            return SpamVerdict(isSpam: false, reason: .clean)
+        }
 
         if blockedPeerIds.contains(peerId) {
             return SpamVerdict(isSpam: true, reason: .blockedUser)
