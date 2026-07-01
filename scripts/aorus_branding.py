@@ -14100,7 +14100,9 @@ def main() -> None:
     patch_download_accelerator(tg)
     patch_max_media_quality(tg)
     patch_deleted_messages_interception(tg)
-    patch_deleted_message_quote_reply(tg)
+    # patch_deleted_message_quote_reply(tg)  # disabled: rewriting the send broke delivery
+    # (message flashed and vanished). Native reply to a preserved deleted message works
+    # as-is, so we no longer touch the send path.
     patch_anti_spoof_delete_preflight(tg)
     patch_block_ads(tg)
     patch_ghost_mode_hide_typing(tg)

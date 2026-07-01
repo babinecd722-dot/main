@@ -6,7 +6,10 @@ final class AntiSpamManager {
 
     private let defaultsKey = "aorusgram_antispam"
     private(set) var isEnabled = true
-    private(set) var autoBlock = true
+    // Auto-block is OFF by default: the client never silently blocks anyone. Blocking is
+    // a manual choice (or an explicit action from a notification). This is the single most
+    // important safeguard against false positives ever cutting off real contacts/channels.
+    private(set) var autoBlock = false
     private(set) var keywords: [String] = []
     private(set) var blockedPeerIds: Set<Int64> = []
     private(set) var allowedPeerIds: Set<Int64> = []
@@ -148,6 +151,15 @@ final class AntiSpamManager {
         spamProtection = saved.spamProtection ?? true
         stopWordsProtection = saved.stopWordsProtection ?? true
         textCleanup = saved.textCleanup ?? true
+        // One-time repair: earlier builds auto-blocked far too aggressively and could bury
+        // real contacts/channels. Wipe the accumulated block list once and force auto-block
+        // off, so everyone the user actually knows is reachable again.
+        if !UserDefaults.standard.bool(forKey: "aorusgram_antispam_repair_v3") {
+            blockedPeerIds = []
+            autoBlock = false
+            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v3")
+            save()
+        }
         mirrorFlatState()
     }
 
