@@ -633,6 +633,68 @@ def patch_callkit_brand_name(tg: Path) -> None:
         print("CallKit: localizedName Aorusgram")
 
 
+def patch_deleted_message_quote_reply(tg: Path) -> None:
+    """Reply to a preserved deleted message as a local blockquote "quote reply".
+
+    A deleted incoming message is kept locally (invisible \\u2063\\u2064 suffix) but no
+    longer exists on the server, so a normal server reply can't carry its quote to the
+    peer. Instead, when the user taps Reply on such a message, insert its text into the
+    composer as a collapsed blockquote (ChatTextInputAttributes.block) with the caret
+    placed below it — the reply then sends as an ordinary message that visibly quotes the
+    deleted text. Non-deleted messages keep the native reply behaviour untouched.
+    """
+    path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
+    if not path.is_file():
+        print("DeletedQuoteReply: ChatInterfaceStateContextMenus.swift not found, skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: deleted-message quote reply" in t:
+        print("DeletedQuoteReply: already injected")
+        return
+    anchor = (
+        "                interfaceInteraction.setupReplyMessage(messages[0].id, nil, { transition, completed in\n"
+        "                    c?.dismiss(result: .custom(transition), completion: {\n"
+        "                        completed()\n"
+        "                    })\n"
+        "                })\n"
+    )
+    if anchor not in t:
+        print("DeletedQuoteReply: reply-action anchor not found — skipped")
+        return
+    replacement = (
+        "                // AorusGram: deleted-message quote reply\n"
+        "                let aorusReplyMsg = messages[0]\n"
+        "                if aorusReplyMsg.text.hasSuffix(\"\\u{2063}\\u{2064}\") {\n"
+        "                    // No server copy to reply to — quote the preserved text locally.\n"
+        "                    let aorusQuoted = String(aorusReplyMsg.text.dropLast(2))\n"
+        "                    c?.dismiss(result: .default, completion: {})\n"
+        "                    interfaceInteraction.updateTextInputStateAndMode { current, inputMode in\n"
+        "                        let aorusQuote = NSMutableAttributedString(string: aorusQuoted)\n"
+        "                        if aorusQuote.length > 0 {\n"
+        "                            aorusQuote.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: true), range: NSRange(location: 0, length: aorusQuote.length))\n"
+        "                        }\n"
+        "                        let aorusResult = NSMutableAttributedString()\n"
+        "                        aorusResult.append(aorusQuote)\n"
+        "                        aorusResult.append(NSAttributedString(string: \"\\n\"))\n"
+        "                        aorusResult.append(current.inputText)\n"
+        "                        let aorusPos = aorusQuote.length + 1\n"
+        "                        return (ChatTextInputState(inputText: aorusResult, selectionRange: aorusPos ..< aorusPos), .text)\n"
+        "                    }\n"
+        "                } else {\n"
+        "                    interfaceInteraction.setupReplyMessage(messages[0].id, nil, { transition, completed in\n"
+        "                        c?.dismiss(result: .custom(transition), completion: {\n"
+        "                            completed()\n"
+        "                        })\n"
+        "                    })\n"
+        "                }\n"
+    )
+    t = t.replace(anchor, replacement, 1)
+    if "import TextFormat" not in t:
+        t = t.replace("import AccountContext\n", "import AccountContext\nimport TextFormat\n", 1)
+    path.write_text(t, encoding="utf-8")
+    print("DeletedQuoteReply: injected blockquote quote-reply for deleted messages")
+
+
 def patch_deleted_messages_interception(tg: Path) -> None:
     """Post NotificationCenter event before postbox.deleteMessages() in TelegramCore.
 
@@ -13927,6 +13989,7 @@ def main() -> None:
     patch_download_accelerator(tg)
     patch_max_media_quality(tg)
     patch_deleted_messages_interception(tg)
+    patch_deleted_message_quote_reply(tg)
     patch_anti_spoof_delete_preflight(tg)
     patch_block_ads(tg)
     patch_ghost_mode_hide_typing(tg)
