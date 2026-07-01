@@ -14,39 +14,69 @@ final class AntiSpamManager {
     private let trustedTelegramServiceIds: Set<Int64> = [777000]
 
     private let highConfidencePatterns: [String] = [
-        "быстрый доход", "пассивный доход", "без вложений", "free bitcoin",
-        "nft drop", "airdrop", "переведи деньги", "срочно нужна помощь",
-        "онлайн casino", "крипто раздача", "гарантированный доход",
-        "быстрый заработок", "легкие деньги", "гарантия выплат",
-        "доход каждый день", "без риска", "100% доход", "работа без опыта",
-        "удаленная работа без опыта", "пиши в лс заработок",
-        // Only the phishing *request* to hand over a code — never a legitimate
-        // "your confirmation code: …" delivery, which real services (banks,
-        // couriers) send and which must not be auto-hidden.
-        "введите код", "отправьте код", "пришлите код", "код никому не сообщайте",
-        "verify your account", "seed phrase", "recovery phrase",
-        "wallet connect", "подключите кошелек", "подключи кошелек",
-        "служба поддержки telegram", "telegram support"
+        "гарантированный доход", "гарантированная прибыль", "гарантия выплат", "доход каждый день",
+        "быстрый доход", "пассивный доход", "без вложений", "100% доход",
+        "доход без риска", "удвою ваши вложения", "удвою ваш депозит", "верну с прибылью",
+        "закрытый инвест клуб", "личный инвестор", "инвестируй и получай", "переведи деньги",
+        "без риска", "guaranteed profit", "guaranteed income", "guaranteed returns",
+        "double your money", "double your investment", "double your deposit", "risk free profit",
+        "get rich quick", "investment opportunity", "high return investment", "no risk high profit",
+        "крипто раздача", "раздача криптовалюты", "бесплатные биткоины", "подключите кошелек",
+        "подключи кошелек", "синхронизируйте кошелек", "введите сид фразу", "сид фраза",
+        "мнемоническая фраза", "секретная фраза", "онлайн casino", "free bitcoin",
+        "free crypto", "crypto giveaway", "bitcoin giveaway", "nft drop",
+        "airdrop", "claim your airdrop", "claim your reward", "connect your wallet",
+        "wallet connect", "validate your wallet", "sync your wallet", "seed phrase",
+        "recovery phrase", "private key", "send 1 btc", "elon musk giveaway",
+        "double your btc", "быстрый заработок", "легкий заработок", "легкие деньги",
+        "работа без опыта", "удаленная работа без опыта", "пиши в лс заработок", "заработок в интернете",
+        "ищем сотрудников на удаленку", "оплата ежедневно", "заработок от 5000", "easy money",
+        "make money fast", "work from home no experience", "be your own boss", "hiring remote workers",
+        "earn money online", "ваш аккаунт заблокирован", "аккаунт будет удален", "подтвердите аккаунт",
+        "верифицируйте аккаунт", "введите код", "отправьте код", "пришлите код",
+        "код никому не сообщайте", "служба поддержки telegram", "техподдержка telegram", "официальная поддержка telegram",
+        "verify your account", "confirm your identity", "account has been blocked", "account will be suspended",
+        "telegram support", "official telegram team", "unusual login attempt", "click here to verify",
+        "your account is at risk", "вы выиграли приз", "вы стали победителем", "заберите свой выигрыш",
+        "поздравляем вы выиграли", "вы получили приз", "you have won", "you are a winner",
+        "claim your prize", "congratulations you won", "you have been selected", "я взломал вашу камеру",
+        "у меня есть ваше видео", "оплатите иначе разошлю", "i hacked your webcam", "i have your video",
+        "pay or i will send", "i recorded you"
     ]
 
     private let weightedPatterns: [String] = [
-        "заработ", "крипт", "инвест", "казино", "букмекер",
-        "розыгрыш", "приз", "доход", "трейдинг", "сигналы",
-        "подработка", "удаленная работа", "арбитраж", "ставки",
-        "промокод", "слоты", "forex", "binance", "usdt", "btc",
-        "crypto", "wallet", "giveaway", "bonus",
-        "верификация", "подтвердите", "аккаунт заблокирован",
-        "support", "поддержка", "кошелек", "сид фраза", "мнемоническая фраза"
+        "заработ", "крипт", "биткоин", "инвест",
+        "казино", "букмекер", "ставки", "розыгрыш",
+        "приз", "доход", "прибыль", "трейдинг",
+        "трейдер", "сигнал", "подработка", "арбитраж",
+        "промокод", "слоты", "депозит", "вложени",
+        "кошелек", "кошелёк", "верификац", "подтверд",
+        "заблокирован", "поддержк", "выплат", "вывод средств",
+        "реферал", "бонус", "обмен валют", "гарант",
+        "forex", "binance", "usdt", "btc",
+        "eth", "crypto", "bitcoin", "wallet",
+        "giveaway", "bonus", "casino", "betting",
+        "gambling", "trading", "profit", "invest",
+        "referral", "withdraw", "deposit", "airdrop",
+        "verify", "suspended", "prize", "winner",
+        "lottery", "loan", "escort", "promo",
+        "earn", "payout"
     ]
 
     private let contactBaitPatterns: [String] = [
         "пиши в лс", "пиши в личку", "напиши мне", "подробности в лс",
-        "за деталями", "write me", "dm me", "pm me"
+        "за деталями", "жду в лс", "переходи по ссылке", "подпишись на канал",
+        "пиши в телеграм", "write me", "dm me", "pm me",
+        "message me", "contact me", "text me", "click the link",
+        "join my channel", "add me", "hit me up"
     ]
 
     private let moneyPatterns: [String] = [
-        "₽", "$", "€", "руб", "доллар", "оплата", "выплата",
-        "прибыль", "процент", "x2", "x3"
+        "₽", "$", "€", "£",
+        "руб", "доллар", "евро", "оплата",
+        "выплата", "прибыль", "процент", "x2",
+        "x3", "x10", "usd", "eur",
+        "payout", "cashout"
     ]
 
     private let shortLinkMarkers: [String] = [
@@ -54,7 +84,11 @@ final class AntiSpamManager {
     ]
 
     private let phishingLinkHints: [String] = [
-        "login", "verify", "wallet", "airdrop", "bonus", "gift", "support", "security"
+        "login", "verify", "wallet", "airdrop",
+        "bonus", "gift", "support", "security",
+        "account", "confirm", "claim", "unlock",
+        "restore", "recover", "billing", "payment",
+        "update", "signin", "auth"
     ]
 
     // MARK: - Persistence
