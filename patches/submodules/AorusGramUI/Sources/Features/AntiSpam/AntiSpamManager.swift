@@ -28,17 +28,17 @@ final class AntiSpamManager {
     // ordinary spam so such messages raise the dedicated "threat" alert (with a one-tap
     // Report action) instead of a plain spam notice.
     private let threatPatterns: [String] = [
-        // RU — doxxing / deanon / OSINT
-        "деанон", "сдеанон", "докс", "доксинг", "докс тебя", "задокс", "задокш", "пробью", "пробив по",
+        // RU — doxxing / deanon / OSINT (specific, rarely appear in normal chat)
+        "деанон", "сдеанон", "докс", "доксинг", "докс тебя", "задокс", "задокш", "пробив по базе",
         "пробить человека", "вычислю по ip", "вычислю тебя", "найду твой адрес",
         "твой домашний адрес", "знаю где ты живешь", "знаю твой адрес", "найду где ты живешь",
-        "слил твои данные", "сольём данные", "сольем данные", "разошлю твои", "паспортные данные",
+        "слил твои данные", "сольём данные", "сольем данные", "разошлю твои данные", "паспортные данные",
         "твой паспорт", "осинт",
         // RU — swatting / physical threats
-        "сваткну", "закажу сват", "приедет сват", "отправлю сват", "закажу тебя",
-        "приеду к тебе домой", "приеду по адресу", "тебя закопаю", "тебя найдут", "тебе конец",
+        "сваткну", "закажу сват", "заказан сват", "приедет сват", "отправлю сват", "сватинг",
+        "приеду к тебе домой", "приеду по адресу", "тебя закопаю", "убью тебя",
         // EN — doxxing / OSINT
-        "dox", "doxx", "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
+        "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
         "leak your info", "your home address", "your ip address", "track your ip",
         "i know where you live", "i have your address", "i will find you",
         // EN — swatting / physical threats
@@ -50,8 +50,7 @@ final class AntiSpamManager {
     // Cyrillic "О"/"Х"), and separators (d.o.x, d o x). All tokens are stored already
     // de-obfuscated (lowercase latin, no separators).
     private let threatTokensLatin: [String] = [
-        "dox", "doxx", "doxxing", "deanon", "deanonim", "swat", "swatting",
-        "osint", "probiv", "proboj", "slivdannyh", "tvojadres", "znajugdezivesh",
+        "doxxing", "doxxyou", "iwilldox", "deanonim", "swatting", "swatyou", "iwillswat",
         "iknowwhereyoulive", "ihaveyouraddress", "iwillfindyou", "iwillkillyou",
         "youaredead", "leakyourdata", "youripaddress", "trackyourip"
     ]
@@ -73,7 +72,9 @@ final class AntiSpamManager {
         "recovery phrase", "private key", "send 1 btc", "elon musk giveaway",
         "double your btc", "быстрый заработок", "легкий заработок", "легкие деньги",
         "работа без опыта", "удаленная работа без опыта", "пиши в лс заработок", "заработок в интернете",
-        "ищем сотрудников на удаленку", "оплата ежедневно", "заработок от 5000", "easy money",
+        "ищем сотрудников на удаленку", "оплата ежедневно", "заработок от 5000",
+        "предлагаю заработок", "заработок по", "тысяч в час", "тысяч в день", "тысяч в неделю",
+        "заработок без вложений", "доход в час", "easy money",
         "make money fast", "work from home no experience", "be your own boss", "hiring remote workers",
         "earn money online", "ваш аккаунт заблокирован", "аккаунт будет удален", "подтвердите аккаунт",
         "верифицируйте аккаунт", "введите код", "отправьте код", "пришлите код",
