@@ -2689,26 +2689,7 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: anti-spoof presence override"
     if sentinel in t:
-        import re as _re
-        upgraded = _re.sub(
-            r"^([ \t]*)let isRu = \(UserDefaults\.standard\.string\(forKey: \"aorusgram_lang\"\) == \"ru\"\)\n"
-            r"^\1if ago < 120 \{ return isRu \? \"в сети • AORUS\" : \"online • AORUS\" \}\n"
-            r"^\1if ago < 3600 \{\n"
-            r"^\1    let minutes = max\(1, Int\(ago / 60\)\)\n"
-            r"^\1    return isRu \? \"был\(а\) \\\(minutes\) мин назад • AORUS\" : \"last seen \\\(minutes\) min ago • AORUS\"\n"
-            r"^\1\}\n",
-            lambda m: (
-                f"{m.group(1)}if ago < 60 {{ return \"в сети • AORUS\" }}\n"
-                f"{m.group(1)}if ago < 3600 {{ return \"был(а) \\(Int(ago / 60)) мин назад • AORUS\" }}\n"
-            ),
-            t,
-            flags=_re.MULTILINE,
-        )
-        if upgraded != t:
-            path.write_text(upgraded, encoding="utf-8")
-            print("ChatTitleAntiSpoof: restored previous presence override")
-        else:
-            print("ChatTitleAntiSpoof: already injected")
+        print("ChatTitleAntiSpoof: already injected")
         return
 
     # Match the entire source line that contains this binding — using ^ / $ with
@@ -2781,35 +2762,7 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: anti-spoof deleted preflight"
     if sentinel in t:
-        upgraded = t
-        upgraded = upgraded.replace(
-            "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
-            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\") && !text.contains(\"\\u{3164}\")\n",
-            "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n",
-        )
-        upgraded = upgraded.replace(
-            "            let text = msg.text.trimmingCharacters(in: .whitespacesAndNewlines)\n"
-            "            return !msg.flags.contains(.Incoming) && !text.isEmpty && !text.contains(\"\\u{2063}\")\n",
-            "            return !msg.flags.contains(.Incoming) && !msg.text.isEmpty && !msg.text.hasPrefix(\"Ты не увидишь\")\n",
-        )
-        upgraded = upgraded.replace(
-            "        let decoy = \"\\u{2063}\"\n",
-            "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
-        )
-        upgraded = upgraded.replace(
-            "        let decoy = \"\\u{3164}\"\n",
-            "        let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
-        )
-        upgraded = upgraded.replace(
-            "        let serverPropagationDelay: Signal<Void, NoError> = .complete() |> delay(0.35, queue: Queue.mainQueue())\n"
-            "        return editPreflight |> then(serverPropagationDelay) |> then(normalDelete)\n",
-            "        return editPreflight |> then(normalDelete)\n",
-        )
-        if upgraded != t:
-            path.write_text(upgraded, encoding="utf-8")
-            print("AntiSpoofDeletePreflight: restored previous preflight timing/decoy")
-        else:
-            print("AntiSpoofDeletePreflight: already injected")
+        print("AntiSpoofDeletePreflight: already injected")
         return
 
     needle = (
@@ -2984,85 +2937,6 @@ def patch_app_delegate_activate_deeplink(tg: Path) -> None:
         print("ActivateDeeplink: OpenUrl.swift not found, skip")
 
 
-def patch_link_protection_open_url(tg: Path) -> None:
-    """AorusGram link protection: warn before opening suspicious URLs.
-
-    The analyzer and UI live in AorusGramUI. This hook sits at the central
-    openExternalUrlImpl entry point so normal Telegram URL resolution remains
-    untouched unless the user explicitly enabled Link Protection.
-    """
-    path = tg / "submodules/TelegramUI/Sources/OpenUrl.swift"
-    if not path.is_file():
-        print("LinkProtection: OpenUrl.swift not found, skip")
-        return
-
-    t = path.read_text(encoding="utf-8")
-    sentinel = "// AorusGram: link protection"
-    if sentinel in t:
-        old_open_anyway = (
-            "            AorusLinkProtection.allowOnce(url)\n"
-            "            context.sharedContext.openExternalUrl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
-        )
-        new_open_anyway = (
-            "            AorusLinkProtection.allowOnce(url)\n"
-            "            openExternalUrlImpl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
-        )
-        if old_open_anyway in t:
-            t = t.replace(old_open_anyway, new_open_anyway, 1)
-            path.write_text(t, encoding="utf-8")
-            print("LinkProtection: upgraded OpenUrl bypass routing")
-        else:
-            print("LinkProtection: OpenUrl already injected")
-        return
-
-    if "import AorusGramUI\n" not in t:
-        if "import AccountContext\n" in t:
-            t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
-        elif "import Foundation\n" in t:
-            t = t.replace("import Foundation\n", "import Foundation\nimport AorusGramUI\n", 1)
-        else:
-            t = "import AorusGramUI\n" + t
-        print("LinkProtection: added import AorusGramUI")
-
-    anchor = "func openExternalUrlImpl(context: AccountContext, urlContext: OpenURLContext, url: String, forceExternal: Bool, presentationData: PresentationData, navigationController: NavigationController?, dismissInput: @escaping () -> Void) {\n"
-    if anchor not in t:
-        print("LinkProtection: openExternalUrlImpl anchor not found — skipped")
-        path.write_text(t, encoding="utf-8")
-        return
-
-    injection = (
-        anchor
-        + "    " + sentinel + "\n"
-        + "    let aorusLinkProtectionURL = URL(string: url)\n"
-        + "    let aorusLinkProtectionBypass = (aorusLinkProtectionURL?.scheme == \"aorusgram\" || aorusLinkProtectionURL?.scheme == \"tg\") && aorusLinkProtectionURL?.host == \"activate\"\n"
-        + "    if !aorusLinkProtectionBypass, !AorusLinkProtection.consumeAllowed(url), AorusLinkProtection.shouldIntercept(url) {\n"
-        + "        AorusLinkProtection.presentWarning(url: url, languageCode: presentationData.strings.baseLanguageCode, openAnyway: {\n"
-        + "            AorusLinkProtection.allowOnce(url)\n"
-        + "            openExternalUrlImpl(context: context, urlContext: urlContext, url: url, forceExternal: forceExternal, presentationData: presentationData, navigationController: navigationController, dismissInput: dismissInput)\n"
-        + "        })\n"
-        + "        return\n"
-        + "    }\n"
-    )
-    t = t.replace(anchor, injection, 1)
-    path.write_text(t, encoding="utf-8")
-
-    build = tg / "submodules/TelegramUI/BUILD"
-    if build.is_file():
-        bt = build.read_text(encoding="utf-8")
-        if "//submodules/AorusGramUI" not in bt:
-            dep_anchor = '        "//submodules/AccountContext:AccountContext",\n'
-            if dep_anchor in bt:
-                bt = bt.replace(dep_anchor, dep_anchor + '        "//submodules/AorusGramUI",\n', 1)
-                print("LinkProtection: added AorusGramUI dep to TelegramUI BUILD")
-            else:
-                print("LinkProtection: WARNING TelegramUI BUILD dep anchor not found")
-            build.write_text(bt, encoding="utf-8")
-    else:
-        print("LinkProtection: TelegramUI BUILD not found — dep patch skipped")
-
-    print("LinkProtection: injected OpenUrl warning gate")
-
-
 def patch_app_delegate_open_purchase_bot(tg: Path) -> None:
     """Open the purchase bot INSIDE AorusGram, above the lock screen.
 
@@ -3193,19 +3067,7 @@ def patch_app_delegate_anti_spoof_delete_observer(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusgram.antiSpoofDelete" in t:
-        upgraded = t.replace(
-            "            let decoy = \"\\u{3164}\"\n",
-            "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
-        )
-        upgraded = upgraded.replace(
-            "            let decoy = \"\\u{2063}\"\n",
-            "            let decoy = \"Ты не увидишь это сообщение. Привет от AORUS! 🔥\"\n",
-        )
-        if upgraded != t:
-            path.write_text(upgraded, encoding="utf-8")
-            print("AntiSpoofDeleteObserver: restored previous decoy")
-        else:
-            print("AntiSpoofDeleteObserver: already injected")
+        print("AntiSpoofDeleteObserver: already injected")
         return
     sentinel = "// AorusGram: anti-spoof delete observer"
     hook = (
@@ -3407,236 +3269,6 @@ def patch_peer_info_account_details(tg: Path) -> None:
         return
     path.write_text(t, encoding="utf-8")
     print("PeerInfoAccountDetails: injected Подробнее row for " + ", ".join(applied))
-
-
-def patch_phone_spoof_profile_display(tg: Path) -> None:
-    """Show the protected number in the local profile phone row."""
-    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoProfileItems.swift"
-    if not path.is_file():
-        print("PhoneSpoofProfile: PeerInfoProfileItems.swift not found, skip")
-        return
-    t = path.read_text(encoding="utf-8")
-
-    if "import TelegramCore\n" not in t:
-        t = t.replace("import Foundation\n", "import Foundation\nimport TelegramCore\n", 1)
-
-    helper = (
-        "\n"
-        "private func aorusPhoneSpoofDisplayNumber(isOwnAccount: Bool, phone: String) -> String {\n"
-        "    guard isOwnAccount, AorusPhoneSpoofStore.isEnabled else {\n"
-        "        return phone\n"
-        "    }\n"
-        "    let protectedNumber = AorusPhoneSpoofStore.number\n"
-        "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
-        "}\n"
-    )
-
-    legacy_helper = (
-        "\n"
-        "private func aorusPhoneSpoofDisplayNumber(_ phone: String) -> String {\n"
-        "    guard AorusPhoneSpoofStore.isEnabled else {\n"
-        "        return phone\n"
-        "    }\n"
-        "    let protectedNumber = AorusPhoneSpoofStore.number\n"
-        "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
-        "}\n"
-    )
-    if legacy_helper in t:
-        t = t.replace(legacy_helper, helper, 1)
-    elif "private func aorusPhoneSpoofDisplayNumber(isOwnAccount: Bool, phone: String) -> String" not in t:
-        t = t.replace("func infoItems(", helper + "\nfunc infoItems(", 1)
-
-    # Repair older cached trees where the spoof helper was applied to every profile.
-    legacy_replacements = [
-        ("formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(phone))", "formatPhoneNumber(context: context, number: phone)"),
-        ("formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(user.phone))", "formatPhoneNumber(context: context, number: user.phone)"),
-        ("formatPhoneNumber(context: context, number: aorusPhoneSpoofDisplayNumber(peer.phone))", "formatPhoneNumber(context: context, number: peer.phone)"),
-        (".phone(aorusPhoneSpoofDisplayNumber(phone))", ".phone(phone)"),
-    ]
-    for old, new in legacy_replacements:
-        t = t.replace(old, new)
-
-    source_block = (
-        "        if let phone = user.phone {\n"
-        "            let formattedPhone = formatPhoneNumber(context: context, number: phone)\n"
-        "            let label: String\n"
-        "            if formattedPhone.hasPrefix(\"+888 \") {\n"
-        "                label = presentationData.strings.UserInfo_AnonymousNumberLabel\n"
-        "            } else {\n"
-        "                label = presentationData.strings.ContactInfo_PhoneLabelMobile\n"
-        "            }\n"
-        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemPhoneNumber, label: label, text: formattedPhone, textColor: .accent, action: { node, progress in\n"
-        "                interaction.openPhone(phone, node, nil, progress)\n"
-        "            }, longTapAction: nil, contextAction: { node, gesture, _ in\n"
-        "                interaction.openPhone(phone, node, gesture, nil)\n"
-        "            }, requestLayout: { animated in\n"
-        "                interaction.requestLayout(animated)\n"
-        "            }))\n"
-        "        }\n"
-    )
-    patched_block = (
-        "        if let phone = user.phone {\n"
-        "            let aorusDisplayPhone = aorusPhoneSpoofDisplayNumber(isOwnAccount: user.id == context.account.peerId, phone: phone)\n"
-        "            let formattedPhone = formatPhoneNumber(context: context, number: aorusDisplayPhone)\n"
-        "            let label: String\n"
-        "            if formattedPhone.hasPrefix(\"+888 \") {\n"
-        "                label = presentationData.strings.UserInfo_AnonymousNumberLabel\n"
-        "            } else {\n"
-        "                label = presentationData.strings.ContactInfo_PhoneLabelMobile\n"
-        "            }\n"
-        "            items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemPhoneNumber, label: label, text: formattedPhone, textColor: .accent, action: { node, progress in\n"
-        "                interaction.openPhone(aorusDisplayPhone, node, nil, progress)\n"
-        "            }, longTapAction: nil, contextAction: { node, gesture, _ in\n"
-        "                interaction.openPhone(aorusDisplayPhone, node, gesture, nil)\n"
-        "            }, requestLayout: { animated in\n"
-        "                interaction.requestLayout(animated)\n"
-        "            }))\n"
-        "        }\n"
-    )
-
-    applied = 0
-    if patched_block in t:
-        print("PhoneSpoofProfile: already scoped to local account")
-    elif source_block in t:
-        t = t.replace(source_block, patched_block, 1)
-        applied = 1
-    else:
-        t, applied = re.subn(
-            r"(        if let phone = user\.phone \{\n)(\s*)let formattedPhone = formatPhoneNumber\(context: context, number: phone\)",
-            r"\1\2let aorusDisplayPhone = aorusPhoneSpoofDisplayNumber(isOwnAccount: user.id == context.account.peerId, phone: phone)\n\2let formattedPhone = formatPhoneNumber(context: context, number: aorusDisplayPhone)",
-            t,
-            count=1,
-        )
-        if applied:
-            phone_block_start = t.find("        if let phone = user.phone {")
-            phone_block_end = t.find("        if let mainUsername = user.addressName {", phone_block_start)
-            if phone_block_start != -1 and phone_block_end != -1:
-                phone_block = t[phone_block_start:phone_block_end]
-                phone_block = phone_block.replace("interaction.openPhone(phone, node, nil, progress)", "interaction.openPhone(aorusDisplayPhone, node, nil, progress)")
-                phone_block = phone_block.replace("interaction.openPhone(phone, node, gesture, nil)", "interaction.openPhone(aorusDisplayPhone, node, gesture, nil)")
-                t = t[:phone_block_start] + phone_block + t[phone_block_end:]
-
-    path.write_text(t, encoding="utf-8")
-    print(f"PhoneSpoofProfile: scoped local profile phone override ({applied} replacements)")
-
-
-def patch_phone_spoof_profile_header(tg: Path) -> None:
-    """Show the protected number in the Settings/Profile header preview."""
-    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
-    if not path.is_file():
-        print("PhoneSpoofHeader: PeerInfoHeaderNode.swift not found, skip")
-        return
-    t = path.read_text(encoding="utf-8")
-
-    helper = (
-        "\n"
-        "private func aorusPhoneSpoofHeaderNumber(isOwnAccount: Bool, isSettings: Bool, phone: String) -> String {\n"
-        "    guard isSettings, isOwnAccount, AorusPhoneSpoofStore.isEnabled else {\n"
-        "        return phone\n"
-        "    }\n"
-        "    let protectedNumber = AorusPhoneSpoofStore.number\n"
-        "    return protectedNumber.isEmpty ? phone : protectedNumber\n"
-        "}\n"
-    )
-    if "aorusPhoneSpoofHeaderNumber" not in t:
-        inserted_helper = False
-        for anchor in ("final class PeerInfoHeaderNode", "class PeerInfoHeaderNode"):
-            if anchor in t:
-                t = t.replace(anchor, helper + "\n" + anchor, 1)
-                inserted_helper = True
-                break
-        if not inserted_helper:
-            t = helper + "\n" + t
-
-    replacements = [
-        (
-            "private func aorusPhoneSpoofHeaderNumber(context: AccountContext, peer: Peer?, isSettings: Bool, phone: String) -> String {\n"
-            "    guard isSettings, AorusPhoneSpoofStore.isEnabled, let peer = peer, peer.id == context.account.peerId else {\n",
-            "private func aorusPhoneSpoofHeaderNumber(isOwnAccount: Bool, isSettings: Bool, phone: String) -> String {\n"
-            "    guard isSettings, isOwnAccount, AorusPhoneSpoofStore.isEnabled else {\n",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: phone))",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: phone))",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: phone))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: user.phone))",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: user.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: user.phone))",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: user.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(context: context, peer: peer, isSettings: isSettings, phone: peer.phone))",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: peer.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(context: self.context, peer: peer, isSettings: isSettings, phone: peer.phone))",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: peer.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == context.account.peerId } ?? false, isSettings: isSettings, phone: phone))",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == self.context.account.peerId } ?? false, isSettings: isSettings, phone: phone))",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: phone))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == context.account.peerId } ?? false, isSettings: isSettings, phone: user.phone))",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: user.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.map { $0.id == self.context.account.peerId } ?? false, isSettings: isSettings, phone: user.phone))",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: user.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: phone)",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: phone)",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: phone))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: user.phone)",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: user.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: user.phone)",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: user.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: user.phone ?? \"\")",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: user.phone ?? \"\"))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: user.phone ?? \"\")",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: user.phone ?? \"\"))",
-        ),
-        (
-            "formatPhoneNumber(context: context, number: peer.phone)",
-            "formatPhoneNumber(context: context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == context.account.peerId, isSettings: isSettings, phone: peer.phone))",
-        ),
-        (
-            "formatPhoneNumber(context: self.context, number: peer.phone)",
-            "formatPhoneNumber(context: self.context, number: aorusPhoneSpoofHeaderNumber(isOwnAccount: peer.id == self.context.account.peerId, isSettings: isSettings, phone: peer.phone))",
-        ),
-    ]
-    applied = 0
-    for old, new in replacements:
-        count = t.count(old)
-        if count:
-            t = t.replace(old, new)
-            applied += count
-
-    path.write_text(t, encoding="utf-8")
-    print(f"PhoneSpoofHeader: injected settings header phone override ({applied} replacements)")
 
 
 def patch_info_plist_bgtask(tg: Path) -> None:
@@ -3995,135 +3627,38 @@ def patch_conversation_export(tg: Path) -> None:
 
 
 def patch_unlimited_pinned_chats(tg: Path) -> None:
-    """Unlimited pinned chats: lift the toggle cap, keep pin icons past the stock limit
-    of 5, and stop server sync from dropping extra local pins.
+    """Remove the client-side cap on the number of pinned chats/channels (main list
+    and archive). Stock behaviour, no UI surface.
 
-    Stock Telegram ties the pin *icon* to pinningIndex in the chat-list index. The toggle
-    cap (maxPinnedChatCount = 5) is only one piece: sync can still replace a 6+ local pin
-    list with the server's ~5 dialogs, and folder filters strip pinningIndex in the
-    includePinnedAsUnpinned space. All three are patched here. (Idempotent.)
+    _internal_toggleItemPinned returns .limitExceeded once the pinned count passes
+    userLimitsConfiguration.maxPinnedChatCount / maxArchivedPinnedChatCount. Forcing
+    that local cap to Int.max means the engine never reports the limit, so the chat
+    list pins without the premium/limit wall. (Idempotent.)
     """
-    # 1) Lift the client-side cap when pinning / unpinning.
-    toggle = tg / "submodules/TelegramCore/Sources/TelegramEngine/Peers/TogglePeerChatPinned.swift"
-    if toggle.is_file():
-        t = toggle.read_text(encoding="utf-8")
-        if "AorusGram: unlimited pins" in t:
-            print("Unlimited pins: TogglePeerChatPinned already patched")
-        else:
-            replacements = [
-                ("limitCount = Int(userLimitsConfiguration.maxPinnedChatCount)",
-                 "limitCount = Int.max // AorusGram: unlimited pins"),
-                ("limitCount = Int(userLimitsConfiguration.maxArchivedPinnedChatCount)",
-                 "limitCount = Int.max // AorusGram: unlimited pins"),
-            ]
-            changed = 0
-            for old, new in replacements:
-                if old in t:
-                    t = t.replace(old, new, 1)
-                    changed += 1
-            if changed > 0:
-                toggle.write_text(t, encoding="utf-8")
-                print(f"Unlimited pins: patched {changed} toggle limit(s) → Int.max")
-            else:
-                print("WARNING: TogglePeerChatPinned limit assignments not found")
+    path = tg / "submodules/TelegramCore/Sources/TelegramEngine/Peers/TogglePeerChatPinned.swift"
+    if not path.is_file():
+        print("TogglePeerChatPinned.swift not found, skip unlimited pins")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: unlimited pins" in t:
+        print("Unlimited pins: already patched")
+        return
+    replacements = [
+        ("limitCount = Int(userLimitsConfiguration.maxPinnedChatCount)",
+         "limitCount = Int.max // AorusGram: unlimited pins"),
+        ("limitCount = Int(userLimitsConfiguration.maxArchivedPinnedChatCount)",
+         "limitCount = Int.max // AorusGram: unlimited pins"),
+    ]
+    changed = 0
+    for old, new in replacements:
+        if old in t:
+            t = t.replace(old, new, 1)
+            changed += 1
+    if changed > 0:
+        path.write_text(t, encoding="utf-8")
+        print(f"Unlimited pins: patched {changed} limit assignment(s) → Int.max")
     else:
-        print("TogglePeerChatPinned.swift not found, skip toggle cap")
-
-    # 2) Sync: when local and remote baselines match but the server returns fewer pins
-    #    (dialogs_pinned_limit ≈ 5), keep the longer local list so pinningIndex survives.
-    sync = tg / "submodules/TelegramCore/Sources/State/ManagedSynchronizePinnedChatsOperations.swift"
-    if sync.is_file():
-        t = sync.read_text(encoding="utf-8")
-        if "AorusGram: unlimited pins sync" in t:
-            print("Unlimited pins: sync already patched")
-        else:
-            anchor = (
-                "            if initialRemoteItemIds == localItemIds {\n"
-                "                resultingItemIds = remoteItemIds\n"
-            )
-            inject = (
-                "            if initialRemoteItemIds == localItemIds {\n"
-                "                // AorusGram: unlimited pins sync — server caps at ~5; never drop extra local pins.\n"
-                "                if remoteItemIds.count < localItemIds.count {\n"
-                "                    resultingItemIds = localItemIds\n"
-                "                } else {\n"
-                "                    resultingItemIds = remoteItemIds\n"
-                "                }\n"
-            )
-            if anchor in t:
-                t = t.replace(anchor, inject, 1)
-                sync.write_text(t, encoding="utf-8")
-                print("Unlimited pins: patched ManagedSynchronizePinnedChatsOperations (keep local overflow)")
-            else:
-                print("WARNING: ManagedSynchronizePinnedChatsOperations sync anchor not found")
-    else:
-        print("ManagedSynchronizePinnedChatsOperations.swift not found, skip sync")
-
-    # 3) UI: folder filters load global pins through includePinnedAsUnpinned, which stock
-    #    code forces pinningIndex = nil (chat stays on top, pin icon hidden). Keep the
-    #    postbox pinningIndex so the badge renders for pins 6+ inside folders too.
-    view_state = tg / "submodules/Postbox/Sources/ChatListViewState.swift"
-    if view_state.is_file():
-        t = view_state.read_text(encoding="utf-8")
-        if "AorusGram: unlimited pins icon" in t:
-            print("Unlimited pins: ChatListViewState already patched")
-        else:
-            note = " // AorusGram: unlimited pins icon — keep pinningIndex so the pin badge shows for pins 6+ in folder tabs"
-            # Replace the whole `var updatedIndex = index` + includePinnedAsUnpinned reset with
-            # a plain `let updatedIndex = index`. This both preserves pinningIndex (so the pin
-            # icon renders inside folders) and avoids a "never mutated; use let" Swift warning
-            # that deleting only the reset block would leave behind. Three indent levels.
-            pin_blocks = [
-                (
-                    "                    var updatedIndex = index\n"
-                    "                    if case .includePinnedAsUnpinned = pinned {\n"
-                    "                        updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                    }\n",
-                    "                    let updatedIndex = index" + note + "\n",
-                ),
-                (
-                    "                        var updatedIndex = index\n"
-                    "                        if case .includePinnedAsUnpinned = pinned {\n"
-                    "                            updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                        }\n",
-                    "                        let updatedIndex = index" + note + "\n",
-                ),
-                (
-                    "                                var updatedIndex = index\n"
-                    "                                if case .includePinnedAsUnpinned = pinned {\n"
-                    "                                    updatedIndex = ChatListIndex(pinningIndex: nil, messageIndex: index.messageIndex)\n"
-                    "                                }\n",
-                    "                                let updatedIndex = index" + note + "\n",
-                ),
-            ]
-            changed = 0
-            for old, new in pin_blocks:
-                if old in t:
-                    t = t.replace(old, new, 1)
-                    changed += 1
-            # In the .RemoveEntry branch `pinned` was bound only to feed the now-removed
-            # includePinnedAsUnpinned reset; without it the build trips on the strict
-            # "immutable value 'pinned' was never used" error, so silence that one binding.
-            remove_old = (
-                "                case let .RemoveEntry(indices):\n"
-                "                    switch self.space {\n"
-                "                    case let .group(spaceGroupId, pinned, _):\n"
-            )
-            remove_new = (
-                "                case let .RemoveEntry(indices):\n"
-                "                    switch self.space {\n"
-                "                    case let .group(spaceGroupId, _, _):\n"
-            )
-            remove_fixed = remove_old in t
-            if remove_fixed:
-                t = t.replace(remove_old, remove_new, 1)
-            if changed == 3 and remove_fixed:
-                view_state.write_text(t, encoding="utf-8")
-                print("Unlimited pins: patched ChatListViewState (3 sites, var→let, pinningIndex kept)")
-            else:
-                print(f"WARNING: ChatListViewState pin-icon sites: only {changed}/3 matched, remove-binding fixed={remove_fixed}")
-    else:
-        print("ChatListViewState.swift not found, skip pin icon UI")
+        print("WARNING: TogglePeerChatPinned limit assignments not found — unlimited pins NOT applied")
 
 
 def patch_user_messages_feature(tg: Path) -> None:
@@ -6092,11 +5627,10 @@ public struct AorusStoredGift: Codable, Equatable {
     public var pinnedToTop: Bool
     public var worn: Bool
     public var pinnedOrder: Int32   // pin sequence; lower = pinned earlier (0 = not pinned)
-    public var resellStars: Int64   // resale price amount (stars count, or TON in nanotons); 0 = not listed
-    public var resellCurrency: Int32   // resale currency: 0 = stars, 1 = TON (matches CurrencyAmount.Currency)
+    public var resellStars: Int64   // resale price in stars; 0 = not listed for sale
     public var collectionIds: [Int32]   // ids of the user's gift collections this fake gift belongs to
 
-    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = []) {
+    public init(giftData: Data, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, collectionIds: [Int32] = []) {
         self.giftData = giftData
         self.senderPeerId = senderPeerId
         self.date = date
@@ -6106,12 +5640,11 @@ public struct AorusStoredGift: Codable, Equatable {
         self.worn = worn
         self.pinnedOrder = pinnedOrder
         self.resellStars = resellStars
-        self.resellCurrency = resellCurrency
         self.collectionIds = collectionIds
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds
+        case giftData, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, collectionIds
     }
 
     // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars/collectionIds existed still load.
@@ -6126,7 +5659,6 @@ public struct AorusStoredGift: Codable, Equatable {
         self.worn = try c.decodeIfPresent(Bool.self, forKey: .worn) ?? false
         self.pinnedOrder = try c.decodeIfPresent(Int32.self, forKey: .pinnedOrder) ?? 0
         self.resellStars = try c.decodeIfPresent(Int64.self, forKey: .resellStars) ?? 0
-        self.resellCurrency = try c.decodeIfPresent(Int32.self, forKey: .resellCurrency) ?? 0
         self.collectionIds = try c.decodeIfPresent([Int32].self, forKey: .collectionIds) ?? []
     }
 
@@ -6320,17 +5852,14 @@ public enum AorusFakeGiftsStore {
         })
     }
 
-    // Local resale: amount == 0 removes the gift from sale, > 0 lists it at that price in the
-    // given currency (0 = stars, 1 = TON in nanotons — matches CurrencyAmount.Currency.rawValue).
-    public static func setResellBySlug(_ slug: String, amount: Int64, currency: Int32) {
+    // Local resale: 0 stars removes the gift from sale, > 0 lists it at that price.
+    public static func setResellBySlug(_ slug: String, stars: Int64) {
         var gifts = all()
         var changed = false
         for index in gifts.indices {
             if let gift = gifts[index].gift, case let .unique(uniqueGift) = gift, uniqueGift.slug == slug {
-                let newCurrency = amount > 0 ? currency : 0
-                if gifts[index].resellStars != amount || gifts[index].resellCurrency != newCurrency {
-                    gifts[index].resellStars = amount
-                    gifts[index].resellCurrency = newCurrency
+                if gifts[index].resellStars != stars {
+                    gifts[index].resellStars = stars
                     changed = true
                 }
             }
@@ -6405,19 +5934,11 @@ public enum AorusFakeGiftsStore {
         // received collectible gift (unique gifts carry their message in originalInfo,
         // never in the plain "text" field, which the gift screen forces to nil for them).
         if var root = giftObject as? [String: Any], var value = root["value"] as? [String: Any] {
-            // Reflect local resale as a proper currency-tagged resellAmounts entry (stars or TON),
-            // exactly like a server-listed gift — instead of the legacy currency-less "resellStars"
-            // field. A TON price stored under "resellStars" would decode as a huge STARS amount and
-            // trap on Int32(resellPrice) in the native gift cell. resellForTonOnly mirrors the currency.
-            value.removeValue(forKey: "resellStars")
+            value.removeValue(forKey: "resellAmounts")
             if stored.resellStars > 0 {
-                let aorusAmount: [String: Any] = ["value": stored.resellStars, "nanos": 0]
-                let aorusCurrencyAmount: [String: Any] = ["a": aorusAmount, "c": Int(stored.resellCurrency)]
-                value["resellAmounts"] = [aorusCurrencyAmount]
-                value["resellForTonOnly"] = stored.resellCurrency == 1
+                value["resellStars"] = stored.resellStars
             } else {
-                value.removeValue(forKey: "resellAmounts")
-                value["resellForTonOnly"] = false
+                value.removeValue(forKey: "resellStars")
             }
             if var attributes = value["attributes"] as? [[String: Any]],
                let ownerId = (value["ownerPeerId"] as? NSNumber)?.int64Value,
@@ -6450,12 +5971,6 @@ public enum AorusFakeGiftsStore {
             "pinnedToTop": stored.pinnedToTop,
             "canUpgrade": false
         ]
-        // Give every fake a stable, unique reference (.slug -> {"type":2,"slug":...}). Without it
-        // reference == nil for all fakes, and the native collection "add gifts" picker keys its
-        // selection on reference.stringValue (nil -> ""), so selecting one fake selects them all.
-        if let giftValue = stored.gift, case let .unique(uniqueGift) = giftValue {
-            dict["reference"] = ["type": 2, "slug": uniqueGift.slug] as [String: Any]
-        }
         if !stored.comment.isEmpty {
             dict["text"] = stored.comment
         }
@@ -6856,18 +6371,6 @@ def patch_fake_gifts(tg: Path) -> None:
             else:
                 ok = False
                 print("FakeGifts: WARNING GiftViewScreen Share anchor not found")
-
-            # 2c) Suppress the NATIVE Pin/Unpin item for fake gifts. Our pinned-icon work
-            #     gives fake gifts a reference + pinnedToTop, which satisfies the stock
-            #     condition and renders a second, dead "Pin/Unpin" (it talks to the server)
-            #     above our working one. Skip it when the gift is one of ours.
-            native_pin_old = "                if let reference = arguments.reference, case .unique = arguments.gift, let togglePinnedToTop = controller.togglePinnedToTop, let pinnedToTop = arguments.pinnedToTop {\n"
-            native_pin_new = "                if let reference = arguments.reference, case .unique = arguments.gift, let togglePinnedToTop = controller.togglePinnedToTop, let pinnedToTop = arguments.pinnedToTop, !AorusFakeGiftsStore.contains(arguments.gift) {\n"
-            if native_pin_old in t:
-                t = t.replace(native_pin_old, native_pin_new, 1)
-            else:
-                print("FakeGifts: WARNING GiftViewScreen native pin anchor not found")
-
             if ok:
                 # The Transfer flow constructs a StoreMessage (a Postbox type) to inject
                 # the local-only gift message; make sure the module is imported.
@@ -7285,7 +6788,7 @@ def patch_fake_gifts(tg: Path) -> None:
                 "    public func updateStarGiftResellPrice(reference: StarGiftReference, price: CurrencyAmount?, id: Int64? = nil) -> Signal<Never, UpdateStarGiftPriceError> {\n"
                 "        // AorusGram: fake gifts resell locally — no server call, no error. price == nil unlists.\n"
                 "        if case let .slug(slug) = reference, AorusFakeGiftsStore.isFakeBySlug(slug) {\n"
-                "            AorusFakeGiftsStore.setResellBySlug(slug, amount: price?.amount.value ?? 0, currency: price?.currency.rawValue ?? 0)\n"
+                "            AorusFakeGiftsStore.setResellBySlug(slug, stars: price?.amount.value ?? 0)\n"
                 "            return .complete()\n"
                 "        }\n"
                 "        return Signal { subscriber in\n"
@@ -7405,32 +6908,19 @@ def patch_fake_gifts(tg: Path) -> None:
 
     # 9) Collection tab thumbnails. The server leaves collection.icon nil and count 0 for a
     #    collection that holds only local fakes, so its tab shows no preview gift (and can
-    #    be hidden as "empty"). Enrich each collection with a fake-derived icon + count.
-    #    GiftsListView already refreshes on AorusFakeGiftsStore.changedNotification, but
-    #    the tab strip only listened to profileGiftsCollections.state — so adding a fake
-    #    to a folder updated the grid but not the tab icon until profile re-entry. Mirror
-    #    the list-view pattern: snapshot server collections, enrich, and re-enrich live.
+    #    be hidden as "empty"). Enrich each collection with a fake-derived icon + count when
+    #    the server values are empty — at the single assignment point so every consumer (tab
+    #    visibility, the empty-collection skip, the tab icon) stays consistent. A live add
+    #    re-emits the collections state from the server, and a relaunch reloads it, so the
+    #    enriched values are recomputed and the thumbnail appears.
     pane = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift"
     if pane.is_file():
         t = pane.read_text(encoding="utf-8")
-        if "aorusEnrichCollections" in t:
-            print("FakeGifts: PeerInfoGiftsPaneNode already patched (live collection icons)")
+        if "AorusFakeGiftsStore.collectionCount" in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode already patched")
         else:
-            ok = True
-
-            props_anchor = "    private var collections: [StarGiftCollection]?\n"
-            props_inject = (
-                "    private var collections: [StarGiftCollection]?\n"
-                "    private var aorusServerCollections: [StarGiftCollection]?\n"
-                "    private var aorusFakeCollectionsObserver: NSObjectProtocol?\n"
-            )
-            if props_anchor in t:
-                t = t.replace(props_anchor, props_inject, 1)
-            else:
-                ok = False
-                print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections property anchor not found")
-
-            old_inline = (
+            anchor = "            self.collections = state.collections\n"
+            inject = (
                 "            self.collections = state.collections.map { aorusCollection in\n"
                 "                guard AorusFakeGiftsStore.isEnabled else { return aorusCollection }\n"
                 "                let aorusFakeCount = AorusFakeGiftsStore.collectionCount(collectionId: aorusCollection.id)\n"
@@ -7438,106 +6928,15 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                let aorusIcon = aorusCollection.icon ?? AorusFakeGiftsStore.collectionIconFile(collectionId: aorusCollection.id)\n"
                 "                return StarGiftCollection(id: aorusCollection.id, title: aorusCollection.title, icon: aorusIcon, count: aorusCollection.count + aorusFakeCount, hash: aorusCollection.hash)\n"
                 "            }\n"
-                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
             )
-            state_anchor = (
-                "            self.collections = state.collections\n"
-                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
-            )
-            state_inject = (
-                "            self.aorusServerCollections = state.collections\n"
-                "            self.collections = self.aorusEnrichCollections(state.collections)\n"
-                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
-            )
-            if old_inline in t:
-                t = t.replace(old_inline, state_inject, 1)
-            elif state_anchor in t:
-                t = t.replace(state_anchor, state_inject, 1)
-            else:
-                ok = False
-                print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections state anchor not found")
-
-            observer_anchor = (
-                "        if let initialGiftCollectionId {\n"
-                "            self.setCurrentCollection(collection: .collection(Int32(initialGiftCollectionId)))\n"
-                "        }\n"
-            )
-            observer_inject = (
-                "        self.aorusFakeCollectionsObserver = NotificationCenter.default.addObserver(forName: AorusFakeGiftsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
-                "            guard let self, let server = self.aorusServerCollections else { return }\n"
-                "            self.collections = self.aorusEnrichCollections(server)\n"
-                "            self.updateScrolling(transition: .easeInOut(duration: 0.2))\n"
-                "        }\n"
-                "\n"
-            ) + observer_anchor
-            if observer_anchor in t:
-                t = t.replace(observer_anchor, observer_inject, 1)
-            else:
-                ok = False
-                print("FakeGifts: WARNING PeerInfoGiftsPaneNode observer anchor not found")
-
-            deinit_anchor = (
-                "    deinit {\n"
-                "        self.collectionsDisposable?.dispose()\n"
-                "    }\n"
-            )
-            deinit_inject = (
-                "    deinit {\n"
-                "        self.collectionsDisposable?.dispose()\n"
-                "        if let aorusFakeCollectionsObserver = self.aorusFakeCollectionsObserver {\n"
-                "            NotificationCenter.default.removeObserver(aorusFakeCollectionsObserver)\n"
-                "        }\n"
-                "    }\n"
-            )
-            if deinit_anchor in t:
-                t = t.replace(deinit_anchor, deinit_inject, 1)
-            else:
-                ok = False
-                print("FakeGifts: WARNING PeerInfoGiftsPaneNode deinit anchor not found")
-
-            helper_anchor = "    func updateScrolling(interactive: Bool = false, transition: ComponentTransition) {\n"
-            helper_inject = (
-                "    private func aorusEnrichCollections(_ collections: [StarGiftCollection]) -> [StarGiftCollection] {\n"
-                "        guard AorusFakeGiftsStore.isEnabled else { return collections }\n"
-                "        return collections.map { aorusCollection in\n"
-                "            let aorusFakeCount = AorusFakeGiftsStore.collectionCount(collectionId: aorusCollection.id)\n"
-                "            if aorusFakeCount == 0 { return aorusCollection }\n"
-                "            let aorusIcon = aorusCollection.icon ?? AorusFakeGiftsStore.collectionIconFile(collectionId: aorusCollection.id)\n"
-                "            return StarGiftCollection(id: aorusCollection.id, title: aorusCollection.title, icon: aorusIcon, count: aorusCollection.count + aorusFakeCount, hash: aorusCollection.hash)\n"
-                "        }\n"
-                "    }\n"
-                "\n"
-            ) + helper_anchor
-            if helper_anchor in t:
-                t = t.replace(helper_anchor, helper_inject, 1)
-            else:
-                ok = False
-                print("FakeGifts: WARNING PeerInfoGiftsPaneNode helper anchor not found")
-
-            if ok:
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
                 pane.write_text(t, encoding="utf-8")
-                print("FakeGifts: patched PeerInfoGiftsPaneNode (live collection tab icons)")
+                print("FakeGifts: patched PeerInfoGiftsPaneNode (collection tab thumbnails for fakes)")
+            else:
+                print("FakeGifts: WARNING PeerInfoGiftsPaneNode collections anchor not found")
     else:
         print("FakeGifts: PeerInfoGiftsPaneNode.swift not found — skip collection thumbnails")
-
-    # 10) Defense-in-depth for the resale price label. The gift cell formats the resale price via
-    #     presentationStringsFormattedNumber(Int32(resellPrice), ...). A non-stars (TON) price is
-    #     a huge nanoton value, so an unchecked Int32() conversion traps and crashes. Our store now
-    #     tags resale with the correct currency (so the stars-only label never receives a TON value),
-    #     but we also clamp the conversion here so no out-of-range value can ever crash the client.
-    gic = tg / "submodules/TelegramUI/Components/Gifts/GiftItemComponent/Sources/GiftItemComponent.swift"
-    if gic.is_file():
-        t = gic.read_text(encoding="utf-8")
-        if "Int32(clamping: resellPrice)" in t:
-            print("FakeGifts: GiftItemComponent resale price already clamped")
-        elif "Int32(resellPrice)" in t:
-            t = t.replace("Int32(resellPrice)", "Int32(clamping: resellPrice)")
-            gic.write_text(t, encoding="utf-8")
-            print("FakeGifts: patched GiftItemComponent (clamp resale price to avoid Int32 overflow)")
-        else:
-            print("FakeGifts: WARNING GiftItemComponent Int32(resellPrice) anchor not found")
-    else:
-        print("FakeGifts: GiftItemComponent.swift not found — skip resale clamp")
 
 
 def patch_fake_stars(tg: Path) -> None:
@@ -7654,976 +7053,6 @@ def patch_fake_stars(tg: Path) -> None:
     if ok:
         stars.write_text(t, encoding="utf-8")
         print("FakeStars: patched Stars.swift (local balance override)")
-
-
-AORUS_ANTI_SEARCH_SWIFT = '''import Foundation
-import Postbox
-
-// AorusGram AntiSearch — swap visually identical Cyrillic <-> Latin letters on outgoing
-// text at send and edit time so the rendered message looks pixel-identical but no longer
-// matches a plain keyword search. Only conservative true homoglyph pairs are used
-// (А=A, е=e, …), so there is never a visibly different uppercase glyph like Latin
-// "Y" for Cyrillic "У" inside Russian text.
-//
-// Safety:
-//  • Every swap stays inside the BMP and is one UTF-16 unit, so message entity offsets
-//    (bold/links/mentions) are preserved exactly.
-//  • Entity ranges (mentions, urls, code, emails, commands, …) and link/@-like tokens are
-//    protected and never altered, so functional text keeps working.
-
-public enum AorusAntiSearchStore {
-    private static let enabledKey = "aorusgram_anti_search_enabled"
-
-    public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
-    }
-
-    public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
-    }
-}
-
-public enum AorusAnonymousStickerStore {
-    private static let enabledKey = "aorusgram_anonymous_stickers_enabled"
-
-    public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
-    }
-
-    public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
-    }
-}
-
-public enum AorusProfileLinkStore {
-    private static let enabledKey = "aorusgram_profile_link_enabled"
-    private static let targetPeerIdKey = "aorusgram_profile_link_target_peer_id"
-
-    public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
-    }
-
-    public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
-    }
-
-    public static func targetPeerId(default accountPeerId: PeerId) -> PeerId {
-        guard let raw = UserDefaults.standard.string(forKey: targetPeerIdKey), let value = Int64(raw), value != 0 else {
-            return accountPeerId
-        }
-        return PeerId(value)
-    }
-}
-
-public enum AorusPhoneSpoofStore {
-    private struct PhoneRule {
-        let countryCode: String
-        let nationalLengths: [Int]
-
-        var preferredLength: Int {
-            return nationalLengths.last ?? 10
-        }
-
-        var maxNationalLength: Int {
-            return nationalLengths.max() ?? preferredLength
-        }
-    }
-
-    private static let enabledKey = "aorusgram_phone_spoof_enabled"
-    private static let numberKey = "aorusgram_phone_spoof_number"
-
-    private static let regionRules: [String: PhoneRule] = [
-        "AC": PhoneRule(countryCode: "247", nationalLengths: [4]), "AD": PhoneRule(countryCode: "376", nationalLengths: [6]),
-        "AE": PhoneRule(countryCode: "971", nationalLengths: [9]), "AF": PhoneRule(countryCode: "93", nationalLengths: [9]),
-        "AG": PhoneRule(countryCode: "1", nationalLengths: [10]), "AI": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "AL": PhoneRule(countryCode: "355", nationalLengths: [9]), "AM": PhoneRule(countryCode: "374", nationalLengths: [8]),
-        "AO": PhoneRule(countryCode: "244", nationalLengths: [9]), "AR": PhoneRule(countryCode: "54", nationalLengths: [10]),
-        "AS": PhoneRule(countryCode: "1", nationalLengths: [10]), "AT": PhoneRule(countryCode: "43", nationalLengths: [10, 11, 12, 13]),
-        "AU": PhoneRule(countryCode: "61", nationalLengths: [9]), "AW": PhoneRule(countryCode: "297", nationalLengths: [7]),
-        "AX": PhoneRule(countryCode: "358", nationalLengths: [6, 7, 8, 9, 10]), "AZ": PhoneRule(countryCode: "994", nationalLengths: [9]),
-        "BA": PhoneRule(countryCode: "387", nationalLengths: [8]), "BB": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "BD": PhoneRule(countryCode: "880", nationalLengths: [10]), "BE": PhoneRule(countryCode: "32", nationalLengths: [9]),
-        "BF": PhoneRule(countryCode: "226", nationalLengths: [8]), "BG": PhoneRule(countryCode: "359", nationalLengths: [9]),
-        "BH": PhoneRule(countryCode: "973", nationalLengths: [8]), "BI": PhoneRule(countryCode: "257", nationalLengths: [8]),
-        "BJ": PhoneRule(countryCode: "229", nationalLengths: [8, 10]), "BL": PhoneRule(countryCode: "590", nationalLengths: [9]),
-        "BM": PhoneRule(countryCode: "1", nationalLengths: [10]), "BN": PhoneRule(countryCode: "673", nationalLengths: [7]),
-        "BO": PhoneRule(countryCode: "591", nationalLengths: [8]), "BQ": PhoneRule(countryCode: "599", nationalLengths: [7]),
-        "BR": PhoneRule(countryCode: "55", nationalLengths: [10, 11]), "BS": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "BT": PhoneRule(countryCode: "975", nationalLengths: [8]), "BW": PhoneRule(countryCode: "267", nationalLengths: [7, 8]),
-        "BY": PhoneRule(countryCode: "375", nationalLengths: [9]), "BZ": PhoneRule(countryCode: "501", nationalLengths: [7]),
-        "CA": PhoneRule(countryCode: "1", nationalLengths: [10]), "CC": PhoneRule(countryCode: "61", nationalLengths: [9]),
-        "CD": PhoneRule(countryCode: "243", nationalLengths: [9]), "CF": PhoneRule(countryCode: "236", nationalLengths: [8]),
-        "CG": PhoneRule(countryCode: "242", nationalLengths: [9]), "CH": PhoneRule(countryCode: "41", nationalLengths: [9]),
-        "CI": PhoneRule(countryCode: "225", nationalLengths: [10]), "CK": PhoneRule(countryCode: "682", nationalLengths: [5]),
-        "CL": PhoneRule(countryCode: "56", nationalLengths: [9]), "CM": PhoneRule(countryCode: "237", nationalLengths: [9]),
-        "CN": PhoneRule(countryCode: "86", nationalLengths: [11]), "CO": PhoneRule(countryCode: "57", nationalLengths: [10]),
-        "CR": PhoneRule(countryCode: "506", nationalLengths: [8]), "CU": PhoneRule(countryCode: "53", nationalLengths: [8]),
-        "CV": PhoneRule(countryCode: "238", nationalLengths: [7]), "CW": PhoneRule(countryCode: "599", nationalLengths: [7]),
-        "CX": PhoneRule(countryCode: "61", nationalLengths: [9]), "CY": PhoneRule(countryCode: "357", nationalLengths: [8]),
-        "CZ": PhoneRule(countryCode: "420", nationalLengths: [9]), "DE": PhoneRule(countryCode: "49", nationalLengths: [10, 11]),
-        "DJ": PhoneRule(countryCode: "253", nationalLengths: [8]), "DK": PhoneRule(countryCode: "45", nationalLengths: [8]),
-        "DM": PhoneRule(countryCode: "1", nationalLengths: [10]), "DO": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "DZ": PhoneRule(countryCode: "213", nationalLengths: [9]), "EC": PhoneRule(countryCode: "593", nationalLengths: [9]),
-        "EE": PhoneRule(countryCode: "372", nationalLengths: [7, 8]), "EG": PhoneRule(countryCode: "20", nationalLengths: [10]),
-        "EH": PhoneRule(countryCode: "212", nationalLengths: [9]), "ER": PhoneRule(countryCode: "291", nationalLengths: [7]),
-        "ES": PhoneRule(countryCode: "34", nationalLengths: [9]), "ET": PhoneRule(countryCode: "251", nationalLengths: [9]),
-        "FI": PhoneRule(countryCode: "358", nationalLengths: [8, 9, 10]), "FJ": PhoneRule(countryCode: "679", nationalLengths: [7]),
-        "FK": PhoneRule(countryCode: "500", nationalLengths: [5]), "FM": PhoneRule(countryCode: "691", nationalLengths: [7]),
-        "FO": PhoneRule(countryCode: "298", nationalLengths: [6]), "FR": PhoneRule(countryCode: "33", nationalLengths: [9]),
-        "GA": PhoneRule(countryCode: "241", nationalLengths: [7, 8]), "GB": PhoneRule(countryCode: "44", nationalLengths: [10]),
-        "GD": PhoneRule(countryCode: "1", nationalLengths: [10]), "GE": PhoneRule(countryCode: "995", nationalLengths: [9]),
-        "GF": PhoneRule(countryCode: "594", nationalLengths: [9]), "GG": PhoneRule(countryCode: "44", nationalLengths: [10]),
-        "GH": PhoneRule(countryCode: "233", nationalLengths: [9]), "GI": PhoneRule(countryCode: "350", nationalLengths: [8]),
-        "GL": PhoneRule(countryCode: "299", nationalLengths: [6]), "GM": PhoneRule(countryCode: "220", nationalLengths: [7]),
-        "GN": PhoneRule(countryCode: "224", nationalLengths: [9]), "GP": PhoneRule(countryCode: "590", nationalLengths: [9]),
-        "GQ": PhoneRule(countryCode: "240", nationalLengths: [9]), "GR": PhoneRule(countryCode: "30", nationalLengths: [10]),
-        "GT": PhoneRule(countryCode: "502", nationalLengths: [8]), "GU": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "GW": PhoneRule(countryCode: "245", nationalLengths: [7]), "GY": PhoneRule(countryCode: "592", nationalLengths: [7]),
-        "HK": PhoneRule(countryCode: "852", nationalLengths: [8]), "HN": PhoneRule(countryCode: "504", nationalLengths: [8]),
-        "HR": PhoneRule(countryCode: "385", nationalLengths: [8, 9]), "HT": PhoneRule(countryCode: "509", nationalLengths: [8]),
-        "HU": PhoneRule(countryCode: "36", nationalLengths: [9]), "ID": PhoneRule(countryCode: "62", nationalLengths: [9, 10, 11, 12]),
-        "IE": PhoneRule(countryCode: "353", nationalLengths: [9]), "IL": PhoneRule(countryCode: "972", nationalLengths: [9]),
-        "IM": PhoneRule(countryCode: "44", nationalLengths: [10]), "IN": PhoneRule(countryCode: "91", nationalLengths: [10]),
-        "IO": PhoneRule(countryCode: "246", nationalLengths: [7]), "IQ": PhoneRule(countryCode: "964", nationalLengths: [10]),
-        "IR": PhoneRule(countryCode: "98", nationalLengths: [10]), "IS": PhoneRule(countryCode: "354", nationalLengths: [7]),
-        "IT": PhoneRule(countryCode: "39", nationalLengths: [9, 10, 11]), "JE": PhoneRule(countryCode: "44", nationalLengths: [10]),
-        "JM": PhoneRule(countryCode: "1", nationalLengths: [10]), "JO": PhoneRule(countryCode: "962", nationalLengths: [9]),
-        "JP": PhoneRule(countryCode: "81", nationalLengths: [10]), "KE": PhoneRule(countryCode: "254", nationalLengths: [9]),
-        "KG": PhoneRule(countryCode: "996", nationalLengths: [9]), "KH": PhoneRule(countryCode: "855", nationalLengths: [8, 9]),
-        "KI": PhoneRule(countryCode: "686", nationalLengths: [5, 8]), "KM": PhoneRule(countryCode: "269", nationalLengths: [7]),
-        "KN": PhoneRule(countryCode: "1", nationalLengths: [10]), "KP": PhoneRule(countryCode: "850", nationalLengths: [10]),
-        "KR": PhoneRule(countryCode: "82", nationalLengths: [9, 10]), "KW": PhoneRule(countryCode: "965", nationalLengths: [8]),
-        "KY": PhoneRule(countryCode: "1", nationalLengths: [10]), "KZ": PhoneRule(countryCode: "7", nationalLengths: [10]),
-        "LA": PhoneRule(countryCode: "856", nationalLengths: [8, 10]), "LB": PhoneRule(countryCode: "961", nationalLengths: [7, 8]),
-        "LC": PhoneRule(countryCode: "1", nationalLengths: [10]), "LI": PhoneRule(countryCode: "423", nationalLengths: [7]),
-        "LK": PhoneRule(countryCode: "94", nationalLengths: [9]), "LR": PhoneRule(countryCode: "231", nationalLengths: [7, 8]),
-        "LS": PhoneRule(countryCode: "266", nationalLengths: [8]), "LT": PhoneRule(countryCode: "370", nationalLengths: [8]),
-        "LU": PhoneRule(countryCode: "352", nationalLengths: [9]), "LV": PhoneRule(countryCode: "371", nationalLengths: [8]),
-        "LY": PhoneRule(countryCode: "218", nationalLengths: [9]), "MA": PhoneRule(countryCode: "212", nationalLengths: [9]),
-        "MC": PhoneRule(countryCode: "377", nationalLengths: [8, 9]), "MD": PhoneRule(countryCode: "373", nationalLengths: [8]),
-        "ME": PhoneRule(countryCode: "382", nationalLengths: [8]), "MF": PhoneRule(countryCode: "590", nationalLengths: [9]),
-        "MG": PhoneRule(countryCode: "261", nationalLengths: [9]), "MH": PhoneRule(countryCode: "692", nationalLengths: [7]),
-        "MK": PhoneRule(countryCode: "389", nationalLengths: [8]), "ML": PhoneRule(countryCode: "223", nationalLengths: [8]),
-        "MM": PhoneRule(countryCode: "95", nationalLengths: [8, 9, 10]), "MN": PhoneRule(countryCode: "976", nationalLengths: [8]),
-        "MO": PhoneRule(countryCode: "853", nationalLengths: [8]), "MP": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "MQ": PhoneRule(countryCode: "596", nationalLengths: [9]), "MR": PhoneRule(countryCode: "222", nationalLengths: [8]),
-        "MS": PhoneRule(countryCode: "1", nationalLengths: [10]), "MT": PhoneRule(countryCode: "356", nationalLengths: [8]),
-        "MU": PhoneRule(countryCode: "230", nationalLengths: [8]), "MV": PhoneRule(countryCode: "960", nationalLengths: [7]),
-        "MW": PhoneRule(countryCode: "265", nationalLengths: [9]), "MX": PhoneRule(countryCode: "52", nationalLengths: [10]),
-        "MY": PhoneRule(countryCode: "60", nationalLengths: [9, 10]), "MZ": PhoneRule(countryCode: "258", nationalLengths: [9]),
-        "NA": PhoneRule(countryCode: "264", nationalLengths: [9]), "NC": PhoneRule(countryCode: "687", nationalLengths: [6]),
-        "NE": PhoneRule(countryCode: "227", nationalLengths: [8]), "NF": PhoneRule(countryCode: "672", nationalLengths: [6]),
-        "NG": PhoneRule(countryCode: "234", nationalLengths: [10]), "NI": PhoneRule(countryCode: "505", nationalLengths: [8]),
-        "NL": PhoneRule(countryCode: "31", nationalLengths: [9]), "NO": PhoneRule(countryCode: "47", nationalLengths: [8]),
-        "NP": PhoneRule(countryCode: "977", nationalLengths: [10]), "NR": PhoneRule(countryCode: "674", nationalLengths: [7]),
-        "NU": PhoneRule(countryCode: "683", nationalLengths: [4]), "NZ": PhoneRule(countryCode: "64", nationalLengths: [8, 9]),
-        "OM": PhoneRule(countryCode: "968", nationalLengths: [8]), "PA": PhoneRule(countryCode: "507", nationalLengths: [8]),
-        "PE": PhoneRule(countryCode: "51", nationalLengths: [9]), "PF": PhoneRule(countryCode: "689", nationalLengths: [6]),
-        "PG": PhoneRule(countryCode: "675", nationalLengths: [8]), "PH": PhoneRule(countryCode: "63", nationalLengths: [10]),
-        "PK": PhoneRule(countryCode: "92", nationalLengths: [10]), "PL": PhoneRule(countryCode: "48", nationalLengths: [9]),
-        "PM": PhoneRule(countryCode: "508", nationalLengths: [6]), "PR": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "PS": PhoneRule(countryCode: "970", nationalLengths: [9]), "PT": PhoneRule(countryCode: "351", nationalLengths: [9]),
-        "PW": PhoneRule(countryCode: "680", nationalLengths: [7]), "PY": PhoneRule(countryCode: "595", nationalLengths: [9]),
-        "QA": PhoneRule(countryCode: "974", nationalLengths: [8]), "RE": PhoneRule(countryCode: "262", nationalLengths: [9]),
-        "RO": PhoneRule(countryCode: "40", nationalLengths: [9]), "RS": PhoneRule(countryCode: "381", nationalLengths: [8, 9]),
-        "RU": PhoneRule(countryCode: "7", nationalLengths: [10]), "RW": PhoneRule(countryCode: "250", nationalLengths: [9]),
-        "SA": PhoneRule(countryCode: "966", nationalLengths: [9]), "SB": PhoneRule(countryCode: "677", nationalLengths: [5, 7]),
-        "SC": PhoneRule(countryCode: "248", nationalLengths: [7]), "SD": PhoneRule(countryCode: "249", nationalLengths: [9]),
-        "SE": PhoneRule(countryCode: "46", nationalLengths: [9]), "SG": PhoneRule(countryCode: "65", nationalLengths: [8]),
-        "SH": PhoneRule(countryCode: "290", nationalLengths: [4]), "SI": PhoneRule(countryCode: "386", nationalLengths: [8]),
-        "SJ": PhoneRule(countryCode: "47", nationalLengths: [8]), "SK": PhoneRule(countryCode: "421", nationalLengths: [9]),
-        "SL": PhoneRule(countryCode: "232", nationalLengths: [8]), "SM": PhoneRule(countryCode: "378", nationalLengths: [10]),
-        "SN": PhoneRule(countryCode: "221", nationalLengths: [9]), "SO": PhoneRule(countryCode: "252", nationalLengths: [8, 9]),
-        "SR": PhoneRule(countryCode: "597", nationalLengths: [6, 7]), "SS": PhoneRule(countryCode: "211", nationalLengths: [9]),
-        "ST": PhoneRule(countryCode: "239", nationalLengths: [7]), "SV": PhoneRule(countryCode: "503", nationalLengths: [8]),
-        "SX": PhoneRule(countryCode: "1", nationalLengths: [10]), "SY": PhoneRule(countryCode: "963", nationalLengths: [9]),
-        "SZ": PhoneRule(countryCode: "268", nationalLengths: [8]), "TA": PhoneRule(countryCode: "290", nationalLengths: [4]),
-        "TC": PhoneRule(countryCode: "1", nationalLengths: [10]), "TD": PhoneRule(countryCode: "235", nationalLengths: [8]),
-        "TG": PhoneRule(countryCode: "228", nationalLengths: [8]), "TH": PhoneRule(countryCode: "66", nationalLengths: [9]),
-        "TJ": PhoneRule(countryCode: "992", nationalLengths: [9]), "TK": PhoneRule(countryCode: "690", nationalLengths: [4]),
-        "TL": PhoneRule(countryCode: "670", nationalLengths: [7, 8]), "TM": PhoneRule(countryCode: "993", nationalLengths: [8]),
-        "TN": PhoneRule(countryCode: "216", nationalLengths: [8]), "TO": PhoneRule(countryCode: "676", nationalLengths: [5, 7]),
-        "TR": PhoneRule(countryCode: "90", nationalLengths: [10]), "TT": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "TV": PhoneRule(countryCode: "688", nationalLengths: [5, 6]), "TW": PhoneRule(countryCode: "886", nationalLengths: [9]),
-        "TZ": PhoneRule(countryCode: "255", nationalLengths: [9]), "UA": PhoneRule(countryCode: "380", nationalLengths: [9]),
-        "UG": PhoneRule(countryCode: "256", nationalLengths: [9]), "US": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "UY": PhoneRule(countryCode: "598", nationalLengths: [8]), "UZ": PhoneRule(countryCode: "998", nationalLengths: [9]),
-        "VA": PhoneRule(countryCode: "39", nationalLengths: [10]), "VC": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "VE": PhoneRule(countryCode: "58", nationalLengths: [10]), "VG": PhoneRule(countryCode: "1", nationalLengths: [10]),
-        "VI": PhoneRule(countryCode: "1", nationalLengths: [10]), "VN": PhoneRule(countryCode: "84", nationalLengths: [9, 10]),
-        "VU": PhoneRule(countryCode: "678", nationalLengths: [5, 7]), "WF": PhoneRule(countryCode: "681", nationalLengths: [6]),
-        "WS": PhoneRule(countryCode: "685", nationalLengths: [5, 7]), "XK": PhoneRule(countryCode: "383", nationalLengths: [8]),
-        "YE": PhoneRule(countryCode: "967", nationalLengths: [9]), "YT": PhoneRule(countryCode: "262", nationalLengths: [9]),
-        "ZA": PhoneRule(countryCode: "27", nationalLengths: [9]), "ZM": PhoneRule(countryCode: "260", nationalLengths: [9]),
-        "ZW": PhoneRule(countryCode: "263", nationalLengths: [9])
-    ]
-
-    private static let codeRules: [String: [Int]] = [
-        "1": [10], "7": [10], "20": [10], "27": [9], "30": [10], "31": [9], "32": [9], "33": [9], "34": [9],
-        "36": [9], "39": [9, 10, 11], "40": [9], "41": [9], "43": [10, 11, 12, 13], "44": [10], "45": [8],
-        "46": [9], "47": [8], "48": [9], "49": [10, 11], "51": [9], "52": [10], "53": [8], "54": [10],
-        "55": [10, 11], "56": [9], "57": [10], "58": [10], "60": [9, 10], "61": [9], "62": [9, 10, 11, 12],
-        "63": [10], "64": [8, 9], "65": [8], "66": [9], "81": [10], "82": [9, 10], "84": [9, 10], "86": [11],
-        "90": [10], "91": [10], "92": [10], "93": [9], "94": [9], "95": [8, 9, 10], "98": [10],
-        "211": [9], "212": [9], "213": [9], "216": [8], "218": [9], "220": [7], "221": [9], "222": [8],
-        "223": [8], "224": [9], "225": [10], "226": [8], "227": [8], "228": [8], "229": [8, 10],
-        "230": [8], "231": [7, 8], "232": [8], "233": [9], "234": [10], "235": [8], "236": [8], "237": [9],
-        "238": [7], "239": [7], "240": [9], "241": [7, 8], "242": [9], "243": [9], "244": [9], "245": [7],
-        "246": [7], "247": [4], "248": [7], "249": [9], "250": [9], "251": [9], "252": [8, 9], "253": [8],
-        "254": [9], "255": [9], "256": [9], "257": [8], "258": [9], "260": [9], "261": [9], "262": [9],
-        "263": [9], "264": [9], "265": [9], "266": [8], "267": [7, 8], "268": [8], "269": [7], "290": [4],
-        "291": [7], "297": [7], "298": [6], "299": [6], "350": [8], "351": [9], "352": [9], "353": [9],
-        "354": [7], "355": [9], "356": [8], "357": [8], "358": [6, 7, 8, 9, 10], "359": [9], "370": [8],
-        "371": [8], "372": [7, 8], "373": [8], "374": [8], "375": [9], "376": [6], "377": [8, 9], "378": [10],
-        "380": [9], "381": [8, 9], "382": [8], "383": [8], "385": [8, 9], "386": [8], "387": [8], "389": [8],
-        "420": [9], "421": [9], "423": [7], "500": [5], "501": [7], "502": [8], "503": [8], "504": [8],
-        "505": [8], "506": [8], "507": [8], "508": [6], "509": [8], "590": [9], "591": [8], "592": [7],
-        "593": [9], "594": [9], "595": [9], "596": [9], "597": [6, 7], "598": [8], "599": [7], "670": [7, 8],
-        "672": [6], "673": [7], "674": [7], "675": [8], "676": [5, 7], "677": [5, 7], "678": [5, 7],
-        "679": [7], "680": [7], "681": [6], "682": [5], "683": [4], "685": [5, 7], "686": [5, 8],
-        "687": [6], "688": [5, 6], "689": [6], "690": [4], "691": [7], "692": [7], "850": [10],
-        "852": [8], "853": [8], "855": [8, 9], "856": [8, 10], "880": [10], "886": [9], "960": [7],
-        "961": [7, 8], "962": [9], "963": [9], "964": [10], "965": [8], "966": [9], "967": [9], "968": [8],
-        "970": [9], "971": [9], "972": [9], "973": [8], "974": [8], "975": [8], "976": [8], "977": [10],
-        "992": [9], "993": [8], "994": [9], "995": [9], "996": [9], "998": [9]
-    ]
-
-    private static var defaultRule: PhoneRule {
-        if let region = Locale.current.regionCode?.uppercased(), let rule = regionRules[region] {
-            return rule
-        }
-        return PhoneRule(countryCode: "1", nationalLengths: [10])
-    }
-
-    public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
-    }
-
-    public static func setEnabled(_ value: Bool) {
-        if value {
-            _ = ensureNumber()
-        }
-        UserDefaults.standard.set(value, forKey: enabledKey)
-    }
-
-    public static func ensureNumber() -> String {
-        if let stored = UserDefaults.standard.string(forKey: numberKey), isComplete(stored) {
-            return stored
-        }
-        return randomize()
-    }
-
-    public static func setNumber(_ rawValue: String) -> String {
-        if rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            UserDefaults.standard.set("", forKey: numberKey)
-            return ""
-        }
-        let normalized = normalize(rawValue)
-        UserDefaults.standard.set(normalized, forKey: numberKey)
-        return normalized
-    }
-
-    public static func randomize() -> String {
-        let rule = defaultRule
-        let digits = randomNationalNumber(rule: rule)
-        let value = "+\\(rule.countryCode)\\(digits)"
-        UserDefaults.standard.set(value, forKey: numberKey)
-        return value
-    }
-
-    private static func randomNationalNumber(rule: PhoneRule) -> String {
-        if rule.countryCode == "7", rule.preferredLength == 10 {
-            let prefixes = [
-                "900", "901", "902", "903", "904", "905", "906", "908", "909",
-                "910", "911", "912", "913", "914", "915", "916", "917", "918", "919",
-                "920", "921", "922", "923", "924", "925", "926", "927", "928", "929",
-                "930", "931", "932", "933", "934", "936", "937", "938", "939",
-                "950", "951", "952", "953", "958", "960", "961", "962", "963", "964",
-                "965", "966", "967", "968", "969", "970", "971", "977", "978", "980",
-                "981", "982", "983", "984", "985", "986", "987", "988", "989", "991",
-                "992", "993", "994", "995", "996", "997", "999",
-                "700", "701", "702", "705", "707", "708", "747", "750", "751", "760",
-                "761", "762", "763", "764", "771", "775", "776", "777", "778"
-            ]
-            var digits = prefixes.randomElement() ?? "900"
-            while digits.count < 10 {
-                digits.append(String(Int.random(in: 0 ... 9)))
-            }
-            return digits
-        }
-
-        if rule.countryCode == "1", rule.preferredLength == 10 {
-            var digits = ""
-            for index in 0 ..< 10 {
-                if index == 0 || index == 3 {
-                    digits.append(String(Int.random(in: 2 ... 9)))
-                } else {
-                    digits.append(String(Int.random(in: 0 ... 9)))
-                }
-            }
-            return digits
-        }
-
-        var digits = ""
-        digits.reserveCapacity(rule.preferredLength)
-        for index in 0 ..< rule.preferredLength {
-            let minDigit = index == 0 ? 1 : 0
-            digits.append(String(Int.random(in: minDigit ... 9)))
-        }
-        return digits
-    }
-
-    private static func normalize(_ rawValue: String) -> String {
-        var digits = rawValue.filter { $0.isNumber }
-        if digits.isEmpty {
-            return ""
-        }
-        let rule = ruleForDigits(digits)
-        let maxLength = rule.countryCode.count + rule.maxNationalLength
-        if digits.count > maxLength {
-            digits = String(digits.prefix(maxLength))
-        }
-        return "+\\(digits)"
-    }
-
-    private static func isComplete(_ value: String) -> Bool {
-        let digits = value.filter { $0.isNumber }
-        let rule = ruleForDigits(digits)
-        let nationalLength = max(0, digits.count - rule.countryCode.count)
-        return digits.hasPrefix(rule.countryCode) && rule.nationalLengths.contains(nationalLength) && isPlausible(rule: rule, digits: digits)
-    }
-
-    private static func ruleForDigits(_ digits: String) -> PhoneRule {
-        let knownCodes = codeRules.keys.sorted { $0.count > $1.count }
-        for code in knownCodes {
-            if digits.hasPrefix(code), let lengths = codeRules[code] {
-                return PhoneRule(countryCode: code, nationalLengths: lengths)
-            }
-        }
-        return defaultRule
-    }
-
-    private static func isPlausible(rule: PhoneRule, digits: String) -> Bool {
-        let national = String(digits.dropFirst(rule.countryCode.count))
-        if rule.countryCode == "7", national.count == 10 {
-            return national.hasPrefix("9") || national.hasPrefix("7")
-        }
-        if rule.countryCode == "1", national.count == 10 {
-            let values = Array(national)
-            guard let area = values.first, let exchange = values.dropFirst(3).first else {
-                return false
-            }
-            return ("2"..."9").contains(String(area)) && ("2"..."9").contains(String(exchange))
-        }
-        return true
-    }
-
-    public static var number: String {
-        return ensureNumber()
-    }
-}
-
-public enum AorusOutgoingPrivacy {
-    public static var hasActiveTransforms: Bool {
-        return AorusAntiSearchStore.isEnabled || AorusAnonymousStickerStore.isEnabled || AorusProfileLinkStore.isEnabled || AorusPhoneSpoofStore.isEnabled
-    }
-
-    public static func transform(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox, disableAntiSearch: Bool = false) -> EnqueueMessage {
-        return AorusAntiSearch.normalize(message, accountPeerId: accountPeerId, mediaBox: mediaBox, disableAntiSearch: disableAntiSearch)
-    }
-}
-
-public enum AorusAntiSearch {
-    // True homoglyph pairs only — identical glyphs in the standard UI font. Built once and
-    // expanded to a bidirectional map: Latin->Cyrillic and Cyrillic->Latin in a single
-    // table so one pass swaps every convertible letter to its twin in the other script.
-    private static let swapMap: [Character: Character] = {
-        let pairs: [(Character, Character)] = [
-            // Uppercase
-            ("A", "А"), ("B", "В"), ("C", "С"), ("E", "Е"), ("H", "Н"), ("K", "К"),
-            ("M", "М"), ("O", "О"), ("P", "Р"), ("T", "Т"), ("X", "Х"),
-            ("I", "І"), ("J", "Ј"), ("S", "Ѕ"),
-            // Lowercase
-            ("a", "а"), ("c", "с"), ("e", "е"), ("o", "о"), ("p", "р"), ("x", "х"),
-            ("y", "у"), ("i", "і"), ("j", "ј"), ("s", "ѕ"),
-        ]
-        var map: [Character: Character] = [:]
-        map.reserveCapacity(pairs.count * 2)
-        for (latin, cyrillic) in pairs {
-            map[latin] = cyrillic
-            map[cyrillic] = latin
-        }
-        return map
-    }()
-
-    // Entity types whose text must stay byte-exact (would break or change meaning).
-    private static func isProtectedEntityType(_ type: MessageTextEntityType) -> Bool {
-        switch type {
-        case .Mention, .Hashtag, .BotCommand, .Url, .Email, .TextUrl, .TextMention,
-             .PhoneNumber, .BankCard, .Code, .Pre, .CustomEmoji:
-            return true
-        default:
-            return false
-        }
-    }
-
-    public static func normalize(_ message: EnqueueMessage, accountPeerId: PeerId, mediaBox: MediaBox, disableAntiSearch: Bool = false) -> EnqueueMessage {
-        switch message {
-        case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
-            var entities: [MessageTextEntity] = []
-            for attribute in attributes {
-                if let textEntities = attribute as? TextEntitiesMessageAttribute {
-                    entities = textEntities.entities
-                    break
-                }
-            }
-            let anonymousSticker = AorusAnonymousStickerStore.isEnabled && isStickerReference(mediaReference)
-            let normalizedText = disableAntiSearch ? text : normalizeText(text, entities: entities)
-            let normalizedAttributes = AorusProfileLinkStore.isEnabled ? profileLinkedAttributes(text: normalizedText, attributes: attributes, accountPeerId: accountPeerId) : attributes
-            var updatedMediaReference = mediaReference
-            if anonymousSticker {
-                updatedMediaReference = anonymizedMediaReference(updatedMediaReference, mediaBox: mediaBox)
-            }
-            if AorusPhoneSpoofStore.isEnabled {
-                updatedMediaReference = spoofedContactMediaReference(updatedMediaReference)
-            }
-            return .message(
-                text: normalizedText,
-                attributes: normalizedAttributes,
-                inlineStickers: inlineStickers,
-                mediaReference: updatedMediaReference,
-                threadId: threadId,
-                replyToMessageId: replyToMessageId,
-                replyToStoryId: replyToStoryId,
-                localGroupingKey: localGroupingKey,
-                correlationId: correlationId,
-                bubbleUpEmojiOrStickersets: anonymousSticker ? [] : bubbleUpEmojiOrStickersets
-            )
-        case .forward:
-            return message
-        }
-    }
-
-    private static func profileLinkedAttributes(text: String, attributes: [MessageAttribute], accountPeerId: PeerId) -> [MessageAttribute] {
-        let textLength = text.utf16.count
-        guard textLength > 0 else {
-            return attributes
-        }
-        let targetPeerId = AorusProfileLinkStore.targetPeerId(default: accountPeerId)
-
-        var entities: [MessageTextEntity] = []
-        var resultAttributes: [MessageAttribute] = []
-        resultAttributes.reserveCapacity(attributes.count + 1)
-
-        for attribute in attributes {
-            if let textEntities = attribute as? TextEntitiesMessageAttribute {
-                entities.append(contentsOf: textEntities.entities.filter { isProfileLinkCompatibleEntityType($0.type) })
-            } else {
-                resultAttributes.append(attribute)
-            }
-        }
-
-        entities.append(MessageTextEntity(range: 0 ..< textLength, type: .TextMention(peerId: targetPeerId)))
-        resultAttributes.append(TextEntitiesMessageAttribute(entities: entities))
-        return resultAttributes
-    }
-
-    private static func isProfileLinkCompatibleEntityType(_ type: MessageTextEntityType) -> Bool {
-        switch type {
-        case .Mention, .Hashtag, .BotCommand, .Url, .Email, .TextUrl, .TextMention,
-             .PhoneNumber, .BankCard, .Code, .Pre:
-            return false
-        default:
-            return true
-        }
-    }
-
-    private static func isStickerReference(_ reference: AnyMediaReference?) -> Bool {
-        guard let reference = reference else {
-            return false
-        }
-        switch reference {
-        case let .standalone(media):
-            return isStickerMedia(media)
-        case let .message(_, media):
-            return isStickerMedia(media)
-        case let .webPage(_, media):
-            return isStickerMedia(media)
-        case let .stickerPack(_, media):
-            return isStickerMedia(media)
-        case let .savedGif(media):
-            return isStickerMedia(media)
-        case let .recentSticker(media):
-            return isStickerMedia(media)
-        default:
-            return false
-        }
-    }
-
-    private static func anonymizedMediaReference(_ reference: AnyMediaReference?, mediaBox: MediaBox) -> AnyMediaReference? {
-        guard let reference = reference else {
-            return nil
-        }
-        switch reference {
-        case let .standalone(media):
-            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
-        case let .message(_, media):
-            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
-        case let .webPage(_, media):
-            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
-        case let .stickerPack(_, media):
-            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
-        case let .savedGif(media):
-            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
-        case let .recentSticker(media):
-            return .standalone(media: anonymizedMedia(media, mediaBox: mediaBox))
-        default:
-            return reference
-        }
-    }
-
-    private static func isStickerMedia(_ media: Media) -> Bool {
-        guard let file = media as? TelegramMediaFile else {
-            return false
-        }
-        return file.isSticker || file.isAnimatedSticker || file.isVideoSticker
-    }
-
-    private static func spoofedContactMediaReference(_ reference: AnyMediaReference?) -> AnyMediaReference? {
-        guard let reference = reference else {
-            return nil
-        }
-        switch reference {
-        case let .standalone(media):
-            return .standalone(media: spoofedContactMedia(media))
-        case let .message(_, media):
-            return .standalone(media: spoofedContactMedia(media))
-        case let .webPage(_, media):
-            return .standalone(media: spoofedContactMedia(media))
-        default:
-            return reference
-        }
-    }
-
-    private static func spoofedContactMedia(_ media: Media) -> Media {
-        guard let contact = media as? TelegramMediaContact else {
-            return media
-        }
-        let spoofedPhoneNumber = AorusPhoneSpoofStore.number.isEmpty ? contact.phoneNumber : AorusPhoneSpoofStore.number
-        return TelegramMediaContact(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: spoofedPhoneNumber, peerId: contact.peerId, vCardData: spoofedContactVCard(contact.vCardData, phoneNumber: spoofedPhoneNumber))
-    }
-
-    private static func spoofedContactVCard(_ vCardData: String?, phoneNumber: String) -> String? {
-        guard let vCardData = vCardData, !vCardData.isEmpty else {
-            return vCardData
-        }
-        var updatedLines: [String] = []
-        updatedLines.reserveCapacity(vCardData.count / 24)
-
-        var skippingFoldedTelContinuation = false
-        let normalizedVCardData = vCardData
-            .replacingOccurrences(of: "\\r\\n", with: "\\n")
-            .replacingOccurrences(of: "\\r", with: "\\n")
-        for rawLine in normalizedVCardData.split(separator: "\\n", omittingEmptySubsequences: false) {
-            let line = String(rawLine)
-            if skippingFoldedTelContinuation && (line.hasPrefix(" ") || line.hasPrefix("\\t")) {
-                continue
-            }
-            skippingFoldedTelContinuation = false
-
-            if isVCardTelLine(line), let colonIndex = line.firstIndex(of: ":") {
-                let prefix = String(line[...colonIndex])
-                updatedLines.append(prefix + escapedVCardValue(phoneNumber))
-                skippingFoldedTelContinuation = true
-            } else {
-                updatedLines.append(line)
-            }
-        }
-        return updatedLines.joined(separator: "\\r\\n")
-    }
-
-    private static func isVCardTelLine(_ line: String) -> Bool {
-        guard let propertyEnd = line.firstIndex(where: { $0 == ":" || $0 == ";" }) else {
-            return false
-        }
-        let property = line[..<propertyEnd].uppercased()
-        let propertyName = property.split(separator: ".").last ?? Substring(property)
-        return propertyName == "TEL"
-    }
-
-    private static func escapedVCardValue(_ value: String) -> String {
-        var result = ""
-        result.reserveCapacity(value.count)
-        for scalar in value.unicodeScalars {
-            switch scalar {
-            case "\\\\":
-                result.append("\\\\\\\\")
-            case ";":
-                result.append("\\\\;")
-            case ",":
-                result.append("\\\\,")
-            case "\\n", "\\r":
-                result.append("\\\\n")
-            default:
-                result.unicodeScalars.append(scalar)
-            }
-        }
-        return result
-    }
-
-    private static func anonymizedMedia(_ media: Media, mediaBox: MediaBox) -> Media {
-        guard let file = media as? TelegramMediaFile, isStickerMedia(file) else {
-            return media
-        }
-        let attributes = file.attributes.map { attribute -> TelegramMediaFileAttribute in
-            switch attribute {
-            case let .Sticker(displayText, _, maskData):
-                return .Sticker(displayText: displayText, packReference: nil, maskData: maskData)
-            default:
-                return attribute
-            }
-        }
-        if let path = completedStickerPath(for: file, mediaBox: mediaBox) {
-            let resource = LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: false)
-            return TelegramMediaFile(
-                fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max)),
-                partialReference: nil,
-                resource: resource,
-                previewRepresentations: file.previewRepresentations,
-                videoThumbnails: file.videoThumbnails,
-                immediateThumbnailData: file.immediateThumbnailData,
-                mimeType: file.mimeType,
-                size: file.size,
-                attributes: attributes,
-                alternativeRepresentations: file.alternativeRepresentations
-            )
-        }
-        return TelegramMediaFile(
-            fileId: file.fileId,
-            partialReference: nil,
-            resource: file.resource,
-            previewRepresentations: file.previewRepresentations,
-            videoThumbnails: file.videoThumbnails,
-            immediateThumbnailData: file.immediateThumbnailData,
-            mimeType: file.mimeType,
-            size: file.size,
-            attributes: attributes,
-            alternativeRepresentations: file.alternativeRepresentations
-        )
-    }
-
-    private static func completedStickerPath(for file: TelegramMediaFile, mediaBox: MediaBox) -> String? {
-        if let path = mediaBox.completedResourcePath(file.resource) {
-            return path
-        }
-        if let fileName = file.fileName, let ext = fileName.split(separator: ".").last, !ext.isEmpty {
-            return mediaBox.completedResourcePath(file.resource, pathExtension: String(ext))
-        }
-        if file.mimeType == "image/webp" {
-            return mediaBox.completedResourcePath(file.resource, pathExtension: "webp")
-        }
-        if file.mimeType == "application/x-tgsticker" {
-            return mediaBox.completedResourcePath(file.resource, pathExtension: "tgs")
-        }
-        if file.mimeType == "video/webm" {
-            return mediaBox.completedResourcePath(file.resource, pathExtension: "webm")
-        }
-        return nil
-    }
-
-    public static func normalizeText(_ text: String, entities: [MessageTextEntity] = []) -> String {
-        guard AorusAntiSearchStore.isEnabled, !text.isEmpty else {
-            return text
-        }
-
-        let utf16Count = text.utf16.count
-        var isProtected = [Bool](repeating: false, count: utf16Count)
-
-        // 1) Protect ranges covered by sensitive entities (UTF-16 offsets, matching the API).
-        for entity in entities where isProtectedEntityType(entity.type) {
-            let lower = max(0, entity.range.lowerBound)
-            let upper = min(utf16Count, entity.range.upperBound)
-            if lower < upper {
-                for i in lower ..< upper {
-                    isProtected[i] = true
-                }
-            }
-        }
-
-        // 2) Protect link / mention / hashtag / command / email-like whitespace tokens that
-        //    may not carry an entity yet (e.g. auto-detected on the server).
-        markHeuristicProtectedTokens(text, into: &isProtected)
-
-        // 3) Single pass: swap each convertible letter unless its UTF-16 slot is protected.
-        //    Replacements are length-preserving in UTF-16, so entity offsets stay valid.
-        var result = ""
-        result.reserveCapacity(text.count)
-        var utf16Index = 0
-        for character in text {
-            let width = character.utf16.count
-            if !isProtected[utf16Index], width == 1, let swapped = swapMap[character] {
-                result.append(swapped)
-            } else {
-                result.append(character)
-            }
-            utf16Index += width
-        }
-        return result
-    }
-
-    private static func markHeuristicProtectedTokens(_ text: String, into isProtected: inout [Bool]) {
-        let utf16Count = isProtected.count
-        var tokenStart = 0
-        var utf16Index = 0
-        var token = ""
-
-        func flushToken(endingAt end: Int) {
-            if !token.isEmpty, isProtectedToken(token) {
-                let lower = max(0, tokenStart)
-                let upper = min(utf16Count, end)
-                if lower < upper {
-                    for i in lower ..< upper {
-                        isProtected[i] = true
-                    }
-                }
-            }
-            token.removeAll(keepingCapacity: true)
-        }
-
-        for character in text {
-            let width = character.utf16.count
-            if character.isWhitespace || character.isNewline {
-                flushToken(endingAt: utf16Index)
-                tokenStart = utf16Index + width
-            } else {
-                if token.isEmpty {
-                    tokenStart = utf16Index
-                }
-                token.append(character)
-            }
-            utf16Index += width
-        }
-        flushToken(endingAt: utf16Index)
-    }
-
-    private static func isProtectedToken(_ token: String) -> Bool {
-        // Strip surrounding brackets / quotes / punctuation before classifying.
-        let trimSet = CharacterSet(charactersIn: "()[]{}<>\\"'«»“”.,!?;:…")
-        let core = token.trimmingCharacters(in: trimSet)
-        guard let first = core.first else {
-            return false
-        }
-        if first == "@" || first == "#" || first == "/" || first == "$" {
-            return true
-        }
-        let lower = core.lowercased()
-        if lower.contains("://") || lower.hasPrefix("www.") || lower.contains("t.me/") || lower.contains("telegram.me/") {
-            return true
-        }
-        // Email: name@host.tld
-        if let atIndex = core.firstIndex(of: "@"), atIndex != core.startIndex {
-            let afterAt = core[core.index(after: atIndex)...]
-            if afterAt.contains(".") {
-                return true
-            }
-        }
-        return isLikelyDomain(core)
-    }
-
-    private static func isLikelyDomain(_ value: String) -> Bool {
-        let host = value.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? value
-        guard host.contains(".") else {
-            return false
-        }
-        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard labels.count >= 2, let tld = labels.last else {
-            return false
-        }
-        for label in labels {
-            if label.isEmpty {
-                return false
-            }
-            for character in label where !(character.isLetter || character.isNumber || character == "-") {
-                return false
-            }
-        }
-        if tld.count < 2 || tld.count > 24 {
-            return false
-        }
-        for character in tld where !character.isLetter {
-            return false
-        }
-        return true
-    }
-}
-'''
-
-
-def patch_anti_search(tg: Path) -> None:
-    """AntiSearch — unify Cyrillic/Latin homoglyphs on outgoing send and edit.
-
-    Settings toggle lives in AorusGram → Прочее (below Fake Stars). Normalization runs
-    in TelegramCore at enqueueMessages (send) and _internal_requestEditMessage (edit).
-    Each word is brought to one script (dominant letters in that word); pure Latin or
-    pure Cyrillic words stay internally consistent without awkward mixed glyphs.
-    """
-    store = tg / "submodules/TelegramCore/Sources/AorusAntiSearch.swift"
-    store.write_text(AORUS_ANTI_SEARCH_SWIFT, encoding="utf-8")
-    print("AntiSearch: wrote AorusAntiSearch.swift")
-
-    enqueue = tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift"
-    if enqueue.is_file():
-        t = enqueue.read_text(encoding="utf-8")
-        enqueue_function = """public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {
-    let aorusIsBotChatSignal: Signal<Bool, NoError>
-    if AorusAntiSearchStore.isEnabled {
-        aorusIsBotChatSignal = account.postbox.transaction { transaction -> Bool in
-            if let user = transaction.getPeer(peerId) as? TelegramUser, user.botInfo != nil {
-                return true
-            }
-            return false
-        }
-    } else {
-        aorusIsBotChatSignal = .single(false)
-    }
-
-    return aorusIsBotChatSignal
-    |> mapToSignal { aorusIsBotChat -> Signal<[MessageId?], NoError> in
-        let outboundMessages: [EnqueueMessage]
-        if AorusOutgoingPrivacy.hasActiveTransforms {
-            outboundMessages = messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox, disableAntiSearch: aorusIsBotChat) }
-        } else {
-            outboundMessages = messages
-        }
-        let signal: Signal<[(Bool, EnqueueMessage)], NoError>
-        if let transformOutgoingMessageMedia = account.transformOutgoingMessageMedia {
-            signal = opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)
-        } else {
-            signal = .single(outboundMessages.map { (false, $0) })
-        }
-        return signal
-        |> mapToSignal { messages -> Signal<[MessageId?], NoError> in
-            return account.postbox.transaction { transaction -> [MessageId?] in
-                return enqueueMessages(transaction: transaction, account: account, peerId: peerId, messages: messages)
-            }
-        }
-    }
-}
-"""
-        if "AorusOutgoingPrivacy.transform" in t or "AorusAntiSearch.normalize" in t:
-            upgraded, count = re.subn(
-                r"public func enqueueMessages\(account: Account, peerId: PeerId, messages: \[EnqueueMessage\]\) -> Signal<\[MessageId\?\], NoError> \{.*?\n\}\n\npublic func resendMessages",
-                enqueue_function + "\npublic func resendMessages",
-                t,
-                count=1,
-                flags=re.S,
-            )
-            if count:
-                enqueue.write_text(upgraded, encoding="utf-8")
-                print("OutgoingPrivacy: upgraded EnqueueMessage transform hook")
-            else:
-                print("WARNING: OutgoingPrivacy EnqueueMessage upgrade anchor not found")
-        else:
-            anchor = (
-                "public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {\n"
-                "    let signal: Signal<[(Bool, EnqueueMessage)], NoError>\n"
-            )
-            if anchor in t:
-                t = re.sub(
-                    r"public func enqueueMessages\(account: Account, peerId: PeerId, messages: \[EnqueueMessage\]\) -> Signal<\[MessageId\?\], NoError> \{.*?\n\}\n\npublic func resendMessages",
-                    enqueue_function + "\npublic func resendMessages",
-                    t,
-                    count=1,
-                    flags=re.S,
-                )
-                enqueue.write_text(t, encoding="utf-8")
-                print("OutgoingPrivacy: patched EnqueueMessage.swift (send hook)")
-            else:
-                print("WARNING: OutgoingPrivacy EnqueueMessage anchor not found")
-    else:
-        print("OutgoingPrivacy: EnqueueMessage.swift not found — skip send hook")
-
-    edit = tg / "submodules/TelegramCore/Sources/PendingMessages/RequestEditMessage.swift"
-    if edit.is_file():
-        t = edit.read_text(encoding="utf-8")
-        edit_function = """func _internal_requestEditMessage(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute?, richText: RichTextMessageAttribute?, inlineStickers: [MediaId: Media], webpagePreviewAttribute: WebpagePreviewMessageAttribute?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute?, invertMediaAttribute: InvertMediaMessageAttribute?) -> Signal<RequestEditMessageResult, RequestEditMessageError> {
-    if !AorusAntiSearchStore.isEnabled {
-        return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: text, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)
-    }
-    return account.postbox.transaction { transaction -> Bool in
-        if let user = transaction.getPeer(messageId.peerId) as? TelegramUser, user.botInfo != nil {
-            return true
-        }
-        return false
-    }
-    |> castError(RequestEditMessageError.self)
-    |> mapToSignal { aorusIsBotChat -> Signal<RequestEditMessageResult, RequestEditMessageError> in
-        let normalizedText = aorusIsBotChat ? text : AorusAntiSearch.normalizeText(text, entities: entities?.entities ?? [])
-        return requestEditMessage(accountPeerId: account.peerId, postbox: account.postbox, network: account.network, stateManager: account.stateManager, transformOutgoingMessageMedia: account.transformOutgoingMessageMedia, messageMediaPreuploadManager: account.messageMediaPreuploadManager, mediaReferenceRevalidationContext: account.mediaReferenceRevalidationContext, messageId: messageId, text: normalizedText, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: scheduleInfoAttribute, invertMediaAttribute: invertMediaAttribute)
-    }
-}
-"""
-        upgraded, count = re.subn(
-            r"func _internal_requestEditMessage\(account: Account, messageId: MessageId, text: String, media: RequestEditMessageMedia, entities: TextEntitiesMessageAttribute\?, richText: RichTextMessageAttribute\?, inlineStickers: \[MediaId: Media\], webpagePreviewAttribute: WebpagePreviewMessageAttribute\?, disableUrlPreview: Bool, scheduleInfoAttribute: OutgoingScheduleInfoMessageAttribute\?, invertMediaAttribute: InvertMediaMessageAttribute\?\) -> Signal<RequestEditMessageResult, RequestEditMessageError> \{.*?\n\}\n\nfunc requestEditMessage",
-            edit_function + "\nfunc requestEditMessage",
-            t,
-            count=1,
-            flags=re.S,
-        )
-        if count:
-            edit.write_text(upgraded, encoding="utf-8")
-            print("AntiSearch: patched RequestEditMessage.swift (edit hook)")
-        else:
-            print("WARNING: AntiSearch RequestEditMessage anchor not found")
-    else:
-        print("AntiSearch: RequestEditMessage.swift not found — skip edit hook")
-
-
-def patch_wallpaper_remove_footer(tg: Path) -> None:
-    """Hide the stock footer text under chat wallpapers ("set a custom background…").
-
-    The generic chat-wallpaper grid shows Wallpaper_SetCustomBackgroundInfo below the
-    gallery buttons. AorusGram hides that hint *text* but keeps its reserved height, so
-    the spacing between the action buttons and the wallpaper grid stays exactly like
-    upstream (collapsing it made the panel and grid stick together). We only flip the
-    description node to hidden; the layout math is left untouched, which also keeps the
-    descriptionLayout binding (the anchor patch_gif_wallpaper relies on) intact.
-    """
-    grid = tg / "submodules/TelegramUI/Components/Settings/WallpaperGridScreen/Sources/ThemeGridControllerNode.swift"
-    if not grid.is_file():
-        print("WallpaperFooter: ThemeGridControllerNode.swift not found — skip")
-        return
-    t = grid.read_text(encoding="utf-8")
-    if "AorusGram: hide wallpaper footer" in t:
-        print("WallpaperFooter: already patched")
-        return
-    ok = True
-
-    hide_old = (
-        "        } else {\n"
-        "            self.descriptionItemNode.isHidden = false\n"
-        "            self.removeItemNode.isHidden = true\n"
-        "            transition.updateFrame(node: self.descriptionItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: descriptionLayout.contentSize))\n"
-        "        }\n"
-    )
-    hide_new = (
-        "        } else {\n"
-        "            self.descriptionItemNode.isHidden = true // AorusGram: hide wallpaper footer\n"
-        "            self.removeItemNode.isHidden = true\n"
-        "            transition.updateFrame(node: self.descriptionItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: originY), size: descriptionLayout.contentSize))\n"
-        "        }\n"
-    )
-    if hide_old in t:
-        t = t.replace(hide_old, hide_new, 1)
-    else:
-        ok = False
-        print("WARNING: WallpaperFooter layout anchor not found")
-
-    if ok:
-        grid.write_text(t, encoding="utf-8")
-        print("WallpaperFooter: patched ThemeGridControllerNode (footer hidden)")
-    else:
-        print("WARNING: WallpaperFooter patch incomplete")
 
 
 def patch_bypass_copy_protection(tg: Path) -> None:
@@ -9733,23 +8162,14 @@ public:
         NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
         _enabled = [d boolForKey:@"aorusgram_voice_twin_enabled"];
         NSString *preset = [d stringForKey:@"aorusgram_voice_twin_preset"];
-        float semis = -6.0f;
+        float semis = -5.0f;   // anonymous (default): deep, identity-masking
         float ringHz = 0.0f;
-        float ringMix = 0.0f;
-        float wetMix = 0.84f;
-        float tone = 0.96f;
-        float drive = 1.04f;
-        if ([preset isEqualToString:@"male"]) { semis = -4.2f; wetMix = 0.78f; tone = 0.88f; drive = 1.05f; }
-        else if ([preset isEqualToString:@"female"]) { semis = 5.0f; wetMix = 0.72f; tone = 1.08f; drive = 0.98f; }
-        else if ([preset isEqualToString:@"robot"]) { semis = 0.0f; ringHz = 92.0f; ringMix = 0.82f; wetMix = 1.0f; tone = 0.82f; drive = 1.16f; }
-        else if ([preset isEqualToString:@"child"] || [preset isEqualToString:@"high"]) { semis = 8.7f; wetMix = 0.86f; tone = 1.18f; drive = 0.96f; }
-        else { ringHz = 38.0f; ringMix = 0.10f; wetMix = 0.90f; tone = 0.90f; drive = 1.08f; }
+        if ([preset isEqualToString:@"male"]) { semis = -3.0f; }
+        else if ([preset isEqualToString:@"female"]) { semis = 3.5f; }
+        else if ([preset isEqualToString:@"robot"]) { semis = 0.0f; ringHz = 110.0f; }
+        else if ([preset isEqualToString:@"high"]) { semis = 7.0f; }
         _ratio = std::pow(2.0f, semis / 12.0f);
         _ringHz = ringHz;
-        _ringMix = ringMix;
-        _wetMix = wetMix;
-        _tone = tone;
-        _drive = drive;
 #endif
     }
 
@@ -9760,12 +8180,12 @@ public:
     void process(void *samples, size_t nSamples, size_t nBytesPerSample, size_t nChannels, uint32_t sampleRate) {
         if (!_enabled) { return; }
         if (samples == nullptr || nSamples == 0 || nChannels != 1 || nBytesPerSample != 2) { return; }
-        if (_ratio == 1.0f && _ringMix <= 0.0f) { return; }
+        if (_ratio == 1.0f && _ringHz <= 0.0f) { return; }
         const float sr = sampleRate > 0 ? (float)sampleRate : 48000.0f;
         const float ringStep = _ringHz > 0.0f ? (2.0f * (float)M_PI * _ringHz / sr) : 0.0f;
         int16_t *p = (int16_t *)samples;
         for (size_t i = 0; i < nSamples; i++) {
-            float y = transformSample((float)p[i] / 32768.0f, ringStep);
+            float y = transformSample((float)p[i] / 32768.0f, _ratio, ringStep);
             float v = y * 32767.0f;
             if (v > 32767.0f) { v = 32767.0f; }
             if (v < -32768.0f) { v = -32768.0f; }
@@ -9782,33 +8202,16 @@ private:
     static constexpr int kRingSize = 8192;
     static constexpr float kGrain = 1024.0f;
 
-    float transformSample(float x0, float ringStep) {
-        float y = (_ratio == 1.0f) ? x0 : formantStep(x0, _ratio);
-        y = x0 * (1.0f - _wetMix) + y * _wetMix;
-        y = applyTone(y);
-        if (ringStep > 0.0f && _ringMix > 0.0f) {
-            const float modulated = y * std::cos(ringModPhase);
-            y = y * (1.0f - _ringMix) + modulated * _ringMix;
+    float transformSample(float x0, float ratio, float ringStep) {
+        float y = (ratio == 1.0f) ? x0 : formantStep(x0, ratio);
+        if (ringStep > 0.0f) {
+            y *= std::cos(ringModPhase);
             ringModPhase += ringStep;
             if (ringModPhase > 2.0f * (float)M_PI) { ringModPhase -= 2.0f * (float)M_PI; }
-        }
-        if (_drive > 1.0f) {
-            y = std::tanh(y * _drive) / std::tanh(_drive);
-        } else {
-            y *= _drive;
         }
         if (y > 1.0f) { y = 1.0f; }
         if (y < -1.0f) { y = -1.0f; }
         return y;
-    }
-
-    float applyTone(float x) {
-        toneLP = 0.86f * toneLP + 0.14f * x;
-        if (_tone >= 1.0f) {
-            return x + (x - toneLP) * (_tone - 1.0f);
-        } else {
-            return toneLP + (x - toneLP) * _tone;
-        }
     }
 
     float formantStep(float x0, float ratio) {
@@ -9951,16 +8354,11 @@ private:
 
     // Ring modulation phase (robot).
     float ringModPhase = 0.0f;
-    float toneLP = 0.0f;
 
     // Active configuration (refreshed from UserDefaults).
     bool _enabled = false;
     float _ratio = 1.0f;
     float _ringHz = 0.0f;
-    float _ringMix = 0.0f;
-    float _wetMix = 0.84f;
-    float _tone = 0.96f;
-    float _drive = 1.04f;
 };
 
 #endif /* AorusCallVoiceTwin_h */
@@ -12184,791 +10582,6 @@ def patch_account_limit(tg: Path) -> None:
         print("AccountLimit: AccountUtils.swift not found — skipped")
 
 
-def patch_aorus_custom_font(tg: Path) -> None:
-    """Global client font picker.
-
-    The UI lives in AorusGramUI, but the actual font override belongs in
-    Display/Font.swift because Telegram routes nearly all text through Font.with().
-    The selected id is also mirrored to Keychain by AorusGramUI so it survives app
-    reinstall; Display can restore it on a fresh launch before settings are opened.
-    """
-    font_path = tg / "submodules/Display/Source/Font.swift"
-    if font_path.is_file():
-        t = font_path.read_text(encoding="utf-8")
-        orig = t
-        if "AorusRuntimeFont" in t and "fontNames(for choice" in t and "weight.rawValue != UIFont.Weight.regular.rawValue" in t and "importedFontsKey" in t:
-            print("CustomFont: Display Font.swift already patched")
-        else:
-            if "AorusRuntimeFont" in t:
-                start = t.find("private enum AorusRuntimeFont")
-                end = t.find("public struct Font", start)
-                if start != -1 and end != -1:
-                    t = t[:start] + t[end:]
-                    print("CustomFont: upgraded Display Font.swift runtime")
-                else:
-                    print("CustomFont: WARNING old runtime block not replaced cleanly")
-            if "import CoreText\n" not in t:
-                t = t.replace("import UIKit\n", "import UIKit\nimport CoreText\n", 1)
-            if "import Security\n" not in t:
-                t = t.replace("import UIKit\n", "import UIKit\nimport Security\n", 1)
-
-            runtime = r'''
-private enum AorusRuntimeFont {
-    private static let choiceKey = "aorusgram_font_choice"
-    private static let importedNameKey = "aorusgram_font_imported_name"
-    private static let importedFontsKey = "aorusgram_font_imported_fonts"
-    private static let keychainService = "AorusGramFont"
-    private static var didRegisterImported = false
-
-    private struct ImportedFontRecord: Codable {
-        let id: String
-        let postScriptName: String
-        let displayName: String
-    }
-
-    static var cacheKey: String {
-        let choice = selectedChoice
-        if isImportedChoice(choice) {
-            return "\(choice)_\(importedFontName(for: choice) ?? "")"
-        }
-        return choice
-    }
-
-    static func font(size: CGFloat, designKey: String, weight: UIFont.Weight, traitsRaw: Int32) -> UIFont? {
-        let choice = selectedChoice
-        guard choice != "system" else { return nil }
-
-        if #available(iOS 13.0, *) {
-            let systemDesign: UIFontDescriptor.SystemDesign?
-            switch choice {
-            case "rounded":
-                systemDesign = .rounded
-            case "serif":
-                systemDesign = .serif
-            case "mono":
-                systemDesign = .monospaced
-            default:
-                systemDesign = nil
-            }
-            if let systemDesign {
-                let base = UIFont.systemFont(ofSize: size, weight: weight)
-                if var descriptor = base.fontDescriptor.withDesign(systemDesign) {
-                    descriptor = applyTraits(to: descriptor, weight: weight, traitsRaw: traitsRaw)
-                    return UIFont(descriptor: descriptor, size: size)
-                }
-                return base
-            }
-        }
-
-        for name in fontNames(for: choice, weight: weight, italic: (traitsRaw & 1) != 0) {
-            if let base = UIFont(name: name, size: size) {
-                let descriptor = applyTraits(to: base.fontDescriptor, weight: weight, traitsRaw: traitsRaw)
-                return UIFont(descriptor: descriptor, size: size)
-            }
-        }
-        return nil
-    }
-
-    private static var selectedChoice: String {
-        if let value = UserDefaults.standard.string(forKey: choiceKey), !value.isEmpty {
-            if value == "imported", let migrated = importedRecords().first?.id {
-                UserDefaults.standard.set(migrated, forKey: choiceKey)
-                return migrated
-            }
-            return value
-        }
-        if let value = keychainString(account: "choice"), !value.isEmpty {
-            let resolved = value == "imported" ? (importedRecords().first?.id ?? value) : value
-            UserDefaults.standard.set(resolved, forKey: choiceKey)
-            return resolved
-        }
-        return "system"
-    }
-
-    private static func fontNames(for choice: String, weight: UIFont.Weight, italic: Bool) -> [String] {
-        let bold = weight.rawValue >= UIFont.Weight.semibold.rawValue
-        switch choice {
-        case "avenir":
-            return ranked(regular: "AvenirNext-Regular", bold: "AvenirNext-Bold", italic: "AvenirNext-Italic", boldItalic: "AvenirNext-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "helvetica":
-            return ranked(regular: "HelveticaNeue", bold: "HelveticaNeue-Bold", italic: "HelveticaNeue-Italic", boldItalic: "HelveticaNeue-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "arial":
-            return ranked(regular: "ArialMT", bold: "Arial-BoldMT", italic: "Arial-ItalicMT", boldItalic: "Arial-BoldItalicMT", wantsBold: bold, wantsItalic: italic)
-        case "arialRounded":
-            return ["ArialRoundedMTBold"]
-        case "georgia":
-            return ranked(regular: "Georgia", bold: "Georgia-Bold", italic: "Georgia-Italic", boldItalic: "Georgia-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "times":
-            return ranked(regular: "TimesNewRomanPSMT", bold: "TimesNewRomanPS-BoldMT", italic: "TimesNewRomanPS-ItalicMT", boldItalic: "TimesNewRomanPS-BoldItalicMT", wantsBold: bold, wantsItalic: italic)
-        case "courier":
-            return ranked(regular: "CourierNewPSMT", bold: "CourierNewPS-BoldMT", italic: "CourierNewPS-ItalicMT", boldItalic: "CourierNewPS-BoldItalicMT", wantsBold: bold, wantsItalic: italic)
-        case "menlo":
-            return ranked(regular: "Menlo-Regular", bold: "Menlo-Bold", italic: "Menlo-Italic", boldItalic: "Menlo-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "trebuchet":
-            return ranked(regular: "TrebuchetMS", bold: "TrebuchetMS-Bold", italic: "TrebuchetMS-Italic", boldItalic: "TrebuchetMS-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "verdana":
-            return ranked(regular: "Verdana", bold: "Verdana-Bold", italic: "Verdana-Italic", boldItalic: "Verdana-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "futura":
-            return bold ? ["Futura-CondensedExtraBold", "Futura-Medium"] : ["Futura-Medium"]
-        case "gill":
-            return ranked(regular: "GillSans", bold: "GillSans-Bold", italic: "GillSans-Italic", boldItalic: "GillSans-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "palatino":
-            return ranked(regular: "Palatino-Roman", bold: "Palatino-Bold", italic: "Palatino-Italic", boldItalic: "Palatino-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "baskerville":
-            return ranked(regular: "Baskerville", bold: "Baskerville-Bold", italic: "Baskerville-Italic", boldItalic: "Baskerville-BoldItalic", wantsBold: bold, wantsItalic: italic)
-        case "didot":
-            return ranked(regular: "Didot", bold: "Didot-Bold", italic: "Didot-Italic", boldItalic: nil, wantsBold: bold, wantsItalic: italic)
-        case "chalkboard":
-            return bold ? ["ChalkboardSE-Bold", "ChalkboardSE-Regular"] : ["ChalkboardSE-Regular"]
-        case "imported":
-            if let name = importedFontName(for: choice) {
-                return [name]
-            }
-            return []
-        default:
-            if isImportedChoice(choice), let name = importedFontName(for: choice) {
-                return [name]
-            }
-            return []
-        }
-    }
-
-    private static func ranked(regular: String, bold: String?, italic: String?, boldItalic: String?, wantsBold: Bool, wantsItalic: Bool) -> [String] {
-        var names: [String] = []
-        if wantsBold && wantsItalic, let boldItalic {
-            names.append(boldItalic)
-        }
-        if wantsBold, let bold {
-            names.append(bold)
-        }
-        if wantsItalic, let italic {
-            names.append(italic)
-        }
-        names.append(regular)
-        return names
-    }
-
-    private static func importedFontName(for choice: String) -> String? {
-        registerImportedFontsIfNeeded()
-        if isImportedChoice(choice), let record = importedRecords().first(where: { $0.id == choice }) {
-            return record.postScriptName
-        }
-        if let value = UserDefaults.standard.string(forKey: importedNameKey), !value.isEmpty {
-            return value
-        }
-        if let value = keychainString(account: "importedName"), !value.isEmpty {
-            UserDefaults.standard.set(value, forKey: importedNameKey)
-            return value
-        }
-        return nil
-    }
-
-    private static func registerImportedFontsIfNeeded() {
-        guard !didRegisterImported else { return }
-        didRegisterImported = true
-        for record in importedRecords() {
-            if let data = keychainData(account: importedDataAccount(record.id)),
-               let provider = CGDataProvider(data: data as CFData),
-               let cgFont = CGFont(provider) {
-                var error: Unmanaged<CFError>?
-                _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
-            }
-        }
-        if let data = keychainData(account: "importedData"),
-           let provider = CGDataProvider(data: data as CFData),
-           let cgFont = CGFont(provider) {
-            var error: Unmanaged<CFError>?
-            _ = CTFontManagerRegisterGraphicsFont(cgFont, &error)
-        }
-    }
-
-    private static func importedRecords() -> [ImportedFontRecord] {
-        if let data = UserDefaults.standard.data(forKey: importedFontsKey),
-           let records = try? JSONDecoder().decode([ImportedFontRecord].self, from: data) {
-            return records
-        }
-        if let data = keychainData(account: "importedFonts"),
-           let records = try? JSONDecoder().decode([ImportedFontRecord].self, from: data) {
-            UserDefaults.standard.set(data, forKey: importedFontsKey)
-            return records
-        }
-        return []
-    }
-
-    private static func isImportedChoice(_ choice: String) -> Bool {
-        return choice == "imported" || choice.hasPrefix("imported:")
-    }
-
-    private static func importedDataAccount(_ id: String) -> String {
-        return "importedData:\(id)"
-    }
-
-    private static func applyTraits(to descriptor: UIFontDescriptor, weight: UIFont.Weight, traitsRaw: Int32) -> UIFontDescriptor {
-        var result = descriptor
-        if weight.rawValue != UIFont.Weight.regular.rawValue {
-            result = result.addingAttributes([
-                UIFontDescriptor.AttributeName.traits: [
-                    UIFontDescriptor.TraitKey.weight: weight.rawValue
-                ]
-            ])
-        }
-        var symbolicTraits = result.symbolicTraits
-        if weight.rawValue >= UIFont.Weight.semibold.rawValue {
-            symbolicTraits.insert(.traitBold)
-        }
-        if (traitsRaw & 1) != 0 {
-            symbolicTraits.insert(.traitItalic)
-        }
-        if let updated = result.withSymbolicTraits(symbolicTraits) {
-            result = updated
-        }
-        if (traitsRaw & 2) != 0 {
-            result = result.addingAttributes([
-                UIFontDescriptor.AttributeName.featureSettings: [
-                    [
-                        UIFontDescriptor.FeatureKey.featureIdentifier: kNumberSpacingType,
-                        UIFontDescriptor.FeatureKey.typeIdentifier: kMonospacedNumbersSelector
-                    ]
-                ]
-            ])
-        }
-        return result
-    }
-
-    private static func keychainQuery(account: String) -> [String: Any] {
-        return [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account
-        ]
-    }
-
-    private static func keychainString(account: String) -> String? {
-        guard let data = keychainData(account: account) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    private static func keychainData(account: String) -> Data? {
-        var query = keychainQuery(account: account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess else { return nil }
-        return result as? Data
-    }
-}
-
-'''
-            t = t.replace("public struct Font {\n", runtime + "public struct Font {\n", 1)
-            old_key = '        let key = "\\(size)_\\(design.key)_\\(weight.key)_\\(width.key)_\\(traits.rawValue)"\n'
-            new_key = '        let key = "\\(size)_\\(design.key)_\\(weight.key)_\\(width.key)_\\(traits.rawValue)_\\(AorusRuntimeFont.cacheKey)"\n'
-            if old_key in t:
-                t = t.replace(old_key, new_key, 1)
-            else:
-                print("CustomFont: WARNING Font.with cache key anchor not found")
-            cache_anchor = (
-                "        if let cachedFont = self.cache.get(key) {\n"
-                "            return cachedFont\n"
-                "        }\n"
-            )
-            cache_insert = (
-                "        if let cachedFont = self.cache.get(key) {\n"
-                "            return cachedFont\n"
-                "        }\n"
-                "        if design != .camera, let aorusFont = AorusRuntimeFont.font(size: size, designKey: design.key, weight: weight.weight, traitsRaw: traits.rawValue) {\n"
-                "            self.cache.set(aorusFont, key: key)\n"
-                "            return aorusFont\n"
-                "        }\n"
-            )
-            if "AorusRuntimeFont.font(size:" in t:
-                pass
-            elif cache_anchor in t:
-                t = t.replace(cache_anchor, cache_insert, 1)
-            else:
-                print("CustomFont: WARNING Font.with cache anchor not found")
-
-        shortcut_replacements = [
-            (
-                "    public static func regular(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.systemFont(ofSize: size)\n"
-                "    }\n",
-                "    public static func regular(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .regular)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.systemFont(ofSize: size, weight: .medium)\n"
-                "    }\n",
-                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .medium)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.medium)\n"
-                "    }\n",
-                "    public static func medium(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .medium)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.systemFont(ofSize: size, weight: .semibold)\n"
-                "    }\n",
-                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .semibold)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.semibold)\n"
-                "    }\n",
-                "    public static func semibold(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .semibold)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
-                "        if #available(iOS 8.2, *) {\n"
-                "            return UIFont.systemFont(ofSize: size, weight: .bold)\n"
-                "        } else {\n"
-                "            return UIFont.boldSystemFont(ofSize: size)\n"
-                "        }\n"
-                "    }\n",
-                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .bold)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
-                "        if #available(iOS 8.2, *) {\n"
-                "            return UIFont.boldSystemFont(ofSize: size)\n"
-                "        } else {\n"
-                "            return CTFontCreateWithName(\"HelveticaNeue-Bold\" as CFString, size, nil)\n"
-                "        }\n"
-                "    }\n",
-                "    public static func bold(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .bold)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func light(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.systemFont(ofSize: size, weight: .light)\n"
-                "    }\n",
-                "    public static func light(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .light)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func light(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.light)\n"
-                "    }\n",
-                "    public static func light(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .light)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.italicSystemFont(ofSize: size).withWeight(.semibold)\n"
-                "    }\n",
-                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .semibold, traits: [.italic])\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
-                "        if let descriptor = UIFont.systemFont(ofSize: size).fontDescriptor.withSymbolicTraits([.traitBold, .traitItalic]) {\n"
-                "            return UIFont(descriptor: descriptor, size: size)\n"
-                "        } else {\n"
-                "            return UIFont.italicSystemFont(ofSize: size)\n"
-                "        }\n"
-                "    }\n",
-                "    public static func semiboldItalic(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .semibold, traits: [.italic])\n"
-                "    }\n",
-            ),
-            (
-                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .regular)\n"
-                "    }\n",
-                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .regular)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont(name: \"Menlo-Regular\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
-                "    }\n",
-                "    public static func monospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .regular)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .semibold)\n"
-                "    }\n",
-                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .semibold)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont(name: \"Menlo-Bold\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
-                "    }\n",
-                "    public static func semiboldMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .semibold)\n"
-                "    }\n",
-            ),
-            (
-                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .regular).withTraits(.traitItalic)\n"
-                "    }\n",
-                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .regular, traits: [.italic])\n"
-                "    }\n",
-            ),
-            (
-                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont(name: \"Menlo-Italic\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
-                "    }\n",
-                "    public static func italicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .regular, traits: [.italic])\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.monospacedSystemFont(ofSize: size, weight: .semibold).withTraits(.traitItalic)\n"
-                "    }\n",
-                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .semibold, traits: [.italic])\n"
-                "    }\n",
-            ),
-            (
-                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont(name: \"Menlo-BoldItalic\", size: size - 1.0) ?? UIFont.systemFont(ofSize: size)\n"
-                "    }\n",
-                "    public static func semiboldItalicMonospace(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .monospace, weight: .semibold, traits: [.italic])\n"
-                "    }\n",
-            ),
-            (
-                "    public static func italic(_ size: CGFloat) -> UIFont {\n"
-                "        return UIFont.italicSystemFont(ofSize: size)\n"
-                "    }\n",
-                "    public static func italic(_ size: CGFloat) -> UIFont {\n"
-                "        return self.with(size: size, design: .regular, weight: .regular, traits: [.italic])\n"
-                "    }\n",
-            ),
-        ]
-        patched_shortcuts = 0
-        for old, new in shortcut_replacements:
-            if old in t:
-                t = t.replace(old, new, 1)
-                patched_shortcuts += 1
-
-        if t != orig:
-            font_path.write_text(t, encoding="utf-8")
-            print(f"CustomFont: patched Display Font.swift ({patched_shortcuts} shortcut overrides)")
-    else:
-        print("CustomFont: Display Font.swift not found — skip")
-
-    direct_font_replacements = [
-        (
-            "submodules/Display/Source/TextNode.swift",
-            [
-                ("private let defaultFont = UIFont.systemFont(ofSize: 15.0)\n",
-                 "private let defaultFont = Font.regular(15.0)\n"),
-            ],
-        ),
-        (
-            "submodules/Display/Source/NavigationBackButtonNode.swift",
-            [
-                ("        return UIFont.systemFont(ofSize: 17.0)\n",
-                 "        return Font.regular(17.0)\n"),
-            ],
-        ),
-        (
-            "submodules/Display/Source/NavigationTitleNode.swift",
-            [
-                ("        titleAttributes[NSAttributedString.Key.font] = UIFont.boldSystemFont(ofSize: 17.0)\n",
-                 "        titleAttributes[NSAttributedString.Key.font] = Font.bold(17.0)\n"),
-            ],
-        ),
-        (
-            "submodules/Display/Source/StatusBarProxyNode.swift",
-            [
-                ("NSAttributedString.Key.font: UIFont.boldSystemFont(ofSize: 12.0)",
-                 "NSAttributedString.Key.font: Font.bold(12.0)"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatReplyCountItem.swift",
-            [
-                ("private let titleFont = UIFont.systemFont(ofSize: 13.0)\n",
-                 "private let titleFont = Font.regular(13.0)\n"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatUnreadItem.swift",
-            [
-                ("private let titleFont = UIFont.systemFont(ofSize: 13.0)\n",
-                 "private let titleFont = Font.regular(13.0)\n"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/PeerAllowedReactionsScreen/Sources/PeerAllowedReactionsScreen.swift",
-            [
-                ("let body = MarkdownAttributeSet(font: UIFont.systemFont(ofSize: 13.0), textColor: environment.theme.list.freeTextColor)",
-                 "let body = MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.freeTextColor)"),
-                ("let link = MarkdownAttributeSet(font: UIFont.systemFont(ofSize: 13.0), textColor: environment.theme.list.itemAccentColor, additionalAttributes: [:])",
-                 "let link = MarkdownAttributeSet(font: Font.regular(13.0), textColor: environment.theme.list.itemAccentColor, additionalAttributes: [:])"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/InteractiveTextComponent/Sources/InteractiveTextComponent.swift",
-            [
-                ("private let defaultFont = UIFont.systemFont(ofSize: 15.0)\n",
-                 "private let defaultFont = Font.regular(15.0)\n"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/Stories/LiveChat/StoryLiveChatMessageComponent/Sources/StoryLiveChatMessageComponent.swift",
-            [
-                ("descriptor = UIFont.systemFont(ofSize: 10.0).fontDescriptor",
-                 "descriptor = Font.regular(10.0).fontDescriptor"),
-                ("descriptor = UIFont.systemFont(ofSize: 10.0, weight: UIFont.Weight.semibold).fontDescriptor",
-                 "descriptor = Font.semibold(10.0).fontDescriptor"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift",
-            [
-                ("descriptor = UIFont.systemFont(ofSize: 10.0).fontDescriptor",
-                 "descriptor = Font.regular(10.0).fontDescriptor"),
-                ("descriptor = UIFont.systemFont(ofSize: 10.0, weight: UIFont.Weight.semibold).fontDescriptor",
-                 "descriptor = Font.semibold(10.0).fontDescriptor"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/Stories/StoryContainerScreen/Sources/LiveChatReactionStreamView.swift",
-            [
-                ("NSAttributedString.Key.font: UIFont.systemFont(ofSize: 8.0)",
-                 "NSAttributedString.Key.font: Font.regular(8.0)"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/Calls/CallScreen/Sources/Components/TitleView.swift",
-            [
-                ("font = UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: UIFont.Weight(fontWeight))",
-                 "font = Font.with(size: fontSize, weight: fontWeight >= 0.2 ? .medium : .regular, traits: .monospacedNumbers)"),
-                ("font = UIFont.systemFont(ofSize: fontSize, weight: UIFont.Weight(fontWeight))",
-                 "font = Font.with(size: fontSize, weight: fontWeight >= 0.2 ? .medium : .regular)"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/Chat/ChatBotInfoItem/Sources/ChatBotInfoItem.swift",
-            [
-                ("private let messageFixedFont = UIFont(name: \"Menlo-Regular\", size: 16.0) ?? UIFont.systemFont(ofSize: 17.0)\n",
-                 "private let messageFixedFont = Font.monospace(16.0)\n"),
-            ],
-        ),
-        (
-            "submodules/TelegramUI/Components/StorageUsageScreen/Sources/DataUsageScreen.swift",
-            [
-                ("Text(text: \"0\", font: UIFont.systemFont(ofSize: 50.0, weight: UIFont.Weight(0.25)), color: checkColor)",
-                 "Text(text: \"0\", font: Font.medium(50.0), color: checkColor)"),
-            ],
-        ),
-    ]
-    display_import_paths = {
-        "submodules/TelegramUI/Components/Calls/CallScreen/Sources/Components/TitleView.swift",
-    }
-    for rel_path, replacements in direct_font_replacements:
-        path = tg / rel_path
-        if not path.is_file():
-            continue
-        t = path.read_text(encoding="utf-8")
-        orig = t
-        for old, new in replacements:
-            if old in t:
-                t = t.replace(old, new, 1)
-        if rel_path in display_import_paths and "Font." in t and "import Display\n" not in t:
-            if "import UIKit\n" in t:
-                t = t.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
-            elif "import Foundation\n" in t:
-                t = t.replace("import Foundation\n", "import Foundation\nimport Display\n", 1)
-            else:
-                t = "import Display\n" + t
-        if t != orig:
-            path.write_text(t, encoding="utf-8")
-            print(f"CustomFont: patched direct UIKit fonts in {rel_path}")
-
-    settings = tg / "submodules/SettingsUI/Sources/Themes/ThemeSettingsController.swift"
-    if settings.is_file():
-        t = settings.read_text(encoding="utf-8")
-        if "aorusFontPickerController" in t:
-            print("CustomFont: ThemeSettingsController already patched")
-        else:
-            def sub(anchor: str, repl: str, label: str) -> None:
-                nonlocal t
-                if anchor in t:
-                    t = t.replace(anchor, repl, 1)
-                else:
-                    print(f"CustomFont: WARNING ThemeSettingsController anchor not found — {label}")
-
-            if "import AorusGramUI\n" not in t:
-                sub("import DeviceModel\n", "import DeviceModel\nimport AorusGramUI\n", "import")
-
-            sub("    let openAutoNightTheme: () -> Void\n"
-                "    let openTextSize: () -> Void\n",
-                "    let openAutoNightTheme: () -> Void\n"
-                "    let openAorusFont: () -> Void\n"
-                "    let openTextSize: () -> Void\n",
-                "args-prop")
-
-            sub("        openAutoNightTheme: @escaping () -> Void,\n"
-                "        openTextSize: @escaping () -> Void,\n",
-                "        openAutoNightTheme: @escaping () -> Void,\n"
-                "        openAorusFont: @escaping () -> Void,\n"
-                "        openTextSize: @escaping () -> Void,\n",
-                "args-init-param")
-
-            sub("        self.openAutoNightTheme = openAutoNightTheme\n"
-                "        self.openTextSize = openTextSize\n",
-                "        self.openAutoNightTheme = openAutoNightTheme\n"
-                "        self.openAorusFont = openAorusFont\n"
-                "        self.openTextSize = openTextSize\n",
-                "args-assign")
-
-            sub("    case autoNightTheme(PresentationTheme, String, String)\n"
-                "    case textSize(PresentationTheme, String, String)\n",
-                "    case autoNightTheme(PresentationTheme, String, String)\n"
-                "    case aorusFont(PresentationTheme, String, String)\n"
-                "    case textSize(PresentationTheme, String, String)\n",
-                "entry-case")
-
-            sub("            case .textSize, .bubbleSettings:\n"
-                "                return ThemeSettingsControllerSection.message.rawValue\n",
-                "            case .aorusFont, .textSize, .bubbleSettings:\n"
-                "                return ThemeSettingsControllerSection.message.rawValue\n",
-                "entry-section")
-
-            stable_old = (
-                "        case .autoNightTheme:\n"
-                "            return 7\n"
-                "        case .textSize:\n"
-                "            return 8\n"
-                "        case .bubbleSettings:\n"
-                "            return 9\n"
-                "        case .powerSaving:\n"
-                "            return 10\n"
-                "        case .stickersAndEmoji:\n"
-                "            return 11\n"
-                "        case .iconHeader:\n"
-                "            return 12\n"
-                "        case .iconItem:\n"
-                "            return 13\n"
-                "        case .otherHeader:\n"
-                "            return 14\n"
-                "        case .sendWithCmdEnter:\n"
-                "            return 15\n"
-                "        case .showNextMediaOnTap:\n"
-                "            return 16\n"
-                "        case .showNextMediaOnTapInfo:\n"
-                "            return 17\n"
-            )
-            stable_new = (
-                "        case .autoNightTheme:\n"
-                "            return 7\n"
-                "        case .aorusFont:\n"
-                "            return 8\n"
-                "        case .textSize:\n"
-                "            return 9\n"
-                "        case .bubbleSettings:\n"
-                "            return 10\n"
-                "        case .powerSaving:\n"
-                "            return 11\n"
-                "        case .stickersAndEmoji:\n"
-                "            return 12\n"
-                "        case .iconHeader:\n"
-                "            return 20\n"
-                "        case .iconItem:\n"
-                "            return 21\n"
-                "        case .otherHeader:\n"
-                "            return 30\n"
-                "        case .sendWithCmdEnter:\n"
-                "            return 31\n"
-                "        case .showNextMediaOnTap:\n"
-                "            return 32\n"
-                "        case .showNextMediaOnTapInfo:\n"
-                "            return 33\n"
-            )
-            sub(stable_old, stable_new, "stable-id")
-
-            sub("            case let .textSize(lhsTheme, lhsText, lhsValue):\n"
-                "                if case let .textSize(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n",
-                "            case let .aorusFont(lhsTheme, lhsText, lhsValue):\n"
-                "                if case let .aorusFont(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n"
-                "                    return true\n"
-                "                } else {\n"
-                "                    return false\n"
-                "                }\n"
-                "            case let .textSize(lhsTheme, lhsText, lhsValue):\n"
-                "                if case let .textSize(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {\n",
-                "eq-case")
-
-            sub("            case let .textSize(_, text, value):\n"
-                "                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: nil, title: text, label: value, labelStyle: .text, sectionId: self.section, style: .blocks, disclosureStyle: .arrow, action: {\n"
-                "                    arguments.openTextSize()\n"
-                "                })\n",
-                "            case let .aorusFont(_, text, value):\n"
-                "                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: nil, title: text, label: value, labelStyle: .text, sectionId: self.section, style: .blocks, disclosureStyle: .arrow, action: {\n"
-                "                    arguments.openAorusFont()\n"
-                "                })\n"
-                "            case let .textSize(_, text, value):\n"
-                "                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: nil, title: text, label: value, labelStyle: .text, sectionId: self.section, style: .blocks, disclosureStyle: .arrow, action: {\n"
-                "                    arguments.openTextSize()\n"
-                "                })\n",
-                "item-case")
-
-            sub("    entries.append(.textSize(presentationData.theme, strings.Appearance_TextSizeSetting, textSizeValue))\n",
-                "    let aorusFontTitle = (strings.baseLanguageCode == \"ru\" || strings.baseLanguageCode.hasPrefix(\"ru\")) ? \"Шрифт\" : \"Font\"\n"
-                "    entries.append(.aorusFont(presentationData.theme, aorusFontTitle, AorusFontStore.selectedTitle))\n"
-                "    entries.append(.textSize(presentationData.theme, strings.Appearance_TextSizeSetting, textSizeValue))\n",
-                "entries")
-
-            sub("    }, openAutoNightTheme: {\n"
-                "        pushControllerImpl?(themeAutoNightSettingsController(context: context))\n"
-                "    }, openTextSize: {\n",
-                "    }, openAutoNightTheme: {\n"
-                "        pushControllerImpl?(themeAutoNightSettingsController(context: context))\n"
-                "    }, openAorusFont: {\n"
-                "        pushControllerImpl?(aorusFontPickerController(context: context))\n"
-                "    }, openTextSize: {\n",
-                "open-action")
-
-            settings.write_text(t, encoding="utf-8")
-            print("CustomFont: patched ThemeSettingsController")
-    else:
-        print("CustomFont: ThemeSettingsController.swift not found — skip")
-
-    settings_build = tg / "submodules/SettingsUI/BUILD"
-    if settings_build.is_file():
-        bt = settings_build.read_text(encoding="utf-8")
-        if "//submodules/AorusGramUI" not in bt:
-            needle = '        "//submodules/AccountContext:AccountContext",\n'
-            if needle in bt:
-                bt = bt.replace(needle, needle + '        "//submodules/AorusGramUI",\n', 1)
-                print("CustomFont: added AorusGramUI dep to SettingsUI BUILD")
-            else:
-                print("CustomFont: WARNING SettingsUI BUILD dep anchor not found")
-        settings_build.write_text(bt, encoding="utf-8")
-    else:
-        print("CustomFont: SettingsUI BUILD not found — skip")
-
-
 def patch_gif_wallpaper(tg: Path) -> None:
     """Animated GIF chat wallpaper.
 
@@ -13917,7 +11530,6 @@ def main() -> None:
     patch_primary_app_icon(tg)
     patch_settings_entry_point(tg)
     patch_download_accelerator(tg)
-    patch_max_media_quality(tg)
     patch_deleted_messages_interception(tg)
     patch_anti_spoof_delete_preflight(tg)
     patch_block_ads(tg)
@@ -13935,17 +11547,13 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
-    patch_app_delegate_anti_spam_toast(tg)
     patch_app_delegate_publish_account_id(tg)
     patch_app_delegate_open_purchase_bot(tg)
     patch_app_delegate_activate_deeplink(tg)
-    patch_link_protection_open_url(tg)
     patch_app_delegate_import_telegram_api(tg)
     patch_app_delegate_account_restore_hook(tg)
     patch_app_delegate_siri_continue_activity(tg)
     patch_peer_info_account_details(tg)
-    patch_phone_spoof_profile_display(tg)
-    patch_phone_spoof_profile_header(tg)
     patch_chat_title_anti_spoof_status(tg)
     patch_client_spoof_app_version(tg)
     patch_app_delegate_import_aorusgram(tg)
@@ -13963,8 +11571,6 @@ def main() -> None:
     patch_local_premium(tg)
     patch_fake_gifts(tg)
     patch_fake_stars(tg)
-    patch_anti_search(tg)
-    patch_wallpaper_remove_footer(tg)
     patch_bypass_copy_protection(tg)
     patch_bypass_channel_copy_protection(tg)
     patch_bypass_story_download(tg)
@@ -13985,7 +11591,6 @@ def main() -> None:
     patch_view_once_direct_save_button(tg)
     patch_view_once_no_consume(tg)
     patch_license_key_provider(tg)
-    patch_chat_context_menu_media_metadata(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)
     patch_chat_context_menu_hide_name_forward(tg)
@@ -14001,7 +11606,6 @@ def main() -> None:
     patch_call_recording(tg)
     patch_call_recording_group(tg)
     patch_account_limit(tg)
-    patch_aorus_custom_font(tg)
     patch_gif_wallpaper(tg)
     for name in ("Info.plist", "InfoBazel.plist"):
         patch_plist_icons_and_urls(tg / "Telegram/Telegram-iOS" / name)
