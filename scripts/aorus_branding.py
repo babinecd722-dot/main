@@ -634,118 +634,74 @@ def patch_callkit_brand_name(tg: Path) -> None:
 
 
 def patch_deleted_message_quote_reply(tg: Path) -> None:
-    """Reply to a preserved deleted message as a local blockquote "quote reply".
+    """Reply to a preserved deleted message as an inline blockquote on send.
 
     A deleted incoming message is kept locally (invisible \\u2063\\u2064 suffix) but no
     longer exists on the server, so a normal server reply can't carry its quote to the
-    peer. Instead, when the user taps Reply on such a message, insert its text into the
-    composer as a collapsed blockquote (ChatTextInputAttributes.block) with the caret
-    placed below it — the reply then sends as an ordinary message that visibly quotes the
-    deleted text. Non-deleted messages keep the native reply behaviour untouched.
+    peer. We keep the NATIVE reply experience while composing (the usual "In reply to X"
+    bar), and only at send time — in ChatController.sendMessages, the single funnel all
+    sends pass through — do we detect a reply whose target was deleted and rewrite it:
+    the server reply is dropped and the deleted text is prepended as a collapsed
+    blockquote entity. The message then sends as an ordinary message whose quote is
+    visible to everyone. Replies to normal (non-deleted) messages are untouched.
     """
-    path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
-    if not path.is_file():
-        print("DeletedQuoteReply: ChatInterfaceStateContextMenus.swift not found, skip")
+    cc = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+    if not cc.is_file():
+        print("DeletedQuoteReply: ChatController.swift not found, skip")
         return
-    t = path.read_text(encoding="utf-8")
-    if "AorusGram: deleted-message quote reply" in t:
+    t = cc.read_text(encoding="utf-8")
+    if "AorusGram: deleted-message quote reply on send" in t:
         print("DeletedQuoteReply: already injected")
         return
     anchor = (
-        "                interfaceInteraction.setupReplyMessage(messages[0].id, nil, { transition, completed in\n"
-        "                    c?.dismiss(result: .custom(transition), completion: {\n"
-        "                        completed()\n"
-        "                    })\n"
-        "                })\n"
+        "            var messages = messages\n"
+        "            var shouldOpenScheduledMessages = false\n"
     )
     if anchor not in t:
-        print("DeletedQuoteReply: reply-action anchor not found — skipped")
+        print("DeletedQuoteReply: sendMessages anchor not found — skipped")
         return
-    replacement = (
-        "                // AorusGram: deleted-message quote reply\n"
-        "                let aorusReplyMsg = messages[0]\n"
-        "                if aorusReplyMsg.text.hasSuffix(\"\\u{2063}\\u{2064}\") {\n"
-        "                    // No server copy to reply to — quote the preserved text locally.\n"
-        "                    var aorusQuoted = String(aorusReplyMsg.text.dropLast(2))\n"
-        "                    if aorusQuoted.isEmpty {\n"
-        "                        let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-        "                        aorusQuoted = aorusRu ? \"Медиафайл\" : \"Media\"\n"
-        "                    }\n"
-        "                    c?.dismiss(result: .default, completion: {})\n"
-        "                    interfaceInteraction.updateTextInputStateAndMode { current, inputMode in\n"
-        "                        let aorusQuote = NSMutableAttributedString(string: aorusQuoted)\n"
-        "                        if aorusQuote.length > 0 {\n"
-        "                            aorusQuote.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: true), range: NSRange(location: 0, length: aorusQuote.length))\n"
-        "                        }\n"
-        "                        let aorusResult = NSMutableAttributedString()\n"
-        "                        aorusResult.append(aorusQuote)\n"
-        "                        aorusResult.append(NSAttributedString(string: \"\\n\"))\n"
-        "                        aorusResult.append(current.inputText)\n"
-        "                        let aorusPos = aorusQuote.length + 1\n"
-        "                        return (ChatTextInputState(inputText: aorusResult, selectionRange: aorusPos ..< aorusPos), .text)\n"
-        "                    }\n"
-        "                } else {\n"
-        "                    interfaceInteraction.setupReplyMessage(messages[0].id, nil, { transition, completed in\n"
-        "                        c?.dismiss(result: .custom(transition), completion: {\n"
-        "                            completed()\n"
-        "                        })\n"
-        "                    })\n"
-        "                }\n"
-    )
-    t = t.replace(anchor, replacement, 1)
-    if "import TextFormat" not in t:
-        t = t.replace("import AccountContext\n", "import AccountContext\nimport TextFormat\n", 1)
-    path.write_text(t, encoding="utf-8")
-    print("DeletedQuoteReply: injected blockquote quote-reply for deleted messages (menu)")
-
-    # 2) Swipe-to-reply (and any other controllerInteraction.setupReply caller) go through
-    #    the single setupReply closure in ChatController. Intercept it the same way so a
-    #    swipe on a deleted message also produces the local blockquote quote reply.
-    cc = tg / "submodules/TelegramUI/Sources/ChatController.swift"
-    if not cc.is_file():
-        print("DeletedQuoteReply: ChatController.swift not found, skip swipe path")
-        return
-    t2 = cc.read_text(encoding="utf-8")
-    if "AorusGram: deleted-message quote reply (swipe" in t2:
-        print("DeletedQuoteReply: swipe path already injected")
-        return
-    swipe_anchor = (
-        "        }, setupReply: { [weak self] messageId in\n"
-        "            self?.interfaceInteraction?.setupReplyMessage(messageId, nil, { _, f in f() })\n"
-        "        }, canSetupReply: { [weak self] message in\n"
-    )
-    if swipe_anchor not in t2:
-        print("DeletedQuoteReply: setupReply closure anchor not found — skipped swipe path")
-        return
-    swipe_new = (
-        "        }, setupReply: { [weak self] messageId in\n"
-        "            // AorusGram: deleted-message quote reply (swipe / non-menu paths)\n"
-        "            if let strongSelf = self, let aorusMsg = strongSelf.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId), aorusMsg.text.hasSuffix(\"\\u{2063}\\u{2064}\") {\n"
-        "                var aorusQuoted = String(aorusMsg.text.dropLast(2))\n"
+    inject = (
+        "            var messages = messages\n"
+        "            var shouldOpenScheduledMessages = false\n"
+        "            // AorusGram: deleted-message quote reply on send — a reply target that was\n"
+        "            // deleted no longer exists on the server, so replace the server reply with\n"
+        "            // an inline collapsed blockquote of its text. The message then sends normally\n"
+        "            // and the quote is visible to everyone.\n"
+        "            messages = messages.map { aorusMessage -> EnqueueMessage in\n"
+        "                guard case let .message(aorusText, aorusAttributes, aorusInlineStickers, aorusMediaReference, aorusThreadId, aorusReplyToMessageId, aorusReplyToStoryId, aorusLocalGroupingKey, aorusCorrelationId, aorusBubbleUp) = aorusMessage else { return aorusMessage }\n"
+        "                guard let aorusReply = aorusReplyToMessageId, let aorusDeleted = self.chatDisplayNode.historyNode.messageInCurrentHistoryView(aorusReply.messageId), aorusDeleted.text.hasSuffix(\"\\u{2063}\\u{2064}\") else { return aorusMessage }\n"
+        "                var aorusQuoted = String(aorusDeleted.text.dropLast(2))\n"
         "                if aorusQuoted.isEmpty {\n"
         "                    let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
         "                    aorusQuoted = aorusRu ? \"Медиафайл\" : \"Media\"\n"
         "                }\n"
-        "                strongSelf.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
-        "                    let aorusQuote = NSMutableAttributedString(string: aorusQuoted)\n"
-        "                    if aorusQuote.length > 0 {\n"
-        "                        aorusQuote.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: true), range: NSRange(location: 0, length: aorusQuote.length))\n"
+        "                let aorusPrefix = aorusQuoted + \"\\n\"\n"
+        "                let aorusShift = (aorusPrefix as NSString).length\n"
+        "                let aorusQuoteLen = (aorusQuoted as NSString).length\n"
+        "                let aorusNewText = aorusPrefix + aorusText\n"
+        "                var aorusNewAttributes: [MessageAttribute] = []\n"
+        "                var aorusHadEntities = false\n"
+        "                for aorusAttr in aorusAttributes {\n"
+        "                    if let aorusEntities = aorusAttr as? TextEntitiesMessageAttribute {\n"
+        "                        aorusHadEntities = true\n"
+        "                        var aorusShifted: [MessageTextEntity] = [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: true))]\n"
+        "                        for aorusE in aorusEntities.entities {\n"
+        "                            aorusShifted.append(MessageTextEntity(range: (aorusE.range.lowerBound + aorusShift) ..< (aorusE.range.upperBound + aorusShift), type: aorusE.type))\n"
+        "                        }\n"
+        "                        aorusNewAttributes.append(TextEntitiesMessageAttribute(entities: aorusShifted))\n"
+        "                    } else {\n"
+        "                        aorusNewAttributes.append(aorusAttr)\n"
         "                    }\n"
-        "                    let aorusResult = NSMutableAttributedString()\n"
-        "                    aorusResult.append(aorusQuote)\n"
-        "                    aorusResult.append(NSAttributedString(string: \"\\n\"))\n"
-        "                    aorusResult.append(current.inputText)\n"
-        "                    let aorusPos = aorusQuote.length + 1\n"
-        "                    return (ChatTextInputState(inputText: aorusResult, selectionRange: aorusPos ..< aorusPos), .text)\n"
         "                }\n"
-        "                return\n"
+        "                if !aorusHadEntities {\n"
+        "                    aorusNewAttributes.append(TextEntitiesMessageAttribute(entities: [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: true))]))\n"
+        "                }\n"
+        "                return .message(text: aorusNewText, attributes: aorusNewAttributes, inlineStickers: aorusInlineStickers, mediaReference: aorusMediaReference, threadId: aorusThreadId, replyToMessageId: nil, replyToStoryId: aorusReplyToStoryId, localGroupingKey: aorusLocalGroupingKey, correlationId: aorusCorrelationId, bubbleUpEmojiOrStickersets: aorusBubbleUp)\n"
         "            }\n"
-        "            self?.interfaceInteraction?.setupReplyMessage(messageId, nil, { _, f in f() })\n"
-        "        }, canSetupReply: { [weak self] message in\n"
     )
-    t2 = t2.replace(swipe_anchor, swipe_new, 1)
-    cc.write_text(t2, encoding="utf-8")
-    print("DeletedQuoteReply: injected blockquote quote-reply for deleted messages (swipe)")
+    t = t.replace(anchor, inject, 1)
+    cc.write_text(t, encoding="utf-8")
+    print("DeletedQuoteReply: injected blockquote-on-send for deleted-message replies")
 
 
 def patch_deleted_messages_interception(tg: Path) -> None:
