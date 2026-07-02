@@ -38,17 +38,22 @@ final class AntiSpamManager {
         // RU — doxxing / deanon / OSINT. All entries are either phrases or roots with no
         // innocent-word collision. NOTE: never add a bare "докс" — it is a substring of
         // "парадокс"/"ортодокс" and would false-fire; use the phrase/prefix forms below.
-        "деанон", "сдеанон", "доксинг", "докс тебя", "докс на тебя", "тебя докс",
-        "заказан докс", "закажу докс", "сделаю докс", "заказали докс", "задокс", "задокш",
+        "деанон", "сдеанон", "деаноню", "деанонить", "доксинг", "докс тебя", "докс на тебя", "тебя докс",
+        "до кс тебя", "д о к с тебя", "заказан докс", "заказан до кс", "закажу докс", "закажу до кс",
+        "сделаю докс", "сделаю до кс", "заказали докс", "заказали до кс", "задокс", "задокш",
+        "доксну", "доксану", "доксить", "доксер", "доксеры",
         "осинт", "пробив по базе", "пробью по базе", "пробью тебя", "пробить человека",
         "вычислю по ip", "вычислю тебя", "найду твой адрес", "найду где ты живешь",
         "твой домашний адрес", "знаю где ты живешь", "знаю твой адрес", "приеду по адресу",
         "приеду к тебе домой", "слил твои данные", "сольют твои данные", "сольём данные",
-        "сольем данные", "разошлю твои данные", "выложу твои данные", "опубликую твои данные",
+        "сольем данные", "солью твои данные", "залью твои данные", "слить твои данные",
+        "разошлю твои данные", "выложу твои данные", "опубликую твои данные",
         "паспортные данные", "твой паспорт",
         // RU — swatting / physical threats
-        "сваткну", "закажу сват", "заказан сват", "заказали сват", "приедет сват",
-        "отправлю сват", "сватинг", "тебя закопаю", "убью тебя", "тебя убью", "прирежу тебя",
+        "сваткну", "сватну", "сватнуть", "с ват", "с в а т", "закажу сват", "закажу с ват",
+        "заказан сват", "заказан с ват", "заказали сват", "заказали с ват", "приедет сват",
+        "отправлю сват", "вызову сват", "кину сват", "сватинг", "тебя закопаю", "убью тебя",
+        "тебя убью", "прирежу тебя",
         // EN — doxxing / OSINT
         "dox", "doxx", "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
         "leak your info", "your home address", "your ip address", "track your ip",
@@ -66,6 +71,16 @@ final class AntiSpamManager {
         "osint", "probiv", "proboj", "slivdannyh", "tvojadres", "znajugdezivesh",
         "iknowwhereyoulive", "ihaveyouraddress", "iwillfindyou", "iwillkillyou",
         "youaredead", "leakyourdata", "youripaddress", "trackyourip"
+    ]
+
+    private let threatTokensCyrillic: [String] = [
+        "докс", "сват", "осинт", "деанон", "пробив"
+    ]
+
+    private let threatPrefixesCyrillic: [String] = [
+        "доксинг", "доксер", "докси", "доксн", "доксан", "доксю", "задокс", "задокш",
+        "деанон", "деаноним", "сдеанон", "осинт", "пробив", "пробью", "пробь", "пробит",
+        "сватинг", "сватн", "сватк", "засват"
     ]
 
     private let highConfidencePatterns: [String] = [
@@ -219,6 +234,8 @@ final class AntiSpamManager {
         UserDefaults.standard.set(keywords, forKey: "aorusgram_antispam_keywords")
         UserDefaults.standard.set(threatPatterns, forKey: "aorusgram_antispam_threat_patterns")
         UserDefaults.standard.set(threatTokensLatin, forKey: "aorusgram_antispam_threat_tokens_latin")
+        UserDefaults.standard.set(threatTokensCyrillic, forKey: "aorusgram_antispam_threat_tokens_cyrillic")
+        UserDefaults.standard.set(threatPrefixesCyrillic, forKey: "aorusgram_antispam_threat_prefixes_cyrillic")
         UserDefaults.standard.set(threatProtection, forKey: "aorusgram_antispam_threat_protection")
         UserDefaults.standard.set(spamProtection, forKey: "aorusgram_antispam_spam_protection")
         UserDefaults.standard.set(stopWordsProtection, forKey: "aorusgram_antispam_stopwords_protection")
@@ -368,6 +385,9 @@ final class AntiSpamManager {
         if threatProtection {
             for pattern in threatPatterns where containsPattern(pattern, normalized: normalized, compacted: compacted) {
                 return SpamVerdict(isSpam: true, reason: .threat(pattern))
+            }
+            if let token = cyrillicThreatToken(in: normalized) {
+                return SpamVerdict(isSpam: true, reason: .threat(token))
             }
             // Obfuscation-resistant pass (D0X, DОX, d.o.x, …).
             let deobfuscated = deobfuscateLatin(text ?? "")
@@ -570,6 +590,77 @@ final class AntiSpamManager {
             // everything else (separators, remaining non-latin letters) is dropped
         }
         return result
+    }
+
+    private func cyrillicThreatToken(in normalizedText: String) -> String? {
+        let words = cyrillicThreatWords(from: normalizedText)
+        guard !words.isEmpty else { return nil }
+
+        for start in words.indices {
+            var combined = ""
+            let upperBound = min(words.count, start + 6)
+            for index in start..<upperBound {
+                combined += words[index]
+                if threatTokensCyrillic.contains(combined) {
+                    return combined
+                }
+                if threatPrefixesCyrillic.contains(where: { combined.hasPrefix($0) }) {
+                    return combined
+                }
+            }
+        }
+        return nil
+    }
+
+    private func cyrillicThreatWords(from text: String) -> [String] {
+        var result: [String] = []
+        var current = ""
+
+        func flush() {
+            if !current.isEmpty {
+                result.append(current)
+                current.removeAll(keepingCapacity: true)
+            }
+        }
+
+        for ch in text {
+            if let folded = cyrillicThreatFold(ch) {
+                current += folded
+            } else {
+                flush()
+            }
+        }
+        flush()
+        return result
+    }
+
+    private func cyrillicThreatFold(_ ch: Character) -> String? {
+        switch ch {
+        case "0", "o", "о": return "о"
+        case "1", "i", "і": return "и"
+        case "3", "e", "е": return "е"
+        case "4", "a", "@", "а": return "а"
+        case "5", "s", "$", "с", "c": return "с"
+        case "7", "t", "т": return "т"
+        case "8", "в": return "в"
+        case "b", "б": return "б"
+        case "d", "д": return "д"
+        case "k", "к": return "к"
+        case "x", "х": return "кс"
+        case "v", "w": return "в"
+        case "n", "н": return "н"
+        case "r", "р": return "р"
+        case "p", "п": return "п"
+        case "m", "м": return "м"
+        case "z", "з": return "з"
+        case "g", "г": return "г"
+        case "f", "ф": return "ф"
+        default:
+            guard ch.unicodeScalars.count == 1, let scalar = ch.unicodeScalars.first else {
+                return nil
+            }
+            return (0x0400...0x04FF).contains(Int(scalar.value)) ? String(ch) : nil
+        }
     }
 
     private func containsPattern(_ pattern: String, normalized: String, compacted: String) -> Bool {
