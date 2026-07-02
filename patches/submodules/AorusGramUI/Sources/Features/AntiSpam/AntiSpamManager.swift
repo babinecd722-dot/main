@@ -164,10 +164,10 @@ final class AntiSpamManager {
         // One-time repair: earlier builds auto-blocked far too aggressively and could bury
         // real contacts/channels. Wipe the accumulated block list once and force auto-block
         // off, so everyone the user actually knows is reachable again.
-        if !UserDefaults.standard.bool(forKey: "aorusgram_antispam_repair_v3") {
+        if !UserDefaults.standard.bool(forKey: "aorusgram_antispam_repair_v4") {
             blockedPeerIds = []
             autoBlock = false
-            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v3")
+            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v4")
             save()
         }
         mirrorFlatState()
@@ -402,16 +402,9 @@ final class AntiSpamManager {
         let verdict = existingVerdict ?? check(peerId: peerId, text: text)
         guard verdict.isSpam else { return }
 
-        var userInfo: [String: Any] = ["peerId": peerId, "reason": verdict.reason.description]
-        if let messageId {
-            userInfo["msgId"] = NSNumber(value: messageId)
-        }
-        NotificationCenter.default.post(
-            name: .aorusSpamDetected,
-            object: nil,
-            userInfo: userInfo
-        )
-
+        // The alert is posted by the single source of truth — the inline prefilter in
+        // TelegramCore — so we do NOT post it again here (that produced a duplicate toast).
+        // This path only performs the optional auto-block.
         if autoBlock {
             blockPeer(peerId)
         }
