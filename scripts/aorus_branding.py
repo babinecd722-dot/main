@@ -2657,10 +2657,14 @@ def patch_incoming_message_hook(tg: Path) -> None:
     if "aorusgram.didReceiveMessage" in t:
         upgraded = t
         upgraded = upgraded.replace(
+            "                let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
+            "                let aorusStopWordsOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_stopwords_protection\") as? Bool) ?? true\n"
             "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
-            "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
+            "                let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
             "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
+            "                let aorusStopWordsOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_stopwords_protection\") as? Bool) ?? true\n"
+            "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
         )
         upgraded = upgraded.replace(
