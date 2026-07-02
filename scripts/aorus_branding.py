@@ -4432,50 +4432,54 @@ def patch_profile_report_button(tg: Path) -> None:
     """Optionally show Telegram's native Report action in the profile "More" menu.
 
     The user-facing switch lives in AorusGramUI and mirrors its value to
-    aorusgram_profile_report_button. When enabled, this inserts a Report row directly
-    above the destructive Block action in PeerInfoScreenPerformButtonAction.swift.
+    aorusgram_profile_report_button. When enabled, this inserts a Report row in the
+    user profile More menu, directly above Telegram's destructive Block action.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenPerformButtonAction.swift"
     if not path.is_file():
         print("PeerInfoScreenPerformButtonAction.swift not found, skip profile report button")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusgram_profile_report_button" in t:
+    sentinel = "// AorusGram: profile report button"
+    if sentinel in t:
         print("Profile report button: already injected")
         return
 
     item = (
-        "                    if UserDefaults.standard.bool(forKey: \"aorusgram_profile_report_button\") {\n"
-        "                        items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Пожаловаться\" : \"Report\", icon: { theme in\n"
-        "                            return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Report\"), color: theme.contextMenu.primaryColor)\n"
-        "                        }, action: { [weak self] contextController, f in\n"
-        "                            f(.dismissWithoutContent)\n"
-        "                            guard let strongSelf = self else {\n"
-        "                                return\n"
-        "                            }\n"
-        "                            strongSelf.openReport(type: .default, contextController: contextController, backAction: nil)\n"
+        f"                    {sentinel}\n"
+        "                    if UserDefaults.standard.bool(forKey: \"aorusgram_profile_report_button\") && user.id != strongSelf.context.account.peerId && !user.isDeleted {\n"
+        "                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.ReportPeer_Report, icon: { theme in\n"
+        "                            generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Report\"), color: theme.contextMenu.primaryColor)\n"
+        "                        }, action: { [weak self] c, f in\n"
+        "                            self?.openReport(type: .default, contextController: c, backAction: { c in\n"
+        "                                if let mainItemsImpl = mainItemsImpl {\n"
+        "                                    c.setItems(mainItemsImpl() |> map { ContextController.Items(content: .list($0)) }, minHeight: nil, animated: true)\n"
+        "                                }\n"
+        "                            })\n"
         "                        })))\n"
         "                    }\n"
     )
 
     anchors = [
-        "                    items.append(.action(ContextMenuActionItem(text: presentationData.strings.UserInfo_Block",
-        "                    items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.UserInfo_Block",
-        "                    items.append(.action(ContextMenuActionItem(text: strings.UserInfo_Block",
+        "                    if strongSelf.peerId.namespace == Namespaces.Peer.CloudUser && user.botInfo == nil && !user.flags.contains(.isSupport) {\n"
+        "                        if data.isContact {\n",
+        "                    if strongSelf.peerId.namespace == Namespaces.Peer.CloudUser, user.botInfo == nil, !user.flags.contains(.isSupport) {\n"
+        "                        if data.isContact {\n",
+        "                    items.append(.action(ContextMenuActionItem(text: presentationData.strings.Conversation_BlockUser",
+        "                    items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_BlockUser",
     ]
     applied = 0
     for anchor in anchors:
         if anchor in t:
-            count = t.count(anchor)
-            t = t.replace(anchor, item + anchor)
-            applied += count
+            t = t.replace(anchor, item + anchor, 1)
+            applied = 1
             break
 
     if applied:
         path.write_text(t, encoding="utf-8")
-        print(f"Profile report button: injected Report item above Block ({applied}x)")
+        print(f"Profile report button: injected Report item into user More menu ({applied}x)")
     else:
-        print("WARNING: PeerInfoScreenPerformButtonAction Block anchor not found — profile Report item NOT added")
+        print("WARNING: PeerInfoScreenPerformButtonAction user Block anchor not found — profile Report item NOT added")
 
 
 def patch_unlimited_pinned_chats(tg: Path) -> None:
