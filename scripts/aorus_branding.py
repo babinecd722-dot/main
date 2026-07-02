@@ -2650,12 +2650,16 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    // already know must never lose messages \u2014 unsolicited spam is a DM-from-a-\n"
         "                    // stranger problem, so scope the hiding there.\n"
         "                    if mid.peerId.namespace == Namespaces.Peer.CloudUser, !transaction.isPeerContact(peerId: mid.peerId) {\n"
-        "                        let identity = storeMsg.authorId?.toInt64() ?? mid.peerId.toInt64()\n"
-        "                        if identity != 777000 && !aorusAllowedPeerIds.contains(identity) {\n"
+        "                        let peerIdentity = mid.peerId.toInt64()\n"
+        "                        let authorIdentity = storeMsg.authorId?.toInt64()\n"
+        "                        let identity = authorIdentity ?? peerIdentity\n"
+        "                        let aorusIsAllowedPeer = aorusAllowedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusAllowedPeerIds.contains(authorIdentity!))\n"
+        "                        let aorusIsBlockedPeer = aorusBlockedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusBlockedPeerIds.contains(authorIdentity!))\n"
+        "                        if identity != 777000 && !aorusIsAllowedPeer {\n"
         "                            // Priority: a peer in the blocked list is hidden with the\n"
         "                            // \"blocked\" alert. Auto-block only controls adding new peers;\n"
         "                            // already-blocked peers still stay blocked.\n"
-        "                            if aorusBlockedPeerIds.contains(identity) {\n"
+        "                            if aorusIsBlockedPeer {\n"
         "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
         "                                return nil\n"
         "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n"
@@ -2703,11 +2707,31 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                            if aorusBlockedPeerIds.contains(identity) {\n",
         )
         upgraded = upgraded.replace(
+            "                        let identity = storeMsg.authorId?.toInt64() ?? mid.peerId.toInt64()\n"
+            "                        if identity != 777000 && !aorusAllowedPeerIds.contains(identity) {\n",
+            "                        let peerIdentity = mid.peerId.toInt64()\n"
+            "                        let authorIdentity = storeMsg.authorId?.toInt64()\n"
+            "                        let identity = authorIdentity ?? peerIdentity\n"
+            "                        let aorusIsAllowedPeer = aorusAllowedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusAllowedPeerIds.contains(authorIdentity!))\n"
+            "                        let aorusIsBlockedPeer = aorusBlockedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusBlockedPeerIds.contains(authorIdentity!))\n"
+            "                        if identity != 777000 && !aorusIsAllowedPeer {\n",
+        )
+        upgraded = upgraded.replace(
             "                            if aorusBlockedPeerIds.contains(identity) {\n"
             "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
             "                                return nil\n"
             "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
+            "                            if aorusIsBlockedPeer {\n"
+            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
+            "                                return nil\n"
+            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
+        )
+        upgraded = upgraded.replace(
             "                            if aorusBlockedPeerIds.contains(identity) {\n"
+            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
+            "                                return nil\n"
+            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
+            "                            if aorusIsBlockedPeer {\n"
             "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
             "                                return nil\n"
             "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",

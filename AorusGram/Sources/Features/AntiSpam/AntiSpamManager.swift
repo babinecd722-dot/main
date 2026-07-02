@@ -3,6 +3,7 @@ import Security
 
 final class AntiSpamManager {
     static let shared = AntiSpamManager()
+    static let stateChangedNotification = Notification.Name("aorusgram_antispam_state_changed")
     private init() { load() }
 
     private let defaultsKey = "aorusgram_antispam"
@@ -201,6 +202,7 @@ final class AntiSpamManager {
             keychainWrite(data)
         }
         mirrorFlatState()
+        NotificationCenter.default.post(name: Self.stateChangedNotification, object: nil)
     }
 
     private func mirrorFlatState() {

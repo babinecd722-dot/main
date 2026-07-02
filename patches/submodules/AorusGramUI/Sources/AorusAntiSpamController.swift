@@ -27,6 +27,15 @@ private struct ASPeer: Equatable {
     var name: String
 }
 
+private final class ASObserverHolder {
+    var token: NSObjectProtocol?
+    deinit {
+        if let token = self.token {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+}
+
 private struct ASState: Equatable {
     var threatProtection: Bool
     var spamProtection: Bool
@@ -466,6 +475,12 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
             }
             updateState { current in
                 var next = current
+                next.threatProtection = AntiSpamManager.shared.threatProtection
+                next.spamProtection = AntiSpamManager.shared.spamProtection
+                next.stopWordsProtection = AntiSpamManager.shared.stopWordsProtection
+                next.autoBlock = AntiSpamManager.shared.autoBlock
+                next.textCleanup = AntiSpamManager.shared.textCleanup
+                next.autoReport = AntiSpamManager.shared.autoReport
                 next.blocked = blockedIds.map { ASPeer(id: $0, name: names[$0] ?? "\($0)") }
                 next.allowed = allowedIds.map { ASPeer(id: $0, name: names[$0] ?? "\($0)") }
                 next.keywords = AntiSpamManager.shared.keywords
@@ -475,12 +490,23 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
         if allIds.isEmpty {
             updateState { current in
                 var next = current
+                next.threatProtection = AntiSpamManager.shared.threatProtection
+                next.spamProtection = AntiSpamManager.shared.spamProtection
+                next.stopWordsProtection = AntiSpamManager.shared.stopWordsProtection
+                next.autoBlock = AntiSpamManager.shared.autoBlock
+                next.textCleanup = AntiSpamManager.shared.textCleanup
+                next.autoReport = AntiSpamManager.shared.autoReport
                 next.blocked = []
                 next.allowed = []
                 next.keywords = AntiSpamManager.shared.keywords
                 return next
             }
         }
+    }
+
+    let observerHolder = ASObserverHolder()
+    observerHolder.token = NotificationCenter.default.addObserver(forName: AntiSpamManager.stateChangedNotification, object: nil, queue: .main) { _ in
+        reloadPeers()
     }
 
     let arguments = ASArguments(
@@ -565,6 +591,7 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
     let signal = statePromise.get()
         |> deliverOnMainQueue
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
+            let _ = observerHolder
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = asEntries(state: state, theme: presentationData.theme)
             let isRu = AorusLang.current == .ru
