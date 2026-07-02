@@ -517,19 +517,23 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
             reloadPeers()
         },
         addException: {
-            let selectionController = context.sharedContext.makeContactSelectionController(ContactSelectionControllerParams(
+            // Exceptions must be pickable from ALL chats, not just contacts: the whole point
+            // is to whitelist a NON-contact whose messages the filter would otherwise hide
+            // (contacts are never filtered in the first place). A contacts-only picker made
+            // the feature useless — the very peer you want to trust never appeared. Use the
+            // full peer selector (chat list + global search + contacts).
+            let aorusExRu = (UserDefaults.standard.string(forKey: "aorusgram_lang") ?? (Locale.preferredLanguages.first ?? "en")).hasPrefix("ru")
+            let selectionController = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(
                 context: context,
-                autoDismiss: false,
-                title: { strings in return strings.Contacts_Title }
+                filter: [],
+                hasContactSelector: true,
+                title: aorusExRu ? "Добавить исключение" : "Add exception"
             ))
-            actionsDisposable.add((selectionController.result
-            |> deliverOnMainQueue).start(next: { [weak selectionController] result in
+            selectionController.peerSelected = { [weak selectionController] peer, _ in
+                AntiSpamManager.shared.allowPeer(peer.id.toInt64())
+                reloadPeers()
                 selectionController?.dismiss()
-                if let (peers, _, _, _, _, _) = result, let first = peers.first, case let .peer(peer, _, _) = first {
-                    AntiSpamManager.shared.allowPeer(peer.id.toInt64())
-                    reloadPeers()
-                }
-            }))
+            }
             weakController?.push(selectionController)
         },
         setNewKeyword: { text in

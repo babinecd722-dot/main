@@ -162,12 +162,15 @@ final class AntiSpamManager {
         stopWordsProtection = saved.stopWordsProtection ?? true
         textCleanup = saved.textCleanup ?? true
         // One-time repair: earlier builds auto-blocked far too aggressively and could bury
-        // real contacts/channels. Wipe the accumulated block list once and force auto-block
-        // off, so everyone the user actually knows is reachable again.
-        if !UserDefaults.standard.bool(forKey: "aorusgram_antispam_repair_v4") {
+        // real contacts/channels. Even after the v4 repair, a build that still had auto-block
+        // enabled could re-accumulate a phantom block list which then leaks into the flat
+        // mirror the TelegramCore prefilter reads — so a non-blocked stranger keeps raising a
+        // bogus "blocked" alert. Wipe the accumulated block list once more and force auto-block
+        // off. From here the block list is manual-only, so it can never desync from reality.
+        if !UserDefaults.standard.bool(forKey: "aorusgram_antispam_repair_v5") {
             blockedPeerIds = []
             autoBlock = false
-            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v4")
+            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v5")
             save()
         }
         mirrorFlatState()
