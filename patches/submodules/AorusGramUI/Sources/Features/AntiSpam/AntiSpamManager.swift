@@ -1,10 +1,13 @@
 import Foundation
+import Security
 
 final class AntiSpamManager {
     static let shared = AntiSpamManager()
     private init() { load() }
 
     private let defaultsKey = "aorusgram_antispam"
+    private let keychainService = "aorusgram.antispam.state"
+    private let keychainAccount = "settings.v1"
     private(set) var isEnabled = true
     // Auto-block is OFF by default: the client never silently blocks anyone. Blocking is
     // a manual choice (or an explicit action from a notification). This is the single most
@@ -146,10 +149,17 @@ final class AntiSpamManager {
     // MARK: - Persistence
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+        let defaultsData = UserDefaults.standard.data(forKey: defaultsKey)
+        let keychainData = keychainRead()
+        let loadedFromKeychain = defaultsData == nil && keychainData != nil
+        guard let data = defaultsData ?? keychainData,
               let saved = try? JSONDecoder().decode(SavedState.self, from: data) else {
             mirrorFlatState()
             return
+        }
+        if loadedFromKeychain {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v4")
         }
         isEnabled  = saved.isEnabled
         autoBlock  = saved.autoBlock
@@ -186,7 +196,10 @@ final class AntiSpamManager {
             stopWordsProtection: stopWordsProtection,
             textCleanup: textCleanup
         )
-        UserDefaults.standard.set(try? JSONEncoder().encode(state), forKey: defaultsKey)
+        if let data = try? JSONEncoder().encode(state) {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+            keychainWrite(data)
+        }
         mirrorFlatState()
     }
 
@@ -423,6 +436,35 @@ final class AntiSpamManager {
         var spamProtection: Bool?
         var stopWordsProtection: Bool?
         var textCleanup: Bool?
+    }
+
+    private func keychainWrite(_ data: Data) {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    private func keychainRead() -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else {
+            return nil
+        }
+        return data
     }
 
     private var effectiveEnabled: Bool {

@@ -683,7 +683,16 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
                     "                        let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
                     "                        aorusQuoted = aorusRu ? \"\\u{041c}\\u{0435}\\u{0434}\\u{0438}\\u{0430}\\u{0444}\\u{0430}\\u{0439}\\u{043b}\" : \"Media\"\n"
                     "                    }\n"
-                    "                    UserDefaults.standard.set(aorusQuoted, forKey: " + (KEY % ("aorusReplyMsg.id.peerId.toInt64()", "aorusReplyMsg.id.id")) + ")\n"
+                    "                    let aorusDelReplyKey = " + (KEY % ("aorusReplyMsg.id.peerId.toInt64()", "aorusReplyMsg.id.id")) + "\n"
+                    "                    UserDefaults.standard.set(aorusQuoted, forKey: aorusDelReplyKey)\n"
+                    "                    let aorusDelReplyId = aorusReplyMsg.id\n"
+                    "                    for aorusDelay in [0.25, 0.9, 1.8] {\n"
+                    "                        DispatchQueue.main.asyncAfter(deadline: .now() + aorusDelay) {\n"
+                    "                            if UserDefaults.standard.string(forKey: aorusDelReplyKey) != nil {\n"
+                    "                                interfaceInteraction.setupReplyMessage(aorusDelReplyId, nil, { _, completed in completed() })\n"
+                    "                            }\n"
+                    "                        }\n"
+                    "                    }\n"
                     "                }\n"
                 )
                 t = t.replace(anchor, replacement, 1)
@@ -718,7 +727,16 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
                 "                    let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
                 "                    aorusQuoted = aorusRu ? \"\\u{041c}\\u{0435}\\u{0434}\\u{0438}\\u{0430}\\u{0444}\\u{0430}\\u{0439}\\u{043b}\" : \"Media\"\n"
                 "                }\n"
-                "                UserDefaults.standard.set(aorusQuoted, forKey: " + (KEY % ("messageId.peerId.toInt64()", "messageId.id")) + ")\n"
+                "                let aorusDelReplyKey = " + (KEY % ("messageId.peerId.toInt64()", "messageId.id")) + "\n"
+                "                UserDefaults.standard.set(aorusQuoted, forKey: aorusDelReplyKey)\n"
+                "                let aorusDelReplyId = messageId\n"
+                "                for aorusDelay in [0.25, 0.9, 1.8] {\n"
+                "                    DispatchQueue.main.asyncAfter(deadline: .now() + aorusDelay) { [weak self] in\n"
+                "                        if UserDefaults.standard.string(forKey: aorusDelReplyKey) != nil {\n"
+                "                            self?.interfaceInteraction?.setupReplyMessage(aorusDelReplyId, nil, { _, f in f() })\n"
+                "                        }\n"
+                "                    }\n"
+                "                }\n"
                 "            }\n"
                 "        }, canSetupReply: { [weak self] message in\n"
             )
@@ -734,12 +752,14 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
             send_inject = (
                 "            var messages = messages\n"
                 "            var shouldOpenScheduledMessages = false\n"
+                "            var aorusConsumedDeletedReply = false\n"
                 "            // AorusGram: deleted-reply blockquote on send\n"
                 "            messages = messages.map { aorusMessage -> EnqueueMessage in\n"
                 "                guard case let .message(aorusText, aorusAttributes, aorusInlineStickers, aorusMediaReference, aorusThreadId, aorusReplyToMessageId, aorusReplyToStoryId, aorusLocalGroupingKey, aorusCorrelationId, aorusBubbleUp) = aorusMessage else { return aorusMessage }\n"
                 "                guard let aorusReply = aorusReplyToMessageId else { return aorusMessage }\n"
                 "                let aorusDelKey = " + (KEY % ("aorusReply.messageId.peerId.toInt64()", "aorusReply.messageId.id")) + "\n"
                 "                guard let aorusQuoted = UserDefaults.standard.string(forKey: aorusDelKey) else { return aorusMessage }\n"
+                "                aorusConsumedDeletedReply = true\n"
                 "                UserDefaults.standard.removeObject(forKey: aorusDelKey)\n"
                 "                let aorusPrefix = aorusQuoted + \"\\n\"\n"
                 "                let aorusShift = (aorusPrefix as NSString).length\n"
@@ -763,6 +783,11 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
                 "                    aorusNewAttributes.append(TextEntitiesMessageAttribute(entities: [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: false))]))\n"
                 "                }\n"
                 "                return .message(text: aorusNewText, attributes: aorusNewAttributes, inlineStickers: aorusInlineStickers, mediaReference: aorusMediaReference, threadId: aorusThreadId, replyToMessageId: nil, replyToStoryId: aorusReplyToStoryId, localGroupingKey: aorusLocalGroupingKey, correlationId: aorusCorrelationId, bubbleUpEmojiOrStickersets: aorusBubbleUp)\n"
+                "            }\n"
+                "            if aorusConsumedDeletedReply {\n"
+                "                self.updateChatPresentationInterfaceState(animated: false, interactive: false, {\n"
+                "                    $0.updatedInterfaceState { $0.withUpdatedReplyMessageSubject(nil).withUpdatedSendMessageEffect(nil).withUpdatedPostSuggestionState(nil) }\n"
+                "                })\n"
                 "            }\n"
             )
             t2 = t2.replace(send_anchor, send_inject, 1)
@@ -2510,6 +2535,11 @@ def patch_incoming_message_hook(tg: Path) -> None:
     prefilter_code = (
         "                // AorusGram: native anti-spam prefilter (runs before messages enter local history)\n"
         "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n"
+        "                if !UserDefaults.standard.bool(forKey: \"aorusgram_antispam_repair_v4\") {\n"
+        "                    UserDefaults.standard.set([], forKey: \"aorusgram_antispam_blocked_peer_ids\")\n"
+        "                    UserDefaults.standard.set(false, forKey: \"aorusgram_antispam_auto_block\")\n"
+        "                    UserDefaults.standard.set(true, forKey: \"aorusgram_antispam_repair_v4\")\n"
+        "                }\n"
         "                let aorusBlockedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_blocked_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "                let aorusUserKeywords = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_keywords\") ?? []\n"
         "                let aorusAllowedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_allowed_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
@@ -2622,9 +2652,9 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    if mid.peerId.namespace == Namespaces.Peer.CloudUser, !transaction.isPeerContact(peerId: mid.peerId) {\n"
         "                        let identity = storeMsg.authorId?.toInt64() ?? mid.peerId.toInt64()\n"
         "                        if identity != 777000 && !aorusAllowedPeerIds.contains(identity) {\n"
-        "                            // Priority: a peer in the block list is ALWAYS hidden with the\n"
-        "                            // \"blocked\" alert — that wins over threat/spam. So the \"blocked\"\n"
-        "                            // alert appears if and only if the peer is really in the list.\n"
+        "                            // Priority: a peer in the blocked list is hidden with the\n"
+        "                            // \"blocked\" alert. Auto-block only controls adding new peers;\n"
+        "                            // already-blocked peers still stay blocked.\n"
         "                            if aorusBlockedPeerIds.contains(identity) {\n"
         "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
         "                                return nil\n"
@@ -2647,16 +2677,44 @@ def patch_incoming_message_hook(tg: Path) -> None:
 
     if "aorusgram.didReceiveMessage" in t:
         upgraded = t
+        if "aorusgram_antispam_repair_v4" not in upgraded:
+            upgraded = upgraded.replace(
+                "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n",
+                "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n"
+                "                if !UserDefaults.standard.bool(forKey: \"aorusgram_antispam_repair_v4\") {\n"
+                "                    UserDefaults.standard.set([], forKey: \"aorusgram_antispam_blocked_peer_ids\")\n"
+                "                    UserDefaults.standard.set(false, forKey: \"aorusgram_antispam_auto_block\")\n"
+                "                    UserDefaults.standard.set(true, forKey: \"aorusgram_antispam_repair_v4\")\n"
+                "                }\n",
+                1,
+            )
         upgraded = upgraded.replace(
             "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
             "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
-            "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
         )
         upgraded = upgraded.replace(
-            "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
+            "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n",
+            "",
+        )
+        upgraded = upgraded.replace(
+            "                            if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) {\n",
+            "                            if aorusBlockedPeerIds.contains(identity) {\n",
+        )
+        upgraded = upgraded.replace(
+            "                            if aorusBlockedPeerIds.contains(identity) {\n"
+            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
+            "                                return nil\n"
+            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
+            "                            if aorusBlockedPeerIds.contains(identity) {\n"
+            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
+            "                                return nil\n"
+            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
+        )
+        upgraded = upgraded.replace(
             "                    if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) { return true }\n",
+            "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
         )
         upgraded = upgraded.replace(
             "                        if aorusThreatPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return true }\n"

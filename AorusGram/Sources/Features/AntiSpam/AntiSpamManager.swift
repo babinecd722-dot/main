@@ -1,15 +1,21 @@
 import Foundation
+import Security
 
 final class AntiSpamManager {
     static let shared = AntiSpamManager()
     private init() { load() }
 
     private let defaultsKey = "aorusgram_antispam"
+    private let keychainService = "aorusgram.antispam.state"
+    private let keychainAccount = "settings.v1"
     private(set) var isEnabled = true
     // Auto-block is OFF by default: the client never silently blocks anyone. Blocking is
     // a manual choice (or an explicit action from a notification). This is the single most
     // important safeguard against false positives ever cutting off real contacts/channels.
     private(set) var autoBlock = false
+    // Auto-send the threat report when the alert times out (the alert shows "Cancel").
+    // OFF by default: without it the alert shows a manual "Report" button, as before.
+    private(set) var autoReport = false
     private(set) var keywords: [String] = []
     private(set) var blockedPeerIds: Set<Int64> = []
     private(set) var allowedPeerIds: Set<Int64> = []
@@ -28,17 +34,22 @@ final class AntiSpamManager {
     // ordinary spam so such messages raise the dedicated "threat" alert (with a one-tap
     // Report action) instead of a plain spam notice.
     private let threatPatterns: [String] = [
-        // RU — doxxing / deanon / OSINT
-        "деанон", "сдеанон", "докс", "доксинг", "докс тебя", "задокс", "задокш", "пробью", "пробив по",
-        "пробить человека", "вычислю по ip", "вычислю тебя", "найду твой адрес",
-        "твой домашний адрес", "знаю где ты живешь", "знаю твой адрес", "найду где ты живешь",
-        "слил твои данные", "сольём данные", "сольем данные", "разошлю твои", "паспортные данные",
-        "твой паспорт", "осинт",
+        // RU — doxxing / deanon / OSINT. All entries are either phrases or roots with no
+        // innocent-word collision. NOTE: never add a bare "докс" — it is a substring of
+        // "парадокс"/"ортодокс" and would false-fire; use the phrase/prefix forms below.
+        "деанон", "сдеанон", "доксинг", "докс тебя", "докс на тебя", "тебя докс",
+        "заказан докс", "закажу докс", "сделаю докс", "заказали докс", "задокс", "задокш",
+        "осинт", "пробив по базе", "пробью по базе", "пробью тебя", "пробить человека",
+        "вычислю по ip", "вычислю тебя", "найду твой адрес", "найду где ты живешь",
+        "твой домашний адрес", "знаю где ты живешь", "знаю твой адрес", "приеду по адресу",
+        "приеду к тебе домой", "слил твои данные", "сольют твои данные", "сольём данные",
+        "сольем данные", "разошлю твои данные", "выложу твои данные", "опубликую твои данные",
+        "паспортные данные", "твой паспорт",
         // RU — swatting / physical threats
-        "сваткну", "закажу сват", "приедет сват", "отправлю сват", "закажу тебя",
-        "приеду к тебе домой", "приеду по адресу", "тебя закопаю", "тебя найдут", "тебе конец",
+        "сваткну", "закажу сват", "заказан сват", "заказали сват", "приедет сват",
+        "отправлю сват", "сватинг", "тебя закопаю", "убью тебя", "тебя убью", "прирежу тебя",
         // EN — doxxing / OSINT
-        "dox", "doxx", "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
+        "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
         "leak your info", "your home address", "your ip address", "track your ip",
         "i know where you live", "i have your address", "i will find you",
         // EN — swatting / physical threats
@@ -50,8 +61,7 @@ final class AntiSpamManager {
     // Cyrillic "О"/"Х"), and separators (d.o.x, d o x). All tokens are stored already
     // de-obfuscated (lowercase latin, no separators).
     private let threatTokensLatin: [String] = [
-        "dox", "doxx", "doxxing", "deanon", "deanonim", "swat", "swatting",
-        "osint", "probiv", "proboj", "slivdannyh", "tvojadres", "znajugdezivesh",
+        "doxxing", "doxxyou", "iwilldox", "deanonim", "swatting", "swatyou", "iwillswat",
         "iknowwhereyoulive", "ihaveyouraddress", "iwillfindyou", "iwillkillyou",
         "youaredead", "leakyourdata", "youripaddress", "trackyourip"
     ]
@@ -73,7 +83,9 @@ final class AntiSpamManager {
         "recovery phrase", "private key", "send 1 btc", "elon musk giveaway",
         "double your btc", "быстрый заработок", "легкий заработок", "легкие деньги",
         "работа без опыта", "удаленная работа без опыта", "пиши в лс заработок", "заработок в интернете",
-        "ищем сотрудников на удаленку", "оплата ежедневно", "заработок от 5000", "easy money",
+        "ищем сотрудников на удаленку", "оплата ежедневно", "заработок от 5000",
+        "предлагаю заработок", "заработок по", "тысяч в час", "тысяч в день", "тысяч в неделю",
+        "заработок без вложений", "доход в час", "easy money",
         "make money fast", "work from home no experience", "be your own boss", "hiring remote workers",
         "earn money online", "ваш аккаунт заблокирован", "аккаунт будет удален", "подтвердите аккаунт",
         "верифицируйте аккаунт", "введите код", "отправьте код", "пришлите код",
@@ -137,13 +149,21 @@ final class AntiSpamManager {
     // MARK: - Persistence
 
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+        let defaultsData = UserDefaults.standard.data(forKey: defaultsKey)
+        let keychainData = keychainRead()
+        let loadedFromKeychain = defaultsData == nil && keychainData != nil
+        guard let data = defaultsData ?? keychainData,
               let saved = try? JSONDecoder().decode(SavedState.self, from: data) else {
             mirrorFlatState()
             return
         }
+        if loadedFromKeychain {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v4")
+        }
         isEnabled  = saved.isEnabled
         autoBlock  = saved.autoBlock
+        autoReport = saved.autoReport ?? false
         keywords   = saved.keywords
         blockedPeerIds = Set(saved.blockedPeerIds)
         allowedPeerIds = Set(saved.allowedPeerIds ?? [])
@@ -154,10 +174,10 @@ final class AntiSpamManager {
         // One-time repair: earlier builds auto-blocked far too aggressively and could bury
         // real contacts/channels. Wipe the accumulated block list once and force auto-block
         // off, so everyone the user actually knows is reachable again.
-        if !UserDefaults.standard.bool(forKey: "aorusgram_antispam_repair_v3") {
+        if !UserDefaults.standard.bool(forKey: "aorusgram_antispam_repair_v4") {
             blockedPeerIds = []
             autoBlock = false
-            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v3")
+            UserDefaults.standard.set(true, forKey: "aorusgram_antispam_repair_v4")
             save()
         }
         mirrorFlatState()
@@ -167,6 +187,7 @@ final class AntiSpamManager {
         let state = SavedState(
             isEnabled:      isEnabled,
             autoBlock:      autoBlock,
+            autoReport:     autoReport,
             keywords:       keywords,
             blockedPeerIds: Array(blockedPeerIds),
             allowedPeerIds: Array(allowedPeerIds),
@@ -175,7 +196,10 @@ final class AntiSpamManager {
             stopWordsProtection: stopWordsProtection,
             textCleanup: textCleanup
         )
-        UserDefaults.standard.set(try? JSONEncoder().encode(state), forKey: defaultsKey)
+        if let data = try? JSONEncoder().encode(state) {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+            keychainWrite(data)
+        }
         mirrorFlatState()
     }
 
@@ -190,12 +214,14 @@ final class AntiSpamManager {
         UserDefaults.standard.set(stopWordsProtection, forKey: "aorusgram_antispam_stopwords_protection")
         UserDefaults.standard.set(textCleanup, forKey: "aorusgram_antispam_text_cleanup")
         UserDefaults.standard.set(autoBlock, forKey: "aorusgram_antispam_auto_block")
+        UserDefaults.standard.set(autoReport, forKey: "aorusgram_antispam_auto_report")
     }
 
     // MARK: - API
 
     func setEnabled(_ value: Bool)   { isEnabled = value; save() }
     func setAutoBlock(_ value: Bool) { autoBlock = value; save() }
+    func setAutoReport(_ value: Bool) { autoReport = value; save() }
     func setThreatProtection(_ value: Bool)   { threatProtection = value; save() }
     func setSpamProtection(_ value: Bool)      { spamProtection = value; save() }
     func setStopWordsProtection(_ value: Bool) { stopWordsProtection = value; save() }
@@ -389,16 +415,9 @@ final class AntiSpamManager {
         let verdict = existingVerdict ?? check(peerId: peerId, text: text)
         guard verdict.isSpam else { return }
 
-        var userInfo: [String: Any] = ["peerId": peerId, "reason": verdict.reason.description]
-        if let messageId {
-            userInfo["msgId"] = NSNumber(value: messageId)
-        }
-        NotificationCenter.default.post(
-            name: .aorusSpamDetected,
-            object: nil,
-            userInfo: userInfo
-        )
-
+        // The alert is posted by the single source of truth — the inline prefilter in
+        // TelegramCore — so we do NOT post it again here (that produced a duplicate toast).
+        // This path only performs the optional auto-block.
         if autoBlock {
             blockPeer(peerId)
         }
@@ -409,6 +428,7 @@ final class AntiSpamManager {
     private struct SavedState: Codable {
         var isEnabled: Bool
         var autoBlock: Bool
+        var autoReport: Bool?
         var keywords: [String]
         var blockedPeerIds: [Int64]
         var allowedPeerIds: [Int64]?   // optional: tolerant decode of states saved before exceptions existed
@@ -416,6 +436,35 @@ final class AntiSpamManager {
         var spamProtection: Bool?
         var stopWordsProtection: Bool?
         var textCleanup: Bool?
+    }
+
+    private func keychainWrite(_ data: Data) {
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        SecItemAdd(add as CFDictionary, nil)
+    }
+
+    private func keychainRead() -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: keychainAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else {
+            return nil
+        }
+        return data
     }
 
     private var effectiveEnabled: Bool {
