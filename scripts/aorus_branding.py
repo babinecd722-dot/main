@@ -2471,6 +2471,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                let aorusAllowedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_allowed_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "                let aorusThreatProtection = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_threat_protection\") as? Bool) ?? true\n"
         "                let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
+        "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
         "                let aorusStopWordsOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_stopwords_protection\") as? Bool) ?? true\n"
         "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
         "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n"
@@ -2586,7 +2587,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                        if identity != 777000 && !aorusIsAllowedPeer {\n"
         "                            if let threatReason = aorusThreatReason(storeMsg.text) {\n"
         "                                aorusPostSpamNotice(identity, mid.id, \"threat:\" + threatReason)\n"
-        "                            } else if aorusIsBlockedPeer {\n"
+        "                            } else if aorusAutoBlockOn && aorusIsBlockedPeer {\n"
         "                                aorusPostSpamNotice(aorusBlockedNoticePeerId, mid.id, \"blockedUser\")\n"
         "                                return nil\n"
         "                            } else if let hideReason = aorusSpamHideReason(identity, storeMsg.text) {\n"
@@ -2610,11 +2611,12 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
             "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
+            "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
         )
         upgraded = upgraded.replace(
-            "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n",
-            "",
+            "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
+            "                    if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) { return true }\n",
         )
         upgraded = upgraded.replace(
             "                let aorusThreatTokensLatin = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_tokens_latin\") ?? []\n",
@@ -2626,8 +2628,10 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                let aorusDeobMap: [Character: Character] = [\"0\": \"o\", \"1\": \"i\", \"3\": \"e\", \"4\": \"a\", \"5\": \"s\", \"6\": \"b\", \"7\": \"t\", \"8\": \"b\", \"9\": \"g\", \"@\": \"a\", \"$\": \"s\", \"а\": \"a\", \"в\": \"b\", \"е\": \"e\", \"к\": \"k\", \"м\": \"m\", \"н\": \"h\", \"о\": \"o\", \"р\": \"p\", \"с\": \"c\", \"т\": \"t\", \"у\": \"y\", \"х\": \"x\", \"і\": \"i\", \"ѕ\": \"s\", \"ԁ\": \"d\", \"ј\": \"j\", \"ԛ\": \"q\"]\n",
         )
         upgraded = upgraded.replace(
-            "                    if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) { return true }\n",
-            "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
+            "                            if aorusBlockedPeerIds.contains(identity) {\n"
+            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n",
+            "                            if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) {\n"
+            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n",
         )
         upgraded = upgraded.replace(
             "                        let identity = storeMsg.authorId?.toInt64() ?? mid.peerId.toInt64()\n"
@@ -2655,12 +2659,6 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                        if identity != 777000 && !aorusIsAllowedPeer {\n",
         )
         upgraded = upgraded.replace(
-            "                            if aorusBlockedPeerIds.contains(identity) {\n"
-            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n",
-            "                            if aorusIsBlockedPeer {\n"
-            "                                aorusPostSpamNotice(aorusBlockedNoticePeerId, mid.id, \"blockedUser\")\n",
-        )
-        upgraded = upgraded.replace(
             "                            // Priority: a peer in the block list is ALWAYS hidden with the\n"
             "                            // \"blocked\" alert — that wins over threat/spam. So the \"blocked\"\n"
             "                            // alert appears if and only if the peer is really in the list.\n"
@@ -2671,7 +2669,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                                aorusPostSpamNotice(identity, mid.id, \"threat:\" + threatReason)\n",
             "                            if let threatReason = aorusThreatReason(storeMsg.text) {\n"
             "                                aorusPostSpamNotice(identity, mid.id, \"threat:\" + threatReason)\n"
-            "                            } else if aorusIsBlockedPeer {\n"
+            "                            } else if aorusAutoBlockOn && aorusIsBlockedPeer {\n"
             "                                aorusPostSpamNotice(aorusBlockedNoticePeerId, mid.id, \"blockedUser\")\n"
             "                                return nil\n",
         )
@@ -2683,7 +2681,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                                aorusPostSpamNotice(identity, mid.id, \"threat:\" + threatReason)\n",
             "                            if let threatReason = aorusThreatReason(storeMsg.text) {\n"
             "                                aorusPostSpamNotice(identity, mid.id, \"threat:\" + threatReason)\n"
-            "                            } else if aorusIsBlockedPeer {\n"
+            "                            } else if aorusAutoBlockOn && aorusIsBlockedPeer {\n"
             "                                aorusPostSpamNotice(aorusBlockedNoticePeerId, mid.id, \"blockedUser\")\n"
             "                                return nil\n",
         )
@@ -2887,6 +2885,7 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            let isFlood = reason == \"flood\" || reason == \"repeatedMessage\"\n"
         "            let isKeyword = reason == \"keyword\" || reason.hasPrefix(\"keyword\")\n"
         "            let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
+        "            let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
         "            if !aorusSpamProtectionOn && !isThreat && !isBlocked && !isKeyword { return }\n"
         "            // Exceptions are absolute: a peer from the allow list never produces any\n"
         "            // anti-spam notification, whatever the detector said. And \"Blocked\" is shown\n"
@@ -2895,11 +2894,13 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            let aorusAllowedNow = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_allowed_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "            if aorusAllowedNow.contains(aorusPeerId) { return }\n"
         "            if isBlocked {\n"
+        "                guard aorusAutoBlockOn else { return }\n"
         "                let aorusBlockedNow = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_blocked_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "                if !aorusBlockedNow.contains(aorusPeerId) { return }\n"
         "            }\n"
-        "            let cooldownKey = isThreat ? \"aorusgram_antispam_last_threat_toast\" : \"aorusgram_antispam_last_toast\"\n"
-        "            let cooldown: TimeInterval = isThreat ? 0.35 : 1.8\n"
+        "            let cooldownBucket = isThreat ? \"threat\" : (isBlocked ? \"blocked\" : (isFlood ? \"flood\" : (isKeyword ? \"keyword\" : \"spam\")))\n"
+        "            let cooldownKey = \"aorusgram_antispam_last_toast_\\(cooldownBucket)_\\(aorusPeerId)\"\n"
+        "            let cooldown: TimeInterval = isThreat ? 4.0 : (isBlocked ? 15.0 : (isFlood ? 8.0 : 6.0))\n"
         "            let lastToast = UserDefaults.standard.double(forKey: cooldownKey)\n"
         "            guard now - lastToast > cooldown else { return }\n"
         "            UserDefaults.standard.set(now, forKey: cooldownKey)\n"

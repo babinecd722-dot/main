@@ -151,14 +151,13 @@ final class AntiSpamManager {
     // MARK: - Persistence
 
     private func load() {
-        let flatBlockedPeerIds = Self.readFlatPeerIds(key: "aorusgram_antispam_blocked_peer_ids")
         let flatAllowedPeerIds = Self.readFlatPeerIds(key: "aorusgram_antispam_allowed_peer_ids")
         let defaultsData = UserDefaults.standard.data(forKey: defaultsKey)
         let keychainData = keychainRead()
         let loadedFromKeychain = defaultsData == nil && keychainData != nil
         guard let data = defaultsData ?? keychainData,
               let saved = try? JSONDecoder().decode(SavedState.self, from: data) else {
-            blockedPeerIds = flatBlockedPeerIds
+            blockedPeerIds = []
             allowedPeerIds = flatAllowedPeerIds
             mirrorFlatState()
             return
@@ -379,7 +378,7 @@ final class AntiSpamManager {
             }
         }
 
-        if blockedPeerIds.contains(peerId) {
+        if autoBlock && blockedPeerIds.contains(peerId) {
             return SpamVerdict(isSpam: true, reason: .blockedUser)
         }
 
@@ -447,17 +446,15 @@ final class AntiSpamManager {
         let verdict = existingVerdict ?? check(peerId: peerId, text: text)
         guard verdict.isSpam else { return }
 
-        if verdict.isThreat {
-            var userInfo: [String: Any] = ["peerId": NSNumber(value: peerId), "reason": verdict.reason.description]
-            if let messageId {
-                userInfo["msgId"] = NSNumber(value: messageId)
-            }
-            NotificationCenter.default.post(
-                name: .aorusSpamDetected,
-                object: nil,
-                userInfo: userInfo
-            )
+        var userInfo: [String: Any] = ["peerId": NSNumber(value: peerId), "reason": verdict.reason.description]
+        if let messageId {
+            userInfo["msgId"] = NSNumber(value: messageId)
         }
+        NotificationCenter.default.post(
+            name: .aorusSpamDetected,
+            object: nil,
+            userInfo: userInfo
+        )
 
         if autoBlock {
             blockPeer(peerId)
