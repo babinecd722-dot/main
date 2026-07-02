@@ -2517,7 +2517,6 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
         "                let aorusStopWordsOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_stopwords_protection\") as? Bool) ?? true\n"
         "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
-        "                let aorusAutoBlockOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_block\") as? Bool) ?? false\n"
         "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n"
         "                let aorusThreatTokensLatin = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_tokens_latin\") ?? []\n"
         "                let aorusDeobMap: [Character: Character] = [\"0\": \"o\", \"1\": \"i\", \"3\": \"e\", \"4\": \"a\", \"5\": \"s\", \"6\": \"b\", \"7\": \"t\", \"8\": \"b\", \"9\": \"g\", \"@\": \"a\", \"$\": \"s\", \"а\": \"a\", \"в\": \"b\", \"е\": \"e\", \"к\": \"k\", \"м\": \"m\", \"н\": \"h\", \"о\": \"o\", \"р\": \"p\", \"с\": \"c\", \"т\": \"t\", \"у\": \"y\", \"х\": \"x\", \"і\": \"i\"]\n"
