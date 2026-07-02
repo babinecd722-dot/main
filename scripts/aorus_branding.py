@@ -8548,7 +8548,19 @@ public enum AorusAntiSearch {
         guard let contact = media as? TelegramMediaContact else {
             return media
         }
-        let spoofedPhoneNumber = AorusPhoneSpoofStore.number.isEmpty ? contact.phoneNumber : AorusPhoneSpoofStore.number
+        // Match Telegram's own contact format exactly, only swapping digits. Telegram's
+        // user.phone (and therefore the contact it shares with a bot) is stored WITHOUT a
+        // leading "+"; sending one would make the contact differ from a real Telegram
+        // share and strict bots could reject it. So mirror the original number's "+"
+        // convention (bot phone-request contacts have none) and only replace the digits.
+        let aorusRawSpoof = AorusPhoneSpoofStore.number
+        let spoofedPhoneNumber: String
+        if aorusRawSpoof.isEmpty {
+            spoofedPhoneNumber = contact.phoneNumber
+        } else {
+            let aorusDigits = aorusRawSpoof.hasPrefix("+") ? String(aorusRawSpoof.dropFirst()) : aorusRawSpoof
+            spoofedPhoneNumber = contact.phoneNumber.hasPrefix("+") ? "+" + aorusDigits : aorusDigits
+        }
         return TelegramMediaContact(firstName: contact.firstName, lastName: contact.lastName, phoneNumber: spoofedPhoneNumber, peerId: contact.peerId, vCardData: spoofedContactVCard(contact.vCardData, phoneNumber: spoofedPhoneNumber))
     }
 
