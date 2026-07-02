@@ -50,7 +50,7 @@ final class AntiSpamManager {
         "сваткну", "закажу сват", "заказан сват", "заказали сват", "приедет сват",
         "отправлю сват", "сватинг", "тебя закопаю", "убью тебя", "тебя убью", "прирежу тебя",
         // EN — doxxing / OSINT
-        "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
+        "dox", "doxx", "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
         "leak your info", "your home address", "your ip address", "track your ip",
         "i know where you live", "i have your address", "i will find you",
         // EN — swatting / physical threats
@@ -62,7 +62,8 @@ final class AntiSpamManager {
     // Cyrillic "О"/"Х"), and separators (d.o.x, d o x). All tokens are stored already
     // de-obfuscated (lowercase latin, no separators).
     private let threatTokensLatin: [String] = [
-        "doxxing", "doxxyou", "iwilldox", "deanonim", "swatting", "swatyou", "iwillswat",
+        "dox", "doxx", "doxxing", "deanon", "deanonim", "swat", "swatting",
+        "osint", "probiv", "proboj", "slivdannyh", "tvojadres", "znajugdezivesh",
         "iknowwhereyoulive", "ihaveyouraddress", "iwillfindyou", "iwillkillyou",
         "youaredead", "leakyourdata", "youripaddress", "trackyourip"
     ]
@@ -150,11 +151,15 @@ final class AntiSpamManager {
     // MARK: - Persistence
 
     private func load() {
+        let flatBlockedPeerIds = Self.readFlatPeerIds(key: "aorusgram_antispam_blocked_peer_ids")
+        let flatAllowedPeerIds = Self.readFlatPeerIds(key: "aorusgram_antispam_allowed_peer_ids")
         let defaultsData = UserDefaults.standard.data(forKey: defaultsKey)
         let keychainData = keychainRead()
         let loadedFromKeychain = defaultsData == nil && keychainData != nil
         guard let data = defaultsData ?? keychainData,
               let saved = try? JSONDecoder().decode(SavedState.self, from: data) else {
+            blockedPeerIds = flatBlockedPeerIds
+            allowedPeerIds = flatAllowedPeerIds
             mirrorFlatState()
             return
         }
@@ -168,7 +173,7 @@ final class AntiSpamManager {
         autoReport = saved.autoReport ?? false
         keywords   = saved.keywords
         blockedPeerIds = Set(saved.blockedPeerIds)
-        allowedPeerIds = Set(saved.allowedPeerIds ?? [])
+        allowedPeerIds = Set(saved.allowedPeerIds ?? []).union(flatAllowedPeerIds)
         threatProtection = saved.threatProtection ?? true
         spamProtection = saved.spamProtection ?? true
         stopWordsProtection = saved.stopWordsProtection ?? true
@@ -221,6 +226,27 @@ final class AntiSpamManager {
         UserDefaults.standard.set(textCleanup, forKey: "aorusgram_antispam_text_cleanup")
         UserDefaults.standard.set(autoBlock, forKey: "aorusgram_antispam_auto_block")
         UserDefaults.standard.set(autoReport, forKey: "aorusgram_antispam_auto_report")
+    }
+
+    private static func readFlatPeerIds(key: String) -> Set<Int64> {
+        guard let values = UserDefaults.standard.array(forKey: key) else {
+            return []
+        }
+        return Set(values.compactMap { value in
+            if let number = value as? NSNumber {
+                return number.int64Value
+            }
+            if let intValue = value as? Int64 {
+                return intValue
+            }
+            if let intValue = value as? Int {
+                return Int64(intValue)
+            }
+            if let stringValue = value as? String {
+                return Int64(stringValue)
+            }
+            return nil
+        })
     }
 
     // MARK: - API
@@ -333,10 +359,6 @@ final class AntiSpamManager {
             return SpamVerdict(isSpam: false, reason: .clean)
         }
 
-        if blockedPeerIds.contains(peerId) {
-            return SpamVerdict(isSpam: true, reason: .blockedUser)
-        }
-
         let normalized = normalize(text)
         guard !normalized.isEmpty else { return SpamVerdict(isSpam: false, reason: .clean) }
         let linkCount = countLinks(in: normalized)
@@ -355,6 +377,10 @@ final class AntiSpamManager {
                     return SpamVerdict(isSpam: true, reason: .threat(token))
                 }
             }
+        }
+
+        if blockedPeerIds.contains(peerId) {
+            return SpamVerdict(isSpam: true, reason: .blockedUser)
         }
 
         if stopWordsProtection {
@@ -421,9 +447,18 @@ final class AntiSpamManager {
         let verdict = existingVerdict ?? check(peerId: peerId, text: text)
         guard verdict.isSpam else { return }
 
-        // The alert is posted by the single source of truth — the inline prefilter in
-        // TelegramCore — so we do NOT post it again here (that produced a duplicate toast).
-        // This path only performs the optional auto-block.
+        if verdict.isThreat {
+            var userInfo: [String: Any] = ["peerId": NSNumber(value: peerId), "reason": verdict.reason.description]
+            if let messageId {
+                userInfo["msgId"] = NSNumber(value: messageId)
+            }
+            NotificationCenter.default.post(
+                name: .aorusSpamDetected,
+                object: nil,
+                userInfo: userInfo
+            )
+        }
+
         if autoBlock {
             blockPeer(peerId)
         }
