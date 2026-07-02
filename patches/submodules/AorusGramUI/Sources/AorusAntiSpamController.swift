@@ -543,6 +543,8 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
             reloadPeers()
         },
         addException: {
+            // Contacts picker; its search also covers global (non-contact) peers, so any
+            // stranger can still be whitelisted by name.
             let selectionController = context.sharedContext.makeContactSelectionController(ContactSelectionControllerParams(
                 context: context,
                 autoDismiss: false,

@@ -634,168 +634,99 @@ def patch_callkit_brand_name(tg: Path) -> None:
 
 
 def patch_deleted_message_quote_reply(tg: Path) -> None:
-    """Native reply bar for a deleted message, with the quote injected only on send.
+    """Reply to a locally-preserved deleted message: native UI, quote only at send.
 
-    A deleted incoming message is preserved locally (invisible ⁣⁤ suffix) but is
-    gone on the server. The design that neither flickers nor pulls in Telegram's reply-
-    navigation:
+    A deleted incoming message is kept locally (invisible \\u2063\\u2064 suffix) but no
+    longer exists on the server. Replying to it must look 100% native and never flash:
 
-      1. Tapping Reply (menu or swipe) sets up the NORMAL native "In reply to X" bar and
-         does NOT touch the composer text (no quote block in the input). It only remembers
-         the deleted message's text in UserDefaults, keyed by the message id.
-      2. At send (ChatController.sendMessages) any message whose reply target has a
-         remembered quote gets its SERVER reply dropped (so Telegram's reply to a gone
-         message is never attempted) and the quote prepended as a blockquote entity. The
-         message then sends as an ordinary one whose quote everyone sees, with no reply
-         navigation and nothing flashing.
+      - Reply (menu or swipe) is NOT patched at all — Telegram's own reply flow runs and
+        shows the normal "In reply to X" bar. The composer stays clean: no quote block,
+        no indent, nothing extra to hide.
+      - The single patch lives in ChatControllerNode.sendCurrentMessage. When the reply
+        target's text carries the deleted-suffix, the preserved text is prepended to the
+        outgoing attributed input as a collapsed blockquote (ChatTextInputAttributes.block)
+        RIGHT BEFORE Telegram's own generateChatInputTextEntities converts it — i.e. the
+        exact same serialization the composer-quote path used, which the server is proven
+        to keep. The server reply is dropped from the enqueued messages, because the
+        target no longer exists server-side; without it nothing can be retracted by the
+        server ack, so the sent quote never flickers or vanishes.
 
-    Replies to normal (non-deleted) messages are completely untouched.
+    Replies to normal messages are untouched (the quote branch never triggers).
     """
-    KEY = "\"aorusgram_delreply_\\(%s)_\\(%s)\""
-    # --- 1) Context menu "Reply": native bar + remember the quote (no composer change) ---
-    path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
-    if path.is_file():
-        t = path.read_text(encoding="utf-8")
-        if "AorusGram: deleted-message quote reply" in t:
-            print("DeletedQuoteReply: menu already injected")
-        else:
-            anchor = (
-                "                interfaceInteraction.setupReplyMessage(messages[0].id, nil, { transition, completed in\n"
-                "                    c?.dismiss(result: .custom(transition), completion: {\n"
-                "                        completed()\n"
-                "                    })\n"
-                "                })\n"
-            )
-            if anchor not in t:
-                print("DeletedQuoteReply: reply-action anchor not found — skipped menu")
-            else:
-                replacement = (
-                    "                // AorusGram: deleted-message quote reply\n"
-                    "                let aorusReplyMsg = messages[0]\n"
-                    "                interfaceInteraction.setupReplyMessage(messages[0].id, nil, { transition, completed in\n"
-                    "                    c?.dismiss(result: .custom(transition), completion: {\n"
-                    "                        completed()\n"
-                    "                    })\n"
-                    "                })\n"
-                    "                if aorusReplyMsg.text.hasSuffix(\"\\u{2063}\\u{2064}\") {\n"
-                    "                    var aorusQuoted = String(aorusReplyMsg.text.dropLast(2))\n"
-                    "                    if aorusQuoted.isEmpty {\n"
-                    "                        let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-                    "                        aorusQuoted = aorusRu ? \"\\u{041c}\\u{0435}\\u{0434}\\u{0438}\\u{0430}\\u{0444}\\u{0430}\\u{0439}\\u{043b}\" : \"Media\"\n"
-                    "                    }\n"
-                    "                    let aorusDelReplyKey = " + (KEY % ("aorusReplyMsg.id.peerId.toInt64()", "aorusReplyMsg.id.id")) + "\n"
-                    "                    UserDefaults.standard.set(aorusQuoted, forKey: aorusDelReplyKey)\n"
-                    "                    let aorusDelReplyId = aorusReplyMsg.id\n"
-                    "                    for aorusDelay in [0.25, 0.9, 1.8] {\n"
-                    "                        DispatchQueue.main.asyncAfter(deadline: .now() + aorusDelay) {\n"
-                    "                            if UserDefaults.standard.string(forKey: aorusDelReplyKey) != nil {\n"
-                    "                                interfaceInteraction.setupReplyMessage(aorusDelReplyId, nil, { _, completed in completed() })\n"
-                    "                            }\n"
-                    "                        }\n"
-                    "                    }\n"
-                    "                }\n"
-                )
-                t = t.replace(anchor, replacement, 1)
-                path.write_text(t, encoding="utf-8")
-                print("DeletedQuoteReply: injected native reply + remembered quote (menu)")
-    else:
-        print("DeletedQuoteReply: ChatInterfaceStateContextMenus.swift not found, skip menu")
-
-    cc = tg / "submodules/TelegramUI/Sources/ChatController.swift"
-    if not cc.is_file():
-        print("DeletedQuoteReply: ChatController.swift not found, skip")
+    path = tg / "submodules/TelegramUI/Sources/ChatControllerNode.swift"
+    if not path.is_file():
+        print("DeletedQuoteReply: ChatControllerNode.swift not found, skip")
         return
-    t2 = cc.read_text(encoding="utf-8")
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: deleted-message quote reply" in t:
+        print("DeletedQuoteReply: already injected")
+        return
 
-    # --- 2) Swipe-to-reply: native bar + remember the quote ---
-    if "AorusGram: deleted-message quote reply (swipe" not in t2:
-        swipe_anchor = (
-            "        }, setupReply: { [weak self] messageId in\n"
-            "            self?.interfaceInteraction?.setupReplyMessage(messageId, nil, { _, f in f() })\n"
-            "        }, canSetupReply: { [weak self] message in\n"
-        )
-        if swipe_anchor not in t2:
-            print("DeletedQuoteReply: setupReply closure anchor not found — skipped swipe")
-        else:
-            swipe_new = (
-                "        }, setupReply: { [weak self] messageId in\n"
-                "            // AorusGram: deleted-message quote reply (swipe / non-menu paths)\n"
-                "            self?.interfaceInteraction?.setupReplyMessage(messageId, nil, { _, f in f() })\n"
-                "            if let strongSelf = self, let aorusMsg = strongSelf.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId), aorusMsg.text.hasSuffix(\"\\u{2063}\\u{2064}\") {\n"
-                "                var aorusQuoted = String(aorusMsg.text.dropLast(2))\n"
-                "                if aorusQuoted.isEmpty {\n"
-                "                    let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-                "                    aorusQuoted = aorusRu ? \"\\u{041c}\\u{0435}\\u{0434}\\u{0438}\\u{0430}\\u{0444}\\u{0430}\\u{0439}\\u{043b}\" : \"Media\"\n"
-                "                }\n"
-                "                let aorusDelReplyKey = " + (KEY % ("messageId.peerId.toInt64()", "messageId.id")) + "\n"
-                "                UserDefaults.standard.set(aorusQuoted, forKey: aorusDelReplyKey)\n"
-                "                let aorusDelReplyId = messageId\n"
-                "                for aorusDelay in [0.25, 0.9, 1.8] {\n"
-                "                    DispatchQueue.main.asyncAfter(deadline: .now() + aorusDelay) { [weak self] in\n"
-                "                        if UserDefaults.standard.string(forKey: aorusDelReplyKey) != nil {\n"
-                "                            self?.interfaceInteraction?.setupReplyMessage(aorusDelReplyId, nil, { _, f in f() })\n"
-                "                        }\n"
-                "                    }\n"
-                "                }\n"
-                "            }\n"
-                "        }, canSetupReply: { [weak self] message in\n"
-            )
-            t2 = t2.replace(swipe_anchor, swipe_new, 1)
+    # 1) Build the quote (if the reply target is a preserved deleted message) right after
+    #    the outgoing attributed text is finalized.
+    anchor1 = "                let inputText = convertMarkdownToAttributes(effectiveInputText)\n"
+    if anchor1 not in t:
+        print("DeletedQuoteReply: convertMarkdownToAttributes anchor not found — skipped")
+        return
+    inject1 = (
+        anchor1
+        + "                // AorusGram: deleted-message quote reply — the native reply bar was shown as\n"
+        "                // usual; here at send the preserved text becomes a collapsed blockquote that\n"
+        "                // goes through Telegram's own entity serialization below.\n"
+        "                let aorusDeletedReplyQuote: NSAttributedString? = {\n"
+        "                    guard let aorusReplySubject = self.chatPresentationInterfaceState.interfaceState.replyMessageSubject else { return nil }\n"
+        "                    var aorusReplyText: String?\n"
+        "                    if let aorusMsg = self.chatPresentationInterfaceState.replyMessage, aorusMsg.id == aorusReplySubject.messageId {\n"
+        "                        aorusReplyText = aorusMsg.text\n"
+        "                    } else if let aorusMsg = self.historyNode.messageInCurrentHistoryView(aorusReplySubject.messageId) {\n"
+        "                        aorusReplyText = aorusMsg.text\n"
+        "                    }\n"
+        "                    guard let aorusText = aorusReplyText, aorusText.hasSuffix(\"\\u{2063}\\u{2064}\") else { return nil }\n"
+        "                    var aorusQuoted = String(aorusText.dropLast(2))\n"
+        "                    if aorusQuoted.isEmpty {\n"
+        "                        let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
+        "                        aorusQuoted = aorusRu ? \"Медиафайл\" : \"Media\"\n"
+        "                    }\n"
+        "                    let aorusQuote = NSMutableAttributedString(string: aorusQuoted)\n"
+        "                    aorusQuote.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: true), range: NSRange(location: 0, length: aorusQuote.length))\n"
+        "                    return aorusQuote\n"
+        "                }()\n"
+        "                let aorusOutgoingInputText: NSAttributedString\n"
+        "                if let aorusDeletedReplyQuote {\n"
+        "                    let aorusCombined = NSMutableAttributedString()\n"
+        "                    aorusCombined.append(aorusDeletedReplyQuote)\n"
+        "                    aorusCombined.append(NSAttributedString(string: \"\\n\"))\n"
+        "                    aorusCombined.append(inputText)\n"
+        "                    aorusOutgoingInputText = aorusCombined\n"
+        "                } else {\n"
+        "                    aorusOutgoingInputText = inputText\n"
+        "                }\n"
+    )
+    t = t.replace(anchor1, inject1, 1)
 
-    # --- 3) On send: drop server reply + inject blockquote for remembered targets ---
-    if "AorusGram: deleted-reply blockquote on send" not in t2:
-        send_anchor = (
-            "            var messages = messages\n"
-            "            var shouldOpenScheduledMessages = false\n"
-        )
-        if send_anchor in t2:
-            send_inject = (
-                "            var messages = messages\n"
-                "            var shouldOpenScheduledMessages = false\n"
-                "            var aorusConsumedDeletedReply = false\n"
-                "            // AorusGram: deleted-reply blockquote on send\n"
-                "            messages = messages.map { aorusMessage -> EnqueueMessage in\n"
-                "                guard case let .message(aorusText, aorusAttributes, aorusInlineStickers, aorusMediaReference, aorusThreadId, aorusReplyToMessageId, aorusReplyToStoryId, aorusLocalGroupingKey, aorusCorrelationId, aorusBubbleUp) = aorusMessage else { return aorusMessage }\n"
-                "                guard let aorusReply = aorusReplyToMessageId else { return aorusMessage }\n"
-                "                let aorusDelKey = " + (KEY % ("aorusReply.messageId.peerId.toInt64()", "aorusReply.messageId.id")) + "\n"
-                "                guard let aorusQuoted = UserDefaults.standard.string(forKey: aorusDelKey) else { return aorusMessage }\n"
-                "                aorusConsumedDeletedReply = true\n"
-                "                UserDefaults.standard.removeObject(forKey: aorusDelKey)\n"
-                "                let aorusPrefix = aorusQuoted + \"\\n\"\n"
-                "                let aorusShift = (aorusPrefix as NSString).length\n"
-                "                let aorusQuoteLen = (aorusQuoted as NSString).length\n"
-                "                let aorusNewText = aorusPrefix + aorusText\n"
-                "                var aorusNewAttributes: [MessageAttribute] = []\n"
-                "                var aorusHadEntities = false\n"
-                "                for aorusAttr in aorusAttributes {\n"
-                "                    if let aorusEntities = aorusAttr as? TextEntitiesMessageAttribute {\n"
-                "                        aorusHadEntities = true\n"
-                "                        var aorusShifted: [MessageTextEntity] = [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: false))]\n"
-                "                        for aorusE in aorusEntities.entities {\n"
-                "                            aorusShifted.append(MessageTextEntity(range: (aorusE.range.lowerBound + aorusShift) ..< (aorusE.range.upperBound + aorusShift), type: aorusE.type))\n"
-                "                        }\n"
-                "                        aorusNewAttributes.append(TextEntitiesMessageAttribute(entities: aorusShifted))\n"
-                "                    } else {\n"
-                "                        aorusNewAttributes.append(aorusAttr)\n"
-                "                    }\n"
-                "                }\n"
-                "                if !aorusHadEntities {\n"
-                "                    aorusNewAttributes.append(TextEntitiesMessageAttribute(entities: [MessageTextEntity(range: 0 ..< aorusQuoteLen, type: .BlockQuote(isCollapsed: false))]))\n"
-                "                }\n"
-                "                return .message(text: aorusNewText, attributes: aorusNewAttributes, inlineStickers: aorusInlineStickers, mediaReference: aorusMediaReference, threadId: aorusThreadId, replyToMessageId: nil, replyToStoryId: aorusReplyToStoryId, localGroupingKey: aorusLocalGroupingKey, correlationId: aorusCorrelationId, bubbleUpEmojiOrStickersets: aorusBubbleUp)\n"
-                "            }\n"
-                "            if aorusConsumedDeletedReply {\n"
-                "                self.updateChatPresentationInterfaceState(animated: false, interactive: false, {\n"
-                "                    $0.updatedInterfaceState { $0.withUpdatedReplyMessageSubject(nil).withUpdatedSendMessageEffect(nil).withUpdatedPostSuggestionState(nil) }\n"
-                "                })\n"
-                "            }\n"
-            )
-            t2 = t2.replace(send_anchor, send_inject, 1)
-        else:
-            print("DeletedQuoteReply: sendMessages anchor not found — skipped send")
+    # 2) Feed the (possibly quoted) text into the existing serialization loop.
+    anchor2 = "                for text in breakChatInputText(trimChatInputText(inputText)) {\n"
+    if anchor2 not in t:
+        print("DeletedQuoteReply: breakChatInputText anchor not found — aborting file write")
+        return
+    t = t.replace(anchor2, "                for text in breakChatInputText(trimChatInputText(aorusOutgoingInputText)) {\n", 1)
 
-    cc.write_text(t2, encoding="utf-8")
-    print("DeletedQuoteReply: injected swipe-remember + blockquote-on-send")
+    # 3) Drop the server reply for these messages — the target is gone on the server, so a
+    #    real reply would be rejected/normalized by the ack and make the message flicker.
+    anchor3 = "                if !messages.isEmpty && forwardingToSameChat {\n"
+    if anchor3 not in t:
+        print("DeletedQuoteReply: forwardingToSameChat anchor not found — aborting file write")
+        return
+    inject3 = (
+        "                if aorusDeletedReplyQuote != nil {\n"
+        "                    messages = messages.map { $0.withUpdatedReplyToMessageId(nil) }\n"
+        "                }\n"
+        + anchor3
+    )
+    t = t.replace(anchor3, inject3, 1)
+
+    path.write_text(t, encoding="utf-8")
+    print("DeletedQuoteReply: injected send-time quote for deleted-message replies (native bar, clean composer)")
 
 
 def patch_deleted_messages_interception(tg: Path) -> None:
@@ -2535,11 +2466,6 @@ def patch_incoming_message_hook(tg: Path) -> None:
     prefilter_code = (
         "                // AorusGram: native anti-spam prefilter (runs before messages enter local history)\n"
         "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n"
-        "                if !UserDefaults.standard.bool(forKey: \"aorusgram_antispam_repair_v4\") {\n"
-        "                    UserDefaults.standard.set([], forKey: \"aorusgram_antispam_blocked_peer_ids\")\n"
-        "                    UserDefaults.standard.set(false, forKey: \"aorusgram_antispam_auto_block\")\n"
-        "                    UserDefaults.standard.set(true, forKey: \"aorusgram_antispam_repair_v4\")\n"
-        "                }\n"
         "                let aorusBlockedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_blocked_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
         "                let aorusUserKeywords = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_keywords\") ?? []\n"
         "                let aorusAllowedPeerIds = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_allowed_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
@@ -2655,12 +2581,13 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                        let identity = authorIdentity ?? peerIdentity\n"
         "                        let aorusIsAllowedPeer = aorusAllowedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusAllowedPeerIds.contains(authorIdentity!))\n"
         "                        let aorusIsBlockedPeer = aorusBlockedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusBlockedPeerIds.contains(authorIdentity!))\n"
+        "                        let aorusBlockedNoticePeerId = aorusBlockedPeerIds.contains(peerIdentity) ? peerIdentity : identity\n"
         "                        if identity != 777000 && !aorusIsAllowedPeer {\n"
-        "                            // Priority: a peer in the blocked list is hidden with the\n"
-        "                            // \"blocked\" alert. Auto-block only controls adding new peers;\n"
-        "                            // already-blocked peers still stay blocked.\n"
+        "                            // Priority: a peer in the block list is ALWAYS hidden with the\n"
+        "                            // \"blocked\" alert — that wins over threat/spam. So the \"blocked\"\n"
+        "                            // alert appears if and only if the peer is really in the list.\n"
         "                            if aorusIsBlockedPeer {\n"
-        "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
+        "                                aorusPostSpamNotice(aorusBlockedNoticePeerId, mid.id, \"blockedUser\")\n"
         "                                return nil\n"
         "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n"
         "                                aorusPostSpamNotice(identity, mid.id, \"threat:\" + threatReason)\n"
@@ -2681,17 +2608,6 @@ def patch_incoming_message_hook(tg: Path) -> None:
 
     if "aorusgram.didReceiveMessage" in t:
         upgraded = t
-        if "aorusgram_antispam_repair_v4" not in upgraded:
-            upgraded = upgraded.replace(
-                "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n",
-                "                let aorusAntiSpamEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_feature_anti_spam\") as? Bool) ?? true\n"
-                "                if !UserDefaults.standard.bool(forKey: \"aorusgram_antispam_repair_v4\") {\n"
-                "                    UserDefaults.standard.set([], forKey: \"aorusgram_antispam_blocked_peer_ids\")\n"
-                "                    UserDefaults.standard.set(false, forKey: \"aorusgram_antispam_auto_block\")\n"
-                "                    UserDefaults.standard.set(true, forKey: \"aorusgram_antispam_repair_v4\")\n"
-                "                }\n",
-                1,
-            )
         upgraded = upgraded.replace(
             "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
@@ -2703,8 +2619,22 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "",
         )
         upgraded = upgraded.replace(
-            "                            if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) {\n",
-            "                            if aorusBlockedPeerIds.contains(identity) {\n",
+            "                    if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) { return true }\n",
+            "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
+        )
+        upgraded = upgraded.replace(
+            "                        let identity = storeMsg.authorId?.toInt64() ?? mid.peerId.toInt64()\n"
+            "                        // The allow list may hold either the author id or the chat peer id\n"
+            "                        // (both name the same person in a DM) — accept either, so an added\n"
+            "                        // exception always wins.\n"
+            "                        if identity != 777000 && !aorusAllowedPeerIds.contains(identity) && !aorusAllowedPeerIds.contains(mid.peerId.toInt64()) {\n",
+            "                        let peerIdentity = mid.peerId.toInt64()\n"
+            "                        let authorIdentity = storeMsg.authorId?.toInt64()\n"
+            "                        let identity = authorIdentity ?? peerIdentity\n"
+            "                        let aorusIsAllowedPeer = aorusAllowedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusAllowedPeerIds.contains(authorIdentity!))\n"
+            "                        let aorusIsBlockedPeer = aorusBlockedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusBlockedPeerIds.contains(authorIdentity!))\n"
+            "                        let aorusBlockedNoticePeerId = aorusBlockedPeerIds.contains(peerIdentity) ? peerIdentity : identity\n"
+            "                        if identity != 777000 && !aorusIsAllowedPeer {\n",
         )
         upgraded = upgraded.replace(
             "                        let identity = storeMsg.authorId?.toInt64() ?? mid.peerId.toInt64()\n"
@@ -2714,31 +2644,14 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                        let identity = authorIdentity ?? peerIdentity\n"
             "                        let aorusIsAllowedPeer = aorusAllowedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusAllowedPeerIds.contains(authorIdentity!))\n"
             "                        let aorusIsBlockedPeer = aorusBlockedPeerIds.contains(peerIdentity) || (authorIdentity != nil && aorusBlockedPeerIds.contains(authorIdentity!))\n"
+            "                        let aorusBlockedNoticePeerId = aorusBlockedPeerIds.contains(peerIdentity) ? peerIdentity : identity\n"
             "                        if identity != 777000 && !aorusIsAllowedPeer {\n",
         )
         upgraded = upgraded.replace(
             "                            if aorusBlockedPeerIds.contains(identity) {\n"
-            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
-            "                                return nil\n"
-            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
+            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n",
             "                            if aorusIsBlockedPeer {\n"
-            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
-            "                                return nil\n"
-            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
-        )
-        upgraded = upgraded.replace(
-            "                            if aorusBlockedPeerIds.contains(identity) {\n"
-            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
-            "                                return nil\n"
-            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
-            "                            if aorusIsBlockedPeer {\n"
-            "                                aorusPostSpamNotice(identity, mid.id, \"blockedUser\")\n"
-            "                                return nil\n"
-            "                            } else if let threatReason = aorusThreatReason(storeMsg.text) {\n",
-        )
-        upgraded = upgraded.replace(
-            "                    if aorusAutoBlockOn && aorusBlockedPeerIds.contains(identity) { return true }\n",
-            "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
+            "                                aorusPostSpamNotice(aorusBlockedNoticePeerId, mid.id, \"blockedUser\")\n",
         )
         upgraded = upgraded.replace(
             "                        if aorusThreatPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return true }\n"
@@ -2938,6 +2851,19 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            let aorusAutoReport = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_auto_report\") as? Bool) ?? false\n"
         "            let isBlocked = reason == \"blockedUser\"\n"
         "            let isFlood = reason == \"flood\" || reason == \"repeatedMessage\"\n"
+        "            let isKeyword = reason == \"keyword\" || reason.hasPrefix(\"keyword\")\n"
+        "            let aorusSpamProtectionOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_spam_protection\") as? Bool) ?? true\n"
+        "            if !aorusSpamProtectionOn && !isThreat && !isBlocked && !isKeyword { return }\n"
+        "            // Exceptions are absolute: a peer from the allow list never produces any\n"
+        "            // anti-spam notification, whatever the detector said. And \"Blocked\" is shown\n"
+        "            // only when the peer is REALLY in the block list at display time, so the\n"
+        "            // notification can never disagree with the list in settings.\n"
+        "            let aorusAllowedNow = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_allowed_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
+        "            if aorusAllowedNow.contains(aorusPeerId) { return }\n"
+        "            if isBlocked {\n"
+        "                let aorusBlockedNow = Set((UserDefaults.standard.array(forKey: \"aorusgram_antispam_blocked_peer_ids\") as? [NSNumber] ?? []).map { $0.int64Value })\n"
+        "                if !aorusBlockedNow.contains(aorusPeerId) { return }\n"
+        "            }\n"
         "            let cooldownKey = isThreat ? \"aorusgram_antispam_last_threat_toast\" : \"aorusgram_antispam_last_toast\"\n"
         "            let cooldown: TimeInterval = isThreat ? 0.35 : 1.8\n"
         "            let lastToast = UserDefaults.standard.double(forKey: cooldownKey)\n"
