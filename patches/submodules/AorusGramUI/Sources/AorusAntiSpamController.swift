@@ -215,7 +215,7 @@ private enum ASEntry: ItemListNodeEntry {
         case let .keyword(_, _, word):
             return ASRevealTextItem(theme: presentationData.theme, title: word, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeKeyword(word) })
         case let .keywordInput(_, placeholder, value):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, returnKeyType: .done, sectionId: section, textUpdated: { args.setNewKeyword($0) }, action: { args.commitNewKeyword() })
+            return ASKeywordInputItem(theme: presentationData.theme, text: value, placeholder: placeholder, sectionId: section, textUpdated: { args.setNewKeyword($0) }, action: { args.commitNewKeyword() })
         case let .keywordsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .exceptionsHeader(_, text):
@@ -226,6 +226,178 @@ private enum ASEntry: ItemListNodeEntry {
             return ItemListActionItem(presentationData: presentationData, title: text, kind: .neutral, alignment: .natural, sectionId: section, style: .blocks, action: { args.addException() })
         case let .exceptionsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        }
+    }
+}
+
+private final class ASKeywordInputItem: ListViewItem, ItemListItem {
+    let theme: PresentationTheme
+    let text: String
+    let placeholder: String
+    let sectionId: ItemListSectionId
+    let requestsNoInset: Bool = false
+    let textUpdated: (String) -> Void
+    let action: () -> Void
+
+    init(theme: PresentationTheme, text: String, placeholder: String, sectionId: ItemListSectionId, textUpdated: @escaping (String) -> Void, action: @escaping () -> Void) {
+        self.theme = theme
+        self.text = text
+        self.placeholder = placeholder
+        self.sectionId = sectionId
+        self.textUpdated = textUpdated
+        self.action = action
+    }
+
+    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void,
+                                 params: ListViewItemLayoutParams,
+                                 synchronousLoads: Bool,
+                                 previousItem: ListViewItem?,
+                                 nextItem: ListViewItem?,
+                                 completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
+        async {
+            let node = ASKeywordInputItemNode()
+            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+            node.contentSize = layout.contentSize
+            node.insets = layout.insets
+            Queue.mainQueue().async {
+                completion(node, { return (nil, { _ in apply() }) })
+            }
+        }
+    }
+
+    func updateNode(async: @escaping (@escaping () -> Void) -> Void,
+                    node: @escaping () -> ListViewItemNode,
+                    params: ListViewItemLayoutParams,
+                    previousItem: ListViewItem?,
+                    nextItem: ListViewItem?,
+                    animation: ListViewItemUpdateAnimation,
+                    completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
+        Queue.mainQueue().async {
+            if let nodeValue = node() as? ASKeywordInputItemNode {
+                let makeLayout = nodeValue.asyncLayout()
+                async {
+                    let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+                    Queue.mainQueue().async { completion(layout, { _ in apply() }) }
+                }
+            }
+        }
+    }
+}
+
+private final class ASKeywordInputItemNode: ListViewItemNode, UITextFieldDelegate {
+    private let backgroundNode = ASDisplayNode()
+    private let topStripeNode = ASDisplayNode()
+    private let bottomStripeNode = ASDisplayNode()
+    private let maskNode = ASImageNode()
+    private weak var textField: UITextField?
+    private var item: ASKeywordInputItem?
+    private var layoutParams: ListViewItemLayoutParams?
+
+    override init() {
+        backgroundNode.isLayerBacked = true
+        topStripeNode.isLayerBacked = true
+        bottomStripeNode.isLayerBacked = true
+        super.init(layerBacked: false)
+        addSubnode(backgroundNode)
+        addSubnode(topStripeNode)
+        addSubnode(bottomStripeNode)
+        addSubnode(maskNode)
+    }
+
+    override func didLoad() {
+        super.didLoad()
+        let textField = UITextField()
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.returnKeyType = .done
+        textField.clearButtonMode = .whileEditing
+        textField.delegate = self
+        textField.addTarget(self, action: #selector(textChanged), for: .editingChanged)
+        self.view.addSubview(textField)
+        self.textField = textField
+        if let item {
+            applyItem(item)
+        }
+        layoutTextField()
+    }
+
+    private func applyItem(_ item: ASKeywordInputItem) {
+        guard let textField else { return }
+        if textField.text != item.text {
+            textField.text = item.text
+        }
+        textField.textColor = item.theme.list.itemPrimaryTextColor
+        textField.tintColor = item.theme.list.itemAccentColor
+        textField.font = Font.regular(17.0)
+        textField.attributedPlaceholder = NSAttributedString(string: item.placeholder, attributes: [.foregroundColor: UIColor.white])
+    }
+
+    private func layoutTextField() {
+        guard let params = layoutParams else { return }
+        let left = params.leftInset + 16.0
+        textField?.frame = CGRect(x: left, y: 8.0, width: params.width - left - params.rightInset - 16.0, height: 32.0)
+    }
+
+    @objc private func textChanged() {
+        item?.textUpdated(textField?.text ?? "")
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        item?.textUpdated(textField.text ?? "")
+        item?.action()
+        textField.resignFirstResponder()
+        return false
+    }
+
+    func asyncLayout() -> (ASKeywordInputItem, ListViewItemLayoutParams, ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
+        return { item, params, neighbors in
+            let contentSize = CGSize(width: params.width, height: 48.0)
+            let insets = itemListNeighborsGroupedInsets(neighbors, params)
+            let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
+            return (layout, { [weak self] in
+                guard let self else { return }
+                self.item = item
+                self.layoutParams = params
+                self.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
+                self.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
+                self.bottomStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
+
+                let hasCorners = itemListHasRoundedBlockLayout(params)
+                var topCorners = false
+                var bottomCorners = false
+                switch neighbors.top {
+                case .sameSection(false):
+                    self.topStripeNode.isHidden = true
+                default:
+                    topCorners = true
+                    self.topStripeNode.isHidden = hasCorners
+                }
+                let bottomInset: CGFloat
+                let bottomOffset: CGFloat
+                switch neighbors.bottom {
+                case .sameSection(false):
+                    bottomInset = params.leftInset + 16.0
+                    bottomOffset = -UIScreenPixel
+                    self.bottomStripeNode.isHidden = false
+                default:
+                    bottomInset = 0.0
+                    bottomOffset = 0.0
+                    bottomCorners = true
+                    self.bottomStripeNode.isHidden = hasCorners
+                }
+
+                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: topCorners, bottom: bottomCorners) : nil
+                let bgY = -min(insets.top, UIScreenPixel)
+                let bgH = contentSize.height + min(insets.top, UIScreenPixel) + min(insets.bottom, UIScreenPixel)
+                self.backgroundNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: bgH)
+                self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                self.topStripeNode.frame = CGRect(x: 0.0, y: bgY, width: params.width, height: UIScreenPixel)
+                self.bottomStripeNode.frame = CGRect(x: bottomInset, y: contentSize.height + bottomOffset, width: params.width - bottomInset, height: UIScreenPixel)
+
+                self.applyItem(item)
+                self.layoutTextField()
+                self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
+            })
         }
     }
 }

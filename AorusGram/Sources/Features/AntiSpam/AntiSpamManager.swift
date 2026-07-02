@@ -53,13 +53,20 @@ final class AntiSpamManager {
         "сваткну", "сватну", "сватнуть", "с ват", "с в а т", "закажу сват", "закажу с ват",
         "заказан сват", "заказан с ват", "заказали сват", "заказали с ват", "приедет сват",
         "отправлю сват", "вызову сват", "кину сват", "сватинг", "тебя закопаю", "убью тебя",
-        "тебя убью", "прирежу тебя",
+        "тебя убью", "я тебя убью", "найду и убью", "приеду и убью", "прирежу тебя",
+        "зарежу тебя", "я тебя зарежу", "вырежу тебя", "я тебя вырежу", "порежу тебя",
+        "перережу тебя", "застрелю тебя", "расстреляю тебя", "удушу тебя", "сожгу тебя",
+        "закопаю тебя", "изобью тебя", "побью тебя", "сломаю тебе", "тебе конец",
+        "ты труп", "тебя похоронят", "будешь лежать", "вынесу тебя", "разнесу тебя",
         // EN — doxxing / OSINT
         "dox", "doxx", "doxxing", "dox you", "doxx you", "i will dox", "i will doxx", "osint", "leak your data",
         "leak your info", "your home address", "your ip address", "track your ip",
         "i know where you live", "i have your address", "i will find you",
         // EN — swatting / physical threats
-        "swat you", "swatting", "i will swat", "send swat", "i will kill you", "you are dead"
+        "swat you", "swatting", "i will swat", "send swat", "i will kill you", "kill you",
+        "i will stab you", "stab you", "i will cut you", "cut you", "i will shoot you",
+        "shoot you", "beat you up", "find and kill you", "come to your house",
+        "burn your house", "you are dead", "youre dead"
     ]
 
     // Short threat keywords matched against a DE-OBFUSCATED form of the text, so common
@@ -70,7 +77,9 @@ final class AntiSpamManager {
         "dox", "doxx", "doxxing", "deanon", "deanonim", "swat", "swatting",
         "osint", "probiv", "proboj", "slivdannyh", "tvojadres", "znajugdezivesh",
         "iknowwhereyoulive", "ihaveyouraddress", "iwillfindyou", "iwillkillyou",
-        "youaredead", "leakyourdata", "youripaddress", "trackyourip"
+        "killyou", "iwillstabyou", "stabyou", "iwillcutyou", "cutyou", "iwillshootyou",
+        "shootyou", "beatyouup", "findandkillyou", "cometoyourhouse",
+        "burnyourhouse", "youaredead", "youredead", "leakyourdata", "youripaddress", "trackyourip"
     ]
 
     private let threatTokensCyrillic: [String] = [
@@ -80,7 +89,11 @@ final class AntiSpamManager {
     private let threatPrefixesCyrillic: [String] = [
         "доксинг", "доксер", "докси", "доксн", "доксан", "доксю", "задокс", "задокш",
         "деанон", "деаноним", "сдеанон", "осинт", "пробив", "пробью", "пробь", "пробит",
-        "сватинг", "сватн", "сватк", "засват"
+        "сватинг", "сватн", "сватк", "засват", "ятебяубью", "убьютебя", "найдуиубью",
+        "приедуиубью", "ятебязарежу", "зарежутебя", "ятебявырежу", "вырежутебя",
+        "порежутебя", "перережутебя", "застрелю", "расстреляю", "удушутебя",
+        "сожгутебя", "закопаютебя", "изобьютебя", "побьютебя", "сломаютебе",
+        "тебеконец", "тытруп", "тебяпохоронят", "будешьлежать", "вынесутебя"
     ]
 
     private let highConfidencePatterns: [String] = [
@@ -98,10 +111,12 @@ final class AntiSpamManager {
         "airdrop", "claim your airdrop", "claim your reward", "connect your wallet",
         "wallet connect", "validate your wallet", "sync your wallet", "seed phrase",
         "recovery phrase", "private key", "send 1 btc", "elon musk giveaway",
-        "double your btc", "быстрый заработок", "легкий заработок", "легкие деньги",
+        "double your btc", "быстрый заработок", "легкий заработок", "легкий зарабаток",
+        "лёгкий заработок", "лёгкий зарабаток", "легкие деньги",
         "работа без опыта", "удаленная работа без опыта", "пиши в лс заработок", "заработок в интернете",
         "ищем сотрудников на удаленку", "оплата ежедневно", "заработок от 5000",
-        "предлагаю заработок", "заработок по", "тысяч в час", "тысяч в день", "тысяч в неделю",
+        "предлагаю заработок", "предлагаю зарабаток", "заработок по", "зарабаток по",
+        "тысяч в час", "тысяч в день", "тысяч в неделю",
         "заработок без вложений", "доход в час", "easy money",
         "make money fast", "work from home no experience", "be your own boss", "hiring remote workers",
         "earn money online", "ваш аккаунт заблокирован", "аккаунт будет удален", "подтвердите аккаунт",
@@ -117,7 +132,7 @@ final class AntiSpamManager {
     ]
 
     private let weightedPatterns: [String] = [
-        "заработ", "крипт", "биткоин", "инвест",
+        "заработ", "зарабат", "крипт", "биткоин", "инвест",
         "казино", "букмекер", "ставки", "розыгрыш",
         "приз", "доход", "прибыль", "трейдинг",
         "трейдер", "сигнал", "подработка", "арбитраж",

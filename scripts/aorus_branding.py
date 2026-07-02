@@ -2476,11 +2476,11 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
         "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n"
         "                let aorusStoredThreatTokensLatin = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_tokens_latin\") ?? []\n"
-        "                let aorusThreatTokensLatin = aorusStoredThreatTokensLatin.isEmpty ? [\"dox\", \"doxx\", \"doxxing\", \"deanon\", \"deanonim\", \"swat\", \"swatting\", \"osint\", \"probiv\", \"proboj\", \"slivdannyh\", \"tvojadres\", \"znajugdezivesh\", \"iknowwhereyoulive\", \"ihaveyouraddress\", \"iwillfindyou\", \"iwillkillyou\", \"youaredead\", \"leakyourdata\", \"youripaddress\", \"trackyourip\"] : aorusStoredThreatTokensLatin\n"
+        "                let aorusThreatTokensLatin = aorusStoredThreatTokensLatin.isEmpty ? [\"dox\", \"doxx\", \"doxxing\", \"deanon\", \"deanonim\", \"swat\", \"swatting\", \"osint\", \"probiv\", \"proboj\", \"slivdannyh\", \"tvojadres\", \"znajugdezivesh\", \"iknowwhereyoulive\", \"ihaveyouraddress\", \"iwillfindyou\", \"iwillkillyou\", \"killyou\", \"iwillstabyou\", \"stabyou\", \"iwillcutyou\", \"cutyou\", \"iwillshootyou\", \"shootyou\", \"beatyouup\", \"findandkillyou\", \"cometoyourhouse\", \"burnyourhouse\", \"youaredead\", \"youredead\", \"leakyourdata\", \"youripaddress\", \"trackyourip\"] : aorusStoredThreatTokensLatin\n"
         "                let aorusStoredThreatTokensCyr = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_tokens_cyrillic\") ?? []\n"
         "                let aorusThreatTokensCyr = aorusStoredThreatTokensCyr.isEmpty ? [\"докс\", \"сват\", \"осинт\", \"деанон\", \"пробив\"] : aorusStoredThreatTokensCyr\n"
         "                let aorusStoredThreatPrefixesCyr = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_prefixes_cyrillic\") ?? []\n"
-        "                let aorusThreatPrefixesCyr = aorusStoredThreatPrefixesCyr.isEmpty ? [\"доксинг\", \"доксер\", \"докси\", \"доксн\", \"доксан\", \"доксю\", \"задокс\", \"задокш\", \"деанон\", \"деаноним\", \"сдеанон\", \"осинт\", \"пробив\", \"пробью\", \"пробь\", \"пробит\", \"сватинг\", \"сватн\", \"сватк\", \"засват\"] : aorusStoredThreatPrefixesCyr\n"
+        "                let aorusThreatPrefixesCyr = aorusStoredThreatPrefixesCyr.isEmpty ? [\"доксинг\", \"доксер\", \"докси\", \"доксн\", \"доксан\", \"доксю\", \"задокс\", \"задокш\", \"деанон\", \"деаноним\", \"сдеанон\", \"осинт\", \"пробив\", \"пробью\", \"пробь\", \"пробит\", \"сватинг\", \"сватн\", \"сватк\", \"засват\", \"ятебяубью\", \"убьютебя\", \"найдуиубью\", \"приедуиубью\", \"ятебязарежу\", \"зарежутебя\", \"ятебявырежу\", \"вырежутебя\", \"порежутебя\", \"перережутебя\", \"застрелю\", \"расстреляю\", \"удушутебя\", \"сожгутебя\", \"закопаютебя\", \"изобьютебя\", \"побьютебя\", \"сломаютебе\", \"тебеконец\", \"тытруп\", \"тебяпохоронят\", \"будешьлежать\", \"вынесутебя\"] : aorusStoredThreatPrefixesCyr\n"
         "                let aorusDeobMap: [Character: Character] = [\"0\": \"o\", \"1\": \"i\", \"3\": \"e\", \"4\": \"a\", \"5\": \"s\", \"6\": \"b\", \"7\": \"t\", \"8\": \"b\", \"9\": \"g\", \"@\": \"a\", \"$\": \"s\", \"а\": \"a\", \"в\": \"b\", \"е\": \"e\", \"к\": \"k\", \"м\": \"m\", \"н\": \"h\", \"о\": \"o\", \"р\": \"p\", \"с\": \"c\", \"т\": \"t\", \"у\": \"y\", \"х\": \"x\", \"і\": \"i\", \"ѕ\": \"s\", \"ԁ\": \"d\", \"ј\": \"j\", \"ԛ\": \"q\"]\n"
         "                func aorusDeobfuscate(_ text: String) -> String {\n"
         "                    var result = \"\"\n"
@@ -2580,9 +2580,9 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                        }\n"
         "                    }\n"
         "                    guard aorusSpamProtectionOn else { return nil }\n"
-        "                    let strongPatterns = [\"гарантированный доход\", \"гарантированная прибыль\", \"гарантия выплат\", \"доход каждый день\", \"быстрый доход\", \"пассивный доход\", \"без вложений\", \"100% доход\", \"доход без риска\", \"удвою ваши вложения\", \"удвою ваш депозит\", \"верну с прибылью\", \"закрытый инвест клуб\", \"личный инвестор\", \"инвестируй и получай\", \"переведи деньги\", \"без риска\", \"guaranteed profit\", \"guaranteed income\", \"guaranteed returns\", \"double your money\", \"double your investment\", \"double your deposit\", \"risk free profit\", \"get rich quick\", \"investment opportunity\", \"high return investment\", \"no risk high profit\", \"крипто раздача\", \"раздача криптовалюты\", \"бесплатные биткоины\", \"подключите кошелек\", \"подключи кошелек\", \"синхронизируйте кошелек\", \"введите сид фразу\", \"сид фраза\", \"мнемоническая фраза\", \"секретная фраза\", \"онлайн casino\", \"free bitcoin\", \"free crypto\", \"crypto giveaway\", \"bitcoin giveaway\", \"nft drop\", \"airdrop\", \"claim your airdrop\", \"claim your reward\", \"connect your wallet\", \"wallet connect\", \"validate your wallet\", \"sync your wallet\", \"seed phrase\", \"recovery phrase\", \"private key\", \"send 1 btc\", \"elon musk giveaway\", \"double your btc\", \"быстрый заработок\", \"легкий заработок\", \"легкие деньги\", \"работа без опыта\", \"удаленная работа без опыта\", \"пиши в лс заработок\", \"заработок в интернете\", \"ищем сотрудников на удаленку\", \"оплата ежедневно\", \"заработок от 5000\", \"предлагаю заработок\", \"заработок по\", \"тысяч в час\", \"тысяч в день\", \"тысяч в неделю\", \"заработок без вложений\", \"доход в час\", \"easy money\", \"make money fast\", \"work from home no experience\", \"be your own boss\", \"hiring remote workers\", \"earn money online\", \"ваш аккаунт заблокирован\", \"аккаунт будет удален\", \"подтвердите аккаунт\", \"верифицируйте аккаунт\", \"введите код\", \"отправьте код\", \"пришлите код\", \"код никому не сообщайте\", \"служба поддержки telegram\", \"техподдержка telegram\", \"официальная поддержка telegram\", \"verify your account\", \"confirm your identity\", \"account has been blocked\", \"account will be suspended\", \"telegram support\", \"official telegram team\", \"unusual login attempt\", \"click here to verify\", \"your account is at risk\", \"вы выиграли приз\", \"вы стали победителем\", \"заберите свой выигрыш\", \"поздравляем вы выиграли\", \"вы получили приз\", \"you have won\", \"you are a winner\", \"claim your prize\", \"congratulations you won\", \"you have been selected\", \"я взломал вашу камеру\", \"у меня есть ваше видео\", \"оплатите иначе разошлю\", \"i hacked your webcam\", \"i have your video\", \"pay or i will send\", \"i recorded you\"]\n"
+        "                    let strongPatterns = [\"гарантированный доход\", \"гарантированная прибыль\", \"гарантия выплат\", \"доход каждый день\", \"быстрый доход\", \"пассивный доход\", \"без вложений\", \"100% доход\", \"доход без риска\", \"удвою ваши вложения\", \"удвою ваш депозит\", \"верну с прибылью\", \"закрытый инвест клуб\", \"личный инвестор\", \"инвестируй и получай\", \"переведи деньги\", \"без риска\", \"guaranteed profit\", \"guaranteed income\", \"guaranteed returns\", \"double your money\", \"double your investment\", \"double your deposit\", \"risk free profit\", \"get rich quick\", \"investment opportunity\", \"high return investment\", \"no risk high profit\", \"крипто раздача\", \"раздача криптовалюты\", \"бесплатные биткоины\", \"подключите кошелек\", \"подключи кошелек\", \"синхронизируйте кошелек\", \"введите сид фразу\", \"сид фраза\", \"мнемоническая фраза\", \"секретная фраза\", \"онлайн casino\", \"free bitcoin\", \"free crypto\", \"crypto giveaway\", \"bitcoin giveaway\", \"nft drop\", \"airdrop\", \"claim your airdrop\", \"claim your reward\", \"connect your wallet\", \"wallet connect\", \"validate your wallet\", \"sync your wallet\", \"seed phrase\", \"recovery phrase\", \"private key\", \"send 1 btc\", \"elon musk giveaway\", \"double your btc\", \"быстрый заработок\", \"легкий заработок\", \"легкий зарабаток\", \"лёгкий заработок\", \"лёгкий зарабаток\", \"легкие деньги\", \"работа без опыта\", \"удаленная работа без опыта\", \"пиши в лс заработок\", \"заработок в интернете\", \"ищем сотрудников на удаленку\", \"оплата ежедневно\", \"заработок от 5000\", \"предлагаю заработок\", \"предлагаю зарабаток\", \"заработок по\", \"зарабаток по\", \"тысяч в час\", \"тысяч в день\", \"тысяч в неделю\", \"заработок без вложений\", \"доход в час\", \"easy money\", \"make money fast\", \"work from home no experience\", \"be your own boss\", \"hiring remote workers\", \"earn money online\", \"ваш аккаунт заблокирован\", \"аккаунт будет удален\", \"подтвердите аккаунт\", \"верифицируйте аккаунт\", \"введите код\", \"отправьте код\", \"пришлите код\", \"код никому не сообщайте\", \"служба поддержки telegram\", \"техподдержка telegram\", \"официальная поддержка telegram\", \"verify your account\", \"confirm your identity\", \"account has been blocked\", \"account will be suspended\", \"telegram support\", \"official telegram team\", \"unusual login attempt\", \"click here to verify\", \"your account is at risk\", \"вы выиграли приз\", \"вы стали победителем\", \"заберите свой выигрыш\", \"поздравляем вы выиграли\", \"вы получили приз\", \"you have won\", \"you are a winner\", \"claim your prize\", \"congratulations you won\", \"you have been selected\", \"я взломал вашу камеру\", \"у меня есть ваше видео\", \"оплатите иначе разошлю\", \"i hacked your webcam\", \"i have your video\", \"pay or i will send\", \"i recorded you\"]\n"
         "                    if strongPatterns.contains(where: { aorusSpamContains($0, normalized: text, compacted: compacted) }) { return \"builtinPattern\" }\n"
-        "                    let weightedPatterns = [\"заработ\", \"крипт\", \"биткоин\", \"инвест\", \"казино\", \"букмекер\", \"ставки\", \"розыгрыш\", \"приз\", \"доход\", \"прибыль\", \"трейдинг\", \"трейдер\", \"сигнал\", \"подработка\", \"арбитраж\", \"промокод\", \"слоты\", \"депозит\", \"вложени\", \"кошелек\", \"кошелёк\", \"верификац\", \"подтверд\", \"заблокирован\", \"поддержк\", \"выплат\", \"вывод средств\", \"реферал\", \"бонус\", \"обмен валют\", \"гарант\", \"forex\", \"binance\", \"usdt\", \"btc\", \"eth\", \"crypto\", \"bitcoin\", \"wallet\", \"giveaway\", \"bonus\", \"casino\", \"betting\", \"gambling\", \"trading\", \"profit\", \"invest\", \"referral\", \"withdraw\", \"deposit\", \"airdrop\", \"verify\", \"suspended\", \"prize\", \"winner\", \"lottery\", \"loan\", \"escort\", \"promo\", \"earn\", \"payout\"]\n"
+        "                    let weightedPatterns = [\"заработ\", \"зарабат\", \"крипт\", \"биткоин\", \"инвест\", \"казино\", \"букмекер\", \"ставки\", \"розыгрыш\", \"приз\", \"доход\", \"прибыль\", \"трейдинг\", \"трейдер\", \"сигнал\", \"подработка\", \"арбитраж\", \"промокод\", \"слоты\", \"депозит\", \"вложени\", \"кошелек\", \"кошелёк\", \"верификац\", \"подтверд\", \"заблокирован\", \"поддержк\", \"выплат\", \"вывод средств\", \"реферал\", \"бонус\", \"обмен валют\", \"гарант\", \"forex\", \"binance\", \"usdt\", \"btc\", \"eth\", \"crypto\", \"bitcoin\", \"wallet\", \"giveaway\", \"bonus\", \"casino\", \"betting\", \"gambling\", \"trading\", \"profit\", \"invest\", \"referral\", \"withdraw\", \"deposit\", \"airdrop\", \"verify\", \"suspended\", \"prize\", \"winner\", \"lottery\", \"loan\", \"escort\", \"promo\", \"earn\", \"payout\"]\n"
         "                    var score = 0\n"
         "                    for pattern in weightedPatterns where aorusSpamContains(pattern, normalized: text, compacted: compacted) { score += 1 }\n"
         "                    let links = aorusSpamLinkCount(text)\n"
@@ -4422,6 +4422,56 @@ def patch_conversation_export(tg: Path) -> None:
         print(f"Conversation export: injected Download Conversation menu item ({count}x, above Delete)")
     else:
         print("WARNING: PeerInfoScreenPerformButtonAction clear-history anchor not found — export item NOT added")
+
+
+def patch_profile_report_button(tg: Path) -> None:
+    """Optionally show Telegram's native Report action in the profile "More" menu.
+
+    The user-facing switch lives in AorusGramUI and mirrors its value to
+    aorusgram_profile_report_button. When enabled, this inserts a Report row directly
+    above the destructive Block action in PeerInfoScreenPerformButtonAction.swift.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenPerformButtonAction.swift"
+    if not path.is_file():
+        print("PeerInfoScreenPerformButtonAction.swift not found, skip profile report button")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusgram_profile_report_button" in t:
+        print("Profile report button: already injected")
+        return
+
+    item = (
+        "                    if UserDefaults.standard.bool(forKey: \"aorusgram_profile_report_button\") {\n"
+        "                        items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Пожаловаться\" : \"Report\", icon: { theme in\n"
+        "                            return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Report\"), color: theme.contextMenu.primaryColor)\n"
+        "                        }, action: { [weak self] contextController, f in\n"
+        "                            f(.dismissWithoutContent)\n"
+        "                            guard let strongSelf = self else {\n"
+        "                                return\n"
+        "                            }\n"
+        "                            strongSelf.openReport(type: .default, contextController: contextController, backAction: nil)\n"
+        "                        })))\n"
+        "                    }\n"
+    )
+
+    anchors = [
+        "                    items.append(.action(ContextMenuActionItem(text: presentationData.strings.UserInfo_Block",
+        "                    items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.UserInfo_Block",
+        "                    items.append(.action(ContextMenuActionItem(text: strings.UserInfo_Block",
+    ]
+    applied = 0
+    for anchor in anchors:
+        if anchor in t:
+            count = t.count(anchor)
+            t = t.replace(anchor, item + anchor)
+            applied += count
+            break
+
+    if applied:
+        path.write_text(t, encoding="utf-8")
+        print(f"Profile report button: injected Report item above Block ({applied}x)")
+    else:
+        print("WARNING: PeerInfoScreenPerformButtonAction Block anchor not found — profile Report item NOT added")
 
 
 def patch_unlimited_pinned_chats(tg: Path) -> None:
@@ -14412,6 +14462,7 @@ def main() -> None:
     patch_bypass_channel_copy_protection(tg)
     patch_bypass_story_download(tg)
     patch_conversation_export(tg)
+    patch_profile_report_button(tg)
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_media_caption_rich_edit(tg)

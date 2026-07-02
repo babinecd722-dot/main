@@ -311,6 +311,7 @@ private struct AorusState: Equatable {
     var tripleTapDelete: Bool
     var glassUI: Bool
     var amoledMode: Bool
+    var profileReportButton: Bool
     var hideCallsTab: Bool
     var hideContactsTab: Bool
     var siriShortcuts: Bool
@@ -412,6 +413,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case uiHeader(PresentationTheme, String)
     case glassUI(PresentationTheme, String, Bool)
     case amoledMode(PresentationTheme, String, Bool)
+    case profileReportButton(PresentationTheme, String, Bool)
     case hideCallsTab(PresentationTheme, String, Bool)
     case hideContactsTab(PresentationTheme, String, Bool)
     case siriShortcuts(PresentationTheme, String, Bool)
@@ -457,7 +459,7 @@ private enum AorusEntry: ItemListNodeEntry {
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .glassUI, .amoledMode, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge:
+        case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge:
             return AorusSection.ui.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
@@ -515,10 +517,11 @@ private enum AorusEntry: ItemListNodeEntry {
         case .uiHeader:             return 50
         case .glassUI:              return 51
         case .amoledMode:           return 52
-        case .hideCallsTab:         return 53
-        case .hideContactsTab:      return 54
-        case .siriShortcuts:        return 55
-        case .appBadge:             return 56
+        case .profileReportButton:  return 53
+        case .hideCallsTab:         return 54
+        case .hideContactsTab:      return 55
+        case .siriShortcuts:        return 56
+        case .appBadge:             return 57
         case .editLocalHeader:      return 63
         case .messagesDoubleCopy:   return 64
         case .messagesTripleDelete: return 65
@@ -620,6 +623,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .glassUI(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .amoledMode(lt, ls, lv):
             if case let .amoledMode(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .profileReportButton(lt, ls, lv):
+            if case let .profileReportButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .hideCallsTab(lt, ls, lv):
             if case let .hideCallsTab(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .hideContactsTab(lt, ls, lv):
@@ -753,6 +758,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.glassUI, $0) })
         case let .amoledMode(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.amoledMode, $0) })
+        case let .profileReportButton(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.profileReportButton, $0) })
         case let .hideCallsTab(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideCallsTab, !$0) })
         case let .hideContactsTab(_, title, value):
@@ -857,6 +864,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .uiHeader(theme, l10n.uiHeader),
         .glassUI(theme, l10n.glassUI, state.glassUI),
         .amoledMode(theme, l10n.amoledMode, state.amoledMode),
+        .profileReportButton(theme, l10n.profileReportButton, state.profileReportButton),
         // Switch reflects tab PRESENCE: on = tab shown (stored hide flag inverted).
         .hideCallsTab(theme, l10n.hideCallsTab, !state.hideCallsTab),
         .hideContactsTab(theme, l10n.hideContactsTab, !state.hideContactsTab),
@@ -999,6 +1007,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         tripleTapDelete:    mgr.tripleTapDelete,
         glassUI:            mgr.glassUI,
         amoledMode:         mgr.amoledMode,
+        profileReportButton: mgr.profileReportButton,
         hideCallsTab:       mgr.hideCallsTab,
         hideContactsTab:    mgr.hideContactsTab,
         siriShortcuts:      mgr.siriShortcuts,
@@ -1064,6 +1073,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.tripleTapDelete     = s.tripleTapDelete
             mgr.glassUI             = s.glassUI
             mgr.amoledMode          = s.amoledMode
+            mgr.profileReportButton = s.profileReportButton
             mgr.hideCallsTab        = s.hideCallsTab
             mgr.hideContactsTab     = s.hideContactsTab
             mgr.siriShortcuts       = s.siriShortcuts

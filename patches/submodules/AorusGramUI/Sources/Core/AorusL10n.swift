@@ -122,6 +122,7 @@ public struct AorusL10n {
     public var glassUI: String { t("Glass UI", "Glass UI") }
     public var siriShortcuts: String { t("Siri Shortcuts", "Siri Shortcuts") }
     public var amoledMode: String { t("AMOLED интерфейс", "AMOLED Interface") }
+    public var profileReportButton: String { t("Кнопка «Пожаловаться»", "Report Button") }
 
     // Badge picker (notch-area logo): AorusGram / ATunnel / off.
     public var appBadge: String { t("Бейдж", "Badge") }

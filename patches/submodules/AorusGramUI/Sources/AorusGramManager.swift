@@ -23,6 +23,7 @@ public final class AorusGramManager {
     public var downloadAccel: Bool     = true  { didSet { save() } }
     public var glassUI: Bool           = true  { didSet { save() } }
     public var amoledMode: Bool        = false { didSet { save() } }
+    public var profileReportButton: Bool = false { didSet { save() } }
     public var hideCallsTab: Bool      = false { didSet { save() } }
     public var hideContactsTab: Bool   = false { didSet { save() } }
     public var voiceTranscription: Bool = false { didSet { save() } }
@@ -83,6 +84,7 @@ public final class AorusGramManager {
             ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
             ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
             ud.set(maxMediaQuality,     forKey: "aorusgram_feature_max_media_quality")
+            ud.set(profileReportButton, forKey: "aorusgram_profile_report_button")
         }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
         ghostMode           = d["ghostMode"]           as? Bool ?? false
@@ -95,6 +97,7 @@ public final class AorusGramManager {
         downloadAccel       = d["downloadAccel"]       as? Bool ?? true
         glassUI             = d["glassUI"]             as? Bool ?? true
         amoledMode          = d["amoledMode"]          as? Bool ?? false
+        profileReportButton = d["profileReportButton"] as? Bool ?? false
         hideCallsTab        = d["hideCallsTab"]        as? Bool ?? false
         hideContactsTab     = d["hideContactsTab"]     as? Bool ?? false
         voiceTranscription  = d["voiceTranscription"]  as? Bool ?? false
@@ -139,6 +142,7 @@ public final class AorusGramManager {
             "downloadAccel":       downloadAccel,
             "glassUI":             glassUI,
             "amoledMode":          amoledMode,
+            "profileReportButton": profileReportButton,
             "hideCallsTab":        hideCallsTab,
             "hideContactsTab":     hideContactsTab,
             "voiceTranscription":  voiceTranscription,
@@ -186,6 +190,7 @@ public final class AorusGramManager {
         ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
         ud.set(glassUI,             forKey: "aorusgram_feature_glass_ui")
         ud.set(amoledMode,          forKey: "aorusgram_amoled")
+        ud.set(profileReportButton, forKey: "aorusgram_profile_report_button")
         ud.set(hideCallsTab,        forKey: "aorusgram_hide_calls_tab")
         ud.set(hideContactsTab,     forKey: "aorusgram_hide_contacts_tab")
         ud.set(streaks,             forKey: "aorusgram_feature_streaks")
