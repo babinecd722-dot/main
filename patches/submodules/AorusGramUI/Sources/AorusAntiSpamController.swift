@@ -293,7 +293,7 @@ private final class ASKeywordInputItemNode: ListViewItemNode, UITextFieldDelegat
     private var item: ASKeywordInputItem?
     private var layoutParams: ListViewItemLayoutParams?
 
-    override init() {
+    init() {
         backgroundNode.isLayerBacked = true
         topStripeNode.isLayerBacked = true
         bottomStripeNode.isLayerBacked = true
@@ -358,6 +358,8 @@ private final class ASKeywordInputItemNode: ListViewItemNode, UITextFieldDelegat
                 guard let self else { return }
                 self.item = item
                 self.layoutParams = params
+                self.contentSize = contentSize
+                self.insets = insets
                 self.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
                 self.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
                 self.bottomStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
@@ -396,7 +398,6 @@ private final class ASKeywordInputItemNode: ListViewItemNode, UITextFieldDelegat
 
                 self.applyItem(item)
                 self.layoutTextField()
-                self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
             })
         }
     }
