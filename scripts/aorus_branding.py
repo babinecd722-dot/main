@@ -611,6 +611,17 @@ def patch_accent_color_purple(tg: Path) -> None:
          "accentColor: UIColor(rgb: 0x3e88f7)",
          "accentColor: UIColor(rgb: 0x9b4dff)",
          "dark accent"),
+        # The base "Night" theme hardcodes a white selected tab; every other theme derives
+        # it from the accent. Tint the selected Chats/Settings tab violet here too so the
+        # tab bar highlight matches across all themes. (Unselected icons stay white.)
+        ("submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift",
+         "selectedIconColor: UIColor(rgb: 0xffffff),",
+         "selectedIconColor: UIColor(rgb: 0x9b4dff),",
+         "night tab selected icon"),
+        ("submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift",
+         "selectedTextColor: UIColor(rgb: 0xffffff),",
+         "selectedTextColor: UIColor(rgb: 0x9b4dff),",
+         "night tab selected text"),
     ]
     for rel, old, new, label in replacements:
         p = tg / rel
@@ -627,6 +638,128 @@ def patch_accent_color_purple(tg: Path) -> None:
         t = t.replace(old, new, 1)
         p.write_text(t, encoding="utf-8")
         print(f"AccentPurple: {label} -> neon violet")
+
+
+def patch_outgoing_bubble_purple(tg: Path) -> None:
+    """Make the user's OUTGOING message bubbles a neon-violet gradient that matches the
+    accent/icon; incoming bubbles are left untouched (on the dark themes they are already
+    a near-black 0x1D1D1D on a black background — exactly the "black incoming" look).
+
+    Telegram defines the outgoing bubble fill per built-in theme:
+      - Night (pure dark): a hardcoded blue gradient -> violet.
+      - Day (the accent "Day" light theme): blue + accent -> violet.
+      - Day Classic (default light): a light-green bubble with dark text -> violet, and
+        its outgoing text/element colours are flipped to the white-on-colour set so the
+        text stays readable on the darker bubble.
+      - Night Accent (dark tinted): its outgoing bubble is derived from the accent, so it
+        already turns violet from patch_accent_color_purple — nothing to do here.
+    """
+    grad = "[UIColor(rgb: 0xb15cff), UIColor(rgb: 0x8a3bee)]"
+    day = tg / "submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift"
+    night = tg / "submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift"
+
+    # --- Night (pure dark): blue gradient -> violet (withWallpaper + withoutWallpaper) ---
+    if night.is_file():
+        t = night.read_text(encoding="utf-8")
+        old = "fill: [UIColor(rgb: 0x61BCF9), UIColor(rgb: 0x0088ff)],"
+        if grad in t:
+            print("OutgoingPurple: night already violet")
+        elif old in t:
+            t = t.replace(old, f"fill: {grad},")
+            # pressed/highlight state (was the blue 0x61BCF9) -> lighter violet
+            t = t.replace("highlightedFill: UIColor(rgb: 0x61BCF9),", "highlightedFill: UIColor(rgb: 0xb15cff),")
+            night.write_text(t, encoding="utf-8")
+            print("OutgoingPurple: night outgoing -> violet")
+        else:
+            print("OutgoingPurple: WARNING night outgoing anchor not found")
+    else:
+        print("OutgoingPurple: DefaultDarkPresentationTheme.swift not found — skip night")
+
+    if not day.is_file():
+        print("OutgoingPurple: DefaultDayPresentationTheme.swift not found — skip day")
+        return
+    t = day.read_text(encoding="utf-8")
+
+    # --- Day (accent light theme): blue + accent -> violet ---
+    day_old = "fill: [UIColor(rgb: 0x57b2e0), defaultDayAccentColor],"
+    if day_old in t:
+        t = t.replace(day_old, f"fill: {grad},")
+        # pressed state (was the blue 0x57b2e0) -> violet
+        t = t.replace("highlightedFill: UIColor(rgb: 0x57b2e0).withMultipliedBrightnessBy(0.7),",
+                      "highlightedFill: UIColor(rgb: 0xb15cff).withMultipliedBrightnessBy(0.7),")
+        print("OutgoingPurple: day (accent) outgoing -> violet")
+    else:
+        print("OutgoingPurple: day (accent) anchor already applied / not found")
+
+    # --- Day Classic (default light): green bubble -> violet ---
+    green_old = "fill: [UIColor(rgb: 0xe1ffc7)],"
+    if green_old in t:
+        t = t.replace(green_old, f"fill: {grad},")
+        # pressed state (was light green 0xbaff93) -> light violet
+        t = t.replace("highlightedFill: UIColor(rgb: 0xbaff93),", "highlightedFill: UIColor(rgb: 0xc98cff),")
+        print("OutgoingPurple: dayClassic bubble -> violet")
+    else:
+        print("OutgoingPurple: dayClassic bubble anchor already applied / not found")
+
+    # --- Day Classic: flip the green outgoing text/element colours to the white set so
+    #     they read on the darker violet bubble. Anchored on the exact green tail. ---
+    green_tail = (
+        "            primaryTextColor: UIColor(rgb: 0x000000),\n"
+        "            secondaryTextColor: UIColor(rgb: 0x008c09, alpha: 0.8),\n"
+        "            linkTextColor: UIColor(rgb: 0x004bad),\n"
+        "            linkHighlightColor: defaultDayAccentColor.withAlphaComponent(0.3),\n"
+        "            scamColor: UIColor(rgb: 0xff3b30),\n"
+        "            textHighlightColor: UIColor(rgb: 0xffe438),\n"
+        "            accentTextColor: UIColor(rgb: 0x00a700),\n"
+        "            accentControlColor: UIColor(rgb: 0x3fc33b),\n"
+        "            accentControlDisabledColor: UIColor(rgb: 0x3fc33b).withAlphaComponent(0.7),\n"
+        "            mediaActiveControlColor: UIColor(rgb: 0x3fc33b),\n"
+        "            mediaInactiveControlColor: UIColor(rgb: 0x93d987),\n"
+        "            mediaControlInnerBackgroundColor: UIColor(rgb: 0xe1ffc7),\n"
+        "            pendingActivityColor: UIColor(rgb: 0x42b649),\n"
+        "            fileTitleColor: UIColor(rgb: 0x3faa3c),\n"
+        "            fileDescriptionColor: UIColor(rgb: 0x6fb26a),\n"
+        "            fileDurationColor: UIColor(rgb: 0x008c09, alpha: 0.8),\n"
+        "            mediaPlaceholderColor: UIColor(rgb: 0xd2f2b6),\n"
+        "            polls: PresentationThemeChatBubblePolls(radioButton: UIColor(rgb: 0x93d987), radioProgress: UIColor(rgb: 0x3fc33b), highlight: UIColor(rgb: 0x3fc33b).withAlphaComponent(0.08), separator: UIColor(rgb: 0x93d987), bar: UIColor(rgb: 0x00A700), barIconForeground: .white, barPositive: UIColor(rgb: 0x00A700), barNegative: UIColor(rgb: 0x00A700)),\n"
+        "            actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: serviceBackgroundColor, withoutWallpaper: UIColor(rgb: 0x596e89, alpha: 0.35)),\n"
+        "            actionButtonsStrokeColor: PresentationThemeVariableColor(color: .clear),\n"
+        "            actionButtonsTextColor: PresentationThemeVariableColor(color: UIColor(rgb: 0xffffff)),\n"
+        "            textSelectionColor: UIColor(rgb: 0xbbde9f),\n"
+        "            textSelectionKnobColor: UIColor(rgb: 0x3fc33b)),\n"
+    )
+    white_tail = (
+        "            primaryTextColor: UIColor(rgb: 0xffffff),\n"
+        "            secondaryTextColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+        "            linkTextColor: UIColor(rgb: 0xffffff),\n"
+        "            linkHighlightColor: UIColor(rgb: 0xffffff, alpha: 0.3),\n"
+        "            scamColor: UIColor(rgb: 0xffffff),\n"
+        "            textHighlightColor: UIColor(rgb: 0xffc738),\n"
+        "            accentTextColor: UIColor(rgb: 0xffffff),\n"
+        "            accentControlColor: UIColor(rgb: 0xffffff),\n"
+        "            accentControlDisabledColor: UIColor(rgb: 0xffffff).withAlphaComponent(0.5),\n"
+        "            mediaActiveControlColor: UIColor(rgb: 0xffffff),\n"
+        "            mediaInactiveControlColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+        "            mediaControlInnerBackgroundColor: .clear,\n"
+        "            pendingActivityColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+        "            fileTitleColor: UIColor(rgb: 0xffffff),\n"
+        "            fileDescriptionColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+        "            fileDurationColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+        "            mediaPlaceholderColor: UIColor(rgb: 0x8a3bee),\n"
+        "            polls: PresentationThemeChatBubblePolls(radioButton: UIColor(rgb: 0xffffff, alpha: 0.65), radioProgress: UIColor(rgb: 0xffffff), highlight: UIColor(rgb: 0xffffff, alpha: 0.12), separator: UIColor(rgb: 0xffffff, alpha: 0.65), bar: UIColor(rgb: 0xffffff), barIconForeground: .clear, barPositive: UIColor(rgb: 0xffffff), barNegative: UIColor(rgb: 0xffffff)),\n"
+        "            actionButtonsFillColor: PresentationThemeVariableColor(withWallpaper: serviceBackgroundColor, withoutWallpaper: UIColor(rgb: 0xffffff, alpha: 0.8)),\n"
+        "            actionButtonsStrokeColor: PresentationThemeVariableColor(color: .clear),\n"
+        "            actionButtonsTextColor: PresentationThemeVariableColor(color: UIColor(rgb: 0xffffff)),\n"
+        "            textSelectionColor: UIColor(rgb: 0xffffff, alpha: 0.2),\n"
+        "            textSelectionKnobColor: UIColor(rgb: 0xffffff)),\n"
+    )
+    if green_tail in t:
+        t = t.replace(green_tail, white_tail, 1)
+        print("OutgoingPurple: dayClassic outgoing text -> white set")
+    else:
+        print("OutgoingPurple: dayClassic text tail anchor not found (already flipped?)")
+
+    day.write_text(t, encoding="utf-8")
 
 
 def patch_metal_comma_operator_warnings(tg: Path) -> None:
@@ -14436,6 +14569,7 @@ def main() -> None:
     patch_authorization_network_flood_wait(tg)
     patch_authorization_login_title_gold(tg)
     patch_accent_color_purple(tg)
+    patch_outgoing_bubble_purple(tg)
     patch_callkit_brand_name(tg)
     patch_metal_comma_operator_warnings(tg)
     patch_presentation_theme_intro_gold(tg)
