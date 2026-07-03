@@ -5595,7 +5595,7 @@ def patch_default_dark_theme(tg: Path) -> None:
         "theme: .builtin(.night)), largeEmoji: true, reduceMotion: false)"
     )
     new_default = (
-        "return PresentationThemeSettings(theme: .builtin(.night), themePreferredBaseTheme: [:], "
+        "return PresentationThemeSettings(theme: .builtin(.dayClassic), themePreferredBaseTheme: [:], "
         "themeSpecificAccentColors: [:], themeSpecificChatWallpapers: [:], useSystemFont: true, "
         "fontSize: .regular, listsFontSize: .regular, chatBubbleSettings: .default, "
         "automaticThemeSwitchSetting: AutomaticThemeSwitchSetting(force: false, trigger: .explicitNone, "
@@ -6123,12 +6123,15 @@ def patch_default_auto_night(tg: Path) -> None:
         print("AutoNight: PresentationThemeSettings.swift not found — skipped")
         return
     t = f.read_text(encoding="utf-8")
-    desired = "AutomaticThemeSwitchSetting(force: false, trigger: .system, theme: .builtin(.night))"
+    # Night mode OFF by default: .explicitNone shows "Выключен" in the Auto-Night screen,
+    # which is what the stock state must read (the dark look comes from the dayClassic
+    # routing, not from auto-switching to night).
+    desired = "AutomaticThemeSwitchSetting(force: false, trigger: .explicitNone, theme: .builtin(.night))"
     pattern = r"AutomaticThemeSwitchSetting\(force: [^,]+, trigger: \.[A-Za-z]+, theme: \.builtin\(\.[A-Za-z]+\)\)"
     new_t, n = re.subn(pattern, desired, t)
     if n and new_t != t:
         f.write_text(new_t, encoding="utf-8")
-        print(f"AutoNight: pinned System + .night in {n} place(s)")
+        print(f"AutoNight: pinned night mode OFF (.explicitNone) in {n} place(s)")
     elif n:
         print("AutoNight: already System + .night")
     else:
@@ -6136,33 +6139,62 @@ def patch_default_auto_night(tg: Path) -> None:
 
 
 def patch_force_dark_base_theme(tg: Path) -> None:
-    """Make the BASE default theme dark (.night) for fresh installs / stock.
-
-    patch_default_auto_night already pins automaticThemeSwitchSetting to
-    (trigger: .system, theme: .night). With the BASE theme also .night the
-    resolved theme is night whether the device is in light OR dark mode — i.e.
-    AorusGram is always dark out of the box, independent of the iOS appearance —
-    while the Auto-Night settings screen still reads "Системная" (trigger is left
-    untouched). The light theme stays fully selectable in Settings → Appearance.
-    Existing users keep their stored preference; only the fresh-install default
-    changes. Idempotent.
+    """Stock default = the .dayClassic slot (which patch_dayclassic_uses_dark routes to our
+    dark theme) with night mode OFF. So the app is dark out of the box while Settings reads
+    "night theme off, night mode off". Ensure defaultSettings' selected theme is .dayClassic
+    (some builds shipped it forced to .night); the trigger is set to .explicitNone by
+    patch_default_auto_night. Idempotent.
     """
     f = tg / "submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift"
     if not f.is_file():
         print("ForceDark: PresentationThemeSettings.swift not found — skipped")
         return
     t = f.read_text(encoding="utf-8")
-    old = "PresentationThemeSettings(theme: .builtin(.dayClassic), themePreferredBaseTheme:"
-    new = "PresentationThemeSettings(theme: .builtin(.night), themePreferredBaseTheme:"
-    if new in t:
-        print("ForceDark: base default theme already .night")
+    night = "PresentationThemeSettings(theme: .builtin(.night), themePreferredBaseTheme:"
+    dayc = "PresentationThemeSettings(theme: .builtin(.dayClassic), themePreferredBaseTheme:"
+    if dayc in t and night not in t:
+        print("ForceDark: defaultSettings already .dayClassic")
+        return
+    if night in t:
+        t = t.replace(night, dayc, 1)
+        f.write_text(t, encoding="utf-8")
+        print("ForceDark: defaultSettings selected theme -> .dayClassic (stock night-off)")
+    else:
+        print("ForceDark: defaultSettings anchor not found (already .dayClassic?) — skipped")
+
+
+def patch_dayclassic_uses_dark(tg: Path) -> None:
+    """Reuse the existing dark theme for the default (.dayClassic) slot.
+
+    The user wants the stock state to read "night theme OFF, night mode OFF" yet still look
+    like our dark theme (grey tab bar, dark rows) — not the white light theme. Rather than
+    author a whole new theme, route the .dayClassic reference to makeDefaultDarkPresentationTheme
+    so "day classic" simply RENDERS as our dark theme. .night stays the standard dark theme
+    for when the user explicitly turns night on. Existing selections are unaffected.
+    """
+    f = tg / "submodules/TelegramPresentationData/Sources/MakePresentationTheme.swift"
+    if not f.is_file():
+        print("DayClassicDark: MakePresentationTheme.swift not found — skipped")
+        return
+    t = f.read_text(encoding="utf-8")
+    old = (
+        "        case .dayClassic:\n"
+        "            theme = makeDefaultDayPresentationTheme(extendingThemeReference: extendingThemeReference, serviceBackgroundColor: serviceBackgroundColor, day: false, preview: preview)\n"
+    )
+    new = (
+        "        case .dayClassic:\n"
+        "            // AorusGram: the default slot renders as our dark theme (stock stays night-off).\n"
+        "            theme = makeDefaultDarkPresentationTheme(extendingThemeReference: extendingThemeReference, preview: preview)\n"
+    )
+    if "AorusGram: the default slot renders as our dark theme" in t:
+        print("DayClassicDark: already routed")
         return
     if old in t:
         t = t.replace(old, new, 1)
         f.write_text(t, encoding="utf-8")
-        print("ForceDark: defaultSettings base theme -> .night (always dark stock)")
+        print("DayClassicDark: .dayClassic -> dark theme")
     else:
-        print("ForceDark: WARNING defaultSettings base-theme anchor not found — skipped")
+        print("DayClassicDark: WARNING .dayClassic case anchor not found — skipped")
 
 
 def patch_intro_default_dark(tg: Path) -> None:
@@ -14711,6 +14743,7 @@ def main() -> None:
     patch_app_delegate_language_bridge(tg)
     # patch_default_dark_theme intentionally NOT called (it forced .explicitNone,
     # which showed "Off"). Instead pin auto-night to System + Night explicitly:
+    patch_dayclassic_uses_dark(tg)
     patch_default_auto_night(tg)
     patch_force_dark_base_theme(tg)
     patch_intro_default_dark(tg)
