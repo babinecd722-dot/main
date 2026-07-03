@@ -713,6 +713,28 @@ def patch_outgoing_bubble_purple(tg: Path) -> None:
     else:
         print("OutgoingPurple: DefaultDarkPresentationTheme.swift not found — skip night")
 
+    # --- Night Accent (dark tinted): the outgoing bubble is DERIVED from the accent with
+    #     reduced brightness + a lightened top stop, which reads as a milky/pastel violet.
+    #     Force the same fixed neon gradient as the other themes so it matches exactly.
+    tinted = tg / "submodules/TelegramPresentationData/Sources/DefaultDarkTintedPresentationTheme.swift"
+    if tinted.is_file():
+        tt = tinted.read_text(encoding="utf-8")
+        tinted_old = (
+            "    let outgoingBubbleFillGradientColor = accentColor.withMultiplied(hue: 1.019, saturation: 0.731, brightness: 0.59)\n"
+            "\n"
+            "    let outgoingBubbleFillColors: [UIColor] = [outgoingBubbleFillGradientColor.withMultiplied(hue: 0.966, saturation: 0.61, brightness: 0.98), outgoingBubbleFillGradientColor]\n"
+        )
+        if "let outgoingBubbleFillColors: [UIColor] = [UIColor(rgb: 0x9b4dff)" in tt:
+            print("OutgoingPurple: dark-tinted already fixed violet")
+        elif tinted_old in tt:
+            tt = tt.replace(tinted_old, "    let outgoingBubbleFillColors: [UIColor] = " + grad + "\n", 1)
+            tinted.write_text(tt, encoding="utf-8")
+            print("OutgoingPurple: dark-tinted outgoing -> fixed violet")
+        else:
+            print("OutgoingPurple: WARNING dark-tinted outgoing anchor not found")
+    else:
+        print("OutgoingPurple: DefaultDarkTintedPresentationTheme.swift not found — skip tinted")
+
     if not day.is_file():
         print("OutgoingPurple: DefaultDayPresentationTheme.swift not found — skip day")
         return

@@ -8,7 +8,7 @@ enum SubscriptionStyle {
     static let cardElevated   = UIColor(white: 0.17, alpha: 1.0)
     static let primaryText    = UIColor.white
     static let secondaryText  = UIColor(white: 0.62, alpha: 1.0)
-    static let accent         = UIColor(red: 0x34/255.0, green: 0x78/255.0, blue: 0xF6/255.0, alpha: 1.0)
+    static let accent         = UIColor(red: 0x9B/255.0, green: 0x4D/255.0, blue: 0xFF/255.0, alpha: 1.0) // AorusGram neon violet
     static let success        = UIColor(red: 0x34/255.0, green: 0xC7/255.0, blue: 0x59/255.0, alpha: 1.0)
     static let destructive    = UIColor(red: 0xFF/255.0, green: 0x3B/255.0, blue: 0x30/255.0, alpha: 1.0)
 
