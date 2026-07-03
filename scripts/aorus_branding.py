@@ -622,6 +622,19 @@ def patch_accent_color_purple(tg: Path) -> None:
          "selectedTextColor: UIColor(rgb: 0xffffff),",
          "selectedTextColor: UIColor(rgb: 0x9b4dff),",
          "night tab selected text"),
+        # THE decisive runtime lever. The presentation theme is rebuilt at runtime from
+        # PresentationThemeAccentColor: when no custom accent is set, colorFor() returns a
+        # hardcoded blue (0x3e88f7 for night+blue) and the .blue base color is 0x0088ff.
+        # These — not the theme-file constants above — are what actually paint the running
+        # app blue, so they must become violet or nothing visibly changes.
+        ("submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift",
+         "value = 0x0088ff",
+         "value = 0x9b4dff",
+         "base .blue accent (runtime)"),
+        ("submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift",
+         "return UIColor(rgb: 0x3e88f7)",
+         "return UIColor(rgb: 0x9b4dff)",
+         "night default accent (runtime)"),
     ]
     for rel, old, new, label in replacements:
         p = tg / rel
@@ -4610,12 +4623,39 @@ def patch_profile_report_button(tg: Path) -> None:
         "                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.ReportPeer_Report, textColor: .destructive, icon: { theme in\n"
         "                            generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Report\"), color: theme.contextMenu.destructiveColor)\n"
         "                        }, action: { [weak self] c, f in\n"
-        "                            // Route through Telegram's own report entry point (same call its\n"
-        "                            // native Report menu item uses). Passing the context controller `c`\n"
-        "                            // lets the reason picker transition in-place; the previous approach\n"
-        "                            // dismissed the menu first and pushed the screen manually, which\n"
-        "                            // silently did nothing.\n"
-        "                            self?.openReport(type: .default, contextController: c, backAction: nil)\n"
+        "                            // Report a USER. The native openReport / makeContentReportScreen only\n"
+        "                            // presents a screen when the server returns .options (channels/groups).\n"
+        "                            // For a user it returns .addComment or .reported, so that path showed\n"
+        "                            // nothing at all. Handle every result explicitly here.\n"
+        "                            f(.dismissWithoutContent)\n"
+        "                            guard let strongSelf = self else { return }\n"
+        "                            let aorusRPeer = strongSelf.peerId\n"
+        "                            let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
+        "                            let aorusReportToast: (String) -> Void = { [weak self] toastText in\n"
+        "                                guard let strongSelf = self else { return }\n"
+        "                                strongSelf.controller?.present(UndoOverlayController(presentationData: strongSelf.presentationData, content: .emoji(name: \"PoliceCar\", text: toastText), elevatedLayout: false, action: { _ in return false }), in: .current)\n"
+        "                            }\n"
+        "                            let _ = (strongSelf.context.engine.messages.reportContent(subject: .peer(aorusRPeer), option: nil, message: nil)\n"
+        "                            |> deliverOnMainQueue).startStandalone(next: { [weak self] result in\n"
+        "                                guard let strongSelf = self else { return }\n"
+        "                                switch result {\n"
+        "                                case .options:\n"
+        "                                    strongSelf.context.sharedContext.makeContentReportScreen(context: strongSelf.context, subject: .peer(aorusRPeer), forceDark: false, present: { [weak self] controller in\n"
+        "                                        self?.controller?.push(controller)\n"
+        "                                    }, completion: {}, requestSelectMessages: { [weak self] title, option, message in\n"
+        "                                        self?.openChatForReporting(title: title, option: option, message: message)\n"
+        "                                    })\n"
+        "                                case let .addComment(_, option):\n"
+        "                                    let _ = strongSelf.context.engine.messages.reportContent(subject: .peer(aorusRPeer), option: option, message: nil).startStandalone()\n"
+        "                                    aorusReportToast(aorusRu ? \"\\u{0416}\\u{0430}\\u{043b}\\u{043e}\\u{0431}\\u{0430} \\u{043e}\\u{0442}\\u{043f}\\u{0440}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d}\\u{0430}\" : strongSelf.presentationData.strings.Report_Succeed)\n"
+        "                                case .reported:\n"
+        "                                    aorusReportToast(aorusRu ? \"\\u{0416}\\u{0430}\\u{043b}\\u{043e}\\u{0431}\\u{0430} \\u{043e}\\u{0442}\\u{043f}\\u{0440}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d}\\u{0430}\" : strongSelf.presentationData.strings.Report_Succeed)\n"
+        "                                }\n"
+        "                            }, error: { [weak self] _ in\n"
+        "                                guard let strongSelf = self else { return }\n"
+        "                                let _ = strongSelf\n"
+        "                                aorusReportToast(aorusRu ? \"\\u{041d}\\u{0435} \\u{0443}\\u{0434}\\u{0430}\\u{043b}\\u{043e}\\u{0441}\\u{044c} \\u{043e}\\u{0442}\\u{043f}\\u{0440}\\u{0430}\\u{0432}\\u{0438}\\u{0442}\\u{044c} \\u{0436}\\u{0430}\\u{043b}\\u{043e}\\u{0431}\\u{0443}\" : \"Couldn't submit the report\")\n"
+        "                            })\n"
         "                        })))\n"
         "                    }\n"
     )

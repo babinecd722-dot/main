@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v167-release-12.8-png8
+          key: tg-ios-src-v168-release-12.8-png8
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -452,7 +452,17 @@ jobs:
               line_start = t.rfind("\n", 0, idx) + 1
               indent = t[line_start:idx]
               block = (
-                  indent + "items[.aorusGram]!.append(PeerInfoScreenDisclosureItem(id: 0, text: \"AorusGram\", icon: renderSettingsIcon(name: \"Item List/Icons/Settings\", backgroundColors: [UIColor(rgb: 0x007AFF)]), action: {\n"
+                  indent + "let aorusRowIcon: UIImage? = {\n"
+                  + indent + "    // Use the \"Black\" alternate app icon (bundle-root Black@2x/@3x.png, same asset\n"
+                  + indent + "    // the Appearance icon picker loads), scaled into a rounded 30x30 settings tile.\n"
+                  + indent + "    guard let base = UIImage(named: \"Black\", in: Bundle.main, compatibleWith: nil) else { return nil }\n"
+                  + indent + "    let sz = CGSize(width: 30.0, height: 30.0)\n"
+                  + indent + "    return UIGraphicsImageRenderer(size: sz).image { _ in\n"
+                  + indent + "        UIBezierPath(roundedRect: CGRect(origin: .zero, size: sz), cornerRadius: 8.0).addClip()\n"
+                  + indent + "        base.draw(in: CGRect(origin: .zero, size: sz))\n"
+                  + indent + "    }\n"
+                  + indent + "}()\n"
+                  + indent + "items[.aorusGram]!.append(PeerInfoScreenDisclosureItem(id: 0, text: \"AorusGram\", icon: aorusRowIcon, action: {\n"
                   + indent + "    interaction.openSettings(.aorusGram)\n"
                   + indent + "}))\n"
               )
