@@ -661,15 +661,19 @@ def patch_premium_button_purple(tg: Path) -> None:
     if not pdir.is_dir():
         print("PremiumPurple: PremiumUI/Sources not found — skip")
         return
+    # Every blue used for premium buttons / accents across ALL premium screens
+    # (subscribe, "subscription ended", limit, gift, boost, privacy…), so none stay blue.
+    blues = ["0x0077ff", "0x0088ff", "0x597cf5", "0x2a9ef1"]
     changed = 0
     for p in sorted(pdir.glob("*.swift")):
         t = p.read_text(encoding="utf-8")
-        if "UIColor(rgb: 0x0077ff)" not in t:
-            continue
-        t = t.replace("UIColor(rgb: 0x0077ff)", "UIColor(rgb: 0x9b4dff)")
-        p.write_text(t, encoding="utf-8")
-        changed += 1
-    print(f"PremiumPurple: recolored blue subscribe button -> violet in {changed} file(s)")
+        orig = t
+        for b in blues:
+            t = t.replace(f"UIColor(rgb: {b})", "UIColor(rgb: 0x9b4dff)")
+        if t != orig:
+            p.write_text(t, encoding="utf-8")
+            changed += 1
+    print(f"PremiumPurple: recolored blue premium buttons/accents -> violet in {changed} file(s)")
 
 
 def patch_outgoing_bubble_purple(tg: Path) -> None:
@@ -686,7 +690,9 @@ def patch_outgoing_bubble_purple(tg: Path) -> None:
       - Night Accent (dark tinted): its outgoing bubble is derived from the accent, so it
         already turns violet from patch_accent_color_purple — nothing to do here.
     """
-    grad = "[UIColor(rgb: 0xb15cff), UIColor(rgb: 0x8a3bee)]"
+    # Centre the bubble on the accent neon (0x9b4dff) so outgoing messages read as the
+    # exact theme colour, not a lighter/pastel violet.
+    grad = "[UIColor(rgb: 0x9b4dff), UIColor(rgb: 0x7c30d8)]"
     day = tg / "submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift"
     night = tg / "submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift"
 
