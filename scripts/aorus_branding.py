@@ -653,6 +653,25 @@ def patch_accent_color_purple(tg: Path) -> None:
         print(f"AccentPurple: {label} -> neon violet")
 
 
+def patch_premium_button_purple(tg: Path) -> None:
+    """The Premium / subscription screens hardcode a blue button colour (0x0077ff),
+    independent of the theme accent, so their buttons stayed blue. Repoint that blue to
+    the neon violet across all PremiumUI screens (colour literal only)."""
+    pdir = tg / "submodules/PremiumUI/Sources"
+    if not pdir.is_dir():
+        print("PremiumPurple: PremiumUI/Sources not found — skip")
+        return
+    changed = 0
+    for p in sorted(pdir.glob("*.swift")):
+        t = p.read_text(encoding="utf-8")
+        if "UIColor(rgb: 0x0077ff)" not in t:
+            continue
+        t = t.replace("UIColor(rgb: 0x0077ff)", "UIColor(rgb: 0x9b4dff)")
+        p.write_text(t, encoding="utf-8")
+        changed += 1
+    print(f"PremiumPurple: recolored blue subscribe button -> violet in {changed} file(s)")
+
+
 def patch_outgoing_bubble_purple(tg: Path) -> None:
     """Make the user's OUTGOING message bubbles a neon-violet gradient that matches the
     accent/icon; incoming bubbles are left untouched (on the dark themes they are already
@@ -4623,39 +4642,35 @@ def patch_profile_report_button(tg: Path) -> None:
         "                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.ReportPeer_Report, textColor: .destructive, icon: { theme in\n"
         "                            generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Report\"), color: theme.contextMenu.destructiveColor)\n"
         "                        }, action: { [weak self] c, f in\n"
-        "                            // Report a USER. The native openReport / makeContentReportScreen only\n"
-        "                            // presents a screen when the server returns .options (channels/groups).\n"
-        "                            // For a user it returns .addComment or .reported, so that path showed\n"
-        "                            // nothing at all. Handle every result explicitly here.\n"
+        "                            // Report a USER. reportContent(.peer) needs a source message and errors\n"
+        "                            // with messageIdRequired for a bare profile, so use the classic\n"
+        "                            // engine.peers.reportPeer(reason:) via a reason action sheet — that works\n"
+        "                            // for a user with no message context.\n"
         "                            f(.dismissWithoutContent)\n"
         "                            guard let strongSelf = self else { return }\n"
         "                            let aorusRPeer = strongSelf.peerId\n"
         "                            let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-        "                            let aorusReportToast: (String) -> Void = { [weak self] toastText in\n"
+        "                            let aorusPD = strongSelf.presentationData\n"
+        "                            let aorusSheet = ActionSheetController(presentationData: aorusPD)\n"
+        "                            let aorusDismiss: () -> Void = { [weak aorusSheet] in aorusSheet?.dismissAnimated() }\n"
+        "                            let aorusDoReport: (ReportReason) -> Void = { [weak self] reason in\n"
         "                                guard let strongSelf = self else { return }\n"
-        "                                strongSelf.controller?.present(UndoOverlayController(presentationData: strongSelf.presentationData, content: .emoji(name: \"PoliceCar\", text: toastText), elevatedLayout: false, action: { _ in return false }), in: .current)\n"
+        "                                let _ = strongSelf.context.engine.peers.reportPeer(peerId: aorusRPeer, reason: reason, message: \"\").startStandalone()\n"
+        "                                strongSelf.controller?.present(UndoOverlayController(presentationData: strongSelf.presentationData, content: .emoji(name: \"PoliceCar\", text: aorusRu ? \"\\u{0416}\\u{0430}\\u{043b}\\u{043e}\\u{0431}\\u{0430} \\u{043e}\\u{0442}\\u{043f}\\u{0440}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d}\\u{0430}\" : strongSelf.presentationData.strings.Report_Succeed), elevatedLayout: false, action: { _ in return false }), in: .current)\n"
         "                            }\n"
-        "                            let _ = (strongSelf.context.engine.messages.reportContent(subject: .peer(aorusRPeer), option: nil, message: nil)\n"
-        "                            |> deliverOnMainQueue).startStandalone(next: { [weak self] result in\n"
-        "                                guard let strongSelf = self else { return }\n"
-        "                                switch result {\n"
-        "                                case .options:\n"
-        "                                    strongSelf.context.sharedContext.makeContentReportScreen(context: strongSelf.context, subject: .peer(aorusRPeer), forceDark: false, present: { [weak self] controller in\n"
-        "                                        self?.controller?.push(controller)\n"
-        "                                    }, completion: {}, requestSelectMessages: { [weak self] title, option, message in\n"
-        "                                        self?.openChatForReporting(title: title, option: option, message: message)\n"
-        "                                    })\n"
-        "                                case let .addComment(_, option):\n"
-        "                                    let _ = strongSelf.context.engine.messages.reportContent(subject: .peer(aorusRPeer), option: option, message: nil).startStandalone()\n"
-        "                                    aorusReportToast(aorusRu ? \"\\u{0416}\\u{0430}\\u{043b}\\u{043e}\\u{0431}\\u{0430} \\u{043e}\\u{0442}\\u{043f}\\u{0440}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d}\\u{0430}\" : strongSelf.presentationData.strings.Report_Succeed)\n"
-        "                                case .reported:\n"
-        "                                    aorusReportToast(aorusRu ? \"\\u{0416}\\u{0430}\\u{043b}\\u{043e}\\u{0431}\\u{0430} \\u{043e}\\u{0442}\\u{043f}\\u{0440}\\u{0430}\\u{0432}\\u{043b}\\u{0435}\\u{043d}\\u{0430}\" : strongSelf.presentationData.strings.Report_Succeed)\n"
-        "                                }\n"
-        "                            }, error: { [weak self] _ in\n"
-        "                                guard let strongSelf = self else { return }\n"
-        "                                let _ = strongSelf\n"
-        "                                aorusReportToast(aorusRu ? \"\\u{041d}\\u{0435} \\u{0443}\\u{0434}\\u{0430}\\u{043b}\\u{043e}\\u{0441}\\u{044c} \\u{043e}\\u{0442}\\u{043f}\\u{0440}\\u{0430}\\u{0432}\\u{0438}\\u{0442}\\u{044c} \\u{0436}\\u{0430}\\u{043b}\\u{043e}\\u{0431}\\u{0443}\" : \"Couldn't submit the report\")\n"
-        "                            })\n"
+        "                            aorusSheet.setItemGroups([\n"
+        "                                ActionSheetItemGroup(items: [\n"
+        "                                    ActionSheetTextItem(title: aorusRu ? \"\\u{041f}\\u{043e}\\u{0436}\\u{0430}\\u{043b}\\u{043e}\\u{0432}\\u{0430}\\u{0442}\\u{044c}\\u{0441}\\u{044f}\" : \"Report\"),\n"
+        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{0421}\\u{043f}\\u{0430}\\u{043c}\" : \"Spam\", action: { aorusDismiss(); aorusDoReport(.spam) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041d}\\u{0430}\\u{0441}\\u{0438}\\u{043b}\\u{0438}\\u{0435}\" : \"Violence\", action: { aorusDismiss(); aorusDoReport(.violence) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041f}\\u{043e}\\u{0440}\\u{043d}\\u{043e}\\u{0433}\\u{0440}\\u{0430}\\u{0444}\\u{0438}\\u{044f}\" : \"Pornography\", action: { aorusDismiss(); aorusDoReport(.porno) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041d}\\u{0430}\\u{0441}\\u{0438}\\u{043b}\\u{0438}\\u{0435} \\u{043d}\\u{0430}\\u{0434} \\u{0434}\\u{0435}\\u{0442}\\u{044c}\\u{043c}\\u{0438}\" : \"Child Abuse\", action: { aorusDismiss(); aorusDoReport(.childAbuse) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041d}\\u{0430}\\u{0440}\\u{043a}\\u{043e}\\u{0442}\\u{0438}\\u{043a}\\u{0438}\" : \"Illegal Drugs\", action: { aorusDismiss(); aorusDoReport(.illegalDrugs) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041b}\\u{0438}\\u{0447}\\u{043d}\\u{044b}\\u{0435} \\u{0434}\\u{0430}\\u{043d}\\u{043d}\\u{044b}\\u{0435}\" : \"Personal Details\", action: { aorusDismiss(); aorusDoReport(.personalDetails) })\n"
+        "                                ]),\n"
+        "                                ActionSheetItemGroup(items: [ActionSheetButtonItem(title: aorusPD.strings.Common_Cancel, color: .accent, font: .bold, action: { aorusDismiss() })])\n"
+        "                            ])\n"
+        "                            strongSelf.controller?.present(aorusSheet, in: .window(.root))\n"
         "                        })))\n"
         "                    }\n"
     )
@@ -14610,6 +14625,7 @@ def main() -> None:
     patch_authorization_login_title_gold(tg)
     patch_accent_color_purple(tg)
     patch_outgoing_bubble_purple(tg)
+    patch_premium_button_purple(tg)
     patch_callkit_brand_name(tg)
     patch_metal_comma_operator_warnings(tg)
     patch_presentation_theme_intro_gold(tg)
