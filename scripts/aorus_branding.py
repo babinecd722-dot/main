@@ -582,10 +582,13 @@ def patch_accent_color_purple(tg: Path) -> None:
 
     Only the ACCENT is changed — the colour every theme derives buttons, links,
     switches, checkmarks, the selected tab and unread badges from. Greys, backgrounds
-    and text keep their defaults, so the client is tinted, not repainted. Covered:
-      - Day theme accent (0x0088ff -> 0x8a3bee, deeper so links stay readable on white)
-      - Dark-tinted theme accent (0x2ea6ff -> 0xa96bff, brighter neon on dark)
-      - Dark theme accent (0x3e88f7 -> 0xa96bff)
+    and text keep their defaults, so the client is tinted, not repainted. A SINGLE neon
+    violet (0x9b4dff — the core of the icon's gradient) is used across every theme so
+    day and dark match exactly; its contrast on white is actually higher than
+    Telegram's original blue, and it glows well on dark. Covered:
+      - Day theme accent (0x0088ff -> 0x9b4dff)
+      - Dark-tinted theme accent (0x2ea6ff -> 0x9b4dff)
+      - Dark theme accent (0x3e88f7 -> 0x9b4dff)
       - Light-theme intro CTA button (0x2ca5e0 -> 0x9b4dff). The dark themes already
         derive the intro "Start Messaging" button + page dots from the accent, so they
         turn violet automatically; the light theme hardcodes that button, hence the
@@ -594,7 +597,7 @@ def patch_accent_color_purple(tg: Path) -> None:
     replacements = [
         ("submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift",
          "public let defaultDayAccentColor = UIColor(rgb: 0x0088ff)",
-         "public let defaultDayAccentColor = UIColor(rgb: 0x8a3bee)",
+         "public let defaultDayAccentColor = UIColor(rgb: 0x9b4dff)",
          "day accent"),
         ("submodules/TelegramPresentationData/Sources/DefaultDayPresentationTheme.swift",
          "startButtonColor: UIColor(rgb: 0x2ca5e0),",
@@ -602,11 +605,11 @@ def patch_accent_color_purple(tg: Path) -> None:
          "day intro button"),
         ("submodules/TelegramPresentationData/Sources/DefaultDarkTintedPresentationTheme.swift",
          "private let defaultDarkTintedAccentColor = UIColor(rgb: 0x2ea6ff)",
-         "private let defaultDarkTintedAccentColor = UIColor(rgb: 0xa96bff)",
+         "private let defaultDarkTintedAccentColor = UIColor(rgb: 0x9b4dff)",
          "dark-tinted accent"),
         ("submodules/TelegramPresentationData/Sources/DefaultDarkPresentationTheme.swift",
          "accentColor: UIColor(rgb: 0x3e88f7)",
-         "accentColor: UIColor(rgb: 0xa96bff)",
+         "accentColor: UIColor(rgb: 0x9b4dff)",
          "dark accent"),
     ]
     for rel, old, new, label in replacements:
