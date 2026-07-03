@@ -642,6 +642,8 @@ def patch_accent_color_purple(tg: Path) -> None:
          "return UIColor(rgb: 0x9b4dff)",
          "night default accent (runtime)"),
     ]
+    print("AccentPurple: skipped global built-in theme recolor; Aorus colors are applied only in stock night-off mode")
+    return
     for rel, old, new, label in replacements:
         p = tg / rel
         if not p.is_file():
@@ -696,6 +698,8 @@ def patch_outgoing_bubble_purple(tg: Path) -> None:
       - Night Accent (dark tinted): its outgoing bubble is derived from the accent, so it
         already turns violet from patch_accent_color_purple — nothing to do here.
     """
+    print("OutgoingPurple: skipped global bubble recolor; Aorus bubbles are applied only in stock night-off mode")
+    return
     # Centre the bubble on the accent neon (0x9b4dff) so outgoing messages read as the
     # exact theme colour, not a lighter/pastel violet.
     grad = "[UIColor(rgb: 0x9b4dff), UIColor(rgb: 0x7c30d8)]"
@@ -6114,8 +6118,272 @@ def patch_aorus_badges(tg: Path) -> None:
                 print("Badges: WARNING ChatListUI BUILD needle not found")
 
 
+_AORUS_STOCK_OFF_THEME_HELPER = (
+    "// AorusGram: stock theme for the exact Telegram state \"Night Mode: Off\" + \"Night Theme: Off\".\n"
+    "// This deliberately does NOT recolor Telegram's .night / .nightAccent globally: if the\n"
+    "// user enables Night Theme or System auto-night, Telegram keeps its normal theme logic.\n"
+    "private func aorusStockOffThemeEnabled(settings: PresentationThemeSettings, autoNightModeTriggered: Bool) -> Bool {\n"
+    "    guard !autoNightModeTriggered else { return false }\n"
+    "    if case .explicitNone = settings.automaticThemeSwitchSetting.trigger {\n"
+    "        return true\n"
+    "    }\n"
+    "    return false\n"
+    "}\n"
+    "\n"
+    "private func aorusApplyStockOffTheme(_ theme: PresentationTheme) -> PresentationTheme {\n"
+    "    let accent = UIColor(rgb: 0x9b4dff)\n"
+    "    let accentDark = UIColor(rgb: 0x7c30d8)\n"
+    "    let accentHighlight = UIColor(rgb: 0xb15cff)\n"
+    "    let tabGray = UIColor(rgb: 0x9a9aa0)\n"
+    "    let tabBackground = UIColor(rgb: 0x202022)\n"
+    "    let searchFill = UIColor(rgb: 0x2c2c2e)\n"
+    "\n"
+    "    let tabBar = theme.rootController.tabBar.withUpdated(\n"
+    "        backgroundColor: tabBackground.withAlphaComponent(0.92),\n"
+    "        separatorColor: UIColor(rgb: 0xffffff, alpha: 0.10),\n"
+    "        iconColor: tabGray,\n"
+    "        selectedIconColor: accent,\n"
+    "        textColor: tabGray,\n"
+    "        selectedTextColor: accent,\n"
+    "        badgeBackgroundColor: UIColor(rgb: 0xff4b55),\n"
+    "        badgeTextColor: UIColor(rgb: 0xffffff)\n"
+    "    )\n"
+    "    let navigationSearchBar = theme.rootController.navigationSearchBar.withUpdated(\n"
+    "        backgroundColor: tabBackground,\n"
+    "        accentColor: tabGray,\n"
+    "        inputFillColor: searchFill,\n"
+    "        inputTextColor: UIColor(rgb: 0xffffff),\n"
+    "        inputPlaceholderTextColor: tabGray,\n"
+    "        inputIconColor: tabGray,\n"
+    "        inputClearButtonColor: tabGray,\n"
+    "        separatorColor: UIColor(rgb: 0xffffff, alpha: 0.10)\n"
+    "    )\n"
+    "    let rootController = theme.rootController.withUpdated(tabBar: tabBar, navigationSearchBar: navigationSearchBar)\n"
+    "\n"
+    "    let checkColors = theme.list.itemCheckColors.withUpdated(fillColor: accent, strokeColor: accent, foregroundColor: UIColor(rgb: 0xffffff))\n"
+    "    let list = theme.list.withUpdated(\n"
+    "        freeMonoIconColor: tabGray,\n"
+    "        itemCheckColors: checkColors,\n"
+    "        controlSecondaryColor: tabGray,\n"
+    "        inputClearButtonColor: tabGray\n"
+    "    )\n"
+    "    let chatList = theme.chatList.withUpdated(\n"
+    "        checkmarkColor: accent,\n"
+    "        pendingIndicatorColor: accent,\n"
+    "        unreadBadgeActiveBackgroundColor: accent,\n"
+    "        unreadBadgeActiveTextColor: UIColor(rgb: 0xffffff),\n"
+    "        reactionBadgeActiveBackgroundColor: accent,\n"
+    "        pinnedBadgeColor: accent,\n"
+    "        pinnedSearchBarColor: tabBackground,\n"
+    "        regularSearchBarColor: tabBackground,\n"
+    "        storyUnseenColors: PresentationThemeGradientColors(topColor: accent, bottomColor: accentDark),\n"
+    "        storyUnseenPrivateColors: PresentationThemeGradientColors(topColor: accent, bottomColor: accentDark)\n"
+    "    )\n"
+    "\n"
+    "    let outgoingBubble = theme.chat.message.outgoing.bubble.withUpdated(\n"
+    "        withWallpaper: theme.chat.message.outgoing.bubble.withWallpaper.withUpdated(fill: [accent, accentDark], highlightedFill: accentHighlight),\n"
+    "        withoutWallpaper: theme.chat.message.outgoing.bubble.withoutWallpaper.withUpdated(fill: [accent, accentDark], highlightedFill: accentHighlight)\n"
+    "    )\n"
+    "    let outgoing = theme.chat.message.outgoing.withUpdated(\n"
+    "        bubble: outgoingBubble,\n"
+    "        secondaryTextColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+    "        linkTextColor: UIColor(rgb: 0xffffff),\n"
+    "        linkHighlightColor: UIColor(rgb: 0xffffff, alpha: 0.30),\n"
+    "        accentTextColor: UIColor(rgb: 0xffffff),\n"
+    "        accentControlColor: UIColor(rgb: 0xffffff),\n"
+    "        accentControlDisabledColor: UIColor(rgb: 0xffffff, alpha: 0.50),\n"
+    "        mediaActiveControlColor: UIColor(rgb: 0xffffff),\n"
+    "        mediaInactiveControlColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+    "        pendingActivityColor: UIColor(rgb: 0xffffff, alpha: 0.65),\n"
+    "        textSelectionColor: UIColor(rgb: 0xffffff, alpha: 0.20),\n"
+    "        textSelectionKnobColor: UIColor(rgb: 0xffffff)\n"
+    "    )\n"
+    "    let chatMessage = theme.chat.message.withUpdated(outgoing: outgoing, outgoingCheckColor: UIColor(rgb: 0xffffff, alpha: 0.75))\n"
+    "    let inputPanel = theme.chat.inputPanel.withUpdated(\n"
+    "        panelControlAccentColor: accent,\n"
+    "        inputControlColor: accent,\n"
+    "        actionControlFillColor: accent,\n"
+    "        actionControlForegroundColor: UIColor(rgb: 0xffffff)\n"
+    "    )\n"
+    "    let chat = theme.chat.withUpdated(message: chatMessage, inputPanel: inputPanel)\n"
+    "    return PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: theme.actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)\n"
+    "}\n"
+    "\n"
+)
+
+
+def patch_aorus_stock_off_theme(tg: Path) -> None:
+    """Apply the Aorus visual theme only when Telegram's night mode and night theme are off."""
+    f = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
+    if not f.is_file():
+        print("AorusStockOffTheme: PresentationData.swift not found — skipped")
+        return
+    t = f.read_text(encoding="utf-8")
+    if "aorusStockOffThemeEnabled" not in t:
+        anchor = "public func updatedPresentationData("
+        if anchor not in t:
+            print("AorusStockOffTheme: WARNING updatedPresentationData anchor not found")
+            return
+        t = t.replace(anchor, _AORUS_STOCK_OFF_THEME_HELPER + anchor, 1)
+
+    initial_effective_let = "        let effectiveTheme: PresentationThemeReference\n"
+    initial_effective_var = "        var effectiveTheme: PresentationThemeReference\n"
+    if initial_effective_let in t:
+        t = t.replace(initial_effective_let, initial_effective_var, 1)
+    elif initial_effective_var in t:
+        print("AorusStockOffTheme: initial effectiveTheme already mutable")
+    else:
+        print("AorusStockOffTheme: WARNING initial effectiveTheme declaration anchor not found")
+        return
+
+    initial_after_branch = (
+        "        }\n"
+        "        \n"
+        "        let effectiveColors = themeSettings.themeSpecificAccentColors[effectiveTheme.index]\n"
+        "        let theme = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], baseColor: effectiveColors?.baseColor) ?? defaultPresentationTheme\n"
+    )
+    initial_after_branch_new = (
+        "        }\n"
+        "        \n"
+        "        let aorusUseStockOffTheme = aorusStockOffThemeEnabled(settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered)\n"
+        "        if aorusUseStockOffTheme {\n"
+        "            effectiveTheme = .builtin(.night)\n"
+        "            preferredBaseTheme = .night\n"
+        "        }\n"
+        "        \n"
+        "        var effectiveColors = themeSettings.themeSpecificAccentColors[effectiveTheme.index]\n"
+        "        if aorusUseStockOffTheme {\n"
+        "            effectiveColors = nil\n"
+        "        }\n"
+        "        var theme = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], baseColor: effectiveColors?.baseColor) ?? defaultPresentationTheme\n"
+        "        if aorusUseStockOffTheme {\n"
+        "            theme = aorusApplyStockOffTheme(theme)\n"
+        "        }\n"
+    )
+    if "theme = aorusApplyStockOffTheme(theme)" not in t:
+        if initial_after_branch not in t:
+            print("AorusStockOffTheme: WARNING initial theme anchor not found")
+            return
+        t = t.replace(initial_after_branch, initial_after_branch_new, 1)
+
+    initial_wallpaper = (
+        "        var effectiveChatWallpaper: TelegramWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]) ?? theme.chat.defaultWallpaper\n"
+        "        if case .builtin = effectiveChatWallpaper {\n"
+        "            effectiveChatWallpaper = defaultBuiltinWallpaper(data: .legacy, colors: legacyBuiltinWallpaperGradientColors.map(\\.rgb))\n"
+        "        }\n"
+    )
+    initial_wallpaper_new = (
+        "        var effectiveChatWallpaper: TelegramWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]) ?? theme.chat.defaultWallpaper\n"
+        "        if aorusUseStockOffTheme {\n"
+        "            switch effectiveChatWallpaper {\n"
+        "                case .builtin, .color, .gradient:\n"
+        "                    effectiveChatWallpaper = theme.chat.defaultWallpaper\n"
+        "                case .file:\n"
+        "                    if effectiveChatWallpaper.isPattern {\n"
+        "                        effectiveChatWallpaper = theme.chat.defaultWallpaper\n"
+        "                    }\n"
+        "                default:\n"
+        "                    break\n"
+        "            }\n"
+        "        } else if case .builtin = effectiveChatWallpaper {\n"
+        "            effectiveChatWallpaper = defaultBuiltinWallpaper(data: .legacy, colors: legacyBuiltinWallpaperGradientColors.map(\\.rgb))\n"
+        "        }\n"
+    )
+    if "if aorusUseStockOffTheme {\n            switch effectiveChatWallpaper" not in t:
+        if initial_wallpaper not in t:
+            print("AorusStockOffTheme: WARNING initial wallpaper anchor not found")
+            return
+        t = t.replace(initial_wallpaper, initial_wallpaper_new, 1)
+
+    old_effective = (
+        "                        if autoNightModeTriggered {\n"
+        "                            let automaticTheme = themeSettings.automaticThemeSwitchSetting.theme\n"
+    )
+    new_effective = (
+        "                        let aorusUseStockOffTheme = aorusStockOffThemeEnabled(settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered)\n"
+        "                        if aorusUseStockOffTheme {\n"
+        "                            effectiveTheme = .builtin(.night)\n"
+        "                            effectiveColors = nil\n"
+        "                            preferredBaseTheme = .night\n"
+        "                        } else if autoNightModeTriggered {\n"
+        "                            let automaticTheme = themeSettings.automaticThemeSwitchSetting.theme\n"
+    )
+    if t.count("let aorusUseStockOffTheme = aorusStockOffThemeEnabled") < 2:
+        if old_effective not in t:
+            print("AorusStockOffTheme: WARNING effectiveTheme branch anchor not found")
+            return
+        t = t.replace(old_effective, new_effective, 1)
+
+    old_theme = (
+        "                        let themeValue = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], wallpaper: effectiveColors?.wallpaper, baseColor: effectiveColors?.baseColor, serviceBackgroundColor: serviceBackgroundColor) ?? defaultPresentationTheme\n"
+    )
+    new_theme = (
+        "                        var themeValue = makePresentationTheme(mediaBox: accountManager.mediaBox, themeReference: effectiveTheme, baseTheme: preferredBaseTheme, accentColor: effectiveColors?.colorFor(baseTheme: preferredBaseTheme ?? .day), bubbleColors: effectiveColors?.customBubbleColors ?? [], wallpaper: effectiveColors?.wallpaper, baseColor: effectiveColors?.baseColor, serviceBackgroundColor: serviceBackgroundColor) ?? defaultPresentationTheme\n"
+        "                        if aorusUseStockOffTheme {\n"
+        "                            themeValue = aorusApplyStockOffTheme(themeValue)\n"
+        "                        }\n"
+    )
+    if "themeValue = aorusApplyStockOffTheme(themeValue)" not in t:
+        if old_theme not in t:
+            print("AorusStockOffTheme: WARNING themeValue anchor not found")
+            return
+        t = t.replace(old_theme, new_theme, 1)
+
+    old_wallpaper = "                        if autoNightModeTriggered && !switchedToNightModeWallpaper {\n"
+    new_wallpaper = "                        if (autoNightModeTriggered || aorusUseStockOffTheme) && !switchedToNightModeWallpaper {\n"
+    if new_wallpaper not in t:
+        if old_wallpaper not in t:
+            print("AorusStockOffTheme: WARNING wallpaper branch anchor not found")
+            return
+        t = t.replace(old_wallpaper, new_wallpaper, 1)
+
+    f.write_text(t, encoding="utf-8")
+    print("AorusStockOffTheme: injected scoped stock-off Aorus theme")
+
+
+def patch_aorus_tabbar_search_tint(tg: Path) -> None:
+    """Keep the floating tab-bar search button in the tab-bar color system.
+
+    Telegram's iOS 26 tab bar renders the separate search button in
+    TabBarComponent.NavigationSearchView. Inactive tint originally comes from
+    chat.inputPanel.panelControlColor, which stays white in the dark theme and does
+    not follow rootController.tabBar.iconColor. Use the tab-bar icon color for the
+    inactive loupe, and the navigation search clear color for the active close
+    glyph, so the search control matches the grey tab-bar treatment.
+    """
+    f = tg / "submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift"
+    if not f.is_file():
+        print("AorusTabSearchTint: TabBarComponent.swift not found — skipped")
+        return
+    t = f.read_text(encoding="utf-8")
+    replacements = [
+        (
+            "transition.setTintColor(view: self.iconView, color: params.isActive ? params.theme.rootController.navigationSearchBar.inputIconColor : params.theme.chat.inputPanel.panelControlColor)",
+            "transition.setTintColor(view: self.iconView, color: params.isActive ? params.theme.rootController.navigationSearchBar.inputIconColor : params.theme.rootController.tabBar.iconColor)",
+            "inactive search icon -> tabBar.iconColor",
+        ),
+        (
+            "close.icon.tintColor = params.theme.chat.inputPanel.panelControlColor",
+            "close.icon.tintColor = params.theme.rootController.navigationSearchBar.inputClearButtonColor",
+            "active search close icon -> navigationSearchBar.inputClearButtonColor",
+        ),
+    ]
+    changed = 0
+    for old, new, label in replacements:
+        if new in t:
+            print(f"AorusTabSearchTint: {label} already patched")
+        elif old in t:
+            t = t.replace(old, new, 1)
+            changed += 1
+            print(f"AorusTabSearchTint: {label}")
+        else:
+            print(f"AorusTabSearchTint: WARNING anchor not found for {label}")
+    if changed:
+        f.write_text(t, encoding="utf-8")
+
+
 def patch_default_auto_night(tg: Path) -> None:
-    """Pin the default auto-night setting to System + "Night" (.night) theme.
+    """Make fresh installs show Night Theme: Off.
 
     The auto-night settings screen derives the selected mode purely from
     `automaticThemeSwitchSetting.trigger`: .system → "Системная", .explicitNone →
@@ -6129,27 +6397,40 @@ def patch_default_auto_night(tg: Path) -> None:
         print("AutoNight: PresentationThemeSettings.swift not found — skipped")
         return
     t = f.read_text(encoding="utf-8")
-    # Night mode OFF by default: .explicitNone shows "Выключен" in the Auto-Night screen,
-    # which is what the stock state must read (the dark look comes from the dayClassic
-    # routing, not from auto-switching to night).
-    desired = "AutomaticThemeSwitchSetting(force: false, trigger: .explicitNone, theme: .builtin(.night))"
-    pattern = r"AutomaticThemeSwitchSetting\(force: [^,]+, trigger: \.[A-Za-z]+, theme: \.builtin\(\.[A-Za-z]+\)\)"
-    new_t, n = re.subn(pattern, desired, t)
-    if n and new_t != t:
-        f.write_text(new_t, encoding="utf-8")
-        print(f"AutoNight: pinned night mode OFF (.explicitNone) in {n} place(s)")
-    elif n:
-        print("AutoNight: already System + .night")
-    else:
-        print("AutoNight: WARNING AutomaticThemeSwitchSetting pattern not found")
+    replacements = [
+        (
+            "automaticThemeSwitchSetting: AutomaticThemeSwitchSetting(force: false, trigger: .system, theme: .builtin(.night))",
+            "automaticThemeSwitchSetting: AutomaticThemeSwitchSetting(force: false, trigger: .explicitNone, theme: .builtin(.night))",
+            "defaultSettings",
+        ),
+        (
+            'self.automaticThemeSwitchSetting = try container.decodeIfPresent(AutomaticThemeSwitchSetting.self, forKey: "automaticThemeSwitchSetting") ?? AutomaticThemeSwitchSetting(force: false, trigger: .system, theme: .builtin(.night))',
+            'self.automaticThemeSwitchSetting = try container.decodeIfPresent(AutomaticThemeSwitchSetting.self, forKey: "automaticThemeSwitchSetting") ?? AutomaticThemeSwitchSetting(force: false, trigger: .explicitNone, theme: .builtin(.night))',
+            "decode fallback",
+        ),
+    ]
+    changed = 0
+    for old, new, label in replacements:
+        if new in t:
+            print(f"AutoNight: {label} already explicitNone")
+        elif old in t:
+            t = t.replace(old, new, 1)
+            changed += 1
+            print(f"AutoNight: {label} -> explicitNone")
+        else:
+            print(f"AutoNight: WARNING {label} anchor not found")
+    if changed:
+        f.write_text(t, encoding="utf-8")
 
 
 def patch_force_dark_base_theme(tg: Path) -> None:
-    """Stock default = the .dayClassic slot (which patch_dayclassic_uses_dark routes to our
-    dark theme) with night mode OFF. So the app is dark out of the box while Settings reads
-    "night theme off, night mode off". Ensure defaultSettings' selected theme is .dayClassic
-    (some builds shipped it forced to .night); the trigger is set to .explicitNone by
-    patch_default_auto_night. Idempotent.
+    """Keep the selected built-in theme in the stock .dayClassic slot.
+
+    The Aorus visual theme is applied later at presentation-data runtime only when
+    night mode and night theme are both off. Keeping the saved theme reference as
+    .dayClassic makes Settings show the stock "Night Theme: Off" state instead of a
+    selected .night theme; patch_default_auto_night pins the trigger to .explicitNone.
+    Idempotent.
     """
     f = tg / "submodules/TelegramUIPreferences/Sources/PresentationThemeSettings.swift"
     if not f.is_file():
@@ -6204,13 +6485,13 @@ def patch_dayclassic_uses_dark(tg: Path) -> None:
 
 
 def patch_intro_default_dark(tg: Path) -> None:
-    """Force the pre-login / intro presentation to the dark theme.
+    """Force the pre-login / intro presentation to the Aorus stock-off theme.
 
     The intro tour + auth screens render before any account settings exist, via
     defaultPresentationData(), which hard-codes the light theme
-    (defaultPresentationTheme). We swap it to defaultDarkPresentationTheme so the
-    welcome screen ("Aorusgram / The world's fastest messaging app") and the whole
-    login flow are dark, matching the always-dark stock default. Idempotent.
+    (defaultPresentationTheme). We swap it to the same Aorus stock-off transform used
+    by the default client state, so the welcome screen and login flow match the app
+    theme exactly. Idempotent.
     """
     f = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
     if not f.is_file():
@@ -6219,15 +6500,22 @@ def patch_intro_default_dark(tg: Path) -> None:
     t = f.read_text(encoding="utf-8")
     old = ("theme: defaultPresentationTheme, autoNightModeTriggered: false, "
            "chatWallpaper: defaultPresentationTheme.chat.defaultWallpaper")
-    new = ("theme: defaultDarkPresentationTheme, autoNightModeTriggered: true, "
-           "chatWallpaper: defaultDarkPresentationTheme.chat.defaultWallpaper")
+    new = ("theme: aorusApplyStockOffTheme(defaultDarkPresentationTheme), autoNightModeTriggered: true, "
+           "chatWallpaper: aorusApplyStockOffTheme(defaultDarkPresentationTheme).chat.defaultWallpaper")
     if new in t:
-        print("IntroDark: defaultPresentationData already dark")
+        print("IntroDark: defaultPresentationData already Aorus stock-off")
+        return
+    legacy_dark = ("theme: defaultDarkPresentationTheme, autoNightModeTriggered: true, "
+                   "chatWallpaper: defaultDarkPresentationTheme.chat.defaultWallpaper")
+    if legacy_dark in t:
+        t = t.replace(legacy_dark, new, 1)
+        f.write_text(t, encoding="utf-8")
+        print("IntroDark: defaultPresentationData dark -> Aorus stock-off")
         return
     if old in t:
         t = t.replace(old, new, 1)
         f.write_text(t, encoding="utf-8")
-        print("IntroDark: defaultPresentationData -> dark theme")
+        print("IntroDark: defaultPresentationData -> Aorus stock-off theme")
     else:
         print("IntroDark: WARNING defaultPresentationData theme anchor not found — skipped")
 
@@ -14747,9 +15035,10 @@ def main() -> None:
     patch_system_proxy_runtime_monitor(tg)
     patch_disable_call_p2p(tg)
     patch_app_delegate_language_bridge(tg)
-    # patch_default_dark_theme intentionally NOT called (it forced .explicitNone,
-    # which showed "Off"). Instead pin auto-night to System + Night explicitly:
-    patch_dayclassic_uses_dark(tg)
+    # Aorus visual theme is scoped to Telegram's stock "Night Theme: Off" state.
+    # System/night modes keep Telegram's normal built-in theme logic.
+    patch_aorus_stock_off_theme(tg)
+    patch_aorus_tabbar_search_tint(tg)
     patch_default_auto_night(tg)
     patch_force_dark_base_theme(tg)
     patch_intro_default_dark(tg)
