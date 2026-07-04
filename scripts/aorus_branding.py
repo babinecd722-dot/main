@@ -8787,6 +8787,161 @@ def patch_fake_stars(tg: Path) -> None:
         print("FakeStars: patched Stars.swift (local balance override)")
 
 
+def patch_stars_purchase_redirects(tg: Path) -> None:
+    """Replace unavailable fork IAP Stars packages with Fragment / PremiumBot routes."""
+    f = tg / "submodules/TelegramUI/Components/Stars/StarsPurchaseScreen/Sources/StarsPurchaseScreen.swift"
+    if not f.is_file():
+        print("StarsPurchaseRedirects: StarsPurchaseScreen.swift not found — skip")
+        return
+
+    t = f.read_text(encoding="utf-8")
+    if "AorusStarsPurchaseRedirects" in t:
+        print("StarsPurchaseRedirects: already patched")
+        return
+
+    original = t
+
+    for unused_import in (
+        "import BalancedTextComponent\n",
+        "import Markdown\n",
+        "import TextFormat\n",
+        "import ItemShimmeringLoadingComponent\n",
+    ):
+        t = t.replace(unused_import, "", 1)
+
+    child_anchor = (
+        "        let text = Child(BalancedTextComponent.self)\n"
+        "        let list = Child(VStack<Empty>.self)\n"
+        "        let termsText = Child(BalancedTextComponent.self)\n"
+    )
+    if child_anchor in t:
+        t = t.replace(child_anchor, "        let list = Child(VStack<Empty>.self)\n", 1)
+    else:
+        print("StarsPurchaseRedirects: WARNING child anchor not found")
+
+    state_anchor = (
+        "            let state = context.state\n"
+        "    \n"
+        "            state.products = component.products\n"
+        "            \n"
+    )
+    if state_anchor in t:
+        t = t.replace(state_anchor, "", 1)
+    else:
+        print("StarsPurchaseRedirects: WARNING content state anchor not found")
+
+    desc_start = "            let textColor = theme.list.itemPrimaryTextColor\n"
+    desc_end = "            context.component.externalState.descriptionHeight = text.size.height\n"
+    if desc_start in t and desc_end in t:
+        start = t.index(desc_start)
+        end = t.index(desc_end, start) + len(desc_end)
+        t = (
+            t[:start]
+            + "            let accentColor = theme.list.itemAccentColor\n"
+              "            context.component.externalState.descriptionHeight = 0.0\n"
+              "            // AorusStarsPurchaseRedirects: fork builds cannot sell Stars through App Store IAP.\n"
+              "            // Keep the native header/art and show explicit official purchase routes instead.\n"
+            + t[end:]
+        )
+    else:
+        print("StarsPurchaseRedirects: WARNING description block anchor not found")
+
+    t = t.replace("            let externalStateUpdated = context.component.stateUpdated\n            \n", "", 1)
+
+    products_start = "            var i = 0\n"
+    products_end = "            let list = list.update(\n"
+    if products_start in t and products_end in t:
+        start = t.index(products_start)
+        end = t.index(products_end, start)
+        buttons_block = (
+            "            var items: [AnyComponentWithIdentity<Empty>] = []\n"
+            "            let aorusIsRu = strings.baseLanguageCode == \"ru\" || strings.baseLanguageCode.hasPrefix(\"ru\")\n"
+            "            let aorusFragmentTitle = aorusIsRu ? \"Купить в Fragment\" : \"Buy on Fragment\"\n"
+            "            let aorusTelegramTitle = aorusIsRu ? \"Купить в Telegram\" : \"Buy in Telegram\"\n"
+            "            let aorusOpenFragmentStars: () -> Void = {\n"
+            "                guard let controller = controller(), let navigationController = controller.navigationController as? NavigationController else {\n"
+            "                    return\n"
+            "                }\n"
+            "                component.context.sharedContext.openExternalUrl(context: component.context, urlContext: .generic, url: \"https://fragment.com/stars\", forceExternal: false, presentationData: presentationData, navigationController: navigationController, dismissInput: {})\n"
+            "            }\n"
+            "            let aorusOpenPremiumBot: () -> Void = {\n"
+            "                guard let controller = controller(), let navigationController = controller.navigationController as? NavigationController else {\n"
+            "                    return\n"
+            "                }\n"
+            "                let _ = (component.context.engine.peers.resolvePeerByName(name: \"PremiumBot\", referrer: nil)\n"
+            "                |> deliverOnMainQueue).startStandalone(next: { result in\n"
+            "                    guard case let .result(peer) = result, let peer = peer else {\n"
+            "                        return\n"
+            "                    }\n"
+            "                    component.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(\n"
+            "                        navigationController: navigationController,\n"
+            "                        context: component.context,\n"
+            "                        chatLocation: .peer(peer)\n"
+            "                    ))\n"
+            "                })\n"
+            "            }\n"
+            "            let aorusButtonFont = Font.regular(presentationData.listsFontSize.baseDisplaySize)\n"
+            "            let aorusButtonItems: [AnyComponentWithIdentity<Empty>] = [\n"
+            "                AnyComponentWithIdentity(id: 0, component: AnyComponent(ListActionItemComponent(\n"
+            "                    theme: environment.theme,\n"
+            "                    style: .glass,\n"
+            "                    title: AnyComponent(MultilineTextComponent(text: .plain(NSAttributedString(string: aorusFragmentTitle, font: aorusButtonFont, textColor: environment.theme.list.itemPrimaryTextColor)), maximumNumberOfLines: 0)),\n"
+            "                    contentInsets: UIEdgeInsets(top: 13.0, left: -6.0, bottom: 13.0, right: 0.0),\n"
+            "                    leftIcon: .custom(AnyComponentWithIdentity(id: 0, component: AnyComponent(StarsIconComponent(amount: 1))), true),\n"
+            "                    accessory: .arrow,\n"
+            "                    action: { _ in\n"
+            "                        aorusOpenFragmentStars()\n"
+            "                    }\n"
+            "                ))),\n"
+            "                AnyComponentWithIdentity(id: 1, component: AnyComponent(ListActionItemComponent(\n"
+            "                    theme: environment.theme,\n"
+            "                    style: .glass,\n"
+            "                    title: AnyComponent(MultilineTextComponent(text: .plain(NSAttributedString(string: aorusTelegramTitle, font: aorusButtonFont, textColor: environment.theme.list.itemPrimaryTextColor)), maximumNumberOfLines: 0)),\n"
+            "                    contentInsets: UIEdgeInsets(top: 13.0, left: -6.0, bottom: 13.0, right: 0.0),\n"
+            "                    leftIcon: .custom(AnyComponentWithIdentity(id: 1, component: AnyComponent(StarsIconComponent(amount: 1))), true),\n"
+            "                    accessory: .arrow,\n"
+            "                    action: { _ in\n"
+            "                        aorusOpenPremiumBot()\n"
+            "                    }\n"
+            "                )))\n"
+            "            ]\n"
+            "            items.append(AnyComponentWithIdentity(\n"
+            "                id: AnyHashable(\"aorus-stars-purchase-routes\"),\n"
+            "                component: AnyComponent(ListSectionComponent(\n"
+            "                    theme: environment.theme,\n"
+            "                    style: .glass,\n"
+            "                    header: nil,\n"
+            "                    footer: nil,\n"
+            "                    items: aorusButtonItems\n"
+            "                ))\n"
+            "            ))\n"
+            "            \n"
+        )
+        t = t[:start] + buttons_block + t[end:]
+    else:
+        print("StarsPurchaseRedirects: WARNING products block anchor not found")
+
+    terms_start = "            let termsFont = Font.regular(13.0)\n"
+    terms_end = "            size.height += 10.0\n"
+    if terms_start in t and terms_end in t:
+        start = t.index(terms_start)
+        end = t.index(terms_end, start) + len(terms_end)
+        t = t[:start] + "            // AorusStarsPurchaseRedirects: Telegram IAP terms hidden for fork route screen.\n" + t[end:]
+    else:
+        print("StarsPurchaseRedirects: WARNING terms block anchor not found")
+
+    expanded_old = "                size.height = max(size.height, component.containerSize.height + 150.0 + text.size.height)\n"
+    expanded_new = "                size.height = max(size.height, component.containerSize.height + 150.0)\n"
+    if expanded_old in t:
+        t = t.replace(expanded_old, expanded_new, 1)
+
+    if t != original:
+        f.write_text(t, encoding="utf-8")
+        print("StarsPurchaseRedirects: patched Stars purchase route screen")
+    else:
+        print("StarsPurchaseRedirects: no changes")
+
+
 AORUS_ANTI_SEARCH_SWIFT = '''import Foundation
 import Postbox
 
@@ -15239,6 +15394,7 @@ def main() -> None:
     patch_local_premium(tg)
     patch_fake_gifts(tg)
     patch_fake_stars(tg)
+    patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)
     patch_bypass_copy_protection(tg)
