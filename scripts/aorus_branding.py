@@ -5299,7 +5299,7 @@ def patch_alternate_icons(tg: Path) -> None:
         ("GXCPlanet",  "GXC Планета",  "GXC Planet",  False),
         ("GXCClassic", "GXC Классика", "GXC Classic", False),
         ("OrbitBlack", "Орбита",       "Orbit",       False),
-        ("OrbitWhite", "Орбита",       "Orbit",       False),
+        ("OrbitWhite", "Орбита белая", "Orbit White", False),
     ]
 
     repo_root = Path(__file__).resolve().parent.parent
