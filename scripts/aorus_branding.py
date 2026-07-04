@@ -2242,8 +2242,10 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
         "                }\n"
         "            }\n"
         "\n"
-        "            // -- Translate / Show Original (gated by translator flag) --\n"
-        "            if UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") {\n"
+        "            // -- Translate / Show Original — MOVED to the per-message inline button\n"
+        "            //    (patch_message_translate_button). Condition below is intentionally a\n"
+        "            //    key that is never set, so the menu item is gone without a dead-code warning.\n"
+        "            if UserDefaults.standard.bool(forKey: \"aorusgram_translate_menu_removed_never\") {\n"
         "                if aorusIsTranslated, let aorusOrig = aorusSavedText {\n"
         "                    actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Оригинал\" : \"Original\", icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: theme.actionSheet.primaryTextColor)\n"
@@ -15332,6 +15334,199 @@ extension WallpaperBackgroundNodeImpl {
 """
 
 
+
+def patch_share_button_translate(tg: Path) -> None:
+    """Add an aorusIsTranslate mode to ChatMessageShareButton so the same native node renders a
+    translate (文A) glyph, using the share button's own themed icon colour."""
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageShareButton/Sources/ChatMessageShareButton.swift"
+    if not path.is_file():
+        print("ShareBtnTranslate: ChatMessageShareButton.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusIsTranslate" in t:
+        print("ShareBtnTranslate: already patched")
+        return
+    sig_old = "disableComments: Bool = false, isSummarize: Bool = false) -> CGSize {"
+    sig_new = "disableComments: Bool = false, isSummarize: Bool = false, aorusIsTranslate: Bool = false) -> CGSize {"
+    icon_old = "            if isSummarize {\n"
+    icon_new = (
+        "            if aorusIsTranslate {\n"
+        "                updatedIconImage = generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper))\n"
+        "            } else if isSummarize {\n"
+    )
+    if sig_old in t and icon_old in t:
+        t = t.replace(sig_old, sig_new, 1)
+        t = t.replace(icon_old, icon_new, 1)
+        path.write_text(t, encoding="utf-8")
+        print("ShareBtnTranslate: added aorusIsTranslate mode")
+    else:
+        print("ShareBtnTranslate: WARNING anchors not found (upstream drift)")
+
+
+def patch_message_translate_button(tg: Path) -> None:
+    """Per-message inline Translate button (mirrors Telegram's native summarize button).
+
+    A floating 文A circle appears on incoming (others') text messages when the translator
+    feature is on: bottom-right for chats, and stacked ABOVE the native share button on
+    channel posts. Tap → Google Translate (GTranslate) result appended under the original
+    with a "🗨 GTranslate" header; second tap restores the original. Nothing on own messages.
+    """
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
+    if not path.is_file():
+        print("MsgTranslateBtn: ChatMessageBubbleItemNode.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusTranslateButtonNode" in t:
+        print("MsgTranslateBtn: already patched")
+        return
+
+    def sub(anchor: str, repl: str, label: str) -> bool:
+        nonlocal t
+        if anchor in t:
+            t = t.replace(anchor, repl, 1)
+            return True
+        print(f"MsgTranslateBtn: WARNING anchor not found — {label}")
+        return False
+
+    # 1) property
+    sub("    private var summarizeButtonNode: ChatMessageShareButton?\n",
+        "    private var summarizeButtonNode: ChatMessageShareButton?\n    private var aorusTranslateButtonNode: ChatMessageShareButton?\n",
+        "property")
+
+    # 2) needs computation (incoming text + feature flag)
+    sub("        var needsShareButton = false\n        var needsSummarizeButton = false\n",
+        "        var needsShareButton = false\n        var needsSummarizeButton = false\n"
+        "        let aorusNeedsTranslateButton = UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") && incoming && !item.message.text.isEmpty\n",
+        "needs")
+
+    # 3) instantiation — after summarize instantiation/removal block
+    inst_anchor = (
+        "        } else if let summarizeButtonNode = strongSelf.summarizeButtonNode {\n"
+        "            strongSelf.summarizeButtonNode = nil\n"
+        "            summarizeButtonNode.removeFromSupernode()\n"
+        "        }\n"
+    )
+    inst_add = (
+        "        if aorusNeedsTranslateButton {\n"
+        "            if strongSelf.aorusTranslateButtonNode == nil {\n"
+        "                let aorusTranslateButtonNode = ChatMessageShareButton()\n"
+        "                strongSelf.aorusTranslateButtonNode = aorusTranslateButtonNode\n"
+        "                strongSelf.insertSubnode(aorusTranslateButtonNode, belowSubnode: strongSelf.messageAccessibilityArea)\n"
+        "                aorusTranslateButtonNode.pressed = { [weak strongSelf] in\n"
+        "                    strongSelf?.aorusToggleTranslate()\n"
+        "                }\n"
+        "            }\n"
+        "        } else if let aorusTranslateButtonNode = strongSelf.aorusTranslateButtonNode {\n"
+        "            strongSelf.aorusTranslateButtonNode = nil\n"
+        "            aorusTranslateButtonNode.removeFromSupernode()\n"
+        "        }\n"
+    )
+    sub(inst_anchor, inst_anchor + inst_add, "instantiation")
+
+    # 4) frame layout — inject after EACH summarize frame block (there are two code paths)
+    summ_frame = (
+        "            if let summarizeButtonNode = strongSelf.summarizeButtonNode {\n"
+        "                let buttonSize = summarizeButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: EngineMessage(item.message), accountPeerId: item.context.account.peerId, disableComments: disablesComments, isSummarize: true)\n"
+    )
+    tr_frame = (
+        "            if let aorusTranslateButtonNode = strongSelf.aorusTranslateButtonNode {\n"
+        "                let buttonSize = aorusTranslateButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: EngineMessage(item.message), accountPeerId: item.context.account.peerId, disableComments: disablesComments, aorusIsTranslate: true)\n"
+        "                var buttonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0), size: buttonSize)\n"
+        "                if needsShareButton {\n"
+        "                    buttonFrame.origin.y -= (buttonSize.height + 6.0)\n"
+        "                }\n"
+        "                if let shareButtonOffset = shareButtonOffset {\n"
+        "                    if incoming {\n"
+        "                        buttonFrame.origin.x = shareButtonOffset.x\n"
+        "                    }\n"
+        "                    buttonFrame.origin.y = buttonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)\n"
+        "                } else if !disablesComments {\n"
+        "                    buttonFrame.origin.y = buttonFrame.origin.y - (buttonSize.height - 30.0)\n"
+        "                }\n"
+        "                if isSidePanelOpen {\n"
+        "                    buttonFrame.origin.x -= buttonFrame.width * 0.5\n"
+        "                    buttonFrame.origin.y += buttonFrame.height * 0.5\n"
+        "                }\n"
+        "                animation.animator.updatePosition(layer: aorusTranslateButtonNode.layer, position: buttonFrame.center, completion: nil)\n"
+        "                animation.animator.updateBounds(layer: aorusTranslateButtonNode.layer, bounds: CGRect(origin: CGPoint(), size: buttonFrame.size), completion: nil)\n"
+        "                animation.animator.updateAlpha(layer: aorusTranslateButtonNode.layer, alpha: (isCurrentlyPlayingMedia || isSidePanelOpen) ? 0.0 : 1.0, completion: nil)\n"
+        "                animation.animator.updateScale(layer: aorusTranslateButtonNode.layer, scale: (isCurrentlyPlayingMedia || isSidePanelOpen) ? 0.001 : 1.0, completion: nil)\n"
+        "            }\n"
+    )
+    n_frame = t.count(summ_frame)
+    if n_frame >= 1:
+        t = t.replace(summ_frame, tr_frame + summ_frame)
+        print(f"MsgTranslateBtn: frame injected in {n_frame} block(s)")
+    else:
+        print("MsgTranslateBtn: WARNING summarize frame anchor not found")
+
+    # 5) hit test (recognizer)
+    sub("                if let summarizeButtonNode = strongSelf.summarizeButtonNode, summarizeButtonNode.frame.contains(point) {\n                    return .fail\n                }\n",
+        "                if let aorusTranslateButtonNode = strongSelf.aorusTranslateButtonNode, aorusTranslateButtonNode.frame.contains(point) {\n                    return .fail\n                }\n"
+        "                if let summarizeButtonNode = strongSelf.summarizeButtonNode, summarizeButtonNode.frame.contains(point) {\n                    return .fail\n                }\n",
+        "hittest-recognizer")
+
+    # 6) hit test (view hitTest)
+    sub("        if let summarizeButtonNode = self.summarizeButtonNode, summarizeButtonNode.frame.contains(point) {\n            return summarizeButtonNode.view.hitTest(self.view.convert(point, to: summarizeButtonNode.view), with: event)\n        }\n",
+        "        if let aorusTranslateButtonNode = self.aorusTranslateButtonNode, aorusTranslateButtonNode.frame.contains(point) {\n            return aorusTranslateButtonNode.view.hitTest(self.view.convert(point, to: aorusTranslateButtonNode.view), with: event)\n        }\n"
+        "        if let summarizeButtonNode = self.summarizeButtonNode, summarizeButtonNode.frame.contains(point) {\n            return summarizeButtonNode.view.hitTest(self.view.convert(point, to: summarizeButtonNode.view), with: event)\n        }\n",
+        "hittest-view")
+
+    # 7) absolute rect
+    sub("        if let summarizeButtonNode = self.summarizeButtonNode {\n            var summarizeButtonNodeFrame = summarizeButtonNode.frame\n            summarizeButtonNodeFrame.origin.x += rect.minX\n            summarizeButtonNodeFrame.origin.y += rect.minY\n            \n            summarizeButtonNode.updateAbsoluteRect(summarizeButtonNodeFrame, within: containerSize)\n        }\n",
+        "        if let aorusTranslateButtonNode = self.aorusTranslateButtonNode {\n            var aorusTranslateButtonNodeFrame = aorusTranslateButtonNode.frame\n            aorusTranslateButtonNodeFrame.origin.x += rect.minX\n            aorusTranslateButtonNodeFrame.origin.y += rect.minY\n            \n            aorusTranslateButtonNode.updateAbsoluteRect(aorusTranslateButtonNodeFrame, within: containerSize)\n        }\n"
+        "        if let summarizeButtonNode = self.summarizeButtonNode {\n            var summarizeButtonNodeFrame = summarizeButtonNode.frame\n            summarizeButtonNodeFrame.origin.x += rect.minX\n            summarizeButtonNodeFrame.origin.y += rect.minY\n            \n            summarizeButtonNode.updateAbsoluteRect(summarizeButtonNodeFrame, within: containerSize)\n        }\n",
+        "absoluteRect")
+
+    # 8) toggle method (GTranslate) — inserted before toggleSummarization
+    toggle_anchor = "    private func toggleSummarization() {\n"
+    toggle_new = (
+        "    private func aorusToggleTranslate() {\n"
+        "        guard let item = self.item else { return }\n"
+        "        let aorusMid = item.message.id\n"
+        "        let aorusKey = \"aorusgram_gt_orig_\\(aorusMid.peerId.toInt64())_\\(aorusMid.id)\"\n"
+        "        let aorusContext = item.context\n"
+        "        func aorusSetText(_ newText: String, _ mid: MessageId) {\n"
+        "            let _ = aorusContext.account.postbox.transaction { transaction -> Void in\n"
+        "                transaction.updateMessage(mid, update: { current in\n"
+        "                    let storeForwardInfo = current.forwardInfo.flatMap(StoreMessageForwardInfo.init)\n"
+        "                    return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: storeForwardInfo, authorId: current.author?.id, text: newText, attributes: current.attributes, media: current.media))\n"
+        "                })\n"
+        "            }.start()\n"
+        "        }\n"
+        "        if let aorusOrig = UserDefaults.standard.string(forKey: aorusKey) {\n"
+        "            aorusSetText(aorusOrig, aorusMid)\n"
+        "            UserDefaults.standard.removeObject(forKey: aorusKey)\n"
+        "            return\n"
+        "        }\n"
+        "        let aorusOriginal = item.message.text\n"
+        "        guard !aorusOriginal.isEmpty else { return }\n"
+        "        let aorusTarget = Locale.current.languageCode ?? \"en\"\n"
+        "        guard var aorusComp = URLComponents(string: \"https://translate.googleapis.com/translate_a/single\") else { return }\n"
+        "        aorusComp.queryItems = [URLQueryItem(name: \"client\", value: \"gtx\"), URLQueryItem(name: \"sl\", value: \"auto\"), URLQueryItem(name: \"tl\", value: aorusTarget), URLQueryItem(name: \"dt\", value: \"t\"), URLQueryItem(name: \"q\", value: aorusOriginal)]\n"
+        "        guard let aorusUrl = aorusComp.url else { return }\n"
+        "        URLSession.shared.dataTask(with: aorusUrl) { data, _, _ in\n"
+        "            guard let data = data, let json = try? JSONSerialization.jsonObject(with: data) as? [Any], let sentences = json.first as? [Any] else { return }\n"
+        "            var aorusTranslated = \"\"\n"
+        "            for s in sentences {\n"
+        "                if let arr = s as? [Any], let piece = arr.first as? String { aorusTranslated += piece }\n"
+        "            }\n"
+        "            guard !aorusTranslated.isEmpty, aorusTranslated != aorusOriginal else { return }\n"
+        "            let aorusNewText = aorusOriginal + \"\\n\\n\\u{1F5E8} GTranslate\\n\" + aorusTranslated\n"
+        "            DispatchQueue.main.async {\n"
+        "                aorusSetText(aorusNewText, aorusMid)\n"
+        "                UserDefaults.standard.set(aorusOriginal, forKey: aorusKey)\n"
+        "            }\n"
+        "        }.resume()\n"
+        "    }\n"
+        "\n"
+    )
+    sub(toggle_anchor, toggle_new + toggle_anchor, "toggle-method")
+
+    path.write_text(t, encoding="utf-8")
+    print("MsgTranslateBtn: injected per-message translate button")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -15374,6 +15569,8 @@ def main() -> None:
     patch_aorus_code_reveal(tg)
     patch_status_edit_delete_icons(tg)
     patch_chat_context_menu_translate_transcribe(tg)
+    patch_share_button_translate(tg)
+    patch_message_translate_button(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
     patch_app_delegate_anti_spam_toast(tg)
