@@ -6413,6 +6413,19 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
                 ),
             ],
         ),
+        (
+            tg / "submodules/TelegramUI/Components/Stories/StoryPeerListComponent/Sources/StoryPeerListComponent.swift",
+            [
+                (
+                    "TitleActivityIndicatorComponent(\n"
+                    "                        color: component.theme.rootController.navigationBar.accentTextColor\n"
+                    "                    )",
+                    "TitleActivityIndicatorComponent(\n"
+                    "                        color: UIColor(rgb: 0x9b4dff)\n"
+                    "                    )",
+                ),
+            ],
+        ),
     ]
 
     changed = False
@@ -14411,14 +14424,7 @@ def patch_gif_wallpaper(tg: Path) -> None:
         if "AorusGifGridVideoView" in it:
             print("GifWallpaper: grid item already patched")
             upgraded = False
-            old_tap = (
-                "        if case .ended = recognizer.state {\n"
-                "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
-                "                item.interaction.openWallpaper(item.wallpaper)\n"
-                "            }\n"
-                "        }\n"
-            )
-            new_tap = (
+            eager_clear_tap = (
                 "        if case .ended = recognizer.state {\n"
                 "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
                 "                aorusClearGifWallpaperBeforeOpeningRegularWallpaper()\n"
@@ -14426,40 +14432,36 @@ def patch_gif_wallpaper(tg: Path) -> None:
                 "            }\n"
                 "        }\n"
             )
-            if new_tap not in it:
-                if old_tap in it:
-                    it = it.replace(old_tap, new_tap, 1)
-                    upgraded = True
-                else:
-                    print("GifWallpaper: WARNING regular wallpaper clear tap anchor not found")
-            if "private func aorusClearGifWallpaperBeforeOpeningRegularWallpaper()" not in it:
-                marker = (
-                    "// Renders the active GIF wallpaper (pre-converted to a looping H.264 MP4) inside\n"
-                    "// its native wallpaper-grid cell. The cell is a real ThemeGridControllerEntry\n"
-                    "// injected at the top of the grid, so it scrolls and shows the native checkmark.\n"
-                )
-                helper = marker + "\n" + (
-                    "private func aorusClearGifWallpaperBeforeOpeningRegularWallpaper() {\n"
-                    "    let defaults = UserDefaults.standard\n"
-                    "    guard defaults.bool(forKey: \"aorusgram_gif_wallpaper_active\") else {\n"
-                    "        return\n"
-                    "    }\n"
-                    "    if let path = defaults.string(forKey: \"aorusgram_gif_wallpaper_mp4\") {\n"
-                    "        try? FileManager.default.removeItem(atPath: path)\n"
-                    "    }\n"
-                    "    defaults.set(false, forKey: \"aorusgram_gif_wallpaper_active\")\n"
-                    "    defaults.removeObject(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
-                    "    NotificationCenter.default.post(name: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil)\n"
-                    "}\n"
-                )
-                if marker in it:
-                    it = it.replace(marker, helper, 1)
-                    upgraded = True
-                else:
-                    print("GifWallpaper: WARNING regular wallpaper clear helper anchor not found")
+            native_tap = (
+                "        if case .ended = recognizer.state {\n"
+                "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
+                "                item.interaction.openWallpaper(item.wallpaper)\n"
+                "            }\n"
+                "        }\n"
+            )
+            if eager_clear_tap in it:
+                it = it.replace(eager_clear_tap, native_tap, 1)
+                upgraded = True
+            helper = (
+                "\nprivate func aorusClearGifWallpaperBeforeOpeningRegularWallpaper() {\n"
+                "    let defaults = UserDefaults.standard\n"
+                "    guard defaults.bool(forKey: \"aorusgram_gif_wallpaper_active\") else {\n"
+                "        return\n"
+                "    }\n"
+                "    if let path = defaults.string(forKey: \"aorusgram_gif_wallpaper_mp4\") {\n"
+                "        try? FileManager.default.removeItem(atPath: path)\n"
+                "    }\n"
+                "    defaults.set(false, forKey: \"aorusgram_gif_wallpaper_active\")\n"
+                "    defaults.removeObject(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
+                "    NotificationCenter.default.post(name: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil)\n"
+                "}\n"
+            )
+            if helper in it:
+                it = it.replace(helper, "\n", 1)
+                upgraded = True
             if upgraded:
                 item_f.write_text(it, encoding="utf-8")
-                print("GifWallpaper: upgraded regular wallpaper clear path")
+                print("GifWallpaper: restored native regular wallpaper preview tap")
         else:
             def isub(anchor: str, repl: str, label: str) -> None:
                 nonlocal it
@@ -14513,7 +14515,6 @@ def patch_gif_wallpaper(tg: Path) -> None:
                  "        }\n",
                  "        if case .ended = recognizer.state {\n"
                  "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
-                 "                aorusClearGifWallpaperBeforeOpeningRegularWallpaper()\n"
                  "                item.interaction.openWallpaper(item.wallpaper)\n"
                  "            }\n"
                  "        }\n",
@@ -14568,6 +14569,68 @@ def patch_gif_wallpaper(tg: Path) -> None:
             print("GifWallpaper: patched ThemeGridControllerItem.swift")
     else:
         print("GifWallpaper: ThemeGridControllerItem.swift not found — skip grid cell render")
+
+    # ── 1c. Wallpaper preview: regular wallpaper replaces GIF only after Apply ─
+    gallery = tg / ("submodules/TelegramUI/Components/Settings/WallpaperGalleryScreen"
+                    "/Sources/WallpaperGalleryController.swift")
+    if gallery.is_file():
+        gt = gallery.read_text(encoding="utf-8")
+        original_gt = gt
+        misplaced_clear = (
+            "            strongSelf.toolbarDoneDismissed = true\n"
+            "            strongSelf.aorusClearGifWallpaperOnRegularWallpaperApply()\n"
+        )
+        if misplaced_clear in gt:
+            gt = gt.replace(misplaced_clear, "            strongSelf.toolbarDoneDismissed = true\n", 1)
+
+        apply_clear_anchor = (
+            "                    return\n"
+            "                }\n"
+            "\n"
+            "                switch entry {\n"
+        )
+        apply_clear_repl = (
+            "                    return\n"
+            "                }\n"
+            "\n"
+            "                strongSelf.aorusClearGifWallpaperOnRegularWallpaperApply()\n"
+            "                switch entry {\n"
+        )
+        if "                strongSelf.aorusClearGifWallpaperOnRegularWallpaperApply()\n" not in gt:
+            if apply_clear_anchor in gt:
+                gt = gt.replace(apply_clear_anchor, apply_clear_repl, 1)
+            else:
+                print("GifWallpaper: WARNING wallpaper apply anchor not found")
+
+        if "private func aorusClearGifWallpaperOnRegularWallpaperApply()" not in gt:
+            helper_anchor = "    private func updateTransaction(entries: [WallpaperGalleryEntry], arguments: WallpaperGalleryItemArguments) -> GalleryPagerTransaction {\n"
+            helper = (
+                "    private func aorusClearGifWallpaperOnRegularWallpaperApply() {\n"
+                "        let defaults = UserDefaults.standard\n"
+                "        guard defaults.bool(forKey: \"aorusgram_gif_wallpaper_active\") else {\n"
+                "            return\n"
+                "        }\n"
+                "        if let path = defaults.string(forKey: \"aorusgram_gif_wallpaper_mp4\") {\n"
+                "            try? FileManager.default.removeItem(atPath: path)\n"
+                "        }\n"
+                "        defaults.set(false, forKey: \"aorusgram_gif_wallpaper_active\")\n"
+                "        defaults.removeObject(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
+                "        NotificationCenter.default.post(name: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil)\n"
+                "    }\n"
+                "    \n"
+                "    private func updateTransaction(entries: [WallpaperGalleryEntry], arguments: WallpaperGalleryItemArguments) -> GalleryPagerTransaction {\n"
+            )
+            if helper_anchor in gt:
+                gt = gt.replace(helper_anchor, helper, 1)
+            else:
+                print("GifWallpaper: WARNING wallpaper apply helper anchor not found")
+        if gt != original_gt:
+            gallery.write_text(gt, encoding="utf-8")
+            print("GifWallpaper: patched native wallpaper apply clear")
+        else:
+            print("GifWallpaper: wallpaper apply clear already patched")
+    else:
+        print("GifWallpaper: WallpaperGalleryController.swift not found — skip apply clear")
 
     # ── 2. Background node: self-contained looping-MP4 playback host ──────────
     bg = tg / "submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift"
@@ -14914,19 +14977,6 @@ AORUS_GIF_GRID_VIDEO_SWIFT = """
 // Renders the active GIF wallpaper (pre-converted to a looping H.264 MP4) inside
 // its native wallpaper-grid cell. The cell is a real ThemeGridControllerEntry
 // injected at the top of the grid, so it scrolls and shows the native checkmark.
-
-private func aorusClearGifWallpaperBeforeOpeningRegularWallpaper() {
-    let defaults = UserDefaults.standard
-    guard defaults.bool(forKey: "aorusgram_gif_wallpaper_active") else {
-        return
-    }
-    if let path = defaults.string(forKey: "aorusgram_gif_wallpaper_mp4") {
-        try? FileManager.default.removeItem(atPath: path)
-    }
-    defaults.set(false, forKey: "aorusgram_gif_wallpaper_active")
-    defaults.removeObject(forKey: "aorusgram_gif_wallpaper_mp4")
-    NotificationCenter.default.post(name: Notification.Name("AorusGramGifWallpaperChanged"), object: nil)
-}
 
 final class AorusGifGridVideoView: UIView {
     override class var layerClass: AnyClass {
