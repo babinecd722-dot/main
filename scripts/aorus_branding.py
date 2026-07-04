@@ -6340,43 +6340,37 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
     f.write_text(t, encoding="utf-8")
     print("AorusStockOffTheme: injected scoped stock-off Aorus theme")
 
-
-def patch_aorus_tabbar_search_tint(tg: Path) -> None:
-    """Keep the floating tab-bar search button in the tab-bar color system."""
-    f = tg / "submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift"
-    if not f.is_file():
+    tabbar_file = tg / "submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift"
+    if not tabbar_file.is_file():
         print("AorusTabSearchTint: TabBarComponent.swift not found — skipped")
-        return
-    t = f.read_text(encoding="utf-8")
-    replacements = [
-        (
-            "transition.setTintColor(view: self.iconView, color: params.isActive ? params.theme.rootController.navigationSearchBar.inputIconColor : params.theme.chat.inputPanel.panelControlColor)",
-            "transition.setTintColor(view: self.iconView, color: params.isActive ? params.theme.rootController.navigationSearchBar.inputIconColor : params.theme.rootController.tabBar.iconColor)",
-            "inactive search icon -> tabBar.iconColor",
-        ),
-        (
-            "close.icon.tintColor = params.theme.chat.inputPanel.panelControlColor",
-            "close.icon.tintColor = params.theme.rootController.navigationSearchBar.inputClearButtonColor",
-            "active search close icon -> navigationSearchBar.inputClearButtonColor",
-        ),
-    ]
-    changed = 0
-    for old, new, label in replacements:
-        if new in t:
-            print(f"AorusTabSearchTint: {label} already patched")
-        elif old in t:
-            t = t.replace(old, new, 1)
-            changed += 1
-            print(f"AorusTabSearchTint: {label}")
-        else:
-            print(f"AorusTabSearchTint: WARNING anchor not found for {label}")
-    if changed:
-        f.write_text(t, encoding="utf-8")
+    else:
+        t = tabbar_file.read_text(encoding="utf-8")
+        tabbar_replacements = [
+            (
+                "transition.setTintColor(view: self.iconView, color: params.isActive ? params.theme.rootController.navigationSearchBar.inputIconColor : params.theme.chat.inputPanel.panelControlColor)",
+                "transition.setTintColor(view: self.iconView, color: params.isActive ? params.theme.rootController.navigationSearchBar.inputIconColor : params.theme.rootController.tabBar.iconColor)",
+                "inactive search icon -> tabBar.iconColor",
+            ),
+            (
+                "close.icon.tintColor = params.theme.chat.inputPanel.panelControlColor",
+                "close.icon.tintColor = params.theme.rootController.navigationSearchBar.inputClearButtonColor",
+                "active search close icon -> navigationSearchBar.inputClearButtonColor",
+            ),
+        ]
+        changed = 0
+        for old, new, label in tabbar_replacements:
+            if new in t:
+                print(f"AorusTabSearchTint: {label} already patched")
+            elif old in t:
+                t = t.replace(old, new, 1)
+                changed += 1
+                print(f"AorusTabSearchTint: {label}")
+            else:
+                print(f"AorusTabSearchTint: WARNING anchor not found for {label}")
+        if changed:
+            tabbar_file.write_text(t, encoding="utf-8")
 
-
-def patch_aorus_chat_list_activity_tint(tg: Path) -> None:
-    """Tint only chat-list title activity rings, without broadening input/nav colors."""
-    replacements = [
+    activity_replacements = [
         (
             tg / "submodules/TelegramUI/Components/ChatListTitleView/Sources/ChatListTitleView.swift",
             [
@@ -6406,11 +6400,11 @@ def patch_aorus_chat_list_activity_tint(tg: Path) -> None:
     ]
 
     changed = False
-    for f, file_replacements in replacements:
-        if not f.is_file():
-            print(f"AorusChatListActivityTint: {f.name} not found — skipped")
+    for activity_file, file_replacements in activity_replacements:
+        if not activity_file.is_file():
+            print(f"AorusChatListActivityTint: {activity_file.name} not found — skipped")
             continue
-        t = f.read_text(encoding="utf-8")
+        t = activity_file.read_text(encoding="utf-8")
         original = t
         for old, new in file_replacements:
             if new in t:
@@ -6418,9 +6412,9 @@ def patch_aorus_chat_list_activity_tint(tg: Path) -> None:
             if old in t:
                 t = t.replace(old, new, 1)
             else:
-                print(f"AorusChatListActivityTint: WARNING anchor not found in {f.name}")
+                print(f"AorusChatListActivityTint: WARNING anchor not found in {activity_file.name}")
         if t != original:
-            f.write_text(t, encoding="utf-8")
+            activity_file.write_text(t, encoding="utf-8")
             changed = True
     print("AorusChatListActivityTint: applied" if changed else "AorusChatListActivityTint: already applied")
 
@@ -15081,8 +15075,6 @@ def main() -> None:
     # Aorus visual theme is scoped to Telegram's stock "Night Theme: Off" state.
     # System/night modes keep Telegram's normal built-in theme logic.
     patch_aorus_stock_off_theme(tg)
-    patch_aorus_tabbar_search_tint(tg)
-    patch_aorus_chat_list_activity_tint(tg)
     patch_default_auto_night(tg)
     patch_force_dark_base_theme(tg)
     patch_intro_default_dark(tg)
