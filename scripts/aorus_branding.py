@@ -8837,8 +8837,7 @@ def patch_stars_purchase_redirects(tg: Path) -> None:
         end = t.index(desc_end, start) + len(desc_end)
         t = (
             t[:start]
-            + "            let accentColor = theme.list.itemAccentColor\n"
-              "            context.component.externalState.descriptionHeight = 0.0\n"
+            + "            context.component.externalState.descriptionHeight = 0.0\n"
               "            // AorusStarsPurchaseRedirects: fork builds cannot sell Stars through App Store IAP.\n"
               "            // Keep the native header/art and show explicit official purchase routes instead.\n"
             + t[end:]
