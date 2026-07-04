@@ -8830,6 +8830,14 @@ def patch_stars_purchase_redirects(tg: Path) -> None:
     else:
         print("StarsPurchaseRedirects: WARNING content state anchor not found")
 
+    t = t.replace("        var cachedChevronImage: (UIImage, PresentationTheme)?\n        \n", "", 1)
+
+    theme_line = "            let theme = environment.theme\n"
+    if theme_line in t:
+        t = t.replace(theme_line, "", 1)
+    else:
+        print("StarsPurchaseRedirects: WARNING theme line anchor not found")
+
     desc_start = "            let textColor = theme.list.itemPrimaryTextColor\n"
     desc_end = "            context.component.externalState.descriptionHeight = text.size.height\n"
     if desc_start in t and desc_end in t:
