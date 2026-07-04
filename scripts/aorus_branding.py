@@ -6376,11 +6376,19 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
             [
                 (
                     "self.activityIndicator.type = .custom(self.theme.rootController.navigationBar.primaryTextColor, 22.0, 1.5, false)",
-                    "self.activityIndicator.type = .custom(self.theme.list.itemAccentColor, 22.0, 1.5, false)",
+                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false)",
                 ),
                 (
                     "ActivityIndicator(type: .custom(theme.rootController.navigationBar.primaryTextColor, 22.0, 1.5, false), speed: .slow)",
+                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false), speed: .slow)",
+                ),
+                (
+                    "self.activityIndicator.type = .custom(self.theme.list.itemAccentColor, 22.0, 1.5, false)",
+                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false)",
+                ),
+                (
                     "ActivityIndicator(type: .custom(theme.list.itemAccentColor, 22.0, 1.5, false), speed: .slow)",
+                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 22.0, 1.5, false), speed: .slow)",
                 ),
             ],
         ),
@@ -6389,11 +6397,19 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
             [
                 (
                     "self.activityIndicator.type = .custom(theme.chat.inputPanel.panelControlColor, 10.0, 1.3333, true)",
-                    "self.activityIndicator.type = .custom(theme.list.itemAccentColor, 10.0, 1.3333, true)",
+                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true)",
                 ),
                 (
                     "ActivityIndicator(type: .custom(theme.chat.inputPanel.panelControlColor, 10.0, 1.3333, true), speed: .slow)",
+                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true), speed: .slow)",
+                ),
+                (
+                    "self.activityIndicator.type = .custom(theme.list.itemAccentColor, 10.0, 1.3333, true)",
+                    "self.activityIndicator.type = .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true)",
+                ),
+                (
                     "ActivityIndicator(type: .custom(theme.list.itemAccentColor, 10.0, 1.3333, true), speed: .slow)",
+                    "ActivityIndicator(type: .custom(UIColor(rgb: 0x9b4dff), 10.0, 1.3333, true), speed: .slow)",
                 ),
             ],
         ),
@@ -6411,8 +6427,8 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
                 continue
             if old in t:
                 t = t.replace(old, new, 1)
-            else:
-                print(f"AorusChatListActivityTint: WARNING anchor not found in {activity_file.name}")
+        if "UIColor(rgb: 0x9b4dff)" not in t:
+            print(f"AorusChatListActivityTint: WARNING activity color anchor not found in {activity_file.name}")
         if t != original:
             activity_file.write_text(t, encoding="utf-8")
             changed = True
@@ -14107,6 +14123,27 @@ def patch_gif_wallpaper(tg: Path) -> None:
     t = grid.read_text(encoding="utf-8")
     if "aorusPresentGifPicker" in t or "AorusGifWallpaperPicker" in t:
         print("GifWallpaper: grid already patched")
+        if "let aorusGifStoredActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")" not in t:
+            old = (
+                "                let aorusGifActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")\n"
+                "                entries.insert(ThemeGridControllerEntry(index: 0, wallpaper: presentationData.chatWallpaper, emoji: nil, isEditable: false, isSelected: !aorusGifActive), at: 0)\n"
+            )
+            new = (
+                "                let aorusGifStoredActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")\n"
+                "                let aorusGifStoredPath = UserDefaults.standard.string(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
+                "                let aorusGifActive = aorusGifStoredActive && aorusGifStoredPath.map { FileManager.default.fileExists(atPath: $0) } == true\n"
+                "                if aorusGifStoredActive && !aorusGifActive {\n"
+                "                    UserDefaults.standard.set(false, forKey: \"aorusgram_gif_wallpaper_active\")\n"
+                "                    UserDefaults.standard.removeObject(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
+                "                }\n"
+                "                entries.insert(ThemeGridControllerEntry(index: 0, wallpaper: presentationData.chatWallpaper, emoji: nil, isEditable: false, isSelected: !aorusGifActive), at: 0)\n"
+            )
+            if old in t:
+                t = t.replace(old, new, 1)
+                grid.write_text(t, encoding="utf-8")
+                print("GifWallpaper: upgraded stale GIF selection guard")
+            else:
+                print("GifWallpaper: WARNING stale GIF selection guard anchor not found")
     else:
         def sub(anchor: str, repl: str, label: str) -> None:
             nonlocal t
@@ -14328,7 +14365,13 @@ def patch_gif_wallpaper(tg: Path) -> None:
         # mark the base chat wallpaper unselected (the GIF is the selected one).
         sub("                entries.insert(ThemeGridControllerEntry(index: 0, wallpaper: presentationData.chatWallpaper, emoji: nil, isEditable: false, isSelected: true), at: 0)\n"
             "                index += 1\n",
-            "                let aorusGifActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")\n"
+            "                let aorusGifStoredActive = UserDefaults.standard.bool(forKey: \"aorusgram_gif_wallpaper_active\")\n"
+            "                let aorusGifStoredPath = UserDefaults.standard.string(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
+            "                let aorusGifActive = aorusGifStoredActive && aorusGifStoredPath.map { FileManager.default.fileExists(atPath: $0) } == true\n"
+            "                if aorusGifStoredActive && !aorusGifActive {\n"
+            "                    UserDefaults.standard.set(false, forKey: \"aorusgram_gif_wallpaper_active\")\n"
+            "                    UserDefaults.standard.removeObject(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
+            "                }\n"
             "                entries.insert(ThemeGridControllerEntry(index: 0, wallpaper: presentationData.chatWallpaper, emoji: nil, isEditable: false, isSelected: !aorusGifActive), at: 0)\n"
             "                index += 1\n"
             "                if aorusGifActive {\n"
@@ -14367,6 +14410,56 @@ def patch_gif_wallpaper(tg: Path) -> None:
         it = item_f.read_text(encoding="utf-8")
         if "AorusGifGridVideoView" in it:
             print("GifWallpaper: grid item already patched")
+            upgraded = False
+            old_tap = (
+                "        if case .ended = recognizer.state {\n"
+                "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
+                "                item.interaction.openWallpaper(item.wallpaper)\n"
+                "            }\n"
+                "        }\n"
+            )
+            new_tap = (
+                "        if case .ended = recognizer.state {\n"
+                "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
+                "                aorusClearGifWallpaperBeforeOpeningRegularWallpaper()\n"
+                "                item.interaction.openWallpaper(item.wallpaper)\n"
+                "            }\n"
+                "        }\n"
+            )
+            if new_tap not in it:
+                if old_tap in it:
+                    it = it.replace(old_tap, new_tap, 1)
+                    upgraded = True
+                else:
+                    print("GifWallpaper: WARNING regular wallpaper clear tap anchor not found")
+            if "private func aorusClearGifWallpaperBeforeOpeningRegularWallpaper()" not in it:
+                marker = (
+                    "// Renders the active GIF wallpaper (pre-converted to a looping H.264 MP4) inside\n"
+                    "// its native wallpaper-grid cell. The cell is a real ThemeGridControllerEntry\n"
+                    "// injected at the top of the grid, so it scrolls and shows the native checkmark.\n"
+                )
+                helper = marker + "\n" + (
+                    "private func aorusClearGifWallpaperBeforeOpeningRegularWallpaper() {\n"
+                    "    let defaults = UserDefaults.standard\n"
+                    "    guard defaults.bool(forKey: \"aorusgram_gif_wallpaper_active\") else {\n"
+                    "        return\n"
+                    "    }\n"
+                    "    if let path = defaults.string(forKey: \"aorusgram_gif_wallpaper_mp4\") {\n"
+                    "        try? FileManager.default.removeItem(atPath: path)\n"
+                    "    }\n"
+                    "    defaults.set(false, forKey: \"aorusgram_gif_wallpaper_active\")\n"
+                    "    defaults.removeObject(forKey: \"aorusgram_gif_wallpaper_mp4\")\n"
+                    "    NotificationCenter.default.post(name: Notification.Name(\"AorusGramGifWallpaperChanged\"), object: nil)\n"
+                    "}\n"
+                )
+                if marker in it:
+                    it = it.replace(marker, helper, 1)
+                    upgraded = True
+                else:
+                    print("GifWallpaper: WARNING regular wallpaper clear helper anchor not found")
+            if upgraded:
+                item_f.write_text(it, encoding="utf-8")
+                print("GifWallpaper: upgraded regular wallpaper clear path")
         else:
             def isub(anchor: str, repl: str, label: str) -> None:
                 nonlocal it
@@ -14420,6 +14513,7 @@ def patch_gif_wallpaper(tg: Path) -> None:
                  "        }\n",
                  "        if case .ended = recognizer.state {\n"
                  "            if let item = self.item, !item.isEmpty, !item.isAorusGif {\n"
+                 "                aorusClearGifWallpaperBeforeOpeningRegularWallpaper()\n"
                  "                item.interaction.openWallpaper(item.wallpaper)\n"
                  "            }\n"
                  "        }\n",
@@ -14820,6 +14914,19 @@ AORUS_GIF_GRID_VIDEO_SWIFT = """
 // Renders the active GIF wallpaper (pre-converted to a looping H.264 MP4) inside
 // its native wallpaper-grid cell. The cell is a real ThemeGridControllerEntry
 // injected at the top of the grid, so it scrolls and shows the native checkmark.
+
+private func aorusClearGifWallpaperBeforeOpeningRegularWallpaper() {
+    let defaults = UserDefaults.standard
+    guard defaults.bool(forKey: "aorusgram_gif_wallpaper_active") else {
+        return
+    }
+    if let path = defaults.string(forKey: "aorusgram_gif_wallpaper_mp4") {
+        try? FileManager.default.removeItem(atPath: path)
+    }
+    defaults.set(false, forKey: "aorusgram_gif_wallpaper_active")
+    defaults.removeObject(forKey: "aorusgram_gif_wallpaper_mp4")
+    NotificationCenter.default.post(name: Notification.Name("AorusGramGifWallpaperChanged"), object: nil)
+}
 
 final class AorusGifGridVideoView: UIView {
     override class var layerClass: AnyClass {
