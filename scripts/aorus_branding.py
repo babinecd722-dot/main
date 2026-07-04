@@ -5297,6 +5297,7 @@ def patch_alternate_icons(tg: Path) -> None:
         ("White",      "Белая",        "White",       False),
         ("Premium",    "Премиум",      "Premium",     False),
         ("GXCPlanet",  "GXC Планета",  "GXC Planet",  False),
+        ("GXCClassic", "GXC Классика", "GXC Classic", False),
         ("OrbitBlack", "Орбита",       "Orbit",       False),
         ("OrbitWhite", "Орбита",       "Orbit",       False),
     ]
