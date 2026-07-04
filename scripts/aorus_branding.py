@@ -5296,6 +5296,9 @@ def patch_alternate_icons(tg: Path) -> None:
         ("Black",      "Черная",       "Black",       False),
         ("White",      "Белая",        "White",       False),
         ("Premium",    "Премиум",      "Premium",     False),
+        ("GXCPlanet",  "GXC Планета",  "GXC Planet",  False),
+        ("OrbitBlack", "Орбита",       "Orbit",       False),
+        ("OrbitWhite", "Орбита",       "Orbit",       False),
     ]
 
     repo_root = Path(__file__).resolve().parent.parent
