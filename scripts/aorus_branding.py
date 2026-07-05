@@ -15694,6 +15694,100 @@ def patch_message_translate_button(tg: Path) -> None:
     print("MsgTranslateBtn: injected per-message translate/transcribe button")
 
 
+def patch_quick_replies_ampersand(tg: Path) -> None:
+    """Make '&' in the message input trigger the native hashtag suggestion panel,
+    populated with the user's Quick Replies (AorusQuickReplies), so tapping one
+    inserts the reply text.
+
+    The trick keeps the surface tiny and reuses ALL of Telegram's hashtag machinery
+    (detection type, results panel, row look, insertion):
+      1. ChatContextQuery: '&' is detected as a `.hashtag`-type query whose range
+         INCLUDES the '&' (unlike '#', whose range starts after it). So the query
+         string becomes "&<filter>" and, crucially, the panel's insertion (which
+         replaces the matched `.hashtag` range) removes the '&' cleanly.
+      2. The `.hashtag` result computation: when the query starts with '&', return
+         the Quick Replies (filtered by the text after '&') as `.hashtags(...)`.
+         The existing HashtagChatInputContextPanelNode then renders them (blue '#'
+         circle + text) and inserts the picked reply on tap.
+    No new query kinds, panels or enum cases — nothing else changes.
+    """
+    # 1) Detection: add the '&' trigger (range includes '&') next to '#'.
+    cq = tg / "submodules/ChatContextQuery/Sources/ChatContextQuery.swift"
+    if not cq.is_file():
+        print("QuickReplies&: ChatContextQuery.swift not found — skip")
+    else:
+        t = cq.read_text(encoding="utf-8")
+        if "ampersandScalar" in t:
+            print("QuickReplies&: ChatContextQuery already patched")
+        else:
+            const_anchor = 'private let colonScalar = ":" as UnicodeScalar\n'
+            hash_block = (
+                "                } else if c == hashScalar {\n"
+                "                    if scalarCanPrependQueryControl(previousC) {\n"
+                "                        possibleTypes = possibleTypes.intersection([.hashtag])\n"
+                "                        definedType = true\n"
+                "                        index += 1\n"
+                "                        possibleQueryRange = NSRange(location: index, length: maxIndex - index)\n"
+                "                    }\n"
+                "                    break\n"
+                "                } else if c == atScalar {\n"
+            )
+            amp_block = (
+                "                } else if c == hashScalar {\n"
+                "                    if scalarCanPrependQueryControl(previousC) {\n"
+                "                        possibleTypes = possibleTypes.intersection([.hashtag])\n"
+                "                        definedType = true\n"
+                "                        index += 1\n"
+                "                        possibleQueryRange = NSRange(location: index, length: maxIndex - index)\n"
+                "                    }\n"
+                "                    break\n"
+                "                } else if c == ampersandScalar {\n"
+                "                    if scalarCanPrependQueryControl(previousC) {\n"
+                "                        possibleTypes = possibleTypes.intersection([.hashtag])\n"
+                "                        definedType = true\n"
+                "                        possibleQueryRange = NSRange(location: index, length: maxIndex - index)\n"
+                "                    }\n"
+                "                    break\n"
+                "                } else if c == atScalar {\n"
+            )
+            if const_anchor in t and hash_block in t:
+                t = t.replace(const_anchor, const_anchor + 'private let ampersandScalar = "&" as UnicodeScalar\n', 1)
+                t = t.replace(hash_block, amp_block, 1)
+                cq.write_text(t, encoding="utf-8")
+                print("QuickReplies&: ChatContextQuery '&' trigger added")
+            else:
+                print("QuickReplies&: WARNING ChatContextQuery anchors not found")
+
+    # 2) Result computation: '&' query -> Quick Replies as hashtag results.
+    cq2 = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextQueries.swift"
+    if not cq2.is_file():
+        print("QuickReplies&: ChatInterfaceStateContextQueries.swift not found — skip")
+        return
+    t = cq2.read_text(encoding="utf-8")
+    if "aorusgram_quick_replies" in t:
+        print("QuickReplies&: result computation already patched")
+        return
+    result_anchor = (
+        "        case let .hashtag(query):\n"
+        "            var signal: Signal<(ChatPresentationInputQueryResult?) -> ChatPresentationInputQueryResult?, ChatContextQueryError> = .complete()\n"
+    )
+    result_inject = (
+        "        case let .hashtag(query):\n"
+        "            if query.hasPrefix(\"&\") {\n"
+        "                let aorusFilter = String(query.dropFirst()).lowercased()\n"
+        "                let aorusReplies = (UserDefaults.standard.stringArray(forKey: \"aorusgram_quick_replies\") ?? []).filter { aorusFilter.isEmpty || $0.lowercased().hasPrefix(aorusFilter) }\n"
+        "                return .single({ _ in return .hashtags(aorusReplies, \"\") })\n"
+        "            }\n"
+        "            var signal: Signal<(ChatPresentationInputQueryResult?) -> ChatPresentationInputQueryResult?, ChatContextQueryError> = .complete()\n"
+    )
+    if result_anchor in t:
+        t = t.replace(result_anchor, result_inject, 1)
+        cq2.write_text(t, encoding="utf-8")
+        print("QuickReplies&: result computation injected")
+    else:
+        print("QuickReplies&: WARNING result anchor not found")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -15738,6 +15832,7 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_share_button_translate(tg)
     patch_message_translate_button(tg)
+    patch_quick_replies_ampersand(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
     patch_app_delegate_anti_spam_toast(tg)
