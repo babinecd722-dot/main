@@ -15393,13 +15393,11 @@ def patch_message_translate_button(tg: Path) -> None:
         "    private var summarizeButtonNode: ChatMessageShareButton?\n    private var aorusTranslateButtonNode: ChatMessageShareButton?\n",
         "property")
 
-    # 2) needs computation (incoming text + feature flag)
-    sub("        var needsShareButton = false\n        var needsSummarizeButton = false\n",
-        "        var needsShareButton = false\n        var needsSummarizeButton = false\n"
-        "        let aorusNeedsTranslateButton = UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") && incoming && !item.message.text.isEmpty\n",
-        "needs")
-
-    # 3) instantiation — after summarize instantiation/removal block
+    # 2+3) instantiation — after summarize instantiation/removal block.
+    # NOTE: this block lives in the static applyLayout function, where the layout
+    # closure's locals are NOT visible — but `item`, `incoming` and
+    # `needsShareButton` are applyLayout parameters, so the needs-flag is
+    # computed locally right here.
     inst_anchor = (
         "        } else if let summarizeButtonNode = strongSelf.summarizeButtonNode {\n"
         "            strongSelf.summarizeButtonNode = nil\n"
@@ -15407,6 +15405,7 @@ def patch_message_translate_button(tg: Path) -> None:
         "        }\n"
     )
     inst_add = (
+        "        let aorusNeedsTranslateButton = UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") && incoming && !item.message.text.isEmpty\n"
         "        if aorusNeedsTranslateButton {\n"
         "            if strongSelf.aorusTranslateButtonNode == nil {\n"
         "                let aorusTranslateButtonNode = ChatMessageShareButton()\n"
