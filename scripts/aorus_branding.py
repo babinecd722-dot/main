@@ -5179,6 +5179,99 @@ def patch_call_proxy(tg: Path) -> None:
     path.write_text(t, encoding="utf-8")
 
 
+def patch_call_proxy_tcp_media(tg: Path) -> None:
+    """Make voice/video calls actually reach reflectors THROUGH the SOCKS5 proxy.
+
+    Root cause of "calls never connect in RF even with the proxy":
+    Telegram call media defaults to UDP to Telegram reflectors. A SOCKS5 proxy
+    cannot carry UDP, and RF blocks UDP to Telegram — so the proxied call signals
+    fine (over the proxied MTProto link) but the media leg has no path and the call
+    "connects" forever. Three things conspire against a proxied call:
+      1. enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, which
+         is OFF by default, so tgcalls will not use TCP at all.
+      2. For call protocol versions != "12.0.0" the TCP reflectors are diverted to a
+         DIRECT (non-proxied) signaling connection — also blocked in RF.
+      3. network_use_tcponly (the tgcalls "force TCP" switch) is only set in a
+         #if DEBUG block, so release builds never force the TCP leg.
+
+    Fix — ONLY when a SOCKS5 call proxy is configured (voipProxyServer != nil):
+      • keep the TCP reflectors as media connections (signalling then rides the
+        already-proxied MTProto link, not a blocked direct connection);
+      • force allowTCP = true so tgcalls may use TCP;
+      • set network_use_tcponly = true, keep only TCP reflector descriptors and
+        disable P2P, so the whole media leg goes over TCP through the proxy.
+    Calls without a proxy are completely untouched (still UDP, still fast).
+    """
+    path = tg / "submodules/TelegramVoip/Sources/OngoingCallContext.swift"
+    if not path.is_file():
+        print("CallProxyTCP: OngoingCallContext.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: force call media over TCP" in t:
+        print("CallProxyTCP: already patched")
+        return
+
+    ok = True
+
+    # 1) Keep TCP reflectors as media connections when a proxy is set (don't divert
+    #    them to a direct, RF-blocked signaling connection).
+    anchor1 = (
+        "                        if reflector.isTcp {\n"
+        "                            if version == \"12.0.0\" {\n"
+    )
+    repl1 = (
+        "                        if reflector.isTcp {\n"
+        "                            if version == \"12.0.0\" || voipProxyServer != nil {\n"
+    )
+    if anchor1 in t:
+        t = t.replace(anchor1, repl1, 1)
+    else:
+        print("CallProxyTCP: WARNING reflector-diversion anchor not found")
+        ok = False
+
+    # 2) Allow TCP whenever a proxy is set (enableVoipTcp is off by default).
+    anchor2 = "                    allowTCP: enableTCP,\n"
+    repl2 = "                    allowTCP: (voipProxyServer != nil ? true : enableTCP),\n"
+    if anchor2 in t:
+        t = t.replace(anchor2, repl2, 1)
+    else:
+        print("CallProxyTCP: WARNING allowTCP anchor not found")
+        ok = False
+
+    # 3) Force network_use_tcponly + TCP-only reflectors + no P2P for proxied calls.
+    anchor3 = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
+    block3 = (
+        "                #if !DEBUG\n"
+        "                // AorusGram: force call media over TCP through the SOCKS5 proxy so\n"
+        "                // it works where direct UDP voice traffic is blocked (e.g. RF).\n"
+        "                var customParameters = customParameters\n"
+        "                if voipProxyServer != nil {\n"
+        "                    var aorusCP: [String: Any] = ((try? JSONSerialization.jsonObject(with: (customParameters ?? \"{}\").data(using: .utf8)!)) as? [String: Any]) ?? [:]\n"
+        "                    aorusCP[\"network_use_tcponly\"] = true as NSNumber\n"
+        "                    if let aorusData = try? JSONSerialization.data(withJSONObject: aorusCP), let aorusStr = String(data: aorusData, encoding: .utf8) {\n"
+        "                        customParameters = aorusStr\n"
+        "                    }\n"
+        "                    let aorusTcp = filteredConnections.filter { $0.hasTcp }\n"
+        "                    if !aorusTcp.isEmpty {\n"
+        "                        filteredConnections = aorusTcp\n"
+        "                    }\n"
+        "                    allowP2P = false\n"
+        "                }\n"
+        "                #endif\n"
+    )
+    if anchor3 in t:
+        t = t.replace(anchor3, block3 + anchor3, 1)
+    else:
+        print("CallProxyTCP: WARNING context-init anchor not found")
+        ok = False
+
+    if ok:
+        path.write_text(t, encoding="utf-8")
+        print("CallProxyTCP: routed proxied call media over TCP (network_use_tcponly + TCP reflectors + allowTCP)")
+    else:
+        print("CallProxyTCP: NOT applied (anchor mismatch)")
+
+
 def patch_intro_brand_logo(tg: Path) -> None:
     """Replace the OpenGL Telegram paper-plane logo on the intro/welcome screen
     with the AorusGram brand logo.
@@ -15876,6 +15969,7 @@ def main() -> None:
     patch_remove_send_logs(tg)
     patch_app_bundle_name(tg)
     patch_call_proxy(tg)
+    patch_call_proxy_tcp_media(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
