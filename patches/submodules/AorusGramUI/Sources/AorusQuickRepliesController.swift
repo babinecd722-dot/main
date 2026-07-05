@@ -99,8 +99,17 @@ private enum QRSection: Int32 {
     case list
 }
 
+// Each reply carries a stable, position-independent id so the list diff can
+// animate a single insertion/deletion cleanly (index-based ids would shift on
+// every middle-delete and make the whole list re-shuffle — the "raw" feeling).
+private struct QRReply: Equatable {
+    let id: Int32
+    var text: String
+}
+
 private struct QRState: Equatable {
-    var replies: [String]
+    var replies: [QRReply]
+    var nextId: Int32
     var isAdding: Bool
     var draft: String
 }
@@ -171,8 +180,8 @@ private enum QREntry: ItemListNodeEntry {
             return ItemListPeerActionItem(presentationData: presentationData, icon: plusIcon, title: text, sectionId: section, action: { args.beginAdding() })
         case let .input(_, placeholder, value):
             return QRInputItem(theme: presentationData.theme, text: value, placeholder: placeholder, sectionId: section, textUpdated: { args.setDraft($0) }, action: { args.commitDraft() })
-        case let .reply(_, index, text):
-            return QRRevealTextItem(theme: presentationData.theme, title: text, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeReply(Int(index)) })
+        case let .reply(_, id, text):
+            return QRRevealTextItem(theme: presentationData.theme, title: text, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: { args.removeReply(Int(id)) })
         }
     }
 }
@@ -538,15 +547,22 @@ private func qrEntries(state: QRState, theme: PresentationTheme) -> [QREntry] {
     if state.isAdding {
         entries.append(.input(theme, isRu ? "Текст ответа" : "Reply text", state.draft))
     }
-    for (i, reply) in state.replies.enumerated() {
-        entries.append(.reply(theme, Int32(i), reply))
+    for reply in state.replies {
+        entries.append(.reply(theme, reply.id, reply.text))
     }
 
     return entries
 }
 
 public func aorusQuickRepliesController(context: AccountContext) -> ViewController {
-    let initialState = QRState(replies: AorusQuickReplies.items, isAdding: false, draft: "")
+    let loaded = AorusQuickReplies.items
+    var seedId: Int32 = 0
+    let seededReplies = loaded.map { text -> QRReply in
+        let r = QRReply(id: seedId, text: text)
+        seedId += 1
+        return r
+    }
+    let initialState = QRState(replies: seededReplies, nextId: seedId, isAdding: false, draft: "")
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((QRState) -> QRState) -> Void = { f in
@@ -583,19 +599,22 @@ public func aorusQuickRepliesController(context: AccountContext) -> ViewControll
             AorusQuickReplies.add(draft)
             updateState { current in
                 var next = current
-                next.replies = AorusQuickReplies.items
+                next.replies.append(QRReply(id: next.nextId, text: draft))
+                next.nextId += 1
                 next.isAdding = false
                 next.draft = ""
                 return next
             }
         },
-        removeReply: { index in
-            AorusQuickReplies.remove(at: index)
+        removeReply: { id in
+            let id32 = Int32(id)
             updateState { current in
                 var next = current
-                next.replies = AorusQuickReplies.items
+                next.replies.removeAll { $0.id == id32 }
                 return next
             }
+            // Persist the new order/content (drives UserDefaults + Keychain).
+            AorusQuickReplies.items = stateValue.with { $0 }.replies.map { $0.text }
         }
     )
 
