@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Security
 import Display
 import AsyncDisplayKit
 import SwiftSignalKit
@@ -15,13 +16,25 @@ import AccountContext
 // A user-managed list of canned messages. In a chat, typing "&" pops an
 // autocomplete panel of these replies; picking one inserts its text.
 // Reachable from "Прочее" via the "Быстрые ответы" row.
+//
+// Storage: the device Keychain is the source of truth (kSecClassGenericPassword
+// survives app deletion/reinstall, unlike UserDefaults), with a UserDefaults
+// mirror under "aorusgram_quick_replies" — that mirror is what the patched
+// core (ChatInterfaceStateContextQueries) reads for the "&" panel, since core
+// code cannot import AorusGramUI. restoreFromKeychainIfNeeded() re-seeds the
+// mirror on the first launch after a reinstall (called from AorusGramBootstrap).
 
 public enum AorusQuickReplies {
     private static let key = "aorusgram_quick_replies"
+    private static let service = "aorusgram.quickreplies"
+    private static let account = "list"
 
     public static var items: [String] {
         get { UserDefaults.standard.stringArray(forKey: key) ?? [] }
-        set { UserDefaults.standard.set(newValue, forKey: key) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: key)
+            keychainWrite(newValue)
+        }
     }
 
     public static func add(_ text: String) {
@@ -37,6 +50,47 @@ public enum AorusQuickReplies {
         guard index >= 0 && index < arr.count else { return }
         arr.remove(at: index)
         items = arr
+    }
+
+    // First launch after a (re)install: UserDefaults is empty but the Keychain
+    // may still hold the list from the previous install — re-seed the mirror.
+    public static func restoreFromKeychainIfNeeded() {
+        if UserDefaults.standard.object(forKey: key) != nil { return }
+        if let saved = keychainRead(), !saved.isEmpty {
+            UserDefaults.standard.set(saved, forKey: key)
+        }
+    }
+
+    // MARK: Keychain helpers
+
+    private static func keychainWrite(_ list: [String]) {
+        guard let data = try? JSONEncoder().encode(list) else { return }
+        let base: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(base as CFDictionary)
+        var query = base
+        query[kSecValueData as String] = data
+        // AfterFirstUnlock: readable in background, migrates via encrypted
+        // backups AND — the point — survives app deletion/reinstall.
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(query as CFDictionary, nil)
+    }
+
+    private static func keychainRead() -> [String]? {
+        let query: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String:  true,
+            kSecMatchLimit as String:  kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        return try? JSONDecoder().decode([String].self, from: data)
     }
 }
 

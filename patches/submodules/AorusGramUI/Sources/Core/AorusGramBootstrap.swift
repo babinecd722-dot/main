@@ -67,6 +67,10 @@ public final class AorusGramBootstrap {
         // Auto-reply
         AutoReplyManager.shared.load()
 
+        // Quick Replies — after a reinstall UserDefaults is wiped but the
+        // Keychain copy survives; re-seed the mirror the "&" panel reads.
+        AorusQuickReplies.restoreFromKeychainIfNeeded()
+
         // Anti-spam
         AntiSpamManager.shared.setEnabled(AorusGramConfig.isEnabled(.antiSpam))
 
