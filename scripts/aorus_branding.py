@@ -5294,7 +5294,7 @@ def patch_alternate_icons(tg: Path) -> None:
         ("Sunset",     "Закат",        "Sunset",      False),
         ("Cosmos",     "Космос",       "Cosmos",      False),
         ("Cosmos2",    "Космос 2",     "Cosmos 2",    False),
-        ("Duck",       "Утка",         "Duck",        False),
+        ("Duck",       "Утка",         "Ducky",       False),
         ("BlueWhite",  "Сине-белая",   "Blue White",  False),
         ("BlackWhite", "Черно-белая",  "Black White", False),
         ("Black",      "Черная",       "Black",       False),
