@@ -287,6 +287,7 @@ private struct AorusState: Equatable {
     var voiceTranscription: Bool
     var chatSummary: Bool
     var translator: Bool
+    var shareButton: Bool
     var autoReply: Bool
     var downloadAccel: Bool
     var maxMediaQuality: Bool
@@ -420,6 +421,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case appBadge(PresentationTheme, String, String)
 
     case editLocalHeader(PresentationTheme, String)
+    case shareButton(PresentationTheme, String, Bool)
     case messagesDoubleCopy(PresentationTheme, String, Bool)
     case messagesTripleDelete(PresentationTheme, String, Bool)
     case editLocalEnabled(PresentationTheme, String, Bool)
@@ -452,7 +454,7 @@ private enum AorusEntry: ItemListNodeEntry {
         switch self {
         case .privacyHeader, .ghostMode, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot, .callRecording:
             return AorusSection.privacy.rawValue
-        case .aiHeader, .voiceTranscription, .chatSummary, .translator, .autoReply, .voiceTwin:
+        case .aiHeader, .chatSummary, .autoReply, .voiceTwin:
             return AorusSection.ai.rawValue
         case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .antiSpamManage, .performanceStats, .performanceUptime, .performanceRAM,
              .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
@@ -461,7 +463,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.performance.rawValue
         case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge:
             return AorusSection.ui.rawValue
-        case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
+        case .editLocalHeader, .translator, .voiceTranscription, .shareButton, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
         case .deviceSpoofHeader, .deviceSpoof:
             return AorusSection.deviceSpoof.rawValue
@@ -490,9 +492,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case .antiScreenshot:       return 7
         case .callRecording:        return 8
         case .aiHeader:             return 10
-        case .voiceTranscription:   return 11
         case .chatSummary:          return 13
-        case .translator:           return 14
         case .autoReply:            return 16
         case .voiceTwin:            return 17
         case .perfHeader:           return 20
@@ -522,7 +522,10 @@ private enum AorusEntry: ItemListNodeEntry {
         case .hideContactsTab:      return 55
         case .siriShortcuts:        return 56
         case .appBadge:             return 57
-        case .editLocalHeader:      return 63
+        case .editLocalHeader:      return 59
+        case .translator:           return 60
+        case .voiceTranscription:   return 61
+        case .shareButton:          return 62
         case .messagesDoubleCopy:   return 64
         case .messagesTripleDelete: return 65
         case .editLocalEnabled:     return 66
@@ -635,6 +638,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .appBadge(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .editLocalHeader(lt, ls):
             if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .shareButton(lt, ls, lv):
+            if case let .shareButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .messagesDoubleCopy(lt, ls, lv):
             if case let .messagesDoubleCopy(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .messagesTripleDelete(lt, ls, lv):
@@ -706,6 +711,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.chatSummary, $0) })
         case let .translator(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.translator, $0) })
+        case let .shareButton(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.shareButton, $0) })
         case let .autoReply(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.autoReply, $0) })
         case let .voiceTwin(_, title):
@@ -846,13 +853,6 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .antiScreenshot(theme, l10n.antiScreenshot, state.antiScreenshot),
         .callRecording(theme, l10n.callRecording, state.callRecording),
 
-        .aiHeader(theme, l10n.aiHeader),
-        .voiceTranscription(theme, l10n.voiceTranscription, state.voiceTranscription),
-        .chatSummary(theme, l10n.chatSummary, state.chatSummary),
-        .translator(theme, l10n.translator, state.translator),
-        .autoReply(theme, l10n.autoReply, state.autoReply),
-        .voiceTwin(theme, l10n.voiceTwin),
-
         .perfHeader(theme, l10n.perfHeader),
         .downloadAccel(theme, l10n.downloadAccel, state.downloadAccel),
         .maxMediaQuality(theme, l10n.maxMediaQuality, state.maxMediaQuality),
@@ -872,6 +872,9 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
 
         .editLocalHeader(theme, l10n.messagesHeader),
+        .translator(theme, l10n.translator, state.translator),
+        .voiceTranscription(theme, l10n.voiceTranscription, state.voiceTranscription),
+        .shareButton(theme, l10n.shareButton, state.shareButton),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
         .messagesTripleDelete(theme, l10n.tripleTapDelete, state.tripleTapDelete),
         .editLocalEnabled(theme, l10n.editLocally, state.editLocally),
@@ -983,6 +986,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         voiceTranscription: mgr.voiceTranscription,
         chatSummary:        mgr.chatSummary,
         translator:         mgr.translator,
+        shareButton:        mgr.shareButton,
         autoReply:          mgr.autoReply,
         downloadAccel:      mgr.downloadAccel,
         maxMediaQuality:    mgr.maxMediaQuality,
@@ -1049,6 +1053,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.voiceTranscription  = s.voiceTranscription
             mgr.chatSummary         = s.chatSummary
             mgr.translator          = s.translator
+            mgr.shareButton         = s.shareButton
             mgr.autoReply           = s.autoReply
             mgr.downloadAccel       = s.downloadAccel
             mgr.maxMediaQuality     = s.maxMediaQuality

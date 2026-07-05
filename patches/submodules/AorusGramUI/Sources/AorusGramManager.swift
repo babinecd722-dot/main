@@ -29,6 +29,8 @@ public final class AorusGramManager {
     public var voiceTranscription: Bool = false { didSet { save() } }
     public var chatSummary: Bool       = false { didSet { save() } }
     public var translator: Bool        = false { didSet { save() } }
+    // Native share button on posts — decoupled from the translator; on by default (stock).
+    public var shareButton: Bool       = true  { didSet { save() } }
     public var antiScreenshot: Bool    = false { didSet { save() } }
     public var callRecording: Bool     = false { didSet { save() } }
     public var streaks: Bool           = false { didSet { save() } }
@@ -103,6 +105,7 @@ public final class AorusGramManager {
         voiceTranscription  = d["voiceTranscription"]  as? Bool ?? false
         chatSummary         = d["chatSummary"]         as? Bool ?? false
         translator          = d["translator"]          as? Bool ?? false
+        shareButton         = d["shareButton"]         as? Bool ?? true
         antiScreenshot      = d["antiScreenshot"]      as? Bool ?? false
         callRecording       = d["callRecording"]       as? Bool ?? false
         streaks             = d["streaks"]             as? Bool ?? false
@@ -148,6 +151,7 @@ public final class AorusGramManager {
             "voiceTranscription":  voiceTranscription,
             "chatSummary":         chatSummary,
             "translator":          translator,
+            "shareButton":         shareButton,
             "antiScreenshot":      antiScreenshot,
             "callRecording":       callRecording,
             "streaks":             streaks,
@@ -183,6 +187,7 @@ public final class AorusGramManager {
         ud.set(callRecording,       forKey: "aorusgram_feature_call_recording")
         ud.set(voiceTranscription,  forKey: "aorusgram_feature_voice_transcription")
         ud.set(translator,          forKey: "aorusgram_feature_translator")
+        ud.set(shareButton,         forKey: "aorusgram_share_button")
         ud.set(chatSummary,         forKey: "aorusgram_feature_chat_summary")
         ud.set(autoReply,           forKey: "aorusgram_feature_auto_reply")
         ud.set(maxMediaQuality,     forKey: "aorusgram_feature_max_media_quality")

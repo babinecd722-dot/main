@@ -2293,8 +2293,10 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
         "                }\n"
         "            }\n"
         "\n"
-        "            // -- Transcribe / Hide Transcription (gated by voice transcription flag) --\n"
-        "            if UserDefaults.standard.bool(forKey: \"aorusgram_feature_voice_transcription\"), let aorusVoiceFile = aorusVoiceFile {\n"
+        "            // -- Transcribe / Hide Transcription — MOVED to the per-message inline button\n"
+        "            //    (patch_message_translate_button). Condition below is a key that is never\n"
+        "            //    set, so the menu item is gone without a dead-code warning.\n"
+        "            if UserDefaults.standard.bool(forKey: \"aorusgram_transcribe_menu_removed_never\"), let aorusVoiceFile = aorusVoiceFile {\n"
         "                if aorusIsTranscribed, let aorusOrig = aorusSavedText {\n"
         "                    actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Скрыть расшифровку\" : \"Hide Transcription\", icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: theme.actionSheet.primaryTextColor)\n"
@@ -15347,11 +15349,13 @@ def patch_share_button_translate(tg: Path) -> None:
         print("ShareBtnTranslate: already patched")
         return
     sig_old = "disableComments: Bool = false, isSummarize: Bool = false) -> CGSize {"
-    sig_new = "disableComments: Bool = false, isSummarize: Bool = false, aorusIsTranslate: Bool = false) -> CGSize {"
+    sig_new = "disableComments: Bool = false, isSummarize: Bool = false, aorusIsTranslate: Bool = false, aorusIsTranscribe: Bool = false) -> CGSize {"
     icon_old = "            if isSummarize {\n"
     icon_new = (
         "            if aorusIsTranslate {\n"
         "                updatedIconImage = generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper))\n"
+        "            } else if aorusIsTranscribe {\n"
+        "                updatedIconImage = generateTintedImage(image: UIImage(systemName: \"waveform\", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)), color: bubbleVariableColor(variableColor: presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: presentationData.theme.wallpaper))\n"
         "            } else if isSummarize {\n"
     )
     if sig_old in t and icon_old in t:
@@ -15364,12 +15368,16 @@ def patch_share_button_translate(tg: Path) -> None:
 
 
 def patch_message_translate_button(tg: Path) -> None:
-    """Per-message inline Translate button (mirrors Telegram's native summarize button).
+    """Per-message inline action button (mirrors Telegram's native summarize button).
 
-    A floating 文A circle appears on incoming (others') text messages when the translator
-    feature is on: bottom-right for chats, and stacked ABOVE the native share button on
-    channel posts. Tap → Google Translate (GTranslate) result appended under the original
-    with a "🗨 GTranslate" header; second tap restores the original. Nothing on own messages.
+    A floating circle appears on incoming (others') messages: bottom-right for chats,
+    stacked ABOVE the native share button on channel posts. Two modes, mutually exclusive
+    per message:
+      • text message + translator on   → 文A glyph; tap = Google Translate (GTranslate)
+        appended under the original with a "🗨 GTranslate" header.
+      • voice message + transcription on → waveform glyph; tap = on-device Speech-to-text,
+        the recognized text is written under the voice bubble.
+    Second tap restores the original in both modes. Nothing on own messages.
     """
     path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
     if not path.is_file():
@@ -15405,7 +15413,8 @@ def patch_message_translate_button(tg: Path) -> None:
         "        }\n"
     )
     inst_add = (
-        "        let aorusNeedsTranslateButton = UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") && incoming && !item.message.text.isEmpty\n"
+        "        let aorusHasVoiceMedia = item.message.media.contains(where: { ($0 as? TelegramMediaFile)?.isVoice == true })\n"
+        "        let aorusNeedsTranslateButton = incoming && ((UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") && !aorusHasVoiceMedia && !item.message.text.isEmpty) || (UserDefaults.standard.bool(forKey: \"aorusgram_feature_voice_transcription\") && aorusHasVoiceMedia))\n"
         "        if aorusNeedsTranslateButton {\n"
         "            if strongSelf.aorusTranslateButtonNode == nil {\n"
         "                let aorusTranslateButtonNode = ChatMessageShareButton()\n"
@@ -15429,7 +15438,8 @@ def patch_message_translate_button(tg: Path) -> None:
     )
     tr_frame = (
         "            if let aorusTranslateButtonNode = strongSelf.aorusTranslateButtonNode {\n"
-        "                let buttonSize = aorusTranslateButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: EngineMessage(item.message), accountPeerId: item.context.account.peerId, disableComments: disablesComments, aorusIsTranslate: true)\n"
+        "                let aorusIsVoiceButton = item.message.media.contains(where: { ($0 as? TelegramMediaFile)?.isVoice == true })\n"
+        "                let buttonSize = aorusTranslateButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: EngineMessage(item.message), accountPeerId: item.context.account.peerId, disableComments: disablesComments, aorusIsTranslate: !aorusIsVoiceButton, aorusIsTranscribe: aorusIsVoiceButton)\n"
         "                var buttonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0), size: buttonSize)\n"
         "                if needsShareButton {\n"
         "                    buttonFrame.origin.y -= (buttonSize.height + 6.0)\n"
@@ -15498,6 +15508,32 @@ def patch_message_translate_button(tg: Path) -> None:
         "            UserDefaults.standard.removeObject(forKey: aorusKey)\n"
         "            return\n"
         "        }\n"
+        "        var aorusVoiceFile: TelegramMediaFile? = nil\n"
+        "        for aorusMedia in item.message.media { if let f = aorusMedia as? TelegramMediaFile, f.isVoice { aorusVoiceFile = f; break } }\n"
+        "        if let aorusVoiceFile = aorusVoiceFile {\n"
+        "            #if canImport(Speech)\n"
+        "            let aorusVoiceOriginal = item.message.text\n"
+        "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { return }\n"
+        "            SFSpeechRecognizer.requestAuthorization { status in\n"
+        "                guard status == .authorized else { return }\n"
+        "                guard let aorusRecognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: \"ru-RU\")), aorusRecognizer.isAvailable else { return }\n"
+        "                let aorusReq = SFSpeechURLRecognitionRequest(url: URL(fileURLWithPath: aorusPath))\n"
+        "                aorusReq.shouldReportPartialResults = false\n"
+        "                aorusReq.taskHint = .dictation\n"
+        "                if aorusRecognizer.supportsOnDeviceRecognition { aorusReq.requiresOnDeviceRecognition = true }\n"
+        "                _ = aorusRecognizer.recognitionTask(with: aorusReq) { result, _ in\n"
+        "                    guard let result = result, result.isFinal else { return }\n"
+        "                    let aorusText = result.bestTranscription.formattedString\n"
+        "                    guard !aorusText.isEmpty else { return }\n"
+        "                    DispatchQueue.main.async {\n"
+        "                        aorusSetText(aorusText, aorusMid)\n"
+        "                        UserDefaults.standard.set(aorusVoiceOriginal, forKey: aorusKey)\n"
+        "                    }\n"
+        "                }\n"
+        "            }\n"
+        "            #endif\n"
+        "            return\n"
+        "        }\n"
         "        let aorusOriginal = item.message.text\n"
         "        guard !aorusOriginal.isEmpty else { return }\n"
         "        let aorusTarget = Locale.current.languageCode ?? \"en\"\n"
@@ -15522,8 +15558,28 @@ def patch_message_translate_button(tg: Path) -> None:
     )
     sub(toggle_anchor, toggle_new + toggle_anchor, "toggle-method")
 
+    # 9) import Speech (guarded) — needed by the transcribe branch of aorusToggleTranslate.
+    if "import Speech" not in t:
+        sub("import Foundation\n",
+            "import Foundation\n#if canImport(Speech)\nimport Speech\n#endif\n",
+            "import-speech")
+
+    # 10) Share-button toggle — hide the native share button when the user turns
+    #     "Share Button" off. Default (key unset) keeps stock behaviour (shown).
+    #     Injected right after the last needsShareButton computation, before layout.
+    sub("        if let subject = item.associatedData.subject, case .messageOptions = subject {\n"
+        "            needsShareButton = false\n"
+        "        }\n",
+        "        if let subject = item.associatedData.subject, case .messageOptions = subject {\n"
+        "            needsShareButton = false\n"
+        "        }\n"
+        "        if needsShareButton, let aorusShareOn = UserDefaults.standard.object(forKey: \"aorusgram_share_button\") as? Bool, !aorusShareOn {\n"
+        "            needsShareButton = false\n"
+        "        }\n",
+        "share-button-gate")
+
     path.write_text(t, encoding="utf-8")
-    print("MsgTranslateBtn: injected per-message translate button")
+    print("MsgTranslateBtn: injected per-message translate/transcribe button")
 
 
 def main() -> None:

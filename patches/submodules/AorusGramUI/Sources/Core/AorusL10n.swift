@@ -87,6 +87,7 @@ public struct AorusL10n {
     public var voiceTranscription: String { t("Расшифровка голосовых", "Voice to Text") }
     public var chatSummary: String { t("Сводка чата", "Chat Summary") }
     public var translator: String { t("Переводчик", "Translator") }
+    public var shareButton: String { t("Кнопка «Поделиться»", "Share Button") }
     public var autoReply: String { t("Автоответчик", "Auto-Reply") }
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
     public var maxMediaQuality: String { t("Максимальное качество медиа", "Maximum Media Quality") }

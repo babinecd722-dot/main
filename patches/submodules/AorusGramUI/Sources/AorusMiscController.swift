@@ -18,6 +18,9 @@ private enum MiscSection: Int32 {
     case premium
     case fakeGifts
     case fakeStars
+    case calls
+    case autoReplyS
+    case chatSummaryS
     case antiSearch
     case security
 }
@@ -26,6 +29,8 @@ private struct MiscState: Equatable {
     var localPremium: Bool
     var fakeStars: Bool
     var fakeStarsAmount: String
+    var autoReply: Bool
+    var chatSummary: Bool
     var antiSearch: Bool
     var anonymousStickers: Bool
     var profileLink: Bool
@@ -44,6 +49,9 @@ private final class MiscArguments {
     let openFakeGifts: () -> Void
     let setFakeStars: (Bool) -> Void
     let setFakeStarsAmount: (String) -> Void
+    let openVoiceTwin: () -> Void
+    let setAutoReply: (Bool) -> Void
+    let setChatSummary: (Bool) -> Void
     let setAntiSearch: (Bool) -> Void
     let setAnonymousStickers: (Bool) -> Void
     let setProfileLink: (Bool) -> Void
@@ -57,11 +65,14 @@ private final class MiscArguments {
     let setLinkProtectionRedirects: (Bool) -> Void
     let setLinkProtectionBlockFiles: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
         self.setFakeStarsAmount = setFakeStarsAmount
+        self.openVoiceTwin = openVoiceTwin
+        self.setAutoReply = setAutoReply
+        self.setChatSummary = setChatSummary
         self.setAntiSearch = setAntiSearch
         self.setAnonymousStickers = setAnonymousStickers
         self.setProfileLink = setProfileLink
@@ -86,6 +97,10 @@ private enum MiscEntry: ItemListNodeEntry {
     case fakeStars(PresentationTheme, String, Bool)
     case fakeStarsCount(PresentationTheme, String, String)
     case fakeStarsInfo(PresentationTheme, String)
+    case callsHeader(PresentationTheme, String)
+    case voiceTwin(PresentationTheme, String)
+    case autoReply(PresentationTheme, String, Bool)
+    case chatSummary(PresentationTheme, String, Bool)
     case antiSearchHeader(PresentationTheme, String)
     case antiSearch(PresentationTheme, String, Bool)
     case antiSearchInfo(PresentationTheme, String)
@@ -115,6 +130,12 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.fakeGifts.rawValue
         case .fakeStarsHeader, .fakeStars, .fakeStarsCount, .fakeStarsInfo:
             return MiscSection.fakeStars.rawValue
+        case .callsHeader, .voiceTwin:
+            return MiscSection.calls.rawValue
+        case .autoReply:
+            return MiscSection.autoReplyS.rawValue
+        case .chatSummary:
+            return MiscSection.chatSummaryS.rawValue
         case .antiSearchHeader, .antiSearch, .antiSearchInfo, .anonymousStickers, .anonymousStickersInfo,
              .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
              .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
@@ -134,6 +155,10 @@ private enum MiscEntry: ItemListNodeEntry {
         case .fakeStars:        return 21
         case .fakeStarsCount:   return 22
         case .fakeStarsInfo:    return 23
+        case .callsHeader:      return 24
+        case .voiceTwin:        return 25
+        case .autoReply:        return 26
+        case .chatSummary:      return 27
         case .antiSearchHeader: return 30
         case .antiSearch:       return 31
         case .antiSearchInfo:   return 32
@@ -179,6 +204,14 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .fakeStarsCount(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .fakeStarsInfo(lt, ls):
             if case let .fakeStarsInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .callsHeader(lt, ls):
+            if case let .callsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .voiceTwin(lt, ls):
+            if case let .voiceTwin(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .autoReply(lt, ls, lv):
+            if case let .autoReply(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .chatSummary(lt, ls, lv):
+            if case let .chatSummary(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .antiSearchHeader(lt, ls):
             if case let .antiSearchHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .antiSearch(lt, ls, lv):
@@ -242,6 +275,14 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .number, sectionId: section, textUpdated: { text in args.setFakeStarsAmount(text) }, action: {})
         case let .fakeStarsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .callsHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .voiceTwin(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openVoiceTwin)
+        case let .autoReply(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoReply($0) })
+        case let .chatSummary(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setChatSummary($0) })
         case let .antiSearchHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .antiSearch(_, title, value):
@@ -308,6 +349,11 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
         ? "Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся."
         : "Shows the entered Stars balance locally, only for you. No real stars are created or spent."))
 
+    entries.append(.callsHeader(theme, isRu ? "ЗВОНКИ" : "CALLS"))
+    entries.append(.voiceTwin(theme, isRu ? "Голосовой двойник" : "Voice Twin"))
+    entries.append(.autoReply(theme, isRu ? "Автоответчик" : "Auto-Reply", state.autoReply))
+    entries.append(.chatSummary(theme, isRu ? "Сводка чата" : "Chat Summary", state.chatSummary))
+
     entries.append(.antiSearchHeader(theme, isRu ? "АНТИПОИСК" : "ANTI-SEARCH"))
     entries.append(.antiSearch(theme, isRu ? "АнтиПоиск" : "AntiSearch", state.antiSearch))
     entries.append(.antiSearchInfo(theme, isRu
@@ -359,6 +405,8 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
         localPremium: AorusLocalPremium.isEnabled,
         fakeStars: initialFakeStars,
         fakeStarsAmount: initialFakeStarsAmount,
+        autoReply: AorusGramManager.shared.autoReply,
+        chatSummary: AorusGramManager.shared.chatSummary,
         antiSearch: AorusAntiSearchStore.isEnabled,
         anonymousStickers: UserDefaults.standard.bool(forKey: "aorusgram_anonymous_stickers_enabled"),
         profileLink: UserDefaults.standard.bool(forKey: "aorusgram_profile_link_enabled"),
@@ -415,6 +463,29 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
             updateState { current in
                 var next = current
                 next.fakeStarsAmount = digits
+                return next
+            }
+        },
+        openVoiceTwin: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            navigationController.pushViewController(voiceTwinController(context: context))
+        },
+        setAutoReply: { value in
+            AorusGramManager.shared.autoReply = value
+            updateState { current in
+                var next = current
+                next.autoReply = value
+                return next
+            }
+        },
+        setChatSummary: { value in
+            AorusGramManager.shared.chatSummary = value
+            updateState { current in
+                var next = current
+                next.chatSummary = value
                 return next
             }
         },
