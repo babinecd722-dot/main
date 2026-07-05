@@ -271,6 +271,8 @@ private enum AorusSection: Int32 {
     case aorusCode
     case channel
     case editLocal
+    case quickButtons
+    case calls
     case misc
 }
 
@@ -389,6 +391,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case translator(PresentationTheme, String, Bool)
     case autoReply(PresentationTheme, String, Bool)
 
+    case callsHeader(PresentationTheme, String)
     case voiceTwin(PresentationTheme, String)
 
     case perfHeader(PresentationTheme, String)
@@ -454,8 +457,10 @@ private enum AorusEntry: ItemListNodeEntry {
         switch self {
         case .privacyHeader, .ghostMode, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot, .callRecording:
             return AorusSection.privacy.rawValue
-        case .aiHeader, .chatSummary, .autoReply, .voiceTwin:
+        case .aiHeader, .chatSummary, .autoReply:
             return AorusSection.ai.rawValue
+        case .callsHeader, .voiceTwin:
+            return AorusSection.calls.rawValue
         case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .antiSpamManage, .performanceStats, .performanceUptime, .performanceRAM,
              .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
@@ -463,8 +468,10 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.performance.rawValue
         case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge:
             return AorusSection.ui.rawValue
-        case .editLocalHeader, .translator, .voiceTranscription, .shareButton, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
+        case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
+        case .translator, .voiceTranscription, .shareButton:
+            return AorusSection.quickButtons.rawValue
         case .deviceSpoofHeader, .deviceSpoof:
             return AorusSection.deviceSpoof.rawValue
         case .bypassHeader, .bypassSavePaid, .bypassSaveViewOnce, .bypassStoryDownload:
@@ -494,7 +501,6 @@ private enum AorusEntry: ItemListNodeEntry {
         case .aiHeader:             return 10
         case .chatSummary:          return 13
         case .autoReply:            return 16
-        case .voiceTwin:            return 17
         case .perfHeader:           return 20
         case .downloadAccel:        return 21
         case .maxMediaQuality:      return 22
@@ -522,14 +528,16 @@ private enum AorusEntry: ItemListNodeEntry {
         case .hideContactsTab:      return 55
         case .siriShortcuts:        return 56
         case .appBadge:             return 57
-        case .editLocalHeader:      return 59
-        case .translator:           return 60
-        case .voiceTranscription:   return 61
-        case .shareButton:          return 62
-        case .messagesDoubleCopy:   return 64
-        case .messagesTripleDelete: return 65
-        case .editLocalEnabled:     return 66
-        case .userMessagesEnabled:  return 67
+        case .editLocalHeader:      return 58
+        case .messagesDoubleCopy:   return 59
+        case .messagesTripleDelete: return 60
+        case .editLocalEnabled:     return 61
+        case .userMessagesEnabled:  return 62
+        case .translator:           return 63
+        case .voiceTranscription:   return 64
+        case .shareButton:          return 65
+        case .callsHeader:          return 66
+        case .voiceTwin:            return 67
         case .deviceSpoofHeader:    return 68
         case .deviceSpoof:          return 69
         case .bypassHeader:         return 70
@@ -580,6 +588,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .translator(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .autoReply(lt, ls, lv):
             if case let .autoReply(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .callsHeader(lt, ls):
+            if case let .callsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .voiceTwin(lt, ls):
             if case let .voiceTwin(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .perfHeader(lt, ls):
@@ -715,6 +725,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.shareButton, $0) })
         case let .autoReply(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.autoReply, $0) })
+        case let .callsHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .voiceTwin(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openVoiceTwin)
         case let .perfHeader(_, text):
@@ -872,13 +884,19 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
 
         .editLocalHeader(theme, l10n.messagesHeader),
-        .translator(theme, l10n.translator, state.translator),
-        .voiceTranscription(theme, l10n.voiceTranscription, state.voiceTranscription),
-        .shareButton(theme, l10n.shareButton, state.shareButton),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
         .messagesTripleDelete(theme, l10n.tripleTapDelete, state.tripleTapDelete),
         .editLocalEnabled(theme, l10n.editLocally, state.editLocally),
         .userMessagesEnabled(theme, l10n.userMessagesInGroup, state.userMessages),
+
+        // Unnamed block directly under Messages: the three quick message buttons.
+        .translator(theme, l10n.quickTranslateButton, state.translator),
+        .voiceTranscription(theme, l10n.quickTranscribeButton, state.voiceTranscription),
+        .shareButton(theme, l10n.quickShareButton, state.shareButton),
+
+        // Calls block (Voice Twin) — moved here from Other.
+        .callsHeader(theme, l10n.callsHeader),
+        .voiceTwin(theme, l10n.voiceTwin),
 
         .deviceSpoofHeader(theme, l10n.deviceSpoofHeader),
         .deviceSpoof(theme, l10n.deviceSpoof, state.spoofedDeviceName ?? l10n.deviceSpoofOff),

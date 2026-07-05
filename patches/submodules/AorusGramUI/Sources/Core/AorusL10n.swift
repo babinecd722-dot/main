@@ -70,7 +70,7 @@ public struct AorusL10n {
     public var perfHeader: String { t("ПРОИЗВОДИТЕЛЬНОСТЬ", "PERFORMANCE") }
     public var uiHeader: String { t("ИНТЕРФЕЙС", "INTERFACE") }
     public var antiSpoofHeader: String { t("АНТИ-СПУФ", "ANTI-SPOOF") }
-    public var accountBackupHeader: String { t("БЭКАП", "BACKUP") }
+    public var accountBackupHeader: String { t("АККАУНТ", "ACCOUNT") }
     public var aorusCodeHeader: String { t("AORUS CODE", "AORUS CODE") }
 
     // MARK: Settings — subscription
@@ -88,6 +88,10 @@ public struct AorusL10n {
     public var chatSummary: String { t("Сводка чата", "Chat Summary") }
     public var translator: String { t("Переводчик", "Translator") }
     public var shareButton: String { t("Кнопка «Поделиться»", "Share Button") }
+    public var quickTranslateButton: String { t("Кнопка быстрого перевода", "Quick Translate Button") }
+    public var quickTranscribeButton: String { t("Кнопка быстрой транскрипции", "Quick Transcription Button") }
+    public var quickShareButton: String { t("Кнопка быстро поделиться", "Quick Share Button") }
+    public var callsHeader: String { t("ЗВОНКИ", "CALLS") }
     public var autoReply: String { t("Автоответчик", "Auto-Reply") }
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
     public var maxMediaQuality: String { t("Максимальное качество медиа", "Maximum Media Quality") }

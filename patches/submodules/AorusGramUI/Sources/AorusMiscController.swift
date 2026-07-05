@@ -349,12 +349,12 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
         ? "Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся."
         : "Shows the entered Stars balance locally, only for you. No real stars are created or spent."))
 
-    entries.append(.callsHeader(theme, isRu ? "ЗВОНКИ" : "CALLS"))
-    entries.append(.voiceTwin(theme, isRu ? "Голосовой двойник" : "Voice Twin"))
+    // Voice Twin (Calls) moved to the main AorusGram screen. Auto-Reply and
+    // Chat Summary stay here as separate headerless blocks.
     entries.append(.autoReply(theme, isRu ? "Автоответчик" : "Auto-Reply", state.autoReply))
     entries.append(.chatSummary(theme, isRu ? "Сводка чата" : "Chat Summary", state.chatSummary))
 
-    entries.append(.antiSearchHeader(theme, isRu ? "АНТИПОИСК" : "ANTI-SEARCH"))
+    // ANTI-SEARCH header intentionally removed — the block stays, just untitled.
     entries.append(.antiSearch(theme, isRu ? "АнтиПоиск" : "AntiSearch", state.antiSearch))
     entries.append(.antiSearchInfo(theme, isRu
         ? "Заменяет только визуально идентичные буквы, чтобы текст выглядел так же, но хуже находился поиском."
