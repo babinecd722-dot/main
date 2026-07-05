@@ -50,6 +50,7 @@ private final class MiscArguments {
     let setFakeStars: (Bool) -> Void
     let setFakeStarsAmount: (String) -> Void
     let openVoiceTwin: () -> Void
+    let openQuickReplies: () -> Void
     let setAutoReply: (Bool) -> Void
     let setChatSummary: (Bool) -> Void
     let setAntiSearch: (Bool) -> Void
@@ -65,12 +66,13 @@ private final class MiscArguments {
     let setLinkProtectionRedirects: (Bool) -> Void
     let setLinkProtectionBlockFiles: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
         self.setFakeStarsAmount = setFakeStarsAmount
         self.openVoiceTwin = openVoiceTwin
+        self.openQuickReplies = openQuickReplies
         self.setAutoReply = setAutoReply
         self.setChatSummary = setChatSummary
         self.setAntiSearch = setAntiSearch
@@ -279,8 +281,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .voiceTwin(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openVoiceTwin)
-        case let .autoReply(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setAutoReply($0) })
+        case let .autoReply(_, title, _):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openQuickReplies)
         case let .chatSummary(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setChatSummary($0) })
         case let .antiSearchHeader(_, text):
@@ -351,7 +353,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
 
     // Voice Twin (Calls) moved to the main AorusGram screen. Auto-Reply and
     // Chat Summary stay here as separate headerless blocks.
-    entries.append(.autoReply(theme, isRu ? "Автоответчик" : "Auto-Reply", state.autoReply))
+    entries.append(.autoReply(theme, isRu ? "Быстрые ответы" : "Quick Replies", state.autoReply))
     entries.append(.chatSummary(theme, isRu ? "Сводка чата" : "Chat Summary", state.chatSummary))
 
     // ANTI-SEARCH header intentionally removed — the block stays, just untitled.
@@ -472,6 +474,13 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 return
             }
             navigationController.pushViewController(voiceTwinController(context: context))
+        },
+        openQuickReplies: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            navigationController.pushViewController(aorusQuickRepliesController(context: context))
         },
         setAutoReply: { value in
             AorusGramManager.shared.autoReply = value
