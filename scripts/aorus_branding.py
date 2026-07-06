@@ -1733,6 +1733,35 @@ def patch_max_media_quality(tg: Path) -> None:
         print("MaxMediaQuality: TelegramRootController.swift not found — skip")
 
 
+def patch_video_message_rear_camera(tg: Path) -> None:
+    """Start round video messages with the rear camera when enabled.
+
+    Telegram's dedicated round-video screen creates Camera.Configuration with
+    `position: self.cameraState.position`. The setting only changes this initial
+    position; the native switch-camera button and Camera.position signal keep working.
+    """
+    path = tg / "submodules/TelegramUI/Components/VideoMessageCameraScreen/Sources/VideoMessageCameraScreen.swift"
+    if not path.is_file():
+        print("VideoMessagesRearCamera: VideoMessageCameraScreen.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: rear camera for video messages"
+    if sentinel in t:
+        print("VideoMessagesRearCamera: already patched")
+        return
+    anchor = "                    position: self.cameraState.position,\n"
+    replacement = (
+        "                    " + sentinel + "\n"
+        "                    position: ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true) ? .back : self.cameraState.position,\n"
+    )
+    if anchor not in t:
+        print("VideoMessagesRearCamera: camera configuration anchor not found — skipped")
+        return
+    t = t.replace(anchor, replacement, 1)
+    path.write_text(t, encoding="utf-8")
+    print("VideoMessagesRearCamera: patched initial round-video camera position")
+
+
 def patch_ghost_mode_hooks(tg: Path) -> None:
     """Inject UserDefaults ghost-mode guards around presence/typing/read-receipt API calls.
 
@@ -16090,6 +16119,7 @@ def main() -> None:
     patch_settings_entry_point(tg)
     patch_download_accelerator(tg)
     patch_max_media_quality(tg)
+    patch_video_message_rear_camera(tg)
     patch_deleted_messages_interception(tg)
     patch_deleted_message_quote_reply(tg)
     patch_anti_spoof_delete_preflight(tg)

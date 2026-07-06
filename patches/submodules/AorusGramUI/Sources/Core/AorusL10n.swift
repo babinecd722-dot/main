@@ -91,10 +91,12 @@ public struct AorusL10n {
     public var quickTranslateButton: String { t("Кнопка быстрого перевода", "Quick Translate Button") }
     public var quickTranscribeButton: String { t("Кнопка быстрой транскрипции", "Quick Transcription Button") }
     public var quickShareButton: String { t("Кнопка быстро поделиться", "Quick Share Button") }
+    public var videoMessagesHeader: String { t("ВИДЕОСООБЩЕНИЯ", "VIDEO MESSAGES") }
+    public var videoMessagesRearCamera: String { t("Запись сразу с задней камеры", "Start Recording With Rear Camera") }
     public var callsHeader: String { t("ЗВОНКИ", "CALLS") }
     public var autoReply: String { t("Автоответчик", "Auto-Reply") }
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
-    public var maxMediaQuality: String { t("Максимальное качество медиа", "Maximum Media Quality") }
+    public var maxMediaQuality: String { t("Макс качество медиа", "Max Media Quality") }
     public var antiSpam: String { t("Анти-спам", "Anti-Spam") }
     public var performanceStats: String { t("Показывать статистику", "Show Statistics") }
     public var performanceUptime: String { t("Uptime", "Uptime") }

@@ -272,6 +272,7 @@ private enum AorusSection: Int32 {
     case channel
     case editLocal
     case quickButtons
+    case videoMessages
     case calls
     case misc
 }
@@ -290,6 +291,7 @@ private struct AorusState: Equatable {
     var chatSummary: Bool
     var translator: Bool
     var shareButton: Bool
+    var videoMessagesRearCamera: Bool
     var autoReply: Bool
     var downloadAccel: Bool
     var maxMediaQuality: Bool
@@ -425,6 +427,8 @@ private enum AorusEntry: ItemListNodeEntry {
 
     case editLocalHeader(PresentationTheme, String)
     case shareButton(PresentationTheme, String, Bool)
+    case videoMessagesHeader(PresentationTheme, String)
+    case videoMessagesRearCamera(PresentationTheme, String, Bool)
     case messagesDoubleCopy(PresentationTheme, String, Bool)
     case messagesTripleDelete(PresentationTheme, String, Bool)
     case editLocalEnabled(PresentationTheme, String, Bool)
@@ -472,6 +476,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.editLocal.rawValue
         case .translator, .voiceTranscription, .shareButton:
             return AorusSection.quickButtons.rawValue
+        case .videoMessagesHeader, .videoMessagesRearCamera:
+            return AorusSection.videoMessages.rawValue
         case .deviceSpoofHeader, .deviceSpoof:
             return AorusSection.deviceSpoof.rawValue
         case .bypassHeader, .bypassSavePaid, .bypassSaveViewOnce, .bypassStoryDownload:
@@ -536,14 +542,16 @@ private enum AorusEntry: ItemListNodeEntry {
         case .translator:           return 63
         case .voiceTranscription:   return 64
         case .shareButton:          return 65
-        case .callsHeader:          return 66
-        case .voiceTwin:            return 67
-        case .deviceSpoofHeader:    return 68
-        case .deviceSpoof:          return 69
-        case .bypassHeader:         return 70
-        case .bypassSavePaid:       return 71
-        case .bypassSaveViewOnce:   return 72
-        case .bypassStoryDownload:  return 73
+        case .videoMessagesHeader:  return 66
+        case .videoMessagesRearCamera: return 67
+        case .callsHeader:          return 68
+        case .voiceTwin:            return 69
+        case .deviceSpoofHeader:    return 70
+        case .deviceSpoof:          return 71
+        case .bypassHeader:         return 72
+        case .bypassSavePaid:       return 73
+        case .bypassSaveViewOnce:   return 74
+        case .bypassStoryDownload:  return 75
         case .antiSpoofHeader:      return 80
         case .antiSpoofDeleted:     return 81
         case .antiSpoofOnline:      return 82
@@ -650,6 +658,10 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .shareButton(lt, ls, lv):
             if case let .shareButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .videoMessagesHeader(lt, ls):
+            if case let .videoMessagesHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .videoMessagesRearCamera(lt, ls, lv):
+            if case let .videoMessagesRearCamera(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .messagesDoubleCopy(lt, ls, lv):
             if case let .messagesDoubleCopy(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .messagesTripleDelete(lt, ls, lv):
@@ -723,6 +735,10 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.translator, $0) })
         case let .shareButton(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.shareButton, $0) })
+        case let .videoMessagesHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .videoMessagesRearCamera(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.videoMessagesRearCamera, $0) })
         case let .autoReply(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.autoReply, $0) })
         case let .callsHeader(_, text):
@@ -894,6 +910,9 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .voiceTranscription(theme, l10n.quickTranscribeButton, state.voiceTranscription),
         .shareButton(theme, l10n.quickShareButton, state.shareButton),
 
+        .videoMessagesHeader(theme, l10n.videoMessagesHeader),
+        .videoMessagesRearCamera(theme, l10n.videoMessagesRearCamera, state.videoMessagesRearCamera),
+
         // Calls block (Voice Twin) — moved here from Other.
         .callsHeader(theme, l10n.callsHeader),
         .voiceTwin(theme, l10n.voiceTwin),
@@ -1005,6 +1024,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         chatSummary:        mgr.chatSummary,
         translator:         mgr.translator,
         shareButton:        mgr.shareButton,
+        videoMessagesRearCamera: mgr.videoMessagesRearCamera,
         autoReply:          mgr.autoReply,
         downloadAccel:      mgr.downloadAccel,
         maxMediaQuality:    mgr.maxMediaQuality,
@@ -1072,6 +1092,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.chatSummary         = s.chatSummary
             mgr.translator          = s.translator
             mgr.shareButton         = s.shareButton
+            mgr.videoMessagesRearCamera = s.videoMessagesRearCamera
             mgr.autoReply           = s.autoReply
             mgr.downloadAccel       = s.downloadAccel
             mgr.maxMediaQuality     = s.maxMediaQuality

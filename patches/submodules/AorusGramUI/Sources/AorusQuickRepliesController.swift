@@ -600,14 +600,23 @@ public func aorusQuickRepliesController(context: AccountContext) -> ViewControll
                 }
                 return
             }
-            AorusQuickReplies.add(draft)
+            let replyId = stateValue.with { $0 }.nextId
             updateState { current in
                 var next = current
-                next.replies.append(QRReply(id: next.nextId, text: draft))
                 next.nextId += 1
                 next.isAdding = false
                 next.draft = ""
                 return next
+            }
+            Queue.mainQueue().after(0.12) {
+                updateState { current in
+                    var next = current
+                    if !next.replies.contains(where: { $0.id == replyId }) {
+                        next.replies.append(QRReply(id: replyId, text: draft))
+                    }
+                    return next
+                }
+                AorusQuickReplies.items = stateValue.with { $0 }.replies.map { $0.text }
             }
         },
         removeReply: { id in
