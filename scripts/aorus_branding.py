@@ -2366,6 +2366,11 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: edit locally v2"
+    unused_body_line = "            let aorusEditBody = aorusEditMsg.text\n"
+    if unused_body_line in t:
+        t = t.replace(unused_body_line, "")
+        path.write_text(t, encoding="utf-8")
+        print("EditLocally: removed unused legacy aorusEditBody")
     if sentinel in t:
         print("EditLocally: context menu already injected")
     else:
@@ -2381,7 +2386,6 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                     "        if UserDefaults.standard.bool(forKey: \"aorusgram_feature_edit_locally\") {\n"
                     "            let aorusEditMsg = messages[0]\n"
                     "            let aorusEditMid = aorusEditMsg.id\n"
-                    "            let aorusEditBody = aorusEditMsg.text\n"
                     "            let aorusEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
                     "            let aorusEditRu = aorusEditLang.hasPrefix(\"ru\")\n"
                     "            let aorusEditKey = \"aorusgram_local_edit_\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\"\n"
