@@ -146,13 +146,9 @@ private enum QREntry: ItemListNodeEntry {
     var stableId: Int32 {
         switch self {
         case .info:                 return 0
-        case .addButton:            return 10
-        case .input:                return 11
-        // Newest-first, position-stable: a committed reply lands right below the
-        // input row (where you were typing) instead of jumping to the bottom, and
-        // because each id is fixed for the reply's lifetime the diff animates a
-        // single clean insert/remove with no reshuffle of the other rows.
-        case let .reply(_, id, _): return 1_000_000 - id
+        case let .reply(_, id, _):  return 1_000 + id
+        case .addButton:            return 2_000_000
+        case .input:                return 2_000_001
         }
     }
 
@@ -265,6 +261,18 @@ private final class QRInputItemNode: ListViewItemNode, UITextFieldDelegate {
         addSubnode(topStripeNode)
         addSubnode(bottomStripeNode)
         addSubnode(maskNode)
+    }
+
+    override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.22)
+    }
+
+    override func animateAdded(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.22)
+    }
+
+    override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.18, removeOnCompletion: false)
     }
 
     override func didLoad() {
@@ -444,6 +452,18 @@ private final class QRRevealTextItemNode: ItemListRevealOptionsItemNode {
         addSubnode(maskNode)
     }
 
+    override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.22)
+    }
+
+    override func animateAdded(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.22)
+    }
+
+    override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.18, removeOnCompletion: false)
+    }
+
     override func didLoad() {
         super.didLoad()
         let title = UILabel()
@@ -491,6 +511,8 @@ private final class QRRevealTextItemNode: ItemListRevealOptionsItemNode {
                 guard let self else { return }
                 self.item = item
                 self.layoutParams = params
+                self.contentSize = contentSize
+                self.insets = insets
                 self.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
                 self.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
                 self.bottomStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
@@ -547,12 +569,13 @@ private func qrEntries(state: QRState, theme: PresentationTheme) -> [QREntry] {
         ? "Вы можете добавить неограниченное количество ответов, используя кнопку ниже. Чтобы воспользоваться быстрым ответом, введите символ «&» в поле ввода сообщения."
         : "You can add any number of replies with the button below. To use a quick reply, type «&» in the message input field."))
 
-    entries.append(.addButton(theme, isRu ? "Добавить новый" : "Add new"))
-    if state.isAdding {
-        entries.append(.input(theme, isRu ? "Текст ответа" : "Reply text", state.draft))
-    }
     for reply in state.replies {
         entries.append(.reply(theme, reply.id, reply.text))
+    }
+    if state.isAdding {
+        entries.append(.input(theme, isRu ? "Текст ответа" : "Reply text", state.draft))
+    } else {
+        entries.append(.addButton(theme, isRu ? "Добавить новый" : "Add new"))
     }
 
     return entries
