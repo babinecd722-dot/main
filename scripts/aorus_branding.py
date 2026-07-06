@@ -2405,7 +2405,6 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                     "                actions.append(.action(ContextMenuActionItem(text: aorusEditRu ? \"Изменить локально\" : \"Edit Locally\", icon: { theme in\n"
                     "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
                     "                }, action: { action, f in\n"
-                    "                    UserDefaults.standard.set(aorusEditBody, forKey: aorusEditKey)\n"
                     "                    UserDefaults.standard.set(\"\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\", forKey: \"aorusgram_local_edit_active_message\")\n"
                     "                    interfaceInteraction.setupEditMessage(aorusEditMid, { transition in\n"
                     "                        f(.custom(transition))\n"
@@ -2441,10 +2440,26 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "                    let _ = (strongSelf.context.account.postbox.messageAtId(editMessage.messageId)\n"
                 "                    |> deliverOnMainQueue).startStandalone(next: { [weak self] currentMessage in\n"
                 "                        guard let strongSelf = self, let currentMessage = currentMessage else { return }\n"
-                "                        if UserDefaults.standard.string(forKey: aorusOriginalKey) == nil {\n"
+                "                        let aorusText = richTextAttribute == nil ? text.string : \"\"\n"
+                "                        let aorusCurrentEntities = currentMessage.textEntitiesAttribute?.entities ?? []\n"
+                "                        let aorusCurrentEntitiesDescription = String(describing: aorusCurrentEntities)\n"
+                "                        let aorusNewEntitiesDescription = String(describing: entities)\n"
+                "                        let aorusCurrentRichText = currentMessage.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute\n"
+                "                        let aorusPreviewDidChange: Bool\n"
+                "                        if disableUrlPreview {\n"
+                "                            aorusPreviewDidChange = currentMessage.webpagePreviewAttribute != nil\n"
+                "                        } else {\n"
+                "                            aorusPreviewDidChange = (webpagePreviewAttribute != nil) != (currentMessage.webpagePreviewAttribute != nil)\n"
+                "                        }\n"
+                "                        let aorusDidChange: Bool\n"
+                "                        if richTextAttribute != nil {\n"
+                "                            aorusDidChange = aorusCurrentRichText == nil || !currentMessage.text.isEmpty\n"
+                "                        } else {\n"
+                "                            aorusDidChange = currentMessage.text != text.string || aorusCurrentEntitiesDescription != aorusNewEntitiesDescription || aorusCurrentRichText != nil || aorusPreviewDidChange\n"
+                "                        }\n"
+                "                        if aorusDidChange && UserDefaults.standard.string(forKey: aorusOriginalKey) == nil {\n"
                 "                            UserDefaults.standard.set(currentMessage.text, forKey: aorusOriginalKey)\n"
                 "                        }\n"
-                "                        let aorusText = richTextAttribute == nil ? text.string : \"\"\n"
                 "                        var aorusAttributes = currentMessage.attributes.filter { attribute in\n"
                 "                            if attribute is TextEntitiesMessageAttribute { return false }\n"
                 "                            if attribute is RichTextMessageAttribute { return false }\n"
@@ -2468,12 +2483,14 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "                        if let webpage = webpage, !disableUrlPreview {\n"
                 "                            aorusMedia.append(webpage)\n"
                 "                        }\n"
-                "                        let _ = strongSelf.context.account.postbox.transaction { transaction -> Void in\n"
-                "                            transaction.updateMessage(editMessage.messageId, update: { current in\n"
-                "                                let storeForwardInfo = current.forwardInfo.flatMap(StoreMessageForwardInfo.init)\n"
-                "                                return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: storeForwardInfo, authorId: current.author?.id, text: aorusText, attributes: aorusAttributes, media: aorusMedia))\n"
-                "                            })\n"
-                "                        }.start()\n"
+                "                        if aorusDidChange {\n"
+                "                            let _ = strongSelf.context.account.postbox.transaction { transaction -> Void in\n"
+                "                                transaction.updateMessage(editMessage.messageId, update: { current in\n"
+                "                                    let storeForwardInfo = current.forwardInfo.flatMap(StoreMessageForwardInfo.init)\n"
+                "                                    return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: storeForwardInfo, authorId: current.author?.id, text: aorusText, attributes: aorusAttributes, media: aorusMedia))\n"
+                "                                })\n"
+                "                            }.start()\n"
+                "                        }\n"
                 "                        UserDefaults.standard.removeObject(forKey: \"aorusgram_local_edit_active_message\")\n"
                 "                        strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { state in\n"
                 "                            var state = state\n"
@@ -2509,29 +2526,97 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
     title_path = tg / "submodules/TelegramUI/Sources/EditAccessoryPanelNode.swift"
     if not title_path.is_file():
         print("EditLocally: EditAccessoryPanelNode.swift not found, skip title")
-        return
-    title_text = title_path.read_text(encoding="utf-8")
-    if "aorusgram_local_edit_active_message" in title_text:
-        print("EditLocally: accessory title already patched")
-        return
-    title_anchor = (
-        "        let titleString: String\n"
-        "        if let message, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
-    )
-    title_replacement = (
-        "        let titleString: String\n"
-        "        let aorusLocalEditToken = \"\\(self.messageId.peerId.toInt64())_\\(self.messageId.id)\"\n"
-        "        if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
-        "            let aorusLocalEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
-        "            titleString = aorusLocalEditLang.hasPrefix(\"ru\") ? \"Изменить локально\" : \"Edit Locally\"\n"
-        "        } else if let message, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
-    )
-    if title_anchor in title_text:
-        title_text = title_text.replace(title_anchor, title_replacement, 1)
-        title_path.write_text(title_text, encoding="utf-8")
-        print("EditLocally: accessory title patched")
     else:
-        print("WARNING: EditLocally accessory title anchor not found")
+        title_text = title_path.read_text(encoding="utf-8")
+        if "aorusgram_local_edit_active_message" in title_text:
+            print("EditLocally: accessory title already patched")
+        else:
+            title_anchor = (
+                "        let titleString: String\n"
+                "        if let message, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
+            )
+            title_replacement = (
+                "        let titleString: String\n"
+                "        let aorusLocalEditToken = \"\\(self.messageId.peerId.toInt64())_\\(self.messageId.id)\"\n"
+                "        if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
+                "            let aorusLocalEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
+                "            titleString = aorusLocalEditLang.hasPrefix(\"ru\") ? \"Изменить локально\" : \"Edit Locally\"\n"
+                "        } else if let message, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
+            )
+            if title_anchor in title_text:
+                title_text = title_text.replace(title_anchor, title_replacement, 1)
+                title_path.write_text(title_text, encoding="utf-8")
+                print("EditLocally: accessory title patched")
+            else:
+                print("WARNING: EditLocally accessory title anchor not found")
+
+    component_path = tg / "submodules/TelegramUI/Components/Chat/ChatInputMessageAccessoryPanel/Sources/ChatInputMessageAccessoryPanel.swift"
+    if component_path.is_file():
+        component_text = component_path.read_text(encoding="utf-8")
+        component_sentinel = "// AorusGram: local edit accessory title v1"
+        if component_sentinel in component_text:
+            print("EditLocally: component accessory title already patched")
+        else:
+            component_anchor = (
+                "            case .edit:\n"
+                "                let canEditMedia: Bool\n"
+            )
+            component_replacement = (
+                "            case let .edit(edit):\n"
+                "                " + component_sentinel + "\n"
+                "                let canEditMedia: Bool\n"
+            )
+            component_text = component_text.replace(component_anchor, component_replacement, 1)
+            component_title_anchor = (
+                "                let titleStringValue: String\n"
+                "                if let message = self.messages.first, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
+            )
+            component_title_replacement = (
+                "                let titleStringValue: String\n"
+                "                let aorusLocalEditToken = \"\\(edit.id.peerId.toInt64())_\\(edit.id.id)\"\n"
+                "                if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
+                "                    let aorusLocalEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
+                "                    titleStringValue = aorusLocalEditLang.hasPrefix(\"ru\") ? \"Изменить локально\" : \"Edit Locally\"\n"
+                "                } else if let message = self.messages.first, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
+            )
+            if component_anchor in component_text or component_sentinel in component_text:
+                if component_title_anchor in component_text:
+                    component_text = component_text.replace(component_title_anchor, component_title_replacement, 1)
+                    component_path.write_text(component_text, encoding="utf-8")
+                    print("EditLocally: component accessory title patched")
+                else:
+                    print("WARNING: EditLocally component title anchor not found")
+            else:
+                print("WARNING: EditLocally component edit-case anchor not found")
+    else:
+        print("EditLocally: ChatInputMessageAccessoryPanel.swift not found, skip component title")
+
+    input_panel_path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateInputPanels.swift"
+    if input_panel_path.is_file():
+        input_panel_text = input_panel_path.read_text(encoding="utf-8")
+        input_panel_sentinel = "// AorusGram: local edit input in broadcast channels v1"
+        if input_panel_sentinel in input_panel_text:
+            print("EditLocally: broadcast input panel already patched")
+        else:
+            input_panel_anchor = (
+                "                if chatPresentationInterfaceState.interfaceState.editMessage != nil, channel.hasPermission(.editAllMessages) {\n"
+                "                    displayInputTextPanel = true\n"
+            )
+            input_panel_replacement = (
+                "                " + input_panel_sentinel + "\n"
+                "                if let aorusLocalEditMessage = chatPresentationInterfaceState.interfaceState.editMessage, UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == \"\\(aorusLocalEditMessage.messageId.peerId.toInt64())_\\(aorusLocalEditMessage.messageId.id)\" {\n"
+                "                    displayInputTextPanel = true\n"
+                "                } else if chatPresentationInterfaceState.interfaceState.editMessage != nil, channel.hasPermission(.editAllMessages) {\n"
+                "                    displayInputTextPanel = true\n"
+            )
+            if input_panel_anchor in input_panel_text:
+                input_panel_text = input_panel_text.replace(input_panel_anchor, input_panel_replacement, 1)
+                input_panel_path.write_text(input_panel_text, encoding="utf-8")
+                print("EditLocally: broadcast input panel patched")
+            else:
+                print("WARNING: EditLocally broadcast input panel anchor not found")
+    else:
+        print("EditLocally: ChatInterfaceStateInputPanels.swift not found, skip broadcast input")
 
 
 def patch_chat_context_menu_media_metadata(tg: Path) -> None:
