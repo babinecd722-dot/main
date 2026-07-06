@@ -148,7 +148,11 @@ private enum QREntry: ItemListNodeEntry {
         case .info:                 return 0
         case .addButton:            return 10
         case .input:                return 11
-        case let .reply(_, index, _): return 100 + index
+        // Newest-first, position-stable: a committed reply lands right below the
+        // input row (where you were typing) instead of jumping to the bottom, and
+        // because each id is fixed for the reply's lifetime the diff animates a
+        // single clean insert/remove with no reshuffle of the other rows.
+        case let .reply(_, id, _): return 1_000_000 - id
         }
     }
 
