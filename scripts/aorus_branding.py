@@ -5179,99 +5179,6 @@ def patch_call_proxy(tg: Path) -> None:
     path.write_text(t, encoding="utf-8")
 
 
-def patch_call_proxy_tcp_media(tg: Path) -> None:
-    """Make voice/video calls actually reach reflectors THROUGH the SOCKS5 proxy.
-
-    Root cause of "calls never connect in RF even with the proxy":
-    Telegram call media defaults to UDP to Telegram reflectors. A SOCKS5 proxy
-    cannot carry UDP, and RF blocks UDP to Telegram — so the proxied call signals
-    fine (over the proxied MTProto link) but the media leg has no path and the call
-    "connects" forever. Three things conspire against a proxied call:
-      1. enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, which
-         is OFF by default, so tgcalls will not use TCP at all.
-      2. For call protocol versions != "12.0.0" the TCP reflectors are diverted to a
-         DIRECT (non-proxied) signaling connection — also blocked in RF.
-      3. network_use_tcponly (the tgcalls "force TCP" switch) is only set in a
-         #if DEBUG block, so release builds never force the TCP leg.
-
-    Fix — ONLY when a SOCKS5 call proxy is configured (voipProxyServer != nil):
-      • keep the TCP reflectors as media connections (signalling then rides the
-        already-proxied MTProto link, not a blocked direct connection);
-      • force allowTCP = true so tgcalls may use TCP;
-      • set network_use_tcponly = true, keep only TCP reflector descriptors and
-        disable P2P, so the whole media leg goes over TCP through the proxy.
-    Calls without a proxy are completely untouched (still UDP, still fast).
-    """
-    path = tg / "submodules/TelegramVoip/Sources/OngoingCallContext.swift"
-    if not path.is_file():
-        print("CallProxyTCP: OngoingCallContext.swift not found — skip")
-        return
-    t = path.read_text(encoding="utf-8")
-    if "AorusGram: force call media over TCP" in t:
-        print("CallProxyTCP: already patched")
-        return
-
-    ok = True
-
-    # 1) Keep TCP reflectors as media connections when a proxy is set (don't divert
-    #    them to a direct, RF-blocked signaling connection).
-    anchor1 = (
-        "                        if reflector.isTcp {\n"
-        "                            if version == \"12.0.0\" {\n"
-    )
-    repl1 = (
-        "                        if reflector.isTcp {\n"
-        "                            if version == \"12.0.0\" || voipProxyServer != nil {\n"
-    )
-    if anchor1 in t:
-        t = t.replace(anchor1, repl1, 1)
-    else:
-        print("CallProxyTCP: WARNING reflector-diversion anchor not found")
-        ok = False
-
-    # 2) Allow TCP whenever a proxy is set (enableVoipTcp is off by default).
-    anchor2 = "                    allowTCP: enableTCP,\n"
-    repl2 = "                    allowTCP: (voipProxyServer != nil ? true : enableTCP),\n"
-    if anchor2 in t:
-        t = t.replace(anchor2, repl2, 1)
-    else:
-        print("CallProxyTCP: WARNING allowTCP anchor not found")
-        ok = False
-
-    # 3) Force network_use_tcponly + TCP-only reflectors + no P2P for proxied calls.
-    anchor3 = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
-    block3 = (
-        "                #if !DEBUG\n"
-        "                // AorusGram: force call media over TCP through the SOCKS5 proxy so\n"
-        "                // it works where direct UDP voice traffic is blocked (e.g. RF).\n"
-        "                var customParameters = customParameters\n"
-        "                if voipProxyServer != nil {\n"
-        "                    var aorusCP: [String: Any] = ((try? JSONSerialization.jsonObject(with: (customParameters ?? \"{}\").data(using: .utf8)!)) as? [String: Any]) ?? [:]\n"
-        "                    aorusCP[\"network_use_tcponly\"] = true as NSNumber\n"
-        "                    if let aorusData = try? JSONSerialization.data(withJSONObject: aorusCP), let aorusStr = String(data: aorusData, encoding: .utf8) {\n"
-        "                        customParameters = aorusStr\n"
-        "                    }\n"
-        "                    let aorusTcp = filteredConnections.filter { $0.hasTcp }\n"
-        "                    if !aorusTcp.isEmpty {\n"
-        "                        filteredConnections = aorusTcp\n"
-        "                    }\n"
-        "                    allowP2P = false\n"
-        "                }\n"
-        "                #endif\n"
-    )
-    if anchor3 in t:
-        t = t.replace(anchor3, block3 + anchor3, 1)
-    else:
-        print("CallProxyTCP: WARNING context-init anchor not found")
-        ok = False
-
-    if ok:
-        path.write_text(t, encoding="utf-8")
-        print("CallProxyTCP: routed proxied call media over TCP (network_use_tcponly + TCP reflectors + allowTCP)")
-    else:
-        print("CallProxyTCP: NOT applied (anchor mismatch)")
-
-
 def patch_intro_brand_logo(tg: Path) -> None:
     """Replace the OpenGL Telegram paper-plane logo on the intro/welcome screen
     with the AorusGram brand logo.
@@ -11137,23 +11044,26 @@ public:
         NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
         _enabled = [d boolForKey:@"aorusgram_voice_twin_enabled"];
         NSString *preset = [d stringForKey:@"aorusgram_voice_twin_preset"];
-        float semis = -6.0f;
+        float semis = -5.0f;
         float ringHz = 0.0f;
         float ringMix = 0.0f;
-        float wetMix = 0.84f;
-        float tone = 0.96f;
-        float drive = 1.04f;
-        if ([preset isEqualToString:@"male"]) { semis = -4.2f; wetMix = 0.78f; tone = 0.88f; drive = 1.05f; }
-        else if ([preset isEqualToString:@"female"]) { semis = 5.0f; wetMix = 0.72f; tone = 1.08f; drive = 0.98f; }
-        else if ([preset isEqualToString:@"robot"]) { semis = 0.0f; ringHz = 92.0f; ringMix = 0.82f; wetMix = 1.0f; tone = 0.82f; drive = 1.16f; }
-        else if ([preset isEqualToString:@"child"] || [preset isEqualToString:@"high"]) { semis = 8.7f; wetMix = 0.86f; tone = 1.18f; drive = 0.96f; }
-        else { ringHz = 38.0f; ringMix = 0.10f; wetMix = 0.90f; tone = 0.90f; drive = 1.08f; }
+        float tone = 0.95f;
+        float drive = 1.03f;
+        bool formantMove = false;
+        // Mirrors AorusVoiceTwin.params() exactly: wetMix is 1.0 everywhere (no dry
+        // pitch bleed) and gender/age presets move the formants with the pitch.
+        if ([preset isEqualToString:@"male"]) { semis = -4.5f; tone = 0.92f; drive = 1.02f; formantMove = true; }
+        else if ([preset isEqualToString:@"female"]) { semis = 4.0f; tone = 1.06f; drive = 1.0f; formantMove = true; }
+        else if ([preset isEqualToString:@"robot"]) { semis = 0.0f; ringHz = 90.0f; ringMix = 0.80f; tone = 0.85f; drive = 1.10f; }
+        else if ([preset isEqualToString:@"child"] || [preset isEqualToString:@"high"]) { semis = 7.5f; tone = 1.10f; drive = 0.98f; formantMove = true; }
+        else { semis = -5.0f; ringHz = 40.0f; ringMix = 0.08f; tone = 0.95f; drive = 1.03f; }
         _ratio = std::pow(2.0f, semis / 12.0f);
         _ringHz = ringHz;
         _ringMix = ringMix;
-        _wetMix = wetMix;
+        _wetMix = 1.0f;
         _tone = tone;
         _drive = drive;
+        _formantMove = formantMove;
 #endif
     }
 
@@ -11187,7 +11097,17 @@ private:
     static constexpr float kGrain = 1024.0f;
 
     float transformSample(float x0, float ringStep) {
-        float y = (_ratio == 1.0f) ? x0 : formantStep(x0, _ratio);
+        float y;
+        if (_ratio == 1.0f) {
+            y = x0;
+        } else if (_formantMove) {
+            // Plain pitch shift of the full signal → formants move with the pitch
+            // (natural gender/age change).
+            y = granStep(x0, _ratio);
+        } else {
+            // Formant-preserving LPC shift (disguise / robot base).
+            y = formantStep(x0, _ratio);
+        }
         y = x0 * (1.0f - _wetMix) + y * _wetMix;
         y = applyTone(y);
         if (ringStep > 0.0f && _ringMix > 0.0f) {
@@ -11307,9 +11227,10 @@ private:
             if (p2 >= g) { p2 -= g; }
             const float r1 = readRing((float)writeIndex - p1, n);
             const float r2 = readRing((float)writeIndex - p2, n);
-            float w1 = std::fabs(half - p1) / half;
-            if (w1 < 0.0f) { w1 = 0.0f; }
-            if (w1 > 1.0f) { w1 = 1.0f; }
+            // Raised-cosine (Hann) crossfade — each tap fades to zero AT its own grain
+            // wrap discontinuity instead of peaking there (the old triangular window),
+            // which removes the periodic warble.
+            const float w1 = 0.5f * (1.0f - std::cos(2.0f * (float)M_PI * p1 / g));
             y = r1 * w1 + r2 * (1.0f - w1);
         }
 
@@ -11362,9 +11283,10 @@ private:
     float _ratio = 1.0f;
     float _ringHz = 0.0f;
     float _ringMix = 0.0f;
-    float _wetMix = 0.84f;
+    float _wetMix = 1.0f;
     float _tone = 0.96f;
     float _drive = 1.04f;
+    bool _formantMove = false;
 };
 
 #endif /* AorusCallVoiceTwin_h */
@@ -15969,7 +15891,6 @@ def main() -> None:
     patch_remove_send_logs(tg)
     patch_app_bundle_name(tg)
     patch_call_proxy(tg)
-    patch_call_proxy_tcp_media(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)

@@ -23,18 +23,22 @@ import CoreMedia
 // against) and is configured purely through flat UserDefaults keys written by the
 // AorusGramUI settings screen, so the two modules stay decoupled.
 //
-// Pitch presets use a FORMANT-PRESERVING shifter (LPC vocoder): every sample is
-// inverse-filtered to a near-white residual, the residual is pitch-shifted with a
-// granular delay line, then re-synthesised through the ORIGINAL all-pole vocal-
-// tract filter — so the formants (timbre/identity) stay put while the pitch moves,
-// giving a natural result instead of a chipmunk/monster. LPC is re-estimated every
-// hop with bandwidth expansion + pre-emphasis for a clean, stable envelope; output
-// is AGC-levelled and soft-clipped, and a per-sample stability guard falls back to
-// the dry residual if a frame ever produces a non-finite/runaway value.
+// Two shifter modes, picked per preset:
+//   • formantMove = false ("anonymous"): FORMANT-PRESERVING LPC vocoder — each
+//     sample is inverse-filtered to a near-white residual, the residual is pitch-
+//     shifted with the granular delay line, then re-synthesised through the ORIGINAL
+//     all-pole vocal-tract filter, so the timbre/identity stays put while the pitch
+//     moves (a clean disguise, not a chipmunk). LPC is re-estimated every hop with
+//     bandwidth expansion + pre-emphasis; output is AGC-levelled, soft-clipped, and
+//     a stability guard falls back to the dry residual on any non-finite frame.
+//   • formantMove = true (male / female / child): PLAIN granular pitch shift of the
+//     full signal, so the formants move WITH the pitch — a real vocal-tract resize,
+//     which is what actually makes a voice sound male/female/child (formant-
+//     preserving only ever sounds like the same person pitched up/down).
 //
-// "Robot" is pure ring modulation (no pitch shift). The whole chain was validated
-// offline: formants stay within ~15 Hz on downward shifts, output stays bounded
-// (peak 1.0, no NaN) across presets.
+// The granular shifter uses a raised-cosine crossfade (fades away from each grain's
+// wrap discontinuity) and every pitch preset is fully wet (no dry-signal mix), so
+// there is no "double pitch" artefact. "Robot" is pure ring modulation (no pitch).
 
 public final class AorusVoiceTwin {
     public static let shared = AorusVoiceTwin()
@@ -94,30 +98,42 @@ public final class AorusVoiceTwin {
         let wetMix: Float
         let tone: Float
         let drive: Float
+        // true  → pitch-shift the FULL signal so the formants move with the pitch
+        //         (a real vocal-tract resize → convincing gender/age change);
+        // false → formant-PRESERVING LPC shift (disguise while keeping the timbre).
+        let formantMove: Bool
     }
 
     // Resolve the active preset to a full voice character, not just pitch.
+    //
+    // Two design fixes vs. the earlier version, both audible:
+    //  • wetMix is 1.0 everywhere — the old <1 values mixed the DRY (original-pitch)
+    //    signal back in, so you heard two pitches at once (a phasey "double" voice).
+    //  • gender/age presets use formantMove = true (formants follow the pitch), which
+    //    is what actually makes a voice sound male/female/child; formant-preserving
+    //    only kept the original vocal-tract size, so it sounded like the same person
+    //    pitched up/down. "anonymous" keeps formant preservation (pure disguise).
     private func params() -> PresetParams {
         let preset = UserDefaults.standard.string(forKey: "aorusgram_voice_twin_preset") ?? "anonymous"
-        var semis: Float = -6.0
+        var semis: Float = -5.0
         var ringHz: Float = 0
         var ringMix: Float = 0
-        var wetMix: Float = 0.84
-        var tone: Float = 0.96
-        var drive: Float = 1.04
+        var tone: Float = 0.95
+        var drive: Float = 1.03
+        var formantMove = false
         switch preset {
         case "male":
-            semis = -4.2; wetMix = 0.78; tone = 0.88; drive = 1.05
+            semis = -4.5; tone = 0.92; drive = 1.02; formantMove = true
         case "female":
-            semis = 5.0; wetMix = 0.72; tone = 1.08; drive = 0.98
+            semis = 4.0; tone = 1.06; drive = 1.0; formantMove = true
         case "robot":
-            semis = 0.0; ringHz = 92.0; ringMix = 0.82; wetMix = 1.0; tone = 0.82; drive = 1.16
+            semis = 0.0; ringHz = 90.0; ringMix = 0.80; tone = 0.85; drive = 1.10
         case "child", "high":
-            semis = 8.7; wetMix = 0.86; tone = 1.18; drive = 0.96
+            semis = 7.5; tone = 1.10; drive = 0.98; formantMove = true
         default:
-            ringHz = 38.0; ringMix = 0.10; wetMix = 0.90; tone = 0.90; drive = 1.08
+            semis = -5.0; ringHz = 40.0; ringMix = 0.08; tone = 0.95; drive = 1.03
         }
-        return PresetParams(ratio: powf(2.0, semis / 12.0), ringHz: ringHz, ringMix: ringMix, wetMix: wetMix, tone: tone, drive: drive)
+        return PresetParams(ratio: powf(2.0, semis / 12.0), ringHz: ringHz, ringMix: ringMix, wetMix: 1.0, tone: tone, drive: drive, formantMove: formantMove)
     }
 
     // Voice-message path: process the recorder's Int16 mono 48 kHz buffer in place.
@@ -178,7 +194,17 @@ public final class AorusVoiceTwin {
 
     // Shared per-sample core: input/output in [-1, 1].
     private func transformSample(_ x0: Float, params: PresetParams, ringStep: Float) -> Float {
-        var y: Float = (params.ratio == 1.0) ? x0 : formantStep(x0, params.ratio)
+        var y: Float
+        if params.ratio == 1.0 {
+            y = x0
+        } else if params.formantMove {
+            // Plain pitch shift of the full signal → formants move with the pitch
+            // (natural gender/age change). No formant preservation here on purpose.
+            y = granStep(x0, params.ratio)
+        } else {
+            // Formant-preserving LPC shift (disguise / robot base).
+            y = formantStep(x0, params.ratio)
+        }
         y = x0 * (1.0 - params.wetMix) + y * params.wetMix
         y = applyTone(y, tone: params.tone)
         if ringStep > 0, params.ringMix > 0 {
@@ -328,9 +354,10 @@ public final class AorusVoiceTwin {
             if p2 >= g { p2 -= g }
             let r1 = readRing(Float(writeIndex) - p1, n)
             let r2 = readRing(Float(writeIndex) - p2, n)
-            var w1 = abs(half - p1) / half
-            if w1 < 0 { w1 = 0 }
-            if w1 > 1 { w1 = 1 }
+            // Raised-cosine (Hann) crossfade: each tap fades to zero AT its own grain
+            // wrap discontinuity (tap1 at p1=0/g, tap2 at p1=half) instead of peaking
+            // there like the old triangular window did — kills the periodic warble.
+            let w1 = 0.5 * (1.0 - cosf(2.0 * Float.pi * p1 / g))
             y = r1 * w1 + r2 * (1.0 - w1)
         }
 
