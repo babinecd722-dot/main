@@ -4,8 +4,16 @@ import Display
 import SwiftSignalKit
 import TelegramPresentationData
 import ItemListUI
+import ItemListPeerActionItem
 import PresentationDataUtils
 import AccountContext
+
+// Render an SF Symbol into a pre-tinted image for the action rows (the reference
+// Keychain-backup screen shows a key / restore / trash glyph next to each action).
+private func aorusBackupActionIcon(_ systemName: String, color: UIColor) -> UIImage? {
+    let cfg = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)
+    return UIImage(systemName: systemName, withConfiguration: cfg)?.withTintColor(color, renderingMode: .alwaysOriginal)
+}
 
 // MARK: - Sections
 
@@ -179,12 +187,15 @@ private enum BackupEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let args = arguments as! BackupArguments
         switch self {
-        case let .backupAction(_, title, enabled):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: section, style: .blocks, action: { if enabled { args.backup() } })
-        case let .restoreAction(_, title, enabled):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: enabled ? .generic : .disabled, alignment: .natural, sectionId: section, style: .blocks, action: { if enabled { args.restore() } })
-        case let .deleteAction(_, title, enabled):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: enabled ? .destructive : .disabled, alignment: .natural, sectionId: section, style: .blocks, action: { if enabled { args.delete() } })
+        case let .backupAction(theme, title, enabled):
+            let iconColor = enabled ? theme.list.itemAccentColor : theme.list.itemDisabledTextColor
+            return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("key.fill", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.backup() } })
+        case let .restoreAction(theme, title, enabled):
+            let iconColor = enabled ? theme.list.itemAccentColor : theme.list.itemDisabledTextColor
+            return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("arrow.clockwise", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.restore() } })
+        case let .deleteAction(theme, title, enabled):
+            let iconColor = enabled ? theme.list.itemDestructiveColor : theme.list.itemDisabledTextColor
+            return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("trash", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .destructive : .disabled, action: { if enabled { args.delete() } })
         case let .info(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .statusHeader(_, text):

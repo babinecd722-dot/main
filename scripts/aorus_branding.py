@@ -16144,7 +16144,9 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "        // durable Keychain backup exists, so it never overwrites a live session.\n"
         "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
         "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
-        "            aorusKeyItem.tintColor = self.presentationData.theme.rootController.navigationBar.accentTextColor\n"
+        "            // Use the list accent (our theme paints `list`, not `navigationBar`) so the key\n"
+        "            // takes the AorusGram color instead of the stock blue navigation tint.\n"
+        "            aorusKeyItem.tintColor = self.presentationData.theme.list.itemAccentColor\n"
         "            self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
         "        }\n"
     )

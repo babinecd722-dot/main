@@ -152,7 +152,7 @@ final class AorusLoginBackupPickerController: UIViewController {
     private let headerIconView = UIImageView()
     private let titleLabel = UILabel()
     private let descriptionLabel = UILabel()
-    private let closeButton = UIButton(type: .system)
+    private let closeButton = UIButton(type: .close)
     private var cards: [AorusAccountCardView] = []
 
     init(theme: PresentationTheme, isRu: Bool, accountIds: [String]) {
@@ -212,11 +212,8 @@ final class AorusLoginBackupPickerController: UIViewController {
             self.cards.append(card)
         }
 
-        self.closeButton.setTitle(self.isRu ? "Закрыть" : "Close", for: .normal)
-        self.closeButton.setTitleColor(self.theme.list.itemSecondaryTextColor, for: .normal)
-        self.closeButton.titleLabel?.font = UIFont.systemFont(ofSize: 17.0, weight: .regular)
         self.closeButton.addTarget(self, action: #selector(self.closePressed), for: .touchUpInside)
-        self.contentView.addSubview(self.closeButton)
+        self.view.addSubview(self.closeButton)
     }
 
     override func viewDidLayoutSubviews() {
@@ -244,12 +241,13 @@ final class AorusLoginBackupPickerController: UIViewController {
             y = card.frame.maxY + 12.0
         }
 
-        y += 12.0
-        self.closeButton.frame = CGRect(x: sideMargin, y: y, width: cardWidth, height: 44.0)
-        y = self.closeButton.frame.maxY + inset.bottom + 24.0
-
+        y += inset.bottom + 24.0
         self.contentView.frame = CGRect(x: 0.0, y: 0.0, width: width, height: y)
         self.scrollView.contentSize = CGSize(width: width, height: y)
+
+        // Native close button, top-left, above the scrolling content.
+        let closeSize: CGFloat = 30.0
+        self.closeButton.frame = CGRect(x: sideMargin, y: inset.top + 12.0, width: closeSize, height: closeSize)
     }
 
     @objc private func closePressed() {
