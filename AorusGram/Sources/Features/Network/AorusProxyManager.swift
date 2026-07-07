@@ -191,8 +191,12 @@ public final class AorusProxyManager {
 
     private var licenseAllowsProxy: Bool {
         guard LicenseKeyProvider.isProvisioned else { return true }
-        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") { return false }
-        return LicenseStore.shared.effectiveOfflineStatus().allowsAppAccess
+        // Do not second-guess LicenseGate here. The gate owns the subscription
+        // verdict and flips this flag on expired/banned/not-started/connection locks.
+        // Requiring LicenseStore.effectiveOfflineStatus() here made the proxy path
+        // fragile during launch/recheck: the proxy manager could clear a valid cached
+        // proxy before LicenseGate had saved the fresh active server verdict.
+        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
     }
 
     // MARK: - Public

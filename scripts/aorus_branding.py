@@ -6504,7 +6504,12 @@ _AORUS_STOCK_OFF_THEME_HELPER = (
     "        actionControlForegroundColor: UIColor(rgb: 0xffffff)\n"
     "    )\n"
     "    let chat = theme.chat.withUpdated(message: chatMessage, inputPanel: inputPanel)\n"
-    "    return PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: theme.actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)\n"
+    "    let actionSheet = theme.actionSheet.withUpdated(\n"
+    "        standardActionTextColor: accent,\n"
+    "        controlAccentColor: accent,\n"
+    "        checkContentColor: UIColor(rgb: 0xffffff)\n"
+    "    )\n"
+    "    return PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)\n"
     "}\n"
     "\n"
 )
