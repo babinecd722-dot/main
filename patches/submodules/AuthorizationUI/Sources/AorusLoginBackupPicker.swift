@@ -185,7 +185,7 @@ final class AorusLoginBackupPickerController: UIViewController {
     private let closeButton = UIButton(type: .close)
     private var cards: [AorusAccountCardView] = []
 
-    init(theme: PresentationTheme, isRu: Bool, accounts: [PickerAccount]) {
+    private init(theme: PresentationTheme, isRu: Bool, accounts: [PickerAccount]) {
         self.theme = theme
         self.isRu = isRu
         self.accounts = accounts
