@@ -319,6 +319,15 @@ private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: B
 // MARK: - Public factory
 
 public func accountBackupController(context: AccountContext) -> ViewController {
+    // Primary: the pixel-faithful SwiftUI port of Swiftgram's screen. The ItemList
+    // implementation below stays as an iOS 12 fallback.
+    if #available(iOS 13.0, *) {
+        return AorusSessionBackupHostController(context: context)
+    }
+    return accountBackupControllerLegacy(context: context)
+}
+
+private func accountBackupControllerLegacy(context: AccountContext) -> ViewController {
     let initialState = BackupState(revision: 0, busy: false)
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
