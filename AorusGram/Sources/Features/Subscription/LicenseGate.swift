@@ -28,6 +28,7 @@ final class LicenseGate {
     private var telegramUserId: Int64?
     private var bannerShownThisLaunch = false
     private var inFlight = false
+    private var lockSweepTimer: Timer?
     // When the lock is temporarily hidden so the user can reach the bot to buy, this
     // forces a re-check (and re-lock if still not active) on the next foreground.
     private var pendingRelock = false
@@ -122,9 +123,11 @@ final class LicenseGate {
     // The license just became active. Unlicensed devices carry no proxy (Telegram
     // runs direct); the moment a subscription is active we force-fetch the proxy now
     // so it applies immediately instead of waiting up to an hour for the next poll.
-    // A device that already has a proxy is left untouched (no redundant request).
+    // A device that already has a still-valid proxy lease is left untouched (no
+    // redundant request). A stale cached proxy is not enough: it may decrypt to nil
+    // in the injected network reader because proxy leases now carry expiresAt.
     private func upgradeSystemProxy() {
-        if AorusProxyManager.shared.lastKnownProxy() == nil {
+        if AorusProxyManager.shared.currentProxy() == nil {
             AorusProxyManager.shared.refresh(force: true)
         }
     }
@@ -302,26 +305,24 @@ final class LicenseGate {
         ud.set(locked, forKey: "aorusgram_license_locked")
 
         if locked {
+            startLockSweep()
+            AorusProxyManager.shared.licenseDidLock()
             // Snapshot the real values ONCE (don't overwrite an existing backup — a
             // repeated locked verdict must not capture the already-zeroed state).
             if ud.object(forKey: LicenseGate.lockBackupKey) == nil {
                 var backup: [String: Bool] = [:]
-                for (k, v) in ud.dictionaryRepresentation() {
-                    guard k.hasPrefix("aorusgram_"),
-                          k != "aorusgram_license_locked",
-                          k != LicenseGate.lockBackupKey,
-                          !k.hasPrefix("aorusgram_lic") else { continue }
+                for (k, v) in aorusBooleanFlags(in: ud) {
                     if let n = v as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() {
                         backup[k] = n.boolValue
                     }
                 }
                 ud.set(backup, forKey: LicenseGate.lockBackupKey)
             }
-            // Force every backed-up flag off (idempotent — corrects any drift).
-            if let backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) {
-                for k in backup.keys { ud.set(false, forKey: k) }
-            }
+            // Force every current aorusgram boolean off (idempotent — corrects any
+            // drift and covers feature keys created after the original backup).
+            for (k, _) in aorusBooleanFlags(in: ud) { ud.set(false, forKey: k) }
         } else {
+            stopLockSweep()
             // Restore the real values captured at lock time, then drop the backup.
             if let backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) {
                 for (k, v) in backup { if let b = v as? Bool { ud.set(b, forKey: k) } }
@@ -334,6 +335,35 @@ final class LicenseGate {
         NotificationCenter.default.post(
             name: NSNotification.Name("aorusgram.licenseLockChanged"),
             object: nil, userInfo: ["locked": locked])
+    }
+
+    private func aorusBooleanFlags(in ud: UserDefaults) -> [(String, Any)] {
+        ud.dictionaryRepresentation().filter { key, value in
+            guard key.hasPrefix("aorusgram_"),
+                  key != "aorusgram_license_locked",
+                  key != LicenseGate.lockBackupKey,
+                  !key.hasPrefix("aorusgram_lic") else {
+                return false
+            }
+            guard let n = value as? NSNumber else { return false }
+            return CFGetTypeID(n) == CFBooleanGetTypeID()
+        }
+    }
+
+    private func startLockSweep() {
+        guard lockSweepTimer == nil else { return }
+        lockSweepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            let ud = UserDefaults.standard
+            guard ud.bool(forKey: "aorusgram_license_locked") else { return }
+            for (key, _) in self.aorusBooleanFlags(in: ud) {
+                ud.set(false, forKey: key)
+            }
+        }
+    }
+
+    private func stopLockSweep() {
+        lockSweepTimer?.invalidate()
+        lockSweepTimer = nil
     }
 
     private func makeNav(_ root: UIViewController) -> UINavigationController {

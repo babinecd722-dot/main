@@ -88,7 +88,10 @@ public final class AorusVoiceTwin {
     private var ringModPhase: Float = 0
 
     public var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: "aorusgram_voice_twin_enabled")
+        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+            return false
+        }
+        return UserDefaults.standard.bool(forKey: "aorusgram_voice_twin_enabled")
     }
 
     private struct PresetParams {

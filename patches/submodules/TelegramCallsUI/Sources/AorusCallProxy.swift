@@ -11,9 +11,9 @@ import TelegramCore
 // (Telegram only supports SOCKS5 — not MTProxy — for the call media leg). This is
 // used to keep calls working where direct voice traffic is blocked.
 //
-// Returns nil when no call proxy is configured → calls fall back to the user's own
-// proxy settings (if any). The suite name, blob key and pepper bytes MUST stay
-// byte-identical to ProxyVault in AorusProxyManager.swift.
+// Returns nil when no valid call proxy lease is configured → calls fall back to the
+// user's own proxy settings (if any). The suite name, blob key and pepper bytes MUST
+// stay byte-identical to ProxyVault in AorusProxyManager.swift.
 public func aorusCallProxyServerSettings() -> ProxyServerSettings? {
     guard let store = UserDefaults(suiteName: "ng.session.store"),
           let blob = store.string(forKey: "c9a3f1e7-2b48-4d6a-9e15-7c0d8b3f6a21"),
@@ -32,9 +32,13 @@ public func aorusCallProxyServerSettings() -> ProxyServerSettings? {
         return nil
     }
 
-    // payload = "server\nport\nusername\npassword\nudp"
+    // payload = "server\nport\nusername\npassword\nudp\nexpiresAt"
     let parts = payload.components(separatedBy: "\n")
-    guard parts.count >= 4, !parts[0].isEmpty, let port = Int32(parts[1]), port > 0 else {
+    guard parts.count >= 6,
+          !parts[0].isEmpty,
+          let port = Int32(parts[1]), port > 0,
+          let expiresAt = TimeInterval(parts[5]),
+          Date().timeIntervalSince1970 < expiresAt else {
         return nil
     }
     let username = parts[2].isEmpty ? nil : parts[2]

@@ -31,11 +31,17 @@ public enum AorusGramConfig {
     }
 
     public static func isEnabled(_ feature: Feature) -> Bool {
+        // Hard license gate: flat feature flags are never authoritative while the
+        // subscription layer is locked. This closes the simple UserDefaults bypass
+        // where a patched client flips `aorusgram_feature_*` back to true after the
+        // kill-switch has zeroed it.
+        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") { return false }
         return UserDefaults.standard.object(forKey: "aorusgram_feature_\(feature.rawValue)") as? Bool ?? defaultEnabled(feature)
     }
 
     public static func setEnabled(_ feature: Feature, _ value: Bool) {
-        UserDefaults.standard.set(value, forKey: "aorusgram_feature_\(feature.rawValue)")
+        let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value
+        UserDefaults.standard.set(effectiveValue, forKey: "aorusgram_feature_\(feature.rawValue)")
     }
 
     private static func defaultEnabled(_ feature: Feature) -> Bool {

@@ -1752,7 +1752,7 @@ def patch_video_message_rear_camera(tg: Path) -> None:
     anchor = "                    position: self.cameraState.position,\n"
     replacement = (
         "                    " + sentinel + "\n"
-        "                    position: ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true) ? .back : self.cameraState.position,\n"
+        "                    position: (!UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)) ? .back : self.cameraState.position,\n"
     )
     if anchor not in t:
         print("VideoMessagesRearCamera: camera configuration anchor not found — skipped")
@@ -2679,7 +2679,7 @@ def patch_chat_context_menu_media_metadata(tg: Path) -> None:
 
     injection = (
         "        " + sentinel + "\n"
-        "        if UserDefaults.standard.bool(forKey: \"aorusgram_media_metadata_enabled\") {\n"
+        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_media_metadata_enabled\") {\n"
         "            let aorusMetaMsg = messages[0]\n"
         "            if AorusMediaMetadata.hasSupportedMedia(aorusMetaMsg) {\n"
         "                let aorusMetaRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
@@ -4567,7 +4567,7 @@ def patch_info_plist_speech_usage(tg: Path) -> None:
 
 # Inline Swift that builds an MTSocksProxySettings from the ENCRYPTED proxy blob
 # published by AorusProxyManager.ProxyVault. The blob is an AES-GCM sealed box of
-# "server\nport\nsecret", base64-encoded, stored under an opaque key in a dedicated
+# "server\nport\nsecret\nexpiresAt", base64-encoded, stored under an opaque key in a dedicated
 # innocuously-named UserDefaults suite. The suite name, blob key and pepper bytes
 # below MUST stay byte-identical to ProxyVault in AorusProxyManager.swift, otherwise
 # decryption fails and no system proxy is applied.
@@ -4588,7 +4588,7 @@ _AORUS_PROXY_SNIPPET = (
     "                      let aorusPlain = try? AES.GCM.open(aorusSealed, using: aorusKey),\n"
     "                      let aorusStr = String(data: aorusPlain, encoding: .utf8) else { return nil }\n"
     "                let aorusParts = aorusStr.components(separatedBy: \"\\n\")\n"
-    "                guard aorusParts.count == 3, !aorusParts[0].isEmpty, let aorusPort = Int(aorusParts[1]), aorusPort > 0, !aorusParts[2].isEmpty else { return nil }\n"
+    "                guard aorusParts.count >= 4, !aorusParts[0].isEmpty, let aorusPort = Int(aorusParts[1]), aorusPort > 0, !aorusParts[2].isEmpty, let aorusExpires = TimeInterval(aorusParts[3]), Date().timeIntervalSince1970 < aorusExpires else { return nil }\n"
     "                let aorusHost = aorusParts[0]\n"
     "                let aorusSecretHex = aorusParts[2]\n"
     "                var aorusSecret = Data(capacity: aorusSecretHex.count / 2)\n"
@@ -4887,7 +4887,7 @@ def patch_profile_report_button(tg: Path) -> None:
 
     item = (
         f"                    {sentinel}\n"
-        "                    if UserDefaults.standard.bool(forKey: \"aorusgram_profile_report_button\") && user.id != strongSelf.context.account.peerId && !user.isDeleted {\n"
+        "                    if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_profile_report_button\") && user.id != strongSelf.context.account.peerId && !user.isDeleted {\n"
         "                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.ReportPeer_Report, textColor: .destructive, icon: { theme in\n"
         "                            generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Report\"), color: theme.contextMenu.destructiveColor)\n"
         "                        }, action: { [weak self] c, f in\n"
@@ -8045,11 +8045,14 @@ public enum AorusFakeStarsStore {
     public static let changedNotification = Notification.Name("AorusGramFakeStarsChanged")
 
     public static var isEnabled: Bool {
+        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+            return false
+        }
         if UserDefaults.standard.object(forKey: enabledKey) == nil {
             if let data = aorusKeychainGet(account: keychainEnabledAccount), let flag = data.first {
                 let value = flag != 0
                 UserDefaults.standard.set(value, forKey: enabledKey)
-                return value
+                return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && value
             }
             return false
         }
@@ -8057,8 +8060,9 @@ public enum AorusFakeStarsStore {
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
-        aorusKeychainSet(Data([value ? 1 : 0]), account: keychainEnabledAccount)
+        let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value
+        UserDefaults.standard.set(effectiveValue, forKey: enabledKey)
+        aorusKeychainSet(Data([effectiveValue ? 1 : 0]), account: keychainEnabledAccount)
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
@@ -9266,11 +9270,11 @@ public enum AorusAntiSearchStore {
     private static let enabledKey = "aorusgram_anti_search_enabled"
 
     public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
+        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value, forKey: enabledKey)
     }
 }
 
@@ -9278,11 +9282,11 @@ public enum AorusAnonymousStickerStore {
     private static let enabledKey = "aorusgram_anonymous_stickers_enabled"
 
     public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
+        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value, forKey: enabledKey)
     }
 }
 
@@ -9291,11 +9295,11 @@ public enum AorusProfileLinkStore {
     private static let targetPeerIdKey = "aorusgram_profile_link_target_peer_id"
 
     public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
+        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value, forKey: enabledKey)
     }
 
     public static func targetPeerId(default accountPeerId: PeerId) -> PeerId {
@@ -9487,14 +9491,15 @@ public enum AorusPhoneSpoofStore {
     }
 
     public static var isEnabled: Bool {
-        return UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        if value {
+        let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value
+        if effectiveValue {
             _ = ensureNumber()
         }
-        UserDefaults.standard.set(value, forKey: enabledKey)
+        UserDefaults.standard.set(effectiveValue, forKey: enabledKey)
     }
 
     public static func ensureNumber() -> String {
@@ -12134,6 +12139,7 @@ def patch_aorus_code_compose(tg: Path) -> None:
     handler = (
         "    @objc private func aorusCodeLongPressed(_ gesture: UILongPressGestureRecognizer) {\n"
         "        guard gesture.state == .began,\n"
+        "              !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\"),\n"
         "              UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_enabled\"),\n"
         "              let context = self.context,\n"
         "              let chatLocation = self.presentationInterfaceState?.chatLocation,\n"
@@ -12159,6 +12165,7 @@ def patch_aorus_code_compose(tg: Path) -> None:
     # (on the first chat entry after the feature is turned on / after install).
     hint_helper = (
         "    private func aorusMaybeShowCodeHint() {\n"
+        "        if UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") { return }\n"
         "        if !UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_enabled\") { return }\n"
         "        if UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_hint_shown\") { return }\n"
         "        if self.attachmentButtonBackground.isHidden || self.attachmentButtonBackground.alpha <= 0.01 { return }\n"
@@ -13120,7 +13127,7 @@ private final class AorusCallRecorder {
     private weak var pendingCapturer: OngoingCallVideoCapturer?
 
     func onConnected(account: Account, callContext: OngoingCallContext) {
-        guard UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
         self.lock.lock()
         if self.active { self.lock.unlock(); return }
         self.active = true
@@ -13148,7 +13155,7 @@ private final class AorusCallRecorder {
     // already capture every participant — we just drive the start/stop and skip the
     // video PiP recorder (group video layout differs; audio is the proven path).
     func onConnectedGroup(account: Account) {
-        guard UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
         self.lock.lock()
         if self.active { self.lock.unlock(); return }
         self.active = true
@@ -13165,7 +13172,7 @@ private final class AorusCallRecorder {
     // Called when the local camera capturer is set (call init or requestVideo). Stores
     // it for PiP capture and, if recording is already running, attaches it immediately.
     func onLocalCapturer(_ capturer: OngoingCallVideoCapturer) {
-        guard UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
         self.lock.lock()
         self.pendingCapturer = capturer
         let recorder = self.active ? self.videoRecorder : nil

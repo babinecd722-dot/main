@@ -40,7 +40,8 @@ enum AorusGramConfig {
     }
 
     static func setEnabled(_ feature: Feature, _ value: Bool) {
-        UserDefaults.standard.set(value, forKey: "aorusgram_feature_\(feature.rawValue)")
+        let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value
+        UserDefaults.standard.set(effectiveValue, forKey: "aorusgram_feature_\(feature.rawValue)")
     }
 
     private static func defaultEnabled(_ feature: Feature) -> Bool {

@@ -17,6 +17,7 @@ public final class AorusGramManager {
             let locked = (note.userInfo?["locked"] as? Bool) ?? false
             if locked {
                 AntiScreenshotManager.shared.disable()
+                self?.mirrorFlatKeys()
             } else {
                 self?.save()   // flags restored by LicenseGate → re-apply real in-memory state
             }
@@ -91,21 +92,50 @@ public final class AorusGramManager {
     public var voiceTwinPreset: String = "anonymous"  { didSet { save() } }
 
     private let key = "aorusgram_settings_v1"
+    private var licenseLocked: Bool {
+        UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+    }
+
+    private func effective(_ value: Bool) -> Bool {
+        licenseLocked ? false : value
+    }
+
+    private func mirrorFlatKeys() {
+        let ud = UserDefaults.standard
+        ud.set(effective(ghostMode),           forKey: "aorusgram_ghost_mode")
+        ud.set(effective(saveDeletedMessages), forKey: "aorusgram_feature_deleted_messages")
+        ud.set(effective(saveEditedMessages),  forKey: "aorusgram_feature_edited_messages")
+        ud.set(effective(antiScreenshot),      forKey: "aorusgram_feature_anti_screenshot")
+        ud.set(effective(callRecording),       forKey: "aorusgram_feature_call_recording")
+        ud.set(effective(voiceTranscription),  forKey: "aorusgram_feature_voice_transcription")
+        ud.set(effective(translator),          forKey: "aorusgram_feature_translator")
+        ud.set(effective(shareButton),         forKey: "aorusgram_share_button")
+        ud.set(effective(videoMessagesRearCamera), forKey: "aorusgram_video_messages_rear_camera")
+        ud.set(effective(chatSummary),         forKey: "aorusgram_feature_chat_summary")
+        ud.set(effective(autoReply),           forKey: "aorusgram_feature_auto_reply")
+        ud.set(effective(maxMediaQuality),     forKey: "aorusgram_feature_max_media_quality")
+        ud.set(effective(antiSpamEnabled),     forKey: "aorusgram_feature_anti_spam")
+        ud.set(effective(downloadAccel),       forKey: "aorusgram_feature_download_accel")
+        ud.set(effective(glassUI),             forKey: "aorusgram_feature_glass_ui")
+        ud.set(effective(amoledMode),          forKey: "aorusgram_amoled")
+        ud.set(effective(profileReportButton), forKey: "aorusgram_profile_report_button")
+        ud.set(effective(hideCallsTab),        forKey: "aorusgram_hide_calls_tab")
+        ud.set(effective(hideContactsTab),     forKey: "aorusgram_hide_contacts_tab")
+        ud.set(effective(streaks),             forKey: "aorusgram_feature_streaks")
+        ud.set(effective(siriShortcuts),       forKey: "aorusgram_feature_siri_shortcuts")
+        ud.set(effective(editLocally),         forKey: "aorusgram_feature_edit_locally")
+        ud.set(effective(userMessagesInGroup), forKey: "aorusgram_feature_user_messages")
+        ud.set(effective(doubleTapCopy),       forKey: "aorusgram_feature_double_copy")
+        ud.set(effective(tripleTapDelete),     forKey: "aorusgram_feature_triple_delete")
+        ud.set(effective(voiceTwinEnabled),    forKey: "aorusgram_voice_twin_enabled")
+        ud.set(voiceTwinPreset,                forKey: "aorusgram_voice_twin_preset")
+    }
 
     private func load() {
         // Always mirror current values to the flat keys read by source patches —
         // this also catches fresh installs where the dictionary doesn't exist yet
         // (defaults apply, then save() is called once).
-        defer {
-            let ud = UserDefaults.standard
-            ud.set(ghostMode,           forKey: "aorusgram_ghost_mode")
-            ud.set(saveDeletedMessages, forKey: "aorusgram_feature_deleted_messages")
-            ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
-            ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
-            ud.set(maxMediaQuality,     forKey: "aorusgram_feature_max_media_quality")
-            ud.set(videoMessagesRearCamera, forKey: "aorusgram_video_messages_rear_camera")
-            ud.set(profileReportButton, forKey: "aorusgram_profile_report_button")
-        }
+        defer { mirrorFlatKeys() }
         guard let d = UserDefaults.standard.dictionary(forKey: key) else { return }
         ghostMode           = d["ghostMode"]           as? Bool ?? false
         blockReadReceipts   = d["blockReadReceipts"]   as? Bool ?? true
@@ -199,38 +229,10 @@ public final class AorusGramManager {
             "voiceTwinPreset":     voiceTwinPreset,
         ], forKey: key)
 
-        let ud = UserDefaults.standard
-        ud.set(ghostMode,           forKey: "aorusgram_ghost_mode")
-        ud.set(saveDeletedMessages, forKey: "aorusgram_feature_deleted_messages")
-        ud.set(saveEditedMessages,  forKey: "aorusgram_feature_edited_messages")
-        ud.set(antiScreenshot,      forKey: "aorusgram_feature_anti_screenshot")
-        ud.set(callRecording,       forKey: "aorusgram_feature_call_recording")
-        ud.set(voiceTranscription,  forKey: "aorusgram_feature_voice_transcription")
-        ud.set(translator,          forKey: "aorusgram_feature_translator")
-        ud.set(shareButton,         forKey: "aorusgram_share_button")
-        ud.set(videoMessagesRearCamera, forKey: "aorusgram_video_messages_rear_camera")
-        ud.set(chatSummary,         forKey: "aorusgram_feature_chat_summary")
-        ud.set(autoReply,           forKey: "aorusgram_feature_auto_reply")
-        ud.set(maxMediaQuality,     forKey: "aorusgram_feature_max_media_quality")
-        ud.set(antiSpamEnabled,     forKey: "aorusgram_feature_anti_spam")
-        ud.set(downloadAccel,       forKey: "aorusgram_feature_download_accel")
-        ud.set(glassUI,             forKey: "aorusgram_feature_glass_ui")
-        ud.set(amoledMode,          forKey: "aorusgram_amoled")
-        ud.set(profileReportButton, forKey: "aorusgram_profile_report_button")
-        ud.set(hideCallsTab,        forKey: "aorusgram_hide_calls_tab")
-        ud.set(hideContactsTab,     forKey: "aorusgram_hide_contacts_tab")
-        ud.set(streaks,             forKey: "aorusgram_feature_streaks")
-        ud.set(siriShortcuts,       forKey: "aorusgram_feature_siri_shortcuts")
-        ud.set(editLocally,         forKey: "aorusgram_feature_edit_locally")
-        ud.set(userMessagesInGroup, forKey: "aorusgram_feature_user_messages")
-        ud.set(doubleTapCopy,       forKey: "aorusgram_feature_double_copy")
-        ud.set(tripleTapDelete,     forKey: "aorusgram_feature_triple_delete")
-        ud.set(voiceTwinEnabled,    forKey: "aorusgram_voice_twin_enabled")
-        ud.set(voiceTwinPreset,     forKey: "aorusgram_voice_twin_preset")
+        mirrorFlatKeys()
 
         // Never turn Anti-Screenshot on while the subscription is locked.
-        let aorusLocked = UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
-        if antiScreenshot && !aorusLocked {
+        if antiScreenshot && !licenseLocked {
             AntiScreenshotManager.shared.enable()
         } else {
             AntiScreenshotManager.shared.disable()
@@ -241,15 +243,15 @@ public final class AorusGramManager {
 
     // MARK: - Ghost Mode
 
-    public func shouldSendOnlinePresence() -> Bool  { !ghostMode }
-    public func shouldSendReadReceipt() -> Bool     { !ghostMode || !blockReadReceipts }
-    public func shouldSendTypingIndicator() -> Bool { !ghostMode || !hideTyping }
+    public func shouldSendOnlinePresence() -> Bool  { licenseLocked ? true : !ghostMode }
+    public func shouldSendReadReceipt() -> Bool     { licenseLocked ? true : (!ghostMode || !blockReadReceipts) }
+    public func shouldSendTypingIndicator() -> Bool { licenseLocked ? true : (!ghostMode || !hideTyping) }
 
     // MARK: - Bootstrap (call from AppDelegate/AppLock)
 
     public func bootstrap() {
-        if downloadAccel  { applyDownloadAcceleration() }
-        if siriShortcuts  { donateSiriShortcuts() }
+        if effective(downloadAccel)  { applyDownloadAcceleration() }
+        if effective(siriShortcuts)  { donateSiriShortcuts() }
     }
 
     private func applyDownloadAcceleration() {

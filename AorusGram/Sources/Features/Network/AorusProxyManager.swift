@@ -90,6 +90,7 @@ private struct ATunnelDiagData: Codable {
 public final class AorusProxyManager {
     public static let shared = AorusProxyManager()
     private init() {
+        LicenseStore.shared.load()
         load()
         // Cross-module force-probe signal: ATunnelStatusViewController (AorusGramUI) posts
         // this notification when the user taps "Запустить диагностику" — triggers a fresh probe.
@@ -188,11 +189,18 @@ public final class AorusProxyManager {
     private let watchdogInterval: TimeInterval = 4.0
     private let watchdogProbeTimeout: TimeInterval = 1.0
 
+    private var licenseAllowsProxy: Bool {
+        guard LicenseKeyProvider.isProvisioned else { return true }
+        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") { return false }
+        return LicenseStore.shared.effectiveOfflineStatus().allowsAppAccess
+    }
+
     // MARK: - Public
 
     /// Returns the last known proxy if it is still within its TTL, otherwise nil.
     /// Never blocks; callers should also trigger `refresh()` opportunistically.
     public func currentProxy() -> AorusProxyConfig? {
+        guard licenseAllowsProxy else { return nil }
         lock.lock(); defer { lock.unlock() }
         guard let cfg = cached else { return nil }
         guard Date().timeIntervalSince(cachedAt) < cfg.ttl else { return nil }
@@ -203,8 +211,16 @@ public final class AorusProxyManager {
     /// client can keep connecting through a slightly-stale proxy if the API is
     /// temporarily unreachable (e.g. itself blocked).
     public func lastKnownProxy() -> AorusProxyConfig? {
+        guard licenseAllowsProxy else { return nil }
         lock.lock(); defer { lock.unlock() }
         return cached
+    }
+
+    /// Called by LicenseGate when a subscription loses access. This deliberately
+    /// clears every proxy surface, not only in-memory state, so a patched client cannot
+    /// keep using a stale MTProxy/SOCKS blob after the license is locked.
+    func licenseDidLock() {
+        clearProxyState(postUpdate: true)
     }
 
     /// Fetches a fresh proxy config. De-duplicates concurrent calls. Skips the
@@ -214,6 +230,12 @@ public final class AorusProxyManager {
     /// so a freshly-subscribed device fetches the proxy immediately rather than
     /// waiting up to an hour. Always resolves on the main queue.
     public func refresh(force: Bool = false, completion: ((AorusProxyConfig?) -> Void)? = nil) {
+        guard licenseAllowsProxy else {
+            clearProxyState(postUpdate: true)
+            DispatchQueue.main.async { completion?(nil) }
+            return
+        }
+
         // If the tamper flag is already set but refresh is still being called,
         // someone may have patched the gate; accumulate an extra strike.
         if AorusTamperGuard.isFridaDetected || UserDefaults.standard.bool(forKey: "_ag_frida") {
@@ -272,7 +294,7 @@ public final class AorusProxyManager {
             }
 
             // Publish (or clear) the SOCKS5 call proxy for the calls layer.
-            ProxyVault.publishCall(resp.callProxy)
+            ProxyVault.publishCall(resp.callProxy, ttl: resp.ttl)
 
             // Build the MTProxy candidate list: the extended `proxies` list when present,
             // otherwise the single top-level proxy (backward compatible).
@@ -590,6 +612,7 @@ public final class AorusProxyManager {
     // MARK: - Request building
 
     private func buildSignedRequest() -> URLRequest? {
+        guard licenseAllowsProxy else { return nil }
         // Check both in-module flag and the cross-module UserDefaults bridge.
         // Disagreement between the two (one patched to false while the other isn't)
         // is itself a tamper signal worth accumulating.
@@ -635,6 +658,10 @@ public final class AorusProxyManager {
     // MARK: - Persistence
 
     private func store(_ cfg: AorusProxyConfig) {
+        guard licenseAllowsProxy else {
+            clearProxyState(postUpdate: true)
+            return
+        }
         lock.lock()
         cached = cfg
         cachedAt = Date()
@@ -647,10 +674,36 @@ public final class AorusProxyManager {
         // TelegramCore (which cannot import this module). server/port/secret are
         // sealed with AES-GCM and stored as one opaque value — a jailbreak file
         // browser sees only ciphertext, never the live proxy secret. (See ProxyVault.)
-        ProxyVault.publish(cfg)
+        ProxyVault.publish(cfg, expiresAt: proxyLeaseExpiresAt(ttl: cfg.ttl))
         writeDiagnostics() // AORUS-DIAG
         // Wake the system-side bridge so it re-applies immediately.
         NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
+    }
+
+    private func proxyLeaseExpiresAt(ttl: TimeInterval) -> TimeInterval {
+        let proxyExpiry = Date().addingTimeInterval(ttl).timeIntervalSince1970
+        guard LicenseKeyProvider.isProvisioned,
+              let activeUntil = LicenseStore.shared.snapshot?.activeUntil else {
+            return proxyExpiry
+        }
+        return min(proxyExpiry, TimeInterval(activeUntil))
+    }
+
+    private func clearProxyState(postUpdate: Bool) {
+        lock.lock()
+        cached = nil
+        cachedAt = .distantPast
+        lastCandidates = []
+        lastServerStatuses = []
+        lock.unlock()
+        ProxyKeychain.clear()
+        ProxyVault.clear()
+        UserDefaults.standard.removeObject(forKey: cacheStampKey)
+        UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey)
+        writeDiagnostics()
+        if postUpdate {
+            NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
+        }
     }
 
     // AORUS-DIAG: ATunnel status page in AorusGram settings reads this JSON.
@@ -668,6 +721,10 @@ public final class AorusProxyManager {
     }
 
     private func load() {
+        guard licenseAllowsProxy else {
+            clearProxyState(postUpdate: false)
+            return
+        }
         guard let data = ProxyKeychain.read(),
               let cfg = try? JSONDecoder().decode(AorusProxyConfig.self, from: data) else { return }
         cached = cfg
@@ -676,7 +733,7 @@ public final class AorusProxyManager {
         // Publish the encrypted bridge blob synchronously at construction so the
         // network layer (Network.swift) sees a cached proxy on the very first
         // connection of this launch, before any async refresh completes.
-        ProxyVault.publish(cfg)
+        ProxyVault.publish(cfg, expiresAt: proxyLeaseExpiresAt(ttl: max(0, cfg.ttl - Date().timeIntervalSince(cachedAt))))
     }
 
     // MARK: - Helpers
@@ -752,6 +809,13 @@ private enum ProxyKeychain {
         // a device where SE was not available at write time.
         return AorusSeKeyBinder.unbind(raw) ?? raw
     }
+
+    static func clear() {
+        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                kSecAttrService as String: svc,
+                                kSecAttrAccount as String: acct]
+        SecItemDelete(q as CFDictionary)
+    }
 }
 
 // MARK: - Encrypted cross-module proxy bridge
@@ -786,29 +850,36 @@ private enum ProxyVault {
         return SymmetricKey(data: Data(SHA256.hash(data: Data(s0 + s1 + s2))))
     }()
 
-    // Seals "server\nport\nsecret" and stores it base64 under the opaque key.
-    static func publish(_ cfg: AorusProxyConfig) {
+    // Seals "server\nport\nsecret\nexpiresAt" and stores it base64 under the opaque key.
+    static func publish(_ cfg: AorusProxyConfig, expiresAt: TimeInterval) {
         purgeLegacy()
         guard let ud = UserDefaults(suiteName: suiteName) else { return }
-        let payload = "\(cfg.server)\n\(cfg.port)\n\(cfg.secret)"
+        let payload = "\(cfg.server)\n\(cfg.port)\n\(cfg.secret)\n\(Int64(expiresAt))"
         guard let box = try? AES.GCM.seal(Data(payload.utf8), using: key),
               let combined = box.combined else { return }
         ud.set(combined.base64EncodedString(), forKey: blobKey)
     }
 
-    // Seals "server\nport\nusername\npassword\nudp" for the SOCKS5 call proxy under a
+    // Seals "server\nport\nusername\npassword\nudp\nexpiresAt" for the SOCKS5 call proxy under a
     // second opaque key. nil / non-socks5 / invalid clears it (calls fall back to
     // the user's own proxy settings, if any). Read by the calls layer (Part 2).
-    static func publishCall(_ cfg: AorusCallProxyConfig?) {
+    static func publishCall(_ cfg: AorusCallProxyConfig?, ttl: TimeInterval) {
         guard let ud = UserDefaults(suiteName: suiteName) else { return }
         guard let cfg = cfg, cfg.type.lowercased() == "socks5", !cfg.server.isEmpty, cfg.port > 0 else {
             ud.removeObject(forKey: callBlobKey)
             return
         }
-        let payload = "\(cfg.server)\n\(cfg.port)\n\(cfg.username ?? "")\n\(cfg.password ?? "")\n\((cfg.udp ?? false) ? "1" : "0")"
+        let payload = "\(cfg.server)\n\(cfg.port)\n\(cfg.username ?? "")\n\(cfg.password ?? "")\n\((cfg.udp ?? false) ? "1" : "0")\n\(Int64(Date().addingTimeInterval(ttl).timeIntervalSince1970))"
         guard let box = try? AES.GCM.seal(Data(payload.utf8), using: key),
               let combined = box.combined else { return }
         ud.set(combined.base64EncodedString(), forKey: callBlobKey)
+    }
+
+    static func clear() {
+        purgeLegacy()
+        guard let ud = UserDefaults(suiteName: suiteName) else { return }
+        ud.removeObject(forKey: blobKey)
+        ud.removeObject(forKey: callBlobKey)
     }
 
     // Wipe the legacy plaintext flat keys left in the standard store by older

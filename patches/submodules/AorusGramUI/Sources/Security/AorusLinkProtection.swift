@@ -23,6 +23,9 @@ public enum AorusLinkProtection {
     }
 
     public static var isEnabled: Bool {
+        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+            return false
+        }
         return UserDefaults.standard.bool(forKey: enabledKey)
     }
 
@@ -41,7 +44,8 @@ public enum AorusLinkProtection {
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: enabledKey)
+        let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value
+        UserDefaults.standard.set(effectiveValue, forKey: enabledKey)
     }
 
     public static func setChecksRedirects(_ value: Bool) {

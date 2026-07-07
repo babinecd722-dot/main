@@ -541,6 +541,9 @@ final class AntiSpamManager {
     }
 
     private var effectiveEnabled: Bool {
+        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+            return false
+        }
         if let value = UserDefaults.standard.object(forKey: "aorusgram_feature_anti_spam") as? Bool {
             return value
         }

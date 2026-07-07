@@ -22,8 +22,16 @@ public final class AorusStealthCodec {
     private init() {}
 
     public var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: "aorusgram_aorus_code_enabled") }
-        set { UserDefaults.standard.set(newValue, forKey: "aorusgram_aorus_code_enabled") }
+        get {
+            if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+                return false
+            }
+            return UserDefaults.standard.bool(forKey: "aorusgram_aorus_code_enabled")
+        }
+        set {
+            let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : newValue
+            UserDefaults.standard.set(effectiveValue, forKey: "aorusgram_aorus_code_enabled")
+        }
     }
 
     // Four data code points — all guaranteed zero-width / no-glyph on iOS.
