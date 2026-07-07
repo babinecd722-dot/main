@@ -14,6 +14,8 @@ import UserNotifications
 // The screen is deliberately drawn by hand (gradient avatars, rounded cards, a
 // soft accent glow) so it matches the AorusGram look instead of a stock list.
 
+private let aorusLoginBackupAccent = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)
+
 private func aorusMix(_ a: UIColor, _ b: UIColor, _ t: CGFloat) -> UIColor {
     var ar: CGFloat = 0, ag: CGFloat = 0, ab: CGFloat = 0, aa: CGFloat = 0
     var br: CGFloat = 0, bg: CGFloat = 0, bb: CGFloat = 0, ba: CGFloat = 0
@@ -44,7 +46,7 @@ private final class AorusAccountCardView: UIControl {
         self.layer.cornerRadius = 18.0
         self.layer.cornerCurve = .continuous
         self.layer.borderWidth = 1.0
-        self.layer.borderColor = theme.list.itemAccentColor.withAlphaComponent(0.18).cgColor
+        self.layer.borderColor = aorusLoginBackupAccent.withAlphaComponent(0.18).cgColor
 
         self.avatarView.image = avatar
         self.avatarView.layer.cornerRadius = 25.0
@@ -66,7 +68,7 @@ private final class AorusAccountCardView: UIControl {
 
         let chevronCfg = UIImage.SymbolConfiguration(pointSize: 15.0, weight: .semibold)
         self.chevron.image = UIImage(systemName: "chevron.right", withConfiguration: chevronCfg)?.withRenderingMode(.alwaysTemplate)
-        self.chevron.tintColor = theme.list.itemAccentColor
+        self.chevron.tintColor = aorusLoginBackupAccent
         self.chevron.isUserInteractionEnabled = false
         self.addSubview(self.chevron)
     }
@@ -209,7 +211,7 @@ final class AorusLoginBackupPickerController: UIViewController {
         self.scrollView.addSubview(self.contentView)
 
         // Header: an accent-tinted key badge with a soft glow.
-        let accent = self.theme.list.itemAccentColor
+        let accent = aorusLoginBackupAccent
         self.headerIconView.image = self.badgeImage(accent: accent)
         self.headerIconView.layer.shadowColor = accent.cgColor
         self.headerIconView.layer.shadowOpacity = 0.45
@@ -299,7 +301,7 @@ final class AorusLoginBackupPickerController: UIViewController {
         alert.addAction(UIAlertAction(title: self.isRu ? "Войти" : "Sign in", style: .default, handler: { [weak self] _ in
             self?.armRestoreAndRestart()
         }))
-        alert.view.tintColor = self.theme.list.itemAccentColor
+        alert.view.tintColor = aorusLoginBackupAccent
         self.present(alert, animated: true, completion: nil)
     }
 
@@ -375,7 +377,7 @@ final class AorusLoginBackupPickerController: UIViewController {
     // Native-style letters avatar (gradient + initials) when no photo is available.
     private func lettersAvatar(name: String, seed: String) -> UIImage {
         let size = CGSize(width: 50.0, height: 50.0)
-        let accent = self.theme.list.itemAccentColor
+        let accent = aorusLoginBackupAccent
         let palette: [UIColor] = [
             accent,
             aorusMix(accent, UIColor(red: 0.29, green: 0.62, blue: 0.94, alpha: 1.0), 0.6),

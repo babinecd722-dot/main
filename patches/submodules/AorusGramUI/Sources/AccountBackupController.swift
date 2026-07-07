@@ -148,6 +148,7 @@ private struct BackupL10n {
     var deleteTitle: String { t("Удалить бэкап?", "Delete Backup?") }
     var deleteText: String { t("Зашифрованный бэкап и ключ из Keychain будут удалены. Действие необратимо.", "The encrypted backup and Keychain key will be deleted. This cannot be undone.") }
     var delete: String { t("Удалить", "Delete") }
+    var backupDeleted: String { t("Бэкап удалён.", "Backup deleted.") }
 }
 
 // MARK: - Arguments
@@ -464,8 +465,14 @@ private func accountBackupControllerLegacy(context: AccountContext) -> ViewContr
                 actions: [
                     TextAlertAction(type: .genericAction, title: l10n.cancel, action: {}),
                     TextAlertAction(type: .destructiveAction, title: l10n.delete, action: {
-                        AccountBackupManager.shared.deleteBackup()
-                        refresh()
+                        runBusy {
+                            AccountBackupManager.shared.deleteBackup()
+                            DispatchQueue.main.async {
+                                let l10n = currentL10n()
+                                refresh()
+                                presentAlert(l10n.done, l10n.backupDeleted)
+                            }
+                        }
                     })
                 ]
             )

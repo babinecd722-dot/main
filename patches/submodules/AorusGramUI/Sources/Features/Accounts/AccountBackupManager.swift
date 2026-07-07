@@ -4,9 +4,11 @@ import Security
 
 // MARK: - Account Backup Manager
 //
-// Backs up Telegram account auth data — `accounts-metadata` plus every
-// `account-*` directory, excluding the re-downloadable media caches — into a
-// single AES-256-GCM encrypted archive stored inside the app data directory.
+// Backs up Telegram account auth data — `accounts-metadata` plus the compact
+// network/session state from every `account-*` directory — into a single
+// AES-256-GCM encrypted archive stored inside the app data directory.
+// Message databases, media, caches and other re-downloadable data are excluded
+// so the Keychain copy stays small and responsive like Swiftgram's backup.
 // The archive's encryption key lives in the device Keychain and never leaves it.
 //
 // Restore is two-phase so it can never corrupt a live postbox:
@@ -41,6 +43,7 @@ public final class AccountBackupManager {
     private let keychainMetaName   = "archive_meta_v1"
     private let keychainChunkPrefix = "archive_chunk_"
     private let keychainChunkSize  = 200 * 1024   // 200 KB per Keychain item — safely small.
+    private let maxCompactBackupFileSize: UInt64 = 2 * 1024 * 1024
 
     // Per-account display data, captured at backup time, so the Sessions list and
     // the login-by-backup picker can show a real username / Telegram ID / avatar
@@ -282,7 +285,9 @@ public final class AccountBackupManager {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: dirAbs, isDirectory: &isDir) else { continue }
             if !isDir.boolValue {
-                files.append((abs: dirAbs, rel: name))
+                if shouldIncludeBackupFile(abs: dirAbs, rel: name) {
+                    files.append((abs: dirAbs, rel: name))
+                }
                 continue
             }
             enumerate(dirAbs: dirAbs, relBase: name, into: &files)
@@ -294,20 +299,68 @@ public final class AccountBackupManager {
         let fm = FileManager.default
         guard let en = fm.enumerator(atPath: dirAbs) else { return }
         while let sub = en.nextObject() as? String {
-            let lower = sub.lowercased()
-            // Skip media / cache directories — large and re-downloadable.
-            if lower.hasPrefix("postbox/media") || lower.contains("/media/")
-                || lower == "media" || lower.hasPrefix("media/")
-                || lower.contains("cache") || lower.contains("temp")
-                || lower.contains("tmp") {
-                en.skipDescendants()
-                continue
-            }
             let abs = (dirAbs as NSString).appendingPathComponent(sub)
             var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: abs, isDirectory: &isDir), !isDir.boolValue else { continue }
-            files.append((abs: abs, rel: relBase + "/" + sub))
+            guard fm.fileExists(atPath: abs, isDirectory: &isDir) else { continue }
+            let rel = relBase + "/" + sub
+            if isDir.boolValue {
+                if shouldSkipBackupDirectory(rel: rel) {
+                    en.skipDescendants()
+                }
+                continue
+            }
+            if shouldIncludeBackupFile(abs: abs, rel: rel) {
+                files.append((abs: abs, rel: rel))
+            }
         }
+    }
+
+    private func shouldSkipBackupDirectory(rel: String) -> Bool {
+        let comps = rel.split(separator: "/").map { String($0).lowercased() }
+        guard comps.count >= 2 else { return false }
+        let heavyRoots: Set<String> = [
+            "postbox", "mediabox", "media", "cache", "caches", "temp", "tmp",
+            "resources", "resource-cache", "stickers", "video", "audio"
+        ]
+        return comps.contains(where: { heavyRoots.contains($0) || $0.contains("cache") || $0.contains("temp") || $0.contains("tmp") })
+    }
+
+    private func shouldIncludeBackupFile(abs: String, rel: String) -> Bool {
+        let fm = FileManager.default
+        let attrs = try? fm.attributesOfItem(atPath: abs)
+        let size = (attrs?[.size] as? NSNumber)?.uint64Value ?? 0
+        let comps = rel.split(separator: "/").map(String.init)
+        guard let first = comps.first else { return false }
+
+        if first == "accounts-metadata" {
+            return size <= maxCompactBackupFileSize
+        }
+        guard first.hasPrefix("account-"), comps.count >= 2 else { return false }
+        guard size <= maxCompactBackupFileSize else { return false }
+
+        if shouldSkipBackupDirectory(rel: rel) {
+            return false
+        }
+
+        let second = comps[1].lowercased()
+        if second == "network" || second.contains("network") || second.contains("auth")
+            || second.contains("session") || second.contains("state")
+            || second.contains("metadata") || second.contains("config")
+            || second.contains("preference") || second.contains("mtproto")
+            || second.contains("datacenter") {
+            return true
+        }
+
+        let lowerRel = rel.lowercased()
+        if lowerRel.hasSuffix(".sqlite") || lowerRel.hasSuffix(".sqlite-wal")
+            || lowerRel.hasSuffix(".sqlite-shm") || lowerRel.hasSuffix(".db")
+            || lowerRel.hasSuffix(".ldb") || lowerRel.hasSuffix(".log") {
+            return false
+        }
+
+        // Keep small root-level account metadata files, but never descend into broad
+        // stores such as postbox/media. Telegram recreates message databases after login.
+        return comps.count == 2
     }
 
     // MARK: - Restore phase 1: prepare

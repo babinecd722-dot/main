@@ -15886,6 +15886,12 @@ def patch_message_translate_button(tg: Path) -> None:
     # 8) toggle method (GTranslate) — inserted before toggleSummarization
     toggle_anchor = "    private func toggleSummarization() {\n"
     toggle_new = (
+        "    private func aorusPresentInlineActionToast(_ text: String) {\n"
+        "        guard let item = self.item else { return }\n"
+        "        guard let navigationController = item.controllerInteraction.navigationController() else { return }\n"
+        "        navigationController.present(UndoOverlayController(presentationData: item.presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), in: .current)\n"
+        "    }\n"
+        "\n"
         "    private func aorusToggleTranslate() {\n"
         "        guard let item = self.item else { return }\n"
         "        let aorusMid = item.message.id\n"
@@ -15911,18 +15917,27 @@ def patch_message_translate_button(tg: Path) -> None:
         "        if let aorusVoiceFile = aorusVoiceFile {\n"
         "            #if canImport(Speech)\n"
         "            let aorusVoiceOriginal = item.message.text\n"
-        "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { return }\n"
+        "            let aorusSpeechFailText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Не удалось определить речь\" : \"Could not detect speech\"\n"
+        "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { self.aorusPresentInlineActionToast(aorusSpeechFailText); return }\n"
         "            SFSpeechRecognizer.requestAuthorization { status in\n"
-        "                guard status == .authorized else { return }\n"
-        "                guard let aorusRecognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: \"ru-RU\")), aorusRecognizer.isAvailable else { return }\n"
+        "                guard status == .authorized else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }; return }\n"
+        "                guard let aorusRecognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: \"ru-RU\")), aorusRecognizer.isAvailable else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }; return }\n"
         "                let aorusReq = SFSpeechURLRecognitionRequest(url: URL(fileURLWithPath: aorusPath))\n"
         "                aorusReq.shouldReportPartialResults = false\n"
         "                aorusReq.taskHint = .dictation\n"
         "                if aorusRecognizer.supportsOnDeviceRecognition { aorusReq.requiresOnDeviceRecognition = true }\n"
-        "                _ = aorusRecognizer.recognitionTask(with: aorusReq) { result, _ in\n"
+        "                var aorusDidFinishSpeech = false\n"
+        "                _ = aorusRecognizer.recognitionTask(with: aorusReq) { result, error in\n"
+        "                    if aorusDidFinishSpeech { return }\n"
+        "                    if error != nil {\n"
+        "                        aorusDidFinishSpeech = true\n"
+        "                        DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }\n"
+        "                        return\n"
+        "                    }\n"
         "                    guard let result = result, result.isFinal else { return }\n"
+        "                    aorusDidFinishSpeech = true\n"
         "                    let aorusText = result.bestTranscription.formattedString\n"
-        "                    guard !aorusText.isEmpty else { return }\n"
+        "                    guard !aorusText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }; return }\n"
         "                    DispatchQueue.main.async {\n"
         "                        aorusSetText(aorusText, aorusMid)\n"
         "                        UserDefaults.standard.set(aorusVoiceOriginal, forKey: aorusKey)\n"
@@ -15934,7 +15949,8 @@ def patch_message_translate_button(tg: Path) -> None:
         "        }\n"
         "        let aorusOriginal = item.message.text\n"
         "        guard !aorusOriginal.isEmpty else { return }\n"
-        "        let aorusTarget = Locale.current.languageCode ?? \"en\"\n"
+        "        let aorusTranslateNoopText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Сообщение уже на вашем языке\" : \"Message is already in your language\"\n"
+        "        let aorusTarget = item.presentationData.strings.baseLanguageCode.split(separator: \"-\").first.map(String.init) ?? (Locale.current.languageCode ?? \"en\")\n"
         "        guard var aorusComp = URLComponents(string: \"https://translate.googleapis.com/translate_a/single\") else { return }\n"
         "        aorusComp.queryItems = [URLQueryItem(name: \"client\", value: \"gtx\"), URLQueryItem(name: \"sl\", value: \"auto\"), URLQueryItem(name: \"tl\", value: aorusTarget), URLQueryItem(name: \"dt\", value: \"t\"), URLQueryItem(name: \"q\", value: aorusOriginal)]\n"
         "        guard let aorusUrl = aorusComp.url else { return }\n"
@@ -15944,7 +15960,7 @@ def patch_message_translate_button(tg: Path) -> None:
         "            for s in sentences {\n"
         "                if let arr = s as? [Any], let piece = arr.first as? String { aorusTranslated += piece }\n"
         "            }\n"
-        "            guard !aorusTranslated.isEmpty, aorusTranslated != aorusOriginal else { return }\n"
+        "            guard !aorusTranslated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, aorusTranslated != aorusOriginal else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusTranslateNoopText) }; return }\n"
         "            let aorusNewText = aorusOriginal + \"\\n\\n\\u{1F5E8} GTranslate\\n\" + aorusTranslated\n"
         "            DispatchQueue.main.async {\n"
         "                aorusSetText(aorusNewText, aorusMid)\n"
@@ -15973,7 +15989,8 @@ def patch_message_translate_button(tg: Path) -> None:
         "        }\n"
         "        let aorusOriginal = item.message.text\n"
         "        guard !aorusOriginal.isEmpty else { return }\n"
-        "        let aorusTarget = Locale.current.languageCode ?? \"en\"\n"
+        "        let aorusTranslateNoopText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Сообщение уже на вашем языке\" : \"Message is already in your language\"\n"
+        "        let aorusTarget = item.presentationData.strings.baseLanguageCode.split(separator: \"-\").first.map(String.init) ?? (Locale.current.languageCode ?? \"en\")\n"
         "        guard var aorusComp = URLComponents(string: \"https://translate.googleapis.com/translate_a/single\") else { return }\n"
         "        aorusComp.queryItems = [URLQueryItem(name: \"client\", value: \"gtx\"), URLQueryItem(name: \"sl\", value: \"auto\"), URLQueryItem(name: \"tl\", value: aorusTarget), URLQueryItem(name: \"dt\", value: \"t\"), URLQueryItem(name: \"q\", value: aorusOriginal)]\n"
         "        guard let aorusUrl = aorusComp.url else { return }\n"
@@ -15983,7 +16000,7 @@ def patch_message_translate_button(tg: Path) -> None:
         "            for s in sentences {\n"
         "                if let arr = s as? [Any], let piece = arr.first as? String { aorusTranslated += piece }\n"
         "            }\n"
-        "            guard !aorusTranslated.isEmpty, aorusTranslated != aorusOriginal else { return }\n"
+        "            guard !aorusTranslated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, aorusTranslated != aorusOriginal else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusTranslateNoopText) }; return }\n"
         "            let aorusNewText = aorusOriginal + \"\\n\\n\\u{1F5E8} GTranslate\\n\" + aorusTranslated\n"
         "            DispatchQueue.main.async {\n"
         "                aorusSetText(aorusNewText, aorusMid)\n"
@@ -15995,11 +16012,27 @@ def patch_message_translate_button(tg: Path) -> None:
     )
     sub(toggle_anchor, toggle_new + toggle_anchor, "toggle-method")
 
-    # 9) import Speech (guarded) — needed by the transcribe branch of aorusToggleTranslate.
+    # 9) imports for Speech + native Telegram toast.
     if "import Speech" not in t:
         sub("import Foundation\n",
             "import Foundation\n#if canImport(Speech)\nimport Speech\n#endif\n",
             "import-speech")
+    if "import UndoUI" not in t:
+        sub("import Foundation\n",
+            "import Foundation\nimport UndoUI\n",
+            "import-undoui")
+
+    build = tg / "submodules/TelegramUI/BUILD"
+    if build.is_file():
+        bt = build.read_text(encoding="utf-8")
+        if "//submodules/UndoUI:UndoUI" not in bt:
+            dep_anchor = '        "//submodules/AccountContext:AccountContext",\n'
+            if dep_anchor in bt:
+                bt = bt.replace(dep_anchor, dep_anchor + '        "//submodules/UndoUI:UndoUI",\n', 1)
+                build.write_text(bt, encoding="utf-8")
+                print("MsgTranslateBtn: added UndoUI dep to TelegramUI BUILD")
+            else:
+                print("MsgTranslateBtn: TelegramUI BUILD dep anchor not found")
 
     # 10) Share-button toggle — hide the native share button when the user turns
     #     "Share Button" off. Default (key unset) keeps stock behaviour (shown).
@@ -16144,9 +16177,10 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "        // durable Keychain backup exists, so it never overwrites a live session.\n"
         "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
         "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
-        "            // Use the list accent (our theme paints `list`, not `navigationBar`) so the key\n"
-        "            // takes the AorusGram color instead of the stock blue navigation tint.\n"
-        "            aorusKeyItem.tintColor = self.presentationData.theme.list.itemAccentColor\n"
+        "            // The phone-entry controller can still expose the stock Telegram blue before\n"
+        "            // the full Aorus theme is resolved, so keep this Aorus-only entry point on\n"
+        "            // the brand accent explicitly instead of inheriting navigation tint.\n"
+        "            aorusKeyItem.tintColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
         "            self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
         "        }\n"
     )

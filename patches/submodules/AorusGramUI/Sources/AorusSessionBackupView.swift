@@ -40,6 +40,7 @@ private struct AorusSessionL10n {
     var restorePrepared: String { t("Полностью закройте и снова откройте приложение, чтобы завершить восстановление.", "Fully close and reopen the app to finish restoring.") }
     var deleteTitle: String { t("Удалить бэкап?", "Delete backup?") }
     var deleteText: String { t("Зашифрованный бэкап и ключ из Keychain будут удалены. Действие необратимо.", "The encrypted backup and its key will be removed from the Keychain. This cannot be undone.") }
+    var backupDeleted: String { t("Бэкап удалён.", "Backup deleted.") }
     var cancel: String { t("Отмена", "Cancel") }
     var delete: String { t("Удалить", "Delete") }
     var restart: String { t("Перезапустить", "Restart") }
@@ -278,8 +279,16 @@ struct AorusSessionBackupView: View {
     }
 
     private func performDeleteAll() {
-        AccountBackupManager.shared.deleteBackup()
-        reload()
+        guard !isBusy else { return }
+        isBusy = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            AccountBackupManager.shared.deleteBackup()
+            DispatchQueue.main.async {
+                self.isBusy = false
+                self.reload()
+                self.present(self.l10n.done, self.l10n.backupDeleted)
+            }
+        }
     }
 
     private func present(_ title: String, _ text: String) {
