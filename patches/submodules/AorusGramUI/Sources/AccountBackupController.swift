@@ -7,6 +7,8 @@ import ItemListUI
 import ItemListPeerActionItem
 import PresentationDataUtils
 import AccountContext
+import TelegramCore
+import Postbox
 
 // Render an SF Symbol into a pre-tinted image for the action rows (the reference
 // Keychain-backup screen shows a key / restore / trash glyph next to each action).
@@ -14,6 +16,50 @@ private func aorusBackupActionIcon(_ systemName: String, color: UIColor) -> UIIm
     let cfg = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)
     return UIImage(systemName: systemName, withConfiguration: cfg)?.withTintColor(color, renderingMode: .alwaysOriginal)
 }
+
+// Downscale a captured avatar to a small PNG so it fits comfortably in the Keychain.
+private func aorusDownscalePNG(_ image: UIImage, maxSide: CGFloat = 120.0) -> Data? {
+    let side = max(image.size.width, image.size.height)
+    let scale = side > maxSide ? maxSide / side : 1.0
+    let target = CGSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
+    guard target.width > 0, target.height > 0 else { return image.pngData() }
+    let format = UIGraphicsImageRendererFormat()
+    format.opaque = false
+    format.scale = 1.0
+    let scaled = UIGraphicsImageRenderer(size: target, format: format).image { _ in
+        image.draw(in: CGRect(origin: .zero, size: target))
+    }
+    return scaled.pngData()
+}
+
+// Resolved display data for one backed-up session row.
+private struct BackupSessionInfo: Equatable {
+    let id: String
+    let title: String
+    let idText: String
+    let dateText: String
+    let badgeText: String
+    let isLoggedIn: Bool
+    let avatar: UIImage?
+
+    static func == (lhs: BackupSessionInfo, rhs: BackupSessionInfo) -> Bool {
+        // avatar is derived deterministically from id/name, so it is excluded here.
+        return lhs.id == rhs.id && lhs.title == rhs.title && lhs.idText == rhs.idText
+            && lhs.dateText == rhs.dateText && lhs.badgeText == rhs.badgeText && lhs.isLoggedIn == rhs.isLoggedIn
+    }
+}
+
+// "8373128059" -> "8 373 128 059"
+private func aorusFormatUserId(_ userId: Int64) -> String {
+    let digits = Array(String(userId))
+    var out = ""
+    for (i, ch) in digits.enumerated() {
+        if i > 0 && (digits.count - i) % 3 == 0 { out.append(" ") }
+        out.append(ch)
+    }
+    return out
+}
+
 
 // MARK: - Sections
 
@@ -64,8 +110,11 @@ private struct BackupL10n {
     var busy: String { t("Выполняется операция...", "Operation in progress...") }
     var restorePending: String { t("Бэкап подготовлен к восстановлению.\nПерезапустите приложение для применения.", "Backup is ready to restore.\nRestart the app to apply it.") }
     var noBackup: String { t("Бэкап ещё не создан.", "No backup has been created yet.") }
-    var sessionsHeader: String { t("СЕССИИ", "SESSIONS") }
+    var sessionsHeader: String { t("Сессии", "Sessions") }
     var noSessions: String { t("Нет активных сессий", "No active sessions") }
+    var loggedIn: String { t("Залогинен", "Logged in") }
+    var loggedOut: String { t("Не залогинен", "Logged out") }
+    func lastBackup(_ date: String) -> String { t("Последний бэкап: ", "Last backup: ") + date }
     func account(_ id: String) -> String { t("Аккаунт", "Account") + " · \(id)" }
     func backupStatus(date: String, accountCount: Int, size: String) -> String {
         return t("Бэкап от", "Backup from") + " \(date)\n"
@@ -130,7 +179,7 @@ private enum BackupEntry: ItemListNodeEntry {
     case status(PresentationTheme, String)
 
     case sessionsHeader(PresentationTheme, String)
-    case session(PresentationTheme, Int32, String)
+    case session(PresentationTheme, Int32, BackupSessionInfo)
 
     var section: ItemListSectionId {
         switch self {
@@ -178,8 +227,8 @@ private enum BackupEntry: ItemListNodeEntry {
             if case let .status(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .sessionsHeader(lt, ls):
             if case let .sessionsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .session(lt, li, ls):
-            if case let .session(rt, ri, rs) = rhs { return lt === rt && li == ri && ls == rs }
+        case let .session(lt, li, lv):
+            if case let .session(rt, ri, rv) = rhs { return lt === rt && li == ri && lv == rv }
         }
         return false
     }
@@ -204,8 +253,8 @@ private enum BackupEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .sessionsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .session(_, _, text):
-            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .session(_, _, info):
+            return AorusBackupSessionItem(presentationData: presentationData, avatar: info.avatar, title: info.title, idText: info.idText, dateText: info.dateText, badgeText: info.badgeText, isLoggedIn: info.isLoggedIn, sectionId: section, style: .blocks, action: nil)
         }
     }
 }
@@ -223,28 +272,44 @@ private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: B
 
     entries.append(.info(theme, l10n.info))
 
-    entries.append(.statusHeader(theme, l10n.statusHeader))
+    // Transient status only (a running operation / a pending restore). The persistent
+    // backup date/size lives on each session card now, matching the reference.
     if state.busy {
+        entries.append(.statusHeader(theme, l10n.statusHeader))
         entries.append(.status(theme, l10n.busy))
     } else if mgr.isRestorePending() {
+        entries.append(.statusHeader(theme, l10n.statusHeader))
         entries.append(.status(theme, l10n.restorePending))
-    } else if let info = mgr.backupInfo() {
-        let df = DateFormatter()
-        df.locale = l10n.isRu ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US_POSIX")
-        df.dateFormat = "dd.MM.yyyy HH:mm"
-        let size = ByteCountFormatter.string(fromByteCount: info.sizeBytes, countStyle: .file)
-        entries.append(.status(theme, l10n.backupStatus(date: df.string(from: info.date), accountCount: info.accountCount, size: size)))
-    } else {
-        entries.append(.status(theme, l10n.noBackup))
     }
 
     entries.append(.sessionsHeader(theme, l10n.sessionsHeader))
-    let ids = mgr.localAccountIds()
-    if ids.isEmpty {
-        entries.append(.session(theme, 0, l10n.noSessions))
-    } else {
-        for (i, id) in ids.enumerated() {
-            entries.append(.session(theme, Int32(i), l10n.account(id)))
+    let sessions = mgr.backupAccounts()
+    if !sessions.isEmpty {
+        let loggedIn = Set(mgr.localAccountIds())
+        let df = DateFormatter()
+        df.locale = l10n.isRu ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "d MMMM yyyy, HH:mm"
+        let dateText = mgr.backupInfo().map { l10n.lastBackup(df.string(from: $0.date)) } ?? ""
+        for (i, acc) in sessions.enumerated() {
+            let title: String
+            if let username = acc.username, !username.isEmpty {
+                title = "@\(username)"
+            } else if !acc.name.isEmpty {
+                title = acc.name
+            } else {
+                title = String(acc.userId)
+            }
+            let isLoggedIn = loggedIn.contains(acc.id)
+            let info = BackupSessionInfo(
+                id: acc.id,
+                title: title,
+                idText: "ID: " + aorusFormatUserId(acc.userId),
+                dateText: dateText,
+                badgeText: isLoggedIn ? l10n.loggedIn : l10n.loggedOut,
+                isLoggedIn: isLoggedIn,
+                avatar: nil
+            )
+            entries.append(.session(theme, Int32(i), info))
         }
     }
 
@@ -310,19 +375,43 @@ public func accountBackupController(context: AccountContext) -> ViewController {
                 actions: [
                     TextAlertAction(type: .genericAction, title: l10n.cancel, action: {}),
                     TextAlertAction(type: .defaultAction, title: l10n.create, action: {
-                        runBusy {
-                            let result = AccountBackupManager.shared.performBackup()
-                            DispatchQueue.main.async {
-                                let l10n = currentL10n()
-                                refresh()
-                                switch result {
-                                case let .success(info):
-                                    presentAlert(l10n.done, l10n.backupCreated(info.accountCount))
-                                case let .failure(message):
-                                    presentAlert(l10n.error, message)
+                        // Capture per-account display data (username / Telegram ID / avatar)
+                        // on the main queue first, then run the (blocking) backup off it.
+                        let _ = (context.sharedContext.activeAccountsWithInfo
+                        |> take(1)
+                        |> deliverOnMainQueue).startStandalone(next: { value in
+                            var infos: [AccountBackupManager.AccountDisplayInfo] = []
+                            for account in value.accounts {
+                                let recordId = String(UInt64(bitPattern: account.account.id.int64))
+                                let userId = account.peer.id.id._internalGetInt64Value()
+                                var avatarPNG: Data? = nil
+                                if let representation = account.peer.profileImageRepresentations.first,
+                                   let path = account.account.postbox.mediaBox.completedResourcePath(representation.resource),
+                                   let image = UIImage(contentsOfFile: path) {
+                                    avatarPNG = aorusDownscalePNG(image)
+                                }
+                                infos.append(AccountBackupManager.AccountDisplayInfo(
+                                    id: recordId,
+                                    userId: userId,
+                                    username: account.peer.addressName,
+                                    name: account.peer.debugDisplayTitle,
+                                    avatarPNG: avatarPNG
+                                ))
+                            }
+                            runBusy {
+                                let result = AccountBackupManager.shared.performBackup(displayInfos: infos)
+                                DispatchQueue.main.async {
+                                    let l10n = currentL10n()
+                                    refresh()
+                                    switch result {
+                                    case let .success(info):
+                                        presentAlert(l10n.done, l10n.backupCreated(info.accountCount))
+                                    case let .failure(message):
+                                        presentAlert(l10n.error, message)
+                                    }
                                 }
                             }
-                        }
+                        })
                     })
                 ]
             )

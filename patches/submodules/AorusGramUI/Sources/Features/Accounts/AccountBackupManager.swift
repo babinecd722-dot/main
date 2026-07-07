@@ -42,12 +42,47 @@ public final class AccountBackupManager {
     private let keychainChunkPrefix = "archive_chunk_"
     private let keychainChunkSize  = 200 * 1024   // 200 KB per Keychain item — safely small.
 
+    // Per-account display data, captured at backup time, so the Sessions list and
+    // the login-by-backup picker can show a real username / Telegram ID / avatar
+    // even after a reinstall (the values live in the durable Keychain metadata).
+    public struct AccountRecordMeta: Codable, Equatable {
+        public var id: String            // account-record id (matches the on-disk dir)
+        public var userId: Int64         // Telegram user id (shown as "ID: …")
+        public var username: String?     // @handle, if any
+        public var name: String          // display title
+        public var avatarBase64: String? // small PNG, if a cached photo existed
+        public init(id: String, userId: Int64, username: String?, name: String, avatarBase64: String?) {
+            self.id = id
+            self.userId = userId
+            self.username = username
+            self.name = name
+            self.avatarBase64 = avatarBase64
+        }
+    }
+
+    // Input to performBackup — the live display data gathered from the account contexts.
+    public struct AccountDisplayInfo {
+        public let id: String
+        public let userId: Int64
+        public let username: String?
+        public let name: String
+        public let avatarPNG: Data?
+        public init(id: String, userId: Int64, username: String?, name: String, avatarPNG: Data?) {
+            self.id = id
+            self.userId = userId
+            self.username = username
+            self.name = name
+            self.avatarPNG = avatarPNG
+        }
+    }
+
     private struct KeychainBackupMeta: Codable {
         var chunkCount: Int
         var sizeBytes: Int64
         var date: Double         // timeIntervalSince1970
         var accountCount: Int
         var accountIds: [String]
+        var accounts: [AccountRecordMeta]?
     }
 
     private static let archiveName  = "aorus-account-backup.enc"
@@ -144,6 +179,12 @@ public final class AccountBackupManager {
         )
     }
 
+    // Per-account display metadata captured in the last backup (for the Sessions
+    // list). Empty if the backup predates display capture.
+    public func backupAccounts() -> [AccountRecordMeta] {
+        return keychainMeta()?.accounts ?? []
+    }
+
     // Account record IDs present on disk (the `account-<id>` directory suffix).
     public func localAccountIds() -> [String] {
         let fm = FileManager.default
@@ -157,7 +198,7 @@ public final class AccountBackupManager {
 
     // MARK: - Backup
 
-    public func performBackup() -> BackupOutcome {
+    public func performBackup(displayInfos: [AccountDisplayInfo] = []) -> BackupOutcome {
         guard !rootPath.isEmpty else { return .failure(localized("Путь к данным аккаунтов недоступен", "Account data path is unavailable")) }
         let fm = FileManager.default
 
@@ -210,9 +251,15 @@ public final class AccountBackupManager {
         let ids = localAccountIds()
         let info = BackupInfo(date: Date(), accountCount: ids.count, sizeBytes: size)
 
+        // Build durable per-account display metadata (only for accounts still on disk).
+        let idSet = Set(ids)
+        let accountMetas: [AccountRecordMeta] = displayInfos.filter { idSet.contains($0.id) }.map {
+            AccountRecordMeta(id: $0.id, userId: $0.userId, username: $0.username, name: $0.name, avatarBase64: $0.avatarPNG?.base64EncodedString())
+        }
+
         // Mirror the encrypted archive + metadata into the Keychain so the whole
         // backup survives an app reinstall (files and UserDefaults do not).
-        guard storeArchiveInKeychain(accountIds: ids, date: info.date, accountCount: info.accountCount) else {
+        guard storeArchiveInKeychain(accountIds: ids, date: info.date, accountCount: info.accountCount, accounts: accountMetas) else {
             return .failure(localized("Не удалось сохранить бэкап в Keychain", "Failed to save backup to Keychain"))
         }
 
@@ -466,7 +513,7 @@ public final class AccountBackupManager {
     }
 
     // Stream the on-disk archive into chunked Keychain items + a metadata slot.
-    private func storeArchiveInKeychain(accountIds: [String], date: Date, accountCount: Int) -> Bool {
+    private func storeArchiveInKeychain(accountIds: [String], date: Date, accountCount: Int, accounts: [AccountRecordMeta]) -> Bool {
         deleteKeychainArchive()
         guard let handle = try? FileHandle(forReadingFrom: archiveURL) else { return false }
         defer { try? handle.close() }
@@ -482,7 +529,7 @@ public final class AccountBackupManager {
             }
             index += 1
         }
-        let meta = KeychainBackupMeta(chunkCount: index, sizeBytes: total, date: date.timeIntervalSince1970, accountCount: accountCount, accountIds: accountIds)
+        let meta = KeychainBackupMeta(chunkCount: index, sizeBytes: total, date: date.timeIntervalSince1970, accountCount: accountCount, accountIds: accountIds, accounts: accounts.isEmpty ? nil : accounts)
         guard let metaData = try? JSONEncoder().encode(meta), keychainSet(keychainMetaName, metaData) else {
             deleteKeychainArchive()
             return false
