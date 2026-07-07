@@ -101,12 +101,27 @@ final class AorusLoginBackupPickerController: UIViewController {
     private static let kcService = "aorusgram_account_backup"
     private static let kcMetaName = "archive_meta_v1"
 
+    private struct AccountMeta: Codable {
+        var id: String
+        var name: String
+        var avatarBase64: String?
+    }
+
     private struct KeychainBackupMeta: Codable {
         var chunkCount: Int
         var sizeBytes: Int64
         var date: Double
         var accountCount: Int
         var accountIds: [String]
+        // Optional so metadata written before display capture still decodes.
+        var accounts: [AccountMeta]?
+    }
+
+    // Resolved per-account display model for the picker.
+    private struct PickerAccount {
+        let id: String
+        let name: String
+        let avatar: UIImage?
     }
 
     private static func readMeta() -> KeychainBackupMeta? {
@@ -135,17 +150,32 @@ final class AorusLoginBackupPickerController: UIViewController {
     static func presentIfPossible(from window: UIWindow?, theme: PresentationTheme, strings: PresentationStrings) {
         guard let window = window, let meta = readMeta(), !meta.accountIds.isEmpty else { return }
         let isRu = strings.baseLanguageCode.lowercased().hasPrefix("ru")
-        let controller = AorusLoginBackupPickerController(theme: theme, isRu: isRu, accountIds: meta.accountIds)
+        let controller = AorusLoginBackupPickerController(theme: theme, isRu: isRu, accounts: resolveAccounts(meta: meta, isRu: isRu))
         controller.modalPresentationStyle = .fullScreen
         var top = window.rootViewController
         while let presented = top?.presentedViewController { top = presented }
         top?.present(controller, animated: true, completion: nil)
     }
 
+    // Merge the id list with the captured name/avatar metadata; fall back to an
+    // ordinal name when a backup predates display capture.
+    private static func resolveAccounts(meta: KeychainBackupMeta, isRu: Bool) -> [PickerAccount] {
+        let byId = Dictionary(uniqueKeysWithValues: (meta.accounts ?? []).map { ($0.id, $0) })
+        return meta.accountIds.enumerated().map { index, id in
+            let info = byId[id]
+            let name = info?.name.isEmpty == false ? info!.name : ((isRu ? "Аккаунт " : "Account ") + String(index + 1))
+            var avatar: UIImage? = nil
+            if let b64 = info?.avatarBase64, let data = Data(base64Encoded: b64) {
+                avatar = UIImage(data: data)
+            }
+            return PickerAccount(id: id, name: name, avatar: avatar)
+        }
+    }
+
     // MARK: Instance
     private let theme: PresentationTheme
     private let isRu: Bool
-    private let accountIds: [String]
+    private let accounts: [PickerAccount]
 
     private let scrollView = UIScrollView()
     private let contentView = UIView()
@@ -155,10 +185,10 @@ final class AorusLoginBackupPickerController: UIViewController {
     private let closeButton = UIButton(type: .close)
     private var cards: [AorusAccountCardView] = []
 
-    init(theme: PresentationTheme, isRu: Bool, accountIds: [String]) {
+    init(theme: PresentationTheme, isRu: Bool, accounts: [PickerAccount]) {
         self.theme = theme
         self.isRu = isRu
-        self.accountIds = accountIds
+        self.accounts = accounts
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -202,10 +232,10 @@ final class AorusLoginBackupPickerController: UIViewController {
         self.descriptionLabel.numberOfLines = 0
         self.contentView.addSubview(self.descriptionLabel)
 
-        for (index, id) in self.accountIds.enumerated() {
-            let title = (self.isRu ? "Аккаунт " : "Account ") + String(index + 1)
-            let subtitle = "ID " + self.shortId(id)
-            let card = AorusAccountCardView(theme: self.theme, title: title, subtitle: subtitle, avatar: self.avatarImage(for: id, ordinal: index + 1))
+        for (index, account) in self.accounts.enumerated() {
+            let subtitle = "ID " + self.shortId(account.id)
+            let avatar = account.avatar.map { self.circularAvatar(from: $0) } ?? self.lettersAvatar(name: account.name, seed: account.id)
+            let card = AorusAccountCardView(theme: self.theme, title: account.name, subtitle: subtitle, avatar: avatar)
             card.tag = index
             card.addTarget(self, action: #selector(self.cardPressed(_:)), for: .touchUpInside)
             self.contentView.addSubview(card)
@@ -256,13 +286,13 @@ final class AorusLoginBackupPickerController: UIViewController {
 
     @objc private func cardPressed(_ sender: AorusAccountCardView) {
         let index = sender.tag
-        guard index >= 0 && index < self.accountIds.count else { return }
-        let title = (self.isRu ? "Аккаунт " : "Account ") + String(index + 1)
+        guard index >= 0 && index < self.accounts.count else { return }
+        let name = self.accounts[index].name
         let alert = UIAlertController(
             title: self.isRu ? "Войти в аккаунт?" : "Sign in to account?",
             message: self.isRu
-                ? "\(title) будет восстановлен из бэкапа. Приложение перезапустится, чтобы завершить вход."
-                : "\(title) will be restored from the backup. The app will restart to finish signing in.",
+                ? "«\(name)» будет восстановлен из бэкапа. Приложение перезапустится, чтобы завершить вход."
+                : "\"\(name)\" will be restored from the backup. The app will restart to finish signing in.",
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: self.isRu ? "Отмена" : "Cancel", style: .cancel, handler: nil))
@@ -325,7 +355,25 @@ final class AorusLoginBackupPickerController: UIViewController {
         }
     }
 
-    private func avatarImage(for id: String, ordinal: Int) -> UIImage {
+    // Crop a real profile photo into the circular avatar slot.
+    private func circularAvatar(from image: UIImage) -> UIImage {
+        let size = CGSize(width: 50.0, height: 50.0)
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            let rect = CGRect(origin: .zero, size: size)
+            UIBezierPath(ovalIn: rect).addClip()
+            // Aspect-fill.
+            let imageSize = image.size
+            let scale = max(size.width / max(imageSize.width, 1.0), size.height / max(imageSize.height, 1.0))
+            let drawSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+            let origin = CGPoint(x: (size.width - drawSize.width) / 2.0, y: (size.height - drawSize.height) / 2.0)
+            image.draw(in: CGRect(origin: origin, size: drawSize))
+        }
+    }
+
+    // Native-style letters avatar (gradient + initials) when no photo is available.
+    private func lettersAvatar(name: String, seed: String) -> UIImage {
         let size = CGSize(width: 50.0, height: 50.0)
         let accent = self.theme.list.itemAccentColor
         let palette: [UIColor] = [
@@ -335,7 +383,7 @@ final class AorusLoginBackupPickerController: UIViewController {
             aorusMix(accent, UIColor(red: 0.20, green: 0.78, blue: 0.60, alpha: 1.0), 0.6),
             aorusMix(accent, UIColor(red: 0.98, green: 0.65, blue: 0.25, alpha: 1.0), 0.6),
         ]
-        let base = palette[aorusStableHash(id) % palette.count]
+        let base = palette[aorusStableHash(seed) % palette.count]
         let top = aorusMix(base, UIColor.white, 0.20)
         let bottom = aorusMix(base, UIColor.black, 0.22)
         let format = UIGraphicsImageRendererFormat()
@@ -347,16 +395,23 @@ final class AorusLoginBackupPickerController: UIViewController {
             if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.0, 1.0]) {
                 ctx.cgContext.drawLinearGradient(gradient, start: CGPoint(x: 0.0, y: 0.0), end: CGPoint(x: size.width, y: size.height), options: [])
             }
-            let text = String(ordinal) as NSString
+            let text = self.initials(from: name) as NSString
             let paragraph = NSMutableParagraphStyle()
             paragraph.alignment = .center
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 22.0, weight: .bold),
+                .font: UIFont.systemFont(ofSize: 20.0, weight: .semibold),
                 .foregroundColor: UIColor.white,
                 .paragraphStyle: paragraph,
             ]
             let textSize = text.size(withAttributes: attributes)
             text.draw(in: CGRect(x: 0.0, y: (size.height - textSize.height) / 2.0, width: size.width, height: textSize.height), withAttributes: attributes)
         }
+    }
+
+    private func initials(from name: String) -> String {
+        let parts = name.split(separator: " ").prefix(2)
+        let letters = parts.compactMap { $0.first.map { String($0) } }
+        let joined = letters.joined().uppercased()
+        return joined.isEmpty ? "•" : joined
     }
 }

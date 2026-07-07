@@ -3,6 +3,8 @@ import Foundation
 import Postbox
 import TelegramCore
 import AccountContext
+import TelegramPresentationData
+import SwiftSignalKit
 
 // MARK: - AorusCode Compose Sheet
 //
@@ -20,6 +22,9 @@ public final class AorusCodeComposeViewController: UIViewController {
     private let context: AccountContext
     private let peerId: PeerId
     private let isRu: Bool
+    // AorusGram theme so this sheet matches the app (dark + accent) instead of
+    // following the system light/dark appearance and a hardcoded orange accent.
+    private let theme: PresentationTheme
 
     // MARK: - Views
 
@@ -46,6 +51,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         self.context = context
         self.peerId = peerId
         self.isRu = AorusLang.current == .ru
+        self.theme = context.sharedContext.currentPresentationData.with { $0 }.theme
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -73,23 +79,33 @@ public final class AorusCodeComposeViewController: UIViewController {
     // MARK: - UI Construction
 
     private func buildUI() {
-        view.backgroundColor = .systemBackground
+        // Follow the AorusGram theme, and force the underlying trait to dark when the
+        // theme is dark so any residual system-dynamic color / keyboard reads dark.
+        if theme.overallDarkAppearance {
+            overrideUserInterfaceStyle = .dark
+        } else {
+            overrideUserInterfaceStyle = .light
+        }
+        view.backgroundColor = theme.list.blocksBackgroundColor
+        view.tintColor = theme.list.itemAccentColor
 
         // Title
         titleLabel.text = "AorusCode"
         titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
         titleLabel.textAlignment = .center
+        titleLabel.textColor = theme.list.itemPrimaryTextColor
         view.addSubview(titleLabel)
 
         // Cancel
         cancelButton.setTitle(isRu ? "Отмена" : "Cancel", for: .normal)
         cancelButton.titleLabel?.font = .systemFont(ofSize: 17)
+        cancelButton.setTitleColor(theme.list.itemAccentColor, for: .normal)
         cancelButton.addTarget(self, action: #selector(onCancel), for: .touchUpInside)
         view.addSubview(cancelButton)
 
         // Separator
         let sep = UIView()
-        sep.backgroundColor = .separator
+        sep.backgroundColor = theme.list.itemBlocksSeparatorColor
         view.addSubview(sep)
 
         // Scroll + content
@@ -99,7 +115,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         scrollView.addSubview(contentView)
 
         // Cover card
-        coverCard.backgroundColor = .secondarySystemBackground
+        coverCard.backgroundColor = theme.list.itemBlocksBackgroundColor
         coverCard.layer.cornerRadius = 14
         coverCard.layer.cornerCurve = .continuous
         coverCard.clipsToBounds = true
@@ -107,7 +123,7 @@ public final class AorusCodeComposeViewController: UIViewController {
 
         coverHeaderLabel.text = isRu ? "Видимый текст" : "Visible Text"
         coverHeaderLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        coverHeaderLabel.textColor = .secondaryLabel
+        coverHeaderLabel.textColor = theme.list.itemSecondaryTextColor
         coverHeaderLabel.textAlignment = .left
         contentView.addSubview(coverHeaderLabel)
 
@@ -119,7 +135,7 @@ public final class AorusCodeComposeViewController: UIViewController {
                              in: coverCard)
 
         // Secret card
-        secretCard.backgroundColor = .secondarySystemBackground
+        secretCard.backgroundColor = theme.list.itemBlocksBackgroundColor
         secretCard.layer.cornerRadius = 14
         secretCard.layer.cornerCurve = .continuous
         secretCard.clipsToBounds = true
@@ -127,7 +143,7 @@ public final class AorusCodeComposeViewController: UIViewController {
 
         secretHeaderLabel.text = isRu ? "Скрытое сообщение" : "Hidden Message"
         secretHeaderLabel.font = .systemFont(ofSize: 12, weight: .semibold)
-        secretHeaderLabel.textColor = UIColor(red: 1.0, green: 0.43, blue: 0.0, alpha: 1.0)
+        secretHeaderLabel.textColor = theme.list.itemAccentColor
         contentView.addSubview(secretHeaderLabel)
 
         configureTextView(secretTextView)
@@ -142,7 +158,7 @@ public final class AorusCodeComposeViewController: UIViewController {
             ? "Скрытое сообщение видят только пользователи AorusGram — под спойлером."
             : "Hidden message is only visible to AorusGram users — under a spoiler."
         hintLabel.font = .systemFont(ofSize: 12)
-        hintLabel.textColor = .tertiaryLabel
+        hintLabel.textColor = theme.list.itemSecondaryTextColor
         hintLabel.numberOfLines = 0
         contentView.addSubview(hintLabel)
 
@@ -150,7 +166,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         sendButton.setTitle(isRu ? "Отправить" : "Send", for: .normal)
         sendButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         sendButton.setTitleColor(.white, for: .normal)
-        sendButton.setTitleColor(.white, for: .disabled)
+        sendButton.setTitleColor(UIColor(white: 1.0, alpha: 0.5), for: .disabled)
         sendButton.layer.cornerRadius = 14
         sendButton.layer.cornerCurve = .continuous
         sendButton.clipsToBounds = true
@@ -165,7 +181,9 @@ public final class AorusCodeComposeViewController: UIViewController {
     private func configureTextView(_ tv: UITextView) {
         tv.font = .systemFont(ofSize: 16)
         tv.backgroundColor = .clear
-        tv.textColor = .label
+        tv.textColor = theme.list.itemPrimaryTextColor
+        tv.tintColor = theme.list.itemAccentColor
+        tv.keyboardAppearance = theme.overallDarkAppearance ? .dark : .light
         tv.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         tv.textContainer.lineFragmentPadding = 0
         tv.isScrollEnabled = false
@@ -178,7 +196,7 @@ public final class AorusCodeComposeViewController: UIViewController {
     private func configurePlaceholder(_ label: UILabel, text: String, in card: UIView) {
         label.text = text
         label.font = .systemFont(ofSize: 16)
-        label.textColor = .placeholderText
+        label.textColor = theme.list.itemPlaceholderTextColor
         label.numberOfLines = 0
         label.isUserInteractionEnabled = false
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -291,8 +309,8 @@ public final class AorusCodeComposeViewController: UIViewController {
 
     // MARK: - Send state
 
-    private let sendActiveColor  = UIColor(red: 1.0,  green: 0.43, blue: 0.0,  alpha: 1.0)
-    private let sendInactiveColor = UIColor(red: 0.56, green: 0.56, blue: 0.58, alpha: 1.0)
+    private var sendActiveColor: UIColor { theme.list.itemAccentColor }
+    private var sendInactiveColor: UIColor { theme.list.itemDisabledTextColor }
 
     private func trimmed(_ tv: UITextView) -> String {
         (tv.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
