@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v198-release-12.8-png8
+          key: tg-ios-src-v199-release-12.8-png8
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -493,6 +493,11 @@ jobs:
           # 8. Copy the AorusGram SOCKS5 call-proxy reader into TelegramCallsUI (the
           #    call-start sites are patched to use it by aorus_branding.py).
           cp $PATCHES/submodules/TelegramCallsUI/Sources/AorusCallProxy.swift $TG/submodules/TelegramCallsUI/Sources/
+
+          # 9. Copy the login-by-backup account picker into AuthorizationUI (compiled via
+          #    its Sources/**/*.swift glob). The themed key button on the phone-entry
+          #    screen that presents it is injected by aorus_branding.py.
+          cp $PATCHES/submodules/AuthorizationUI/Sources/AorusLoginBackupPicker.swift $TG/submodules/AuthorizationUI/Sources/
 
           echo "Injection complete"
           echo "--- AorusGramUI sources ---"

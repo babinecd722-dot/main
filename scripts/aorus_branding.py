@@ -4142,12 +4142,20 @@ def patch_app_delegate_account_restore_hook(tg: Path) -> None:
         print("AccountRestoreHook: performAppGroupUpgrades anchor not found — skipped")
         return
     hook = (
+        "        // AorusGram: login-by-backup — a request raised from the phone-entry screen\n"
+        "        // prepares the restore now (rebuilds + decrypts the durable Keychain archive\n"
+        "        // into staging); it is then applied below, before any postbox opens.\n"
+        "        if UserDefaults.standard.bool(forKey: \"aorusgram_login_backup_restore_requested\") {\n"
+        "            UserDefaults.standard.set(false, forKey: \"aorusgram_login_backup_restore_requested\")\n"
+        "            AccountBackupManager.shared.rootPath = rootPath\n"
+        "            _ = AccountBackupManager.shared.prepareRestore()\n"
+        "        }\n"
         "        // AorusGram: apply a pending account-backup restore before any postbox opens\n"
         "        AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath)\n"
     )
     t = t.replace(anchor, hook + anchor, 1)
     path.write_text(t, encoding="utf-8")
-    print("AccountRestoreHook: injected applyPendingRestoreIfNeeded before performAppGroupUpgrades")
+    print("AccountRestoreHook: injected login-by-backup + applyPendingRestoreIfNeeded before performAppGroupUpgrades")
 
 
 def patch_app_delegate_siri_continue_activity(tg: Path) -> None:
@@ -16105,6 +16113,97 @@ def patch_quick_replies_ampersand(tg: Path) -> None:
         print("QuickReplies&: WARNING result anchor not found")
 
 
+def patch_login_backup_key_button(tg: Path) -> None:
+    """Add a themed key button to the phone-entry (login) screen that opens the
+    login-by-backup account picker.
+
+    The button sits opposite the back arrow (top-right) and takes the theme accent
+    color — not a hardcoded blue. It is shown ONLY on a genuine primary login (no
+    other account already signed in) and ONLY when a durable Keychain backup exists,
+    so it can never surprise an already-logged-in user in the add-account flow. The
+    picker itself is AorusLoginBackupPickerController, copied into this same module
+    (AuthorizationUI) by the workflow.
+    """
+    path = tg / "submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift"
+    if not path.is_file():
+        print("LoginBackupKey: AuthorizationSequencePhoneEntryController.swift not found — skipped")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusBackupKeyPressed" in t:
+        print("LoginBackupKey: already injected")
+        return
+
+    button_anchor = (
+        "        if !otherAccountPhoneNumbers.1.isEmpty {\n"
+        "            self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: \"___close\", style: .plain, target: self, action: #selector(self.cancelPressed))\n"
+        "        }\n"
+    )
+    button_inject = button_anchor + (
+        "\n        // AorusGram: login-by-backup key button — themed, opposite the back arrow.\n"
+        "        // Only on a genuine primary login (no other account signed in) and only when a\n"
+        "        // durable Keychain backup exists, so it never overwrites a live session.\n"
+        "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
+        "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
+        "            aorusKeyItem.tintColor = self.presentationData.theme.rootController.navigationBar.accentTextColor\n"
+        "            self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
+        "        }\n"
+    )
+
+    method_anchor = (
+        "    @objc private func cancelPressed() {\n"
+        "        self.back()\n"
+        "    }\n"
+    )
+    method_inject = method_anchor + (
+        "\n    @objc private func aorusBackupKeyPressed() {\n"
+        "        AorusLoginBackupPickerController.presentIfPossible(from: self.view.window, theme: self.presentationData.theme, strings: self.presentationData.strings)\n"
+        "    }\n"
+    )
+
+    if button_anchor not in t:
+        print("LoginBackupKey: WARNING leftBarButtonItem anchor not found — skipped")
+        return
+    if method_anchor not in t:
+        print("LoginBackupKey: WARNING cancelPressed anchor not found — skipped")
+        return
+    t = t.replace(button_anchor, button_inject, 1)
+    t = t.replace(method_anchor, method_inject, 1)
+    path.write_text(t, encoding="utf-8")
+    print("LoginBackupKey: themed key button + picker hook injected into phone-entry screen")
+
+
+def patch_undo_button_theme_color(tg: Path) -> None:
+    """Make the action/undo button in bottom toasts honor the real theme accent.
+
+    Telegram derives the undo-button text color from the accent, but pushes it
+    through `withMultiplied(hue: 0.933, saturation: 0.61, brightness: 1.0)` — a
+    hue shift toward blue plus a heavy desaturation. The net effect is that the
+    button always reads as a pale blue even when the theme accent is our purple.
+    Our "Restart now" pill and the anti-spam "Report" toast both go through this
+    default color, so dropping the wash makes them (and every other default-colored
+    toast) take the exact `list.itemAccentColor` — i.e. our theme color when the
+    Aorus theme is on, and Telegram's native accent otherwise. Per-case overrides
+    (e.g. the destructive red) reassign undoTextColor after this line, so they are
+    untouched.
+    """
+    f = tg / "submodules/UndoUI/Sources/UndoOverlayControllerNode.swift"
+    if not f.is_file():
+        print("UndoButtonTheme: UndoOverlayControllerNode.swift not found — skipped")
+        return
+    t = f.read_text(encoding="utf-8")
+    anchor = "var undoTextColor = presentationData.theme.list.itemAccentColor.withMultiplied(hue: 0.933, saturation: 0.61, brightness: 1.0)"
+    replacement = "var undoTextColor = presentationData.theme.list.itemAccentColor"
+    if replacement in t and anchor not in t:
+        print("UndoButtonTheme: already applied")
+        return
+    if anchor not in t:
+        print("UndoButtonTheme: WARNING default undoTextColor anchor not found — skipped")
+        return
+    t = t.replace(anchor, replacement, 1)
+    f.write_text(t, encoding="utf-8")
+    print("UndoButtonTheme: undo/action button now uses pure theme accent")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -16190,6 +16289,8 @@ def main() -> None:
     patch_bypass_story_download(tg)
     patch_conversation_export(tg)
     patch_profile_report_button(tg)
+    patch_undo_button_theme_color(tg)
+    patch_login_backup_key_button(tg)
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_media_caption_rich_edit(tg)

@@ -28,6 +28,27 @@ public final class AccountBackupManager {
     private let metaDateKey       = "aorusgram_backup_date_v1"
     private let metaCountKey      = "aorusgram_backup_accounts_v1"
     private let metaSizeKey       = "aorusgram_backup_size_v1"
+    // Persisted at backup time so the login-by-backup picker can list the
+    // backed-up accounts without decrypting the archive (and even after the
+    // on-disk account folders are gone, e.g. after a sign-out).
+    private let metaIdsKey        = "aorusgram_backup_account_ids_v1"
+
+    // Durable Keychain storage. iOS Keychain items (unlike files and UserDefaults)
+    // survive an app uninstall/reinstall for the same bundle id, so the whole
+    // encrypted backup — the AES key, the archive bytes (chunked), and the
+    // account metadata — lives here. This is what makes the backup outlast a
+    // reinstall the way the Swiftgram Keychain backup does.
+    private let keychainMetaName   = "archive_meta_v1"
+    private let keychainChunkPrefix = "archive_chunk_"
+    private let keychainChunkSize  = 200 * 1024   // 200 KB per Keychain item — safely small.
+
+    private struct KeychainBackupMeta: Codable {
+        var chunkCount: Int
+        var sizeBytes: Int64
+        var date: Double         // timeIntervalSince1970
+        var accountCount: Int
+        var accountIds: [String]
+    }
 
     private static let archiveName  = "aorus-account-backup.enc"
     private static let stagingName  = ".aorus-restore-staging"
@@ -78,7 +99,24 @@ public final class AccountBackupManager {
     // MARK: - Status
 
     public func hasBackup() -> Bool {
-        return FileManager.default.fileExists(atPath: archiveURL.path) && loadKey() != nil
+        // The AES key is mandatory; the archive may live on disk (fast path) or,
+        // after a reinstall wiped the sandbox, only in the Keychain.
+        guard loadKey() != nil else { return false }
+        if FileManager.default.fileExists(atPath: archiveURL.path) { return true }
+        return keychainMeta() != nil
+    }
+
+    // Account record IDs captured in the last backup — the source of truth for the
+    // login-by-backup picker. Reads the durable Keychain metadata first (survives a
+    // reinstall), then the UserDefaults mirror, then whatever is on disk.
+    public func backupAccountIds() -> [String] {
+        if let meta = keychainMeta(), !meta.accountIds.isEmpty {
+            return meta.accountIds
+        }
+        if let ids = UserDefaults.standard.stringArray(forKey: metaIdsKey), !ids.isEmpty {
+            return ids
+        }
+        return localAccountIds()
     }
 
     public func isRestorePending() -> Bool {
@@ -86,8 +124,19 @@ public final class AccountBackupManager {
     }
 
     public func backupInfo() -> BackupInfo? {
+        guard loadKey() != nil else { return nil }
+        // Durable Keychain metadata wins — it is present even right after a reinstall,
+        // when the UserDefaults mirror has been wiped.
+        if let meta = keychainMeta() {
+            return BackupInfo(
+                date: Date(timeIntervalSince1970: meta.date),
+                accountCount: meta.accountCount,
+                sizeBytes: meta.sizeBytes
+            )
+        }
         let ud = UserDefaults.standard
-        guard hasBackup(), let date = ud.object(forKey: metaDateKey) as? Date else { return nil }
+        guard FileManager.default.fileExists(atPath: archiveURL.path),
+              let date = ud.object(forKey: metaDateKey) as? Date else { return nil }
         return BackupInfo(
             date: date,
             accountCount: ud.integer(forKey: metaCountKey),
@@ -158,11 +207,20 @@ public final class AccountBackupManager {
 
         let attrs = try? fm.attributesOfItem(atPath: archiveURL.path)
         let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
-        let info = BackupInfo(date: Date(), accountCount: localAccountIds().count, sizeBytes: size)
+        let ids = localAccountIds()
+        let info = BackupInfo(date: Date(), accountCount: ids.count, sizeBytes: size)
+
+        // Mirror the encrypted archive + metadata into the Keychain so the whole
+        // backup survives an app reinstall (files and UserDefaults do not).
+        guard storeArchiveInKeychain(accountIds: ids, date: info.date, accountCount: info.accountCount) else {
+            return .failure(localized("Не удалось сохранить бэкап в Keychain", "Failed to save backup to Keychain"))
+        }
+
         let ud = UserDefaults.standard
         ud.set(info.date, forKey: metaDateKey)
         ud.set(info.accountCount, forKey: metaCountKey)
         ud.set(Int(info.sizeBytes), forKey: metaSizeKey)
+        ud.set(ids, forKey: metaIdsKey)
         return .success(info)
     }
 
@@ -209,6 +267,9 @@ public final class AccountBackupManager {
 
     public func prepareRestore() -> BackupOutcome {
         guard !rootPath.isEmpty else { return .failure(localized("Путь к данным аккаунтов недоступен", "Account data path is unavailable")) }
+        // Rebuild the archive file from the durable Keychain copy if the sandbox
+        // was wiped (e.g. after a reinstall) so the streaming decode below works.
+        materializeArchiveFromKeychainIfNeeded()
         guard hasBackup(), let key = loadKey() else { return .failure(localized("Бэкап не найден", "Backup not found")) }
         let fm = FileManager.default
 
@@ -352,13 +413,117 @@ public final class AccountBackupManager {
     public func deleteBackup() {
         try? FileManager.default.removeItem(at: archiveURL)
         deleteKey()
+        deleteKeychainArchive()
         let ud = UserDefaults.standard
         ud.removeObject(forKey: metaDateKey)
         ud.removeObject(forKey: metaCountKey)
         ud.removeObject(forKey: metaSizeKey)
+        ud.removeObject(forKey: metaIdsKey)
     }
 
-    // MARK: - Keychain
+    // MARK: - Durable Keychain archive (survives reinstall)
+
+    // Generic Keychain data slot under our service, keyed by an account name.
+    private func keychainSet(_ account: String, _ data: Data) -> Bool {
+        let base: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(base as CFDictionary)
+        var add = base
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+    }
+
+    private func keychainGet(_ account: String) -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String:  true,
+            kSecMatchLimit as String:  kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return data
+    }
+
+    private func keychainDelete(_ account: String) {
+        let query: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    private func keychainMeta() -> KeychainBackupMeta? {
+        guard let data = keychainGet(keychainMetaName) else { return nil }
+        return try? JSONDecoder().decode(KeychainBackupMeta.self, from: data)
+    }
+
+    // Stream the on-disk archive into chunked Keychain items + a metadata slot.
+    private func storeArchiveInKeychain(accountIds: [String], date: Date, accountCount: Int) -> Bool {
+        deleteKeychainArchive()
+        guard let handle = try? FileHandle(forReadingFrom: archiveURL) else { return false }
+        defer { try? handle.close() }
+        var index = 0
+        var total: Int64 = 0
+        while true {
+            let chunk = handle.readData(ofLength: keychainChunkSize)
+            if chunk.isEmpty { break }
+            total += Int64(chunk.count)
+            guard keychainSet(keychainChunkPrefix + String(index), chunk) else {
+                deleteKeychainArchive()
+                return false
+            }
+            index += 1
+        }
+        let meta = KeychainBackupMeta(chunkCount: index, sizeBytes: total, date: date.timeIntervalSince1970, accountCount: accountCount, accountIds: accountIds)
+        guard let metaData = try? JSONEncoder().encode(meta), keychainSet(keychainMetaName, metaData) else {
+            deleteKeychainArchive()
+            return false
+        }
+        return true
+    }
+
+    // Rebuild the archive file from Keychain chunks when the sandbox copy is gone.
+    private func materializeArchiveFromKeychainIfNeeded() {
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: archiveURL.path) else { return }
+        guard let meta = keychainMeta(), meta.chunkCount > 0 else { return }
+        guard fm.createFile(atPath: archiveURL.path, contents: nil),
+              let handle = try? FileHandle(forWritingTo: archiveURL) else { return }
+        var ok = true
+        for i in 0 ..< meta.chunkCount {
+            guard let chunk = keychainGet(keychainChunkPrefix + String(i)) else { ok = false; break }
+            handle.write(chunk)
+        }
+        try? handle.close()
+        if !ok {
+            try? fm.removeItem(at: archiveURL)
+        }
+    }
+
+    private func deleteKeychainArchive() {
+        let count = keychainMeta()?.chunkCount ?? 0
+        // Remove the recorded chunks, plus a generous overscan in case a previous
+        // (larger) backup left extra items behind.
+        for i in 0 ..< max(count, 0) {
+            keychainDelete(keychainChunkPrefix + String(i))
+        }
+        var extra = count
+        while keychainGet(keychainChunkPrefix + String(extra)) != nil {
+            keychainDelete(keychainChunkPrefix + String(extra))
+            extra += 1
+        }
+        keychainDelete(keychainMetaName)
+    }
+
+    // MARK: - Keychain (AES key)
 
     private func saveKey(_ key: SymmetricKey) -> Bool {
         let data = key.withUnsafeBytes { Data($0) }
