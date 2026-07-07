@@ -246,7 +246,7 @@ private enum BackupEntry: ItemListNodeEntry {
             let iconColor = enabled ? theme.list.itemDestructiveColor : theme.list.itemDisabledTextColor
             return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("trash", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .destructive : .disabled, action: { if enabled { args.delete() } })
         case let .info(_, text):
-            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+            return AorusBackupInfoCardItem(presentationData: presentationData, text: text, sectionId: section)
         case let .statusHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .status(_, text):
@@ -287,8 +287,8 @@ private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: B
     if !sessions.isEmpty {
         let loggedIn = Set(mgr.localAccountIds())
         let df = DateFormatter()
-        df.locale = l10n.isRu ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US_POSIX")
-        df.dateFormat = "d MMMM yyyy, HH:mm"
+        df.locale = l10n.isRu ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US")
+        df.dateFormat = l10n.isRu ? "d MMMM yyyy 'г.,' HH:mm" : "MMM d, yyyy, HH:mm"
         let dateText = mgr.backupInfo().map { l10n.lastBackup(df.string(from: $0.date)) } ?? ""
         for (i, acc) in sessions.enumerated() {
             let title: String
