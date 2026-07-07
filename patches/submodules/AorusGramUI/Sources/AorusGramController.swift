@@ -1008,6 +1008,14 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 // MARK: - Public factory
 
 public func aorusGramController(context: AccountContext) -> ViewController {
+    // License gate: opening the AorusGram settings while the subscription is locked
+    // routes to the purchase/subscription screen instead (LicenseGate handles the
+    // notification). Fail-open — an active user (flag absent/false) is never affected.
+    // The global lock already blocks entry when expired; this covers a bypassed lock.
+    if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+        NotificationCenter.default.post(
+            name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
+    }
     let mgr   = AorusGramManager.shared
     let spoof = AntiSpoofManager.shared
     let stealth = AorusStealthCodec.shared

@@ -5,7 +5,38 @@ import UIKit
 
 public final class AorusGramManager {
     public static let shared = AorusGramManager()
-    private init() { load() }
+    private init() {
+        load()
+        // License kill-switch: when LicenseGate publishes a locked verdict (expired /
+        // banned / no access) re-run save(), which forces every flat feature flag OFF
+        // so the BACKGROUND feature logic stops too — not just the UI lock. On unlock
+        // it restores the real values (kept in the stored properties). Fail-open:
+        // save() only zeroes when aorusgram_license_locked is explicitly true.
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("aorusgram.licenseLockChanged"), object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.save()
+        }
+    }
+
+    // Flat UserDefaults flags read by the source-level patches. Forced to false while
+    // the subscription is locked (the stored dictionary keeps the real values).
+    private static let featureFlatKeys: [String] = [
+        "aorusgram_ghost_mode",
+        "aorusgram_feature_deleted_messages", "aorusgram_feature_edited_messages",
+        "aorusgram_feature_anti_screenshot", "aorusgram_feature_call_recording",
+        "aorusgram_feature_voice_transcription", "aorusgram_feature_translator",
+        "aorusgram_share_button", "aorusgram_video_messages_rear_camera",
+        "aorusgram_feature_chat_summary", "aorusgram_feature_auto_reply",
+        "aorusgram_feature_max_media_quality", "aorusgram_feature_anti_spam",
+        "aorusgram_feature_download_accel", "aorusgram_feature_glass_ui",
+        "aorusgram_amoled", "aorusgram_profile_report_button",
+        "aorusgram_hide_calls_tab", "aorusgram_hide_contacts_tab",
+        "aorusgram_feature_streaks", "aorusgram_feature_siri_shortcuts",
+        "aorusgram_feature_edit_locally", "aorusgram_feature_user_messages",
+        "aorusgram_feature_double_copy", "aorusgram_feature_triple_delete",
+        "aorusgram_voice_twin_enabled",
+    ]
 
     public let version = "1.0.0"
     public let channelURL = "https://t.me/aorusgram"
@@ -212,7 +243,16 @@ public final class AorusGramManager {
         ud.set(voiceTwinEnabled,    forKey: "aorusgram_voice_twin_enabled")
         ud.set(voiceTwinPreset,     forKey: "aorusgram_voice_twin_preset")
 
-        if antiScreenshot {
+        // License kill-switch — force every feature flag OFF while the subscription is
+        // locked, regardless of what triggered this save(). The stored dictionary above
+        // keeps the real values, so unlocking (a fresh save() with the flag clear)
+        // restores everything exactly.
+        let aorusLocked = UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+        if aorusLocked {
+            for k in AorusGramManager.featureFlatKeys { ud.set(false, forKey: k) }
+        }
+
+        if antiScreenshot && !aorusLocked {
             AntiScreenshotManager.shared.enable()
         } else {
             AntiScreenshotManager.shared.disable()

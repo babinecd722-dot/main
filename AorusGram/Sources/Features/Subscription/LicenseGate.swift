@@ -170,6 +170,7 @@ final class LicenseGate {
     }
 
     private func showTrialWelcome() {
+        setFeatureAccess(active: false)
         guard lockKind != .trial else { return }
         lockKind = .trial
         let vc = TrialWelcomeController()
@@ -203,6 +204,7 @@ final class LicenseGate {
     }
 
     private func showExpired(banned: Bool) {
+        setFeatureAccess(active: false)
         let kind: LockKind = banned ? .banned : .expired
         guard lockKind != kind else { return }
         lockKind = kind
@@ -217,6 +219,7 @@ final class LicenseGate {
     }
 
     private func showConnection() {
+        setFeatureAccess(active: false)
         guard lockKind != .connection else { return }
         lockKind = .connection
         let vc = SubscriptionExpiredController()
@@ -272,10 +275,32 @@ final class LicenseGate {
 
     private func hideLock() {
         lockKind = .none
+        setFeatureAccess(active: true)   // access granted → re-enable AorusGram features
         guard let window = lockWindow else { return }
         window.isHidden = true
         window.rootViewController = nil
         lockWindow = nil
+    }
+
+    // Authoritative feature kill-switch. The lock window only covers the UI; the
+    // background AorusGram features (ghost mode, deleted-message capture, anti-spam,
+    // the proxy, …) read flat `aorusgram_feature_*` UserDefaults flags and would keep
+    // running while the subscription is expired. We publish a single authoritative
+    // "locked" flag on every verdict; AorusGramConfig gates on it and AorusGramManager
+    // (via the notification) disables/re-enables every feature flag accordingly.
+    //   • false  → app is accessible (active license or valid offline grace)
+    //   • true   → no access (expired / banned / no connection & no cache)
+    // Fail-open: this is only ever set true when the gate actually locks, so a
+    // legitimate active user can never lose their features to it.
+    private var featureLockPublished: Bool?
+    private func setFeatureAccess(active: Bool) {
+        let locked = !active
+        if featureLockPublished == locked { return }
+        featureLockPublished = locked
+        UserDefaults.standard.set(locked, forKey: "aorusgram_license_locked")
+        NotificationCenter.default.post(
+            name: NSNotification.Name("aorusgram.licenseLockChanged"),
+            object: nil, userInfo: ["locked": locked])
     }
 
     private func makeNav(_ root: UIViewController) -> UINavigationController {
