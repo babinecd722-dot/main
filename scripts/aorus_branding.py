@@ -15710,7 +15710,90 @@ def patch_message_translate_button(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusTranslateButtonNode" in t:
-        print("MsgTranslateBtn: already patched")
+        changed = False
+        helper = (
+            "    private func aorusPresentInlineActionToast(_ text: String) {\n"
+            "        guard let item = self.item else { return }\n"
+            "        guard let navigationController = item.controllerInteraction.navigationController() else { return }\n"
+            "        navigationController.present(UndoOverlayController(presentationData: item.presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), in: .current)\n"
+            "    }\n"
+            "\n"
+        )
+        if "aorusPresentInlineActionToast" not in t and "    private func aorusToggleTranslate() {\n" in t:
+            t = t.replace("    private func aorusToggleTranslate() {\n", helper + "    private func aorusToggleTranslate() {\n", 1)
+            changed = True
+        replacements = [
+            (
+                "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { return }\n",
+                "            let aorusSpeechFailText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Не удалось определить речь\" : \"Could not detect speech\"\n"
+                "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { self.aorusPresentInlineActionToast(aorusSpeechFailText); return }\n",
+            ),
+            (
+                "                guard status == .authorized else { return }\n",
+                "                guard status == .authorized else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }; return }\n",
+            ),
+            (
+                "                guard let aorusRecognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: \"ru-RU\")), aorusRecognizer.isAvailable else { return }\n",
+                "                guard let aorusRecognizer = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: \"ru-RU\")), aorusRecognizer.isAvailable else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }; return }\n",
+            ),
+            (
+                "                    guard !aorusText.isEmpty else { return }\n",
+                "                    guard !aorusText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }; return }\n",
+            ),
+            (
+                "        let aorusTarget = Locale.current.languageCode ?? \"en\"\n",
+                "        let aorusTranslateNoopText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Сообщение уже на вашем языке\" : \"Message is already in your language\"\n"
+                "        let aorusTarget = item.presentationData.strings.baseLanguageCode.split(separator: \"-\").first.map(String.init) ?? (Locale.current.languageCode ?? \"en\")\n",
+            ),
+            (
+                "            guard !aorusTranslated.isEmpty, aorusTranslated != aorusOriginal else { return }\n",
+                "            guard !aorusTranslated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, aorusTranslated != aorusOriginal else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusTranslateNoopText) }; return }\n",
+            ),
+        ]
+        for old, new in replacements:
+            if old in t:
+                t = t.replace(old, new)
+                changed = True
+        if "var aorusDidFinishSpeech = false" not in t:
+            old_task = (
+                "                _ = aorusRecognizer.recognitionTask(with: aorusReq) { result, _ in\n"
+                "                    guard let result = result, result.isFinal else { return }\n"
+            )
+            new_task = (
+                "                var aorusDidFinishSpeech = false\n"
+                "                _ = aorusRecognizer.recognitionTask(with: aorusReq) { result, error in\n"
+                "                    if aorusDidFinishSpeech { return }\n"
+                "                    if error != nil {\n"
+                "                        aorusDidFinishSpeech = true\n"
+                "                        DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }\n"
+                "                        return\n"
+                "                    }\n"
+                "                    guard let result = result, result.isFinal else { return }\n"
+                "                    aorusDidFinishSpeech = true\n"
+            )
+            if old_task in t:
+                t = t.replace(old_task, new_task)
+                changed = True
+        if "import UndoUI" not in t:
+            if "import Foundation\n#if canImport(Speech)" in t:
+                t = t.replace("import Foundation\n#if canImport(Speech)", "import Foundation\nimport UndoUI\n#if canImport(Speech)", 1)
+            else:
+                t = t.replace("import Foundation\n", "import Foundation\nimport UndoUI\n", 1)
+            changed = True
+        if changed:
+            path.write_text(t, encoding="utf-8")
+            print("MsgTranslateBtn: repaired cached translate/transcribe toast patch")
+        else:
+            print("MsgTranslateBtn: already patched")
+        build = tg / "submodules/TelegramUI/BUILD"
+        if build.is_file():
+            bt = build.read_text(encoding="utf-8")
+            if "//submodules/UndoUI:UndoUI" not in bt:
+                dep_anchor = '        "//submodules/AccountContext:AccountContext",\n'
+                if dep_anchor in bt:
+                    bt = bt.replace(dep_anchor, dep_anchor + '        "//submodules/UndoUI:UndoUI",\n', 1)
+                    build.write_text(bt, encoding="utf-8")
+                    print("MsgTranslateBtn: added UndoUI dep to TelegramUI BUILD")
         return
 
     def sub(anchor: str, repl: str, label: str) -> bool:
@@ -16163,7 +16246,14 @@ def patch_login_backup_key_button(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusBackupKeyPressed" in t:
-        print("LoginBackupKey: already injected")
+        old = "            aorusKeyItem.tintColor = self.presentationData.theme.list.itemAccentColor\n"
+        new = "            aorusKeyItem.tintColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
+        if old in t:
+            t = t.replace(old, new, 1)
+            path.write_text(t, encoding="utf-8")
+            print("LoginBackupKey: repaired cached key tint")
+        else:
+            print("LoginBackupKey: already injected")
         return
 
     button_anchor = (

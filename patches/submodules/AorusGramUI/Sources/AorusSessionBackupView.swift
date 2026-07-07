@@ -55,6 +55,24 @@ private struct AorusBackupSession: Identifiable {
 }
 
 @available(iOS 13.0, *)
+private enum AorusSessionBackupAlert: Identifiable {
+    case info(String, String)
+    case restoreConfirm
+    case deleteConfirm
+
+    var id: String {
+        switch self {
+        case .info:
+            return "info"
+        case .restoreConfirm:
+            return "restore"
+        case .deleteConfirm:
+            return "delete"
+        }
+    }
+}
+
+@available(iOS 13.0, *)
 struct AorusSessionBackupRow: View {
     fileprivate let session: AorusBackupSession
     let isLoggedIn: Bool
@@ -106,11 +124,7 @@ struct AorusSessionBackupView: View {
     @State private var dateText: String = ""
     @State private var isBusy = false
 
-    @State private var showRestoreConfirm = false
-    @State private var showDeleteConfirm = false
-    @State private var infoTitle = ""
-    @State private var infoText = ""
-    @State private var showInfo = false
+    @State private var activeAlert: AorusSessionBackupAlert?
 
     private var l10n: AorusSessionL10n { AorusSessionL10n(isRu: isRu) }
     private var hasBackup: Bool { AccountBackupManager.shared.hasBackup() }
@@ -127,7 +141,7 @@ struct AorusSessionBackupView: View {
                 }
                 .disabled(isBusy)
 
-                Button(action: { showRestoreConfirm = true }) {
+                Button(action: { activeAlert = .restoreConfirm }) {
                     HStack {
                         Image(systemName: "arrow.2.circlepath").frame(width: 30)
                         Text(l10n.restore)
@@ -136,7 +150,7 @@ struct AorusSessionBackupView: View {
                 }
                 .disabled(isBusy || !hasBackup)
 
-                Button(action: { showDeleteConfirm = true }) {
+                Button(action: { activeAlert = .deleteConfirm }) {
                     HStack {
                         Image(systemName: "trash").frame(width: 30)
                         Text(l10n.deleteAll)
@@ -163,33 +177,25 @@ struct AorusSessionBackupView: View {
             }
         }
         .onAppear(perform: reload)
-        .alert(isPresented: $showInfo) {
-            Alert(title: Text(infoTitle), message: Text(infoText), dismissButton: .default(Text(l10n.ok)))
-        }
-        .background(restoreConfirmAlert)
-        .background(deleteConfirmAlert)
-    }
-
-    // Two extra alerts via hidden anchors (a single view can bind only one .alert).
-    private var restoreConfirmAlert: some View {
-        EmptyView().alert(isPresented: $showRestoreConfirm) {
-            Alert(
-                title: Text(l10n.restoreTitle),
-                message: Text(l10n.restoreText),
-                primaryButton: .default(Text(l10n.restart), action: performRestore),
-                secondaryButton: .cancel(Text(l10n.cancel))
-            )
-        }
-    }
-
-    private var deleteConfirmAlert: some View {
-        EmptyView().alert(isPresented: $showDeleteConfirm) {
-            Alert(
-                title: Text(l10n.deleteTitle),
-                message: Text(l10n.deleteText),
-                primaryButton: .destructive(Text(l10n.delete), action: performDeleteAll),
-                secondaryButton: .cancel(Text(l10n.cancel))
-            )
+        .alert(item: $activeAlert) { alert in
+            switch alert {
+            case let .info(title, text):
+                return Alert(title: Text(title), message: Text(text), dismissButton: .default(Text(l10n.ok)))
+            case .restoreConfirm:
+                return Alert(
+                    title: Text(l10n.restoreTitle),
+                    message: Text(l10n.restoreText),
+                    primaryButton: .default(Text(l10n.restart), action: performRestore),
+                    secondaryButton: .cancel(Text(l10n.cancel))
+                )
+            case .deleteConfirm:
+                return Alert(
+                    title: Text(l10n.deleteTitle),
+                    message: Text(l10n.deleteText),
+                    primaryButton: .destructive(Text(l10n.delete), action: performDeleteAll),
+                    secondaryButton: .cancel(Text(l10n.cancel))
+                )
+            }
         }
     }
 
@@ -292,9 +298,7 @@ struct AorusSessionBackupView: View {
     }
 
     private func present(_ title: String, _ text: String) {
-        infoTitle = title
-        infoText = text
-        showInfo = true
+        activeAlert = .info(title, text)
     }
 
     private func downscalePNG(_ image: UIImage, maxSide: CGFloat = 120.0) -> Data? {
