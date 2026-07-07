@@ -284,20 +284,53 @@ final class LicenseGate {
 
     // Authoritative feature kill-switch. The lock window only covers the UI; the
     // background AorusGram features (ghost mode, deleted-message capture, anti-spam,
-    // the proxy, …) read flat `aorusgram_feature_*` UserDefaults flags and would keep
-    // running while the subscription is expired. We publish a single authoritative
-    // "locked" flag on every verdict; AorusGramConfig gates on it and AorusGramManager
-    // (via the notification) disables/re-enables every feature flag accordingly.
-    //   • false  → app is accessible (active license or valid offline grace)
-    //   • true   → no access (expired / banned / no connection & no cache)
-    // Fail-open: this is only ever set true when the gate actually locks, so a
-    // legitimate active user can never lose their features to it.
-    private var featureLockPublished: Bool?
+    // link protection, aorus-code, phone/device spoof, bypass, the proxy, …) read flat
+    // `aorusgram_*` UserDefaults flags and would keep running while the subscription is
+    // expired. On every verdict we:
+    //   • publish `aorusgram_license_locked` (AorusGramConfig also gates on it), and
+    //   • force EVERY `aorusgram_*` boolean flag OFF while locked — not a hand-written
+    //     list (which would silently miss features), but every CFBoolean in the
+    //     namespace, so current AND future feature toggles are covered with no holes.
+    // The real values are backed up first and restored verbatim on unlock, so a
+    // returning subscriber loses nothing. The license flag itself and the license
+    // cache mirror (`aorusgram_lic*`) are never touched. Fail-open: only ever engaged
+    // when the gate actually locks, so an active / offline-grace user is never hit.
+    private static let lockBackupKey = "aorusgram_lock_backup_v1"
     private func setFeatureAccess(active: Bool) {
         let locked = !active
-        if featureLockPublished == locked { return }
-        featureLockPublished = locked
-        UserDefaults.standard.set(locked, forKey: "aorusgram_license_locked")
+        let ud = UserDefaults.standard
+        ud.set(locked, forKey: "aorusgram_license_locked")
+
+        if locked {
+            // Snapshot the real values ONCE (don't overwrite an existing backup — a
+            // repeated locked verdict must not capture the already-zeroed state).
+            if ud.object(forKey: LicenseGate.lockBackupKey) == nil {
+                var backup: [String: Bool] = [:]
+                for (k, v) in ud.dictionaryRepresentation() {
+                    guard k.hasPrefix("aorusgram_"),
+                          k != "aorusgram_license_locked",
+                          k != LicenseGate.lockBackupKey,
+                          !k.hasPrefix("aorusgram_lic") else { continue }
+                    if let n = v as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() {
+                        backup[k] = n.boolValue
+                    }
+                }
+                ud.set(backup, forKey: LicenseGate.lockBackupKey)
+            }
+            // Force every backed-up flag off (idempotent — corrects any drift).
+            if let backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) {
+                for k in backup.keys { ud.set(false, forKey: k) }
+            }
+        } else {
+            // Restore the real values captured at lock time, then drop the backup.
+            if let backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) {
+                for (k, v) in backup { if let b = v as? Bool { ud.set(b, forKey: k) } }
+                ud.removeObject(forKey: LicenseGate.lockBackupKey)
+            }
+        }
+
+        // In-memory side effects (Anti-Screenshot, cached manager state) can't be
+        // reverted by a raw key write — the manager reacts to this on the main thread.
         NotificationCenter.default.post(
             name: NSNotification.Name("aorusgram.licenseLockChanged"),
             object: nil, userInfo: ["locked": locked])
