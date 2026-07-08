@@ -11313,23 +11313,23 @@ private func aorusGhostPeerKey(_ peerId: PeerId) -> String {
 }
 
 func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
-    let size = CGSize(width: 32.0, height: 32.0)
+    let size = CGSize(width: 34.0, height: 34.0)
     return UIGraphicsImageRenderer(size: size).image { context in
         let ctx = context.cgContext
-        ctx.setLineWidth(2.7)
+        ctx.setLineWidth(2.4)
         ctx.setLineJoin(.round)
         ctx.setLineCap(.round)
 
         let path = UIBezierPath()
-        path.move(to: CGPoint(x: 6.0, y: 27.0))
-        path.addLine(to: CGPoint(x: 6.0, y: 14.0))
-        path.addCurve(to: CGPoint(x: 16.0, y: 4.8), controlPoint1: CGPoint(x: 6.0, y: 8.2), controlPoint2: CGPoint(x: 10.0, y: 4.8))
-        path.addCurve(to: CGPoint(x: 26.0, y: 14.0), controlPoint1: CGPoint(x: 22.0, y: 4.8), controlPoint2: CGPoint(x: 26.0, y: 8.2))
-        path.addLine(to: CGPoint(x: 26.0, y: 27.0))
-        path.addCurve(to: CGPoint(x: 21.0, y: 27.0), controlPoint1: CGPoint(x: 24.2, y: 24.8), controlPoint2: CGPoint(x: 22.8, y: 24.8))
-        path.addCurve(to: CGPoint(x: 16.0, y: 27.0), controlPoint1: CGPoint(x: 19.2, y: 29.2), controlPoint2: CGPoint(x: 17.8, y: 29.2))
-        path.addCurve(to: CGPoint(x: 11.0, y: 27.0), controlPoint1: CGPoint(x: 14.2, y: 24.8), controlPoint2: CGPoint(x: 12.8, y: 24.8))
-        path.addCurve(to: CGPoint(x: 6.0, y: 27.0), controlPoint1: CGPoint(x: 9.2, y: 29.2), controlPoint2: CGPoint(x: 7.8, y: 29.2))
+        path.move(to: CGPoint(x: 7.2, y: 26.4))
+        path.addLine(to: CGPoint(x: 7.2, y: 14.6))
+        path.addCurve(to: CGPoint(x: 17.0, y: 5.1), controlPoint1: CGPoint(x: 7.2, y: 8.8), controlPoint2: CGPoint(x: 11.2, y: 5.1))
+        path.addCurve(to: CGPoint(x: 26.8, y: 14.6), controlPoint1: CGPoint(x: 22.8, y: 5.1), controlPoint2: CGPoint(x: 26.8, y: 8.8))
+        path.addLine(to: CGPoint(x: 26.8, y: 26.4))
+        path.addCurve(to: CGPoint(x: 22.0, y: 25.2), controlPoint1: CGPoint(x: 25.6, y: 27.5), controlPoint2: CGPoint(x: 23.4, y: 27.5))
+        path.addCurve(to: CGPoint(x: 17.0, y: 25.2), controlPoint1: CGPoint(x: 20.6, y: 22.9), controlPoint2: CGPoint(x: 18.4, y: 22.9))
+        path.addCurve(to: CGPoint(x: 12.0, y: 25.2), controlPoint1: CGPoint(x: 15.6, y: 27.5), controlPoint2: CGPoint(x: 13.4, y: 27.5))
+        path.addCurve(to: CGPoint(x: 7.2, y: 26.4), controlPoint1: CGPoint(x: 10.6, y: 22.9), controlPoint2: CGPoint(x: 8.4, y: 23.8))
         path.close()
 
         let ghostColor = UIColor.white
@@ -11343,8 +11343,8 @@ func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
             ghostColor.setFill()
         }
 
-        ctx.fillEllipse(in: CGRect(x: 11.1, y: 14.1, width: 3.2, height: 4.2))
-        ctx.fillEllipse(in: CGRect(x: 17.7, y: 14.1, width: 3.2, height: 4.2))
+        ctx.fillEllipse(in: CGRect(x: 12.2, y: 14.4, width: 2.9, height: 3.8))
+        ctx.fillEllipse(in: CGRect(x: 18.9, y: 14.4, width: 2.9, height: 3.8))
     }.withRenderingMode(.alwaysOriginal)
 }
 
