@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v210-release-12.8-png8
+          key: tg-ios-src-v211-release-12.8-png8
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -498,6 +498,11 @@ jobs:
           #    its Sources/**/*.swift glob). The themed key button on the phone-entry
           #    screen that presents it is injected by aorus_branding.py.
           cp $PATCHES/submodules/AuthorizationUI/Sources/AorusLoginBackupPicker.swift $TG/submodules/AuthorizationUI/Sources/
+
+          # 10. Copy the Formatting Panel SwiftUI toolbar into the chat input panel module
+          #     (compiled via its Sources/**/*.swift glob). The toolbar is wired into the
+          #     input panel node by aorus_branding.py.
+          cp $PATCHES/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusInputToolbar.swift $TG/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/
 
           echo "Injection complete"
           echo "--- AorusGramUI sources ---"

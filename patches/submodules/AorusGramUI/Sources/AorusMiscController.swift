@@ -36,6 +36,7 @@ private struct MiscState: Equatable {
     var profileLink: Bool
     var profileLinkTargetPeerId: Int64
     var profileLinkTargetName: String
+    var formattingPanel: Bool
     var phoneSpoof: Bool
     var phoneSpoofNumber: String
     var mediaMetadata: Bool
@@ -58,6 +59,7 @@ private final class MiscArguments {
     let setProfileLink: (Bool) -> Void
     let selectProfileLinkSelf: () -> Void
     let selectProfileLinkPeer: () -> Void
+    let setFormattingPanel: (Bool) -> Void
     let setPhoneSpoof: (Bool) -> Void
     let setPhoneSpoofNumber: (String) -> Void
     let randomizePhoneSpoof: () -> Void
@@ -66,7 +68,7 @@ private final class MiscArguments {
     let setLinkProtectionRedirects: (Bool) -> Void
     let setLinkProtectionBlockFiles: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -80,6 +82,7 @@ private final class MiscArguments {
         self.setProfileLink = setProfileLink
         self.selectProfileLinkSelf = selectProfileLinkSelf
         self.selectProfileLinkPeer = selectProfileLinkPeer
+        self.setFormattingPanel = setFormattingPanel
         self.setPhoneSpoof = setPhoneSpoof
         self.setPhoneSpoofNumber = setPhoneSpoofNumber
         self.randomizePhoneSpoof = randomizePhoneSpoof
@@ -112,6 +115,7 @@ private enum MiscEntry: ItemListNodeEntry {
     case profileLinkSelf(PresentationTheme, String, String)
     case profileLinkPeer(PresentationTheme, String, String)
     case profileLinkInfo(PresentationTheme, String)
+    case formattingPanel(PresentationTheme, String, Bool)
     case phoneSpoof(PresentationTheme, String, Bool)
     case phoneSpoofNumber(PresentationTheme, String, String)
     case phoneSpoofRandomize(PresentationTheme, String)
@@ -139,7 +143,7 @@ private enum MiscEntry: ItemListNodeEntry {
         case .chatSummary:
             return MiscSection.chatSummaryS.rawValue
         case .antiSearchHeader, .antiSearch, .antiSearchInfo, .anonymousStickers, .anonymousStickersInfo,
-             .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
+             .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .formattingPanel, .phoneSpoof, .phoneSpoofNumber,
              .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
         case .securityHeader, .linkProtection, .linkProtectionRedirects, .linkProtectionBlockFiles, .linkProtectionInfo:
@@ -170,12 +174,13 @@ private enum MiscEntry: ItemListNodeEntry {
         case .profileLinkSelf:  return 36
         case .profileLinkPeer:  return 37
         case .profileLinkInfo:  return 38
-        case .phoneSpoof:       return 39
-        case .phoneSpoofNumber: return 40
-        case .phoneSpoofRandomize: return 41
-        case .phoneSpoofInfo:   return 42
-        case .mediaMetadata:    return 43
-        case .mediaMetadataInfo:return 44
+        case .formattingPanel:  return 39
+        case .phoneSpoof:       return 40
+        case .phoneSpoofNumber: return 41
+        case .phoneSpoofRandomize: return 42
+        case .phoneSpoofInfo:   return 43
+        case .mediaMetadata:    return 44
+        case .mediaMetadataInfo:return 45
         case .securityHeader:   return 50
         case .linkProtection:   return 51
         case .linkProtectionRedirects: return 52
@@ -232,6 +237,8 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .profileLinkPeer(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .profileLinkInfo(lt, ls):
             if case let .profileLinkInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .formattingPanel(lt, ls, lv):
+            if case let .formattingPanel(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .phoneSpoof(lt, ls, lv):
             if case let .phoneSpoof(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .phoneSpoofNumber(lt, ls, lv):
@@ -303,6 +310,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, action: args.selectProfileLinkPeer)
         case let .profileLinkInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .formattingPanel(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setFormattingPanel($0) })
         case let .phoneSpoof(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setPhoneSpoof($0) })
         case let .phoneSpoofNumber(_, placeholder, value):
@@ -373,6 +382,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.profileLinkInfo(theme, isRu
         ? "Делает весь текст ваших исходящих сообщений кликабельным упоминанием выбранного профиля."
         : "Makes the whole text of your outgoing messages a clickable mention of the selected profile."))
+    entries.append(.formattingPanel(theme, isRu ? "Панель форматирования" : "Formatting Panel", state.formattingPanel))
     entries.append(.phoneSpoof(theme, isRu ? "Подмена номера" : "Phone Spoofing", state.phoneSpoof))
     if state.phoneSpoof {
         entries.append(.phoneSpoofNumber(theme, isRu ? "Номер" : "Number", state.phoneSpoofNumber))
@@ -414,6 +424,7 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
         profileLink: UserDefaults.standard.bool(forKey: "aorusgram_profile_link_enabled"),
         profileLinkTargetPeerId: initialProfileLinkTargetPeerId,
         profileLinkTargetName: UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_name") ?? "",
+        formattingPanel: UserDefaults.standard.bool(forKey: "aorusgram_formatting_panel"),
         phoneSpoof: AorusPhoneSpoofStore.isEnabled,
         phoneSpoofNumber: AorusPhoneSpoofStore.ensureNumber(),
         mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),
@@ -519,6 +530,14 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
             updateState { current in
                 var next = current
                 next.profileLink = value
+                return next
+            }
+        },
+        setFormattingPanel: { value in
+            UserDefaults.standard.set(value, forKey: "aorusgram_formatting_panel")
+            updateState { current in
+                var next = current
+                next.formattingPanel = value
                 return next
             }
         },

@@ -16805,6 +16805,142 @@ def patch_undo_button_theme_color(tg: Path) -> None:
     print("UndoButtonTheme: undo/action button now uses pure theme accent")
 
 
+def patch_formatting_panel(tg: Path) -> None:
+    """AorusGram Formatting Panel — a toolbar above the keyboard in the chat input,
+    ported in spirit from Swiftgram's Formatting Panel. It reuses Telegram's own
+    formatAttributes* methods; the SwiftUI visual lives in AorusInputToolbar.swift
+    (copied into this module's Sources). Gated by aorusgram_formatting_panel."""
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift"
+    if not path.is_file():
+        print("FormattingPanel: ChatTextInputPanelNode.swift not found — skipped")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusLayoutToolbar" in t:
+        print("FormattingPanel: already injected")
+        return
+
+    import_anchor = "import Foundation\nimport UniformTypeIdentifiers\n"
+    if import_anchor in t and "import SwiftUI\n" not in t:
+        t = t.replace(import_anchor, "import Foundation\nimport SwiftUI\nimport UniformTypeIdentifiers\n", 1)
+
+    methods_anchor = "    public func chatInputTextNodeDidUpdateText() {\n"
+    methods = (
+        "    // AorusGram: Formatting Panel (toolbar above the keyboard)\n"
+        "    private var aorusToolbarNode: ASDisplayNode?\n"
+        "    private var aorusToolbarModelBox: AnyObject?\n"
+        "    private var aorusToolbarHostBox: AnyObject?\n"
+        "\n"
+        "    private var aorusFormattingPanelEnabled: Bool {\n"
+        "        return UserDefaults.standard.bool(forKey: \"aorusgram_formatting_panel\")\n"
+        "    }\n"
+        "\n"
+        "    @available(iOS 13.0, *)\n"
+        "    private func aorusInitToolbarIfNeeded() {\n"
+        "        guard self.aorusToolbarNode == nil, self.aorusFormattingPanelEnabled else { return }\n"
+        "        let model = AorusFormattingToolbarModel()\n"
+        "        self.aorusToolbarModelBox = model\n"
+        "        let toolbarView = AorusFormattingToolbarView(\n"
+        "            model: model,\n"
+        "            onNewLine: { [weak self] in self?.aorusInsertNewLine() },\n"
+        "            onClearFormatting: { [weak self] in\n"
+        "                self?.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
+        "                    return (chatTextInputClearFormattingAttributes(current), inputMode)\n"
+        "                }\n"
+        "            },\n"
+        "            onQuote: { [weak self] in guard let s = self else { return }; s.formatAttributesQuote(s) },\n"
+        "            onSpoiler: { [weak self] in guard let s = self else { return }; s.formatAttributesSpoiler(s) },\n"
+        "            onBold: { [weak self] in guard let s = self else { return }; s.formatAttributesBold(s) },\n"
+        "            onItalic: { [weak self] in guard let s = self else { return }; s.formatAttributesItalic(s) },\n"
+        "            onMonospace: { [weak self] in guard let s = self else { return }; s.formatAttributesMonospace(s) },\n"
+        "            onLink: { [weak self] in guard let s = self else { return }; s.formatAttributesLink(s) },\n"
+        "            onUnderline: { [weak self] in guard let s = self else { return }; s.formatAttributesUnderline(s) },\n"
+        "            onStrikethrough: { [weak self] in guard let s = self else { return }; s.formatAttributesStrikethrough(s) },\n"
+        "            onCode: { [weak self] in guard let s = self else { return }; s.formatAttributesCodeBlock(s) }\n"
+        "        )\n"
+        "        let hosting = UIHostingController(rootView: toolbarView)\n"
+        "        hosting.view.backgroundColor = .clear\n"
+        "        self.aorusToolbarHostBox = hosting\n"
+        "        let node = ASDisplayNode(viewBlock: { hosting.view })\n"
+        "        self.aorusToolbarNode = node\n"
+        "        self.addSubnode(node)\n"
+        "        self.aorusUpdateToolbarSelectionState()\n"
+        "    }\n"
+        "\n"
+        "    private func aorusInsertNewLine() {\n"
+        "        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
+        "            let text = NSMutableAttributedString(attributedString: current.inputText)\n"
+        "            let range = current.selectionRange\n"
+        "            text.replaceCharacters(in: NSRange(location: range.lowerBound, length: range.count), with: \"\\n\")\n"
+        "            let newPosition = range.lowerBound + 1\n"
+        "            return (ChatTextInputState(inputText: text, selectionRange: newPosition ..< newPosition), inputMode)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private func aorusUpdateToolbarSelectionState() {\n"
+        "        if #available(iOS 13.0, *) {\n"
+        "            if let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel {\n"
+        "                let hasSelection = (self.textInputNode?.selectedRange.length ?? 0) > 0\n"
+        "                if model.canFormat != hasSelection {\n"
+        "                    model.canFormat = hasSelection\n"
+        "                }\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private func aorusLayoutToolbar(transition: ContainedViewLayoutTransition, panelHeight: CGFloat, width: CGFloat, leftInset: CGFloat, rightInset: CGFloat) -> CGFloat {\n"
+        "        if #available(iOS 13.0, *) {\n"
+        "            self.aorusInitToolbarIfNeeded()\n"
+        "        }\n"
+        "        guard let node = self.aorusToolbarNode else { return 0.0 }\n"
+        "        if !(self.aorusFormattingPanelEnabled && self.isFocused) {\n"
+        "            transition.updateAlpha(node: node, alpha: 0.0)\n"
+        "            return 0.0\n"
+        "        }\n"
+        "        let toolbarHeight: CGFloat = 44.0\n"
+        "        let toolbarSpacing: CGFloat = 6.0\n"
+        "        transition.updateFrame(node: node, frame: CGRect(origin: CGPoint(x: leftInset, y: panelHeight + toolbarSpacing), size: CGSize(width: width - leftInset - rightInset, height: toolbarHeight)))\n"
+        "        transition.updateAlpha(node: node, alpha: 1.0)\n"
+        "        self.aorusUpdateToolbarSelectionState()\n"
+        "        return toolbarHeight + toolbarSpacing\n"
+        "    }\n"
+        "\n"
+    )
+    if methods_anchor not in t:
+        print("FormattingPanel: WARNING chatInputTextNodeDidUpdateText anchor not found — skipped")
+        return
+    t = t.replace(methods_anchor, methods + methods_anchor, 1)
+
+    t = t.replace(
+        "    public func chatInputTextNodeDidUpdateText() {\n",
+        "    public func chatInputTextNodeDidUpdateText() {\n        self.aorusUpdateToolbarSelectionState()\n",
+        1,
+    )
+    t = t.replace(
+        "    public func chatInputTextNodeDidChangeSelection(dueToEditing: Bool) {\n",
+        "    public func chatInputTextNodeDidChangeSelection(dueToEditing: Bool) {\n        self.aorusUpdateToolbarSelectionState()\n",
+        1,
+    )
+
+    layout_anchor = (
+        "        self.glassBackgroundContainer.update(size: containerFrame.size, isDark: interfaceState.theme.overallDarkAppearance, transition: ComponentTransition(transition))\n"
+        "        \n"
+        "        return contentHeight\n"
+    )
+    layout_new = (
+        "        self.glassBackgroundContainer.update(size: containerFrame.size, isDark: interfaceState.theme.overallDarkAppearance, transition: ComponentTransition(transition))\n"
+        "        \n"
+        "        let aorusToolbarOffset = self.aorusLayoutToolbar(transition: transition, panelHeight: contentHeight, width: width, leftInset: leftInset, rightInset: rightInset)\n"
+        "        return contentHeight + aorusToolbarOffset\n"
+    )
+    if layout_anchor in t:
+        t = t.replace(layout_anchor, layout_new, 1)
+    else:
+        print("FormattingPanel: WARNING layout return anchor not found — toolbar height not wired")
+
+    path.write_text(t, encoding="utf-8")
+    print("FormattingPanel: injected toolbar into ChatTextInputPanelNode")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -16893,6 +17029,7 @@ def main() -> None:
     patch_profile_report_button(tg)
     patch_undo_button_theme_color(tg)
     patch_login_backup_key_button(tg)
+    patch_formatting_panel(tg)
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_media_caption_rich_edit(tg)
