@@ -11218,17 +11218,6 @@ private func aorusGhostPeerKey(_ peerId: PeerId) -> String {
     return "aorusgram_ghost_peer_\(peerId.toInt64())"
 }
 
-private final class AorusGhostPeerButton: UIButton {
-    override var isHighlighted: Bool {
-        didSet {
-            UIView.animate(withDuration: 0.16, delay: 0.0, options: [.allowUserInteraction, .curveEaseOut], animations: {
-                self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.88, y: 0.88) : .identity
-                self.alpha = self.isHighlighted ? 0.72 : 1.0
-            })
-        }
-    }
-}
-
 private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
     let size = CGSize(width: 30.0, height: 30.0)
     return UIGraphicsImageRenderer(size: size).image { context in
@@ -11265,7 +11254,7 @@ private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
     }.withRenderingMode(.alwaysOriginal)
 }
 
-func aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState: ChatPresentationInterfaceState, target: Any?, selector: Selector?) -> UIBarButtonItem? {
+func aorusGhostPeerIdForChatInterfaceState(_ presentationInterfaceState: ChatPresentationInterfaceState) -> PeerId? {
     guard case let .peer(peerId) = presentationInterfaceState.chatLocation else {
         return nil
     }
@@ -11287,16 +11276,11 @@ func aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState:
     guard canDisplay else {
         return nil
     }
+    return peerId
+}
 
-    let active = UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode") || UserDefaults.standard.bool(forKey: aorusGhostPeerKey(peerId))
-    let button = AorusGhostPeerButton(type: .custom)
-    button.frame = CGRect(origin: .zero, size: CGSize(width: 34.0, height: 34.0))
-    button.setImage(aorusGhostIconImage(active: active, color: presentationInterfaceState.theme.rootController.navigationBar.buttonColor), for: .normal)
-    button.accessibilityLabel = active ? "Ghost Mode On" : "Ghost Mode Off"
-    button.addTarget(target, action: selector, for: .touchUpInside)
-    let item = UIBarButtonItem(customView: button)
-    item.accessibilityIdentifier = active ? "aorus_ghost_peer_button_on" : "aorus_ghost_peer_button_off"
-    return item
+func aorusGhostIsActive(peerId: PeerId) -> Bool {
+    return UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode") || UserDefaults.standard.bool(forKey: aorusGhostPeerKey(peerId))
 }
 '''
         if insert_after in t:
@@ -11309,57 +11293,144 @@ func aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState:
         print("PerChatGhost: navigation helper already injected")
 
     t = update_state.read_text(encoding="utf-8")
-    if "// AorusGram: append per-chat ghost button" not in t:
-        anchor = (
-            "    if let rightNavigationButton = selfController.rightNavigationButton {\n"
-            "        rightBarButtons.append(rightNavigationButton.buttonItem)\n"
+    if "// AorusGram: update embedded ghost/avatar capsule" not in t:
+        anchor = "    var buttonsAnimated = transition.isAnimated\n"
+        injection = (
+            "    // AorusGram: update embedded ghost/avatar capsule\n"
+            "    if let aorusGhostAvatarNode = selfController.chatInfoNavigationButton?.buttonItem.customDisplayNode as? AorusGhostAvatarNavigationNode {\n"
+            "        let aorusGhostPeerId = aorusGhostPeerIdForChatInterfaceState(updatedChatPresentationInterfaceState)\n"
+            "        aorusGhostAvatarNode.updateGhost(peerId: aorusGhostPeerId, theme: updatedChatPresentationInterfaceState.theme, action: { [weak selfController] peerId, buttonNode in\n"
+            "            selfController?.aorusGhostPeerButtonPressed(peerId: peerId, buttonNode: buttonNode)\n"
+            "        })\n"
             "    }\n"
-        )
-        replacement = anchor + (
-            "    // AorusGram: append per-chat ghost button\n"
-            "    if let aorusGhostButton = aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState: updatedChatPresentationInterfaceState, target: selfController, selector: #selector(selfController.aorusGhostPeerButtonPressed(_:))) {\n"
-            "        rightBarButtons.append(aorusGhostButton)\n"
-            "    }\n"
+            "    \n"
         )
         if anchor in t:
-            t = t.replace(anchor, replacement, 1)
+            t = t.replace(anchor, injection + anchor, 1)
             update_state.write_text(t, encoding="utf-8")
-            print("PerChatGhost: appended button into rightBarButtonItems")
+            print("PerChatGhost: updates embedded ghost/avatar capsule")
         else:
-            print("PerChatGhost: rightBarButtons anchor not found")
+            print("PerChatGhost: buttonsAnimated anchor not found")
     else:
-        print("PerChatGhost: rightBarButtonItems already patched")
-
-    t = update_state.read_text(encoding="utf-8")
-    if "// AorusGram: stable compare for regenerated ghost button" not in t:
-        compare_anchor = (
-            "            if rightBarButtons[i] !== currentRightBarButtons[i] {\n"
-            "                rightBarButtonsUpdated = true\n"
-            "                break\n"
-            "            }\n"
-        )
-        compare_replacement = (
-            "            if rightBarButtons[i] !== currentRightBarButtons[i] {\n"
-            "                // AorusGram: stable compare for regenerated ghost button\n"
-            "                let currentAorusId = currentRightBarButtons[i].accessibilityIdentifier\n"
-            "                let nextAorusId = rightBarButtons[i].accessibilityIdentifier\n"
-            "                if currentAorusId?.hasPrefix(\"aorus_ghost_peer_button\") == true && currentAorusId == nextAorusId {\n"
-            "                    continue\n"
-            "                }\n"
-            "                rightBarButtonsUpdated = true\n"
-            "                break\n"
-            "            }\n"
-        )
-        if compare_anchor in t:
-            t = t.replace(compare_anchor, compare_replacement, 1)
-            update_state.write_text(t, encoding="utf-8")
-            print("PerChatGhost: stabilized rightBarButtonItems comparison")
-        else:
-            print("PerChatGhost: rightBarButtons compare anchor not found")
-    else:
-        print("PerChatGhost: rightBarButtonItems comparison already stable")
+        print("PerChatGhost: embedded ghost/avatar capsule update already patched")
 
     t = controller.read_text(encoding="utf-8")
+    if "// AorusGram: embedded ghost/avatar capsule node" not in t:
+        import_anchor = "import TextProcessingScreen\n"
+        capsule_code = r'''
+
+// AorusGram: embedded ghost/avatar capsule node
+final class AorusGhostAvatarNavigationNode: ASDisplayNode {
+    let avatarNode: ChatAvatarNavigationNode
+    private let backgroundNode: ASDisplayNode
+    private let ghostButtonNode: ASButtonNode
+    private var ghostPeerId: PeerId?
+    private var ghostAction: ((PeerId, ASButtonNode) -> Void)?
+    private var ghostVisible: Bool = false
+
+    init(avatarNode: ChatAvatarNavigationNode) {
+        self.avatarNode = avatarNode
+        self.backgroundNode = ASDisplayNode()
+        self.ghostButtonNode = ASButtonNode()
+        super.init()
+        self.isOpaque = false
+        self.backgroundNode.isUserInteractionEnabled = false
+        self.backgroundNode.backgroundColor = UIColor(white: 0.0, alpha: 0.32)
+        self.backgroundNode.cornerRadius = 22.0
+        self.addSubnode(self.backgroundNode)
+        self.addSubnode(self.ghostButtonNode)
+        self.addSubnode(self.avatarNode)
+        self.ghostButtonNode.addTarget(self, action: #selector(self.ghostPressed), forControlEvents: .touchUpInside)
+    }
+
+    func updateGhost(peerId: PeerId?, theme: PresentationTheme, action: @escaping (PeerId, ASButtonNode) -> Void) {
+        self.ghostPeerId = peerId
+        self.ghostAction = action
+        let isVisible = peerId != nil
+        let isActive = peerId.flatMap { aorusGhostIsActive(peerId: $0) } ?? false
+        self.ghostVisible = isVisible
+        self.ghostButtonNode.isHidden = !isVisible
+        self.backgroundNode.isHidden = !isVisible
+        self.ghostButtonNode.setImage(aorusGhostIconImage(active: isActive, color: theme.rootController.navigationBar.buttonColor), for: [])
+        self.ghostButtonNode.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
+        self.invalidateCalculatedLayout()
+        self.setNeedsLayout()
+    }
+
+    @objc private func ghostPressed() {
+        guard let peerId = self.ghostPeerId else {
+            return
+        }
+        UIView.animate(withDuration: 0.12, delay: 0.0, options: [.allowUserInteraction, .curveEaseOut], animations: {
+            self.ghostButtonNode.view.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
+            self.ghostButtonNode.view.alpha = 0.70
+        }, completion: { [weak self] _ in
+            guard let self else {
+                return
+            }
+            self.ghostAction?(peerId, self.ghostButtonNode)
+            UIView.animate(withDuration: 0.22, delay: 0.0, usingSpringWithDamping: 0.68, initialSpringVelocity: 0.35, options: [.allowUserInteraction, .curveEaseOut], animations: {
+                self.ghostButtonNode.view.transform = .identity
+                self.ghostButtonNode.view.alpha = 1.0
+            })
+        })
+    }
+
+    override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
+        return self.ghostVisible ? CGSize(width: 84.0, height: 44.0) : CGSize(width: 44.0, height: 44.0)
+    }
+
+    override func layout() {
+        super.layout()
+        let size = self.calculatedSize
+        self.backgroundNode.frame = CGRect(origin: .zero, size: size)
+        if self.ghostVisible {
+            self.ghostButtonNode.frame = CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)
+            self.avatarNode.frame = CGRect(x: 40.0, y: 0.0, width: 44.0, height: 44.0)
+        } else {
+            self.avatarNode.frame = CGRect(x: 0.0, y: 0.0, width: 44.0, height: 44.0)
+        }
+    }
+}
+
+func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNavigationNode? {
+    if let node = item?.customDisplayNode as? ChatAvatarNavigationNode {
+        return node
+    }
+    if let node = item?.customDisplayNode as? AorusGhostAvatarNavigationNode {
+        return node.avatarNode
+    }
+    return nil
+}
+'''
+        if import_anchor in t:
+            t = t.replace(import_anchor, import_anchor + capsule_code, 1)
+            print("PerChatGhost: added embedded ghost/avatar capsule node")
+        else:
+            print("PerChatGhost: final ChatController import anchor not found")
+
+    if "AorusGhostAvatarNavigationNode(avatarNode: avatarNode)" not in t:
+        avatar_anchor = "            chatInfoButtonItem = UIBarButtonItem(customDisplayNode: avatarNode)!\n            self.avatarNode = avatarNode\n"
+        avatar_replacement = (
+            "            let aorusGhostAvatarNode = AorusGhostAvatarNavigationNode(avatarNode: avatarNode)\n"
+            "            chatInfoButtonItem = UIBarButtonItem(customDisplayNode: aorusGhostAvatarNode)!\n"
+            "            self.avatarNode = avatarNode\n"
+        )
+        if avatar_anchor in t:
+            t = t.replace(avatar_anchor, avatar_replacement, 1)
+            print("PerChatGhost: embedded ghost button into chat avatar item")
+        else:
+            print("PerChatGhost: chatInfo avatar item anchor not found")
+
+    t = t.replace(
+        "(self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?",
+        "aorusChatAvatarNavigationNode(self.chatInfoNavigationButton?.buttonItem)?",
+    )
+    t = t.replace(
+        "(strongSelf.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?",
+        "aorusChatAvatarNavigationNode(strongSelf.chatInfoNavigationButton?.buttonItem)?",
+    )
+
     if "// AorusGram: per-chat ghost toggle action" not in t:
         anchor = (
             "    @objc func rightNavigationButtonAction() {\n"
@@ -11377,27 +11448,17 @@ func aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState:
         injection = anchor + r'''
 
     // AorusGram: per-chat ghost toggle action
-    @objc func aorusGhostPeerButtonPressed(_ sender: UIButton) {
-        guard case let .peer(peerId) = self.chatLocation else {
-            return
-        }
+    func aorusGhostPeerButtonPressed(peerId: PeerId, buttonNode: ASButtonNode) {
         let key = "aorusgram_ghost_peer_\(peerId.toInt64())"
         let updatedValue = !UserDefaults.standard.bool(forKey: key)
-        UIView.animate(withDuration: 0.12, delay: 0.0, options: [.allowUserInteraction, .curveEaseOut], animations: {
-            sender.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
-            sender.alpha = 0.7
-        }, completion: { [weak self, weak sender] _ in
-            guard let self else {
-                return
-            }
-            UIView.animate(withDuration: 0.22, delay: 0.0, usingSpringWithDamping: 0.68, initialSpringVelocity: 0.35, options: [.allowUserInteraction, .curveEaseOut], animations: {
-                sender?.transform = .identity
-                sender?.alpha = 1.0
+        UserDefaults.standard.set(updatedValue, forKey: key)
+        NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
+        if let image = aorusGhostIconImage(active: updatedValue || UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode"), color: self.presentationInterfaceState.theme.rootController.navigationBar.buttonColor) {
+            UIView.transition(with: buttonNode.view, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
+                buttonNode.setImage(image, for: [])
             })
-            UserDefaults.standard.set(updatedValue, forKey: key)
-            NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
-            self.updateChatPresentationInterfaceState(animated: true, interactive: false, { $0 })
-        })
+        }
+        self.updateChatPresentationInterfaceState(animated: true, interactive: false, { $0 })
     }
 '''
         if anchor in t:
@@ -11408,6 +11469,22 @@ func aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState:
             print("PerChatGhost: rightNavigationButtonAction anchor not found")
     else:
         print("PerChatGhost: ChatController toggle action already injected")
+
+    controller.write_text(t, encoding="utf-8")
+
+    load_display = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerLoadDisplayNode.swift"
+    if load_display.is_file():
+        t = load_display.read_text(encoding="utf-8")
+        t = t.replace(
+            "(self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?",
+            "aorusChatAvatarNavigationNode(self.chatInfoNavigationButton?.buttonItem)?",
+        )
+        t = t.replace(
+            "(strongSelf.chatInfoNavigationButton?.buttonItem.customDisplayNode as? ChatAvatarNavigationNode)?",
+            "aorusChatAvatarNavigationNode(strongSelf.chatInfoNavigationButton?.buttonItem)?",
+        )
+        load_display.write_text(t, encoding="utf-8")
+        print("PerChatGhost: routed chat avatar lookups through helper")
 
 
 def patch_voice_twin_recorder(tg: Path) -> None:
