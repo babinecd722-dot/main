@@ -65,33 +65,39 @@ struct AorusFormattingToolbarView: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                // Always available.
-                iconButton(systemName: "return", enabled: true, action: onNewLine)
-                // Needs something selected to clear its formatting.
-                formatButton(systemName: "pencil.slash", action: onClearFormatting)
+        GeometryReader { geometry in
+            let buttonSize: CGFloat = 38.0
+            let horizontalPadding: CGFloat = 8.0
+            let firstPageButtons: CGFloat = 8.0
+            let firstPageGaps: CGFloat = firstPageButtons - 1.0
+            let availableWidth = max(0.0, geometry.size.width - horizontalPadding * 2.0)
+            let spacing = max(6.0, (availableWidth - buttonSize * firstPageButtons) / firstPageGaps)
 
-                Spacer(minLength: 6)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: spacing) {
+                    // Always available.
+                    iconButton(systemName: "return", enabled: true, action: onNewLine)
+                    // Needs something selected to clear its formatting.
+                    formatButton(systemName: "pencil.slash", action: onClearFormatting)
 
-                Group {
                     formatButton(systemName: "text.quote", action: onQuote)
                     formatButton(systemName: "eye.slash", action: onSpoiler)
                     formatButton(systemName: "bold", action: onBold)
                     formatButton(systemName: "italic", action: onItalic)
                     monospaceButton()
                     formatButton(systemName: "link", action: onLink)
+
+                    Group {
+                        formatButton(systemName: "underline", action: onUnderline)
+                        formatButton(systemName: "strikethrough", action: onStrikethrough)
+                        formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
+                    }
                 }
-                Group {
-                    formatButton(systemName: "underline", action: onUnderline)
-                    formatButton(systemName: "strikethrough", action: onStrikethrough)
-                    formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
-                }
+                .padding(.horizontal, horizontalPadding)
+                .padding(.vertical, 2)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
+            .clipped()
         }
-        .clipped()
     }
 
     private func formatButton(systemName: String, action: @escaping () -> Void) -> some View {
