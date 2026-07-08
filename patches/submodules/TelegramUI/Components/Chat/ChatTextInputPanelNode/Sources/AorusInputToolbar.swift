@@ -13,7 +13,6 @@ import UIKit
 // are disabled, so it is always clear which action can be applied. The "new line"
 // button is always available.
 
-@available(iOS 13.0, *)
 final class AorusFormattingToolbarModel: ObservableObject {
     // Whether a non-empty selection exists (i.e. formatting can be applied now).
     @Published var canFormat: Bool
@@ -23,7 +22,6 @@ final class AorusFormattingToolbarModel: ObservableObject {
     }
 }
 
-@available(iOS 13.0, *)
 struct AorusFormattingToolbarView: View {
     @ObservedObject private var model: AorusFormattingToolbarModel
 
@@ -121,7 +119,6 @@ struct AorusFormattingToolbarView: View {
     }
 }
 
-@available(iOS 13.0, *)
 private struct AorusToolbarButtonStyle: ButtonStyle {
     var size: CGFloat = 38.0
 
@@ -134,7 +131,6 @@ private struct AorusToolbarButtonStyle: ButtonStyle {
     }
 }
 
-@available(iOS 13.0, *)
 private struct AorusGlassCircle: View {
     @Environment(\.colorScheme) private var colorScheme
 
