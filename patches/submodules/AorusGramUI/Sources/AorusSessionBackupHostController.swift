@@ -4,6 +4,7 @@ import SwiftUI
 import Display
 import AccountContext
 import TelegramPresentationData
+import PresentationDataUtils
 
 // Hosts the SwiftUI AorusSessionBackupView inside a Telegram Display navigation
 // controller so it can be pushed from settings like any other screen. The Display
@@ -37,7 +38,16 @@ final class AorusSessionBackupHostController: ViewController {
         self.displayNode.backgroundColor = self.presentationData.theme.list.blocksBackgroundColor
 
         let isRu = AorusLang.resolve(self.presentationData.strings.baseLanguageCode) == .ru
-        let root = AorusSessionBackupView(context: self.context, isRu: isRu)
+        let root = AorusSessionBackupView(
+            context: self.context,
+            isRu: isRu,
+            presentInfo: { [weak self] title, text, ok in
+                self?.presentInfoAlert(title: title, text: text, ok: ok)
+            },
+            presentConfirmation: { [weak self] title, text, confirm, cancel, destructive, action in
+                self?.presentConfirmationAlert(title: title, text: text, confirm: confirm, cancel: cancel, destructive: destructive, action: action)
+            }
+        )
         let host = UIHostingController(rootView: root)
         host.overrideUserInterfaceStyle = self.presentationData.theme.overallDarkAppearance ? .dark : .light
         host.view.tintColor = self.presentationData.theme.list.itemAccentColor
@@ -54,5 +64,28 @@ final class AorusSessionBackupHostController: ViewController {
         super.containerLayoutUpdated(layout, transition: transition)
         let navigationHeight = self.navigationLayout(layout: layout).navigationFrame.maxY
         self.hostingController?.view.frame = CGRect(x: 0.0, y: navigationHeight, width: layout.size.width, height: max(0.0, layout.size.height - navigationHeight))
+    }
+
+    private func presentInfoAlert(title: String, text: String, ok: String) {
+        let alert = textAlertController(
+            context: self.context,
+            title: title,
+            text: text,
+            actions: [TextAlertAction(type: .defaultAction, title: ok, action: {})]
+        )
+        self.present(alert, in: .window(.root))
+    }
+
+    private func presentConfirmationAlert(title: String, text: String, confirm: String, cancel: String, destructive: Bool, action: @escaping () -> Void) {
+        let alert = textAlertController(
+            context: self.context,
+            title: title,
+            text: text,
+            actions: [
+                TextAlertAction(type: .genericAction, title: cancel, action: {}),
+                TextAlertAction(type: destructive ? .destructiveAction : .defaultAction, title: confirm, action: action)
+            ]
+        )
+        self.present(alert, in: .window(.root))
     }
 }

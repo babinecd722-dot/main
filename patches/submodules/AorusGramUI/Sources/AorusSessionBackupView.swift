@@ -55,24 +55,6 @@ private struct AorusBackupSession: Identifiable {
 }
 
 @available(iOS 13.0, *)
-private enum AorusSessionBackupAlert: Identifiable {
-    case info(String, String)
-    case restoreConfirm
-    case deleteConfirm
-
-    var id: String {
-        switch self {
-        case let .info(title, text):
-            return "info-\(title)-\(text)"
-        case .restoreConfirm:
-            return "restore"
-        case .deleteConfirm:
-            return "delete"
-        }
-    }
-}
-
-@available(iOS 13.0, *)
 struct AorusSessionBackupRow: View {
     fileprivate let session: AorusBackupSession
     let isLoggedIn: Bool
@@ -118,13 +100,13 @@ struct AorusSessionBackupRow: View {
 struct AorusSessionBackupView: View {
     let context: AccountContext
     let isRu: Bool
+    let presentInfo: (_ title: String, _ text: String, _ ok: String) -> Void
+    let presentConfirmation: (_ title: String, _ text: String, _ confirm: String, _ cancel: String, _ destructive: Bool, _ action: @escaping () -> Void) -> Void
 
     @State private var sessions: [AorusBackupSession] = []
     @State private var loggedInIds: Set<String> = []
     @State private var dateText: String = ""
     @State private var isBusy = false
-
-    @State private var activeAlert: AorusSessionBackupAlert?
 
     private var l10n: AorusSessionL10n { AorusSessionL10n(isRu: isRu) }
     private var hasBackup: Bool { AccountBackupManager.shared.hasBackup() }
@@ -143,7 +125,9 @@ struct AorusSessionBackupView: View {
 
                 Button(action: {
                     guard !isBusy else { return }
-                    activeAlert = .restoreConfirm
+                    presentConfirmation(l10n.restoreTitle, l10n.restoreText, l10n.restart, l10n.cancel, false) {
+                        self.performRestore()
+                    }
                 }) {
                     HStack {
                         Image(systemName: "arrow.2.circlepath").frame(width: 30)
@@ -155,7 +139,9 @@ struct AorusSessionBackupView: View {
 
                 Button(action: {
                     guard !isBusy else { return }
-                    activeAlert = .deleteConfirm
+                    presentConfirmation(l10n.deleteTitle, l10n.deleteText, l10n.delete, l10n.cancel, true) {
+                        self.performDeleteAll()
+                    }
                 }) {
                     HStack {
                         Image(systemName: "trash").frame(width: 30)
@@ -183,26 +169,6 @@ struct AorusSessionBackupView: View {
             }
         }
         .onAppear(perform: reload)
-        .alert(item: $activeAlert) { alert in
-            switch alert {
-            case let .info(title, text):
-                return Alert(title: Text(title), message: Text(text), dismissButton: .default(Text(l10n.ok)))
-            case .restoreConfirm:
-                return Alert(
-                    title: Text(l10n.restoreTitle),
-                    message: Text(l10n.restoreText),
-                    primaryButton: .default(Text(l10n.restart), action: startRestoreFromAlert),
-                    secondaryButton: .cancel(Text(l10n.cancel))
-                )
-            case .deleteConfirm:
-                return Alert(
-                    title: Text(l10n.deleteTitle),
-                    message: Text(l10n.deleteText),
-                    primaryButton: .destructive(Text(l10n.delete), action: startDeleteFromAlert),
-                    secondaryButton: .cancel(Text(l10n.cancel))
-                )
-            }
-        }
     }
 
     // MARK: - Data
@@ -236,7 +202,6 @@ struct AorusSessionBackupView: View {
 
     private func performBackup() {
         guard !isBusy else { return }
-        activeAlert = nil
         isBusy = true
         let _ = (context.sharedContext.activeAccountsWithInfo
         |> take(1)
@@ -275,20 +240,6 @@ struct AorusSessionBackupView: View {
         })
     }
 
-    private func startRestoreFromAlert() {
-        activeAlert = nil
-        DispatchQueue.main.async {
-            self.performRestore()
-        }
-    }
-
-    private func startDeleteFromAlert() {
-        activeAlert = nil
-        DispatchQueue.main.async {
-            self.performDeleteAll()
-        }
-    }
-
     private func performRestore() {
         guard !isBusy else { return }
         isBusy = true
@@ -321,14 +272,7 @@ struct AorusSessionBackupView: View {
     }
 
     private func present(_ title: String, _ text: String) {
-        if activeAlert != nil {
-            activeAlert = nil
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                self.activeAlert = .info(title, text)
-            }
-        } else {
-            activeAlert = .info(title, text)
-        }
+        presentInfo(title, text, l10n.ok)
     }
 
     private func downscalePNG(_ image: UIImage, maxSide: CGFloat = 120.0) -> Data? {
