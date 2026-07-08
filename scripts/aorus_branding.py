@@ -1948,7 +1948,9 @@ def patch_ghost_mode_hide_typing(tg: Path) -> None:
 
     guard = (
         sentinel + "\n"
-        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") {\n"
+        "    let aorusGhostOverride = UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber\n"
+        "    let aorusGhostActive = aorusGhostOverride.map { $0.intValue > 0 } ?? (UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\"))\n"
+        "    if aorusGhostActive {\n"
         "        return .complete()\n"
         "    }\n"
         "    "
@@ -2173,7 +2175,9 @@ def patch_ghost_mode_block_read(tg: Path) -> None:
     guard = (
         anchor + "\n"
         "    " + sentinel + "\n"
-        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") {\n"
+        "    let aorusGhostOverride = UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber\n"
+        "    let aorusGhostActive = aorusGhostOverride.map { $0.intValue > 0 } ?? (UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\"))\n"
+        "    if aorusGhostActive {\n"
         "        return Signal { _ in ActionDisposable {} }\n"
         "    }"
     )
@@ -11174,7 +11178,9 @@ def patch_ghost_mode_stealth_stories(tg: Path) -> None:
         return
     inject = anchor + "\n" + (
         "    " + sentinel + "\n"
-        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") {\n"
+        "    let aorusGhostOverride = UserDefaults.standard.object(forKey: \"aorusgram_ghost_peer_override_\\(peerId.toInt64())\") as? NSNumber\n"
+        "    let aorusGhostActive = aorusGhostOverride.map { $0.intValue > 0 } ?? (UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\"))\n"
+        "    if aorusGhostActive {\n"
         "        return .complete()\n"
         "    }"
     )
@@ -11190,8 +11196,9 @@ def patch_per_chat_ghost_mode(tg: Path) -> None:
     per-peer UserDefaults keys (`aorusgram_ghost_peer_<peerId>`) and a compact
     ghost button next to the chat avatar for users, groups and supergroups.
     Broadcast channels do not show it. Network guards in typing/read/stories use
-    global OR per-peer state, while online presence stays global because Telegram
-    sends it account-wide and has no peer context.
+    per-peer override state, while online presence stays global because Telegram
+    sends it account-wide and has no peer context. A per-peer override can also
+    disable Ghost Mode for one chat while the global switch is enabled.
     """
     nav_buttons = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift"
     update_state = tg / "submodules/TelegramUI/Sources/Chat/UpdateChatPresentationInterfaceState.swift"
@@ -11236,39 +11243,58 @@ private func aorusGhostPeerKey(_ peerId: PeerId) -> String {
 }
 
 func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
-    let size = CGSize(width: 30.0, height: 30.0)
+    let size = CGSize(width: 32.0, height: 32.0)
     return UIGraphicsImageRenderer(size: size).image { context in
         let ctx = context.cgContext
-        ctx.setLineWidth(2.2)
+        ctx.setLineWidth(2.7)
         ctx.setLineJoin(.round)
         ctx.setLineCap(.round)
 
-        let rect = CGRect(x: 5.0, y: 3.5, width: 20.0, height: 23.0)
         let path = UIBezierPath()
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY - 5.0))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + 10.0))
-        path.addCurve(to: CGPoint(x: rect.midX, y: rect.minY), controlPoint1: CGPoint(x: rect.minX, y: rect.minY + 3.0), controlPoint2: CGPoint(x: rect.minX + 4.0, y: rect.minY))
-        path.addCurve(to: CGPoint(x: rect.maxX, y: rect.minY + 10.0), controlPoint1: CGPoint(x: rect.maxX - 4.0, y: rect.minY), controlPoint2: CGPoint(x: rect.maxX, y: rect.minY + 3.0))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - 5.0))
-        path.addCurve(to: CGPoint(x: rect.maxX - 4.0, y: rect.maxY - 2.0), controlPoint1: CGPoint(x: rect.maxX - 1.2, y: rect.maxY - 3.2), controlPoint2: CGPoint(x: rect.maxX - 2.4, y: rect.maxY - 2.0))
-        path.addCurve(to: CGPoint(x: rect.midX, y: rect.maxY - 2.0), controlPoint1: CGPoint(x: rect.maxX - 6.2, y: rect.maxY - 2.0), controlPoint2: CGPoint(x: rect.maxX - 7.0, y: rect.maxY - 5.0))
-        path.addCurve(to: CGPoint(x: rect.minX + 4.0, y: rect.maxY - 2.0), controlPoint1: CGPoint(x: rect.minX + 7.0, y: rect.maxY - 5.0), controlPoint2: CGPoint(x: rect.minX + 6.2, y: rect.maxY - 2.0))
-        path.addCurve(to: CGPoint(x: rect.minX, y: rect.maxY - 5.0), controlPoint1: CGPoint(x: rect.minX + 2.4, y: rect.maxY - 2.0), controlPoint2: CGPoint(x: rect.minX + 1.2, y: rect.maxY - 3.2))
+        path.move(to: CGPoint(x: 6.0, y: 27.0))
+        path.addLine(to: CGPoint(x: 6.0, y: 14.0))
+        path.addCurve(to: CGPoint(x: 16.0, y: 4.8), controlPoint1: CGPoint(x: 6.0, y: 8.2), controlPoint2: CGPoint(x: 10.0, y: 4.8))
+        path.addCurve(to: CGPoint(x: 26.0, y: 14.0), controlPoint1: CGPoint(x: 22.0, y: 4.8), controlPoint2: CGPoint(x: 26.0, y: 8.2))
+        path.addLine(to: CGPoint(x: 26.0, y: 27.0))
+        path.addCurve(to: CGPoint(x: 21.0, y: 27.0), controlPoint1: CGPoint(x: 24.2, y: 24.8), controlPoint2: CGPoint(x: 22.8, y: 24.8))
+        path.addCurve(to: CGPoint(x: 16.0, y: 27.0), controlPoint1: CGPoint(x: 19.2, y: 29.2), controlPoint2: CGPoint(x: 17.8, y: 29.2))
+        path.addCurve(to: CGPoint(x: 11.0, y: 27.0), controlPoint1: CGPoint(x: 14.2, y: 24.8), controlPoint2: CGPoint(x: 12.8, y: 24.8))
+        path.addCurve(to: CGPoint(x: 6.0, y: 27.0), controlPoint1: CGPoint(x: 9.2, y: 29.2), controlPoint2: CGPoint(x: 7.8, y: 29.2))
         path.close()
 
+        let ghostColor = UIColor.white
         if active {
-            color.setFill()
+            ghostColor.setFill()
             path.fill()
             UIColor.black.setFill()
         } else {
-            color.setStroke()
+            ghostColor.setStroke()
             path.stroke()
-            color.setFill()
+            ghostColor.setFill()
         }
 
-        ctx.fillEllipse(in: CGRect(x: 11.0, y: 13.0, width: 3.2, height: 4.0))
-        ctx.fillEllipse(in: CGRect(x: 15.8, y: 13.0, width: 3.2, height: 4.0))
+        ctx.fillEllipse(in: CGRect(x: 11.1, y: 14.1, width: 3.2, height: 4.2))
+        ctx.fillEllipse(in: CGRect(x: 17.7, y: 14.1, width: 3.2, height: 4.2))
     }.withRenderingMode(.alwaysOriginal)
+}
+
+private func aorusGhostPeerOverrideKey(_ peerId: PeerId) -> String {
+    return "aorusgram_ghost_peer_override_\(peerId.toInt64())"
+}
+
+private func aorusGhostPeerOverride(peerId: PeerId) -> Int? {
+    if let value = UserDefaults.standard.object(forKey: aorusGhostPeerOverrideKey(peerId)) as? NSNumber {
+        let intValue = value.intValue
+        if intValue > 0 {
+            return 1
+        } else if intValue < 0 {
+            return -1
+        }
+    }
+    if UserDefaults.standard.bool(forKey: aorusGhostPeerKey(peerId)) {
+        return 1
+    }
+    return nil
 }
 
 func aorusGhostPeerIdForChatInterfaceState(_ presentationInterfaceState: ChatPresentationInterfaceState) -> PeerId? {
@@ -11297,7 +11323,10 @@ func aorusGhostPeerIdForChatInterfaceState(_ presentationInterfaceState: ChatPre
 }
 
 func aorusGhostIsActive(peerId: PeerId) -> Bool {
-    return UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode") || UserDefaults.standard.bool(forKey: aorusGhostPeerKey(peerId))
+    if let override = aorusGhostPeerOverride(peerId: peerId) {
+        return override > 0
+    }
+    return UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode")
 }
 '''
         if insert_after in t:
@@ -11468,11 +11497,30 @@ func aorusChatAvatarNavigationNode(_ item: UIBarButtonItem?) -> ChatAvatarNaviga
 
     // AorusGram: per-chat ghost toggle action
     func aorusGhostPeerButtonPressed(peerId: PeerId, buttonNode: ASButtonNode) {
-        let key = "aorusgram_ghost_peer_\(peerId.toInt64())"
-        let updatedValue = !UserDefaults.standard.bool(forKey: key)
-        UserDefaults.standard.set(updatedValue, forKey: key)
+        let legacyKey = "aorusgram_ghost_peer_\(peerId.toInt64())"
+        let overrideKey = "aorusgram_ghost_peer_override_\(peerId.toInt64())"
+        let globalValue = UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode")
+        let currentValue = aorusGhostIsActive(peerId: peerId)
+        if globalValue {
+            if currentValue {
+                UserDefaults.standard.set(-1, forKey: overrideKey)
+                UserDefaults.standard.removeObject(forKey: legacyKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: overrideKey)
+                UserDefaults.standard.removeObject(forKey: legacyKey)
+            }
+        } else {
+            if currentValue {
+                UserDefaults.standard.removeObject(forKey: overrideKey)
+                UserDefaults.standard.removeObject(forKey: legacyKey)
+            } else {
+                UserDefaults.standard.set(1, forKey: overrideKey)
+                UserDefaults.standard.removeObject(forKey: legacyKey)
+            }
+        }
+        let updatedValue = aorusGhostIsActive(peerId: peerId)
         NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
-        if let image = aorusGhostIconImage(active: updatedValue || UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode"), color: self.presentationInterfaceState.theme.rootController.navigationBar.buttonColor) {
+        if let image = aorusGhostIconImage(active: updatedValue, color: self.presentationInterfaceState.theme.rootController.navigationBar.buttonColor) {
             UIView.transition(with: buttonNode.view, duration: 0.18, options: [.transitionCrossDissolve, .allowUserInteraction], animations: {
                 buttonNode.setImage(image, for: [])
             })
