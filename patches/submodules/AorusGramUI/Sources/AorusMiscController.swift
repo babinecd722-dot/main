@@ -22,6 +22,7 @@ private enum MiscSection: Int32 {
     case autoReplyS
     case chatSummaryS
     case antiSearch
+    case formattingPanelS
     case security
 }
 
@@ -143,9 +144,11 @@ private enum MiscEntry: ItemListNodeEntry {
         case .chatSummary:
             return MiscSection.chatSummaryS.rawValue
         case .antiSearchHeader, .antiSearch, .antiSearchInfo, .anonymousStickers, .anonymousStickersInfo,
-             .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .formattingPanel, .phoneSpoof, .phoneSpoofNumber,
+             .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
              .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
+        case .formattingPanel:
+            return MiscSection.formattingPanelS.rawValue
         case .securityHeader, .linkProtection, .linkProtectionRedirects, .linkProtectionBlockFiles, .linkProtectionInfo:
             return MiscSection.security.rawValue
         }

@@ -8,13 +8,12 @@ import UIKit
 // input panel node); this file is only the SwiftUI visual + a small observable
 // model.
 //
-// Improvement over the reference: the formatting buttons are only active (white)
-// when there is a non-empty selection to format — otherwise they render grey and
-// are disabled, so it is always clear which action can be applied. The "new line"
-// button is always available.
+// Formatting buttons are active when the input has text. If the user has no
+// selection, the native text formatter is applied to the whole input while the
+// caret is restored instead of leaving the text highlighted.
 
 final class AorusFormattingToolbarModel: ObservableObject {
-    // Whether a non-empty selection exists (i.e. formatting can be applied now).
+    // Whether the current input has text that can be formatted.
     @Published var canFormat: Bool
 
     init(canFormat: Bool = false) {
@@ -75,19 +74,24 @@ struct AorusFormattingToolbarView: View {
 
                 Spacer(minLength: 6)
 
-                formatButton(systemName: "text.quote", action: onQuote)
-                formatButton(systemName: "eye.slash", action: onSpoiler)
-                formatButton(systemName: "bold", action: onBold)
-                formatButton(systemName: "italic", action: onItalic)
-                monospaceButton()
-                formatButton(systemName: "link", action: onLink)
-                formatButton(systemName: "underline", action: onUnderline)
-                formatButton(systemName: "strikethrough", action: onStrikethrough)
-                formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
+                Group {
+                    formatButton(systemName: "text.quote", action: onQuote)
+                    formatButton(systemName: "eye.slash", action: onSpoiler)
+                    formatButton(systemName: "bold", action: onBold)
+                    formatButton(systemName: "italic", action: onItalic)
+                    monospaceButton()
+                    formatButton(systemName: "link", action: onLink)
+                }
+                Group {
+                    formatButton(systemName: "underline", action: onUnderline)
+                    formatButton(systemName: "strikethrough", action: onStrikethrough)
+                    formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
         }
+        .clipped()
     }
 
     private func formatButton(systemName: String, action: @escaping () -> Void) -> some View {
