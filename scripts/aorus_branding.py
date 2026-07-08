@@ -15715,7 +15715,8 @@ def patch_message_translate_button(tg: Path) -> None:
             "    private func aorusPresentInlineActionToast(_ text: String) {\n"
             "        guard let item = self.item else { return }\n"
             "        guard let navigationController = item.controllerInteraction.navigationController() else { return }\n"
-            "        navigationController.present(UndoOverlayController(presentationData: item.presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), in: .current)\n"
+            "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
+            "        navigationController.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), animated: true)\n"
             "    }\n"
             "\n"
         )
@@ -15723,6 +15724,11 @@ def patch_message_translate_button(tg: Path) -> None:
             t = t.replace("    private func aorusToggleTranslate() {\n", helper + "    private func aorusToggleTranslate() {\n", 1)
             changed = True
         replacements = [
+            (
+                "        navigationController.present(UndoOverlayController(presentationData: item.presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), in: .current)\n",
+                "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
+                "        navigationController.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), animated: true)\n",
+            ),
             (
                 "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { return }\n",
                 "            let aorusSpeechFailText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Не удалось определить речь\" : \"Could not detect speech\"\n"
@@ -15972,7 +15978,8 @@ def patch_message_translate_button(tg: Path) -> None:
         "    private func aorusPresentInlineActionToast(_ text: String) {\n"
         "        guard let item = self.item else { return }\n"
         "        guard let navigationController = item.controllerInteraction.navigationController() else { return }\n"
-        "        navigationController.present(UndoOverlayController(presentationData: item.presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), in: .current)\n"
+        "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
+        "        navigationController.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), animated: true)\n"
         "    }\n"
         "\n"
         "    private func aorusToggleTranslate() {\n"
