@@ -9730,24 +9730,94 @@ public enum AorusAntiSearch {
 
         for attribute in attributes {
             if let textEntities = attribute as? TextEntitiesMessageAttribute {
-                entities.append(contentsOf: textEntities.entities.filter { isProfileLinkCompatibleEntityType($0.type) })
+                entities.append(contentsOf: textEntities.entities)
             } else {
                 resultAttributes.append(attribute)
             }
         }
 
-        entities.append(MessageTextEntity(range: 0 ..< textLength, type: .TextMention(peerId: targetPeerId)))
+        if shouldSkipProfileLink(text: text, entities: entities, textLength: textLength) {
+            resultAttributes.append(TextEntitiesMessageAttribute(entities: entities))
+            return resultAttributes
+        }
+
+        var protected = [Bool](repeating: false, count: textLength)
+        for entity in entities where isProfileLinkProtectedEntityType(entity.type) {
+            let lower = max(0, entity.range.lowerBound)
+            let upper = min(textLength, entity.range.upperBound)
+            if lower < upper {
+                for i in lower ..< upper {
+                    protected[i] = true
+                }
+            }
+        }
+
+        var start: Int?
+        for index in 0 ..< textLength {
+            if protected[index] {
+                if let value = start, value < index {
+                    entities.append(MessageTextEntity(range: value ..< index, type: .TextMention(peerId: targetPeerId)))
+                }
+                start = nil
+            } else if start == nil {
+                start = index
+            }
+        }
+        if let value = start, value < textLength {
+            entities.append(MessageTextEntity(range: value ..< textLength, type: .TextMention(peerId: targetPeerId)))
+        }
+
         resultAttributes.append(TextEntitiesMessageAttribute(entities: entities))
         return resultAttributes
     }
 
-    private static func isProfileLinkCompatibleEntityType(_ type: MessageTextEntityType) -> Bool {
+    private static func shouldSkipProfileLink(text: String, entities: [MessageTextEntity], textLength: Int) -> Bool {
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        if isEmojiOnlyText(text) {
+            return true
+        }
+        var customEmojiCoverage = [Bool](repeating: false, count: textLength)
+        for entity in entities {
+            if case .CustomEmoji = entity.type {
+                let lower = max(0, entity.range.lowerBound)
+                let upper = min(textLength, entity.range.upperBound)
+                if lower < upper {
+                    for i in lower ..< upper {
+                        customEmojiCoverage[i] = true
+                    }
+                }
+            }
+        }
+        return !customEmojiCoverage.isEmpty && customEmojiCoverage.allSatisfy { $0 }
+    }
+
+    private static func isEmojiOnlyText(_ text: String) -> Bool {
+        var hasEmoji = false
+        for scalar in text.unicodeScalars {
+            if CharacterSet.whitespacesAndNewlines.contains(scalar) {
+                continue
+            }
+            if scalar.value == 0xfe0f || scalar.value == 0xfe0e || scalar.value == 0x200d {
+                continue
+            }
+            if scalar.properties.isEmojiPresentation || (scalar.properties.isEmoji && !CharacterSet.alphanumerics.contains(scalar)) {
+                hasEmoji = true
+                continue
+            }
+            return false
+        }
+        return hasEmoji
+    }
+
+    private static func isProfileLinkProtectedEntityType(_ type: MessageTextEntityType) -> Bool {
         switch type {
         case .Mention, .Hashtag, .BotCommand, .Url, .Email, .TextUrl, .TextMention,
-             .PhoneNumber, .BankCard, .Code, .Pre:
-            return false
-        default:
+             .PhoneNumber, .BankCard, .Code, .Pre, .CustomEmoji:
             return true
+        default:
+            return false
         }
     }
 
