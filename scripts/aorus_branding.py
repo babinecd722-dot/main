@@ -15714,9 +15714,9 @@ def patch_message_translate_button(tg: Path) -> None:
         helper = (
             "    private func aorusPresentInlineActionToast(_ text: String) {\n"
             "        guard let item = self.item else { return }\n"
-            "        guard let navigationController = item.controllerInteraction.navigationController() else { return }\n"
+            "        guard let controller = item.controllerInteraction.navigationController()?.topViewController as? ViewController else { return }\n"
             "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
-            "        navigationController.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), animated: true)\n"
+            "        controller.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, position: .bottom, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
             "    }\n"
             "\n"
         )
@@ -15726,8 +15726,17 @@ def patch_message_translate_button(tg: Path) -> None:
         replacements = [
             (
                 "        navigationController.present(UndoOverlayController(presentationData: item.presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), in: .current)\n",
+                "        guard let controller = item.controllerInteraction.navigationController()?.topViewController as? ViewController else { return }\n"
+                "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
+                "        controller.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, position: .bottom, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n",
+            ),
+            (
+                "        guard let navigationController = item.controllerInteraction.navigationController() else { return }\n"
                 "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
                 "        navigationController.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), animated: true)\n",
+                "        guard let controller = item.controllerInteraction.navigationController()?.topViewController as? ViewController else { return }\n"
+                "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
+                "        controller.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, position: .bottom, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n",
             ),
             (
                 "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { return }\n",
@@ -15753,6 +15762,10 @@ def patch_message_translate_button(tg: Path) -> None:
             ),
             (
                 "            guard !aorusTranslated.isEmpty, aorusTranslated != aorusOriginal else { return }\n",
+                "            guard !aorusTranslated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, aorusTranslated != aorusOriginal else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusTranslateNoopText) }; return }\n",
+            ),
+            (
+                "            guard !aorusTranslated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, aorusTranslated != aorusOriginal else { return }\n",
                 "            guard !aorusTranslated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, aorusTranslated != aorusOriginal else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusTranslateNoopText) }; return }\n",
             ),
         ]
@@ -15977,9 +15990,9 @@ def patch_message_translate_button(tg: Path) -> None:
     toggle_new = (
         "    private func aorusPresentInlineActionToast(_ text: String) {\n"
         "        guard let item = self.item else { return }\n"
-        "        guard let navigationController = item.controllerInteraction.navigationController() else { return }\n"
+        "        guard let controller = item.controllerInteraction.navigationController()?.topViewController as? ViewController else { return }\n"
         "        let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }\n"
-        "        navigationController.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: true, action: { _ in return false }), animated: true)\n"
+        "        controller.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: text, timeout: nil, customUndoText: nil), elevatedLayout: false, position: .bottom, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
         "    }\n"
         "\n"
         "    private func aorusToggleTranslate() {\n"
@@ -16253,10 +16266,22 @@ def patch_login_backup_key_button(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusBackupKeyPressed" in t:
+        changed = False
+        old_image = "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
+        new_image = (
+            "            let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
+            "            let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
+            "            let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
+        )
+        if old_image in t:
+            t = t.replace(old_image, new_image, 1)
+            changed = True
         old = "            aorusKeyItem.tintColor = self.presentationData.theme.list.itemAccentColor\n"
         new = "            aorusKeyItem.tintColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
         if old in t:
             t = t.replace(old, new, 1)
+            changed = True
+        if changed:
             path.write_text(t, encoding="utf-8")
             print("LoginBackupKey: repaired cached key tint")
         else:
@@ -16273,11 +16298,13 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "        // Only on a genuine primary login (no other account signed in) and only when a\n"
         "        // durable Keychain backup exists, so it never overwrites a live session.\n"
         "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
-        "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
+        "            let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
+        "            let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
+        "            let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
         "            // The phone-entry controller can still expose the stock Telegram blue before\n"
         "            // the full Aorus theme is resolved, so keep this Aorus-only entry point on\n"
         "            // the brand accent explicitly instead of inheriting navigation tint.\n"
-        "            aorusKeyItem.tintColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
+        "            aorusKeyItem.tintColor = aorusKeyColor\n"
         "            self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
         "        }\n"
     )

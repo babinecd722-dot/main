@@ -62,8 +62,8 @@ private enum AorusSessionBackupAlert: Identifiable {
 
     var id: String {
         switch self {
-        case .info:
-            return "info"
+        case let .info(title, text):
+            return "info-\(title)-\(text)"
         case .restoreConfirm:
             return "restore"
         case .deleteConfirm:
@@ -141,7 +141,10 @@ struct AorusSessionBackupView: View {
                 }
                 .disabled(isBusy)
 
-                Button(action: { activeAlert = .restoreConfirm }) {
+                Button(action: {
+                    guard !isBusy else { return }
+                    activeAlert = .restoreConfirm
+                }) {
                     HStack {
                         Image(systemName: "arrow.2.circlepath").frame(width: 30)
                         Text(l10n.restore)
@@ -150,7 +153,10 @@ struct AorusSessionBackupView: View {
                 }
                 .disabled(isBusy || !hasBackup)
 
-                Button(action: { activeAlert = .deleteConfirm }) {
+                Button(action: {
+                    guard !isBusy else { return }
+                    activeAlert = .deleteConfirm
+                }) {
                     HStack {
                         Image(systemName: "trash").frame(width: 30)
                         Text(l10n.deleteAll)
@@ -185,14 +191,14 @@ struct AorusSessionBackupView: View {
                 return Alert(
                     title: Text(l10n.restoreTitle),
                     message: Text(l10n.restoreText),
-                    primaryButton: .default(Text(l10n.restart), action: performRestore),
+                    primaryButton: .default(Text(l10n.restart), action: startRestoreFromAlert),
                     secondaryButton: .cancel(Text(l10n.cancel))
                 )
             case .deleteConfirm:
                 return Alert(
                     title: Text(l10n.deleteTitle),
                     message: Text(l10n.deleteText),
-                    primaryButton: .destructive(Text(l10n.delete), action: performDeleteAll),
+                    primaryButton: .destructive(Text(l10n.delete), action: startDeleteFromAlert),
                     secondaryButton: .cancel(Text(l10n.cancel))
                 )
             }
@@ -229,6 +235,8 @@ struct AorusSessionBackupView: View {
     // MARK: - Actions
 
     private func performBackup() {
+        guard !isBusy else { return }
+        activeAlert = nil
         isBusy = true
         let _ = (context.sharedContext.activeAccountsWithInfo
         |> take(1)
@@ -267,7 +275,22 @@ struct AorusSessionBackupView: View {
         })
     }
 
+    private func startRestoreFromAlert() {
+        activeAlert = nil
+        DispatchQueue.main.async {
+            self.performRestore()
+        }
+    }
+
+    private func startDeleteFromAlert() {
+        activeAlert = nil
+        DispatchQueue.main.async {
+            self.performDeleteAll()
+        }
+    }
+
     private func performRestore() {
+        guard !isBusy else { return }
         isBusy = true
         DispatchQueue.global(qos: .userInitiated).async {
             let result = AccountBackupManager.shared.prepareRestore()
@@ -298,7 +321,14 @@ struct AorusSessionBackupView: View {
     }
 
     private func present(_ title: String, _ text: String) {
-        activeAlert = .info(title, text)
+        if activeAlert != nil {
+            activeAlert = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.activeAlert = .info(title, text)
+            }
+        } else {
+            activeAlert = .info(title, text)
+        }
     }
 
     private func downscalePNG(_ image: UIImage, maxSide: CGFloat = 120.0) -> Data? {
