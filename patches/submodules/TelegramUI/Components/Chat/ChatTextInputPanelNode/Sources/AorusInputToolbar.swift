@@ -97,6 +97,8 @@ struct AorusFormattingToolbarView: View {
     private func iconButton(systemName: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: { if enabled { action() } }) {
             Image(systemName: systemName)
+                .font(.system(size: 17, weight: .regular))
+                .frame(width: 22, height: 22)
                 .foregroundColor(enabled ? Color.primary : Color.secondary.opacity(0.45))
         }
         .buttonStyle(AorusToolbarButtonStyle())
@@ -107,11 +109,12 @@ struct AorusFormattingToolbarView: View {
         Button(action: { if model.canFormat { onMonospace() } }) {
             Group {
                 if #available(iOS 16.4, *) {
-                    Text("M").monospaced()
+                    Text("M").font(.system(size: 17, weight: .medium)).monospaced()
                 } else {
-                    Text("M")
+                    Text("M").font(.system(size: 17, weight: .medium))
                 }
             }
+            .frame(width: 22, height: 22)
             .foregroundColor(model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
         }
         .buttonStyle(AorusToolbarButtonStyle())

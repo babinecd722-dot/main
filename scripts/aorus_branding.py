@@ -11321,15 +11321,16 @@ func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
         ctx.setLineCap(.round)
 
         let path = UIBezierPath()
-        path.move(to: CGPoint(x: 7.2, y: 26.4))
-        path.addLine(to: CGPoint(x: 7.2, y: 14.6))
-        path.addCurve(to: CGPoint(x: 17.0, y: 5.1), controlPoint1: CGPoint(x: 7.2, y: 8.8), controlPoint2: CGPoint(x: 11.2, y: 5.1))
-        path.addCurve(to: CGPoint(x: 26.8, y: 14.6), controlPoint1: CGPoint(x: 22.8, y: 5.1), controlPoint2: CGPoint(x: 26.8, y: 8.8))
-        path.addLine(to: CGPoint(x: 26.8, y: 26.4))
-        path.addCurve(to: CGPoint(x: 22.0, y: 25.2), controlPoint1: CGPoint(x: 25.6, y: 27.5), controlPoint2: CGPoint(x: 23.4, y: 27.5))
-        path.addCurve(to: CGPoint(x: 17.0, y: 25.2), controlPoint1: CGPoint(x: 20.6, y: 22.9), controlPoint2: CGPoint(x: 18.4, y: 22.9))
-        path.addCurve(to: CGPoint(x: 12.0, y: 25.2), controlPoint1: CGPoint(x: 15.6, y: 27.5), controlPoint2: CGPoint(x: 13.4, y: 27.5))
-        path.addCurve(to: CGPoint(x: 7.2, y: 26.4), controlPoint1: CGPoint(x: 10.6, y: 22.9), controlPoint2: CGPoint(x: 8.4, y: 23.8))
+        // Rounded head + straight sides down to the scalloped hem.
+        path.move(to: CGPoint(x: 7.2, y: 24.6))
+        path.addLine(to: CGPoint(x: 7.2, y: 14.2))
+        path.addCurve(to: CGPoint(x: 17.0, y: 4.8), controlPoint1: CGPoint(x: 7.2, y: 8.6), controlPoint2: CGPoint(x: 11.2, y: 4.8))
+        path.addCurve(to: CGPoint(x: 26.8, y: 14.2), controlPoint1: CGPoint(x: 22.8, y: 4.8), controlPoint2: CGPoint(x: 26.8, y: 8.6))
+        path.addLine(to: CGPoint(x: 26.8, y: 24.6))
+        // Three even, identical downward scallops (right -> left).
+        path.addQuadCurve(to: CGPoint(x: 20.27, y: 24.6), controlPoint: CGPoint(x: 23.53, y: 29.2))
+        path.addQuadCurve(to: CGPoint(x: 13.73, y: 24.6), controlPoint: CGPoint(x: 17.0, y: 29.2))
+        path.addQuadCurve(to: CGPoint(x: 7.2, y: 24.6), controlPoint: CGPoint(x: 10.47, y: 29.2))
         path.close()
 
         let ghostColor = UIColor.white
@@ -11343,8 +11344,9 @@ func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
             ghostColor.setFill()
         }
 
-        ctx.fillEllipse(in: CGRect(x: 12.2, y: 14.4, width: 2.9, height: 3.8))
-        ctx.fillEllipse(in: CGRect(x: 18.9, y: 14.4, width: 2.9, height: 3.8))
+        // Eyes, centred in the head.
+        ctx.fillEllipse(in: CGRect(x: 12.6, y: 10.2, width: 3.0, height: 3.9))
+        ctx.fillEllipse(in: CGRect(x: 18.4, y: 10.2, width: 3.0, height: 3.9))
     }.withRenderingMode(.alwaysOriginal)
 }
 
@@ -16842,19 +16844,21 @@ def patch_formatting_panel(tg: Path) -> None:
         "            model: model,\n"
         "            onNewLine: { [weak self] in self?.aorusInsertNewLine() },\n"
         "            onClearFormatting: { [weak self] in\n"
-        "                self?.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
+        "                guard let s = self else { return }\n"
+        "                s.aorusSelectLastWordIfIdle()\n"
+        "                s.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
         "                    return (chatTextInputClearFormattingAttributes(current), inputMode)\n"
         "                }\n"
         "            },\n"
-        "            onQuote: { [weak self] in guard let s = self else { return }; s.formatAttributesQuote(s) },\n"
-        "            onSpoiler: { [weak self] in guard let s = self else { return }; s.formatAttributesSpoiler(s) },\n"
-        "            onBold: { [weak self] in guard let s = self else { return }; s.formatAttributesBold(s) },\n"
-        "            onItalic: { [weak self] in guard let s = self else { return }; s.formatAttributesItalic(s) },\n"
-        "            onMonospace: { [weak self] in guard let s = self else { return }; s.formatAttributesMonospace(s) },\n"
-        "            onLink: { [weak self] in guard let s = self else { return }; s.formatAttributesLink(s) },\n"
-        "            onUnderline: { [weak self] in guard let s = self else { return }; s.formatAttributesUnderline(s) },\n"
-        "            onStrikethrough: { [weak self] in guard let s = self else { return }; s.formatAttributesStrikethrough(s) },\n"
-        "            onCode: { [weak self] in guard let s = self else { return }; s.formatAttributesCodeBlock(s) }\n"
+        "            onQuote: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesQuote(s) },\n"
+        "            onSpoiler: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesSpoiler(s) },\n"
+        "            onBold: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesBold(s) },\n"
+        "            onItalic: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesItalic(s) },\n"
+        "            onMonospace: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesMonospace(s) },\n"
+        "            onLink: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesLink(s) },\n"
+        "            onUnderline: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesUnderline(s) },\n"
+        "            onStrikethrough: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesStrikethrough(s) },\n"
+        "            onCode: { [weak self] in guard let s = self else { return }; s.aorusSelectLastWordIfIdle(); s.formatAttributesCodeBlock(s) }\n"
         "        )\n"
         "        let hosting = UIHostingController(rootView: toolbarView)\n"
         "        hosting.view.backgroundColor = .clear\n"
@@ -16882,11 +16886,25 @@ def patch_formatting_panel(tg: Path) -> None:
         "        }\n"
         "    }\n"
         "\n"
+        "    private func aorusSelectLastWordIfIdle() {\n"
+        "        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
+        "            guard current.selectionRange.lowerBound == current.selectionRange.upperBound else { return (current, inputMode) }\n"
+        "            let ns = current.inputText.string as NSString\n"
+        "            var end = current.selectionRange.lowerBound\n"
+        "            while end > 0 { let ch = ns.character(at: end - 1); if ch == 32 || ch == 9 || ch == 10 || ch == 13 { end -= 1 } else { break } }\n"
+        "            guard end > 0 else { return (current, inputMode) }\n"
+        "            var start = end\n"
+        "            while start > 0 { let ch = ns.character(at: start - 1); if ch == 32 || ch == 9 || ch == 10 || ch == 13 { break } else { start -= 1 } }\n"
+        "            guard start < end else { return (current, inputMode) }\n"
+        "            return (ChatTextInputState(inputText: current.inputText, selectionRange: start ..< end), inputMode)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
         "    private func aorusUpdateToolbarSelectionState() {\n"
         "        if let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel {\n"
-        "            let hasSelection = (self.textInputNode?.selectedRange.length ?? 0) > 0\n"
-        "            if model.canFormat != hasSelection {\n"
-        "                model.canFormat = hasSelection\n"
+        "            let hasText = ((self.textInputNode?.textView.text ?? \"\").isEmpty == false)\n"
+        "            if model.canFormat != hasText {\n"
+        "                model.canFormat = hasText\n"
         "            }\n"
         "        }\n"
         "    }\n"
