@@ -1948,7 +1948,7 @@ def patch_ghost_mode_hide_typing(tg: Path) -> None:
 
     guard = (
         sentinel + "\n"
-        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") {\n"
+        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") {\n"
         "        return .complete()\n"
         "    }\n"
         "    "
@@ -2173,7 +2173,7 @@ def patch_ghost_mode_block_read(tg: Path) -> None:
     guard = (
         anchor + "\n"
         "    " + sentinel + "\n"
-        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") {\n"
+        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") {\n"
         "        return Signal { _ in ActionDisposable {} }\n"
         "    }"
     )
@@ -11174,13 +11174,240 @@ def patch_ghost_mode_stealth_stories(tg: Path) -> None:
         return
     inject = anchor + "\n" + (
         "    " + sentinel + "\n"
-        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") {\n"
+        "    if UserDefaults.standard.bool(forKey: \"aorusgram_ghost_mode\") || UserDefaults.standard.bool(forKey: \"aorusgram_ghost_peer_\\(peerId.toInt64())\") {\n"
         "        return .complete()\n"
         "    }"
     )
     t = t.replace(anchor, inject, 1)
     path.write_text(t, encoding="utf-8")
     print("StealthStories: injected ghost-mode stealth story view")
+
+
+def patch_per_chat_ghost_mode(tg: Path) -> None:
+    """Add a native per-chat Ghost Mode toggle in chat navigation.
+
+    The global Ghost Mode flag remains a master switch. This patch adds
+    per-peer UserDefaults keys (`aorusgram_ghost_peer_<peerId>`) and a compact
+    ghost button next to the chat avatar for users, groups and supergroups.
+    Broadcast channels do not show it. Network guards in typing/read/stories use
+    global OR per-peer state, while online presence stays global because Telegram
+    sends it account-wide and has no peer context.
+    """
+    nav_buttons = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateNavigationButtons.swift"
+    update_state = tg / "submodules/TelegramUI/Sources/Chat/UpdateChatPresentationInterfaceState.swift"
+    controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+
+    if not nav_buttons.is_file():
+        print("PerChatGhost: ChatInterfaceStateNavigationButtons.swift not found, skip")
+        return
+    if not update_state.is_file():
+        print("PerChatGhost: UpdateChatPresentationInterfaceState.swift not found, skip")
+        return
+    if not controller.is_file():
+        print("PerChatGhost: ChatController.swift not found, skip")
+        return
+
+    t = nav_buttons.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: per-chat ghost navigation button"
+    if sentinel not in t:
+        insert_after = "import ChatNavigationButton\n"
+        helper = r'''
+
+// AorusGram: per-chat ghost navigation button
+private func aorusGhostPeerKey(_ peerId: PeerId) -> String {
+    return "aorusgram_ghost_peer_\(peerId.toInt64())"
+}
+
+private final class AorusGhostPeerButton: UIButton {
+    override var isHighlighted: Bool {
+        didSet {
+            UIView.animate(withDuration: 0.16, delay: 0.0, options: [.allowUserInteraction, .curveEaseOut], animations: {
+                self.transform = self.isHighlighted ? CGAffineTransform(scaleX: 0.88, y: 0.88) : .identity
+                self.alpha = self.isHighlighted ? 0.72 : 1.0
+            })
+        }
+    }
+}
+
+private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
+    let size = CGSize(width: 30.0, height: 30.0)
+    return UIGraphicsImageRenderer(size: size).image { context in
+        let ctx = context.cgContext
+        ctx.setLineWidth(2.2)
+        ctx.setLineJoin(.round)
+        ctx.setLineCap(.round)
+
+        let rect = CGRect(x: 5.0, y: 3.5, width: 20.0, height: 23.0)
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY - 5.0))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + 10.0))
+        path.addCurve(to: CGPoint(x: rect.midX, y: rect.minY), controlPoint1: CGPoint(x: rect.minX, y: rect.minY + 3.0), controlPoint2: CGPoint(x: rect.minX + 4.0, y: rect.minY))
+        path.addCurve(to: CGPoint(x: rect.maxX, y: rect.minY + 10.0), controlPoint1: CGPoint(x: rect.maxX - 4.0, y: rect.minY), controlPoint2: CGPoint(x: rect.maxX, y: rect.minY + 3.0))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - 5.0))
+        path.addCurve(to: CGPoint(x: rect.maxX - 4.0, y: rect.maxY - 2.0), controlPoint1: CGPoint(x: rect.maxX - 1.2, y: rect.maxY - 3.2), controlPoint2: CGPoint(x: rect.maxX - 2.4, y: rect.maxY - 2.0))
+        path.addCurve(to: CGPoint(x: rect.midX, y: rect.maxY - 2.0), controlPoint1: CGPoint(x: rect.maxX - 6.2, y: rect.maxY - 2.0), controlPoint2: CGPoint(x: rect.maxX - 7.0, y: rect.maxY - 5.0))
+        path.addCurve(to: CGPoint(x: rect.minX + 4.0, y: rect.maxY - 2.0), controlPoint1: CGPoint(x: rect.minX + 7.0, y: rect.maxY - 5.0), controlPoint2: CGPoint(x: rect.minX + 6.2, y: rect.maxY - 2.0))
+        path.addCurve(to: CGPoint(x: rect.minX, y: rect.maxY - 5.0), controlPoint1: CGPoint(x: rect.minX + 2.4, y: rect.maxY - 2.0), controlPoint2: CGPoint(x: rect.minX + 1.2, y: rect.maxY - 3.2))
+        path.close()
+
+        if active {
+            color.setFill()
+            path.fill()
+            UIColor.black.setFill()
+        } else {
+            color.setStroke()
+            path.stroke()
+            color.setFill()
+        }
+
+        ctx.fillEllipse(in: CGRect(x: 11.0, y: 13.0, width: 3.2, height: 4.0))
+        ctx.fillEllipse(in: CGRect(x: 15.8, y: 13.0, width: 3.2, height: 4.0))
+    }.withRenderingMode(.alwaysOriginal)
+}
+
+func aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState: ChatPresentationInterfaceState, target: Any?, selector: Selector?) -> UIBarButtonItem? {
+    guard case let .peer(peerId) = presentationInterfaceState.chatLocation else {
+        return nil
+    }
+    guard peerId != presentationInterfaceState.accountPeerId, !peerId.isRepliesOrVerificationCodes else {
+        return nil
+    }
+    guard let peer = presentationInterfaceState.renderedPeer?.peer else {
+        return nil
+    }
+
+    var canDisplay = false
+    if peer is TelegramUser || peer is TelegramGroup || peer is TelegramSecretChat {
+        canDisplay = true
+    } else if let channel = peer as? TelegramChannel {
+        if case .group = channel.info {
+            canDisplay = true
+        }
+    }
+    guard canDisplay else {
+        return nil
+    }
+
+    let active = UserDefaults.standard.bool(forKey: "aorusgram_ghost_mode") || UserDefaults.standard.bool(forKey: aorusGhostPeerKey(peerId))
+    let button = AorusGhostPeerButton(type: .custom)
+    button.frame = CGRect(origin: .zero, size: CGSize(width: 34.0, height: 34.0))
+    button.setImage(aorusGhostIconImage(active: active, color: presentationInterfaceState.theme.rootController.navigationBar.buttonColor), for: .normal)
+    button.accessibilityLabel = active ? "Ghost Mode On" : "Ghost Mode Off"
+    button.addTarget(target, action: selector, for: .touchUpInside)
+    let item = UIBarButtonItem(customView: button)
+    item.accessibilityIdentifier = active ? "aorus_ghost_peer_button_on" : "aorus_ghost_peer_button_off"
+    return item
+}
+'''
+        if insert_after in t:
+            t = t.replace(insert_after, insert_after + helper, 1)
+            nav_buttons.write_text(t, encoding="utf-8")
+            print("PerChatGhost: added navigation helper")
+        else:
+            print("PerChatGhost: import anchor not found in ChatInterfaceStateNavigationButtons")
+    else:
+        print("PerChatGhost: navigation helper already injected")
+
+    t = update_state.read_text(encoding="utf-8")
+    if "// AorusGram: append per-chat ghost button" not in t:
+        anchor = (
+            "    if let rightNavigationButton = selfController.rightNavigationButton {\n"
+            "        rightBarButtons.append(rightNavigationButton.buttonItem)\n"
+            "    }\n"
+        )
+        replacement = anchor + (
+            "    // AorusGram: append per-chat ghost button\n"
+            "    if let aorusGhostButton = aorusGhostNavigationButtonForChatInterfaceState(presentationInterfaceState: updatedChatPresentationInterfaceState, target: selfController, selector: #selector(selfController.aorusGhostPeerButtonPressed(_:))) {\n"
+            "        rightBarButtons.append(aorusGhostButton)\n"
+            "    }\n"
+        )
+        if anchor in t:
+            t = t.replace(anchor, replacement, 1)
+            update_state.write_text(t, encoding="utf-8")
+            print("PerChatGhost: appended button into rightBarButtonItems")
+        else:
+            print("PerChatGhost: rightBarButtons anchor not found")
+    else:
+        print("PerChatGhost: rightBarButtonItems already patched")
+
+    t = update_state.read_text(encoding="utf-8")
+    if "// AorusGram: stable compare for regenerated ghost button" not in t:
+        compare_anchor = (
+            "            if rightBarButtons[i] !== currentRightBarButtons[i] {\n"
+            "                rightBarButtonsUpdated = true\n"
+            "                break\n"
+            "            }\n"
+        )
+        compare_replacement = (
+            "            if rightBarButtons[i] !== currentRightBarButtons[i] {\n"
+            "                // AorusGram: stable compare for regenerated ghost button\n"
+            "                let currentAorusId = currentRightBarButtons[i].accessibilityIdentifier\n"
+            "                let nextAorusId = rightBarButtons[i].accessibilityIdentifier\n"
+            "                if currentAorusId?.hasPrefix(\"aorus_ghost_peer_button\") == true && currentAorusId == nextAorusId {\n"
+            "                    continue\n"
+            "                }\n"
+            "                rightBarButtonsUpdated = true\n"
+            "                break\n"
+            "            }\n"
+        )
+        if compare_anchor in t:
+            t = t.replace(compare_anchor, compare_replacement, 1)
+            update_state.write_text(t, encoding="utf-8")
+            print("PerChatGhost: stabilized rightBarButtonItems comparison")
+        else:
+            print("PerChatGhost: rightBarButtons compare anchor not found")
+    else:
+        print("PerChatGhost: rightBarButtonItems comparison already stable")
+
+    t = controller.read_text(encoding="utf-8")
+    if "// AorusGram: per-chat ghost toggle action" not in t:
+        anchor = (
+            "    @objc func rightNavigationButtonAction() {\n"
+            "        if let button = self.rightNavigationButton {\n"
+            "            if case .standard(.previewing) = self.mode {\n"
+            "                self.navigationButtonAction(button.action)\n"
+            "            } else if case let .peer(peerId) = self.chatLocation, case .openChatInfo(expandAvatar: true, _) = button.action, let storyStats = self.contentData?.state.storyStats, storyStats.unseenCount != 0, let avatarNode = self.avatarNode {\n"
+            "                self.openStories(peerId: peerId, avatarHeaderNode: nil, avatarNode: avatarNode.avatarNode)\n"
+            "            } else {\n"
+            "                self.navigationButtonAction(button.action)\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+        )
+        injection = anchor + r'''
+
+    // AorusGram: per-chat ghost toggle action
+    @objc func aorusGhostPeerButtonPressed(_ sender: UIButton) {
+        guard case let .peer(peerId) = self.chatLocation else {
+            return
+        }
+        let key = "aorusgram_ghost_peer_\(peerId.toInt64())"
+        let updatedValue = !UserDefaults.standard.bool(forKey: key)
+        UIView.animate(withDuration: 0.12, delay: 0.0, options: [.allowUserInteraction, .curveEaseOut], animations: {
+            sender.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
+            sender.alpha = 0.7
+        }, completion: { [weak self, weak sender] _ in
+            guard let self else {
+                return
+            }
+            UIView.animate(withDuration: 0.22, delay: 0.0, usingSpringWithDamping: 0.68, initialSpringVelocity: 0.35, options: [.allowUserInteraction, .curveEaseOut], animations: {
+                sender?.transform = .identity
+                sender?.alpha = 1.0
+            })
+            UserDefaults.standard.set(updatedValue, forKey: key)
+            NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
+            self.updateChatPresentationInterfaceState(animated: true, interactive: false, { $0 })
+        })
+    }
+'''
+        if anchor in t:
+            t = t.replace(anchor, injection, 1)
+            controller.write_text(t, encoding="utf-8")
+            print("PerChatGhost: added ChatController toggle action")
+        else:
+            print("PerChatGhost: rightNavigationButtonAction anchor not found")
+    else:
+        print("PerChatGhost: ChatController toggle action already injected")
 
 
 def patch_voice_twin_recorder(tg: Path) -> None:
@@ -16400,6 +16627,7 @@ def main() -> None:
     patch_ghost_mode_proactive_offline(tg)
     patch_ghost_mode_block_read(tg)
     patch_ghost_mode_stealth_stories(tg)
+    patch_per_chat_ghost_mode(tg)
     patch_voice_twin_recorder(tg)
     patch_voice_twin_video_notes(tg)
     patch_voice_twin_calls(tg)
