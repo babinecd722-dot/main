@@ -11208,6 +11208,23 @@ def patch_per_chat_ghost_mode(tg: Path) -> None:
         return
 
     t = nav_buttons.read_text(encoding="utf-8")
+    nav_buttons_changed = False
+    if "import Postbox\n" not in t:
+        import_anchor = "import UIKit\n"
+        if import_anchor in t:
+            t = t.replace(import_anchor, import_anchor + "import Postbox\n", 1)
+            nav_buttons_changed = True
+            print("PerChatGhost: added Postbox import")
+        else:
+            print("PerChatGhost: UIKit import anchor not found for Postbox import")
+    if "private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage?" in t:
+        t = t.replace(
+            "private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage?",
+            "func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage?",
+            1
+        )
+        nav_buttons_changed = True
+        print("PerChatGhost: exposed ghost icon image helper")
     sentinel = "// AorusGram: per-chat ghost navigation button"
     if sentinel not in t:
         insert_after = "import ChatNavigationButton\n"
@@ -11218,7 +11235,7 @@ private func aorusGhostPeerKey(_ peerId: PeerId) -> String {
     return "aorusgram_ghost_peer_\(peerId.toInt64())"
 }
 
-private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
+func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
     let size = CGSize(width: 30.0, height: 30.0)
     return UIGraphicsImageRenderer(size: size).image { context in
         let ctx = context.cgContext
@@ -11290,6 +11307,8 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
         else:
             print("PerChatGhost: import anchor not found in ChatInterfaceStateNavigationButtons")
     else:
+        if nav_buttons_changed:
+            nav_buttons.write_text(t, encoding="utf-8")
         print("PerChatGhost: navigation helper already injected")
 
     t = update_state.read_text(encoding="utf-8")
