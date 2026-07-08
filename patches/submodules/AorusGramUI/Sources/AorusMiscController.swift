@@ -533,14 +533,6 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 return next
             }
         },
-        setFormattingPanel: { value in
-            UserDefaults.standard.set(value, forKey: "aorusgram_formatting_panel")
-            updateState { current in
-                var next = current
-                next.formattingPanel = value
-                return next
-            }
-        },
         selectProfileLinkSelf: {
             UserDefaults.standard.removeObject(forKey: "aorusgram_profile_link_target_peer_id")
             UserDefaults.standard.removeObject(forKey: "aorusgram_profile_link_target_name")
@@ -574,6 +566,14 @@ public func aorusMiscController(context: AccountContext) -> ViewController {
                 }
             }))
             weakController?.push(selectionController)
+        },
+        setFormattingPanel: { value in
+            UserDefaults.standard.set(value, forKey: "aorusgram_formatting_panel")
+            updateState { current in
+                var next = current
+                next.formattingPanel = value
+                return next
+            }
         },
         setPhoneSpoof: { value in
             AorusPhoneSpoofStore.setEnabled(value)
