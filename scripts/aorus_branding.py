@@ -11446,7 +11446,7 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
 // AorusGram: embedded ghost/avatar capsule node
 final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     let avatarNode: ChatAvatarNavigationNode
-    private let backgroundNode: ASDisplayNode
+    private let backgroundNode: NavigationBackgroundNode
     private let ghostButtonNode: ASButtonNode
     private var ghostPeerId: PeerId?
     private var ghostAction: ((PeerId, ASButtonNode) -> Void)?
@@ -11454,13 +11454,11 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
 
     init(avatarNode: ChatAvatarNavigationNode) {
         self.avatarNode = avatarNode
-        self.backgroundNode = ASDisplayNode()
+        self.backgroundNode = NavigationBackgroundNode(color: UIColor(white: 0.0, alpha: 0.32))
         self.ghostButtonNode = ASButtonNode()
         super.init()
         self.isOpaque = false
         self.backgroundNode.isUserInteractionEnabled = false
-        self.backgroundNode.backgroundColor = UIColor(white: 0.0, alpha: 0.32)
-        self.backgroundNode.cornerRadius = 22.0
         self.addSubnode(self.backgroundNode)
         self.addSubnode(self.ghostButtonNode)
         self.addSubnode(self.avatarNode)
@@ -11475,6 +11473,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         self.ghostVisible = isVisible
         self.ghostButtonNode.isHidden = !isVisible
         self.backgroundNode.isHidden = !isVisible
+        self.backgroundNode.updateColor(color: theme.rootController.navigationBar.blurredBackgroundColor, transition: .immediate)
         self.ghostButtonNode.setImage(aorusGhostIconImage(active: isActive, color: theme.rootController.navigationBar.buttonColor), for: [])
         self.ghostButtonNode.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
         self.invalidateCalculatedLayout()
@@ -11508,6 +11507,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         super.layout()
         let size = self.calculatedSize
         self.backgroundNode.frame = CGRect(origin: .zero, size: size)
+        self.backgroundNode.update(size: size, cornerRadius: size.height / 2.0, transition: .immediate)
         if self.ghostVisible {
             self.ghostButtonNode.frame = CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)
             self.avatarNode.frame = CGRect(x: 40.0, y: 0.0, width: 44.0, height: 44.0)
