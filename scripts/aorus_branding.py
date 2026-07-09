@@ -11446,7 +11446,7 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
 // AorusGram: embedded ghost/avatar capsule node
 final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     let avatarNode: ChatAvatarNavigationNode
-    private let backgroundNode: NavigationBackgroundNode
+    private let backgroundNode: ASDisplayNode
     private let ghostButtonNode: ASButtonNode
     private var ghostPeerId: PeerId?
     private var ghostAction: ((PeerId, ASButtonNode) -> Void)?
@@ -11454,11 +11454,18 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
 
     init(avatarNode: ChatAvatarNavigationNode) {
         self.avatarNode = avatarNode
-        self.backgroundNode = NavigationBackgroundNode(color: UIColor(white: 0.0, alpha: 0.32))
+        self.backgroundNode = ASDisplayNode(viewBlock: {
+            let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
+            blurView.clipsToBounds = true
+            blurView.layer.borderWidth = 0.5
+            blurView.layer.borderColor = UIColor.white.withAlphaComponent(0.12).cgColor
+            return blurView
+        })
         self.ghostButtonNode = ASButtonNode()
         super.init()
         self.isOpaque = false
         self.backgroundNode.isUserInteractionEnabled = false
+        self.backgroundNode.clipsToBounds = true
         self.addSubnode(self.backgroundNode)
         self.addSubnode(self.ghostButtonNode)
         self.addSubnode(self.avatarNode)
@@ -11473,7 +11480,6 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         self.ghostVisible = isVisible
         self.ghostButtonNode.isHidden = !isVisible
         self.backgroundNode.isHidden = !isVisible
-        self.backgroundNode.updateColor(color: theme.rootController.navigationBar.blurredBackgroundColor, transition: .immediate)
         self.ghostButtonNode.setImage(aorusGhostIconImage(active: isActive, color: theme.rootController.navigationBar.buttonColor), for: [])
         self.ghostButtonNode.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
         self.invalidateCalculatedLayout()
@@ -11507,7 +11513,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         super.layout()
         let size = self.calculatedSize
         self.backgroundNode.frame = CGRect(origin: .zero, size: size)
-        self.backgroundNode.update(size: size, cornerRadius: size.height / 2.0, transition: .immediate)
+        self.backgroundNode.cornerRadius = size.height / 2.0
         if self.ghostVisible {
             self.ghostButtonNode.frame = CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)
             self.avatarNode.frame = CGRect(x: 40.0, y: 0.0, width: 44.0, height: 44.0)
@@ -16939,9 +16945,8 @@ def patch_formatting_panel(tg: Path) -> None:
         "        }\n"
         "        let toolbarHeight: CGFloat = 55.0\n"
         "        let toolbarSpacing: CGFloat = 6.0\n"
-        "        let toolbarInset: CGFloat = 8.0\n"
-        "        let toolbarX = leftInset + toolbarInset\n"
-        "        let toolbarWidth = max(0.0, width - leftInset - rightInset - toolbarInset * 2.0)\n"
+        "        let toolbarX = leftInset\n"
+        "        let toolbarWidth = max(0.0, width - leftInset - rightInset)\n"
         "        transition.updateFrame(node: node, frame: CGRect(origin: CGPoint(x: toolbarX, y: panelHeight + toolbarSpacing), size: CGSize(width: toolbarWidth, height: toolbarHeight)))\n"
         "        transition.updateAlpha(node: node, alpha: 1.0)\n"
         "        self.aorusUpdateToolbarSelectionState()\n"
