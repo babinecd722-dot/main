@@ -99,7 +99,7 @@ struct AorusFormattingToolbarView: View {
                 formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 2)
+            .padding(.vertical, 8)
         }
         .background(Color(UIColor.clear))
     }

@@ -16937,7 +16937,7 @@ def patch_formatting_panel(tg: Path) -> None:
         "            transition.updateAlpha(node: node, alpha: 0.0)\n"
         "            return 0.0\n"
         "        }\n"
-        "        let toolbarHeight: CGFloat = 44.0\n"
+        "        let toolbarHeight: CGFloat = 55.0\n"
         "        let toolbarSpacing: CGFloat = 6.0\n"
         "        let toolbarInset: CGFloat = 8.0\n"
         "        let toolbarX = leftInset + toolbarInset\n"
