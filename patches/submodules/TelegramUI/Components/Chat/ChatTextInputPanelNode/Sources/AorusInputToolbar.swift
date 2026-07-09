@@ -3,14 +3,14 @@ import Foundation
 import UIKit
 
 // AorusGram "Formatting Panel" — a formatting toolbar shown above the keyboard in
-// the chat input, ported in spirit from Swiftgram's Formatting Panel. It reuses
-// Telegram's own text-formatting methods (formatAttributesBold/Italic/… on the
-// input panel node); this file is only the SwiftUI visual + a small observable
-// model.
-//
-// Formatting buttons are active when the input has text. If the user has no
-// selection, the native text formatter is applied to the whole input while the
-// caret is restored instead of leaving the text highlighted.
+// the chat input. The visual (layout, glass button style, icon set and spacing) is
+// a 1:1 port of Swiftgram's Formatting Panel so it looks identical to the
+// reference. Two AorusGram-specific behaviours are layered on top:
+//   * buttons are white when the input has text that can be formatted and grey
+//     (disabled) when there is nothing to format;
+//   * applying a format without a selection formats the whole input and restores
+//     the caret instead of leaving the text highlighted (handled on the panel-node
+//     side).
 
 final class AorusFormattingToolbarModel: ObservableObject {
     // Whether the current input has text that can be formatted.
@@ -65,99 +65,130 @@ struct AorusFormattingToolbarView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let buttonSize: CGFloat = 38.0
-            let horizontalPadding: CGFloat = 8.0
-            let firstPageButtons: CGFloat = 8.0
-            let firstPageGaps: CGFloat = firstPageButtons - 1.0
-            let availableWidth = max(0.0, geometry.size.width - horizontalPadding * 2.0)
-            let spacing = max(6.0, (availableWidth - buttonSize * firstPageButtons) / firstPageGaps)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: spacing) {
-                    // Always available.
-                    iconButton(systemName: "return", enabled: true, action: onNewLine)
-                    // Needs something selected to clear its formatting.
-                    formatButton(systemName: "pencil.slash", action: onClearFormatting)
-
-                    formatButton(systemName: "text.quote", action: onQuote)
-                    formatButton(systemName: "eye.slash", action: onSpoiler)
-                    formatButton(systemName: "bold", action: onBold)
-                    formatButton(systemName: "italic", action: onItalic)
-                    monospaceButton()
-                    formatButton(systemName: "link", action: onLink)
-
-                    Group {
-                        formatButton(systemName: "underline", action: onUnderline)
-                        formatButton(systemName: "strikethrough", action: onStrikethrough)
-                        formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
-                    }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                // New line — always available.
+                Button(action: onNewLine) {
+                    Image(systemName: "return")
+                        .foregroundColor(Color.primary)
                 }
-                .padding(.horizontal, horizontalPadding)
-                .padding(.vertical, 2)
+                .buttonStyle(AorusToolbarButtonStyle())
+
+                // Clear formatting.
+                formatButton(systemName: "pencil.slash", action: onClearFormatting)
+
+                Spacer()
+
+                // Quote
+                formatButton(systemName: "text.quote", action: onQuote)
+                // Spoiler
+                formatButton(systemName: "eye.slash", action: onSpoiler)
+                // Bold
+                formatButton(systemName: "bold", action: onBold)
+                // Italic
+                formatButton(systemName: "italic", action: onItalic)
+                // Monospace
+                monospaceButton()
+                // Link
+                formatButton(systemName: "link", action: onLink)
+                // Underline
+                formatButton(systemName: "underline", action: onUnderline)
+                // Strikethrough
+                formatButton(systemName: "strikethrough", action: onStrikethrough)
+                // Code
+                formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
             }
-            .clipped()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
         }
+        .background(Color(UIColor.clear))
     }
 
     private func formatButton(systemName: String, action: @escaping () -> Void) -> some View {
-        iconButton(systemName: systemName, enabled: model.canFormat, action: action)
-    }
-
-    private func iconButton(systemName: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: { if enabled { action() } }) {
+        Button(action: { if self.model.canFormat { action() } }) {
             Image(systemName: systemName)
-                .font(.system(size: 17, weight: .regular))
-                .frame(width: 22, height: 22)
-                .foregroundColor(enabled ? Color.primary : Color.secondary.opacity(0.45))
+                .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
         }
         .buttonStyle(AorusToolbarButtonStyle())
-        .disabled(!enabled)
+        .disabled(!self.model.canFormat)
     }
 
     private func monospaceButton() -> some View {
-        Button(action: { if model.canFormat { onMonospace() } }) {
+        Button(action: { if self.model.canFormat { self.onMonospace() } }) {
             Group {
                 if #available(iOS 16.4, *) {
-                    Text("M").font(.system(size: 17, weight: .medium)).monospaced()
+                    Text("M").monospaced()
                 } else {
-                    Text("M").font(.system(size: 17, weight: .medium))
+                    Text("M")
                 }
             }
-            .frame(width: 22, height: 22)
-            .foregroundColor(model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
+            .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
         }
         .buttonStyle(AorusToolbarButtonStyle())
-        .disabled(!model.canFormat)
+        .disabled(!self.model.canFormat)
+    }
+}
+
+// iOS 13–14 blur fallback.
+private struct AorusBlurView: UIViewRepresentable {
+    let style: UIBlurEffect.Style
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        UIVisualEffectView(effect: UIBlurEffect(style: style))
+    }
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
+        uiView.effect = UIBlurEffect(style: style)
+    }
+}
+
+// Glass circle background — matches Swiftgram's toolbar button glass.
+private struct AorusGlass: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let isDark = colorScheme == .dark
+
+        Group {
+            if #available(iOS 15.0, *) {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
+                    )
+            } else {
+                Circle()
+                    .fill(Color.clear)
+                    .background(
+                        AorusBlurView(style: .systemThinMaterial)
+                            .clipShape(Circle())
+                    )
+                    .overlay(
+                        Circle()
+                            .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
+                    )
+            }
+        }
+        .overlay(
+            Circle()
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
     }
 }
 
 private struct AorusToolbarButtonStyle: ButtonStyle {
-    var size: CGFloat = 38.0
+    var size: CGFloat = 39
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .frame(width: size, height: size)
             .contentShape(Circle())
-            .background(AorusGlassCircle())
-            .scaleEffect(configuration.isPressed ? 0.94 : 1.0)
-    }
-}
-
-private struct AorusGlassCircle: View {
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        let isDark = colorScheme == .dark
-        Group {
-            if #available(iOS 15.0, *) {
+            .background(AorusGlass())
+            .overlay(
                 Circle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(Circle().fill(Color.white.opacity(isDark ? 0.05 : 0.20)))
-            } else {
-                Circle().fill(Color.white.opacity(isDark ? 0.12 : 0.20))
-            }
-        }
-        .overlay(Circle().stroke(Color.white.opacity(0.20), lineWidth: 1))
+                    .fill(Color.black.opacity(configuration.isPressed ? 0.08 : 0))
+            )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(nil, value: configuration.isPressed)
     }
 }
