@@ -80,7 +80,16 @@ final class SubscriptionDuckView: UIView {
     private static func materialize(_ duck: SubscriptionDuck) -> String? {
         let dir = NSTemporaryDirectory() + "aorus_subscription_anim"
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        let path = dir + "/" + duck.rawValue + ".tgs"
+        // Key the cache filename on a stable content signature of the embedded
+        // asset (FNV-1a over the base64). Without this, a fixed "<duck>.tgs" name
+        // reuses a stale .tgs cached by a previous app version — so a changed
+        // animation would never appear after an update. A new asset → new hash →
+        // new filename → the old cached file is ignored and the new one is written.
+        var hash: UInt64 = 0xcbf29ce484222325
+        for byte in duck.base64.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x100000001b3
+        }
+        let path = dir + "/" + duck.rawValue + "-" + String(hash, radix: 16) + ".tgs"
         if FileManager.default.fileExists(atPath: path) { return path }
         guard let data = Data(base64Encoded: duck.base64), !data.isEmpty else { return nil }
         do {
