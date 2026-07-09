@@ -10151,6 +10151,87 @@ public enum AorusAntiSearch {
         return true
     }
 }
+
+// AorusGram: outgoing premium-emoji guard.
+//
+// Local Premium unlocks the premium (custom) emoji panel, but the account is not
+// really premium — the SERVER strips CustomEmoji entities from a non-premium
+// sender. The local copy of the message keeps the entity, so the sender's chat
+// renders an inline custom-emoji layer that can never resolve: a dark
+// glyph-silhouette placeholder stuck over the message. Mirror the server's rule
+// at enqueue time instead: drop CustomEmoji entities (the plain emoji text
+// stays and renders as a normal animated emoji), EXCEPT when the account is
+// actually premium or the emoji belongs to the destination group's own emoji
+// pack (which non-premium members are allowed to use).
+public enum AorusPremiumEmojiGuard {
+    public static func strip(_ message: EnqueueMessage, isAccountPremium: Bool, allowedPackId: Int64?) -> EnqueueMessage {
+        if isAccountPremium {
+            return message
+        }
+        switch message {
+        case let .message(text, attributes, inlineStickers, mediaReference, threadId, replyToMessageId, replyToStoryId, localGroupingKey, correlationId, bubbleUpEmojiOrStickersets):
+            var hasCustomEmoji = false
+            outer: for attribute in attributes {
+                if let textEntities = attribute as? TextEntitiesMessageAttribute {
+                    for entity in textEntities.entities {
+                        if case .CustomEmoji = entity.type {
+                            hasCustomEmoji = true
+                            break outer
+                        }
+                    }
+                }
+            }
+            guard hasCustomEmoji else {
+                return message
+            }
+            var removedFileIds = Set<Int64>()
+            var updatedAttributes: [MessageAttribute] = []
+            updatedAttributes.reserveCapacity(attributes.count)
+            for attribute in attributes {
+                if let textEntities = attribute as? TextEntitiesMessageAttribute {
+                    var keptEntities: [MessageTextEntity] = []
+                    keptEntities.reserveCapacity(textEntities.entities.count)
+                    for entity in textEntities.entities {
+                        if case let .CustomEmoji(stickerPack, fileId) = entity.type {
+                            var allowed = false
+                            if let allowedPackId = allowedPackId, let stickerPack = stickerPack, case let .id(packId, _) = stickerPack, packId == allowedPackId {
+                                allowed = true
+                            }
+                            if allowed {
+                                keptEntities.append(entity)
+                            } else {
+                                removedFileIds.insert(fileId)
+                            }
+                        } else {
+                            keptEntities.append(entity)
+                        }
+                    }
+                    updatedAttributes.append(TextEntitiesMessageAttribute(entities: keptEntities))
+                } else {
+                    updatedAttributes.append(attribute)
+                }
+            }
+            var updatedInlineStickers = inlineStickers
+            for fileId in removedFileIds {
+                updatedInlineStickers.removeValue(forKey: MediaId(namespace: Namespaces.Media.CloudFile, id: fileId))
+            }
+            return .message(
+                text: text,
+                attributes: updatedAttributes,
+                inlineStickers: updatedInlineStickers,
+                mediaReference: mediaReference,
+                threadId: threadId,
+                replyToMessageId: replyToMessageId,
+                replyToStoryId: replyToStoryId,
+                localGroupingKey: localGroupingKey,
+                correlationId: correlationId,
+                bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets
+            )
+        case .forward:
+            return message
+        }
+    }
+}
 '''
 
 
@@ -10170,26 +10251,32 @@ def patch_anti_search(tg: Path) -> None:
     if enqueue.is_file():
         t = enqueue.read_text(encoding="utf-8")
         enqueue_function = """public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {
-    let aorusIsBotChatSignal: Signal<Bool, NoError>
-    if AorusAntiSearchStore.isEnabled {
-        aorusIsBotChatSignal = account.postbox.transaction { transaction -> Bool in
-            if let user = transaction.getPeer(peerId) as? TelegramUser, user.botInfo != nil {
-                return true
-            }
-            return false
+    let aorusContextSignal: Signal<(Bool, Bool, Int64?), NoError> = account.postbox.transaction { transaction -> (Bool, Bool, Int64?) in
+        var aorusIsBotChat = false
+        if let user = transaction.getPeer(peerId) as? TelegramUser, user.botInfo != nil {
+            aorusIsBotChat = true
         }
-    } else {
-        aorusIsBotChatSignal = .single(false)
+        var aorusIsPremium = false
+        if let accountUser = transaction.getPeer(account.peerId) as? TelegramUser, accountUser.flags.contains(.isPremium) {
+            aorusIsPremium = true
+        }
+        var aorusAllowedPackId: Int64?
+        if let cachedData = transaction.getPeerCachedData(peerId: peerId) as? CachedChannelData, let emojiPack = cachedData.emojiPack {
+            aorusAllowedPackId = emojiPack.id.id
+        }
+        return (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId)
     }
 
-    return aorusIsBotChatSignal
-    |> mapToSignal { aorusIsBotChat -> Signal<[MessageId?], NoError> in
-        let outboundMessages: [EnqueueMessage]
+    return aorusContextSignal
+    |> mapToSignal { aorusContext -> Signal<[MessageId?], NoError> in
+        let (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId) = aorusContext
+        var outboundMessages: [EnqueueMessage]
         if AorusOutgoingPrivacy.hasActiveTransforms {
             outboundMessages = messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox, disableAntiSearch: aorusIsBotChat) }
         } else {
             outboundMessages = messages
         }
+        outboundMessages = outboundMessages.map { AorusPremiumEmojiGuard.strip($0, isAccountPremium: aorusIsPremium, allowedPackId: aorusAllowedPackId) }
         let signal: Signal<[(Bool, EnqueueMessage)], NoError>
         if let transformOutgoingMessageMedia = account.transformOutgoingMessageMedia {
             signal = opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)
