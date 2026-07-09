@@ -35,6 +35,7 @@ struct AorusFormattingToolbarView: View {
     private let onUnderline: () -> Void
     private let onStrikethrough: () -> Void
     private let onCode: () -> Void
+    private let onAorusCode: () -> Void
 
     init(
         model: AorusFormattingToolbarModel,
@@ -48,7 +49,8 @@ struct AorusFormattingToolbarView: View {
         onLink: @escaping () -> Void,
         onUnderline: @escaping () -> Void,
         onStrikethrough: @escaping () -> Void,
-        onCode: @escaping () -> Void
+        onCode: @escaping () -> Void,
+        onAorusCode: @escaping () -> Void
     ) {
         self._model = ObservedObject(wrappedValue: model)
         self.onNewLine = onNewLine
@@ -62,6 +64,7 @@ struct AorusFormattingToolbarView: View {
         self.onUnderline = onUnderline
         self.onStrikethrough = onStrikethrough
         self.onCode = onCode
+        self.onAorusCode = onAorusCode
     }
 
     var body: some View {
@@ -97,6 +100,8 @@ struct AorusFormattingToolbarView: View {
                 formatButton(systemName: "strikethrough", action: onStrikethrough)
                 // Code
                 formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
+                // AorusCode — hide a secret message inside the visible one.
+                formatButton(systemName: "text.redaction", action: onAorusCode)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
