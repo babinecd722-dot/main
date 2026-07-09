@@ -13046,6 +13046,35 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
         else:
             print("StatusIcons: round-video edited anchor not found — skip")
 
+    # --- Sticker nodes: pass isDeleted so the trash icon shows on deleted stickers ---
+    # Stickers (animated .tgs / video, and static .webp) render their date/status via a
+    # standalone ChatMessageDateAndStatusNode, separate from the bubble/media path, so the
+    # isDeleted flag has to be threaded in here too or deleted stickers show no trash icon.
+    sticker_anchor = (
+        "                edited: edited,\n"
+        "                impressionCount: viewCount,\n"
+    )
+    sticker_inject = (
+        "                edited: edited,\n"
+        "                isDeleted: item.message.text.hasSuffix(\"\\u{2063}\\u{2064}\"),\n"
+        "                impressionCount: viewCount,\n"
+    )
+    for sticker_rel in [
+        "submodules/TelegramUI/Components/Chat/ChatMessageAnimatedStickerItemNode/Sources/ChatMessageAnimatedStickerItemNode.swift",
+        "submodules/TelegramUI/Components/Chat/ChatMessageStickerItemNode/Sources/ChatMessageStickerItemNode.swift",
+    ]:
+        st_path = tg / sticker_rel
+        if st_path.is_file():
+            st = st_path.read_text(encoding="utf-8")
+            if "isDeleted: item.message.text.hasSuffix" in st:
+                print(f"StatusIcons: sticker isDeleted already present ({st_path.name})")
+            elif sticker_anchor in st:
+                st = st.replace(sticker_anchor, sticker_inject, 1)
+                st_path.write_text(st, encoding="utf-8")
+                print(f"StatusIcons: sticker passes isDeleted ({st_path.name})")
+            else:
+                print(f"StatusIcons: sticker edited anchor not found — skip ({st_path.name})")
+
     # --- Bubble item node: dim the bubble cloud (background) to 50% for deleted; text stays opaque ---
     bi_path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
     if bi_path.is_file():

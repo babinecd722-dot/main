@@ -101,7 +101,7 @@ struct AorusFormattingToolbarView: View {
                 // Code
                 formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
                 // AorusCode — hide a secret message inside the visible one.
-                formatButton(systemName: "text.redaction", action: onAorusCode)
+                aorusCodeButton()
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
@@ -132,7 +132,65 @@ struct AorusFormattingToolbarView: View {
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canFormat)
     }
+
+    private func aorusCodeButton() -> some View {
+        Button(action: { if self.model.canFormat { self.onAorusCode() } }) {
+            Image(uiImage: aorusCodeToolbarIcon)
+                .renderingMode(.template)
+                .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
+        }
+        .buttonStyle(AorusToolbarButtonStyle())
+        .disabled(!self.model.canFormat)
+    }
 }
+
+// Custom AorusCode glyph — a chat bubble carrying a </> code mark: a message
+// that secretly carries code/text. Drawn once as a template image so it follows
+// the toolbar's grey/white foreground colour like the SF Symbol buttons.
+private let aorusCodeToolbarIcon: UIImage = {
+    let side: CGFloat = 20.0
+    let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side))
+    let image = renderer.image { context in
+        let ctx = context.cgContext
+        ctx.setStrokeColor(UIColor.black.cgColor)
+        ctx.setLineJoin(.round)
+        ctx.setLineCap(.round)
+
+        // Speech bubble: rounded body + a small tail at the bottom-left.
+        let bubble = UIBezierPath(roundedRect: CGRect(x: 2.3, y: 2.8, width: 15.4, height: 11.8), cornerRadius: 4.0)
+        let tail = UIBezierPath()
+        tail.move(to: CGPoint(x: 6.3, y: 14.6))
+        tail.addLine(to: CGPoint(x: 4.6, y: 18.6))
+        tail.addLine(to: CGPoint(x: 10.3, y: 14.6))
+        bubble.lineWidth = 1.7
+        bubble.stroke()
+        tail.lineWidth = 1.7
+        tail.stroke()
+
+        // </> code mark inside the bubble.
+        ctx.setLineWidth(1.5)
+        let left = UIBezierPath()
+        left.move(to: CGPoint(x: 7.6, y: 6.1))
+        left.addLine(to: CGPoint(x: 5.8, y: 8.7))
+        left.addLine(to: CGPoint(x: 7.6, y: 11.3))
+        left.lineWidth = 1.5
+        left.stroke()
+
+        let right = UIBezierPath()
+        right.move(to: CGPoint(x: 12.4, y: 6.1))
+        right.addLine(to: CGPoint(x: 14.2, y: 8.7))
+        right.addLine(to: CGPoint(x: 12.4, y: 11.3))
+        right.lineWidth = 1.5
+        right.stroke()
+
+        let slash = UIBezierPath()
+        slash.move(to: CGPoint(x: 11.0, y: 5.6))
+        slash.addLine(to: CGPoint(x: 9.0, y: 11.8))
+        slash.lineWidth = 1.5
+        slash.stroke()
+    }
+    return image.withRenderingMode(.alwaysTemplate)
+}()
 
 // iOS 13–14 blur fallback.
 private struct AorusBlurView: UIViewRepresentable {
