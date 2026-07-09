@@ -17205,6 +17205,179 @@ def patch_formatting_panel(tg: Path) -> None:
     print("FormattingPanel: injected toolbar into ChatTextInputPanelNode")
 
 
+def patch_voice_to_text(tg: Path) -> None:
+    """Voice-to-text (dictation) button in the chat input, left of the accessory
+    (sticker/keyboard) buttons. First tap shows an onboarding sheet; press-and-hold
+    records with a live waveform + transcript overlay (AorusVoiceToText in
+    AorusGramUI). Mirrors the built-in inline AI button for placement/lifecycle."""
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift"
+    if not path.is_file():
+        print("VoiceToText: ChatTextInputPanelNode.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusVoiceLongPress" in t:
+        print("VoiceToText: already patched")
+        return
+
+    # AorusGramUI is already imported (formatting panel / AorusCode). Ensure it.
+    if "import AorusGramUI\n" not in t:
+        t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+
+    # 1) Stored properties (after the aiButton declaration).
+    prop_anchor = "    private var aiButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+    prop_inject = (
+        prop_anchor
+        + "    private var aorusVoiceButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+        + "    private var aorusVoiceSession: AorusVoiceSession?\n"
+        + "    private var aorusVoiceStartY: CGFloat = 0.0\n"
+        + "    private var aorusVoiceCancel = false\n"
+    )
+    if prop_anchor in t:
+        t = t.replace(prop_anchor, prop_inject, 1)
+    else:
+        print("VoiceToText: WARNING property anchor not found")
+
+    # 2) Reserve width for the button in the text-field metrics phase.
+    metrics_anchor = "        if self.isAIEnabled && width >= 500.0 {\n"
+    metrics_inject = (
+        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
+        "            accessoryButtonsWidth += self.accessoryButtonSpacing\n"
+        "            accessoryButtonsWidth += 32.0\n"
+        "        }\n"
+        + metrics_anchor
+    )
+    if metrics_anchor in t:
+        t = t.replace(metrics_anchor, metrics_inject, 1)
+    else:
+        print("VoiceToText: WARNING metrics anchor not found")
+
+    # 3) Create + place the button just left of the accessory buttons.
+    place_anchor = "        self.currentTextInputBackgroundWidthOffset = textInputBackgroundWidthOffset\n"
+    place_inject = (
+        "        // AorusGram: voice-to-text button (left of the accessory buttons)\n"
+        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
+        "            let aorusVoiceButton: (button: HighlightTrackingButton, icon: UIImageView)\n"
+        "            if let current = self.aorusVoiceButton {\n"
+        "                aorusVoiceButton = current\n"
+        "            } else {\n"
+        "                aorusVoiceButton = (HighlightTrackingButton(), GlassBackgroundView.ContentImageView())\n"
+        "                self.aorusVoiceButton = aorusVoiceButton\n"
+        "                aorusVoiceButton.button.highligthedChanged = { [weak self] highlighted in\n"
+        "                    guard let self, let aorusVoiceButton = self.aorusVoiceButton else { return }\n"
+        "                    if highlighted {\n"
+        "                        aorusVoiceButton.icon.alpha = 0.6\n"
+        "                    } else {\n"
+        "                        let iconTransition: ContainedViewLayoutTransition = .animated(duration: 0.25, curve: .easeInOut)\n"
+        "                        iconTransition.updateAlpha(layer: aorusVoiceButton.icon.layer, alpha: 1.0)\n"
+        "                    }\n"
+        "                }\n"
+        "                aorusVoiceButton.icon.image = UIImage(systemName: \"waveform\", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular))?.withRenderingMode(.alwaysTemplate)\n"
+        "                aorusVoiceButton.button.addTarget(self, action: #selector(self.aorusVoiceButtonTapped), for: .touchUpInside)\n"
+        "                let aorusVoiceLongPress = UILongPressGestureRecognizer(target: self, action: #selector(self.aorusVoiceLongPress(_:)))\n"
+        "                aorusVoiceLongPress.minimumPressDuration = 0.25\n"
+        "                aorusVoiceButton.button.addGestureRecognizer(aorusVoiceLongPress)\n"
+        "                aorusVoiceButton.button.addSubview(aorusVoiceButton.icon)\n"
+        "                self.textInputContainerBackgroundView.contentView.addSubview(aorusVoiceButton.icon)\n"
+        "                self.textInputContainerBackgroundView.contentView.addSubview(aorusVoiceButton.button)\n"
+        "            }\n"
+        "            aorusVoiceButton.icon.tintColor = interfaceState.theme.chat.inputPanel.inputControlColor\n"
+        "            let aorusVoiceButtonSize = CGSize(width: 32.0, height: minimalInputHeight)\n"
+        "            let aorusVoiceButtonFrame = CGRect(origin: CGPoint(x: nextButtonTopRight.x - aorusVoiceButtonSize.width, y: nextButtonTopRight.y + floor((minimalInputHeight - aorusVoiceButtonSize.height) / 2.0)), size: aorusVoiceButtonSize)\n"
+        "            transition.updateFrame(view: aorusVoiceButton.button, frame: aorusVoiceButtonFrame)\n"
+        "            if let image = aorusVoiceButton.icon.image {\n"
+        "                transition.updateFrame(view: aorusVoiceButton.icon, frame: image.size.centered(in: aorusVoiceButtonFrame))\n"
+        "            }\n"
+        "            nextButtonTopRight.x -= aorusVoiceButtonSize.width\n"
+        "            nextButtonTopRight.x -= self.accessoryButtonSpacing\n"
+        "        } else if let aorusVoiceButton = self.aorusVoiceButton {\n"
+        "            self.aorusVoiceButton = nil\n"
+        "            aorusVoiceButton.button.removeFromSuperview()\n"
+        "            aorusVoiceButton.icon.removeFromSuperview()\n"
+        "        }\n"
+        + place_anchor
+    )
+    if place_anchor in t:
+        t = t.replace(place_anchor, place_inject, 1)
+    else:
+        print("VoiceToText: WARNING placement anchor not found")
+
+    # 4) Handler methods (before aiButtonPressed).
+    method_anchor = "    @objc private func aiButtonPressed() {\n"
+    handlers = (
+        "    @objc private func aorusVoiceButtonTapped() {\n"
+        "        if AorusVoiceToText.isOnboarded { return }\n"
+        "        self.aorusPresentVoiceOnboarding()\n"
+        "    }\n"
+        "\n"
+        "    @objc private func aorusVoiceLongPress(_ gesture: UILongPressGestureRecognizer) {\n"
+        "        switch gesture.state {\n"
+        "        case .began:\n"
+        "            if !AorusVoiceToText.isOnboarded {\n"
+        "                self.aorusPresentVoiceOnboarding()\n"
+        "                return\n"
+        "            }\n"
+        "            guard let hostView = (self.interfaceInteraction?.chatController() as? UIViewController)?.view else { return }\n"
+        "            let accent = self.presentationInterfaceState?.theme.list.itemAccentColor ?? UIColor.systemBlue\n"
+        "            let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
+        "            self.aorusVoiceStartY = gesture.location(in: self.view).y\n"
+        "            self.aorusVoiceCancel = false\n"
+        "            let session = AorusVoiceSession(hostView: hostView, accent: accent, isRu: isRu)\n"
+        "            self.aorusVoiceSession = session\n"
+        "            session.start()\n"
+        "        case .changed:\n"
+        "            guard self.aorusVoiceSession != nil else { return }\n"
+        "            let dy = self.aorusVoiceStartY - gesture.location(in: self.view).y\n"
+        "            let shouldCancel = dy > 80.0\n"
+        "            if shouldCancel != self.aorusVoiceCancel {\n"
+        "                self.aorusVoiceCancel = shouldCancel\n"
+        "                self.aorusVoiceSession?.setCancelHighlighted(shouldCancel)\n"
+        "            }\n"
+        "        case .ended, .cancelled, .failed:\n"
+        "            if let session = self.aorusVoiceSession {\n"
+        "                self.aorusVoiceSession = nil\n"
+        "                if self.aorusVoiceCancel {\n"
+        "                    session.cancel()\n"
+        "                } else {\n"
+        "                    session.finish(insert: { [weak self] text in\n"
+        "                        self?.aorusInsertVoiceText(text)\n"
+        "                    })\n"
+        "                }\n"
+        "            }\n"
+        "        default:\n"
+        "            break\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private func aorusPresentVoiceOnboarding() {\n"
+        "        guard let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
+        "        let accent = self.presentationInterfaceState?.theme.list.itemAccentColor ?? UIColor.systemBlue\n"
+        "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
+        "        let controller = AorusVoiceOnboardingController(isRu: isRu, accent: accent, onContinue: {})\n"
+        "        parentVC.present(controller, animated: true, completion: nil)\n"
+        "    }\n"
+        "\n"
+        "    private func aorusInsertVoiceText(_ text: String) {\n"
+        "        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
+        "            let ns = NSMutableAttributedString(attributedString: current.inputText)\n"
+        "            let needsSpace = ns.length > 0 && !ns.string.hasSuffix(\" \") && !ns.string.hasSuffix(\"\\n\")\n"
+        "            let insertion = needsSpace ? \" \" + text : text\n"
+        "            let range = current.selectionRange\n"
+        "            ns.replaceCharacters(in: NSRange(location: range.lowerBound, length: range.count), with: insertion)\n"
+        "            let newPosition = range.lowerBound + (insertion as NSString).length\n"
+        "            return (ChatTextInputState(inputText: ns, selectionRange: newPosition ..< newPosition), inputMode)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+    )
+    if method_anchor in t:
+        t = t.replace(method_anchor, handlers + method_anchor, 1)
+    else:
+        print("VoiceToText: WARNING method anchor not found")
+
+    path.write_text(t, encoding="utf-8")
+    print("VoiceToText: injected voice-to-text button + onboarding into ChatTextInputPanelNode")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -17294,6 +17467,7 @@ def main() -> None:
     patch_undo_button_theme_color(tg)
     patch_login_backup_key_button(tg)
     patch_formatting_panel(tg)
+    patch_voice_to_text(tg)
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_media_caption_rich_edit(tg)
