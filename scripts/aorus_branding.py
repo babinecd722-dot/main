@@ -11443,33 +11443,40 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
         import_anchor = "import TextProcessingScreen\n"
         capsule_code = r'''
 
+import ComponentFlow
+import GlassBackgroundComponent
+
 // AorusGram: embedded ghost/avatar capsule node
 final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     let avatarNode: ChatAvatarNavigationNode
-    private let backgroundNode: ASDisplayNode
+    private var glassView: GlassBackgroundView?
     private let ghostButtonNode: ASButtonNode
     private var ghostPeerId: PeerId?
     private var ghostAction: ((PeerId, ASButtonNode) -> Void)?
     private var ghostVisible: Bool = false
+    private var isDarkAppearance: Bool = true
 
     init(avatarNode: ChatAvatarNavigationNode) {
         self.avatarNode = avatarNode
-        self.backgroundNode = ASDisplayNode(viewBlock: {
-            let blurView = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
-            blurView.clipsToBounds = true
-            blurView.layer.borderWidth = 0.5
-            blurView.layer.borderColor = UIColor.white.withAlphaComponent(0.12).cgColor
-            return blurView
-        })
         self.ghostButtonNode = ASButtonNode()
         super.init()
         self.isOpaque = false
-        self.backgroundNode.isUserInteractionEnabled = false
-        self.backgroundNode.clipsToBounds = true
-        self.addSubnode(self.backgroundNode)
         self.addSubnode(self.ghostButtonNode)
         self.addSubnode(self.avatarNode)
         self.ghostButtonNode.addTarget(self, action: #selector(self.ghostPressed), forControlEvents: .touchUpInside)
+    }
+
+    override func didLoad() {
+        super.didLoad()
+        // Native navigation-bar "liquid glass" pill, identical to the back-button
+        // and title capsules (GlassBackgroundView drives UIGlassEffect on iOS 26 and
+        // falls back to the legacy glass on older systems). Sits behind the ghost
+        // button and the avatar.
+        let glassView = GlassBackgroundView(frame: CGRect())
+        glassView.isUserInteractionEnabled = false
+        self.glassView = glassView
+        self.view.insertSubview(glassView, at: 0)
+        self.setNeedsLayout()
     }
 
     func updateGhost(peerId: PeerId?, theme: PresentationTheme, action: @escaping (PeerId, ASButtonNode) -> Void) {
@@ -11479,7 +11486,7 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         let isActive = peerId.flatMap { aorusGhostIsActive(peerId: $0) } ?? false
         self.ghostVisible = isVisible
         self.ghostButtonNode.isHidden = !isVisible
-        self.backgroundNode.isHidden = !isVisible
+        self.isDarkAppearance = theme.overallDarkAppearance
         self.ghostButtonNode.setImage(aorusGhostIconImage(active: isActive, color: theme.rootController.navigationBar.buttonColor), for: [])
         self.ghostButtonNode.accessibilityLabel = isActive ? "Ghost Mode On" : "Ghost Mode Off"
         self.invalidateCalculatedLayout()
@@ -11512,8 +11519,10 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
     override func layout() {
         super.layout()
         let size = self.calculatedSize
-        self.backgroundNode.frame = CGRect(origin: .zero, size: size)
-        self.backgroundNode.cornerRadius = size.height / 2.0
+        if let glassView = self.glassView {
+            glassView.frame = CGRect(origin: .zero, size: size)
+            glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: self.ghostVisible, transition: .immediate)
+        }
         if self.ghostVisible {
             self.ghostButtonNode.frame = CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)
             self.avatarNode.frame = CGRect(x: 40.0, y: 0.0, width: 44.0, height: 44.0)
