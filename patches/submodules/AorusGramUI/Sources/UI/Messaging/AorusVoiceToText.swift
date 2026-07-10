@@ -343,10 +343,11 @@ public final class AorusVoiceSession {
             sum += sample * sample
         }
         let rms = sqrt(sum / Float(frameLength))
-        // Map roughly [-50 dB, -10 dB] to [0, 1].
+        // Speech usually sits well below peak amplitude. Use a curved response so
+        // normal speech is clearly visible while loud speech still has headroom.
         let db = 20.0 * log10(max(rms, 1e-7))
-        let normalized = (db + 50.0) / 40.0
-        return CGFloat(min(1.0, max(0.0, normalized)))
+        let normalized = min(1.0, max(0.0, (db + 58.0) / 42.0))
+        return CGFloat(pow(normalized, 0.48))
     }
 
     private func teardownAudio() {
@@ -469,7 +470,7 @@ final class AorusVoiceOverlayView: UIView {
             self.waveform.topAnchor.constraint(equalTo: content.topAnchor, constant: 12.0),
             self.waveform.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
             self.waveform.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16.0),
-            self.waveform.heightAnchor.constraint(equalToConstant: 30.0),
+            self.waveform.heightAnchor.constraint(equalToConstant: 48.0),
 
             self.transcriptLabel.topAnchor.constraint(equalTo: self.waveform.bottomAnchor, constant: 6.0),
             self.transcriptLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
@@ -629,31 +630,40 @@ final class AorusAnimatedVoiceBackdropView: UIView {
 final class AorusWaveformView: UIView {
     private let glowLayer = CAShapeLayer()
     private let strokeGradient = CAGradientLayer()
-    private let strokeMask = CAShapeLayer()
+    private let strokeMask = CALayer()
+    private var ribbonLayers: [CAShapeLayer] = []
     private var displayLink: CADisplayLink?
     private var targetLevel: CGFloat = 0.04
     private var displayedLevel: CGFloat = 0.04
     private var phase: CGFloat = 0.0
+    private let ribbonCount = 9
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.isUserInteractionEnabled = false
 
         self.glowLayer.fillColor = UIColor.clear.cgColor
-        self.glowLayer.lineWidth = 5.5
+        self.glowLayer.lineWidth = 4.8
         self.glowLayer.lineCap = .round
         self.glowLayer.lineJoin = .round
-        self.glowLayer.opacity = 0.25
-        self.glowLayer.shadowRadius = 7.0
-        self.glowLayer.shadowOpacity = 0.75
+        self.glowLayer.opacity = 0.34
+        self.glowLayer.shadowRadius = 8.0
+        self.glowLayer.shadowOpacity = 0.85
         self.glowLayer.shadowOffset = .zero
         self.layer.addSublayer(self.glowLayer)
 
-        self.strokeMask.fillColor = UIColor.clear.cgColor
-        self.strokeMask.strokeColor = UIColor.black.cgColor
-        self.strokeMask.lineWidth = 2.4
-        self.strokeMask.lineCap = .round
-        self.strokeMask.lineJoin = .round
+        for index in 0 ..< self.ribbonCount {
+            let line = CAShapeLayer()
+            let distance = abs(CGFloat(index) - CGFloat(self.ribbonCount - 1) / 2.0) / (CGFloat(self.ribbonCount - 1) / 2.0)
+            line.fillColor = UIColor.clear.cgColor
+            line.strokeColor = UIColor.black.cgColor
+            line.lineWidth = 0.9 + (1.0 - distance) * 0.65
+            line.lineCap = .round
+            line.lineJoin = .round
+            line.opacity = Float(0.46 + (1.0 - distance) * 0.54)
+            self.strokeMask.addSublayer(line)
+            self.ribbonLayers.append(line)
+        }
 
         self.strokeGradient.startPoint = CGPoint(x: 0.0, y: 0.5)
         self.strokeGradient.endPoint = CGPoint(x: 1.0, y: 0.5)
@@ -669,7 +679,12 @@ final class AorusWaveformView: UIView {
     }
 
     override var tintColor: UIColor! {
-        didSet { self.updateColors() }
+        didSet {
+            self.updateColors()
+            if self.window != nil {
+                self.restartGradientAnimation()
+            }
+        }
     }
 
     func push(level: CGFloat) {
@@ -681,11 +696,13 @@ final class AorusWaveformView: UIView {
         if self.window == nil {
             self.displayLink?.invalidate()
             self.displayLink = nil
+            self.strokeGradient.removeAllAnimations()
         } else if self.displayLink == nil {
             let displayLink = CADisplayLink(target: self, selector: #selector(self.stepWaveform))
             displayLink.preferredFramesPerSecond = 30
             displayLink.add(to: .main, forMode: .common)
             self.displayLink = displayLink
+            self.startGradientAnimationIfNeeded()
         }
     }
 
@@ -694,52 +711,104 @@ final class AorusWaveformView: UIView {
         self.glowLayer.frame = self.bounds
         self.strokeGradient.frame = self.bounds
         self.strokeMask.frame = self.bounds
+        for line in self.ribbonLayers {
+            line.frame = self.bounds
+        }
         self.updatePath()
     }
 
     private func updateColors() {
         let accent = self.tintColor ?? UIColor.systemBlue
-        let blue = UIColor(red: 0.30, green: 0.72, blue: 1.0, alpha: 1.0)
-        let rose = UIColor(red: 1.0, green: 0.42, blue: 0.72, alpha: 1.0)
-        self.strokeGradient.colors = [blue.cgColor, accent.cgColor, rose.cgColor, accent.cgColor, blue.cgColor]
-        self.strokeGradient.locations = [0.0, 0.25, 0.5, 0.75, 1.0]
+        self.strokeGradient.colors = self.wavePalette(accent: accent, shift: 0)
+        self.strokeGradient.locations = [0.0, 0.18, 0.38, 0.60, 0.82, 1.0]
         self.glowLayer.strokeColor = accent.cgColor
         self.glowLayer.shadowColor = accent.cgColor
     }
 
+    private func wavePalette(accent: UIColor, shift: Int) -> [CGColor] {
+        let colors = [
+            UIColor(red: 0.20, green: 0.48, blue: 1.0, alpha: 1.0),
+            UIColor(red: 0.10, green: 0.88, blue: 1.0, alpha: 1.0),
+            UIColor(red: 0.20, green: 0.95, blue: 0.58, alpha: 1.0),
+            accent,
+            UIColor(red: 1.0, green: 0.91, blue: 0.16, alpha: 1.0),
+            UIColor(red: 1.0, green: 0.38, blue: 0.18, alpha: 1.0)
+        ]
+        let offset = ((shift % colors.count) + colors.count) % colors.count
+        return Array(colors[offset...] + colors[..<offset]).map(\.cgColor)
+    }
+
+    private func startGradientAnimationIfNeeded() {
+        guard self.strokeGradient.animation(forKey: "aorusWaveColors") == nil else { return }
+        let accent = self.tintColor ?? UIColor.systemBlue
+        let animation = CAKeyframeAnimation(keyPath: "colors")
+        animation.values = [
+            self.wavePalette(accent: accent, shift: 0),
+            self.wavePalette(accent: accent, shift: 1),
+            self.wavePalette(accent: accent, shift: 2),
+            self.wavePalette(accent: accent, shift: 3),
+            self.wavePalette(accent: accent, shift: 4),
+            self.wavePalette(accent: accent, shift: 5),
+            self.wavePalette(accent: accent, shift: 0)
+        ]
+        animation.keyTimes = [0.0, 0.17, 0.33, 0.5, 0.67, 0.83, 1.0]
+        animation.duration = 6.0
+        animation.repeatCount = .infinity
+        animation.calculationMode = .linear
+        self.strokeGradient.add(animation, forKey: "aorusWaveColors")
+    }
+
+    private func restartGradientAnimation() {
+        self.strokeGradient.removeAnimation(forKey: "aorusWaveColors")
+        self.startGradientAnimationIfNeeded()
+    }
+
     @objc private func stepWaveform() {
-        self.displayedLevel += (self.targetLevel - self.displayedLevel) * 0.18
-        self.targetLevel = max(0.04, self.targetLevel * 0.94)
-        self.phase += 0.12
+        let response: CGFloat = self.targetLevel > self.displayedLevel ? 0.42 : 0.12
+        self.displayedLevel += (self.targetLevel - self.displayedLevel) * response
+        self.targetLevel = max(0.04, self.targetLevel * 0.975)
+        self.phase += 0.105 + self.displayedLevel * 0.035
         self.updatePath()
     }
 
     private func updatePath() {
         guard self.bounds.width > 0.0, self.bounds.height > 0.0 else { return }
 
-        let path = CGMutablePath()
-        let steps = 72
+        let steps = 64
         let midY = self.bounds.midY
-        let amplitude = 1.5 + self.displayedLevel * self.bounds.height * 0.42
-
-        for index in 0 ... steps {
-            let progress = CGFloat(index) / CGFloat(steps)
-            let x = progress * self.bounds.width
-            let envelope = pow(max(0.0, sin(progress * .pi)), 0.72)
-            let primary = sin(progress * .pi * 4.0 + self.phase)
-            let detail = sin(progress * .pi * 7.0 - self.phase * 0.72) * 0.28
-            let y = midY + (primary + detail) * amplitude * envelope
-            if index == 0 {
-                path.move(to: CGPoint(x: x, y: y))
-            } else {
-                path.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
+        let amplitude = 3.5 + self.displayedLevel * self.bounds.height * 0.34
+        let halfRibbon = CGFloat(self.ribbonCount - 1) / 2.0
+        var centerPath: CGPath?
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        self.strokeMask.path = path
-        self.glowLayer.path = path
+        for (lineIndex, line) in self.ribbonLayers.enumerated() {
+            let path = CGMutablePath()
+            let linePosition = (CGFloat(lineIndex) - halfRibbon) / halfRibbon
+            let phaseOffset = linePosition * 0.38
+
+            for index in 0 ... steps {
+                let progress = CGFloat(index) / CGFloat(steps)
+                let x = progress * self.bounds.width
+                let envelope = pow(max(0.0, sin(progress * .pi)), 0.68)
+                let primary = sin(progress * .pi * 4.0 + self.phase + phaseOffset)
+                let detail = sin(progress * .pi * 7.0 - self.phase * 0.68 + phaseOffset * 0.6) * 0.24
+                let spreadMotion = 0.68 + 0.32 * sin(progress * .pi * 2.0 + self.phase * 0.34)
+                let ribbonSpread = linePosition * (2.2 + self.displayedLevel * 7.0) * envelope * spreadMotion
+                let rawY = midY + (primary + detail) * amplitude * envelope + ribbonSpread
+                let y = min(self.bounds.height - 1.5, max(1.5, rawY))
+                if index == 0 {
+                    path.move(to: CGPoint(x: x, y: y))
+                } else {
+                    path.addLine(to: CGPoint(x: x, y: y))
+                }
+            }
+            line.path = path
+            if lineIndex == self.ribbonCount / 2 {
+                centerPath = path
+            }
+        }
+        self.glowLayer.path = centerPath
         CATransaction.commit()
     }
 }
