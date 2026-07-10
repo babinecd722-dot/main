@@ -4,8 +4,8 @@ import UIKit
 // Root-level subscription gate.
 //
 // ENFORCEMENT MODEL:
-//  • Inert only if no key is provisioned (LicenseKeyProvider.isProvisioned == false).
-//    With a key embedded this never happens — the gate is always active.
+//  • Production CI requires a provisioned key. A malformed local build fails closed
+//    for protected features instead of silently becoming an unlocked client.
 //  • The SERVER is the source of truth. The user reaches the chat list only on an
 //    active verdict (trial_active / paid_active).
 //  • Offline grace (per spec §12): a cached active license whose active_until has not
@@ -48,11 +48,16 @@ final class LicenseGate {
     // Entry point — called once from AorusGramBootstrap.setup().
     func start() {
         guard !started else { return }
-        guard LicenseKeyProvider.isProvisioned else { return }   // inert without a key
+        guard LicenseKeyProvider.isProvisioned else {
+            setFeatureAccess(active: false)
+            return
+        }
         AorusEnvGuard.enforceAtGate()                            // independent JB hard-stop
         started = true
         LicenseStore.shared.load()
         if telegramUserId == nil { telegramUserId = LicenseStore.shared.telegramUserId }
+        let initialStatus = LicenseStore.shared.effectiveOfflineStatus()
+        setFeatureAccess(active: initialStatus.allowsAppAccess)
 
         NotificationCenter.default.addObserver(self, selector: #selector(didBecomeActive),
                                                name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -76,7 +81,7 @@ final class LicenseGate {
         // Defer so the app's scene/window exists before we draw the overlay.
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            let cached = LicenseStore.shared.effectiveOfflineStatus()
+            let cached = initialStatus
             if cached.allowsAppAccess {
                 // Valid offline grace — let the app through; confirm with the server.
             } else if cached.isLocked {

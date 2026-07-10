@@ -30,6 +30,11 @@ public final class AorusGramBootstrap {
             AorusTamperGuard.shared.verify()
         }
 
+        // Resolve the cached license verdict before the proxy manager is touched.
+        // An active signed cache permits the proxy immediately; every other state is
+        // fail-closed until LicenseGate receives a fresh active server response.
+        LicenseGate.shared.start()
+
         // System proxy (network shield) — touching `.shared` runs load(), which
         // synchronously republishes the cached proxy to the flat UserDefaults
         // keys read by the injected network layer, so a returning user connects
@@ -145,11 +150,6 @@ public final class AorusGramBootstrap {
                 LicenseGate.shared.setTelegramUserId(uid)
             }
         }
-
-        // Subscription / license gate. INERT unless an HMAC key is provisioned, and
-        // strictly fail-open — it can never lock the user out without a definitive
-        // server/cache "expired/banned" verdict.
-        LicenseGate.shared.start()
 
         observeAppLifecycle()
     }

@@ -2,30 +2,29 @@ import Foundation
 
 // HMAC key provider.
 //
-// The license key is stored split into chunks and reassembled + hex-decoded to RAW
-// bytes only at signing time. The hex string is NEVER used directly as the key
-// (HMAC uses the decoded bytes). Splitting only lightly raises the reverse-
-// engineering bar — the key is still embedded in the binary.
+// The key is injected at build time from the LICENSE_HMAC_KEY_HEX GitHub secret.
+// Source control contains only the marker below, never active key material.
 //
 // SECURITY: never log the key, the reassembled bytes, or any signature.
 enum LicenseKeyProvider {
     static let keyVersion = "1"   // X-Aorus-Kv
 
-    private static let keyChunks: [String] = [
-        "0d0199727dbf6872",
-        "c04f14712fc590d1",
-        "d2e67bb7c25e37f0",
-        "a52e287ca7979b78",
-        "b500f59879b5a448",
-        "03553fc94fabd4e5",
-        "df4ba3d46e75f54c",
-        "109d3548c61f40a1",
+    private static let pad: [UInt8] = [
+        0x5A, 0xC3, 0x19, 0x7E, 0x2B, 0xF0, 0x8D, 0x44,
+        0x16, 0xA9, 0x6C, 0xD1, 0x3F, 0x82, 0xE5, 0x70
     ]
 
-    static var isProvisioned: Bool { !keyChunks.isEmpty }
+    private static let obfuscated: [UInt8] = [
+        /*__AORUS_LICENSE_KEY_OBFUSCATED__*/
+    ]
 
-    // Reassemble → hex-decode → raw key bytes. The caller must not retain or log it.
+    static var isProvisioned: Bool { !obfuscated.isEmpty }
+
+    // De-obfuscate the raw key bytes. The caller must not retain or log them.
     static func licenseHmacKeyBytes() -> Data {
-        return LicenseCrypto.hexDecode(keyChunks.joined())
+        guard !obfuscated.isEmpty else { return Data() }
+        return Data(obfuscated.enumerated().map { index, byte in
+            byte ^ pad[index % pad.count]
+        })
     }
 }

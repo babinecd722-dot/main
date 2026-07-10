@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v229-release-12.8-png8
+          key: tg-ios-src-v230-release-12.8-png8
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -511,9 +511,11 @@ jobs:
       - name: AorusGram branding (launch screen, name, URLs, icons, strings)
         env:
           # License HMAC key — injected (obfuscated) into LicenseKeyProvider.swift
-          # at build time. Set this as a repo secret. If unset, the license client
-          # is left unprovisioned (refuses to sign) and the build still succeeds.
+          # at build time. The branding step fails closed if this secret is absent
+          # or malformed, preventing an accidentally unlicensed production build.
           LICENSE_HMAC_KEY_HEX: ${{ secrets.LICENSE_HMAC_KEY_HEX }}
+          # Separate rotatable request key for https://api.aorusgram.com/getProxy.
+          PROXY_HMAC_KEY_HEX: ${{ secrets.PROXY_HMAC_KEY_HEX }}
         run: |
           python3 aorusgram/scripts/aorus_branding.py telegram-ios
           # Cached telegram-ios trees can carry AppDelegate edits without a matching import line.

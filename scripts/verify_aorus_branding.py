@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import plistlib
+import re
 import sys
 from pathlib import Path
 
@@ -74,17 +75,53 @@ def main() -> None:
         if want_scheme not in bt:
             err.append("Telegram/BUILD: primary URL scheme should be aorusgram (UrlTypesInfoPlist template)")
 
+    # Keep Telegram's native frame-based WindowHost geometry. Attaching this auxiliary
+    # window to UIWindowScene gives the photo crop mask and rendered image different
+    # coordinate transforms, producing a black/offset preview in the media editor.
     nw = tg / "submodules" / "Display" / "Source" / "NativeWindowHostView.swift"
     if nw.is_file():
         nt = nw.read_text(encoding="utf-8")
-        if "init(windowScene: UIWindowScene)" not in nt:
-            err.append("NativeWindowHostView: missing init(windowScene:) (scene-attached window)")
-        if "windowScenes.first(where: { $0.activationState == .foregroundActive })" not in nt:
-            err.append("NativeWindowHostView: missing UIWindowScene selection in nativeWindowHostView()")
+        if "let window = NativeWindow(frame: UIScreen.main.bounds)" not in nt:
+            err.append("NativeWindowHostView: stock frame-based NativeWindow constructor is missing")
+        if "override init(windowScene: UIWindowScene)" in nt or "window = NativeWindow(windowScene: windowScene)" in nt:
+            err.append("NativeWindowHostView: scene-attached NativeWindow reintroduces photo-editor coordinate bugs")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:
         err.append("AppDelegate: missing AorusGramBootstrap.shared.setup() call (feature initialisation)")
+
+    license_provider = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "LicenseKeyProvider.swift"
+    if not license_provider.is_file():
+        err.append("LicenseKeyProvider.swift is missing")
+    else:
+        license_text = license_provider.read_text(encoding="utf-8")
+        if "/*__AORUS_LICENSE_KEY_OBFUSCATED__*/" in license_text:
+            err.append("LicenseKeyProvider: build-time key was not injected")
+        if "keyChunks" in license_text:
+            err.append("LicenseKeyProvider: legacy committed key material is present")
+        if "/* AORUS-BUILD-KEY-INJECTED */" not in license_text:
+            err.append("LicenseKeyProvider: trusted build-time injection sentinel is missing")
+
+    proxy_manager = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusProxyManager.swift"
+    if not proxy_manager.is_file():
+        err.append("AorusProxyManager.swift is missing")
+    else:
+        proxy_text = proxy_manager.read_text(encoding="utf-8")
+        if "/*__AORUS_PROXY_KEY_OBFUSCATED__*/" in proxy_text:
+            err.append("AorusProxyManager: build-time proxy key was not injected")
+        if "/* AORUS-BUILD-PROXY-KEY-INJECTED */" not in proxy_text:
+            err.append("AorusProxyManager: trusted build-time proxy injection sentinel is missing")
+
+    subscription_config = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionConfig.swift"
+    if not subscription_config.is_file():
+        err.append("SubscriptionConfig.swift is missing")
+    else:
+        config_text = subscription_config.read_text(encoding="utf-8")
+        if "static let requireSignedResponse = true" not in config_text:
+            err.append("SubscriptionConfig: signed license responses must be mandatory")
+        public_key = re.search(r'responseSigningPublicKeyHex\s*=\s*"([0-9a-fA-F]+)"', config_text)
+        if public_key is None or len(public_key.group(1)) != 64:
+            err.append("SubscriptionConfig: Ed25519 response public key must be 32 bytes")
 
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"

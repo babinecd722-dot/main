@@ -443,102 +443,6 @@ def patch_app_delegate_background_url_session_safe(tg: Path) -> None:
         print("WARNING: AppDelegate URLSession block not found (upstream drift)")
 
 
-def patch_native_window_host_scene(tg: Path) -> None:
-    """Prefer UIWindow(windowScene:) on iOS 13+ when a scene exists — avoids a known
-    class of launch black screens when the window is not attached to a UIWindowScene
-    (see TN3187 / common UIKit guidance for scene-based lifecycle)."""
-    path = tg / "submodules/Display/Source/NativeWindowHostView.swift"
-    if not path.is_file():
-        print("NativeWindowHostView.swift not found, skip")
-        return
-    t = path.read_text(encoding="utf-8")
-    orig = t
-
-    # Anchor must include init(frame:) — the short tail-only marker also appears after
-    # init(windowScene:), so a second branding run (or cached patched tree) would duplicate the override.
-    init_marker = (
-        "    override init(frame: CGRect) {\n"
-        "        super.init(frame: frame)\n"
-        "        \n"
-        "        if let gestureRecognizers = self.gestureRecognizers {\n"
-        "            for recognizer in gestureRecognizers {\n"
-        "                recognizer.delaysTouchesBegan = false\n"
-        "            }\n"
-        "        }\n"
-        "    }\n"
-        "    \n"
-        "    required init?(coder aDecoder: NSCoder) {\n"
-        '        fatalError("init(coder:) has not been implemented")\n'
-        "    }\n"
-    )
-    init_new = (
-        "    override init(frame: CGRect) {\n"
-        "        super.init(frame: frame)\n"
-        "        \n"
-        "        if let gestureRecognizers = self.gestureRecognizers {\n"
-        "            for recognizer in gestureRecognizers {\n"
-        "                recognizer.delaysTouchesBegan = false\n"
-        "            }\n"
-        "        }\n"
-        "    }\n"
-        "    \n"
-        "    @available(iOS 13.0, *)\n"
-        "    override init(windowScene: UIWindowScene) {\n"
-        "        super.init(windowScene: windowScene)\n"
-        "        // UIWindow(windowScene:) does NOT set a full-screen frame automatically — it\n"
-        "        // starts at .zero until the scene lays it out. Any content presented in this\n"
-        "        // window before that (e.g. the photo/media editor) then lays out at the wrong\n"
-        "        // size and renders offset/blank until a re-layout is forced. Give it the scene's\n"
-        "        // bounds immediately so the first layout is correct.\n"
-        "        self.frame = windowScene.coordinateSpace.bounds\n"
-        "        if let gestureRecognizers = self.gestureRecognizers {\n"
-        "            for recognizer in gestureRecognizers {\n"
-        "                recognizer.delaysTouchesBegan = false\n"
-        "            }\n"
-        "        }\n"
-        "    }\n"
-        "    \n"
-        "    required init?(coder aDecoder: NSCoder) {\n"
-        '        fatalError("init(coder:) has not been implemented")\n'
-        "    }\n"
-    )
-    if init_marker in t:
-        t = t.replace(init_marker, init_new, 1)
-        print("Patched NativeWindow: init(windowScene:) for scene-attached windows")
-
-    host_marker = (
-        "public func nativeWindowHostView() -> (UIWindow & WindowHost, WindowHostView) {\n"
-        "    let window = NativeWindow(frame: UIScreen.main.bounds)\n"
-    )
-    host_new = (
-        "public func nativeWindowHostView() -> (UIWindow & WindowHost, WindowHostView) {\n"
-        "    let window: NativeWindow\n"
-        "    if #available(iOS 13.0, *) {\n"
-        "        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }\n"
-        "        if let windowScene = windowScenes.first(where: { $0.activationState == .foregroundActive })\n"
-        "            ?? windowScenes.first(where: { $0.activationState == .foregroundInactive })\n"
-        "            ?? windowScenes.first {\n"
-        "            window = NativeWindow(windowScene: windowScene)\n"
-        "        } else {\n"
-        "            window = NativeWindow(frame: UIScreen.main.bounds)\n"
-        "        }\n"
-        "    } else {\n"
-        "        window = NativeWindow(frame: UIScreen.main.bounds)\n"
-        "    }\n"
-    )
-    if host_marker in t:
-        t = t.replace(host_marker, host_new, 1)
-        print("Patched nativeWindowHostView: UIWindowScene when available")
-
-    if t != orig:
-        path.write_text(t, encoding="utf-8")
-    else:
-        if init_marker not in orig and host_marker not in orig:
-            print("NativeWindowHostView: markers not found (upstream drift)")
-        elif init_marker in orig or host_marker in orig:
-            print("NativeWindowHostView: patch did not apply (upstream drift?)")
-
-
 def patch_authorization_network_flood_wait(tg: Path) -> None:
     """Use MTProto automatic flood wait for auth.sendCode / resend / signIn so the client
     waits server FLOOD_WAIT instead of failing immediately with Login_CodeFloodError."""
@@ -6945,9 +6849,9 @@ def patch_license_key_provider(tg: Path) -> None:
     to a GitHub Actions secret). It is hex-decoded to raw bytes, XORed with a
     rotating pad (kept in sync with the Swift side) and emitted as a byte-array
     literal in place of the __AORUS_LICENSE_KEY_OBFUSCATED__ marker. The key is
-    NEVER printed and never committed in plaintext. If the env var is absent the
-    marker is left empty (isProvisioned == false) so the build still succeeds and
-    the client simply refuses to sign requests.
+    NEVER printed and never committed in plaintext. CI builds fail closed when the
+    secret is absent or malformed; shipping an unprovisioned license gate would turn
+    a configuration mistake into a universal bypass.
     """
     f = tg / "submodules/AorusGram/Sources/Features/Subscription/LicenseKeyProvider.swift"
     if not f.is_file():
@@ -6956,28 +6860,58 @@ def patch_license_key_provider(tg: Path) -> None:
     marker = "/*__AORUS_LICENSE_KEY_OBFUSCATED__*/"
     t = f.read_text(encoding="utf-8")
     if marker not in t:
-        print("LicenseKey: marker absent (already injected?) — skipped")
-        return
+        if "/* AORUS-BUILD-KEY-INJECTED */" in t:
+            print("LicenseKey: already injected — skipped")
+            return
+        raise RuntimeError("LicenseKey: injection marker is missing from an untrusted provider")
     key_hex = os.environ.get("LICENSE_HMAC_KEY_HEX", "").strip()
     if not key_hex:
-        print("LicenseKey: LICENSE_HMAC_KEY_HEX not set — provider left UNPROVISIONED")
-        return
+        raise RuntimeError("LicenseKey: LICENSE_HMAC_KEY_HEX is required")
     try:
         raw = bytes.fromhex(key_hex)
     except ValueError:
-        print("LicenseKey: LICENSE_HMAC_KEY_HEX is not valid hex — left UNPROVISIONED")
-        return
-    if not raw:
-        print("LicenseKey: LICENSE_HMAC_KEY_HEX decoded to 0 bytes — left UNPROVISIONED")
-        return
+        raise RuntimeError("LicenseKey: LICENSE_HMAC_KEY_HEX must be valid hex")
+    if len(raw) < 32:
+        raise RuntimeError("LicenseKey: LICENSE_HMAC_KEY_HEX must decode to at least 32 bytes")
     pad = [0x5A, 0xC3, 0x19, 0x7E, 0x2B, 0xF0, 0x8D, 0x44,
            0x16, 0xA9, 0x6C, 0xD1, 0x3F, 0x82, 0xE5, 0x70]
     obf = [raw[i] ^ pad[i % len(pad)] for i in range(len(raw))]
     literal = ", ".join("0x%02x" % b for b in obf)
-    t = t.replace(marker, literal, 1)
+    t = t.replace(marker, "/* AORUS-BUILD-KEY-INJECTED */ " + literal, 1)
     f.write_text(t, encoding="utf-8")
     # Never log the key itself — only its byte length.
     print("LicenseKey: provisioned obfuscated HMAC key (%d bytes)" % len(raw))
+
+
+def patch_proxy_key_provider(tg: Path) -> None:
+    """Inject the /getProxy request key without committing it to source control."""
+    f = tg / "submodules/AorusGram/Sources/Features/Network/AorusProxyManager.swift"
+    if not f.is_file():
+        raise RuntimeError("ProxyKey: AorusProxyManager.swift not found")
+    marker = "/*__AORUS_PROXY_KEY_OBFUSCATED__*/"
+    t = f.read_text(encoding="utf-8")
+    if marker not in t:
+        if "/* AORUS-BUILD-PROXY-KEY-INJECTED */" in t:
+            print("ProxyKey: already injected — skipped")
+            return
+        raise RuntimeError("ProxyKey: injection marker is missing from an untrusted provider")
+    key_hex = os.environ.get("PROXY_HMAC_KEY_HEX", "").strip().lower()
+    try:
+        raw = bytes.fromhex(key_hex)
+    except ValueError:
+        raise RuntimeError("ProxyKey: PROXY_HMAC_KEY_HEX must be valid hex")
+    if len(raw) < 32:
+        raise RuntimeError("ProxyKey: PROXY_HMAC_KEY_HEX must decode to at least 32 bytes")
+
+    # Keep in sync with Obf.pad in AorusProxyManager.swift. The proxy signer expects
+    # the decoded value to remain the lowercase hex string, not the raw key bytes.
+    pad = hashlib.sha256(b"aorusgram::netshield::v1::shield-pad").digest()
+    plaintext = key_hex.encode("ascii")
+    obfuscated = [byte ^ pad[index % len(pad)] for index, byte in enumerate(plaintext)]
+    literal = ",".join(str(byte) for byte in obfuscated)
+    replacement = "/* AORUS-BUILD-PROXY-KEY-INJECTED */ " + literal
+    f.write_text(t.replace(marker, replacement, 1), encoding="utf-8")
+    print("ProxyKey: provisioned obfuscated HMAC key (%d bytes)" % len(raw))
 
 
 def patch_local_premium(tg: Path) -> None:
@@ -17388,7 +17322,6 @@ def main() -> None:
     patch_app_delegate_launch_fixes(tg)
     patch_app_delegate_background_url_session_safe(tg)
     patch_app_delegate_bootstrap(tg)
-    patch_native_window_host_scene(tg)
     patch_authorization_network_flood_wait(tg)
     patch_authorization_login_title_gold(tg)
     patch_accent_color_purple(tg)
@@ -17485,6 +17418,7 @@ def main() -> None:
     patch_view_once_direct_save_button(tg)
     patch_view_once_no_consume(tg)
     patch_license_key_provider(tg)
+    patch_proxy_key_provider(tg)
     patch_chat_context_menu_media_metadata(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)

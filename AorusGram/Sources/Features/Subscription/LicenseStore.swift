@@ -3,9 +3,9 @@ import Security
 
 // Persistent license cache.
 //
-// The authoritative snapshot lives in the Keychain. A light, non-sensitive mirror
-// is kept in UserDefaults only for fast UI reads. The SERVER is the source of
-// truth; this cache exists for UX and a bounded offline grace based on
+// The authoritative snapshot is Secure-Enclave wrapped and lives in a this-device-only
+// Keychain item. A light, non-sensitive mirror is kept in UserDefaults for fast UI
+// reads. The SERVER is the source of truth; this cache exists for UX and a bounded offline grace based on
 // server_now / active_until — never raw local time alone.
 final class LicenseStore {
     static let shared = LicenseStore()
@@ -31,12 +31,16 @@ final class LicenseStore {
     private(set) var snapshot: Snapshot?
 
     func load() {
-        guard let s = readKeychain() else { snapshot = nil; return }
+        guard let stored = readKeychain() else { snapshot = nil; return }
+        let s = stored.snapshot
         // Integrity + device binding: a tampered blob, or one lifted from another
         // device, is ignored. This only forces a fresh online check — it can never
         // lock out a legitimate user (the server verdict restores access).
         if s.sig == sign(s), s.deviceHash == DeviceFingerprint.deviceHash() {
             snapshot = s
+            if stored.needsMigration {
+                writeKeychain(s)
+            }
         } else {
             snapshot = nil
         }
@@ -123,7 +127,8 @@ final class LicenseStore {
 
     func needsRecheck(interval: TimeInterval) -> Bool {
         guard let last = snapshot?.lastCheckWall else { return true }
-        return (Date().timeIntervalSince1970 - last) > interval
+        let elapsed = Date().timeIntervalSince1970 - last
+        return elapsed < 0 || elapsed > interval
     }
 
     // MARK: - Integrity
@@ -156,6 +161,7 @@ final class LicenseStore {
         s.sig = nil
         s.sig = sign(s)            // sign over the canonical fields (incl. deviceHash)
         guard let data = try? JSONEncoder().encode(s) else { return }
+        let protectedData = AorusSeKeyBinder.bind(data)
         let base: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: kcService,
@@ -163,12 +169,12 @@ final class LicenseStore {
         ]
         SecItemDelete(base as CFDictionary)
         var add = base
-        add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        add[kSecValueData as String] = protectedData
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         _ = SecItemAdd(add as CFDictionary, nil)
     }
 
-    private func readKeychain() -> Snapshot? {
+    private func readKeychain() -> (snapshot: Snapshot, needsMigration: Bool)? {
         let query: [String: Any] = [
             kSecClass as String:       kSecClassGenericPassword,
             kSecAttrService as String: kcService,
@@ -179,6 +185,16 @@ final class LicenseStore {
         var result: AnyObject?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data else { return nil }
-        return try? JSONDecoder().decode(Snapshot.self, from: data)
+
+        if let unbound = AorusSeKeyBinder.unbind(data),
+           let snapshot = try? JSONDecoder().decode(Snapshot.self, from: unbound) {
+            return (snapshot, false)
+        }
+
+        // One-time migration for caches written before Secure Enclave wrapping.
+        if let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data) {
+            return (snapshot, true)
+        }
+        return nil
     }
 }

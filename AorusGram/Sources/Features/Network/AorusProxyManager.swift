@@ -15,8 +15,8 @@ import Network
 //   * The API is authenticated with HMAC-SHA256 over a per-request message
 //     (timestamp + nonce + device + key-version). Replays are rejected
 //     server-side via the nonce window.
-//   * All sensitive constants (endpoint, shared key, header names, user-agent)
-//     are stored XOR-obfuscated and only materialised at the moment of use, so
+//   * The shared request key is injected from GitHub Secrets at build time. Runtime
+//     constants are XOR-obfuscated and only materialised at the moment of use, so
 //     a plain `strings` dump of the IPA reveals nothing. This is obfuscation,
 //     not unbreakable secrecy — the determined reverse engineer can still
 //     recover the key, which is exactly why the server supports key rotation
@@ -190,13 +190,9 @@ public final class AorusProxyManager {
     private let watchdogProbeTimeout: TimeInterval = 1.0
 
     private var licenseAllowsProxy: Bool {
-        guard LicenseKeyProvider.isProvisioned else { return true }
-        // Do not second-guess LicenseGate here. The gate owns the subscription
-        // verdict and flips this flag on expired/banned/not-started/connection locks.
-        // Requiring LicenseStore.effectiveOfflineStatus() here made the proxy path
-        // fragile during launch/recheck: the proxy manager could clear a valid cached
-        // proxy before LicenseGate had saved the fresh active server verdict.
-        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+        guard LicenseKeyProvider.isProvisioned else { return false }
+        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") else { return false }
+        return LicenseStore.shared.effectiveOfflineStatus().allowsAppAccess
     }
 
     // MARK: - Public
@@ -917,8 +913,10 @@ private enum Obf {
         return String(decoding: out, as: UTF8.self)
     }
 
-    // SECRET_KEY_v1 (hex)
-    static let k: [UInt8] = [218,222,109,59,174,253,213,114,87,186,212,15,230,103,194,147,251,231,133,154,181,93,55,114,229,86,131,56,179,58,229,155,137,133,59,59,173,175,214,32,6,229,221,89,229,108,149,197,251,230,210,152,229,11,58,117,179,3,133,105,190,59,176,204,138,137,97,63,170,169,134,114,0,185,221,90,182,102,198,206,164,239,130,206,228,95,97,32,180,81,215,107,224,59,180,205,130,140,59,63,241,165,215,34,82,229,217,94,230,98,207,150,163,228,208,155,229,81,103,115,224,87,139,59,227,111,225,154]
+    // SECRET_KEY_v1 (hex), XOR-obfuscated and injected from PROXY_HMAC_KEY_HEX.
+    static let k: [UInt8] = [
+        /*__AORUS_PROXY_KEY_OBFUSCATED__*/
+    ]
     // https://api.aorusgram.com/getProxy
     static let url: [UInt8] = [211,201,44,46,187,166,205,62,85,172,132,66,177,58,133,130,177,177,147,204,234,71,96,46,188,77,213,63,242,8,242,192,195,196]
     // AorusGram/1.0.0 (iOS)
