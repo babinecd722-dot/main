@@ -267,6 +267,24 @@ private final class QRInputItemNode: ListViewItemNode, UITextFieldDelegate {
         addSubnode(maskNode)
     }
 
+    override func updateAnimationDuration() -> Double? {
+        // The stock 0.4 s height spring races the keyboard resize and makes a new
+        // row appear below its destination before jumping upwards.
+        return 0.01
+    }
+
+    override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.18)
+    }
+
+    override func animateAdded(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.18)
+    }
+
+    override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.14, removeOnCompletion: false)
+    }
+
     override func didLoad() {
         super.didLoad()
         let textField = UITextField()
@@ -284,7 +302,13 @@ private final class QRInputItemNode: ListViewItemNode, UITextFieldDelegate {
         layoutTextField()
         if !self.didFocus {
             self.didFocus = true
-            textField.becomeFirstResponder()
+            // Let ItemList install the node at its final position first. Starting
+            // the keyboard in didLoad races the insertion transaction and causes
+            // the visible bottom-to-top jump reported on the management screen.
+            Queue.mainQueue().after(0.05) { [weak self, weak textField] in
+                guard let self, self.view.window != nil else { return }
+                textField?.becomeFirstResponder()
+            }
         }
     }
 
@@ -444,6 +468,22 @@ private final class QRRevealTextItemNode: ItemListRevealOptionsItemNode {
         addSubnode(maskNode)
     }
 
+    override func updateAnimationDuration() -> Double? {
+        return 0.18
+    }
+
+    override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.18)
+    }
+
+    override func animateAdded(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.18)
+    }
+
+    override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
+        self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.16, removeOnCompletion: false)
+    }
+
     override func didLoad() {
         super.didLoad()
         let title = UILabel()
@@ -600,36 +640,25 @@ public func aorusQuickRepliesController(context: AccountContext) -> ViewControll
                 }
                 return
             }
-            let replyId = stateValue.with { $0 }.nextId
             updateState { current in
                 var next = current
+                next.replies.append(QRReply(id: next.nextId, text: draft))
                 next.nextId += 1
                 next.isAdding = false
                 next.draft = ""
                 return next
             }
-            Queue.mainQueue().after(0.12) {
-                updateState { current in
-                    var next = current
-                    if !next.replies.contains(where: { $0.id == replyId }) {
-                        next.replies.append(QRReply(id: replyId, text: draft))
-                    }
-                    return next
-                }
-                AorusQuickReplies.items = stateValue.with { $0 }.replies.map { $0.text }
-            }
+            AorusQuickReplies.items = stateValue.with { $0 }.replies.map { $0.text }
         },
         removeReply: { id in
             let id32 = Int32(id)
-            Queue.mainQueue().after(0.16) {
-                updateState { current in
-                    var next = current
-                    next.replies.removeAll { $0.id == id32 }
-                    return next
-                }
-                // Persist the new order/content (drives UserDefaults + Keychain).
-                AorusQuickReplies.items = stateValue.with { $0 }.replies.map { $0.text }
+            updateState { current in
+                var next = current
+                next.replies.removeAll { $0.id == id32 }
+                return next
             }
+            // Persist the new order/content (drives UserDefaults + Keychain).
+            AorusQuickReplies.items = stateValue.with { $0 }.replies.map { $0.text }
         }
     )
 

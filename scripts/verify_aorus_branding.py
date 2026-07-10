@@ -131,6 +131,18 @@ def main() -> None:
     else:
         err.append("VoiceToText: ChatTextInputPanelNode.swift is missing")
 
+    quick_replies = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusQuickRepliesController.swift"
+    if quick_replies.is_file():
+        quick_text = quick_replies.read_text(encoding="utf-8")
+        if "Queue.mainQueue().after(0.12)" in quick_text or "Queue.mainQueue().after(0.16)" in quick_text:
+            err.append("QuickReplies: delayed two-phase list mutation reintroduces jumping rows")
+        if quick_text.count("override func updateAnimationDuration() -> Double?") < 2:
+            err.append("QuickReplies: input/reply animation timing overrides are missing")
+        if "next.replies.append(QRReply(id: next.nextId, text: draft))" not in quick_text:
+            err.append("QuickReplies: reply commit is not an atomic state update")
+    else:
+        err.append("QuickReplies: AorusQuickRepliesController.swift is missing")
+
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:
         err.append("AppDelegate: missing AorusGramBootstrap.shared.setup() call (feature initialisation)")
