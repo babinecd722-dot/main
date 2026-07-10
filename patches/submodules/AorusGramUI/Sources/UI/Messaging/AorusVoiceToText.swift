@@ -398,6 +398,7 @@ final class AorusVoiceOverlayView: UIView {
     private let bottomInset: CGFloat
 
     private let card = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterialDark))
+    private let backdrop: AorusAnimatedVoiceBackdropView
     private let waveform = AorusWaveformView()
     private let transcriptLabel = UILabel()
     private let hintIcon = UIImageView()
@@ -407,6 +408,7 @@ final class AorusVoiceOverlayView: UIView {
         self.accent = accent
         self.isRu = isRu
         self.bottomInset = bottomInset
+        self.backdrop = AorusAnimatedVoiceBackdropView(accent: accent)
         super.init(frame: .zero)
         self.setup()
     }
@@ -424,6 +426,9 @@ final class AorusVoiceOverlayView: UIView {
         self.addSubview(self.card)
 
         let content = self.card.contentView
+
+        self.backdrop.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(self.backdrop)
 
         self.waveform.translatesAutoresizingMaskIntoConstraints = false
         self.waveform.tintColor = self.accent
@@ -456,6 +461,11 @@ final class AorusVoiceOverlayView: UIView {
             self.card.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -12.0),
             self.card.bottomAnchor.constraint(equalTo: self.bottomAnchor, constant: -self.bottomInset),
 
+            self.backdrop.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            self.backdrop.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            self.backdrop.topAnchor.constraint(equalTo: content.topAnchor),
+            self.backdrop.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+
             self.waveform.topAnchor.constraint(equalTo: content.topAnchor, constant: 12.0),
             self.waveform.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
             self.waveform.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16.0),
@@ -464,6 +474,7 @@ final class AorusVoiceOverlayView: UIView {
             self.transcriptLabel.topAnchor.constraint(equalTo: self.waveform.bottomAnchor, constant: 6.0),
             self.transcriptLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
             self.transcriptLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16.0),
+            self.transcriptLabel.heightAnchor.constraint(equalToConstant: 36.0),
 
             self.hintIcon.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
             self.hintIcon.topAnchor.constraint(equalTo: self.transcriptLabel.bottomAnchor, constant: 8.0),
@@ -535,61 +546,200 @@ final class AorusVoiceOverlayView: UIView {
     }
 }
 
-// MARK: - Waveform
+// MARK: - Animated backdrop
 
-final class AorusWaveformView: UIView {
-    private var bars: [CALayer] = []
-    private var smoothedLevel: CGFloat = 0.0
-    private var phase: CGFloat = 0.0
-    private let barCount = 31
-    private let barWidth: CGFloat = 2.5
+final class AorusAnimatedVoiceBackdropView: UIView {
+    private let accent: UIColor
+    private let gradientLayer = CAGradientLayer()
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        for _ in 0 ..< self.barCount {
-            let layer = CALayer()
-            layer.cornerRadius = self.barWidth / 2.0
-            self.layer.addSublayer(layer)
-            self.bars.append(layer)
-        }
+    init(accent: UIColor) {
+        self.accent = accent
+        super.init(frame: .zero)
+        self.isUserInteractionEnabled = false
+        self.clipsToBounds = true
+
+        self.gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.5)
+        self.gradientLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+        self.gradientLayer.locations = [0.0, 0.34, 0.68, 1.0]
+        self.gradientLayer.colors = self.palette(phase: 0)
+        self.layer.addSublayer(self.gradientLayer)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.gradientLayer.frame = self.bounds.insetBy(dx: -self.bounds.width * 0.18, dy: 0.0)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if self.window == nil {
+            self.gradientLayer.removeAllAnimations()
+        } else {
+            self.startAnimatingIfNeeded()
+        }
+    }
+
+    private func palette(phase: Int) -> [CGColor] {
+        let blue = UIColor(red: 0.18, green: 0.58, blue: 0.98, alpha: 0.24)
+        let rose = UIColor(red: 0.96, green: 0.30, blue: 0.62, alpha: 0.20)
+        let aqua = UIColor(red: 0.20, green: 0.82, blue: 0.76, alpha: 0.18)
+        let purple = self.accent.withAlphaComponent(0.30)
+        switch phase % 4 {
+        case 0:
+            return [blue.cgColor, purple.cgColor, rose.cgColor, aqua.cgColor]
+        case 1:
+            return [purple.cgColor, rose.cgColor, aqua.cgColor, blue.cgColor]
+        case 2:
+            return [rose.cgColor, aqua.cgColor, blue.cgColor, purple.cgColor]
+        default:
+            return [aqua.cgColor, blue.cgColor, purple.cgColor, rose.cgColor]
+        }
+    }
+
+    private func startAnimatingIfNeeded() {
+        guard self.gradientLayer.animation(forKey: "aorusVoiceColors") == nil else { return }
+
+        let colors = CAKeyframeAnimation(keyPath: "colors")
+        colors.values = [self.palette(phase: 0), self.palette(phase: 1), self.palette(phase: 2), self.palette(phase: 3), self.palette(phase: 0)]
+        colors.keyTimes = [0.0, 0.25, 0.5, 0.75, 1.0]
+        colors.duration = 8.0
+        colors.repeatCount = .infinity
+        colors.calculationMode = .linear
+        self.gradientLayer.add(colors, forKey: "aorusVoiceColors")
+
+        let movement = CAKeyframeAnimation(keyPath: "locations")
+        movement.values = [
+            [-0.12, 0.22, 0.62, 1.12],
+            [0.0, 0.42, 0.76, 1.0],
+            [-0.08, 0.30, 0.70, 1.08],
+            [-0.12, 0.22, 0.62, 1.12]
+        ]
+        movement.keyTimes = [0.0, 0.36, 0.72, 1.0]
+        movement.duration = 6.5
+        movement.repeatCount = .infinity
+        movement.calculationMode = .cubic
+        self.gradientLayer.add(movement, forKey: "aorusVoiceMovement")
+    }
+}
+
+// MARK: - Continuous waveform
+
+final class AorusWaveformView: UIView {
+    private let glowLayer = CAShapeLayer()
+    private let strokeGradient = CAGradientLayer()
+    private let strokeMask = CAShapeLayer()
+    private var displayLink: CADisplayLink?
+    private var targetLevel: CGFloat = 0.04
+    private var displayedLevel: CGFloat = 0.04
+    private var phase: CGFloat = 0.0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.isUserInteractionEnabled = false
+
+        self.glowLayer.fillColor = UIColor.clear.cgColor
+        self.glowLayer.lineWidth = 5.5
+        self.glowLayer.lineCap = .round
+        self.glowLayer.lineJoin = .round
+        self.glowLayer.opacity = 0.25
+        self.glowLayer.shadowRadius = 7.0
+        self.glowLayer.shadowOpacity = 0.75
+        self.glowLayer.shadowOffset = .zero
+        self.layer.addSublayer(self.glowLayer)
+
+        self.strokeMask.fillColor = UIColor.clear.cgColor
+        self.strokeMask.strokeColor = UIColor.black.cgColor
+        self.strokeMask.lineWidth = 2.4
+        self.strokeMask.lineCap = .round
+        self.strokeMask.lineJoin = .round
+
+        self.strokeGradient.startPoint = CGPoint(x: 0.0, y: 0.5)
+        self.strokeGradient.endPoint = CGPoint(x: 1.0, y: 0.5)
+        self.strokeGradient.mask = self.strokeMask
+        self.layer.addSublayer(self.strokeGradient)
+        self.updateColors()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    deinit {
+        self.displayLink?.invalidate()
+    }
+
     override var tintColor: UIColor! {
-        didSet { self.setNeedsLayout() }
+        didSet { self.updateColors() }
     }
 
     func push(level: CGFloat) {
-        let clamped = min(1.0, max(0.0, level))
-        self.smoothedLevel = self.smoothedLevel * 0.68 + clamped * 0.32
-        self.phase += 0.42
-        self.setNeedsLayout()
+        self.targetLevel = max(0.04, min(1.0, level))
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if self.window == nil {
+            self.displayLink?.invalidate()
+            self.displayLink = nil
+        } else if self.displayLink == nil {
+            let displayLink = CADisplayLink(target: self, selector: #selector(self.stepWaveform))
+            displayLink.preferredFramesPerSecond = 30
+            displayLink.add(to: .main, forMode: .common)
+            self.displayLink = displayLink
+        }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let count = self.bars.count
-        guard count > 0 else { return }
-        let totalGap = self.bounds.width - CGFloat(count) * self.barWidth
-        let gap = count > 1 ? totalGap / CGFloat(count - 1) : 0.0
+        self.glowLayer.frame = self.bounds
+        self.strokeGradient.frame = self.bounds
+        self.strokeMask.frame = self.bounds
+        self.updatePath()
+    }
+
+    private func updateColors() {
+        let accent = self.tintColor ?? UIColor.systemBlue
+        let blue = UIColor(red: 0.30, green: 0.72, blue: 1.0, alpha: 1.0)
+        let rose = UIColor(red: 1.0, green: 0.42, blue: 0.72, alpha: 1.0)
+        self.strokeGradient.colors = [blue.cgColor, accent.cgColor, rose.cgColor, accent.cgColor, blue.cgColor]
+        self.strokeGradient.locations = [0.0, 0.25, 0.5, 0.75, 1.0]
+        self.glowLayer.strokeColor = accent.cgColor
+        self.glowLayer.shadowColor = accent.cgColor
+    }
+
+    @objc private func stepWaveform() {
+        self.displayedLevel += (self.targetLevel - self.displayedLevel) * 0.18
+        self.targetLevel = max(0.04, self.targetLevel * 0.94)
+        self.phase += 0.12
+        self.updatePath()
+    }
+
+    private func updatePath() {
+        guard self.bounds.width > 0.0, self.bounds.height > 0.0 else { return }
+
+        let path = CGMutablePath()
+        let steps = 72
         let midY = self.bounds.midY
-        let maxH = self.bounds.height
-        let color = (self.tintColor ?? UIColor.white).cgColor
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(0.075)
-        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
-        for i in 0 ..< count {
-            let distance = abs(CGFloat(i) - CGFloat(count - 1) / 2.0) / (CGFloat(count - 1) / 2.0)
-            let envelope = 0.28 + 0.72 * (1.0 - distance)
-            let ripple = 0.72 + 0.28 * sin(CGFloat(i) * 0.92 + self.phase)
-            let activity = max(0.045, self.smoothedLevel * envelope * ripple)
-            let h = max(self.barWidth, min(maxH, self.barWidth + activity * (maxH - self.barWidth)))
-            let x = CGFloat(i) * (self.barWidth + gap)
-            self.bars[i].frame = CGRect(x: x, y: midY - h / 2.0, width: self.barWidth, height: h)
-            self.bars[i].backgroundColor = color
-            self.bars[i].opacity = Float(0.40 + 0.60 * min(1.0, activity * 1.8))
+        let amplitude = 1.5 + self.displayedLevel * self.bounds.height * 0.42
+
+        for index in 0 ... steps {
+            let progress = CGFloat(index) / CGFloat(steps)
+            let x = progress * self.bounds.width
+            let envelope = pow(max(0.0, sin(progress * .pi)), 0.72)
+            let primary = sin(progress * .pi * 4.0 + self.phase)
+            let detail = sin(progress * .pi * 7.0 - self.phase * 0.72) * 0.28
+            let y = midY + (primary + detail) * amplitude * envelope
+            if index == 0 {
+                path.move(to: CGPoint(x: x, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
         }
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.strokeMask.path = path
+        self.glowLayer.path = path
         CATransaction.commit()
     }
 }
