@@ -108,7 +108,28 @@ def main() -> None:
         if "let window = NativeWindow(frame: UIScreen.main.bounds)" not in nt:
             err.append("NativeWindowHostView: stock frame-based NativeWindow constructor is missing")
         if "override init(windowScene: UIWindowScene)" in nt or "window = NativeWindow(windowScene: windowScene)" in nt:
-            err.append("NativeWindowHostView: scene-attached NativeWindow reintroduces photo-editor coordinate bugs")
+            err.append("NativeWindowHostView: unexpected branding-time UIWindowScene override is present")
+
+    chat_input = (
+        tg
+        / "submodules"
+        / "TelegramUI"
+        / "Components"
+        / "Chat"
+        / "ChatTextInputPanelNode"
+        / "Sources"
+        / "ChatTextInputPanelNode.swift"
+    )
+    if chat_input.is_file():
+        chat_text = chat_input.read_text(encoding="utf-8")
+        if "reserve voice button in initial text-node insets" not in chat_text:
+            err.append("VoiceToText: initial text-node insets do not reserve the voice button")
+        if "keep liquid-glass composer clear of its outer buttons" not in chat_text:
+            err.append("VoiceToText: composer side-gap correction is missing")
+        if "let aorusOuterActionSpacing: CGFloat" not in chat_text:
+            err.append("VoiceToText: outer action spacing correction is missing")
+    else:
+        err.append("VoiceToText: ChatTextInputPanelNode.swift is missing")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:

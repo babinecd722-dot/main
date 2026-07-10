@@ -17149,8 +17149,90 @@ def patch_voice_to_text(tg: Path) -> None:
         print("VoiceToText: ChatTextInputPanelNode.swift not found — skip")
         return
     t = path.read_text(encoding="utf-8")
+
+    voice_width_block = (
+        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
+        "            if firstButton {\n"
+        "                firstButton = false\n"
+        "                accessoryButtonsWidth += self.accessoryButtonInset\n"
+        "            } else {\n"
+        "                accessoryButtonsWidth += self.accessoryButtonSpacing\n"
+        "            }\n"
+        "            accessoryButtonsWidth += 32.0\n"
+        "        }\n"
+    )
+
+    def repair_voice_layout(source: str) -> tuple[str, list[str]]:
+        repairs: list[str] = []
+
+        old_width_block = (
+            "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
+            "            accessoryButtonsWidth += self.accessoryButtonSpacing\n"
+            "            accessoryButtonsWidth += 32.0\n"
+            "        }\n"
+        )
+        if old_width_block in source:
+            source = source.replace(old_width_block, voice_width_block, 1)
+            repairs.append("metrics reservation")
+
+        load_sentinel = "// AorusGram: reserve voice button in initial text-node insets"
+        load_anchor = (
+            "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
+            "            refreshChatTextInputTypingAttributes(textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize)\n"
+        )
+        if load_sentinel not in source and load_anchor in source:
+            source = source.replace(
+                load_anchor,
+                "        " + load_sentinel + "\n" + voice_width_block + "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
+                "            refreshChatTextInputTypingAttributes(textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize)\n",
+                1,
+            )
+            repairs.append("initial text insets")
+
+        gap_sentinel = "// AorusGram: keep liquid-glass composer clear of its outer buttons"
+        gap_anchor = "        var audioRecordingItemsAlpha: CGFloat = 1.0\n"
+        if gap_sentinel not in source and gap_anchor in source:
+            source = source.replace(
+                gap_anchor,
+                "        " + gap_sentinel + "\n"
+                "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && mediaRecordingState == nil {\n"
+                "            textFieldInsets.left += 4.0\n"
+                "            textFieldInsets.right += 4.0\n"
+                "        }\n"
+                "        \n"
+                "        var audioRecordingItemsAlpha: CGFloat = 1.0\n",
+                1,
+            )
+            repairs.append("composer side gaps")
+
+        action_sentinel = "let aorusOuterActionSpacing: CGFloat"
+        action_anchor = (
+            "        var mediaActionButtonsFrame = CGRect(origin: CGPoint(x: textInputContainerBackgroundFrame.maxX + 6.0, y: textInputContainerBackgroundFrame.maxY - mediaActionButtonsSize.height), size: mediaActionButtonsSize)\n"
+        )
+        next_action_anchor = "        var nextRightActionButtonX: CGFloat = textInputContainerBackgroundFrame.maxX + 6.0\n"
+        if action_sentinel not in source and action_anchor in source and next_action_anchor in source:
+            source = source.replace(
+                action_anchor,
+                "        let aorusOuterActionSpacing: CGFloat = UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") ? 6.0 : 10.0\n"
+                "        var mediaActionButtonsFrame = CGRect(origin: CGPoint(x: textInputContainerBackgroundFrame.maxX + aorusOuterActionSpacing, y: textInputContainerBackgroundFrame.maxY - mediaActionButtonsSize.height), size: mediaActionButtonsSize)\n",
+                1,
+            )
+            source = source.replace(
+                next_action_anchor,
+                "        var nextRightActionButtonX: CGFloat = textInputContainerBackgroundFrame.maxX + aorusOuterActionSpacing\n",
+                1,
+            )
+            repairs.append("outer action spacing")
+
+        return source, repairs
+
     if "aorusVoiceLongPress" in t:
-        print("VoiceToText: already patched")
+        repaired, repairs = repair_voice_layout(t)
+        if repaired != t:
+            path.write_text(repaired, encoding="utf-8")
+            print("VoiceToText: repaired cached layout (" + ", ".join(repairs) + ")")
+        else:
+            print("VoiceToText: already patched")
         return
 
     # AorusGramUI is already imported (formatting panel / AorusCode). Ensure it.
@@ -17173,13 +17255,7 @@ def patch_voice_to_text(tg: Path) -> None:
 
     # 2) Reserve width for the button in the text-field metrics phase.
     metrics_anchor = "        if self.isAIEnabled && width >= 500.0 {\n"
-    metrics_inject = (
-        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
-        "            accessoryButtonsWidth += self.accessoryButtonSpacing\n"
-        "            accessoryButtonsWidth += 32.0\n"
-        "        }\n"
-        + metrics_anchor
-    )
+    metrics_inject = voice_width_block + metrics_anchor
     if metrics_anchor in t:
         t = t.replace(metrics_anchor, metrics_inject, 1)
     else:
@@ -17308,8 +17384,11 @@ def patch_voice_to_text(tg: Path) -> None:
     else:
         print("VoiceToText: WARNING method anchor not found")
 
+    t, repairs = repair_voice_layout(t)
     path.write_text(t, encoding="utf-8")
     print("VoiceToText: injected voice-to-text button + onboarding into ChatTextInputPanelNode")
+    if repairs:
+        print("VoiceToText: layout geometry applied (" + ", ".join(repairs) + ")")
 
 
 def main() -> None:
