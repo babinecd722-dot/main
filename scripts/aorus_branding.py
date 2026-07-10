@@ -17255,7 +17255,7 @@ def patch_voice_to_text(tg: Path) -> None:
         "            let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
         "            self.aorusVoiceStartY = gesture.location(in: self.view).y\n"
         "            self.aorusVoiceCancel = false\n"
-        "            let session = AorusVoiceSession(hostView: hostView, accent: accent, isRu: isRu)\n"
+        "            let session = AorusVoiceSession(hostView: hostView, anchorView: self.view, accent: accent, isRu: isRu)\n"
         "            self.aorusVoiceSession = session\n"
         "            session.start()\n"
         "        case .changed:\n"

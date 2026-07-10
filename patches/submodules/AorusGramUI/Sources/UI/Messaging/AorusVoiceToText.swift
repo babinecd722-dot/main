@@ -212,6 +212,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
 
 public final class AorusVoiceSession {
     private weak var hostView: UIView?
+    private weak var anchorView: UIView?
     private let accent: UIColor
     private let isRu: Bool
     private let localeIdentifier: String
@@ -225,8 +226,9 @@ public final class AorusVoiceSession {
     private var isCancelled = false
     private var isFinished = false
 
-    public init(hostView: UIView, accent: UIColor, isRu: Bool) {
+    public init(hostView: UIView, anchorView: UIView, accent: UIColor, isRu: Bool) {
         self.hostView = hostView
+        self.anchorView = anchorView
         self.accent = accent
         self.isRu = isRu
         self.localeIdentifier = AorusVoiceToText.resolveLocaleIdentifier(isRu: isRu)
@@ -234,11 +236,15 @@ public final class AorusVoiceSession {
 
     public func start() {
         guard let hostView = self.hostView else { return }
-        let overlay = AorusVoiceOverlayView(accent: self.accent, isRu: self.isRu)
-        // Mount on the window when available so the card floats above everything
-        // in the app; it is CENTERED vertically, so it stays fully visible even
-        // with the keyboard open.
         let mountView: UIView = hostView.window ?? hostView
+        let anchorMinY: CGFloat
+        if let anchorView = self.anchorView, anchorView.window != nil {
+            anchorMinY = anchorView.convert(anchorView.bounds, to: mountView).minY
+        } else {
+            anchorMinY = mountView.bounds.height - mountView.safeAreaInsets.bottom - 56.0
+        }
+        let bottomInset = max(8.0, mountView.bounds.height - anchorMinY + 8.0)
+        let overlay = AorusVoiceOverlayView(accent: self.accent, isRu: self.isRu, bottomInset: bottomInset)
         overlay.frame = mountView.bounds
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mountView.addSubview(overlay)
@@ -389,19 +395,18 @@ public final class AorusVoiceSession {
 final class AorusVoiceOverlayView: UIView {
     private let accent: UIColor
     private let isRu: Bool
+    private let bottomInset: CGFloat
 
-    private let dimView = UIView()
-    private let card = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterialDark))
-    private let statusDot = UIView()
-    private let statusLabel = UILabel()
+    private let card = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterialDark))
     private let waveform = AorusWaveformView()
     private let transcriptLabel = UILabel()
-    private let hintPill = UIView()
+    private let hintIcon = UIImageView()
     private let hintLabel = UILabel()
 
-    init(accent: UIColor, isRu: Bool) {
+    init(accent: UIColor, isRu: Bool, bottomInset: CGFloat) {
         self.accent = accent
         self.isRu = isRu
+        self.bottomInset = bottomInset
         super.init(frame: .zero)
         self.setup()
     }
@@ -411,102 +416,70 @@ final class AorusVoiceOverlayView: UIView {
     private func setup() {
         self.isUserInteractionEnabled = false
 
-        self.dimView.frame = self.bounds
-        self.dimView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        self.dimView.backgroundColor = UIColor(white: 0.0, alpha: 0.35)
-        self.addSubview(self.dimView)
-
         self.card.translatesAutoresizingMaskIntoConstraints = false
-        self.card.layer.cornerRadius = 26.0
+        self.card.layer.cornerRadius = 18.0
+        self.card.layer.borderWidth = 1.0 / UIScreen.main.scale
+        self.card.layer.borderColor = self.accent.withAlphaComponent(0.34).cgColor
         self.card.clipsToBounds = true
         self.addSubview(self.card)
 
         let content = self.card.contentView
-
-        // Status row: pulsing accent dot + "Слушаю…".
-        self.statusDot.translatesAutoresizingMaskIntoConstraints = false
-        self.statusDot.backgroundColor = self.accent
-        self.statusDot.layer.cornerRadius = 4.0
-        content.addSubview(self.statusDot)
-
-        self.statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        self.statusLabel.font = UIFont.systemFont(ofSize: 13.0, weight: .semibold)
-        self.statusLabel.textColor = UIColor(white: 1.0, alpha: 0.55)
-        self.statusLabel.text = (isRu ? "Слушаю…" : "Listening…").uppercased()
-        content.addSubview(self.statusLabel)
 
         self.waveform.translatesAutoresizingMaskIntoConstraints = false
         self.waveform.tintColor = self.accent
         content.addSubview(self.waveform)
 
         self.transcriptLabel.translatesAutoresizingMaskIntoConstraints = false
-        self.transcriptLabel.font = UIFont.systemFont(ofSize: 20.0, weight: .regular)
-        self.transcriptLabel.textColor = UIColor(white: 1.0, alpha: 0.4)
-        self.transcriptLabel.numberOfLines = 4
+        self.transcriptLabel.font = UIFont.systemFont(ofSize: 15.0, weight: .semibold)
+        self.transcriptLabel.textColor = UIColor(white: 1.0, alpha: 0.46)
+        self.transcriptLabel.numberOfLines = 2
         self.transcriptLabel.lineBreakMode = .byTruncatingHead
-        self.transcriptLabel.textAlignment = .center
+        self.transcriptLabel.textAlignment = .left
         self.transcriptLabel.text = isRu ? "Говорите…" : "Speak…"
         content.addSubview(self.transcriptLabel)
 
-        self.hintPill.translatesAutoresizingMaskIntoConstraints = false
-        self.hintPill.backgroundColor = UIColor(white: 1.0, alpha: 0.08)
-        self.hintPill.layer.cornerRadius = 13.0
-        content.addSubview(self.hintPill)
+        self.hintIcon.translatesAutoresizingMaskIntoConstraints = false
+        self.hintIcon.image = UIImage(systemName: "checkmark.circle.fill")
+        self.hintIcon.tintColor = self.accent
+        self.hintIcon.contentMode = .scaleAspectFit
+        content.addSubview(self.hintIcon)
 
         self.hintLabel.translatesAutoresizingMaskIntoConstraints = false
         self.hintLabel.font = UIFont.systemFont(ofSize: 12.0, weight: .medium)
         self.hintLabel.textColor = UIColor(white: 1.0, alpha: 0.55)
-        self.hintLabel.textAlignment = .center
-        self.hintLabel.text = isRu ? "Отпустите — вставить · вверх — отмена" : "Release to insert · up to cancel"
-        self.hintPill.addSubview(self.hintLabel)
+        self.hintLabel.textAlignment = .left
+        self.hintLabel.text = isRu ? "Отпустите, чтобы вставить" : "Release to insert"
+        content.addSubview(self.hintLabel)
 
         NSLayoutConstraint.activate([
-            self.card.centerXAnchor.constraint(equalTo: self.centerXAnchor),
-            self.card.centerYAnchor.constraint(equalTo: self.centerYAnchor, constant: -60.0),
-            self.card.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 24.0),
-            self.card.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -24.0),
+            self.card.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 12.0),
+            self.card.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -12.0),
+            self.card.bottomAnchor.constraint(equalTo: self.bottomAnchor, constant: -self.bottomInset),
 
-            self.statusDot.topAnchor.constraint(equalTo: content.topAnchor, constant: 20.0),
-            self.statusDot.widthAnchor.constraint(equalToConstant: 8.0),
-            self.statusDot.heightAnchor.constraint(equalToConstant: 8.0),
-            self.statusDot.centerYAnchor.constraint(equalTo: self.statusLabel.centerYAnchor),
+            self.waveform.topAnchor.constraint(equalTo: content.topAnchor, constant: 12.0),
+            self.waveform.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
+            self.waveform.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16.0),
+            self.waveform.heightAnchor.constraint(equalToConstant: 30.0),
 
-            self.statusLabel.topAnchor.constraint(equalTo: content.topAnchor, constant: 18.0),
-            self.statusLabel.centerXAnchor.constraint(equalTo: content.centerXAnchor, constant: 8.0),
-            self.statusDot.trailingAnchor.constraint(equalTo: self.statusLabel.leadingAnchor, constant: -7.0),
+            self.transcriptLabel.topAnchor.constraint(equalTo: self.waveform.bottomAnchor, constant: 6.0),
+            self.transcriptLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
+            self.transcriptLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16.0),
 
-            self.waveform.topAnchor.constraint(equalTo: self.statusLabel.bottomAnchor, constant: 16.0),
-            self.waveform.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 28.0),
-            self.waveform.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -28.0),
-            self.waveform.heightAnchor.constraint(equalToConstant: 44.0),
+            self.hintIcon.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 16.0),
+            self.hintIcon.topAnchor.constraint(equalTo: self.transcriptLabel.bottomAnchor, constant: 8.0),
+            self.hintIcon.widthAnchor.constraint(equalToConstant: 15.0),
+            self.hintIcon.heightAnchor.constraint(equalToConstant: 15.0),
+            self.hintIcon.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -11.0),
 
-            self.transcriptLabel.topAnchor.constraint(equalTo: self.waveform.bottomAnchor, constant: 18.0),
-            self.transcriptLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24.0),
-            self.transcriptLabel.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24.0),
-
-            self.hintPill.topAnchor.constraint(equalTo: self.transcriptLabel.bottomAnchor, constant: 18.0),
-            self.hintPill.centerXAnchor.constraint(equalTo: content.centerXAnchor),
-            self.hintPill.heightAnchor.constraint(equalToConstant: 26.0),
-            self.hintPill.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -18.0),
-
-            self.hintLabel.leadingAnchor.constraint(equalTo: self.hintPill.leadingAnchor, constant: 12.0),
-            self.hintLabel.trailingAnchor.constraint(equalTo: self.hintPill.trailingAnchor, constant: -12.0),
-            self.hintLabel.centerYAnchor.constraint(equalTo: self.hintPill.centerYAnchor)
+            self.hintLabel.leadingAnchor.constraint(equalTo: self.hintIcon.trailingAnchor, constant: 7.0),
+            self.hintLabel.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -16.0),
+            self.hintLabel.centerYAnchor.constraint(equalTo: self.hintIcon.centerYAnchor)
         ])
-
-        // Soft pulsing on the status dot.
-        let pulse = CABasicAnimation(keyPath: "opacity")
-        pulse.fromValue = 1.0
-        pulse.toValue = 0.25
-        pulse.duration = 0.8
-        pulse.autoreverses = true
-        pulse.repeatCount = .infinity
-        self.statusDot.layer.add(pulse, forKey: "aorusPulse")
     }
 
     func appear() {
         self.alpha = 0.0
-        self.card.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
+        self.card.transform = CGAffineTransform(translationX: 0.0, y: 12.0)
         UIView.animate(withDuration: 0.3, delay: 0.0, usingSpringWithDamping: 0.82, initialSpringVelocity: 0.4, options: [.allowUserInteraction], animations: {
             self.alpha = 1.0
             self.card.transform = .identity
@@ -516,14 +489,14 @@ final class AorusVoiceOverlayView: UIView {
     func disappear() {
         UIView.animate(withDuration: 0.22, delay: 0.0, options: [.allowUserInteraction], animations: {
             self.alpha = 0.0
-            self.card.transform = CGAffineTransform(scaleX: 0.94, y: 0.94)
+            self.card.transform = CGAffineTransform(translationX: 0.0, y: 10.0)
         }, completion: { [weak self] _ in
             self?.removeFromSuperview()
         })
     }
 
     func setListening() {
-        self.statusLabel.text = (isRu ? "Слушаю…" : "Listening…").uppercased()
+        self.hintLabel.text = isRu ? "Отпустите, чтобы вставить" : "Release to insert"
     }
 
     func updateTranscript(_ text: String) {
@@ -541,20 +514,23 @@ final class AorusVoiceOverlayView: UIView {
     }
 
     func showMessage(_ message: String) {
-        self.statusLabel.text = (isRu ? "Ошибка" : "Error").uppercased()
         self.transcriptLabel.text = message
         self.transcriptLabel.textColor = UIColor(red: 1.0, green: 0.55, blue: 0.55, alpha: 1.0)
+        self.hintIcon.image = UIImage(systemName: "exclamationmark.circle.fill")
+        self.hintIcon.tintColor = UIColor(red: 1.0, green: 0.42, blue: 0.42, alpha: 1.0)
+        self.hintLabel.text = isRu ? "Отпустите, чтобы закрыть" : "Release to close"
         self.waveform.push(level: 0.0)
     }
 
     func setCancelHighlighted(_ highlighted: Bool) {
         let red = UIColor(red: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
-        self.statusDot.backgroundColor = highlighted ? red : self.accent
         self.waveform.tintColor = highlighted ? red : self.accent
-        self.statusLabel.text = (highlighted ? (isRu ? "Отмена" : "Cancel") : (isRu ? "Слушаю…" : "Listening…")).uppercased()
+        self.card.layer.borderColor = (highlighted ? red : self.accent).withAlphaComponent(0.34).cgColor
+        self.hintIcon.image = UIImage(systemName: highlighted ? "xmark.circle.fill" : "checkmark.circle.fill")
+        self.hintIcon.tintColor = highlighted ? red : self.accent
         self.hintLabel.text = highlighted
-            ? (isRu ? "Отпустите — отмена" : "Release to cancel")
-            : (isRu ? "Отпустите — вставить · вверх — отмена" : "Release to insert · up to cancel")
+            ? (isRu ? "Отпустите, чтобы отменить" : "Release to cancel")
+            : (isRu ? "Отпустите, чтобы вставить" : "Release to insert")
         self.hintLabel.textColor = highlighted ? red : UIColor(white: 1.0, alpha: 0.55)
     }
 }
@@ -563,9 +539,10 @@ final class AorusVoiceOverlayView: UIView {
 
 final class AorusWaveformView: UIView {
     private var bars: [CALayer] = []
-    private var levels: [CGFloat] = []
-    private let barCount = 30
-    private let barWidth: CGFloat = 3.0
+    private var smoothedLevel: CGFloat = 0.0
+    private var phase: CGFloat = 0.0
+    private let barCount = 31
+    private let barWidth: CGFloat = 2.5
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -574,7 +551,6 @@ final class AorusWaveformView: UIView {
             layer.cornerRadius = self.barWidth / 2.0
             self.layer.addSublayer(layer)
             self.bars.append(layer)
-            self.levels.append(0.05)
         }
     }
 
@@ -585,9 +561,9 @@ final class AorusWaveformView: UIView {
     }
 
     func push(level: CGFloat) {
-        // Shift the buffer left and append the newest level on the right.
-        self.levels.removeFirst()
-        self.levels.append(max(0.07, level))
+        let clamped = min(1.0, max(0.0, level))
+        self.smoothedLevel = self.smoothedLevel * 0.68 + clamped * 0.32
+        self.phase += 0.42
         self.setNeedsLayout()
     }
 
@@ -601,13 +577,18 @@ final class AorusWaveformView: UIView {
         let maxH = self.bounds.height
         let color = (self.tintColor ?? UIColor.white).cgColor
         CATransaction.begin()
-        CATransaction.setDisableActions(true)
+        CATransaction.setAnimationDuration(0.075)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
         for i in 0 ..< count {
-            let h = max(self.barWidth, self.levels[i] * maxH)
+            let distance = abs(CGFloat(i) - CGFloat(count - 1) / 2.0) / (CGFloat(count - 1) / 2.0)
+            let envelope = 0.28 + 0.72 * (1.0 - distance)
+            let ripple = 0.72 + 0.28 * sin(CGFloat(i) * 0.92 + self.phase)
+            let activity = max(0.045, self.smoothedLevel * envelope * ripple)
+            let h = max(self.barWidth, min(maxH, self.barWidth + activity * (maxH - self.barWidth)))
             let x = CGFloat(i) * (self.barWidth + gap)
             self.bars[i].frame = CGRect(x: x, y: midY - h / 2.0, width: self.barWidth, height: h)
             self.bars[i].backgroundColor = color
-            self.bars[i].opacity = Float(0.35 + 0.65 * self.levels[i])
+            self.bars[i].opacity = Float(0.40 + 0.60 * min(1.0, activity * 1.8))
         }
         CATransaction.commit()
     }

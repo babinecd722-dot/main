@@ -32,6 +32,31 @@ def main() -> None:
                 err.append(f"Master icon must be 1024x1024, got {im.size}")
         except ImportError:
             pass
+
+    # This legacy crop overlay is a transparency mask. A previous PNG-normalizing
+    # step converted its 1-bit tRNS image to opaque grayscale, so the transparent
+    # center rendered as a solid black rectangle over the photo editor.
+    crop_corners = (
+        tg
+        / "submodules"
+        / "LegacyComponents"
+        / "Resources"
+        / "LegacyComponentsResources.bundle"
+        / "PhotoEditorCropCorners@2x.png"
+    )
+    if crop_corners.is_file():
+        try:
+            from PIL import Image
+
+            crop_image = Image.open(crop_corners)
+            if "A" not in crop_image.getbands():
+                err.append("PhotoEditorCropCorners: alpha channel was lost during PNG normalization")
+            elif crop_image.getchannel("A").getextrema()[0] != 0:
+                err.append("PhotoEditorCropCorners: crop mask has no transparent pixels")
+        except ImportError:
+            pass
+    else:
+        err.append("PhotoEditorCropCorners: legacy crop overlay resource is missing")
     plist_path = tg / "Telegram" / "Telegram-iOS" / "Info.plist"
     with plist_path.open("rb") as f:
         pl = plistlib.load(f)
@@ -75,9 +100,8 @@ def main() -> None:
         if want_scheme not in bt:
             err.append("Telegram/BUILD: primary URL scheme should be aorusgram (UrlTypesInfoPlist template)")
 
-    # Keep Telegram's native frame-based WindowHost geometry. Attaching this auxiliary
-    # window to UIWindowScene gives the photo crop mask and rendered image different
-    # coordinate transforms, producing a black/offset preview in the media editor.
+    # Keep Telegram's native frame-based WindowHost implementation. This is an upstream
+    # lifecycle primitive and should not be replaced by a branding-time scene override.
     nw = tg / "submodules" / "Display" / "Source" / "NativeWindowHostView.swift"
     if nw.is_file():
         nt = nw.read_text(encoding="utf-8")

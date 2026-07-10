@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v230-release-12.8-png8
+          key: tg-ios-src-v231-release-12.8-png8-alpha
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -55,22 +55,20 @@ jobs:
       # Cosmetic: a few upstream icons ship as sub-8-bit or 16-bit PNGs, which makes
       # CopyPng emit "Input PNG does not have an 8 bit input depth" warnings. Re-encode
       # just those known assets to 8-bit, mode-aware so pixels stay visually identical:
-      # 1-bit grayscale -> 8-bit L, palette/16-bit/etc. -> 8-bit RGBA. If Pillow is
-      # unavailable, fall back to macOS sips so the step still normalizes the known files.
+      # Transparency-bearing 1-bit/palette assets -> 8-bit RGBA; opaque grayscale ->
+      # 8-bit L. Preserving the tRNS chunk is essential: crop corners and media-group
+      # glyphs are masks, and converting them to plain L produces an opaque black box.
       - name: Normalize non-8-bit PNGs to 8-bit (silence libpng warnings)
         run: |
           cd telegram-ios
           python3 -m pip install --quiet --disable-pip-version-check Pillow >/dev/null 2>&1 || pip3 install --quiet Pillow >/dev/null 2>&1 || true
           python3 << 'PYEOF'
           import os
-          import shutil
-          import subprocess
-          import tempfile
           try:
               from PIL import Image
               has_pillow = True
           except Exception as e:
-              print("Pillow unavailable — using sips fallback:", e)
+              print("Pillow unavailable — leaving source PNGs unchanged:", e)
               has_pillow = False
           names = {
               "VideoRecordArrow",
@@ -84,36 +82,18 @@ jobs:
 
           def normalize_with_pillow(path):
               im = Image.open(path)
-              if im.mode == "1":
+              has_transparency = "transparency" in im.info or "A" in im.getbands()
+              if has_transparency:
+                  im2 = im.convert("RGBA")
+              elif im.mode == "1":
                   im2 = im.convert("L")
               elif im.mode == "P":
-                  im2 = im.convert("RGBA")
+                  im2 = im.convert("RGB")
               elif im.mode in ("L", "LA", "RGB", "RGBA"):
                   im2 = im
               else:
                   im2 = im.convert("RGBA")
               im2.save(path, format="PNG", optimize=True)
-
-          def normalize_with_sips(path):
-              sips = "/usr/bin/sips"
-              if not os.path.exists(sips):
-                  raise RuntimeError("sips not found")
-              fd, tmp = tempfile.mkstemp(prefix=".aorus-png-", suffix=".png", dir=os.path.dirname(path) or ".")
-              os.close(fd)
-              try:
-                  result = subprocess.run(
-                      [sips, "-s", "format", "png", path, "--out", tmp],
-                      stdout=subprocess.PIPE,
-                      stderr=subprocess.STDOUT,
-                      text=True,
-                      check=False,
-                  )
-                  if result.returncode != 0:
-                      raise RuntimeError(result.stdout.strip() or f"sips exited {result.returncode}")
-                  shutil.move(tmp, path)
-              finally:
-                  if os.path.exists(tmp):
-                      os.unlink(tmp)
 
           count = 0
           for root, _, files in os.walk("."):
@@ -127,10 +107,10 @@ jobs:
                   try:
                       if has_pillow:
                           normalize_with_pillow(p)
+                          count += 1
+                          print("8-bit:", p)
                       else:
-                          normalize_with_sips(p)
-                      count += 1
-                      print("8-bit:", p)
+                          print("unchanged:", p)
                   except Exception as e:
                       print("skip", p, e)
           print("PNG normalization done, converted", count)
