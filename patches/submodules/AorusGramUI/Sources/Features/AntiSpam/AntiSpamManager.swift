@@ -300,7 +300,7 @@ final class AntiSpamManager {
     func setTextCleanup(_ value: Bool)         { textCleanup = value; save() }
 
     func addKeyword(_ kw: String) {
-        let clean = kw.lowercased().trimmingCharacters(in: .whitespaces)
+        let clean = kw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, !keywords.contains(clean) else { return }
         keywords.append(clean)
         save()

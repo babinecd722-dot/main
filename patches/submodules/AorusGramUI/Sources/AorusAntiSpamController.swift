@@ -741,7 +741,7 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
             }
         },
         commitNewKeyword: {
-            let word = stateValue.with { $0 }.newKeyword.trimmingCharacters(in: .whitespaces)
+            let word = stateValue.with { $0 }.newKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !word.isEmpty else { return }
             AntiSpamManager.shared.addKeyword(word)
             updateState { current in

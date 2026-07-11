@@ -35,6 +35,7 @@ struct AorusFormattingToolbarView: View {
     private let onLink: () -> Void
     private let onUnderline: () -> Void
     private let onStrikethrough: () -> Void
+    private let onClipboard: () -> Void
     private let onCode: () -> Void
     private let onAorusCode: () -> Void
 
@@ -50,6 +51,7 @@ struct AorusFormattingToolbarView: View {
         onLink: @escaping () -> Void,
         onUnderline: @escaping () -> Void,
         onStrikethrough: @escaping () -> Void,
+        onClipboard: @escaping () -> Void,
         onCode: @escaping () -> Void,
         onAorusCode: @escaping () -> Void
     ) {
@@ -64,6 +66,7 @@ struct AorusFormattingToolbarView: View {
         self.onLink = onLink
         self.onUnderline = onUnderline
         self.onStrikethrough = onStrikethrough
+        self.onClipboard = onClipboard
         self.onCode = onCode
         self.onAorusCode = onAorusCode
     }
@@ -83,22 +86,26 @@ struct AorusFormattingToolbarView: View {
 
                 Spacer()
 
-                // Quote
-                formatButton(systemName: "text.quote", action: onQuote)
-                // Spoiler
-                formatButton(systemName: "eye.slash", action: onSpoiler)
-                // Bold
-                formatButton(systemName: "bold", action: onBold)
-                // Italic
-                formatButton(systemName: "italic", action: onItalic)
-                // Monospace
-                monospaceButton()
-                // Link
-                formatButton(systemName: "link", action: onLink)
-                // Underline
-                formatButton(systemName: "underline", action: onUnderline)
-                // Strikethrough
-                formatButton(systemName: "strikethrough", action: onStrikethrough)
+                Group {
+                    // Quote
+                    formatButton(systemName: "text.quote", action: onQuote)
+                    // Spoiler
+                    formatButton(systemName: "eye.slash", action: onSpoiler)
+                    // Bold
+                    formatButton(systemName: "bold", action: onBold)
+                    // Italic
+                    formatButton(systemName: "italic", action: onItalic)
+                    // Monospace
+                    monospaceButton()
+                    // Link
+                    formatButton(systemName: "link", action: onLink)
+                    // Underline
+                    formatButton(systemName: "underline", action: onUnderline)
+                    // Strikethrough
+                    formatButton(systemName: "strikethrough", action: onStrikethrough)
+                }
+                // Clipboard — available even when the input is empty.
+                clipboardButton()
                 // Code
                 formatButton(systemName: "chevron.left.forwardslash.chevron.right", action: onCode)
                 // AorusCode — hide a secret message inside the visible one.
@@ -132,6 +139,21 @@ struct AorusFormattingToolbarView: View {
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canFormat)
+    }
+
+    private func clipboardButton() -> some View {
+        Button(action: self.onClipboard) {
+            Group {
+                if #available(iOS 16.0, *) {
+                    Image(systemName: "clipboard")
+                } else {
+                    Image(systemName: "doc.on.clipboard")
+                }
+            }
+            .foregroundColor(Color.primary)
+        }
+        .buttonStyle(AorusToolbarButtonStyle())
+        .accessibilityLabel(Text("Clipboard"))
     }
 
     private func aorusCodeButton() -> some View {

@@ -2967,7 +2967,8 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    // channels legitimately carry finance/crypto/link chatter, and people you\n"
         "                    // already know must never lose messages \u2014 unsolicited spam is a DM-from-a-\n"
         "                    // stranger problem, so scope the hiding there.\n"
-        "                    if mid.peerId.namespace == Namespaces.Peer.CloudUser, !transaction.isPeerContact(peerId: mid.peerId) {\n"
+        "                    let aorusIsBotPeer = (transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo != nil\n"
+        "                    if mid.peerId.namespace == Namespaces.Peer.CloudUser, !transaction.isPeerContact(peerId: mid.peerId), !aorusIsBotPeer {\n"
         "                        let peerIdentity = mid.peerId.toInt64()\n"
         "                        let authorIdentity = storeMsg.authorId?.toInt64()\n"
         "                        let identity = authorIdentity ?? peerIdentity\n"
@@ -3014,6 +3015,15 @@ def patch_incoming_message_hook(tg: Path) -> None:
             "                let aorusStopWordsOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_stopwords_protection\") as? Bool) ?? true\n"
             "                let aorusTextCleanupOn = (UserDefaults.standard.object(forKey: \"aorusgram_antispam_text_cleanup\") as? Bool) ?? true\n"
             "                let aorusThreatPatterns = UserDefaults.standard.stringArray(forKey: \"aorusgram_antispam_threat_patterns\") ?? []\n",
+        )
+        upgraded = upgraded.replace(
+            "                    if mid.peerId.namespace == Namespaces.Peer.CloudUser, !transaction.isPeerContact(peerId: mid.peerId) {\n",
+            "                    let aorusIsBotPeer = (transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo != nil\n"
+            "                    if mid.peerId.namespace == Namespaces.Peer.CloudUser, !transaction.isPeerContact(peerId: mid.peerId), !aorusIsBotPeer {\n",
+        )
+        upgraded = upgraded.replace(
+            "                    let aorusSpamEligible = (mid.peerId.namespace == Namespaces.Peer.CloudUser) && !transaction.isPeerContact(peerId: mid.peerId)\n",
+            "                    let aorusSpamEligible = (mid.peerId.namespace == Namespaces.Peer.CloudUser) && !transaction.isPeerContact(peerId: mid.peerId) && ((transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo == nil)\n",
         )
         upgraded = upgraded.replace(
             "                    if aorusBlockedPeerIds.contains(identity) { return true }\n",
@@ -3132,7 +3142,7 @@ def patch_incoming_message_hook(tg: Path) -> None:
         "                    if let authorId = storeMsg.authorId {\n"
         "                        userInfo[\"senderId\"] = NSNumber(value: authorId.toInt64())\n"
         "                    }\n"
-        "                    let aorusSpamEligible = (mid.peerId.namespace == Namespaces.Peer.CloudUser) && !transaction.isPeerContact(peerId: mid.peerId)\n"
+        "                    let aorusSpamEligible = (mid.peerId.namespace == Namespaces.Peer.CloudUser) && !transaction.isPeerContact(peerId: mid.peerId) && ((transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo == nil)\n"
         "                    userInfo[\"spamEligible\"] = NSNumber(value: aorusSpamEligible)\n"
         "                    NotificationCenter.default.post(\n"
         "                        name: NSNotification.Name(\"aorusgram.didReceiveMessage\"),\n"
@@ -16951,7 +16961,74 @@ def patch_formatting_panel(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusLayoutToolbar" in t:
-        print("FormattingPanel: already injected")
+        original = t
+        if "onClipboard:" not in t:
+            t = t.replace(
+                "            onStrikethrough: { [weak self] in guard let s = self else { return }; s.aorusRunFormattingPreservingIdleSelection { s.formatAttributesStrikethrough(s) } },\n"
+                "            onCode:",
+                "            onStrikethrough: { [weak self] in guard let s = self else { return }; s.aorusRunFormattingPreservingIdleSelection { s.formatAttributesStrikethrough(s) } },\n"
+                "            onClipboard: { [weak self] in self?.aorusPresentClipboard() },\n"
+                "            onCode:",
+                1,
+            )
+        if "private func aorusPresentClipboard()" not in t:
+            clipboard_methods = (
+                "    private func aorusInsertClipboardText(_ value: String, replacingAll: Bool) {\n"
+                "        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
+                "            let text = NSMutableAttributedString(attributedString: current.inputText)\n"
+                "            let range = replacingAll ? (0 ..< text.length) : current.selectionRange\n"
+                "            text.replaceCharacters(in: NSRange(location: range.lowerBound, length: range.count), with: value)\n"
+                "            let newPosition = range.lowerBound + (value as NSString).length\n"
+                "            return (ChatTextInputState(inputText: text, selectionRange: newPosition ..< newPosition), inputMode)\n"
+                "        }\n"
+                "    }\n"
+                "\n"
+                "    private func aorusPresentClipboard() {\n"
+                "        guard let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
+                "        let pasteboard = UIPasteboard.general\n"
+                "        let value = pasteboard.string ?? pasteboard.url?.absoluteString\n"
+                "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
+                "        let preview: String\n"
+                "        if let value, !value.isEmpty {\n"
+                "            let singleLine = value.replacingOccurrences(of: \"\\n\", with: \" \")\n"
+                "            preview = singleLine.count > 180 ? String(singleLine.prefix(180)) + \"...\" : singleLine\n"
+                "        } else {\n"
+                "            preview = isRu ? \"В буфере нет текста\" : \"The clipboard contains no text\"\n"
+                "        }\n"
+                "        let alert = UIAlertController(title: isRu ? \"Буфер обмена\" : \"Clipboard\", message: preview, preferredStyle: .actionSheet)\n"
+                "        let insertAction = UIAlertAction(title: isRu ? \"Вставить\" : \"Insert\", style: .default) { [weak self] _ in\n"
+                "            guard let value else { return }\n"
+                "            self?.aorusInsertClipboardText(value, replacingAll: false)\n"
+                "        }\n"
+                "        insertAction.isEnabled = value?.isEmpty == false\n"
+                "        alert.addAction(insertAction)\n"
+                "        let replaceAction = UIAlertAction(title: isRu ? \"Заменить весь текст\" : \"Replace All Text\", style: .default) { [weak self] _ in\n"
+                "            guard let value else { return }\n"
+                "            self?.aorusInsertClipboardText(value, replacingAll: true)\n"
+                "        }\n"
+                "        replaceAction.isEnabled = value?.isEmpty == false\n"
+                "        alert.addAction(replaceAction)\n"
+                "        if value?.isEmpty == false {\n"
+                "            alert.addAction(UIAlertAction(title: isRu ? \"Очистить буфер\" : \"Clear Clipboard\", style: .destructive) { _ in\n"
+                "                pasteboard.items = []\n"
+                "            })\n"
+                "        }\n"
+                "        alert.addAction(UIAlertAction(title: isRu ? \"Отмена\" : \"Cancel\", style: .cancel))\n"
+                "        if let popover = alert.popoverPresentationController {\n"
+                "            popover.sourceView = parentVC.view\n"
+                "            popover.sourceRect = CGRect(x: parentVC.view.bounds.midX, y: parentVC.view.bounds.maxY - 1.0, width: 1.0, height: 1.0)\n"
+                "            popover.permittedArrowDirections = []\n"
+                "        }\n"
+                "        parentVC.present(alert, animated: true)\n"
+                "    }\n"
+                "\n"
+            )
+            t = t.replace("    private func aorusPresentCodeComposer() {\n", clipboard_methods + "    private func aorusPresentCodeComposer() {\n", 1)
+        if t != original:
+            path.write_text(t, encoding="utf-8")
+            print("FormattingPanel: upgraded cached injection with clipboard")
+        else:
+            print("FormattingPanel: already injected")
         return
 
     import_anchor = "import Foundation\nimport UniformTypeIdentifiers\n"
@@ -16992,6 +17069,7 @@ def patch_formatting_panel(tg: Path) -> None:
         "            onLink: { [weak self] in guard let s = self else { return }; s.aorusRunFormattingPreservingIdleSelection { s.formatAttributesLink(s) } },\n"
         "            onUnderline: { [weak self] in guard let s = self else { return }; s.aorusRunFormattingPreservingIdleSelection { s.formatAttributesUnderline(s) } },\n"
         "            onStrikethrough: { [weak self] in guard let s = self else { return }; s.aorusRunFormattingPreservingIdleSelection { s.formatAttributesStrikethrough(s) } },\n"
+        "            onClipboard: { [weak self] in self?.aorusPresentClipboard() },\n"
         "            onCode: { [weak self] in guard let s = self else { return }; s.aorusRunFormattingPreservingIdleSelection { s.formatAttributesCodeBlock(s) } },\n"
         "            onAorusCode: { [weak self] in self?.aorusPresentCodeComposer() }\n"
         "        )\n"
@@ -17019,6 +17097,55 @@ def patch_formatting_panel(tg: Path) -> None:
         "            let newPosition = range.lowerBound + 1\n"
         "            return (ChatTextInputState(inputText: text, selectionRange: newPosition ..< newPosition), inputMode)\n"
         "        }\n"
+        "    }\n"
+        "\n"
+        "    private func aorusInsertClipboardText(_ value: String, replacingAll: Bool) {\n"
+        "        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in\n"
+        "            let text = NSMutableAttributedString(attributedString: current.inputText)\n"
+        "            let range = replacingAll ? (0 ..< text.length) : current.selectionRange\n"
+        "            text.replaceCharacters(in: NSRange(location: range.lowerBound, length: range.count), with: value)\n"
+        "            let newPosition = range.lowerBound + (value as NSString).length\n"
+        "            return (ChatTextInputState(inputText: text, selectionRange: newPosition ..< newPosition), inputMode)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private func aorusPresentClipboard() {\n"
+        "        guard let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
+        "        let pasteboard = UIPasteboard.general\n"
+        "        let value = pasteboard.string ?? pasteboard.url?.absoluteString\n"
+        "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
+        "        let preview: String\n"
+        "        if let value, !value.isEmpty {\n"
+        "            let singleLine = value.replacingOccurrences(of: \"\\n\", with: \" \")\n"
+        "            preview = singleLine.count > 180 ? String(singleLine.prefix(180)) + \"...\" : singleLine\n"
+        "        } else {\n"
+        "            preview = isRu ? \"В буфере нет текста\" : \"The clipboard contains no text\"\n"
+        "        }\n"
+        "        let alert = UIAlertController(title: isRu ? \"Буфер обмена\" : \"Clipboard\", message: preview, preferredStyle: .actionSheet)\n"
+        "        let insertAction = UIAlertAction(title: isRu ? \"Вставить\" : \"Insert\", style: .default) { [weak self] _ in\n"
+        "            guard let value else { return }\n"
+        "            self?.aorusInsertClipboardText(value, replacingAll: false)\n"
+        "        }\n"
+        "        insertAction.isEnabled = value?.isEmpty == false\n"
+        "        alert.addAction(insertAction)\n"
+        "        let replaceAction = UIAlertAction(title: isRu ? \"Заменить весь текст\" : \"Replace All Text\", style: .default) { [weak self] _ in\n"
+        "            guard let value else { return }\n"
+        "            self?.aorusInsertClipboardText(value, replacingAll: true)\n"
+        "        }\n"
+        "        replaceAction.isEnabled = value?.isEmpty == false\n"
+        "        alert.addAction(replaceAction)\n"
+        "        if value?.isEmpty == false {\n"
+        "            alert.addAction(UIAlertAction(title: isRu ? \"Очистить буфер\" : \"Clear Clipboard\", style: .destructive) { _ in\n"
+        "                pasteboard.items = []\n"
+        "            })\n"
+        "        }\n"
+        "        alert.addAction(UIAlertAction(title: isRu ? \"Отмена\" : \"Cancel\", style: .cancel))\n"
+        "        if let popover = alert.popoverPresentationController {\n"
+        "            popover.sourceView = parentVC.view\n"
+        "            popover.sourceRect = CGRect(x: parentVC.view.bounds.midX, y: parentVC.view.bounds.maxY - 1.0, width: 1.0, height: 1.0)\n"
+        "            popover.permittedArrowDirections = []\n"
+        "        }\n"
+        "        parentVC.present(alert, animated: true)\n"
         "    }\n"
         "\n"
         "    private func aorusPresentCodeComposer() {\n"

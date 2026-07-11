@@ -128,8 +128,41 @@ def main() -> None:
             err.append("VoiceToText: composer side-gap correction is missing")
         if "let aorusOuterActionSpacing: CGFloat" not in chat_text:
             err.append("VoiceToText: outer action spacing correction is missing")
+        if "onClipboard: { [weak self] in self?.aorusPresentClipboard() }" not in chat_text:
+            err.append("FormattingPanel: clipboard action is not wired")
+        if "private func aorusPresentClipboard()" not in chat_text:
+            err.append("FormattingPanel: native clipboard presenter is missing")
     else:
         err.append("VoiceToText: ChatTextInputPanelNode.swift is missing")
+
+    formatting_toolbar = (
+        tg
+        / "submodules"
+        / "TelegramUI"
+        / "Components"
+        / "Chat"
+        / "ChatTextInputPanelNode"
+        / "Sources"
+        / "AorusInputToolbar.swift"
+    )
+    if formatting_toolbar.is_file():
+        toolbar_text = formatting_toolbar.read_text(encoding="utf-8")
+        clipboard_index = toolbar_text.find("clipboardButton()")
+        code_index = toolbar_text.find('formatButton(systemName: "chevron.left.forwardslash.chevron.right"')
+        if clipboard_index < 0 or code_index < 0 or clipboard_index > code_index:
+            err.append("FormattingPanel: clipboard button must be immediately before Code")
+    else:
+        err.append("FormattingPanel: AorusInputToolbar.swift is missing")
+
+    account_state = tg / "submodules" / "TelegramCore" / "Sources" / "State" / "AccountStateManagementUtils.swift"
+    if account_state.is_file():
+        account_text = account_state.read_text(encoding="utf-8")
+        if "let aorusIsBotPeer = (transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo != nil" not in account_text:
+            err.append("AntiSpam: prefilter does not exclude bot chats")
+        if "((transaction.getPeer(mid.peerId) as? TelegramUser)?.botInfo == nil)" not in account_text:
+            err.append("AntiSpam: incoming eligibility does not exclude bot chats")
+    else:
+        err.append("AntiSpam: AccountStateManagementUtils.swift is missing")
 
     quick_replies = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusQuickRepliesController.swift"
     if quick_replies.is_file():
