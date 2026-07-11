@@ -153,7 +153,7 @@ struct AorusFormattingToolbarView: View {
             .foregroundColor(Color.primary)
         }
         .buttonStyle(AorusToolbarButtonStyle())
-        .accessibilityLabel(Text("Clipboard"))
+        .accessibility(label: Text("Clipboard"))
     }
 
     private func aorusCodeButton() -> some View {
