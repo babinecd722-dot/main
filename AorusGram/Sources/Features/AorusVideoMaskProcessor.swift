@@ -658,3 +658,10 @@ public final class AorusVideoMaskProcessor: NSObject {
         return lhs + (rhs - lhs) * factor
     }
 }
+
+/// C ABI bridge used by the Objective-C++ WebRTC capturer. Keeping this bridge
+/// module-free avoids enabling Clang C++ modules across the entire tgcalls target.
+@_cdecl("AorusVideoMaskProcessPixelBuffer")
+public func AorusVideoMaskProcessPixelBuffer(_ pixelBuffer: CVPixelBuffer, _ orientation: Int32) -> CVPixelBuffer? {
+    return AorusVideoMaskProcessor.shared.process(pixelBuffer: pixelBuffer, orientation: orientation)
+}

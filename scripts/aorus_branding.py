@@ -11941,12 +11941,21 @@ def patch_video_masks(tg: Path) -> None:
         raise RuntimeError("VideoMasks: VideoCameraCapturer.mm not found")
     text = capturer.read_text(encoding="utf-8")
     sentinel = "// AorusGram: real-time outgoing call mask"
-    if sentinel not in text:
+    # Migrate the first implementation from Swift module import to a stable C ABI.
+    # Telegram caches its source tree between CI runs, so this must happen even
+    # when the frame-hook sentinel is already present.
+    text = text.replace("@import AorusGram;\n", "")
+    bridge_declaration = "extern CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n"
+    if bridge_declaration not in text:
         import_anchor = "#import <AVFoundation/AVFoundation.h>\n"
         if import_anchor not in text:
             raise RuntimeError("VideoMasks: call capturer import anchor not found")
-        text = text.replace(import_anchor, import_anchor + "@import AorusGram;\n", 1)
-
+        text = text.replace(import_anchor, import_anchor + bridge_declaration, 1)
+    text = text.replace(
+        "[[AorusVideoMaskProcessor shared] processPixelBuffer:pixelBuffer orientation:aorusOrientation]",
+        "AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation)"
+    )
+    if sentinel not in text:
         bgra_anchor = (
             "        case kCVPixelFormatType_32BGRA:\n"
             "        case kCVPixelFormatType_32ARGB: {\n"
@@ -11983,7 +11992,7 @@ def patch_video_masks(tg: Path) -> None:
             "        case RTCVideoRotation_270: aorusOrientation = 8; break;\n"
             "        default: break;\n"
             "    }\n"
-            "    CVPixelBufferRef aorusMaskedPixelBuffer = [[AorusVideoMaskProcessor shared] processPixelBuffer:pixelBuffer orientation:aorusOrientation];\n"
+            "    CVPixelBufferRef aorusMaskedPixelBuffer = AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation);\n"
             "    if (aorusMaskedPixelBuffer != nil) {\n"
             "        pixelBuffer = aorusMaskedPixelBuffer;\n"
             "    }\n\n"
@@ -11996,6 +12005,7 @@ def patch_video_masks(tg: Path) -> None:
         print("VideoMasks: outgoing WebRTC camera pipeline patched")
     else:
         print("VideoMasks: outgoing WebRTC pipeline already patched")
+    capturer.write_text(text, encoding="utf-8")
 
     voip_build = tg / "submodules/TgVoipWebrtc/BUILD"
     if not voip_build.is_file():

@@ -197,6 +197,8 @@ def main() -> None:
             err.append("VideoMasks: outgoing call frame hook is missing")
         if "libyuv::ARGBToI420" not in call_text:
             err.append("VideoMasks: BGRA-to-WebRTC converter is missing")
+        if "AorusVideoMaskProcessPixelBuffer" not in call_text or "@import AorusGram" in call_text:
+            err.append("VideoMasks: module-free C bridge is missing")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:
