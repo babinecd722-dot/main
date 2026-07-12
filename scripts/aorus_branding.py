@@ -11945,7 +11945,9 @@ def patch_video_masks(tg: Path) -> None:
     # Telegram caches its source tree between CI runs, so this must happen even
     # when the frame-hook sentinel is already present.
     text = text.replace("@import AorusGram;\n", "")
-    bridge_declaration = "extern CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n"
+    legacy_bridge_declaration = "extern CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n"
+    bridge_declaration = 'extern "C" CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n'
+    text = text.replace(legacy_bridge_declaration, bridge_declaration)
     if bridge_declaration not in text:
         import_anchor = "#import <AVFoundation/AVFoundation.h>\n"
         if import_anchor not in text:
