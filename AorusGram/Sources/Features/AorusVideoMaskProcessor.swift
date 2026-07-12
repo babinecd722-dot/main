@@ -30,7 +30,9 @@ public final class AorusVideoMaskProcessor: NSObject {
     private var missedDetections = 0
     private var lastPreset = ""
     private var templates: [String: CIImage] = [:]
+    private var templateImages: [String: UIImage] = [:]
     private var pools: [String: CVPixelBufferPool] = [:]
+    private var previewMirrored = false
 
     private override init() {
         super.init()
@@ -51,6 +53,10 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     @objc(processPixelBuffer:orientation:)
     public func process(pixelBuffer: CVPixelBuffer, orientation rawOrientation: Int32) -> CVPixelBuffer? {
+        return self.process(pixelBuffer: pixelBuffer, orientation: rawOrientation, mirrored: false)
+    }
+
+    public func process(pixelBuffer: CVPixelBuffer, orientation rawOrientation: Int32, mirrored: Bool) -> CVPixelBuffer? {
         guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"),
               UserDefaults.standard.bool(forKey: Self.enabledKey) else {
             return nil
@@ -64,6 +70,7 @@ public final class AorusVideoMaskProcessor: NSObject {
 
         let configuredPreset = UserDefaults.standard.string(forKey: Self.presetKey) ?? "skull"
         let preset = Self.supportedPresets.contains(configuredPreset) ? configuredPreset : "skull"
+        self.previewMirrored = mirrored
         if preset != self.lastPreset {
             self.lastPreset = preset
             self.smoothedFace = nil
@@ -133,8 +140,12 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     @objc(processSampleBuffer:orientation:)
     public func process(sampleBuffer: CMSampleBuffer, orientation: Int32) -> CMSampleBuffer? {
+        return self.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: false)
+    }
+
+    public func process(sampleBuffer: CMSampleBuffer, orientation: Int32, mirrored: Bool) -> CMSampleBuffer? {
         guard let input = CMSampleBufferGetImageBuffer(sampleBuffer),
-              let output = self.process(pixelBuffer: input, orientation: orientation) else {
+              let output = self.process(pixelBuffer: input, orientation: orientation, mirrored: mirrored) else {
             return nil
         }
 
@@ -216,6 +227,7 @@ public final class AorusVideoMaskProcessor: NSObject {
             self.smoothedRoll = roll
         }
         self.missedDetections = 0
+        self.publishPreview(face: self.smoothedFace ?? detected, extent: extent)
     }
 
     private func registerMiss() {
@@ -223,6 +235,9 @@ public final class AorusVideoMaskProcessor: NSObject {
         if self.missedDetections >= 5 {
             self.smoothedFace = nil
             self.smoothedRoll = 0.0
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .aorusVideoMaskPreviewHidden, object: nil)
+            }
         }
     }
 
@@ -232,25 +247,25 @@ public final class AorusVideoMaskProcessor: NSObject {
         let verticalOffset: CGFloat
         switch preset {
         case "cyber":
-            widthFactor = 1.54
-            heightFactor = 1.15
-            verticalOffset = 0.10
+            widthFactor = 1.95
+            heightFactor = 2.05
+            verticalOffset = 0.08
         case "neonCat", "demon", "oni":
-            widthFactor = 1.62
-            heightFactor = 1.82
-            verticalOffset = 0.22
+            widthFactor = 2.05
+            heightFactor = 2.28
+            verticalOffset = 0.12
         case "phantom":
-            widthFactor = 1.82
-            heightFactor = 1.92
+            widthFactor = 2.16
+            heightFactor = 2.35
             verticalOffset = 0.03
         case "halo", "aurora":
-            widthFactor = 1.90
-            heightFactor = 1.70
-            verticalOffset = 0.22
+            widthFactor = 2.14
+            heightFactor = 2.25
+            verticalOffset = 0.10
         default:
-            widthFactor = 1.56
-            heightFactor = 1.66
-            verticalOffset = 0.02
+            widthFactor = 1.98
+            heightFactor = 2.18
+            verticalOffset = 0.04
         }
         let size = CGSize(width: face.width * widthFactor, height: face.height * heightFactor)
         return CGRect(
@@ -309,6 +324,7 @@ public final class AorusVideoMaskProcessor: NSObject {
             let cg = context.cgContext
             cg.setLineCap(.round)
             cg.setLineJoin(.round)
+            Self.drawFaceFoundation(in: cg, preset: preset)
             switch preset {
             case "cyber":
                 Self.drawCyber(in: cg)
@@ -335,8 +351,77 @@ public final class AorusVideoMaskProcessor: NSObject {
         guard let result = CIImage(image: image) else {
             return nil
         }
+        self.templateImages[preset] = image
         self.templates[preset] = result
         return result
+    }
+
+    private static func drawFaceFoundation(in context: CGContext, preset: String) {
+        let color: UIColor
+        switch preset {
+        case "cyber":
+            color = UIColor(red: 0.025, green: 0.045, blue: 0.10, alpha: 0.98)
+        case "demon", "oni":
+            color = UIColor(red: 0.20, green: 0.015, blue: 0.035, alpha: 0.98)
+        case "neonCat", "phantom":
+            color = UIColor(red: 0.075, green: 0.035, blue: 0.13, alpha: 0.98)
+        case "halo":
+            color = UIColor(red: 0.96, green: 0.87, blue: 0.61, alpha: 0.98)
+        case "aurora":
+            color = UIColor(red: 0.055, green: 0.12, blue: 0.18, alpha: 0.98)
+        case "chrome":
+            color = UIColor(white: 0.68, alpha: 0.99)
+        case "incognito":
+            color = UIColor(red: 0.018, green: 0.022, blue: 0.035, alpha: 0.99)
+        default:
+            color = UIColor(white: 0.92, alpha: 0.99)
+        }
+        context.saveGState()
+        context.setShadow(offset: .zero, blur: 24.0, color: color.withAlphaComponent(0.70).cgColor)
+        let shell = UIBezierPath(roundedRect: CGRect(x: 94, y: 54, width: 324, height: 414), cornerRadius: 150)
+        color.setFill()
+        UIColor.white.withAlphaComponent(0.46).setStroke()
+        shell.lineWidth = 5.0
+        shell.fill()
+        shell.stroke()
+        context.restoreGState()
+    }
+
+    public func previewImage(for preset: String) -> UIImage? {
+        self.processingLock.lock()
+        defer { self.processingLock.unlock() }
+        if let image = self.templateImages[preset] {
+            return image
+        }
+        _ = self.template(for: preset)
+        return self.templateImages[preset]
+    }
+
+    private func publishPreview(face: CGRect, extent: CGRect) {
+        let preset = self.lastPreset
+        let mask = self.maskRect(for: face, preset: preset)
+        let normalized = CGRect(
+            x: mask.minX / extent.width,
+            y: 1.0 - mask.maxY / extent.height,
+            width: mask.width / extent.width,
+            height: mask.height / extent.height
+        )
+        let roll = self.smoothedRoll
+        let mirrored = self.previewMirrored
+        let aspect = extent.width / max(extent.height, 1.0)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .aorusVideoMaskPreviewUpdated,
+                object: nil,
+                userInfo: [
+                    "rect": NSValue(cgRect: normalized),
+                    "roll": NSNumber(value: Double(roll)),
+                    "preset": preset,
+                    "mirrored": mirrored,
+                    "aspect": NSNumber(value: Double(aspect))
+                ]
+            )
+        }
     }
 
     private static func drawSkull(in context: CGContext) {
@@ -662,6 +747,11 @@ public final class AorusVideoMaskProcessor: NSObject {
 /// C ABI bridge used by the Objective-C++ WebRTC capturer. Keeping this bridge
 /// module-free avoids enabling Clang C++ modules across the entire tgcalls target.
 @_cdecl("AorusVideoMaskProcessPixelBuffer")
-public func AorusVideoMaskProcessPixelBuffer(_ pixelBuffer: CVPixelBuffer, _ orientation: Int32) -> CVPixelBuffer? {
-    return AorusVideoMaskProcessor.shared.process(pixelBuffer: pixelBuffer, orientation: orientation)
+public func AorusVideoMaskProcessPixelBuffer(_ pixelBuffer: CVPixelBuffer, _ orientation: Int32, _ mirrored: Int32) -> CVPixelBuffer? {
+    return AorusVideoMaskProcessor.shared.process(pixelBuffer: pixelBuffer, orientation: orientation, mirrored: mirrored != 0)
+}
+
+public extension Notification.Name {
+    static let aorusVideoMaskPreviewUpdated = Notification.Name("aorusgram.videoMask.previewUpdated")
+    static let aorusVideoMaskPreviewHidden = Notification.Name("aorusgram.videoMask.previewHidden")
 }

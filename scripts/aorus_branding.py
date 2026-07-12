@@ -11874,6 +11874,10 @@ def patch_video_masks(tg: Path) -> None:
     camera = tg / "submodules/Camera/Sources/CameraOutput.swift"
     if camera.is_file():
         text = camera.read_text(encoding="utf-8")
+        text = text.replace(
+            "AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation)",
+            "AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: self.currentPosition == .front)"
+        )
         sentinel = "// AorusGram: real-time video mask"
         if sentinel not in text:
             if "import AorusGram\n" not in text:
@@ -11903,7 +11907,7 @@ def patch_video_masks(tg: Path) -> None:
                 "            case .landscapeLeft: orientation = 3\n"
                 "            @unknown default: orientation = 6\n"
                 "            }\n"
-                "            if let masked = AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation) {\n"
+                "            if let masked = AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: self.currentPosition == .front) {\n"
                 "                effectiveSampleBuffer = masked\n"
                 "            }\n"
                 "        }\n\n"
@@ -11919,12 +11923,48 @@ def patch_video_masks(tg: Path) -> None:
             if anchor not in text:
                 raise RuntimeError("VideoMasks: CameraOutput capture anchor not found")
             text = text.replace(anchor, replacement, 1)
-            camera.write_text(text, encoding="utf-8")
             print("VideoMasks: round-video recording pipeline patched")
         else:
             print("VideoMasks: round-video pipeline already patched")
+        camera.write_text(text, encoding="utf-8")
     else:
         raise RuntimeError("VideoMasks: CameraOutput.swift not found")
+
+    camera_preview = tg / "submodules/Camera/Sources/CameraPreviewView.swift"
+    if not camera_preview.is_file():
+        raise RuntimeError("VideoMasks: CameraPreviewView.swift not found")
+    text = camera_preview.read_text(encoding="utf-8")
+    preview_sentinel = "// AorusGram: local round-video mask preview"
+    if preview_sentinel not in text:
+        if "import AorusGram\n" not in text:
+            anchor = "import Foundation\n"
+            if anchor not in text:
+                raise RuntimeError("VideoMasks: CameraPreviewView import anchor not found")
+            text = text.replace(anchor, anchor + "import AorusGram\n", 1)
+        property_anchor = "    private let placeholderView = UIImageView()\n"
+        if property_anchor not in text:
+            raise RuntimeError("VideoMasks: CameraPreviewView property anchor not found")
+        text = text.replace(property_anchor, property_anchor + "    private var aorusMaskOverlayView: AorusVideoMaskOverlayView?\n", 1)
+        init_anchor = "        self.addSubview(self.placeholderView)\n"
+        init_replacement = (
+            init_anchor
+            + "        if roundVideo { " + preview_sentinel + "\n"
+            + "            let overlayView = AorusVideoMaskOverlayView(frame: self.bounds)\n"
+            + "            self.aorusMaskOverlayView = overlayView\n"
+            + "            self.addSubview(overlayView)\n"
+            + "        }\n"
+        )
+        if init_anchor not in text:
+            raise RuntimeError("VideoMasks: CameraPreviewView init anchor not found")
+        text = text.replace(init_anchor, init_replacement, 1)
+        layout_anchor = "        self.placeholderView.frame = self.bounds.insetBy(dx: -1.0, dy: -1.0)\n"
+        if layout_anchor not in text:
+            raise RuntimeError("VideoMasks: CameraPreviewView layout anchor not found")
+        text = text.replace(layout_anchor, layout_anchor + "        self.aorusMaskOverlayView?.frame = self.bounds\n", 1)
+        camera_preview.write_text(text, encoding="utf-8")
+        print("VideoMasks: local round-video preview overlay patched")
+    else:
+        print("VideoMasks: local round-video preview already patched")
 
     camera_build = tg / "submodules/Camera/BUILD"
     if camera_build.is_file():
@@ -11945,9 +11985,12 @@ def patch_video_masks(tg: Path) -> None:
     # Telegram caches its source tree between CI runs, so this must happen even
     # when the frame-hook sentinel is already present.
     text = text.replace("@import AorusGram;\n", "")
-    legacy_bridge_declaration = "extern CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n"
-    bridge_declaration = 'extern "C" CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n'
-    text = text.replace(legacy_bridge_declaration, bridge_declaration)
+    bridge_declaration = 'extern "C" CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation, int32_t mirrored);\n'
+    for legacy_bridge_declaration in (
+        "extern CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n",
+        'extern "C" CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer(CVPixelBufferRef _Nonnull pixelBuffer, int32_t orientation);\n',
+    ):
+        text = text.replace(legacy_bridge_declaration, bridge_declaration)
     if bridge_declaration not in text:
         import_anchor = "#import <AVFoundation/AVFoundation.h>\n"
         if import_anchor not in text:
@@ -11955,7 +11998,11 @@ def patch_video_masks(tg: Path) -> None:
         text = text.replace(import_anchor, import_anchor + bridge_declaration, 1)
     text = text.replace(
         "[[AorusVideoMaskProcessor shared] processPixelBuffer:pixelBuffer orientation:aorusOrientation]",
-        "AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation)"
+        "AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation, usingFrontCamera ? 1 : 0)"
+    )
+    text = text.replace(
+        "AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation)",
+        "AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation, usingFrontCamera ? 1 : 0)"
     )
     if sentinel not in text:
         bgra_anchor = (
@@ -11994,7 +12041,7 @@ def patch_video_masks(tg: Path) -> None:
             "        case RTCVideoRotation_270: aorusOrientation = 8; break;\n"
             "        default: break;\n"
             "    }\n"
-            "    CVPixelBufferRef aorusMaskedPixelBuffer = AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation);\n"
+            "    CVPixelBufferRef aorusMaskedPixelBuffer = AorusVideoMaskProcessPixelBuffer(pixelBuffer, aorusOrientation, usingFrontCamera ? 1 : 0);\n"
             "    if (aorusMaskedPixelBuffer != nil) {\n"
             "        pixelBuffer = aorusMaskedPixelBuffer;\n"
             "    }\n\n"
@@ -12008,6 +12055,57 @@ def patch_video_masks(tg: Path) -> None:
     else:
         print("VideoMasks: outgoing WebRTC pipeline already patched")
     capturer.write_text(text, encoding="utf-8")
+
+    call_preview = tg / "submodules/TgVoipWebrtc/tgcalls/tgcalls/platform/darwin/VideoCaptureView.mm"
+    if not call_preview.is_file():
+        raise RuntimeError("VideoMasks: VideoCaptureView.mm not found")
+    text = call_preview.read_text(encoding="utf-8")
+    call_preview_sentinel = "// AorusGram: local call mask preview"
+    overlay_factory_declaration = 'extern "C" UIView * _Nonnull AorusVideoMaskCreateOverlayView(CGRect frame);\n'
+    if overlay_factory_declaration not in text:
+        import_anchor = '#import "VideoCaptureView.h"\n'
+        if import_anchor not in text:
+            raise RuntimeError("VideoMasks: call preview import anchor not found")
+        text = text.replace(import_anchor, import_anchor + overlay_factory_declaration, 1)
+    legacy_overlay_factory = (
+        "    Class aorusOverlayClass = NSClassFromString(@\"AorusGram.AorusVideoMaskOverlayView\");\n"
+        "    if (aorusOverlayClass != Nil && [aorusOverlayClass isSubclassOfClass:[UIView class]]) {\n"
+        "        _aorusMaskOverlayView = [[aorusOverlayClass alloc] initWithFrame:self.bounds];\n"
+        "        _aorusMaskOverlayView.userInteractionEnabled = false;\n"
+        "        [self addSubview:_aorusMaskOverlayView];\n"
+        "    }\n"
+    )
+    text = text.replace(
+        legacy_overlay_factory,
+        "    _aorusMaskOverlayView = AorusVideoMaskCreateOverlayView(self.bounds);\n"
+        "    _aorusMaskOverlayView.userInteractionEnabled = false;\n"
+        "    [self addSubview:_aorusMaskOverlayView];\n"
+    )
+    if call_preview_sentinel not in text:
+        ivar_anchor = "    VideoCaptureContentView *_captureView;\n"
+        if ivar_anchor not in text:
+            raise RuntimeError("VideoMasks: call preview ivar anchor not found")
+        text = text.replace(ivar_anchor, ivar_anchor + "    UIView *_aorusMaskOverlayView;\n", 1)
+        configure_anchor = "    [self addSubview:_captureView];\n"
+        configure_replacement = (
+            configure_anchor
+            + "    " + call_preview_sentinel + "\n"
+            + "    _aorusMaskOverlayView = AorusVideoMaskCreateOverlayView(self.bounds);\n"
+            + "    _aorusMaskOverlayView.userInteractionEnabled = false;\n"
+            + "    [self addSubview:_aorusMaskOverlayView];\n"
+        )
+        if configure_anchor not in text:
+            raise RuntimeError("VideoMasks: call preview configure anchor not found")
+        text = text.replace(configure_anchor, configure_replacement, 1)
+        layout_anchor = "    _captureView.frame = bounds;\n"
+        if layout_anchor not in text:
+            raise RuntimeError("VideoMasks: call preview layout anchor not found")
+        text = text.replace(layout_anchor, layout_anchor + "    _aorusMaskOverlayView.frame = bounds;\n", 1)
+        call_preview.write_text(text, encoding="utf-8")
+        print("VideoMasks: local call preview overlay patched")
+    else:
+        print("VideoMasks: local call preview already patched")
+    call_preview.write_text(text, encoding="utf-8")
 
     voip_build = tg / "submodules/TgVoipWebrtc/BUILD"
     if not voip_build.is_file():

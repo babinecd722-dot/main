@@ -187,6 +187,9 @@ def main() -> None:
     camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file() or "AorusGram: real-time video mask" not in camera_output.read_text(encoding="utf-8"):
         err.append("VideoMasks: round-video capture hook is missing")
+    camera_preview = tg / "submodules" / "Camera" / "Sources" / "CameraPreviewView.swift"
+    if not camera_preview.is_file() or "AorusGram: local round-video mask preview" not in camera_preview.read_text(encoding="utf-8"):
+        err.append("VideoMasks: local round-video preview overlay is missing")
 
     call_capturer = tg / "submodules" / "TgVoipWebrtc" / "tgcalls" / "tgcalls" / "platform" / "darwin" / "VideoCameraCapturer.mm"
     if not call_capturer.is_file():
@@ -197,8 +200,15 @@ def main() -> None:
             err.append("VideoMasks: outgoing call frame hook is missing")
         if "libyuv::ARGBToI420" not in call_text:
             err.append("VideoMasks: BGRA-to-WebRTC converter is missing")
-        if 'extern "C" CVPixelBufferRef _Nullable AorusVideoMaskProcessPixelBuffer' not in call_text or "@import AorusGram" in call_text:
+        if 'int32_t orientation, int32_t mirrored' not in call_text or "@import AorusGram" in call_text:
             err.append("VideoMasks: module-free C bridge is missing")
+    call_preview = tg / "submodules" / "TgVoipWebrtc" / "tgcalls" / "tgcalls" / "platform" / "darwin" / "VideoCaptureView.mm"
+    if not call_preview.is_file():
+        err.append("VideoMasks: local call preview overlay is missing")
+    else:
+        call_preview_text = call_preview.read_text(encoding="utf-8")
+        if "AorusGram: local call mask preview" not in call_preview_text or "AorusVideoMaskCreateOverlayView" not in call_preview_text:
+            err.append("VideoMasks: local call preview overlay is missing")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:
