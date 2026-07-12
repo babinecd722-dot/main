@@ -11864,6 +11864,158 @@ def patch_voice_twin_video_notes(tg: Path) -> None:
         print("VoiceTwinVideo: Camera BUILD not found")
 
 
+def patch_video_masks(tg: Path) -> None:
+    """Render Aorus face masks into outgoing call and round-video frames.
+
+    The processor is deliberately fail-open: when Vision is busy or cannot find a
+    face, Telegram receives its original CMSampleBuffer. Calls therefore keep
+    flowing even under thermal pressure or on older devices.
+    """
+    camera = tg / "submodules/Camera/Sources/CameraOutput.swift"
+    if camera.is_file():
+        text = camera.read_text(encoding="utf-8")
+        sentinel = "// AorusGram: real-time video mask"
+        if sentinel not in text:
+            if "import AorusGram\n" not in text:
+                anchor = "import Foundation\n"
+                if anchor not in text:
+                    raise RuntimeError("VideoMasks: CameraOutput import anchor not found")
+                text = text.replace(anchor, anchor + "import AorusGram\n", 1)
+
+            anchor = (
+                "        if let masterOutput = self.masterOutput {\n"
+                "            masterOutput.processVideoRecording(sampleBuffer, fromAdditionalOutput: true)\n"
+                "        } else {\n"
+                "            self.processVideoRecording(sampleBuffer, fromAdditionalOutput: false)\n"
+                "        }\n"
+                "        \n"
+                "        if let videoPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {\n"
+                "            self.processSampleBuffer?(sampleBuffer, videoPixelBuffer, connection)\n"
+            )
+            replacement = (
+                "        var effectiveSampleBuffer = sampleBuffer\n"
+                "        if self.isVideoMessage, sampleBuffer.type == kCMMediaType_Video { " + sentinel + "\n"
+                "            let orientation: Int32\n"
+                "            switch self.captureOrientation {\n"
+                "            case .portrait: orientation = 6\n"
+                "            case .portraitUpsideDown: orientation = 8\n"
+                "            case .landscapeRight: orientation = 1\n"
+                "            case .landscapeLeft: orientation = 3\n"
+                "            @unknown default: orientation = 6\n"
+                "            }\n"
+                "            if let masked = AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation) {\n"
+                "                effectiveSampleBuffer = masked\n"
+                "            }\n"
+                "        }\n\n"
+                "        if let masterOutput = self.masterOutput {\n"
+                "            masterOutput.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: true)\n"
+                "        } else {\n"
+                "            self.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: false)\n"
+                "        }\n"
+                "        \n"
+                "        if let videoPixelBuffer = CMSampleBufferGetImageBuffer(effectiveSampleBuffer) {\n"
+                "            self.processSampleBuffer?(effectiveSampleBuffer, videoPixelBuffer, connection)\n"
+            )
+            if anchor not in text:
+                raise RuntimeError("VideoMasks: CameraOutput capture anchor not found")
+            text = text.replace(anchor, replacement, 1)
+            camera.write_text(text, encoding="utf-8")
+            print("VideoMasks: round-video recording pipeline patched")
+        else:
+            print("VideoMasks: round-video pipeline already patched")
+    else:
+        raise RuntimeError("VideoMasks: CameraOutput.swift not found")
+
+    camera_build = tg / "submodules/Camera/BUILD"
+    if camera_build.is_file():
+        text = camera_build.read_text(encoding="utf-8")
+        if "//submodules/AorusGram:AorusGram" not in text:
+            anchor = "    deps = [\n"
+            if anchor not in text:
+                raise RuntimeError("VideoMasks: Camera BUILD deps anchor not found")
+            text = text.replace(anchor, anchor + '        "//submodules/AorusGram:AorusGram",\n', 1)
+            camera_build.write_text(text, encoding="utf-8")
+
+    capturer = tg / "submodules/TgVoipWebrtc/tgcalls/tgcalls/platform/darwin/VideoCameraCapturer.mm"
+    if not capturer.is_file():
+        raise RuntimeError("VideoMasks: VideoCameraCapturer.mm not found")
+    text = capturer.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: real-time outgoing call mask"
+    if sentinel not in text:
+        import_anchor = "#import <AVFoundation/AVFoundation.h>\n"
+        if import_anchor not in text:
+            raise RuntimeError("VideoMasks: call capturer import anchor not found")
+        text = text.replace(import_anchor, import_anchor + "@import AorusGram;\n", 1)
+
+        bgra_anchor = (
+            "        case kCVPixelFormatType_32BGRA:\n"
+            "        case kCVPixelFormatType_32ARGB: {\n"
+            "            return nullptr;\n"
+            "        }\n"
+        )
+        bgra_replacement = (
+            "        case kCVPixelFormatType_32BGRA: {\n"
+            "            const uint8_t *src = static_cast<uint8_t *>(CVPixelBufferGetBaseAddress(pixelBuffer));\n"
+            "            const int srcStride = (int)CVPixelBufferGetBytesPerRow(pixelBuffer);\n"
+            "            libyuv::ARGBToI420(src, srcStride,\n"
+            "                               resultBuffer->MutableDataY(), resultBuffer->StrideY(),\n"
+            "                               resultBuffer->MutableDataU(), resultBuffer->StrideU(),\n"
+            "                               resultBuffer->MutableDataV(), resultBuffer->StrideV(),\n"
+            "                               resultBuffer->width(), resultBuffer->height());\n"
+            "            break;\n"
+            "        }\n"
+            "        case kCVPixelFormatType_32ARGB: {\n"
+            "            CVPixelBufferUnlockBaseAddress(pixelBuffer, kCVPixelBufferLock_ReadOnly);\n"
+            "            return nullptr;\n"
+            "        }\n"
+        )
+        if bgra_anchor not in text:
+            raise RuntimeError("VideoMasks: call BGRA converter anchor not found")
+        text = text.replace(bgra_anchor, bgra_replacement, 1)
+
+        frame_anchor = "    TGRTCCVPixelBuffer *rtcPixelBuffer = [[TGRTCCVPixelBuffer alloc] initWithPixelBuffer:pixelBuffer];\n"
+        frame_replacement = (
+            "    " + sentinel + "\n"
+            "    int32_t aorusOrientation = 1;\n"
+            "    switch (_rotation) {\n"
+            "        case RTCVideoRotation_90: aorusOrientation = 6; break;\n"
+            "        case RTCVideoRotation_180: aorusOrientation = 3; break;\n"
+            "        case RTCVideoRotation_270: aorusOrientation = 8; break;\n"
+            "        default: break;\n"
+            "    }\n"
+            "    CVPixelBufferRef aorusMaskedPixelBuffer = [[AorusVideoMaskProcessor shared] processPixelBuffer:pixelBuffer orientation:aorusOrientation];\n"
+            "    if (aorusMaskedPixelBuffer != nil) {\n"
+            "        pixelBuffer = aorusMaskedPixelBuffer;\n"
+            "    }\n\n"
+            + frame_anchor
+        )
+        if frame_anchor not in text:
+            raise RuntimeError("VideoMasks: outgoing call frame anchor not found")
+        text = text.replace(frame_anchor, frame_replacement, 1)
+        capturer.write_text(text, encoding="utf-8")
+        print("VideoMasks: outgoing WebRTC camera pipeline patched")
+    else:
+        print("VideoMasks: outgoing WebRTC pipeline already patched")
+
+    voip_build = tg / "submodules/TgVoipWebrtc/BUILD"
+    if not voip_build.is_file():
+        raise RuntimeError("VideoMasks: TgVoipWebrtc BUILD not found")
+    text = voip_build.read_text(encoding="utf-8")
+    if "//submodules/AorusGram:AorusGram" not in text:
+        anchor = "    deps = [\n"
+        if anchor not in text:
+            raise RuntimeError("VideoMasks: TgVoipWebrtc deps anchor not found")
+        text = text.replace(anchor, anchor + '        "//submodules/AorusGram:AorusGram",\n', 1)
+    for framework in ("CoreImage", "Vision"):
+        token = '        "' + framework + '",\n'
+        if token not in text:
+            anchor = "    sdk_frameworks = [\n"
+            if anchor not in text:
+                raise RuntimeError("VideoMasks: TgVoipWebrtc frameworks anchor not found")
+            text = text.replace(anchor, anchor + token, 1)
+    voip_build.write_text(text, encoding="utf-8")
+
+
 # Self-contained C++ port of the validated Swift Voice Twin DSP
 # (AorusGram/Sources/Features/AorusVoiceTwin.swift). Runs on the WebRTC capture
 # thread; mutates the microphone PCM in place inside RecordedDataIsAvailable,
@@ -17557,6 +17709,7 @@ def main() -> None:
     patch_voice_twin_recorder(tg)
     patch_voice_twin_video_notes(tg)
     patch_voice_twin_calls(tg)
+    patch_video_masks(tg)
     patch_aorus_code_compose(tg)
     patch_aorus_code_reveal(tg)
     patch_status_edit_delete_icons(tg)

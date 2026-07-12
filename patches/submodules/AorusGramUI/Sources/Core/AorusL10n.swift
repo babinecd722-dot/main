@@ -166,6 +166,21 @@ public struct AorusL10n {
     public var voiceRobot: String { t("Робот", "Robot") }
     public var voiceChild: String { t("Ребёнок", "Child") }
 
+    // MARK: Video Masks
+    public var videoMasks: String { t("Маски", "Masks") }
+    public var videoMasksFooter: String { t("Маска накладывается на лицо в реальном времени во время видеозвонков и записи видеосообщений.", "The mask follows your face in real time during video calls and round video recording.") }
+    public var videoMasksStyleHeader: String { t("СТИЛЬ МАСКИ", "MASK STYLE") }
+    public var videoMaskSkull: String { t("Хрустальный череп", "Crystal Skull") }
+    public var videoMaskCyber: String { t("Кибер-визор", "Cyber Visor") }
+    public var videoMaskPhantom: String { t("Фантом", "Phantom") }
+    public var videoMaskDemon: String { t("Огненный демон", "Inferno Demon") }
+    public var videoMaskNeonCat: String { t("Неон-кот", "Neon Cat") }
+    public var videoMaskIncognito: String { t("Инкогнито", "Incognito") }
+    public var videoMaskChrome: String { t("Жидкий хром", "Liquid Chrome") }
+    public var videoMaskOni: String { t("Маска Они", "Oni Mask") }
+    public var videoMaskHalo: String { t("Сияние", "Halo") }
+    public var videoMaskAurora: String { t("Аврора", "Aurora") }
+
     // MARK: Device Spoof
     public var deviceSpoofHeader: String { t("ДЕВАЙС-СПУФ", "DEVICE SPOOF") }
     public var deviceSpoof: String { t("Устройство", "Device") }

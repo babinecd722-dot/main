@@ -176,6 +176,28 @@ def main() -> None:
     else:
         err.append("QuickReplies: AorusQuickRepliesController.swift is missing")
 
+    mask_processor = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "AorusVideoMaskProcessor.swift"
+    if not mask_processor.is_file():
+        err.append("VideoMasks: AorusVideoMaskProcessor.swift is missing")
+    else:
+        mask_text = mask_processor.read_text(encoding="utf-8")
+        if "processingLock.try()" not in mask_text or "VNDetectFaceLandmarksRequest" not in mask_text:
+            err.append("VideoMasks: fail-open Vision tracking pipeline is incomplete")
+
+    camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
+    if not camera_output.is_file() or "AorusGram: real-time video mask" not in camera_output.read_text(encoding="utf-8"):
+        err.append("VideoMasks: round-video capture hook is missing")
+
+    call_capturer = tg / "submodules" / "TgVoipWebrtc" / "tgcalls" / "tgcalls" / "platform" / "darwin" / "VideoCameraCapturer.mm"
+    if not call_capturer.is_file():
+        err.append("VideoMasks: WebRTC camera capturer is missing")
+    else:
+        call_text = call_capturer.read_text(encoding="utf-8")
+        if "AorusGram: real-time outgoing call mask" not in call_text:
+            err.append("VideoMasks: outgoing call frame hook is missing")
+        if "libyuv::ARGBToI420" not in call_text:
+            err.append("VideoMasks: BGRA-to-WebRTC converter is missing")
+
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:
         err.append("AppDelegate: missing AorusGramBootstrap.shared.setup() call (feature initialisation)")

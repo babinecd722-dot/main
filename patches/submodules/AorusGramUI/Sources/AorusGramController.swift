@@ -341,6 +341,7 @@ private final class AorusArguments {
     let openMisc: () -> Void
     let openAntiSpamManage: () -> Void
     let openDeviceSpoof: () -> Void
+    let openMasks: () -> Void
     let openVoiceTwin: () -> Void
     let setRAMCleanInterval: (Int) -> Void
     let setCacheInterval: (Int) -> Void
@@ -355,6 +356,7 @@ private final class AorusArguments {
          openMisc: @escaping () -> Void,
          openAntiSpamManage: @escaping () -> Void,
          openDeviceSpoof: @escaping () -> Void,
+         openMasks: @escaping () -> Void,
          openVoiceTwin: @escaping () -> Void,
          setRAMCleanInterval: @escaping (Int) -> Void,
          setCacheInterval: @escaping (Int) -> Void,
@@ -368,6 +370,7 @@ private final class AorusArguments {
         self.openMisc = openMisc
         self.openAntiSpamManage = openAntiSpamManage
         self.openDeviceSpoof = openDeviceSpoof
+        self.openMasks = openMasks
         self.openVoiceTwin = openVoiceTwin
         self.setRAMCleanInterval = setRAMCleanInterval
         self.setCacheInterval = setCacheInterval
@@ -394,6 +397,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case autoReply(PresentationTheme, String, Bool)
 
     case callsHeader(PresentationTheme, String)
+    case masks(PresentationTheme, String)
     case voiceTwin(PresentationTheme, String)
 
     case perfHeader(PresentationTheme, String)
@@ -463,7 +467,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.privacy.rawValue
         case .aiHeader, .chatSummary, .autoReply:
             return AorusSection.ai.rawValue
-        case .callsHeader, .voiceTwin:
+        case .callsHeader, .masks, .voiceTwin:
             return AorusSection.calls.rawValue
         case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .antiSpamManage, .performanceStats, .performanceUptime, .performanceRAM,
              .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
@@ -545,24 +549,25 @@ private enum AorusEntry: ItemListNodeEntry {
         case .videoMessagesHeader:  return 66
         case .videoMessagesRearCamera: return 67
         case .callsHeader:          return 68
-        case .voiceTwin:            return 69
-        case .deviceSpoofHeader:    return 70
-        case .deviceSpoof:          return 71
-        case .bypassHeader:         return 72
-        case .bypassSavePaid:       return 73
-        case .bypassSaveViewOnce:   return 74
-        case .bypassStoryDownload:  return 75
-        case .antiSpoofHeader:      return 80
-        case .antiSpoofDeleted:     return 81
-        case .antiSpoofOnline:      return 82
-        case .accountBackupHeader:  return 85
-        case .accountBackup:        return 86
-        case .misc:                 return 87
-        case .aorusCodeHeader:      return 90
-        case .aorusCodeEnabled:     return 91
-        case .subscription:         return 99
-        case .officialChannel:      return 100
-        case .proxyDiagnostics:     return 110 // AORUS-DIAG
+        case .masks:                return 69
+        case .voiceTwin:            return 70
+        case .deviceSpoofHeader:    return 71
+        case .deviceSpoof:          return 72
+        case .bypassHeader:         return 73
+        case .bypassSavePaid:       return 74
+        case .bypassSaveViewOnce:   return 75
+        case .bypassStoryDownload:  return 76
+        case .antiSpoofHeader:      return 81
+        case .antiSpoofDeleted:     return 82
+        case .antiSpoofOnline:      return 83
+        case .accountBackupHeader:  return 86
+        case .accountBackup:        return 87
+        case .misc:                 return 88
+        case .aorusCodeHeader:      return 91
+        case .aorusCodeEnabled:     return 92
+        case .subscription:         return 100
+        case .officialChannel:      return 101
+        case .proxyDiagnostics:     return 111 // AORUS-DIAG
         }
     }
 
@@ -598,6 +603,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .autoReply(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .callsHeader(lt, ls):
             if case let .callsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .masks(lt, ls):
+            if case let .masks(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .voiceTwin(lt, ls):
             if case let .voiceTwin(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .perfHeader(lt, ls):
@@ -743,6 +750,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.autoReply, $0) })
         case let .callsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .masks(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMasks)
         case let .voiceTwin(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openVoiceTwin)
         case let .perfHeader(_, text):
@@ -915,6 +924,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 
         // Calls block (Voice Twin) — moved here from Other.
         .callsHeader(theme, l10n.callsHeader),
+        .masks(theme, l10n.videoMasks),
         .voiceTwin(theme, l10n.voiceTwin),
 
         .deviceSpoofHeader(theme, l10n.deviceSpoofHeader),
@@ -1315,6 +1325,13 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             alert.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
             anchorPopover(alert)
             controller.present(alert, animated: true)
+        },
+        openMasks: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            navigationController.pushViewController(aorusMasksController(context: context))
         },
         openVoiceTwin: {
             guard let controller = weakController,

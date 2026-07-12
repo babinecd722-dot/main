@@ -91,6 +91,10 @@ public final class AorusGramManager {
     public var voiceTwinEnabled: Bool  = false        { didSet { save() } }
     public var voiceTwinPreset: String = "anonymous"  { didSet { save() } }
 
+    // Video masks — rendered locally into outgoing call and round-video frames.
+    public var videoMasksEnabled: Bool = false       { didSet { save() } }
+    public var videoMaskPreset: String = "skull"     { didSet { save() } }
+
     private let key = "aorusgram_settings_v1"
     private var licenseLocked: Bool {
         UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
@@ -129,6 +133,8 @@ public final class AorusGramManager {
         ud.set(effective(tripleTapDelete),     forKey: "aorusgram_feature_triple_delete")
         ud.set(effective(voiceTwinEnabled),    forKey: "aorusgram_voice_twin_enabled")
         ud.set(voiceTwinPreset,                forKey: "aorusgram_voice_twin_preset")
+        ud.set(effective(videoMasksEnabled),   forKey: "aorusgram_video_masks_enabled")
+        ud.set(videoMaskPreset,                forKey: "aorusgram_video_mask_preset")
     }
 
     private func load() {
@@ -180,6 +186,8 @@ public final class AorusGramManager {
         ramCleanInterval        = d["ramCleanInterval"]        as? Int  ?? 60
         voiceTwinEnabled    = d["voiceTwinEnabled"]    as? Bool   ?? false
         voiceTwinPreset     = d["voiceTwinPreset"]     as? String ?? "anonymous"
+        videoMasksEnabled   = d["videoMasksEnabled"]   as? Bool   ?? false
+        videoMaskPreset     = d["videoMaskPreset"]     as? String ?? "skull"
     }
 
     private func save() {
@@ -227,6 +235,8 @@ public final class AorusGramManager {
             "ramCleanInterval":        ramCleanInterval,
             "voiceTwinEnabled":    voiceTwinEnabled,
             "voiceTwinPreset":     voiceTwinPreset,
+            "videoMasksEnabled":   videoMasksEnabled,
+            "videoMaskPreset":     videoMaskPreset,
         ], forKey: key)
 
         mirrorFlatKeys()
