@@ -43,12 +43,15 @@ public final class AorusVideoMaskProcessor: NSObject {
     }
 
     private let processingLock = NSLock()
+    private let detectionQueue = DispatchQueue(label: "com.aorusgram.video-masks.detection", qos: .userInitiated)
     private let ciContext = CIContext(options: [
         .cacheIntermediates: false,
         .name: "AorusVideoMasks"
     ])
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private var lastDetectionTime: CFTimeInterval = 0.0
+    private var detectionInFlight = false
+    private var trackingGeneration: UInt = 0
     private var smoothedPose: FacePose?
     private var missedDetections = 0
     private var lastPreset = ""
@@ -75,6 +78,7 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     public func resetTracking() {
         self.processingLock.lock()
+        self.trackingGeneration &+= 1
         self.smoothedPose = nil
         self.missedDetections = 0
         self.lastDetectionTime = 0.0
@@ -101,6 +105,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         self.previewMirrored = mirrored
         if preset != self.lastPreset {
             self.lastPreset = preset
+            self.trackingGeneration &+= 1
             self.templates.removeAll(keepingCapacity: true)
             self.templateImages.removeAll(keepingCapacity: true)
             self.smoothedPose = nil
@@ -119,10 +124,10 @@ public final class AorusVideoMaskProcessor: NSObject {
         }
 
         let now = CACurrentMediaTime()
-        let interval: CFTimeInterval = self.smoothedPose == nil ? 0.045 : 0.072
+        let interval: CFTimeInterval = self.smoothedPose == nil ? 0.055 : 0.085
         if now - self.lastDetectionTime >= interval {
             self.lastDetectionTime = now
-            self.updatePose(in: image)
+            self.schedulePoseUpdate(in: image)
         }
 
         guard let pose = self.smoothedPose,
@@ -201,25 +206,45 @@ public final class AorusVideoMaskProcessor: NSObject {
         return result
     }
 
-    private func updatePose(in image: CIImage) {
+    private func schedulePoseUpdate(in image: CIImage) {
+        guard !self.detectionInFlight else { return }
+        self.detectionInFlight = true
+        let generation = self.trackingGeneration
+        let previous = self.smoothedPose
+        self.detectionQueue.async { [weak self] in
+            guard let self else { return }
+            let detected: FacePose? = autoreleasepool {
+                self.detectPose(in: image, previous: previous)
+            }
+            self.processingLock.lock()
+            defer { self.processingLock.unlock() }
+            self.detectionInFlight = false
+            guard generation == self.trackingGeneration else { return }
+            guard let detected else {
+                self.registerMiss()
+                return
+            }
+            self.applyDetectedPose(detected, extent: image.extent)
+        }
+    }
+
+    private func detectPose(in image: CIImage, previous: FacePose?) -> FacePose? {
         let longestSide = max(image.extent.width, image.extent.height)
-        let scale = min(1.0, 560.0 / max(longestSide, 1.0))
+        let scale = min(1.0, 420.0 / max(longestSide, 1.0))
         let proxy = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let request = VNDetectFaceLandmarksRequest()
         let handler = VNImageRequestHandler(ciImage: proxy, orientation: .up, options: [:])
         do {
             try handler.perform([request])
         } catch {
-            self.registerMiss()
-            return
+            return nil
         }
         guard let observations = request.results, !observations.isEmpty else {
-            self.registerMiss()
-            return
+            return nil
         }
 
         let observation: VNFaceObservation
-        if let previous = self.smoothedPose {
+        if let previous {
             let previousCenter = CGPoint(x: previous.face.midX / image.extent.width, y: previous.face.midY / image.extent.height)
             observation = observations.min(by: { lhs, rhs in
                 let ld = hypot(lhs.boundingBox.midX - previousCenter.x, lhs.boundingBox.midY - previousCenter.y)
@@ -297,7 +322,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         } else {
             pitch = visionPitch ?? landmarkPitch ?? 0.0
         }
-        let detected = FacePose(
+        return FacePose(
             face: face,
             leftEye: eyePoints[0],
             rightEye: eyePoints[1],
@@ -307,6 +332,9 @@ public final class AorusVideoMaskProcessor: NSObject {
             yaw: yaw,
             pitch: pitch
         )
+    }
+
+    private func applyDetectedPose(_ detected: FacePose, extent: CGRect) {
         self.smoothedPose = self.smoothedPose.map { previous in
             let movement = hypot(
                 detected.eyeMidpoint.x - previous.eyeMidpoint.x,
@@ -350,7 +378,16 @@ public final class AorusVideoMaskProcessor: NSObject {
         let eyeDistance = max(pose.eyeDistance, pose.face.width * 0.30)
         let widthFactor: CGFloat = preset == "neonCat" || preset == "oni" ? 1.05 : 1.0
         let width = max(pose.face.width * 1.30, eyeDistance / 0.34) * widthFactor
-        let height = width
+        let heightFactor: CGFloat
+        switch preset {
+        case "oni":
+            heightFactor = 1.18
+        case "neonCat", "phantom":
+            heightFactor = 1.14
+        default:
+            heightFactor = 1.12
+        }
+        let height = width * heightFactor
         let eyeAnchorY: CGFloat = preset == "oni" ? 0.57 : (preset == "neonCat" ? 0.55 : 0.56)
         let eyeMid = pose.eyeMidpoint
         let originX = eyeMid.x - width * 0.5

@@ -4,55 +4,223 @@ import Foundation
 import TelegramPresentationData
 import UIKit
 
+private enum AorusMaskLayer: Int, CaseIterable {
+    case face
+    case leftEye
+    case rightEye
+    case mouth
+}
+
+private enum AorusMaskTool {
+    case pickLayer
+    case draw
+    case erase
+    case move
+}
+
+private enum AorusMaskFontStyle: String, CaseIterable {
+    case system
+    case rounded
+    case serif
+    case mono
+    case avenir
+    case helvetica
+    case georgia
+
+    func title(isRussian: Bool) -> String {
+        switch self {
+        case .system: return isRussian ? "Системный" : "System"
+        case .rounded: return isRussian ? "Скругленный" : "Rounded"
+        case .serif: return isRussian ? "С засечками" : "Serif"
+        case .mono: return isRussian ? "Моноширинный" : "Monospaced"
+        case .avenir: return "Avenir Next"
+        case .helvetica: return "Helvetica Neue"
+        case .georgia: return "Georgia"
+        }
+    }
+
+    func font(size: CGFloat) -> UIFont {
+        switch self {
+        case .system:
+            return UIFont.systemFont(ofSize: size, weight: .semibold)
+        case .rounded:
+            let descriptor = UIFont.systemFont(ofSize: size, weight: .semibold).fontDescriptor.withDesign(.rounded)
+            return descriptor.map { UIFont(descriptor: $0, size: size) } ?? UIFont.systemFont(ofSize: size, weight: .semibold)
+        case .serif:
+            let descriptor = UIFont.systemFont(ofSize: size, weight: .semibold).fontDescriptor.withDesign(.serif)
+            return descriptor.map { UIFont(descriptor: $0, size: size) } ?? UIFont.systemFont(ofSize: size, weight: .semibold)
+        case .mono:
+            return UIFont.monospacedSystemFont(ofSize: size, weight: .semibold)
+        case .avenir:
+            return UIFont(name: "AvenirNext-DemiBold", size: size) ?? UIFont.systemFont(ofSize: size, weight: .semibold)
+        case .helvetica:
+            return UIFont(name: "HelveticaNeue-Medium", size: size) ?? UIFont.systemFont(ofSize: size, weight: .medium)
+        case .georgia:
+            return UIFont(name: "Georgia-Bold", size: size) ?? UIFont.systemFont(ofSize: size, weight: .semibold)
+        }
+    }
+}
+
 private struct AorusMaskStroke {
     var points: [CGPoint]
     let color: UIColor
     let width: CGFloat
     let erasing: Bool
+    let layer: AorusMaskLayer
 }
 
-private final class AorusMaskCanvasView: UIView {
+private struct AorusMaskTextItem {
+    var text: String
+    var center: CGPoint
+    var fontSize: CGFloat
+    var rotation: CGFloat
+    var color: UIColor
+    var fontStyle: AorusMaskFontStyle
+}
+
+private struct AorusMaskCanvasState {
+    var baseImage: UIImage?
+    var strokes: [AorusMaskStroke]
+    var textItems: [AorusMaskTextItem]
+}
+
+private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     var brushColor = UIColor.white
     var brushWidth: CGFloat = 16.0
-    var isErasing = false
+    var activeLayer: AorusMaskLayer = .face {
+        didSet { self.setNeedsDisplay() }
+    }
+    var tool: AorusMaskTool = .pickLayer {
+        didSet {
+            if self.tool != .move {
+                self.selectedTextIndex = nil
+            }
+            self.setNeedsDisplay()
+        }
+    }
+    var guideAccentColor = UIColor.systemPurple
     var onContentChanged: (() -> Void)?
+    var onLayerSelected: ((AorusMaskLayer) -> Void)?
 
     private var baseImage: UIImage?
     private var strokes: [AorusMaskStroke] = []
+    private var textItems: [AorusMaskTextItem] = []
+    private var undoStack: [AorusMaskCanvasState] = []
     private var activeStroke: AorusMaskStroke?
+    private var selectedTextIndex: Int?
+    private var movingTextIndex: Int?
+    private var movingTextOffset = CGPoint.zero
+    private var gestureSnapshotStored = false
 
     init(image: UIImage?) {
         self.baseImage = image
         super.init(frame: .zero)
-        self.isMultipleTouchEnabled = false
+        self.isMultipleTouchEnabled = true
         self.isOpaque = false
         self.backgroundColor = UIColor(white: 0.08, alpha: 1.0)
         self.layer.cornerRadius = 8.0
         self.layer.masksToBounds = true
         self.layer.borderWidth = 1.0 / UIScreen.main.scale
         self.layer.borderColor = UIColor.white.withAlphaComponent(0.12).cgColor
+
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(self.handlePinch(_:)))
+        pinch.delegate = self
+        pinch.cancelsTouchesInView = false
+        self.addGestureRecognizer(pinch)
+        let rotation = UIRotationGestureRecognizer(target: self, action: #selector(self.handleRotation(_:)))
+        rotation.delegate = self
+        rotation.cancelsTouchesInView = false
+        self.addGestureRecognizer(rotation)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    var canUndo: Bool { return !self.strokes.isEmpty }
-    var hasContent: Bool { return self.baseImage != nil || !self.strokes.isEmpty }
+    var canUndo: Bool { return !self.undoStack.isEmpty }
+    var hasContent: Bool { return self.baseImage != nil || !self.strokes.isEmpty || !self.textItems.isEmpty }
+    var hasSelectedText: Bool {
+        guard let index = self.selectedTextIndex else { return false }
+        return index >= 0 && index < self.textItems.count
+    }
 
     func undo() {
-        guard !self.strokes.isEmpty else { return }
-        self.strokes.removeLast()
+        guard let state = self.undoStack.popLast() else { return }
+        self.baseImage = state.baseImage
+        self.strokes = state.strokes
+        self.textItems = state.textItems
+        self.activeStroke = nil
+        self.selectedTextIndex = nil
         self.setNeedsDisplay()
         self.onContentChanged?()
     }
 
     func clear() {
+        guard self.hasContent else { return }
+        self.storeUndoState()
         self.baseImage = nil
         self.strokes.removeAll()
+        self.textItems.removeAll()
         self.activeStroke = nil
+        self.selectedTextIndex = nil
         self.setNeedsDisplay()
         self.onContentChanged?()
+    }
+
+    func setBaseImage(_ image: UIImage) {
+        self.storeUndoState()
+        self.baseImage = image
+        self.setNeedsDisplay()
+        self.onContentChanged?()
+    }
+
+    func addText(_ text: String, fontStyle: AorusMaskFontStyle, color: UIColor) {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        self.storeUndoState()
+        let item = AorusMaskTextItem(
+            text: value,
+            center: CGPoint(x: self.bounds.midX, y: self.bounds.height * 0.28),
+            fontSize: max(24.0, self.bounds.width * 0.085),
+            rotation: 0.0,
+            color: color,
+            fontStyle: fontStyle
+        )
+        self.textItems.append(item)
+        self.selectedTextIndex = self.textItems.count - 1
+        self.tool = .move
+        self.setNeedsDisplay()
+        self.onContentChanged?()
+    }
+
+    func setSelectedTextColor(_ color: UIColor) {
+        guard let index = self.selectedTextIndex, index < self.textItems.count else { return }
+        guard !self.textItems[index].color.isEqual(color) else { return }
+        self.storeUndoState()
+        self.textItems[index].color = color
+        self.setNeedsDisplay()
+        self.onContentChanged?()
+    }
+
+    func setSelectedTextFont(_ fontStyle: AorusMaskFontStyle) {
+        guard let index = self.selectedTextIndex, index < self.textItems.count else { return }
+        guard self.textItems[index].fontStyle != fontStyle else { return }
+        self.storeUndoState()
+        self.textItems[index].fontStyle = fontStyle
+        self.setNeedsDisplay()
+        self.onContentChanged?()
+    }
+
+    @discardableResult
+    func deleteSelectedText() -> Bool {
+        guard let index = self.selectedTextIndex, index < self.textItems.count else { return false }
+        self.storeUndoState()
+        self.textItems.remove(at: index)
+        self.selectedTextIndex = nil
+        self.movingTextIndex = nil
+        self.setNeedsDisplay()
+        self.onContentChanged?()
+        return true
     }
 
     override func draw(_ rect: CGRect) {
@@ -60,14 +228,15 @@ private final class AorusMaskCanvasView: UIView {
         self.drawCheckerboard(in: context, rect: self.bounds)
         context.saveGState()
         context.beginTransparencyLayer(auxiliaryInfo: nil)
-        if let baseImage {
-            baseImage.draw(in: self.bounds)
-        }
+        self.drawBaseImage(in: self.bounds)
         for stroke in self.strokes {
             self.draw(stroke: stroke, in: context, scale: 1.0)
         }
         if let activeStroke {
             self.draw(stroke: activeStroke, in: context, scale: 1.0)
+        }
+        for (index, item) in self.textItems.enumerated() {
+            self.draw(textItem: item, in: context, scale: 1.0, selected: self.tool == .move && index == self.selectedTextIndex)
         }
         context.endTransparencyLayer()
         context.restoreGState()
@@ -83,55 +252,156 @@ private final class AorusMaskCanvasView: UIView {
         let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
         return renderer.image { rendererContext in
             let context = rendererContext.cgContext
-            if let baseImage {
-                baseImage.draw(in: CGRect(origin: .zero, size: outputSize))
-            }
+            self.drawBaseImage(in: CGRect(origin: .zero, size: outputSize))
             let scale = outputSize.width / self.bounds.width
             for stroke in self.strokes {
                 self.draw(stroke: stroke, in: context, scale: scale)
+            }
+            for item in self.textItems {
+                self.draw(textItem: item, in: context, scale: scale, selected: false)
             }
         }
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let point = touches.first?.location(in: self), self.bounds.contains(point) else { return }
-        self.activeStroke = AorusMaskStroke(points: [point], color: self.brushColor, width: self.brushWidth, erasing: self.isErasing)
-        self.setNeedsDisplay()
+        guard touches.count == 1, let point = touches.first?.location(in: self), self.bounds.contains(point) else { return }
+        switch self.tool {
+        case .pickLayer:
+            if let layer = self.layer(at: point) {
+                self.activeLayer = layer
+                self.onLayerSelected?(layer)
+            }
+        case .draw, .erase:
+            self.storeUndoState()
+            self.activeStroke = AorusMaskStroke(
+                points: [point],
+                color: self.brushColor,
+                width: self.brushWidth,
+                erasing: self.tool == .erase,
+                layer: self.activeLayer
+            )
+            self.setNeedsDisplay()
+        case .move:
+            guard let index = self.textIndex(at: point) else {
+                self.selectedTextIndex = nil
+                self.setNeedsDisplay()
+                return
+            }
+            self.storeUndoState()
+            self.selectedTextIndex = index
+            self.movingTextIndex = index
+            self.movingTextOffset = CGPoint(
+                x: point.x - self.textItems[index].center.x,
+                y: point.y - self.textItems[index].center.y
+            )
+            self.setNeedsDisplay()
+        }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let point = touches.first?.location(in: self), var stroke = self.activeStroke else { return }
-        let clamped = CGPoint(
-            x: min(max(point.x, 0.0), self.bounds.width),
-            y: min(max(point.y, 0.0), self.bounds.height)
-        )
-        if let last = stroke.points.last, hypot(clamped.x - last.x, clamped.y - last.y) < 1.0 {
-            return
+        guard touches.count == 1, let point = touches.first?.location(in: self) else { return }
+        if var stroke = self.activeStroke {
+            let clamped = CGPoint(
+                x: min(max(point.x, 0.0), self.bounds.width),
+                y: min(max(point.y, 0.0), self.bounds.height)
+            )
+            if let last = stroke.points.last, hypot(clamped.x - last.x, clamped.y - last.y) < 1.0 { return }
+            stroke.points.append(clamped)
+            self.activeStroke = stroke
+            self.setNeedsDisplay()
+        } else if let index = self.movingTextIndex, index < self.textItems.count {
+            self.textItems[index].center = CGPoint(
+                x: min(max(point.x - self.movingTextOffset.x, 0.0), self.bounds.width),
+                y: min(max(point.y - self.movingTextOffset.y, 0.0), self.bounds.height)
+            )
+            self.setNeedsDisplay()
         }
-        stroke.points.append(clamped)
-        self.activeStroke = stroke
-        self.setNeedsDisplay()
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        self.commitActiveStroke()
+        self.finishTouchEditing()
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        self.commitActiveStroke()
+        self.finishTouchEditing()
     }
 
-    private func commitActiveStroke() {
-        guard let stroke = self.activeStroke else { return }
-        self.strokes.append(stroke)
-        self.activeStroke = nil
+    private func finishTouchEditing() {
+        if let stroke = self.activeStroke {
+            self.strokes.append(stroke)
+            self.activeStroke = nil
+            self.onContentChanged?()
+        } else if self.movingTextIndex != nil {
+            self.movingTextIndex = nil
+            self.onContentChanged?()
+        }
         self.setNeedsDisplay()
+    }
+
+    @objc private func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+        guard self.tool == .move, let index = self.selectedTextIndex, index < self.textItems.count else { return }
+        if recognizer.state == .began {
+            self.storeGestureUndoState()
+        }
+        if recognizer.state == .began || recognizer.state == .changed {
+            self.textItems[index].fontSize = min(160.0, max(12.0, self.textItems[index].fontSize * recognizer.scale))
+            recognizer.scale = 1.0
+            self.setNeedsDisplay()
+        }
+        if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
+            self.gestureSnapshotStored = false
+            self.onContentChanged?()
+        }
+    }
+
+    @objc private func handleRotation(_ recognizer: UIRotationGestureRecognizer) {
+        guard self.tool == .move, let index = self.selectedTextIndex, index < self.textItems.count else { return }
+        if recognizer.state == .began {
+            self.storeGestureUndoState()
+        }
+        if recognizer.state == .began || recognizer.state == .changed {
+            self.textItems[index].rotation += recognizer.rotation
+            recognizer.rotation = 0.0
+            self.setNeedsDisplay()
+        }
+        if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
+            self.gestureSnapshotStored = false
+            self.onContentChanged?()
+        }
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+
+    private func storeUndoState() {
+        self.undoStack.append(AorusMaskCanvasState(baseImage: self.baseImage, strokes: self.strokes, textItems: self.textItems))
+        if self.undoStack.count > 40 {
+            self.undoStack.removeFirst(self.undoStack.count - 40)
+        }
         self.onContentChanged?()
+    }
+
+    private func storeGestureUndoState() {
+        guard !self.gestureSnapshotStored else { return }
+        self.gestureSnapshotStored = true
+        self.storeUndoState()
+    }
+
+    private func drawBaseImage(in rect: CGRect) {
+        guard let baseImage else { return }
+        let source = baseImage.size
+        guard source.width > 0.0, source.height > 0.0 else { return }
+        let scale = min(rect.width / source.width, rect.height / source.height)
+        let size = CGSize(width: source.width * scale, height: source.height * scale)
+        let frame = CGRect(x: rect.midX - size.width * 0.5, y: rect.midY - size.height * 0.5, width: size.width, height: size.height)
+        baseImage.draw(in: frame)
     }
 
     private func draw(stroke: AorusMaskStroke, in context: CGContext, scale: CGFloat) {
         guard let first = stroke.points.first else { return }
         context.saveGState()
+        self.clip(context: context, to: stroke.layer, scale: scale)
         context.setBlendMode(stroke.erasing ? .clear : .normal)
         context.setStrokeColor(stroke.color.cgColor)
         context.setFillColor(stroke.color.cgColor)
@@ -165,6 +435,106 @@ private final class AorusMaskCanvasView: UIView {
         context.restoreGState()
     }
 
+    private func draw(textItem: AorusMaskTextItem, in context: CGContext, scale: CGFloat, selected: Bool) {
+        let font = textItem.fontStyle.font(size: textItem.fontSize * scale)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let attributed = NSAttributedString(string: textItem.text, attributes: [
+            .font: font,
+            .foregroundColor: textItem.color,
+            .paragraphStyle: paragraph
+        ])
+        let maxSize = CGSize(width: self.bounds.width * scale * 0.88, height: self.bounds.height * scale)
+        let measured = attributed.boundingRect(with: maxSize, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil).integral.size
+        let drawRect = CGRect(x: -measured.width * 0.5, y: -measured.height * 0.5, width: measured.width, height: measured.height)
+        context.saveGState()
+        context.translateBy(x: textItem.center.x * scale, y: textItem.center.y * scale)
+        context.rotate(by: textItem.rotation)
+        attributed.draw(with: drawRect, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
+        if selected {
+            context.setStrokeColor(self.guideAccentColor.cgColor)
+            context.setLineWidth(1.5)
+            context.setLineDash(phase: 0.0, lengths: [5.0, 4.0])
+            context.stroke(drawRect.insetBy(dx: -6.0, dy: -4.0))
+        }
+        context.restoreGState()
+    }
+
+    private func textIndex(at point: CGPoint) -> Int? {
+        for index in self.textItems.indices.reversed() {
+            let item = self.textItems[index]
+            let dx = point.x - item.center.x
+            let dy = point.y - item.center.y
+            let c = cos(-item.rotation)
+            let s = sin(-item.rotation)
+            let local = CGPoint(x: dx * c - dy * s, y: dx * s + dy * c)
+            let font = item.fontStyle.font(size: item.fontSize)
+            let measured = (item.text as NSString).boundingRect(
+                with: CGSize(width: self.bounds.width * 0.88, height: self.bounds.height),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: font],
+                context: nil
+            ).integral.size
+            if CGRect(x: -measured.width * 0.5 - 12.0, y: -measured.height * 0.5 - 10.0, width: measured.width + 24.0, height: measured.height + 20.0).contains(local) {
+                return index
+            }
+        }
+        return nil
+    }
+
+    private func clip(context: CGContext, to layer: AorusMaskLayer, scale: CGFloat) {
+        let face = self.faceRect.applying(CGAffineTransform(scaleX: scale, y: scale))
+        let leftEye = self.leftEyeRect.applying(CGAffineTransform(scaleX: scale, y: scale))
+        let rightEye = self.rightEyeRect.applying(CGAffineTransform(scaleX: scale, y: scale))
+        let mouth = self.mouthRect.applying(CGAffineTransform(scaleX: scale, y: scale))
+        let path = CGMutablePath()
+        switch layer {
+        case .face:
+            path.addEllipse(in: face)
+            path.addEllipse(in: leftEye)
+            path.addEllipse(in: rightEye)
+            path.addEllipse(in: mouth)
+            context.addPath(path)
+            context.clip(using: .evenOdd)
+        case .leftEye:
+            path.addEllipse(in: leftEye)
+            context.addPath(path)
+            context.clip()
+        case .rightEye:
+            path.addEllipse(in: rightEye)
+            context.addPath(path)
+            context.clip()
+        case .mouth:
+            path.addEllipse(in: mouth)
+            context.addPath(path)
+            context.clip()
+        }
+    }
+
+    private var faceRect: CGRect {
+        return CGRect(x: self.bounds.width * 0.17, y: self.bounds.height * 0.055, width: self.bounds.width * 0.66, height: self.bounds.height * 0.89)
+    }
+
+    private var leftEyeRect: CGRect {
+        return CGRect(x: self.bounds.width * 0.235, y: self.bounds.height * 0.38, width: self.bounds.width * 0.225, height: self.bounds.height * 0.115)
+    }
+
+    private var rightEyeRect: CGRect {
+        return CGRect(x: self.bounds.width * 0.54, y: self.bounds.height * 0.38, width: self.bounds.width * 0.225, height: self.bounds.height * 0.115)
+    }
+
+    private var mouthRect: CGRect {
+        return CGRect(x: self.bounds.width * 0.33, y: self.bounds.height * 0.65, width: self.bounds.width * 0.34, height: self.bounds.height * 0.13)
+    }
+
+    private func layer(at point: CGPoint) -> AorusMaskLayer? {
+        if UIBezierPath(ovalIn: self.leftEyeRect).contains(point) { return .leftEye }
+        if UIBezierPath(ovalIn: self.rightEyeRect).contains(point) { return .rightEye }
+        if UIBezierPath(ovalIn: self.mouthRect).contains(point) { return .mouth }
+        if UIBezierPath(ovalIn: self.faceRect).contains(point) { return .face }
+        return nil
+    }
+
     private func drawCheckerboard(in context: CGContext, rect: CGRect) {
         let tile = max(12.0, rect.width / 22.0)
         let colors = [UIColor(white: 0.11, alpha: 1.0), UIColor(white: 0.15, alpha: 1.0)]
@@ -187,36 +557,41 @@ private final class AorusMaskCanvasView: UIView {
     private func drawFaceGuide(in context: CGContext) {
         context.saveGState()
         context.setBlendMode(.normal)
-        context.setStrokeColor(UIColor.white.withAlphaComponent(0.24).cgColor)
-        context.setLineWidth(1.0)
+        context.setLineWidth(1.2)
         context.setLineDash(phase: 0.0, lengths: [5.0, 5.0])
-        let w = self.bounds.width
-        let h = self.bounds.height
-        context.strokeEllipse(in: CGRect(x: w * 0.20, y: h * 0.08, width: w * 0.60, height: h * 0.84))
-        context.strokeEllipse(in: CGRect(x: w * 0.25, y: h * 0.39, width: w * 0.20, height: h * 0.10))
-        context.strokeEllipse(in: CGRect(x: w * 0.55, y: h * 0.39, width: w * 0.20, height: h * 0.10))
-        context.move(to: CGPoint(x: w * 0.50, y: h * 0.46))
-        context.addLine(to: CGPoint(x: w * 0.50, y: h * 0.67))
-        context.strokePath()
+        for layer in AorusMaskLayer.allCases {
+            context.setStrokeColor((layer == self.activeLayer ? self.guideAccentColor : UIColor.white.withAlphaComponent(0.24)).cgColor)
+            let rect: CGRect
+            switch layer {
+            case .face: rect = self.faceRect
+            case .leftEye: rect = self.leftEyeRect
+            case .rightEye: rect = self.rightEyeRect
+            case .mouth: rect = self.mouthRect
+            }
+            context.strokeEllipse(in: rect)
+        }
         context.restoreGState()
     }
 }
 
-final class AorusMaskEditorController: ViewController {
-    private let context: AccountContext
+final class AorusMaskEditorController: ViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     private let presentationData: PresentationData
     private let onSaved: () -> Void
     private let canvas: AorusMaskCanvasView
     private let toolsView = UIView()
-    private let colorStack = UIStackView()
     private let actionsStack = UIStackView()
+    private let colorStack = UIStackView()
     private let widthSlider = UISlider()
     private let widthPreview = UIView()
+    private let layerButton = UIButton(type: .system)
     private let drawButton = UIButton(type: .system)
     private let eraseButton = UIButton(type: .system)
     private let undoButton = UIButton(type: .system)
+    private let addButton = UIButton(type: .system)
     private let clearButton = UIButton(type: .system)
     private var colorButtons: [UIButton] = []
+    private var selectedFontStyle: AorusMaskFontStyle = .rounded
+    private let isRussian = AorusLang.current == .ru
 
     private static var customMaskURL: URL {
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -226,19 +601,13 @@ final class AorusMaskEditorController: ViewController {
     }
 
     init(context: AccountContext, onSaved: @escaping () -> Void) {
-        self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.onSaved = onSaved
-        let existing = UIImage(contentsOfFile: Self.customMaskURL.path)
-        self.canvas = AorusMaskCanvasView(image: existing)
+        self.canvas = AorusMaskCanvasView(image: UIImage(contentsOfFile: Self.customMaskURL.path))
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-        self.title = AorusLang.current == .ru ? "Своя маска" : "Custom Mask"
+        self.title = self.isRussian ? "Своя маска" : "Custom Mask"
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            barButtonSystemItem: .save,
-            target: self,
-            action: #selector(self.savePressed)
-        )
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .save, target: self, action: #selector(self.savePressed))
         self.navigationItem.rightBarButtonItem?.tintColor = self.presentationData.theme.list.itemAccentColor
     }
 
@@ -249,25 +618,29 @@ final class AorusMaskEditorController: ViewController {
     override func loadDisplayNode() {
         self.displayNode = ViewControllerTracingNode()
         self.displayNode.backgroundColor = self.presentationData.theme.list.blocksBackgroundColor
+        self.canvas.guideAccentColor = self.presentationData.theme.list.itemAccentColor
         self.displayNode.view.addSubview(self.canvas)
+        self.displayNode.view.addSubview(self.toolsView)
 
         self.toolsView.backgroundColor = self.presentationData.theme.list.itemBlocksBackgroundColor
         self.toolsView.layer.cornerRadius = 8.0
         self.toolsView.layer.masksToBounds = true
-        self.displayNode.view.addSubview(self.toolsView)
-
         self.actionsStack.axis = .horizontal
         self.actionsStack.alignment = .center
         self.actionsStack.distribution = .equalSpacing
         self.actionsStack.spacing = 8.0
         self.toolsView.addSubview(self.actionsStack)
 
+        self.configureToolButton(self.layerButton, symbol: "square.stack.3d.up", action: #selector(self.pickLayerPressed))
         self.configureToolButton(self.drawButton, symbol: "pencil.tip", action: #selector(self.drawPressed))
         self.configureToolButton(self.eraseButton, symbol: "eraser", action: #selector(self.erasePressed))
         self.configureToolButton(self.undoButton, symbol: "arrow.uturn.backward", action: #selector(self.undoPressed))
+        self.configureToolButton(self.addButton, symbol: "plus", action: #selector(self.addPressed))
         self.configureToolButton(self.clearButton, symbol: "trash", action: #selector(self.clearPressed))
         self.clearButton.tintColor = self.presentationData.theme.list.itemDestructiveColor
-        [self.drawButton, self.eraseButton, self.undoButton, self.clearButton].forEach { self.actionsStack.addArrangedSubview($0) }
+        [self.layerButton, self.drawButton, self.eraseButton, self.undoButton, self.addButton, self.clearButton].forEach {
+            self.actionsStack.addArrangedSubview($0)
+        }
 
         self.widthSlider.minimumValue = 5.0
         self.widthSlider.maximumValue = 48.0
@@ -275,7 +648,6 @@ final class AorusMaskEditorController: ViewController {
         self.widthSlider.minimumTrackTintColor = self.presentationData.theme.list.itemAccentColor
         self.widthSlider.addTarget(self, action: #selector(self.widthChanged), for: .valueChanged)
         self.toolsView.addSubview(self.widthSlider)
-
         self.widthPreview.backgroundColor = .white
         self.widthPreview.isUserInteractionEnabled = false
         self.toolsView.addSubview(self.widthPreview)
@@ -299,9 +671,7 @@ final class AorusMaskEditorController: ViewController {
             button.backgroundColor = color
             button.layer.cornerRadius = 15.0
             button.layer.borderWidth = index == 0 ? 3.0 : 1.0
-            button.layer.borderColor = index == 0
-                ? self.presentationData.theme.list.itemAccentColor.cgColor
-                : UIColor.white.withAlphaComponent(0.22).cgColor
+            button.layer.borderColor = index == 0 ? self.presentationData.theme.list.itemAccentColor.cgColor : UIColor.white.withAlphaComponent(0.22).cgColor
             button.tag = index
             button.addTarget(self, action: #selector(self.colorPressed(_:)), for: .touchUpInside)
             button.widthAnchor.constraint(equalToConstant: 30.0).isActive = true
@@ -309,8 +679,16 @@ final class AorusMaskEditorController: ViewController {
             self.colorButtons.append(button)
             self.colorStack.addArrangedSubview(button)
         }
+
         self.canvas.onContentChanged = { [weak self] in self?.refreshControls() }
-        self.selectDrawingTool()
+        self.canvas.onLayerSelected = { [weak self] layer in
+            guard let self else { return }
+            self.canvas.activeLayer = layer
+            self.selectTool(.draw)
+            UISelectionFeedbackGenerator().selectionChanged()
+        }
+        self.selectTool(.pickLayer)
+        self.widthChanged()
         self.refreshControls()
         self.displayNodeDidLoad()
     }
@@ -322,19 +700,9 @@ final class AorusMaskEditorController: ViewController {
         let toolHeight: CGFloat = 150.0
         let availableHeight = max(180.0, layout.size.height - navigationBottom - layout.intrinsicInsets.bottom - toolHeight - 32.0)
         let canvasSide = min(layout.size.width - sideInset * 2.0, availableHeight)
-        let canvasFrame = CGRect(
-            x: floor((layout.size.width - canvasSide) * 0.5),
-            y: navigationBottom + 12.0,
-            width: canvasSide,
-            height: canvasSide
-        )
+        let canvasFrame = CGRect(x: floor((layout.size.width - canvasSide) * 0.5), y: navigationBottom + 12.0, width: canvasSide, height: canvasSide)
         transition.updateFrame(view: self.canvas, frame: canvasFrame)
-        let toolsFrame = CGRect(
-            x: sideInset,
-            y: canvasFrame.maxY + 12.0,
-            width: layout.size.width - sideInset * 2.0,
-            height: toolHeight
-        )
+        let toolsFrame = CGRect(x: sideInset, y: canvasFrame.maxY + 10.0, width: layout.size.width - sideInset * 2.0, height: toolHeight)
         transition.updateFrame(view: self.toolsView, frame: toolsFrame)
         self.actionsStack.frame = CGRect(x: 16.0, y: 10.0, width: toolsFrame.width - 32.0, height: 44.0)
         self.widthPreview.frame = CGRect(x: 18.0, y: 72.0, width: 16.0, height: 16.0)
@@ -342,9 +710,12 @@ final class AorusMaskEditorController: ViewController {
         self.colorStack.frame = CGRect(x: 16.0, y: 106.0, width: toolsFrame.width - 32.0, height: 34.0)
     }
 
-    private func configureToolButton(_ button: UIButton, symbol: String, action: Selector) {
-        button.setImage(UIImage(systemName: symbol), for: .normal)
+    private func configureToolButton(_ button: UIButton, symbol: String?, action: Selector) {
+        if let symbol {
+            button.setImage(UIImage(systemName: symbol), for: .normal)
+        }
         button.tintColor = self.presentationData.theme.list.itemPrimaryTextColor
+        button.setTitleColor(self.presentationData.theme.list.itemPrimaryTextColor, for: .normal)
         button.backgroundColor = self.presentationData.theme.list.itemSecondaryTextColor.withAlphaComponent(0.10)
         button.layer.cornerRadius = 8.0
         button.addTarget(self, action: action, for: .touchUpInside)
@@ -352,36 +723,105 @@ final class AorusMaskEditorController: ViewController {
         button.heightAnchor.constraint(equalToConstant: 44.0).isActive = true
     }
 
-    private func selectDrawingTool() {
-        self.canvas.isErasing = false
-        self.drawButton.backgroundColor = self.presentationData.theme.list.itemAccentColor.withAlphaComponent(0.22)
-        self.drawButton.tintColor = self.presentationData.theme.list.itemAccentColor
-        self.eraseButton.backgroundColor = self.presentationData.theme.list.itemSecondaryTextColor.withAlphaComponent(0.10)
-        self.eraseButton.tintColor = self.presentationData.theme.list.itemPrimaryTextColor
+    private func selectTool(_ tool: AorusMaskTool) {
+        self.canvas.tool = tool
+        let buttons: [(UIButton, AorusMaskTool)] = [
+            (self.layerButton, .pickLayer),
+            (self.drawButton, .draw),
+            (self.eraseButton, .erase)
+        ]
+        for (button, buttonTool) in buttons {
+            let selected = buttonTool == tool
+            button.backgroundColor = selected ? self.presentationData.theme.list.itemAccentColor.withAlphaComponent(0.22) : self.presentationData.theme.list.itemSecondaryTextColor.withAlphaComponent(0.10)
+            button.tintColor = selected ? self.presentationData.theme.list.itemAccentColor : self.presentationData.theme.list.itemPrimaryTextColor
+        }
     }
 
-    @objc private func drawPressed() {
-        self.selectDrawingTool()
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
-
-    @objc private func erasePressed() {
-        self.canvas.isErasing = true
-        self.eraseButton.backgroundColor = self.presentationData.theme.list.itemAccentColor.withAlphaComponent(0.22)
-        self.eraseButton.tintColor = self.presentationData.theme.list.itemAccentColor
-        self.drawButton.backgroundColor = self.presentationData.theme.list.itemSecondaryTextColor.withAlphaComponent(0.10)
-        self.drawButton.tintColor = self.presentationData.theme.list.itemPrimaryTextColor
-        UISelectionFeedbackGenerator().selectionChanged()
-    }
+    @objc private func pickLayerPressed() { self.selectTool(.pickLayer) }
+    @objc private func drawPressed() { self.selectTool(.draw) }
+    @objc private func erasePressed() { self.selectTool(.erase) }
 
     @objc private func undoPressed() {
         self.canvas.undo()
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
+    @objc private func addPressed() {
+        let alert = UIAlertController(title: self.isRussian ? "Добавить" : "Add", message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Фото" : "Photo", style: .default, handler: { [weak self] _ in
+            self?.importPressed()
+        }))
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Текст" : "Text", style: .default, handler: { [weak self] _ in
+            self?.textPressed()
+        }))
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Выбрать и переместить текст" : "Select and Move Text", style: .default, handler: { [weak self] _ in
+            self?.selectTool(.move)
+        }))
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Шрифт текста" : "Text Font", style: .default, handler: { [weak self] _ in
+            self?.fontPressed()
+        }))
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.popoverPresentationController?.sourceView = self.addButton
+        alert.popoverPresentationController?.sourceRect = self.addButton.bounds
+        self.present(alert, animated: true)
+    }
+
+    @objc private func importPressed() {
+        guard UIImagePickerController.isSourceTypeAvailable(.photoLibrary) else { return }
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = true
+        picker.delegate = self
+        self.present(picker, animated: true)
+    }
+
+    @objc private func textPressed() {
+        let alert = UIAlertController(title: self.isRussian ? "Добавить текст" : "Add Text", message: nil, preferredStyle: .alert)
+        alert.addTextField { field in
+            field.placeholder = self.isRussian ? "Текст" : "Text"
+            field.clearButtonMode = .whileEditing
+        }
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Добавить" : "Add", style: .default, handler: { [weak self, weak alert] _ in
+            guard let self, let value = alert?.textFields?.first?.text else { return }
+            self.canvas.addText(value, fontStyle: self.selectedFontStyle, color: self.canvas.brushColor)
+            self.selectTool(.move)
+        }))
+        self.present(alert, animated: true)
+    }
+
+    @objc private func fontPressed() {
+        let alert = UIAlertController(title: self.isRussian ? "Шрифт" : "Font", message: nil, preferredStyle: .actionSheet)
+        for style in AorusMaskFontStyle.allCases {
+            let title = style == self.selectedFontStyle ? "✓ " + style.title(isRussian: self.isRussian) : style.title(isRussian: self.isRussian)
+            alert.addAction(UIAlertAction(title: title, style: .default, handler: { [weak self] _ in
+                guard let self else { return }
+                self.selectedFontStyle = style
+                self.canvas.setSelectedTextFont(style)
+                UISelectionFeedbackGenerator().selectionChanged()
+            }))
+        }
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.popoverPresentationController?.sourceView = self.addButton
+        alert.popoverPresentationController?.sourceRect = self.addButton.bounds
+        self.present(alert, animated: true)
+    }
+
     @objc private func clearPressed() {
-        self.canvas.clear()
-        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        if self.canvas.deleteSelectedText() {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            return
+        }
+        guard self.canvas.hasContent else { return }
+        let alert = UIAlertController(title: self.isRussian ? "Очистить маску?" : "Clear Mask?", message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Очистить" : "Clear", style: .destructive, handler: { [weak self] _ in
+            self?.canvas.clear()
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        }))
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.popoverPresentationController?.sourceView = self.clearButton
+        alert.popoverPresentationController?.sourceRect = self.clearButton.bounds
+        self.present(alert, animated: true)
     }
 
     @objc private func widthChanged() {
@@ -396,14 +836,12 @@ final class AorusMaskEditorController: ViewController {
     @objc private func colorPressed(_ sender: UIButton) {
         guard sender.tag >= 0, sender.tag < self.colorButtons.count, let color = sender.backgroundColor else { return }
         self.canvas.brushColor = color
+        self.canvas.setSelectedTextColor(color)
         self.widthPreview.backgroundColor = color
         for button in self.colorButtons {
             button.layer.borderWidth = button === sender ? 3.0 : 1.0
-            button.layer.borderColor = button === sender
-                ? self.presentationData.theme.list.itemAccentColor.cgColor
-                : UIColor.white.withAlphaComponent(0.22).cgColor
+            button.layer.borderColor = button === sender ? self.presentationData.theme.list.itemAccentColor.cgColor : UIColor.white.withAlphaComponent(0.22).cgColor
         }
-        self.selectDrawingTool()
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
@@ -427,5 +865,17 @@ final class AorusMaskEditorController: ViewController {
         self.undoButton.isEnabled = self.canvas.canUndo
         self.undoButton.alpha = self.canvas.canUndo ? 1.0 : 0.35
         self.navigationItem.rightBarButtonItem?.isEnabled = self.canvas.hasContent
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
+    }
+
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+        let image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage)
+        picker.dismiss(animated: true) { [weak self] in
+            guard let self, let image else { return }
+            self.canvas.setBaseImage(image)
+        }
     }
 }
