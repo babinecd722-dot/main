@@ -198,7 +198,7 @@ def main() -> None:
         err.append("VideoMasks: custom mask editor is missing")
     else:
         editor_text = mask_editor.read_text(encoding="utf-8")
-        if "renderedImage()" not in editor_text or "blendMode(stroke.erasing ? .clear : .normal)" not in editor_text:
+        if "renderedImage()" not in editor_text or "setBlendMode(stroke.erasing ? .clear : .normal)" not in editor_text:
             err.append("VideoMasks: custom mask drawing/eraser pipeline is incomplete")
 
     camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
