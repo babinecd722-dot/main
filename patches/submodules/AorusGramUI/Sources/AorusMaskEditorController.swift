@@ -32,6 +32,14 @@ enum AorusCustomMaskStore {
             .appendingPathComponent("AorusGram/VideoMasks/custom-mask.png")
     }
 
+    private static func storedRecords() -> [AorusCustomMaskRecord] {
+        guard let data = try? Data(contentsOf: self.manifestURL),
+              let decoded = try? JSONDecoder().decode([AorusCustomMaskRecord].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
     static func imageURL(for record: AorusCustomMaskRecord) -> URL {
         if record.id == "legacy" {
             return self.legacyURL
@@ -44,11 +52,7 @@ enum AorusCustomMaskStore {
         if FileManager.default.fileExists(atPath: self.legacyURL.path) {
             result.append(AorusCustomMaskRecord(id: "legacy", name: isRussian ? "Моя маска" : "My Mask"))
         }
-        guard let data = try? Data(contentsOf: self.manifestURL),
-              let decoded = try? JSONDecoder().decode([AorusCustomMaskRecord].self, from: data) else {
-            return result
-        }
-        let valid = decoded.filter { record in
+        let valid = self.storedRecords().filter { record in
             UUID(uuidString: record.id) != nil && FileManager.default.fileExists(atPath: self.imageURL(for: record).path)
         }
         result.append(contentsOf: valid)
@@ -60,7 +64,9 @@ enum AorusCustomMaskStore {
         let resolvedName = String((cleaned.isEmpty ? "Mask" : cleaned).prefix(48))
         let record = AorusCustomMaskRecord(id: UUID().uuidString.lowercased(), name: resolvedName)
         try data.write(to: self.imageURL(for: record), options: .atomic)
-        var records = self.records(isRussian: false).filter { $0.id != "legacy" }
+        var records = self.storedRecords().filter { record in
+            UUID(uuidString: record.id) != nil && FileManager.default.fileExists(atPath: self.imageURL(for: record).path)
+        }
         records.append(record)
         let manifest = try JSONEncoder().encode(records)
         do {
@@ -70,6 +76,32 @@ enum AorusCustomMaskStore {
             throw error
         }
         return record
+    }
+
+    @discardableResult
+    static func delete(_ record: AorusCustomMaskRecord) -> Bool {
+        if record.id == "legacy" {
+            guard FileManager.default.fileExists(atPath: self.legacyURL.path) else { return true }
+            do {
+                try FileManager.default.removeItem(at: self.legacyURL)
+                return true
+            } catch {
+                return false
+            }
+        }
+        guard UUID(uuidString: record.id) != nil else { return false }
+        var records = self.storedRecords()
+        records.removeAll(where: { $0.id == record.id })
+        do {
+            try JSONEncoder().encode(records).write(to: self.manifestURL, options: .atomic)
+            let imageURL = self.imageURL(for: record)
+            if FileManager.default.fileExists(atPath: imageURL.path) {
+                try? FileManager.default.removeItem(at: imageURL)
+            }
+            return true
+        } catch {
+            return false
+        }
     }
 }
 
@@ -552,20 +584,26 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         let frame = CGRect(x: -size.width * 0.5, y: -size.height * 0.5, width: size.width, height: size.height)
         guard let context = UIGraphicsGetCurrentContext() else { return }
         context.saveGState()
+        let faceClip = self.faceRect.applying(CGAffineTransform(scaleX: outputScale, y: outputScale))
+        context.addEllipse(in: faceClip)
+        context.clip()
         context.translateBy(x: center.x, y: center.y)
         context.rotate(by: self.photoRotation)
         baseImage.draw(in: frame)
+        context.restoreGState()
         if selected {
+            context.saveGState()
             context.setStrokeColor(self.guideAccentColor.cgColor)
             context.setLineWidth(1.5)
             context.setLineDash(phase: 0.0, lengths: [6.0, 4.0])
-            context.stroke(frame.insetBy(dx: -5.0, dy: -5.0))
+            context.strokeEllipse(in: faceClip.insetBy(dx: -2.0, dy: -2.0))
+            context.restoreGState()
         }
-        context.restoreGState()
     }
 
     private func baseImageContains(_ point: CGPoint) -> Bool {
         guard self.baseImage != nil else { return false }
+        guard UIBezierPath(ovalIn: self.faceRect).contains(point) else { return false }
         let center = self.resolvedPhotoCenter
         let dx = point.x - center.x
         let dy = point.y - center.y

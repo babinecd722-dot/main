@@ -220,6 +220,18 @@ def main() -> None:
             err.append("VideoMasks: named custom-mask persistence is incomplete")
         if "UIPinchGestureRecognizer" not in editor_text or "UIRotationGestureRecognizer" not in editor_text or "movingPhoto" not in editor_text:
             err.append("VideoMasks: custom photo/text transforms are incomplete")
+        if "context.addEllipse(in: faceClip)" not in editor_text:
+            err.append("VideoMasks: imported photos must be clipped to the face template")
+        if "static func delete(_ record: AorusCustomMaskRecord)" not in editor_text:
+            err.append("VideoMasks: custom-mask deletion storage is incomplete")
+
+    masks_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMasksController.swift"
+    if not masks_controller.is_file():
+        err.append("VideoMasks: mask preset controller is missing")
+    else:
+        masks_controller_text = masks_controller.read_text(encoding="utf-8")
+        if "AorusMaskPresetItemNode: ItemListRevealOptionsItemNode" not in masks_controller_text or "trash.fill" not in masks_controller_text:
+            err.append("VideoMasks: custom-mask swipe deletion is incomplete")
 
     camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file() or "AorusGram: real-time video mask" not in camera_output.read_text(encoding="utf-8"):
