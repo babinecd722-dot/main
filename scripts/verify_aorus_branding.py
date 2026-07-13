@@ -189,7 +189,7 @@ def main() -> None:
             err.append("VideoMasks: landmark-anchored perspective tracking is incomplete")
         if "AorusVideoMaskAssets" not in mask_text or "custom-mask.png" not in mask_text:
             err.append("VideoMasks: PNG asset/custom-mask loading is incomplete")
-        if "custom:" not in mask_text or "customMaskURL(for preset:" not in mask_text:
+        if 'Self.customPreset + ":"' not in mask_text or "customMaskURL(for preset:" not in mask_text:
             err.append("VideoMasks: named custom-mask loading is incomplete")
 
     mask_assets = tg / "submodules" / "AorusGram" / "Resources" / "VideoMasks"
