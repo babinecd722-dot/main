@@ -15,7 +15,7 @@ private enum MasksSection: Int32 {
 private struct MasksState: Equatable {
     var enabled: Bool
     var preset: String
-    var hasCustomMask: Bool
+    var customMasks: [AorusCustomMaskRecord]
 }
 
 private final class MasksArguments {
@@ -59,7 +59,7 @@ private enum MasksEntry: ItemListNodeEntry {
         case let .preset(_, order, _, _, _):
             return 10 + Int32(order)
         case .editor:
-            return 100
+            return 100_000
         }
     }
 
@@ -123,8 +123,8 @@ private func masksEntries(state: MasksState, theme: PresentationTheme, l10n: Aor
         for (index, preset) in presets.enumerated() {
             entries.append(.preset(theme, index, preset.0, preset.1, state.preset == preset.0))
         }
-        if state.hasCustomMask {
-            entries.append(.preset(theme, presets.count, "custom", l10n.videoMaskCustom, state.preset == "custom"))
+        for (index, mask) in state.customMasks.enumerated() {
+            entries.append(.preset(theme, presets.count + index, mask.presetKey, mask.name, state.preset == mask.presetKey))
         }
         entries.append(.editor(theme, l10n.videoMaskCreate))
     }
@@ -133,12 +133,11 @@ private func masksEntries(state: MasksState, theme: PresentationTheme, l10n: Aor
 
 public func aorusMasksController(context: AccountContext) -> ViewController {
     let manager = AorusGramManager.shared
-    let customMaskURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("AorusGram/VideoMasks/custom-mask.png")
+    let isRussian = AorusLang.current == .ru
     let initialState = MasksState(
         enabled: manager.videoMasksEnabled,
         preset: manager.videoMaskPreset,
-        hasCustomMask: FileManager.default.fileExists(atPath: customMaskURL.path)
+        customMasks: AorusCustomMaskStore.records(isRussian: isRussian)
     )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
@@ -165,12 +164,12 @@ public func aorusMasksController(context: AccountContext) -> ViewController {
             }
         },
         openEditor: {
-            let editor = AorusMaskEditorController(context: context, onSaved: {
-                manager.videoMaskPreset = "custom"
+            let editor = AorusMaskEditorController(context: context, onSaved: { record in
+                manager.videoMaskPreset = record.presetKey
                 updateState { state in
                     var state = state
-                    state.preset = "custom"
-                    state.hasCustomMask = true
+                    state.preset = record.presetKey
+                    state.customMasks = AorusCustomMaskStore.records(isRussian: isRussian)
                     return state
                 }
             })

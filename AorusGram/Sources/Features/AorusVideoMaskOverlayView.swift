@@ -24,8 +24,7 @@ public final class AorusVideoMaskOverlayView: UIView {
         self.imageView.contentMode = .scaleToFill
         self.imageView.backgroundColor = .clear
         self.imageView.layer.allowsEdgeAntialiasing = true
-        self.imageView.layer.shouldRasterize = true
-        self.imageView.layer.rasterizationScale = UIScreen.main.scale
+        self.imageView.layer.shouldRasterize = false
         self.addSubview(self.imageView)
 
         self.observers.append(NotificationCenter.default.addObserver(
@@ -87,10 +86,18 @@ public final class AorusVideoMaskOverlayView: UIView {
               UserDefaults.standard.bool(forKey: AorusVideoMaskProcessor.enabledKey),
               let info = notification.userInfo,
               let rect = (info["rect"] as? NSValue)?.cgRectValue,
-              let preset = info["preset"] as? String,
-              let image = AorusVideoMaskProcessor.shared.previewImage(for: preset) else {
+              let preset = info["preset"] as? String else {
             self.setMaskHidden(true, animated: false)
             return
+        }
+
+        if self.preset != preset || self.imageView.image == nil {
+            guard let image = AorusVideoMaskProcessor.shared.previewImage(for: preset) else {
+                self.setMaskHidden(true, animated: false)
+                return
+            }
+            self.preset = preset
+            self.imageView.image = image
         }
 
         self.normalizedRect = rect
@@ -99,12 +106,10 @@ public final class AorusVideoMaskOverlayView: UIView {
         self.yaw = CGFloat((info["yaw"] as? NSNumber)?.doubleValue ?? 0.0)
         self.pitch = CGFloat((info["pitch"] as? NSNumber)?.doubleValue ?? 0.0)
         self.mirrored = (info["mirrored"] as? Bool) ?? false
-        if self.preset != preset || self.imageView.image !== image {
-            self.preset = preset
-            self.imageView.image = image
-        }
         self.setMaskHidden(false, animated: self.imageView.alpha < 0.01)
-        self.updateMaskFrame(animated: true)
+        // FacePose is already smoothed in the processor. A second UIView
+        // animation here makes the local mask trail behind the outgoing frame.
+        self.updateMaskFrame(animated: false)
     }
 
     private func updateMaskFrame(animated: Bool) {
@@ -151,7 +156,7 @@ public final class AorusVideoMaskOverlayView: UIView {
                 animations: updates
             )
         } else {
-            updates()
+            UIView.performWithoutAnimation(updates)
         }
     }
 

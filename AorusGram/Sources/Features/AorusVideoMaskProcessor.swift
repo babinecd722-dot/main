@@ -59,7 +59,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     private var templateImages: [String: UIImage] = [:]
     private var pools: [String: CVPixelBufferPool] = [:]
     private var previewMirrored = false
-    private var customMaskModificationDate: Date?
+    private var customMaskModificationDates: [String: Date] = [:]
 
     private override init() {
         super.init()
@@ -74,6 +74,28 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     public static var hasCustomMask: Bool {
         return FileManager.default.fileExists(atPath: Self.customMaskURL.path)
+    }
+
+    private static func customMaskURL(for preset: String) -> URL? {
+        if preset == Self.customPreset {
+            return Self.customMaskURL
+        }
+        let prefix = Self.customPreset + ":"
+        guard preset.hasPrefix(prefix) else { return nil }
+        let identifier = String(preset.dropFirst(prefix.count))
+        guard UUID(uuidString: identifier) != nil else { return nil }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AorusGram/VideoMasks/Custom", isDirectory: true)
+            .appendingPathComponent(identifier.lowercased())
+            .appendingPathExtension("png")
+    }
+
+    private static func isSupportedPreset(_ preset: String) -> Bool {
+        if Self.supportedPresets.contains(preset) {
+            return preset != Self.customPreset || Self.hasCustomMask
+        }
+        guard let url = Self.customMaskURL(for: preset) else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     public func resetTracking() {
@@ -99,9 +121,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         defer { self.processingLock.unlock() }
 
         let configured = UserDefaults.standard.string(forKey: Self.presetKey) ?? "skull"
-        let preset = Self.supportedPresets.contains(configured) && (configured != Self.customPreset || Self.hasCustomMask)
-            ? configured
-            : "skull"
+        let preset = Self.isSupportedPreset(configured) ? configured : "skull"
         self.previewMirrored = mirrored
         if preset != self.lastPreset {
             self.lastPreset = preset
@@ -428,20 +448,24 @@ public final class AorusVideoMaskProcessor: NSObject {
     }
 
     private func template(for preset: String) -> CIImage? {
-        if preset == Self.customPreset {
-            let date = (try? FileManager.default.attributesOfItem(atPath: Self.customMaskURL.path)[.modificationDate]) as? Date
-            if date != self.customMaskModificationDate {
+        if let url = Self.customMaskURL(for: preset) {
+            let date = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
+            if date != self.customMaskModificationDates[preset] {
                 self.templates.removeValue(forKey: preset)
                 self.templateImages.removeValue(forKey: preset)
-                self.customMaskModificationDate = date
+                if let date {
+                    self.customMaskModificationDates[preset] = date
+                } else {
+                    self.customMaskModificationDates.removeValue(forKey: preset)
+                }
             }
         }
         if let cached = self.templates[preset] {
             return cached
         }
         let image: UIImage?
-        if preset == Self.customPreset {
-            image = UIImage(contentsOfFile: Self.customMaskURL.path)
+        if let url = Self.customMaskURL(for: preset) {
+            image = UIImage(contentsOfFile: url.path)
         } else {
             image = self.bundledImage(named: preset == "neonCat" ? "neoncat" : preset)
         }
@@ -473,7 +497,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     public func previewImage(for preset: String) -> UIImage? {
         self.processingLock.lock()
         defer { self.processingLock.unlock() }
-        let resolved = Self.supportedPresets.contains(preset) ? preset : "skull"
+        let resolved = Self.isSupportedPreset(preset) ? preset : "skull"
         _ = self.template(for: resolved)
         return self.templateImages[resolved]
     }

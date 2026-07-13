@@ -4,6 +4,75 @@ import Foundation
 import TelegramPresentationData
 import UIKit
 
+struct AorusCustomMaskRecord: Codable, Equatable {
+    let id: String
+    let name: String
+
+    var presetKey: String {
+        return self.id == "legacy" ? "custom" : "custom:\(self.id)"
+    }
+}
+
+enum AorusCustomMaskStore {
+    private static let manifestName = "masks.json"
+
+    static var rootURL: URL {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AorusGram/VideoMasks/Custom", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    private static var manifestURL: URL {
+        return self.rootURL.appendingPathComponent(self.manifestName)
+    }
+
+    private static var legacyURL: URL {
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AorusGram/VideoMasks/custom-mask.png")
+    }
+
+    static func imageURL(for record: AorusCustomMaskRecord) -> URL {
+        if record.id == "legacy" {
+            return self.legacyURL
+        }
+        return self.rootURL.appendingPathComponent(record.id).appendingPathExtension("png")
+    }
+
+    static func records(isRussian: Bool) -> [AorusCustomMaskRecord] {
+        var result: [AorusCustomMaskRecord] = []
+        if FileManager.default.fileExists(atPath: self.legacyURL.path) {
+            result.append(AorusCustomMaskRecord(id: "legacy", name: isRussian ? "Моя маска" : "My Mask"))
+        }
+        guard let data = try? Data(contentsOf: self.manifestURL),
+              let decoded = try? JSONDecoder().decode([AorusCustomMaskRecord].self, from: data) else {
+            return result
+        }
+        let valid = decoded.filter { record in
+            UUID(uuidString: record.id) != nil && FileManager.default.fileExists(atPath: self.imageURL(for: record).path)
+        }
+        result.append(contentsOf: valid)
+        return result
+    }
+
+    static func save(data: Data, name: String) throws -> AorusCustomMaskRecord {
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = String((cleaned.isEmpty ? "Mask" : cleaned).prefix(48))
+        let record = AorusCustomMaskRecord(id: UUID().uuidString.lowercased(), name: resolvedName)
+        try data.write(to: self.imageURL(for: record), options: .atomic)
+        var records = self.records(isRussian: false).filter { $0.id != "legacy" }
+        records.append(record)
+        let manifest = try JSONEncoder().encode(records)
+        do {
+            try manifest.write(to: self.manifestURL, options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: self.imageURL(for: record))
+            throw error
+        }
+        return record
+    }
+}
+
 private enum AorusMaskLayer: Int, CaseIterable {
     case face
     case leftEye
@@ -80,6 +149,9 @@ private struct AorusMaskTextItem {
 
 private struct AorusMaskCanvasState {
     var baseImage: UIImage?
+    var photoCenter: CGPoint
+    var photoScale: CGFloat
+    var photoRotation: CGFloat
     var strokes: [AorusMaskStroke]
     var textItems: [AorusMaskTextItem]
 }
@@ -94,6 +166,7 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         didSet {
             if self.tool != .move {
                 self.selectedTextIndex = nil
+                self.photoSelected = false
             }
             self.setNeedsDisplay()
         }
@@ -103,6 +176,12 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     var onLayerSelected: ((AorusMaskLayer) -> Void)?
 
     private var baseImage: UIImage?
+    private var photoCenter = CGPoint.zero
+    private var photoScale: CGFloat = 1.0
+    private var photoRotation: CGFloat = 0.0
+    private var photoSelected = false
+    private var movingPhoto = false
+    private var movingPhotoOffset = CGPoint.zero
     private var strokes: [AorusMaskStroke] = []
     private var textItems: [AorusMaskTextItem] = []
     private var undoStack: [AorusMaskCanvasState] = []
@@ -147,10 +226,14 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     func undo() {
         guard let state = self.undoStack.popLast() else { return }
         self.baseImage = state.baseImage
+        self.photoCenter = state.photoCenter
+        self.photoScale = state.photoScale
+        self.photoRotation = state.photoRotation
         self.strokes = state.strokes
         self.textItems = state.textItems
         self.activeStroke = nil
         self.selectedTextIndex = nil
+        self.photoSelected = false
         self.setNeedsDisplay()
         self.onContentChanged?()
     }
@@ -159,6 +242,11 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         guard self.hasContent else { return }
         self.storeUndoState()
         self.baseImage = nil
+        self.photoCenter = .zero
+        self.photoScale = 1.0
+        self.photoRotation = 0.0
+        self.photoSelected = false
+        self.movingPhoto = false
         self.strokes.removeAll()
         self.textItems.removeAll()
         self.activeStroke = nil
@@ -170,6 +258,12 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     func setBaseImage(_ image: UIImage) {
         self.storeUndoState()
         self.baseImage = image
+        self.photoCenter = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
+        self.photoScale = 1.0
+        self.photoRotation = 0.0
+        self.photoSelected = true
+        self.selectedTextIndex = nil
+        self.tool = .move
         self.setNeedsDisplay()
         self.onContentChanged?()
     }
@@ -188,6 +282,7 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         )
         self.textItems.append(item)
         self.selectedTextIndex = self.textItems.count - 1
+        self.photoSelected = false
         self.tool = .move
         self.setNeedsDisplay()
         self.onContentChanged?()
@@ -212,12 +307,23 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     }
 
     @discardableResult
-    func deleteSelectedText() -> Bool {
-        guard let index = self.selectedTextIndex, index < self.textItems.count else { return false }
-        self.storeUndoState()
-        self.textItems.remove(at: index)
-        self.selectedTextIndex = nil
-        self.movingTextIndex = nil
+    func deleteSelectedObject() -> Bool {
+        if let index = self.selectedTextIndex, index < self.textItems.count {
+            self.storeUndoState()
+            self.textItems.remove(at: index)
+            self.selectedTextIndex = nil
+            self.movingTextIndex = nil
+        } else if self.photoSelected, self.baseImage != nil {
+            self.storeUndoState()
+            self.baseImage = nil
+            self.photoCenter = .zero
+            self.photoScale = 1.0
+            self.photoRotation = 0.0
+            self.photoSelected = false
+            self.movingPhoto = false
+        } else {
+            return false
+        }
         self.setNeedsDisplay()
         self.onContentChanged?()
         return true
@@ -228,7 +334,7 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         self.drawCheckerboard(in: context, rect: self.bounds)
         context.saveGState()
         context.beginTransparencyLayer(auxiliaryInfo: nil)
-        self.drawBaseImage(in: self.bounds)
+        self.drawBaseImage(in: self.bounds, selected: self.tool == .move && self.photoSelected)
         for stroke in self.strokes {
             self.draw(stroke: stroke, in: context, scale: 1.0)
         }
@@ -252,7 +358,7 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         let renderer = UIGraphicsImageRenderer(size: outputSize, format: format)
         return renderer.image { rendererContext in
             let context = rendererContext.cgContext
-            self.drawBaseImage(in: CGRect(origin: .zero, size: outputSize))
+            self.drawBaseImage(in: CGRect(origin: .zero, size: outputSize), selected: false)
             let scale = outputSize.width / self.bounds.width
             for stroke in self.strokes {
                 self.draw(stroke: stroke, in: context, scale: scale)
@@ -282,18 +388,25 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
             )
             self.setNeedsDisplay()
         case .move:
-            guard let index = self.textIndex(at: point) else {
+            if let index = self.textIndex(at: point) {
+                self.storeUndoState()
+                self.selectedTextIndex = index
+                self.photoSelected = false
+                self.movingTextIndex = index
+                self.movingTextOffset = CGPoint(
+                    x: point.x - self.textItems[index].center.x,
+                    y: point.y - self.textItems[index].center.y
+                )
+            } else if self.baseImageContains(point) {
+                self.storeUndoState()
                 self.selectedTextIndex = nil
-                self.setNeedsDisplay()
-                return
+                self.photoSelected = true
+                self.movingPhoto = true
+                self.movingPhotoOffset = CGPoint(x: point.x - self.resolvedPhotoCenter.x, y: point.y - self.resolvedPhotoCenter.y)
+            } else {
+                self.selectedTextIndex = nil
+                self.photoSelected = false
             }
-            self.storeUndoState()
-            self.selectedTextIndex = index
-            self.movingTextIndex = index
-            self.movingTextOffset = CGPoint(
-                x: point.x - self.textItems[index].center.x,
-                y: point.y - self.textItems[index].center.y
-            )
             self.setNeedsDisplay()
         }
     }
@@ -315,6 +428,12 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
                 y: min(max(point.y - self.movingTextOffset.y, 0.0), self.bounds.height)
             )
             self.setNeedsDisplay()
+        } else if self.movingPhoto {
+            self.photoCenter = CGPoint(
+                x: min(max(point.x - self.movingPhotoOffset.x, -self.bounds.width), self.bounds.width * 2.0),
+                y: min(max(point.y - self.movingPhotoOffset.y, -self.bounds.height), self.bounds.height * 2.0)
+            )
+            self.setNeedsDisplay()
         }
     }
 
@@ -334,17 +453,24 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         } else if self.movingTextIndex != nil {
             self.movingTextIndex = nil
             self.onContentChanged?()
+        } else if self.movingPhoto {
+            self.movingPhoto = false
+            self.onContentChanged?()
         }
         self.setNeedsDisplay()
     }
 
     @objc private func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
-        guard self.tool == .move, let index = self.selectedTextIndex, index < self.textItems.count else { return }
+        guard self.tool == .move, self.hasTransformSelection else { return }
         if recognizer.state == .began {
             self.storeGestureUndoState()
         }
         if recognizer.state == .began || recognizer.state == .changed {
-            self.textItems[index].fontSize = min(160.0, max(12.0, self.textItems[index].fontSize * recognizer.scale))
+            if let index = self.selectedTextIndex, index < self.textItems.count {
+                self.textItems[index].fontSize = min(220.0, max(12.0, self.textItems[index].fontSize * recognizer.scale))
+            } else if self.photoSelected {
+                self.photoScale = min(5.0, max(0.15, self.photoScale * recognizer.scale))
+            }
             recognizer.scale = 1.0
             self.setNeedsDisplay()
         }
@@ -355,12 +481,16 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func handleRotation(_ recognizer: UIRotationGestureRecognizer) {
-        guard self.tool == .move, let index = self.selectedTextIndex, index < self.textItems.count else { return }
+        guard self.tool == .move, self.hasTransformSelection else { return }
         if recognizer.state == .began {
             self.storeGestureUndoState()
         }
         if recognizer.state == .began || recognizer.state == .changed {
-            self.textItems[index].rotation += recognizer.rotation
+            if let index = self.selectedTextIndex, index < self.textItems.count {
+                self.textItems[index].rotation += recognizer.rotation
+            } else if self.photoSelected {
+                self.photoRotation += recognizer.rotation
+            }
             recognizer.rotation = 0.0
             self.setNeedsDisplay()
         }
@@ -375,7 +505,14 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     }
 
     private func storeUndoState() {
-        self.undoStack.append(AorusMaskCanvasState(baseImage: self.baseImage, strokes: self.strokes, textItems: self.textItems))
+        self.undoStack.append(AorusMaskCanvasState(
+            baseImage: self.baseImage,
+            photoCenter: self.photoCenter,
+            photoScale: self.photoScale,
+            photoRotation: self.photoRotation,
+            strokes: self.strokes,
+            textItems: self.textItems
+        ))
         if self.undoStack.count > 40 {
             self.undoStack.removeFirst(self.undoStack.count - 40)
         }
@@ -388,14 +525,55 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         self.storeUndoState()
     }
 
-    private func drawBaseImage(in rect: CGRect) {
+    private var hasTransformSelection: Bool {
+        return self.hasSelectedText || (self.photoSelected && self.baseImage != nil)
+    }
+
+    private var resolvedPhotoCenter: CGPoint {
+        if self.photoCenter == .zero {
+            return CGPoint(x: self.bounds.midX, y: self.bounds.midY)
+        }
+        return self.photoCenter
+    }
+
+    private func fittedPhotoSize() -> CGSize {
+        guard let baseImage, baseImage.size.width > 0.0, baseImage.size.height > 0.0 else { return .zero }
+        let fit = min(self.bounds.width / baseImage.size.width, self.bounds.height / baseImage.size.height)
+        return CGSize(width: baseImage.size.width * fit * self.photoScale, height: baseImage.size.height * fit * self.photoScale)
+    }
+
+    private func drawBaseImage(in rect: CGRect, selected: Bool) {
         guard let baseImage else { return }
-        let source = baseImage.size
-        guard source.width > 0.0, source.height > 0.0 else { return }
-        let scale = min(rect.width / source.width, rect.height / source.height)
-        let size = CGSize(width: source.width * scale, height: source.height * scale)
-        let frame = CGRect(x: rect.midX - size.width * 0.5, y: rect.midY - size.height * 0.5, width: size.width, height: size.height)
+        let outputScale = rect.width / max(self.bounds.width, 1.0)
+        let fitted = self.fittedPhotoSize()
+        guard fitted.width > 0.0, fitted.height > 0.0 else { return }
+        let size = CGSize(width: fitted.width * outputScale, height: fitted.height * outputScale)
+        let center = CGPoint(x: self.resolvedPhotoCenter.x * outputScale, y: self.resolvedPhotoCenter.y * outputScale)
+        let frame = CGRect(x: -size.width * 0.5, y: -size.height * 0.5, width: size.width, height: size.height)
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.saveGState()
+        context.translateBy(x: center.x, y: center.y)
+        context.rotate(by: self.photoRotation)
         baseImage.draw(in: frame)
+        if selected {
+            context.setStrokeColor(self.guideAccentColor.cgColor)
+            context.setLineWidth(1.5)
+            context.setLineDash(phase: 0.0, lengths: [6.0, 4.0])
+            context.stroke(frame.insetBy(dx: -5.0, dy: -5.0))
+        }
+        context.restoreGState()
+    }
+
+    private func baseImageContains(_ point: CGPoint) -> Bool {
+        guard self.baseImage != nil else { return false }
+        let center = self.resolvedPhotoCenter
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        let c = cos(-self.photoRotation)
+        let s = sin(-self.photoRotation)
+        let local = CGPoint(x: dx * c - dy * s, y: dx * s + dy * c)
+        let size = self.fittedPhotoSize()
+        return CGRect(x: -size.width * 0.5, y: -size.height * 0.5, width: size.width, height: size.height).contains(local)
     }
 
     private func draw(stroke: AorusMaskStroke, in context: CGContext, scale: CGFloat) {
@@ -576,7 +754,7 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
 
 final class AorusMaskEditorController: ViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     private let presentationData: PresentationData
-    private let onSaved: () -> Void
+    private let onSaved: (AorusCustomMaskRecord) -> Void
     private let canvas: AorusMaskCanvasView
     private let toolsView = UIView()
     private let actionsStack = UIStackView()
@@ -593,21 +771,19 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     private var selectedFontStyle: AorusMaskFontStyle = .rounded
     private let isRussian = AorusLang.current == .ru
 
-    private static var customMaskURL: URL {
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("AorusGram/VideoMasks", isDirectory: true)
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        return root.appendingPathComponent("custom-mask.png")
-    }
-
-    init(context: AccountContext, onSaved: @escaping () -> Void) {
+    init(context: AccountContext, onSaved: @escaping (AorusCustomMaskRecord) -> Void) {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.onSaved = onSaved
-        self.canvas = AorusMaskCanvasView(image: UIImage(contentsOfFile: Self.customMaskURL.path))
+        self.canvas = AorusMaskCanvasView(image: nil)
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
         self.title = self.isRussian ? "Своя маска" : "Custom Mask"
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .save, target: self, action: #selector(self.savePressed))
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: self.isRussian ? "Сохранить" : "Save",
+            style: .done,
+            target: self,
+            action: #selector(self.savePressed)
+        )
         self.navigationItem.rightBarButtonItem?.tintColor = self.presentationData.theme.list.itemAccentColor
     }
 
@@ -650,6 +826,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.toolsView.addSubview(self.widthSlider)
         self.widthPreview.backgroundColor = .white
         self.widthPreview.isUserInteractionEnabled = false
+        self.widthPreview.clipsToBounds = true
         self.toolsView.addSubview(self.widthPreview)
 
         self.colorStack.axis = .horizontal
@@ -708,6 +885,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.widthPreview.frame = CGRect(x: 18.0, y: 72.0, width: 16.0, height: 16.0)
         self.widthSlider.frame = CGRect(x: 46.0, y: 63.0, width: toolsFrame.width - 64.0, height: 34.0)
         self.colorStack.frame = CGRect(x: 16.0, y: 106.0, width: toolsFrame.width - 32.0, height: 34.0)
+        self.widthChanged()
     }
 
     private func configureToolButton(_ button: UIButton, symbol: String?, action: Selector) {
@@ -754,7 +932,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         alert.addAction(UIAlertAction(title: self.isRussian ? "Текст" : "Text", style: .default, handler: { [weak self] _ in
             self?.textPressed()
         }))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Выбрать и переместить текст" : "Select and Move Text", style: .default, handler: { [weak self] _ in
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Выбрать и переместить объект" : "Select and Move Object", style: .default, handler: { [weak self] _ in
             self?.selectTool(.move)
         }))
         alert.addAction(UIAlertAction(title: self.isRussian ? "Шрифт текста" : "Text Font", style: .default, handler: { [weak self] _ in
@@ -808,7 +986,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     }
 
     @objc private func clearPressed() {
-        if self.canvas.deleteSelectedText() {
+        if self.canvas.deleteSelectedObject() {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             return
         }
@@ -850,9 +1028,31 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
+        let alert = UIAlertController(
+            title: self.isRussian ? "Название маски" : "Mask Name",
+            message: nil,
+            preferredStyle: .alert
+        )
+        alert.addTextField { [weak self] field in
+            field.text = self?.isRussian == true ? "Моя маска" : "My Mask"
+            field.clearButtonMode = .whileEditing
+            field.autocapitalizationType = .sentences
+            field.returnKeyType = .done
+        }
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: self.isRussian ? "Сохранить" : "Save", style: .default, handler: { [weak self, weak alert] _ in
+            guard let self else { return }
+            self.commitMask(data: data, name: alert?.textFields?.first?.text ?? "")
+        }))
+        self.present(alert, animated: true)
+    }
+
+    private func commitMask(data: Data, name: String) {
         do {
-            try data.write(to: Self.customMaskURL, options: .atomic)
-            self.onSaved()
+            let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedName = cleanedName.isEmpty ? (self.isRussian ? "Моя маска" : "My Mask") : cleanedName
+            let record = try AorusCustomMaskStore.save(data: data, name: resolvedName)
+            self.onSaved(record)
             NotificationCenter.default.post(name: Notification.Name("aorusgram_settings_changed"), object: nil)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             self.navigationController?.popViewController(animated: true)
@@ -864,7 +1064,6 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     private func refreshControls() {
         self.undoButton.isEnabled = self.canvas.canUndo
         self.undoButton.alpha = self.canvas.canUndo ? 1.0 : 0.35
-        self.navigationItem.rightBarButtonItem?.isEnabled = self.canvas.hasContent
     }
 
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {

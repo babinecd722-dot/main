@@ -189,11 +189,23 @@ def main() -> None:
             err.append("VideoMasks: landmark-anchored perspective tracking is incomplete")
         if "AorusVideoMaskAssets" not in mask_text or "custom-mask.png" not in mask_text:
             err.append("VideoMasks: PNG asset/custom-mask loading is incomplete")
+        if "custom:" not in mask_text or "customMaskURL(for preset:" not in mask_text:
+            err.append("VideoMasks: named custom-mask loading is incomplete")
 
     mask_assets = tg / "submodules" / "AorusGram" / "Resources" / "VideoMasks"
     expected_mask_assets = {"skull.png", "cyber.png", "oni.png", "phantom.png", "chrome.png", "aurora.png", "neoncat.png"}
     if not mask_assets.is_dir() or not expected_mask_assets.issubset({path.name for path in mask_assets.glob("*.png")}):
         err.append("VideoMasks: generated PNG mask assets are incomplete")
+
+    mask_overlay = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "AorusVideoMaskOverlayView.swift"
+    if not mask_overlay.is_file():
+        err.append("VideoMasks: local preview overlay implementation is missing")
+    else:
+        overlay_text = mask_overlay.read_text(encoding="utf-8")
+        if "self.preset != preset || self.imageView.image == nil" not in overlay_text:
+            err.append("VideoMasks: local preview must reuse its cached artwork")
+        if "updateMaskFrame(animated: true)" in overlay_text or "shouldRasterize = true" in overlay_text:
+            err.append("VideoMasks: local preview reintroduces delayed/rasterized tracking")
 
     mask_editor = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMaskEditorController.swift"
     if not mask_editor.is_file():
@@ -204,6 +216,10 @@ def main() -> None:
             err.append("VideoMasks: custom mask drawing/eraser pipeline is incomplete")
         if "AorusMaskLayer" not in editor_text or "UIImagePickerController" not in editor_text or "addText(" not in editor_text:
             err.append("VideoMasks: layered photo/text mask editor is incomplete")
+        if "AorusCustomMaskStore" not in editor_text or "Mask Name" not in editor_text:
+            err.append("VideoMasks: named custom-mask persistence is incomplete")
+        if "UIPinchGestureRecognizer" not in editor_text or "UIRotationGestureRecognizer" not in editor_text or "movingPhoto" not in editor_text:
+            err.append("VideoMasks: custom photo/text transforms are incomplete")
 
     camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file() or "AorusGram: real-time video mask" not in camera_output.read_text(encoding="utf-8"):
