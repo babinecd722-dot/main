@@ -9,20 +9,24 @@ import AccountContext
 private enum MasksSection: Int32 {
     case toggle
     case presets
+    case custom
 }
 
 private struct MasksState: Equatable {
     var enabled: Bool
     var preset: String
+    var hasCustomMask: Bool
 }
 
 private final class MasksArguments {
     let setEnabled: (Bool) -> Void
     let selectPreset: (String) -> Void
+    let openEditor: () -> Void
 
-    init(setEnabled: @escaping (Bool) -> Void, selectPreset: @escaping (String) -> Void) {
+    init(setEnabled: @escaping (Bool) -> Void, selectPreset: @escaping (String) -> Void, openEditor: @escaping () -> Void) {
         self.setEnabled = setEnabled
         self.selectPreset = selectPreset
+        self.openEditor = openEditor
     }
 }
 
@@ -31,6 +35,7 @@ private enum MasksEntry: ItemListNodeEntry {
     case footer(PresentationTheme, String)
     case header(PresentationTheme, String)
     case preset(PresentationTheme, Int, String, String, Bool)
+    case editor(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -38,6 +43,8 @@ private enum MasksEntry: ItemListNodeEntry {
             return MasksSection.toggle.rawValue
         case .header, .preset:
             return MasksSection.presets.rawValue
+        case .editor:
+            return MasksSection.custom.rawValue
         }
     }
 
@@ -51,6 +58,8 @@ private enum MasksEntry: ItemListNodeEntry {
             return 2
         case let .preset(_, order, _, _, _):
             return 10 + Int32(order)
+        case .editor:
+            return 100
         }
     }
 
@@ -70,6 +79,8 @@ private enum MasksEntry: ItemListNodeEntry {
             if case let .preset(rt, ro, rk, rs, rselected) = rhs {
                 return lt === rt && lo == ro && lk == rk && ls == rs && lselected == rselected
             }
+        case let .editor(lt, ls):
+            if case let .editor(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -87,6 +98,8 @@ private enum MasksEntry: ItemListNodeEntry {
             return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .right, checked: selected, zeroSeparatorInsets: false, sectionId: self.section, action: {
                 arguments.selectPreset(key)
             })
+        case let .editor(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: self.section, style: .blocks, action: arguments.openEditor)
         }
     }
 }
@@ -102,30 +115,38 @@ private func masksEntries(state: MasksState, theme: PresentationTheme, l10n: Aor
             ("skull", l10n.videoMaskSkull),
             ("cyber", l10n.videoMaskCyber),
             ("phantom", l10n.videoMaskPhantom),
-            ("demon", l10n.videoMaskDemon),
             ("neonCat", l10n.videoMaskNeonCat),
-            ("incognito", l10n.videoMaskIncognito),
             ("chrome", l10n.videoMaskChrome),
             ("oni", l10n.videoMaskOni),
-            ("halo", l10n.videoMaskHalo),
             ("aurora", l10n.videoMaskAurora)
         ]
         for (index, preset) in presets.enumerated() {
             entries.append(.preset(theme, index, preset.0, preset.1, state.preset == preset.0))
         }
+        if state.hasCustomMask {
+            entries.append(.preset(theme, presets.count, "custom", l10n.videoMaskCustom, state.preset == "custom"))
+        }
+        entries.append(.editor(theme, l10n.videoMaskCreate))
     }
     return entries
 }
 
 public func aorusMasksController(context: AccountContext) -> ViewController {
     let manager = AorusGramManager.shared
-    let initialState = MasksState(enabled: manager.videoMasksEnabled, preset: manager.videoMaskPreset)
+    let customMaskURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("AorusGram/VideoMasks/custom-mask.png")
+    let initialState = MasksState(
+        enabled: manager.videoMasksEnabled,
+        preset: manager.videoMaskPreset,
+        hasCustomMask: FileManager.default.fileExists(atPath: customMaskURL.path)
+    )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
 
     let updateState: ((MasksState) -> MasksState) -> Void = { f in
         statePromise.set(stateValue.modify(f))
     }
+    var controller: ItemListController?
     let arguments = MasksArguments(
         setEnabled: { enabled in
             manager.videoMasksEnabled = enabled
@@ -142,6 +163,18 @@ public func aorusMasksController(context: AccountContext) -> ViewController {
                 state.preset = preset
                 return state
             }
+        },
+        openEditor: {
+            let editor = AorusMaskEditorController(context: context, onSaved: {
+                manager.videoMaskPreset = "custom"
+                updateState { state in
+                    var state = state
+                    state.preset = "custom"
+                    state.hasCustomMask = true
+                    return state
+                }
+            })
+            controller?.navigationController?.pushViewController(editor, animated: true)
         }
     )
 
@@ -164,5 +197,7 @@ public func aorusMasksController(context: AccountContext) -> ViewController {
         )
         return (controllerState, (listState, arguments))
     }
-    return ItemListController(context: context, state: signal)
+    let result = ItemListController(context: context, state: signal)
+    controller = result
+    return result
 }

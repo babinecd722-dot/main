@@ -180,6 +180,8 @@ public struct AorusL10n {
     public var videoMaskOni: String { t("Маска Они", "Oni Mask") }
     public var videoMaskHalo: String { t("Сияние", "Halo") }
     public var videoMaskAurora: String { t("Аврора", "Aurora") }
+    public var videoMaskCustom: String { t("Моя маска", "My Mask") }
+    public var videoMaskCreate: String { t("Создать свою маску", "Create Custom Mask") }
 
     // MARK: Device Spoof
     public var deviceSpoofHeader: String { t("ДЕВАЙС-СПУФ", "DEVICE SPOOF") }

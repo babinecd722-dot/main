@@ -10,6 +10,8 @@ public final class AorusVideoMaskOverlayView: UIView {
     private var frameAspect: CGFloat = 1.0
     private var normalizedRect = CGRect.zero
     private var roll: CGFloat = 0.0
+    private var yaw: CGFloat = 0.0
+    private var pitch: CGFloat = 0.0
     private var mirrored = false
     private var preset = ""
     private var observers: [NSObjectProtocol] = []
@@ -22,10 +24,8 @@ public final class AorusVideoMaskOverlayView: UIView {
         self.imageView.contentMode = .scaleToFill
         self.imageView.backgroundColor = .clear
         self.imageView.layer.allowsEdgeAntialiasing = true
-        self.imageView.layer.shadowColor = UIColor(red: 0.48, green: 0.64, blue: 1.0, alpha: 1.0).cgColor
-        self.imageView.layer.shadowOpacity = 0.52
-        self.imageView.layer.shadowRadius = 12.0
-        self.imageView.layer.shadowOffset = .zero
+        self.imageView.layer.shouldRasterize = true
+        self.imageView.layer.rasterizationScale = UIScreen.main.scale
         self.addSubview(self.imageView)
 
         self.observers.append(NotificationCenter.default.addObserver(
@@ -96,8 +96,10 @@ public final class AorusVideoMaskOverlayView: UIView {
         self.normalizedRect = rect
         self.frameAspect = CGFloat((info["aspect"] as? NSNumber)?.doubleValue ?? 1.0)
         self.roll = CGFloat((info["roll"] as? NSNumber)?.doubleValue ?? 0.0)
+        self.yaw = CGFloat((info["yaw"] as? NSNumber)?.doubleValue ?? 0.0)
+        self.pitch = CGFloat((info["pitch"] as? NSNumber)?.doubleValue ?? 0.0)
         self.mirrored = (info["mirrored"] as? Bool) ?? false
-        if self.preset != preset {
+        if self.preset != preset || self.imageView.image !== image {
             self.preset = preset
             self.imageView.image = image
         }
@@ -129,7 +131,17 @@ public final class AorusVideoMaskOverlayView: UIView {
         let updates = {
             self.imageView.bounds = CGRect(origin: .zero, size: targetFrame.size)
             self.imageView.center = CGPoint(x: targetFrame.midX, y: targetFrame.midY)
-            self.imageView.transform = CGAffineTransform(rotationAngle: self.mirrored ? self.roll : -self.roll)
+            self.imageView.transform = .identity
+            var transform = CATransform3DIdentity
+            transform.m34 = -1.0 / max(self.bounds.width * 4.0, 900.0)
+            if self.mirrored {
+                transform = CATransform3DScale(transform, -1.0, 1.0, 1.0)
+            }
+            transform = CATransform3DRotate(transform, self.mirrored ? self.roll : -self.roll, 0.0, 0.0, 1.0)
+            let displayedYaw = self.mirrored ? -self.yaw : self.yaw
+            transform = CATransform3DRotate(transform, -displayedYaw * 0.48, 0.0, 1.0, 0.0)
+            transform = CATransform3DRotate(transform, self.pitch * 0.30, 1.0, 0.0, 0.0)
+            self.imageView.layer.transform = transform
         }
         if animated {
             UIView.animate(

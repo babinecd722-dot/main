@@ -188,6 +188,12 @@ public final class AorusGramManager {
         voiceTwinPreset     = d["voiceTwinPreset"]     as? String ?? "anonymous"
         videoMasksEnabled   = d["videoMasksEnabled"]   as? Bool   ?? false
         videoMaskPreset     = d["videoMaskPreset"]     as? String ?? "skull"
+        switch videoMaskPreset {
+        case "demon": videoMaskPreset = "oni"
+        case "incognito": videoMaskPreset = "cyber"
+        case "halo": videoMaskPreset = "aurora"
+        default: break
+        }
     }
 
     private func save() {

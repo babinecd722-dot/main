@@ -1,21 +1,46 @@
-import Foundation
 import AVFoundation
 import CoreImage
+import Foundation
 import UIKit
 import Vision
 
-/// Real-time face-mask compositor shared by video notes and outgoing calls.
+/// Real-time face-mask compositor shared by round videos and outgoing calls.
 ///
-/// Face detection is throttled and the last observation is smoothed between
-/// detections. Rendering stays synchronous on the caller's capture queue so frame
-/// ordering is preserved. Any unsupported frame or processing failure returns nil;
-/// callers must then pass the original frame through unchanged.
+/// Vision landmarks anchor the artwork to the eyes, while yaw, pitch and roll
+/// produce a perspective quad. Detection is throttled, but the pose is retained
+/// and smoothed between detections so short occlusions do not make the mask fall
+/// off the face. Processing is fail-open: callers use the original frame on any
+/// unsupported input or transient failure.
 @objcMembers
 public final class AorusVideoMaskProcessor: NSObject {
     public static let shared = AorusVideoMaskProcessor()
 
     public static let enabledKey = "aorusgram_video_masks_enabled"
     public static let presetKey = "aorusgram_video_mask_preset"
+    public static let customPreset = "custom"
+
+    public static var supportedPresets: [String] {
+        return ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", Self.customPreset]
+    }
+
+    private struct FacePose {
+        var face: CGRect
+        var leftEye: CGPoint
+        var rightEye: CGPoint
+        var nose: CGPoint
+        var mouth: CGPoint
+        var roll: CGFloat
+        var yaw: CGFloat
+        var pitch: CGFloat
+
+        var eyeMidpoint: CGPoint {
+            return CGPoint(x: (leftEye.x + rightEye.x) * 0.5, y: (leftEye.y + rightEye.y) * 0.5)
+        }
+
+        var eyeDistance: CGFloat {
+            return hypot(rightEye.x - leftEye.x, rightEye.y - leftEye.y)
+        }
+    }
 
     private let processingLock = NSLock()
     private let ciContext = CIContext(options: [
@@ -23,29 +48,34 @@ public final class AorusVideoMaskProcessor: NSObject {
         .name: "AorusVideoMasks"
     ])
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
-
     private var lastDetectionTime: CFTimeInterval = 0.0
-    private var smoothedFace: CGRect?
-    private var smoothedRoll: CGFloat = 0.0
+    private var smoothedPose: FacePose?
     private var missedDetections = 0
     private var lastPreset = ""
     private var templates: [String: CIImage] = [:]
     private var templateImages: [String: UIImage] = [:]
     private var pools: [String: CVPixelBufferPool] = [:]
     private var previewMirrored = false
+    private var customMaskModificationDate: Date?
 
     private override init() {
         super.init()
     }
 
-    public static var supportedPresets: [String] {
-        return ["skull", "cyber", "phantom", "demon", "neonCat", "incognito", "chrome", "oni", "halo", "aurora"]
+    public static var customMaskURL: URL {
+        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("AorusGram/VideoMasks", isDirectory: true)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root.appendingPathComponent("custom-mask.png")
+    }
+
+    public static var hasCustomMask: Bool {
+        return FileManager.default.fileExists(atPath: Self.customMaskURL.path)
     }
 
     public func resetTracking() {
         self.processingLock.lock()
-        self.smoothedFace = nil
-        self.smoothedRoll = 0.0
+        self.smoothedPose = nil
         self.missedDetections = 0
         self.lastDetectionTime = 0.0
         self.processingLock.unlock()
@@ -58,23 +88,22 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     public func process(pixelBuffer: CVPixelBuffer, orientation rawOrientation: Int32, mirrored: Bool) -> CVPixelBuffer? {
         guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"),
-              UserDefaults.standard.bool(forKey: Self.enabledKey) else {
+              UserDefaults.standard.bool(forKey: Self.enabledKey),
+              self.processingLock.try() else {
             return nil
         }
-        guard self.processingLock.try() else {
-            return nil
-        }
-        defer {
-            self.processingLock.unlock()
-        }
+        defer { self.processingLock.unlock() }
 
-        let configuredPreset = UserDefaults.standard.string(forKey: Self.presetKey) ?? "skull"
-        let preset = Self.supportedPresets.contains(configuredPreset) ? configuredPreset : "skull"
+        let configured = UserDefaults.standard.string(forKey: Self.presetKey) ?? "skull"
+        let preset = Self.supportedPresets.contains(configured) && (configured != Self.customPreset || Self.hasCustomMask)
+            ? configured
+            : "skull"
         self.previewMirrored = mirrored
         if preset != self.lastPreset {
             self.lastPreset = preset
-            self.smoothedFace = nil
-            self.smoothedRoll = 0.0
+            self.templates.removeAll(keepingCapacity: true)
+            self.templateImages.removeAll(keepingCapacity: true)
+            self.smoothedPose = nil
             self.missedDetections = 0
             self.lastDetectionTime = 0.0
         }
@@ -82,44 +111,35 @@ public final class AorusVideoMaskProcessor: NSObject {
         guard let orientation = CGImagePropertyOrientation(rawValue: UInt32(rawOrientation)) else {
             return nil
         }
-
         let rawImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let orientedImage = rawImage.oriented(orientation)
-        let uprightImage = orientedImage.transformed(
-            by: CGAffineTransform(translationX: -orientedImage.extent.minX, y: -orientedImage.extent.minY)
-        )
-        guard uprightImage.extent.width > 1.0, uprightImage.extent.height > 1.0 else {
+        let oriented = rawImage.oriented(orientation)
+        let image = oriented.transformed(by: CGAffineTransform(translationX: -oriented.extent.minX, y: -oriented.extent.minY))
+        guard image.extent.width > 1.0, image.extent.height > 1.0 else {
             return nil
         }
 
         let now = CACurrentMediaTime()
-        let detectionInterval: CFTimeInterval = self.smoothedFace == nil ? 0.06 : 0.11
-        if now - self.lastDetectionTime >= detectionInterval {
+        let interval: CFTimeInterval = self.smoothedPose == nil ? 0.045 : 0.072
+        if now - self.lastDetectionTime >= interval {
             self.lastDetectionTime = now
-            self.updateFace(in: uprightImage)
+            self.updatePose(in: image)
         }
 
-        guard let face = self.smoothedFace,
-              face.width > 4.0,
-              face.height > 4.0,
+        guard let pose = self.smoothedPose,
+              pose.face.width > 4.0,
+              pose.face.height > 4.0,
               let template = self.template(for: preset) else {
             return nil
         }
 
-        let maskRect = self.maskRect(for: face, preset: preset)
-        let pulse = CGFloat(0.70 + 0.18 * sin(now * 1.8))
-        let bloom = template
-            .applyingFilter("CIBloom", parameters: [kCIInputRadiusKey: 8.0, kCIInputIntensityKey: pulse])
-            .cropped(to: template.extent)
-        let illuminatedTemplate = template.composited(over: bloom)
-        var mask = illuminatedTemplate.transformed(by: CGAffineTransform(translationX: -template.extent.midX, y: -template.extent.midY))
-        mask = mask.transformed(by: CGAffineTransform(scaleX: maskRect.width / 512.0, y: maskRect.height / 512.0))
-        if abs(self.smoothedRoll) > 0.002 {
-            mask = mask.transformed(by: CGAffineTransform(rotationAngle: -self.smoothedRoll))
-        }
-        mask = mask.transformed(by: CGAffineTransform(translationX: maskRect.midX, y: maskRect.midY))
-
-        let composited = mask.composited(over: uprightImage)
+        let quad = self.destinationQuad(for: pose, preset: preset)
+        let mask = template.applyingFilter("CIPerspectiveTransform", parameters: [
+            "inputTopLeft": CIVector(cgPoint: quad.topLeft),
+            "inputTopRight": CIVector(cgPoint: quad.topRight),
+            "inputBottomRight": CIVector(cgPoint: quad.bottomRight),
+            "inputBottomLeft": CIVector(cgPoint: quad.bottomLeft)
+        ])
+        let composited = mask.composited(over: image)
         let restored = composited.oriented(Self.inverse(orientation))
         let normalized = restored.transformed(by: CGAffineTransform(translationX: -restored.extent.minX, y: -restored.extent.minY))
 
@@ -128,7 +148,6 @@ public final class AorusVideoMaskProcessor: NSObject {
         guard let output = self.makeOutputBuffer(width: width, height: height) else {
             return nil
         }
-
         self.ciContext.render(
             normalized,
             to: output,
@@ -148,7 +167,6 @@ public final class AorusVideoMaskProcessor: NSObject {
               let output = self.process(pixelBuffer: input, orientation: orientation, mirrored: mirrored) else {
             return nil
         }
-
         var formatDescription: CMVideoFormatDescription?
         guard CMVideoFormatDescriptionCreateForImageBuffer(
             allocator: kCFAllocatorDefault,
@@ -157,7 +175,6 @@ public final class AorusVideoMaskProcessor: NSObject {
         ) == noErr, let formatDescription else {
             return nil
         }
-
         var timing = CMSampleTimingInfo.invalid
         CMSampleBufferGetSampleTimingInfo(sampleBuffer, at: 0, timingInfoOut: &timing)
         var result: CMSampleBuffer?
@@ -184,96 +201,275 @@ public final class AorusVideoMaskProcessor: NSObject {
         return result
     }
 
-    private func updateFace(in image: CIImage) {
-        // Face coordinates are normalized by Vision, so detection can run on a
-        // compact proxy without sacrificing placement accuracy on the full frame.
+    private func updatePose(in image: CIImage) {
         let longestSide = max(image.extent.width, image.extent.height)
-        let detectionScale = min(1.0, 480.0 / max(longestSide, 1.0))
-        let detectionImage = image.transformed(by: CGAffineTransform(scaleX: detectionScale, y: detectionScale))
+        let scale = min(1.0, 560.0 / max(longestSide, 1.0))
+        let proxy = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let request = VNDetectFaceLandmarksRequest()
-        let handler = VNImageRequestHandler(ciImage: detectionImage, orientation: .up, options: [:])
+        let handler = VNImageRequestHandler(ciImage: proxy, orientation: .up, options: [:])
         do {
             try handler.perform([request])
         } catch {
             self.registerMiss()
             return
         }
-
-        guard let observation = request.results?
-            .max(by: { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }) else {
+        guard let observations = request.results, !observations.isEmpty else {
             self.registerMiss()
             return
         }
 
+        let observation: VNFaceObservation
+        if let previous = self.smoothedPose {
+            let previousCenter = CGPoint(x: previous.face.midX / image.extent.width, y: previous.face.midY / image.extent.height)
+            observation = observations.min(by: { lhs, rhs in
+                let ld = hypot(lhs.boundingBox.midX - previousCenter.x, lhs.boundingBox.midY - previousCenter.y)
+                let rd = hypot(rhs.boundingBox.midX - previousCenter.x, rhs.boundingBox.midY - previousCenter.y)
+                return ld < rd
+            }) ?? observations[0]
+        } else {
+            observation = observations.max(by: {
+                $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height
+            }) ?? observations[0]
+        }
+
         let extent = image.extent
         let box = observation.boundingBox
-        let detected = CGRect(
+        let face = CGRect(
             x: extent.minX + box.minX * extent.width,
             y: extent.minY + box.minY * extent.height,
             width: box.width * extent.width,
             height: box.height * extent.height
         )
-        let roll = CGFloat(truncating: observation.roll ?? 0.0)
-        if let previous = self.smoothedFace {
-            self.smoothedFace = CGRect(
-                x: Self.mix(previous.minX, detected.minX, factor: 0.34),
-                y: Self.mix(previous.minY, detected.minY, factor: 0.34),
-                width: Self.mix(previous.width, detected.width, factor: 0.30),
-                height: Self.mix(previous.height, detected.height, factor: 0.30)
-            )
-            self.smoothedRoll = Self.mix(self.smoothedRoll, roll, factor: 0.28)
-        } else {
-            self.smoothedFace = detected
-            self.smoothedRoll = roll
+        let landmarks = observation.landmarks
+        let fallbackLeft = CGPoint(x: face.minX + face.width * 0.33, y: face.minY + face.height * 0.62)
+        let fallbackRight = CGPoint(x: face.minX + face.width * 0.67, y: face.minY + face.height * 0.62)
+        var eyePoints = [
+            self.center(of: landmarks?.leftEye, in: face) ?? fallbackLeft,
+            self.center(of: landmarks?.rightEye, in: face) ?? fallbackRight
+        ].sorted(by: { $0.x < $1.x })
+        if eyePoints.count != 2 {
+            eyePoints = [fallbackLeft, fallbackRight]
         }
+        let detectedNose = self.center(of: landmarks?.nose, in: face)
+        let detectedMouth = self.center(of: landmarks?.outerLips, in: face)
+        let nose = detectedNose
+            ?? CGPoint(x: face.midX, y: face.minY + face.height * 0.46)
+        let mouth = detectedMouth
+            ?? CGPoint(x: face.midX, y: face.minY + face.height * 0.27)
+        let landmarkRoll = atan2(eyePoints[1].y - eyePoints[0].y, eyePoints[1].x - eyePoints[0].x)
+        let visionRoll = CGFloat(truncating: observation.roll ?? 0.0)
+        let roll = abs(landmarkRoll) < 0.8 ? landmarkRoll : visionRoll
+
+        let eyeMidpoint = CGPoint(
+            x: (eyePoints[0].x + eyePoints[1].x) * 0.5,
+            y: (eyePoints[0].y + eyePoints[1].y) * 0.5
+        )
+        let eyeDistance = max(hypot(eyePoints[1].x - eyePoints[0].x, eyePoints[1].y - eyePoints[0].y), face.width * 0.22)
+        let landmarkYaw = detectedNose.map {
+            Self.clamp(($0.x - eyeMidpoint.x) / (eyeDistance * 0.42), min: -1.0, max: 1.0)
+        }
+        let visionYaw = observation.yaw.map {
+            Self.clamp(CGFloat(truncating: $0) / 0.72, min: -1.0, max: 1.0)
+        }
+        let yaw: CGFloat
+        if let visionYaw, let landmarkYaw {
+            yaw = Self.mix(landmarkYaw, visionYaw, factor: 0.68)
+        } else {
+            yaw = visionYaw ?? landmarkYaw ?? 0.0
+        }
+
+        // The pitch observation is unavailable on older supported iOS versions.
+        // The eye-to-nose ratio gives a stable fallback and also catches brief
+        // Vision pose dropouts without tying the mask to a neutral head angle.
+        let landmarkPitch = detectedNose.map {
+            let eyeToNose = (eyeMidpoint.y - $0.y) / eyeDistance
+            return Self.clamp((eyeToNose - 0.47) / 0.22, min: -1.0, max: 1.0)
+        }
+        var visionPitch: CGFloat?
+        if #available(iOS 15.0, *) {
+            visionPitch = observation.pitch.map {
+                Self.clamp(CGFloat(truncating: $0) / 0.65, min: -1.0, max: 1.0)
+            }
+        }
+        let pitch: CGFloat
+        if let visionPitch, let landmarkPitch {
+            pitch = Self.mix(landmarkPitch, visionPitch, factor: 0.72)
+        } else {
+            pitch = visionPitch ?? landmarkPitch ?? 0.0
+        }
+        let detected = FacePose(
+            face: face,
+            leftEye: eyePoints[0],
+            rightEye: eyePoints[1],
+            nose: nose,
+            mouth: mouth,
+            roll: roll,
+            yaw: yaw,
+            pitch: pitch
+        )
+        self.smoothedPose = self.smoothedPose.map { previous in
+            let movement = hypot(
+                detected.eyeMidpoint.x - previous.eyeMidpoint.x,
+                detected.eyeMidpoint.y - previous.eyeMidpoint.y
+            ) / max(detected.eyeDistance, 1.0)
+            let rotation = abs(detected.roll - previous.roll) + abs(detected.yaw - previous.yaw) * 0.35
+            let factor = Self.clamp(0.44 + movement * 0.72 + rotation * 0.28, min: 0.44, max: 0.82)
+            return self.mix(previous, detected, factor: factor)
+        } ?? detected
         self.missedDetections = 0
-        self.publishPreview(face: self.smoothedFace ?? detected, extent: extent)
+        if let pose = self.smoothedPose {
+            self.publishPreview(pose: pose, extent: extent)
+        }
+    }
+
+    private func center(of region: VNFaceLandmarkRegion2D?, in face: CGRect) -> CGPoint? {
+        guard let region, region.pointCount > 0 else { return nil }
+        var x: CGFloat = 0.0
+        var y: CGFloat = 0.0
+        for point in region.normalizedPoints {
+            x += CGFloat(point.x)
+            y += CGFloat(point.y)
+        }
+        let divisor = CGFloat(region.pointCount)
+        return CGPoint(x: face.minX + x / divisor * face.width, y: face.minY + y / divisor * face.height)
     }
 
     private func registerMiss() {
         self.missedDetections += 1
-        if self.missedDetections >= 5 {
-            self.smoothedFace = nil
-            self.smoothedRoll = 0.0
+        if self.missedDetections >= 14 {
+            self.smoothedPose = nil
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .aorusVideoMaskPreviewHidden, object: nil)
             }
         }
     }
 
-    private func maskRect(for face: CGRect, preset: String) -> CGRect {
-        let widthFactor: CGFloat
-        let heightFactor: CGFloat
-        let verticalOffset: CGFloat
-        switch preset {
-        case "cyber":
-            widthFactor = 1.95
-            heightFactor = 2.05
-            verticalOffset = 0.08
-        case "neonCat", "demon", "oni":
-            widthFactor = 2.05
-            heightFactor = 2.28
-            verticalOffset = 0.12
-        case "phantom":
-            widthFactor = 2.16
-            heightFactor = 2.35
-            verticalOffset = 0.03
-        case "halo", "aurora":
-            widthFactor = 2.14
-            heightFactor = 2.25
-            verticalOffset = 0.10
-        default:
-            widthFactor = 1.98
-            heightFactor = 2.18
-            verticalOffset = 0.04
+    private typealias Quad = (topLeft: CGPoint, topRight: CGPoint, bottomRight: CGPoint, bottomLeft: CGPoint)
+
+    private func destinationQuad(for pose: FacePose, preset: String) -> Quad {
+        let eyeDistance = max(pose.eyeDistance, pose.face.width * 0.30)
+        let widthFactor: CGFloat = preset == "neonCat" || preset == "oni" ? 1.05 : 1.0
+        let width = max(pose.face.width * 1.30, eyeDistance / 0.34) * widthFactor
+        let height = width
+        let eyeAnchorY: CGFloat = preset == "oni" ? 0.57 : (preset == "neonCat" ? 0.55 : 0.56)
+        let eyeMid = pose.eyeMidpoint
+        let originX = eyeMid.x - width * 0.5
+        let originY = eyeMid.y - height * eyeAnchorY
+        var topLeft = CGPoint(x: originX, y: originY + height)
+        var topRight = CGPoint(x: originX + width, y: originY + height)
+        var bottomRight = CGPoint(x: originX + width, y: originY)
+        var bottomLeft = CGPoint(x: originX, y: originY)
+
+        let yaw = Self.clamp(pose.yaw, min: -1.0, max: 1.0)
+        let yawAmount = abs(yaw) * width * 0.19
+        if yaw > 0.0 {
+            topLeft.x += yawAmount
+            bottomLeft.x += yawAmount * 0.72
+            topRight.x += yawAmount * 0.08
+            bottomRight.x += yawAmount * 0.08
+        } else if yaw < 0.0 {
+            topRight.x -= yawAmount
+            bottomRight.x -= yawAmount * 0.72
+            topLeft.x -= yawAmount * 0.08
+            bottomLeft.x -= yawAmount * 0.08
         }
-        let size = CGSize(width: face.width * widthFactor, height: face.height * heightFactor)
-        return CGRect(
-            x: face.midX - size.width * 0.5,
-            y: face.midY - size.height * 0.5 + face.height * verticalOffset,
-            width: size.width,
-            height: size.height
+
+        let pitchAmount = abs(pose.pitch) * height * 0.12
+        if pose.pitch > 0.0 {
+            bottomLeft.y += pitchAmount
+            bottomRight.y += pitchAmount
+        } else if pose.pitch < 0.0 {
+            topLeft.y -= pitchAmount
+            topRight.y -= pitchAmount
+        }
+
+        topLeft = Self.rotate(topLeft, around: eyeMid, angle: pose.roll)
+        topRight = Self.rotate(topRight, around: eyeMid, angle: pose.roll)
+        bottomRight = Self.rotate(bottomRight, around: eyeMid, angle: pose.roll)
+        bottomLeft = Self.rotate(bottomLeft, around: eyeMid, angle: pose.roll)
+        return (topLeft, topRight, bottomRight, bottomLeft)
+    }
+
+    private func template(for preset: String) -> CIImage? {
+        if preset == Self.customPreset {
+            let date = (try? FileManager.default.attributesOfItem(atPath: Self.customMaskURL.path)[.modificationDate]) as? Date
+            if date != self.customMaskModificationDate {
+                self.templates.removeValue(forKey: preset)
+                self.templateImages.removeValue(forKey: preset)
+                self.customMaskModificationDate = date
+            }
+        }
+        if let cached = self.templates[preset] {
+            return cached
+        }
+        let image: UIImage?
+        if preset == Self.customPreset {
+            image = UIImage(contentsOfFile: Self.customMaskURL.path)
+        } else {
+            image = self.bundledImage(named: preset == "neonCat" ? "neoncat" : preset)
+        }
+        guard let image, var result = CIImage(image: image) else {
+            return nil
+        }
+        result = result.transformed(by: CGAffineTransform(translationX: -result.extent.minX, y: -result.extent.minY))
+        self.templateImages[preset] = image
+        self.templates[preset] = result
+        return result
+    }
+
+    private func bundledImage(named name: String) -> UIImage? {
+        let hosts = [Bundle(for: AorusVideoMaskProcessor.self), Bundle.main]
+        for host in hosts {
+            guard let path = host.path(forResource: "AorusVideoMaskAssets", ofType: "bundle"),
+                  let bundle = Bundle(path: path) else {
+                continue
+            }
+            let url = bundle.url(forResource: name, withExtension: "png")
+                ?? bundle.url(forResource: name, withExtension: "png", subdirectory: "VideoMasks")
+            if let url, let image = UIImage(contentsOfFile: url.path) {
+                return image
+            }
+        }
+        return nil
+    }
+
+    public func previewImage(for preset: String) -> UIImage? {
+        self.processingLock.lock()
+        defer { self.processingLock.unlock() }
+        let resolved = Self.supportedPresets.contains(preset) ? preset : "skull"
+        _ = self.template(for: resolved)
+        return self.templateImages[resolved]
+    }
+
+    private func publishPreview(pose: FacePose, extent: CGRect) {
+        let quad = self.destinationQuad(for: pose, preset: self.lastPreset)
+        let xs = [quad.topLeft.x, quad.topRight.x, quad.bottomRight.x, quad.bottomLeft.x]
+        let ys = [quad.topLeft.y, quad.topRight.y, quad.bottomRight.y, quad.bottomLeft.y]
+        guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else { return }
+        let rect = CGRect(
+            x: minX / extent.width,
+            y: 1.0 - maxY / extent.height,
+            width: (maxX - minX) / extent.width,
+            height: (maxY - minY) / extent.height
         )
+        let preset = self.lastPreset
+        let mirrored = self.previewMirrored
+        let aspect = extent.width / max(extent.height, 1.0)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(
+                name: .aorusVideoMaskPreviewUpdated,
+                object: nil,
+                userInfo: [
+                    "rect": NSValue(cgRect: rect),
+                    "roll": NSNumber(value: Double(pose.roll)),
+                    "yaw": NSNumber(value: Double(pose.yaw)),
+                    "pitch": NSNumber(value: Double(pose.pitch)),
+                    "preset": preset,
+                    "mirrored": mirrored,
+                    "aspect": NSNumber(value: Double(aspect))
+                ]
+            )
+        }
     }
 
     private func makeOutputBuffer(width: Int, height: Int) -> CVPixelBuffer? {
@@ -282,9 +478,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         if let current = self.pools[key] {
             pool = current
         } else {
-            let poolAttributes: [String: Any] = [
-                kCVPixelBufferPoolMinimumBufferCountKey as String: 3
-            ]
+            let poolAttributes: [String: Any] = [kCVPixelBufferPoolMinimumBufferCountKey as String: 3]
             let pixelAttributes: [String: Any] = [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
                 kCVPixelBufferWidthKey as String: width,
@@ -294,12 +488,8 @@ public final class AorusVideoMaskProcessor: NSObject {
                 kCVPixelBufferCGBitmapContextCompatibilityKey as String: true
             ]
             var created: CVPixelBufferPool?
-            guard CVPixelBufferPoolCreate(
-                kCFAllocatorDefault,
-                poolAttributes as CFDictionary,
-                pixelAttributes as CFDictionary,
-                &created
-            ) == kCVReturnSuccess, let created else {
+            guard CVPixelBufferPoolCreate(kCFAllocatorDefault, poolAttributes as CFDictionary, pixelAttributes as CFDictionary, &created) == kCVReturnSuccess,
+                  let created else {
                 return nil
             }
             self.pools[key] = created
@@ -312,446 +502,64 @@ public final class AorusVideoMaskProcessor: NSObject {
         return output
     }
 
-    private func template(for preset: String) -> CIImage? {
-        if let cached = self.templates[preset] {
-            return cached
-        }
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1.0
-        format.opaque = false
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 512.0, height: 512.0), format: format)
-        let image = renderer.image { context in
-            let cg = context.cgContext
-            cg.setLineCap(.round)
-            cg.setLineJoin(.round)
-            Self.drawFaceFoundation(in: cg, preset: preset)
-            switch preset {
-            case "cyber":
-                Self.drawCyber(in: cg)
-            case "phantom":
-                Self.drawPhantom(in: cg)
-            case "demon":
-                Self.drawDemon(in: cg)
-            case "neonCat":
-                Self.drawNeonCat(in: cg)
-            case "incognito":
-                Self.drawIncognito(in: cg)
-            case "chrome":
-                Self.drawChrome(in: cg)
-            case "oni":
-                Self.drawOni(in: cg)
-            case "halo":
-                Self.drawHalo(in: cg)
-            case "aurora":
-                Self.drawAurora(in: cg)
-            default:
-                Self.drawSkull(in: cg)
-            }
-        }
-        guard let result = CIImage(image: image) else {
-            return nil
-        }
-        self.templateImages[preset] = image
-        self.templates[preset] = result
-        return result
-    }
-
-    private static func drawFaceFoundation(in context: CGContext, preset: String) {
-        let color: UIColor
-        switch preset {
-        case "cyber":
-            color = UIColor(red: 0.025, green: 0.045, blue: 0.10, alpha: 0.98)
-        case "demon", "oni":
-            color = UIColor(red: 0.20, green: 0.015, blue: 0.035, alpha: 0.98)
-        case "neonCat", "phantom":
-            color = UIColor(red: 0.075, green: 0.035, blue: 0.13, alpha: 0.98)
-        case "halo":
-            color = UIColor(red: 0.96, green: 0.87, blue: 0.61, alpha: 0.98)
-        case "aurora":
-            color = UIColor(red: 0.055, green: 0.12, blue: 0.18, alpha: 0.98)
-        case "chrome":
-            color = UIColor(white: 0.68, alpha: 0.99)
-        case "incognito":
-            color = UIColor(red: 0.018, green: 0.022, blue: 0.035, alpha: 0.99)
-        default:
-            color = UIColor(white: 0.92, alpha: 0.99)
-        }
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 24.0, color: color.withAlphaComponent(0.70).cgColor)
-        let shell = UIBezierPath(roundedRect: CGRect(x: 94, y: 54, width: 324, height: 414), cornerRadius: 150)
-        color.setFill()
-        UIColor.white.withAlphaComponent(0.46).setStroke()
-        shell.lineWidth = 5.0
-        shell.fill()
-        shell.stroke()
-        context.restoreGState()
-    }
-
-    public func previewImage(for preset: String) -> UIImage? {
-        self.processingLock.lock()
-        defer { self.processingLock.unlock() }
-        if let image = self.templateImages[preset] {
-            return image
-        }
-        _ = self.template(for: preset)
-        return self.templateImages[preset]
-    }
-
-    private func publishPreview(face: CGRect, extent: CGRect) {
-        let preset = self.lastPreset
-        let mask = self.maskRect(for: face, preset: preset)
-        let normalized = CGRect(
-            x: mask.minX / extent.width,
-            y: 1.0 - mask.maxY / extent.height,
-            width: mask.width / extent.width,
-            height: mask.height / extent.height
+    private func mix(_ previous: FacePose, _ next: FacePose, factor: CGFloat) -> FacePose {
+        return FacePose(
+            face: CGRect(
+                x: Self.mix(previous.face.minX, next.face.minX, factor: factor),
+                y: Self.mix(previous.face.minY, next.face.minY, factor: factor),
+                width: Self.mix(previous.face.width, next.face.width, factor: factor),
+                height: Self.mix(previous.face.height, next.face.height, factor: factor)
+            ),
+            leftEye: Self.mix(previous.leftEye, next.leftEye, factor: factor),
+            rightEye: Self.mix(previous.rightEye, next.rightEye, factor: factor),
+            nose: Self.mix(previous.nose, next.nose, factor: factor),
+            mouth: Self.mix(previous.mouth, next.mouth, factor: factor),
+            roll: Self.mix(previous.roll, next.roll, factor: factor),
+            yaw: Self.mix(previous.yaw, next.yaw, factor: factor),
+            pitch: Self.mix(previous.pitch, next.pitch, factor: factor)
         )
-        let roll = self.smoothedRoll
-        let mirrored = self.previewMirrored
-        let aspect = extent.width / max(extent.height, 1.0)
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .aorusVideoMaskPreviewUpdated,
-                object: nil,
-                userInfo: [
-                    "rect": NSValue(cgRect: normalized),
-                    "roll": NSNumber(value: Double(roll)),
-                    "preset": preset,
-                    "mirrored": mirrored,
-                    "aspect": NSNumber(value: Double(aspect))
-                ]
-            )
-        }
     }
 
-    private static func drawSkull(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 24.0, color: UIColor.white.withAlphaComponent(0.42).cgColor)
-        let skull = UIBezierPath()
-        skull.move(to: CGPoint(x: 130, y: 104))
-        skull.addCurve(to: CGPoint(x: 382, y: 104), controlPoint1: CGPoint(x: 184, y: 40), controlPoint2: CGPoint(x: 328, y: 40))
-        skull.addCurve(to: CGPoint(x: 401, y: 310), controlPoint1: CGPoint(x: 430, y: 166), controlPoint2: CGPoint(x: 420, y: 254))
-        skull.addCurve(to: CGPoint(x: 338, y: 370), controlPoint1: CGPoint(x: 388, y: 344), controlPoint2: CGPoint(x: 363, y: 354))
-        skull.addLine(to: CGPoint(x: 326, y: 432))
-        skull.addLine(to: CGPoint(x: 186, y: 432))
-        skull.addLine(to: CGPoint(x: 174, y: 370))
-        skull.addCurve(to: CGPoint(x: 111, y: 310), controlPoint1: CGPoint(x: 149, y: 354), controlPoint2: CGPoint(x: 124, y: 344))
-        skull.addCurve(to: CGPoint(x: 130, y: 104), controlPoint1: CGPoint(x: 92, y: 254), controlPoint2: CGPoint(x: 82, y: 166))
-        skull.close()
-        UIColor(white: 0.94, alpha: 0.88).setFill()
-        UIColor.white.withAlphaComponent(0.92).setStroke()
-        skull.lineWidth = 5.0
-        skull.fill()
-        skull.stroke()
-        context.restoreGState()
-
-        let leftEye = UIBezierPath(ovalIn: CGRect(x: 148, y: 190, width: 92, height: 76))
-        let rightEye = UIBezierPath(ovalIn: CGRect(x: 272, y: 190, width: 92, height: 76))
-        UIColor(white: 0.03, alpha: 0.94).setFill()
-        leftEye.fill()
-        rightEye.fill()
-        let nose = UIBezierPath()
-        nose.move(to: CGPoint(x: 256, y: 258))
-        nose.addLine(to: CGPoint(x: 230, y: 316))
-        nose.addLine(to: CGPoint(x: 282, y: 316))
-        nose.close()
-        nose.fill()
-        UIColor(white: 0.12, alpha: 0.82).setStroke()
-        for index in 0 ... 5 {
-            let x = 196.0 + CGFloat(index) * 24.0
-            let tooth = UIBezierPath()
-            tooth.move(to: CGPoint(x: x, y: 365))
-            tooth.addLine(to: CGPoint(x: x, y: 425))
-            tooth.lineWidth = 4.0
-            tooth.stroke()
-        }
-        let gloss = UIBezierPath(arcCenter: CGPoint(x: 228, y: 156), radius: 105, startAngle: 3.65, endAngle: 5.15, clockwise: true)
-        UIColor.white.withAlphaComponent(0.62).setStroke()
-        gloss.lineWidth = 12.0
-        gloss.stroke()
+    private static func mix(_ a: CGFloat, _ b: CGFloat, factor: CGFloat) -> CGFloat {
+        return a + (b - a) * factor
     }
 
-    private static func drawCyber(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 30.0, color: UIColor(red: 0.20, green: 0.76, blue: 1.0, alpha: 0.9).cgColor)
-        let visor = UIBezierPath(roundedRect: CGRect(x: 74, y: 164, width: 364, height: 160), cornerRadius: 70)
-        UIColor(red: 0.04, green: 0.07, blue: 0.14, alpha: 0.82).setFill()
-        visor.fill()
-        UIColor(red: 0.28, green: 0.86, blue: 1.0, alpha: 0.95).setStroke()
-        visor.lineWidth = 7.0
-        visor.stroke()
-        context.restoreGState()
-        let shine = UIBezierPath(roundedRect: CGRect(x: 98, y: 186, width: 316, height: 34), cornerRadius: 17)
-        UIColor.white.withAlphaComponent(0.32).setFill()
-        shine.fill()
-        let scan = UIBezierPath()
-        scan.move(to: CGPoint(x: 112, y: 268))
-        scan.addCurve(to: CGPoint(x: 400, y: 252), controlPoint1: CGPoint(x: 190, y: 220), controlPoint2: CGPoint(x: 294, y: 310))
-        UIColor(red: 0.65, green: 0.34, blue: 1.0, alpha: 0.95).setStroke()
-        scan.lineWidth = 5.0
-        scan.stroke()
-        UIColor(red: 0.24, green: 0.82, blue: 1.0, alpha: 0.76).setStroke()
-        for x in stride(from: 102.0, through: 414.0, by: 52.0) {
-            let circuit = UIBezierPath()
-            circuit.move(to: CGPoint(x: x, y: 326))
-            circuit.addLine(to: CGPoint(x: x + 12, y: 374))
-            circuit.lineWidth = 3.0
-            circuit.stroke()
-        }
+    private static func mix(_ a: CGPoint, _ b: CGPoint, factor: CGFloat) -> CGPoint {
+        return CGPoint(x: mix(a.x, b.x, factor: factor), y: mix(a.y, b.y, factor: factor))
     }
 
-    private static func drawPhantom(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 34.0, color: UIColor(red: 0.42, green: 0.35, blue: 1.0, alpha: 0.75).cgColor)
-        let hood = UIBezierPath()
-        hood.move(to: CGPoint(x: 80, y: 456))
-        hood.addCurve(to: CGPoint(x: 154, y: 92), controlPoint1: CGPoint(x: 58, y: 304), controlPoint2: CGPoint(x: 86, y: 150))
-        hood.addCurve(to: CGPoint(x: 358, y: 92), controlPoint1: CGPoint(x: 210, y: 32), controlPoint2: CGPoint(x: 302, y: 32))
-        hood.addCurve(to: CGPoint(x: 432, y: 456), controlPoint1: CGPoint(x: 426, y: 150), controlPoint2: CGPoint(x: 454, y: 304))
-        hood.addCurve(to: CGPoint(x: 80, y: 456), controlPoint1: CGPoint(x: 342, y: 390), controlPoint2: CGPoint(x: 170, y: 390))
-        hood.close()
-        UIColor(red: 0.07, green: 0.06, blue: 0.14, alpha: 0.88).setFill()
-        UIColor(red: 0.52, green: 0.42, blue: 1.0, alpha: 0.82).setStroke()
-        hood.lineWidth = 7.0
-        hood.fill()
-        hood.stroke()
-        context.restoreGState()
-        UIColor(red: 0.30, green: 0.92, blue: 1.0, alpha: 0.96).setStroke()
-        for originX in [150.0, 282.0] {
-            let eye = UIBezierPath()
-            eye.move(to: CGPoint(x: originX, y: 250))
-            eye.addCurve(to: CGPoint(x: originX + 80, y: 238), controlPoint1: CGPoint(x: originX + 28, y: 220), controlPoint2: CGPoint(x: originX + 58, y: 220))
-            eye.lineWidth = 12.0
-            eye.stroke()
-        }
-        let gloss = UIBezierPath(arcCenter: CGPoint(x: 218, y: 158), radius: 112, startAngle: 3.55, endAngle: 4.86, clockwise: true)
-        UIColor.white.withAlphaComponent(0.22).setStroke()
-        gloss.lineWidth = 14.0
-        gloss.stroke()
+    private static func clamp(_ value: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
+        return Swift.max(min, Swift.min(max, value))
     }
 
-    private static func drawDemon(in context: CGContext) {
-        func horn(_ points: [CGPoint]) {
-            let path = UIBezierPath()
-            path.move(to: points[0])
-            path.addCurve(to: points[3], controlPoint1: points[1], controlPoint2: points[2])
-            path.addCurve(to: points[0], controlPoint1: points[4], controlPoint2: points[5])
-            path.close()
-            UIColor(red: 0.58, green: 0.04, blue: 0.12, alpha: 0.94).setFill()
-            UIColor(red: 1.0, green: 0.30, blue: 0.22, alpha: 0.96).setStroke()
-            path.lineWidth = 6.0
-            path.fill()
-            path.stroke()
-        }
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 26.0, color: UIColor(red: 1.0, green: 0.10, blue: 0.18, alpha: 0.75).cgColor)
-        horn([CGPoint(x: 182, y: 170), CGPoint(x: 108, y: 86), CGPoint(x: 94, y: 24), CGPoint(x: 138, y: 18), CGPoint(x: 168, y: 70), CGPoint(x: 212, y: 120)])
-        horn([CGPoint(x: 330, y: 170), CGPoint(x: 404, y: 86), CGPoint(x: 418, y: 24), CGPoint(x: 374, y: 18), CGPoint(x: 344, y: 70), CGPoint(x: 300, y: 120)])
-        context.restoreGState()
-        let face = UIBezierPath(roundedRect: CGRect(x: 118, y: 132, width: 276, height: 310), cornerRadius: 118)
-        UIColor(red: 0.20, green: 0.02, blue: 0.05, alpha: 0.42).setFill()
-        face.fill()
-        UIColor(red: 1.0, green: 0.24, blue: 0.18, alpha: 0.94).setStroke()
-        for y in [236.0, 314.0] {
-            let mark = UIBezierPath()
-            mark.move(to: CGPoint(x: 150, y: y))
-            mark.addLine(to: CGPoint(x: 206, y: y + 22))
-            mark.move(to: CGPoint(x: 362, y: y))
-            mark.addLine(to: CGPoint(x: 306, y: y + 22))
-            mark.lineWidth = 7.0
-            mark.stroke()
-        }
-        let forehead = UIBezierPath()
-        forehead.move(to: CGPoint(x: 256, y: 154))
-        forehead.addLine(to: CGPoint(x: 226, y: 220))
-        forehead.addLine(to: CGPoint(x: 256, y: 204))
-        forehead.addLine(to: CGPoint(x: 286, y: 220))
-        forehead.close()
-        forehead.fill()
-    }
-
-    private static func drawNeonCat(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 24.0, color: UIColor(red: 0.90, green: 0.30, blue: 1.0, alpha: 0.8).cgColor)
-        let leftEar = UIBezierPath()
-        leftEar.move(to: CGPoint(x: 110, y: 188))
-        leftEar.addLine(to: CGPoint(x: 138, y: 42))
-        leftEar.addLine(to: CGPoint(x: 234, y: 146))
-        leftEar.close()
-        let rightEar = UIBezierPath()
-        rightEar.move(to: CGPoint(x: 402, y: 188))
-        rightEar.addLine(to: CGPoint(x: 374, y: 42))
-        rightEar.addLine(to: CGPoint(x: 278, y: 146))
-        rightEar.close()
-        UIColor(red: 0.18, green: 0.06, blue: 0.24, alpha: 0.72).setFill()
-        UIColor(red: 0.94, green: 0.36, blue: 1.0, alpha: 0.94).setStroke()
-        leftEar.lineWidth = 7.0
-        rightEar.lineWidth = 7.0
-        leftEar.fill(); leftEar.stroke(); rightEar.fill(); rightEar.stroke()
-        context.restoreGState()
-        let nose = UIBezierPath()
-        nose.move(to: CGPoint(x: 230, y: 316))
-        nose.addLine(to: CGPoint(x: 282, y: 316))
-        nose.addLine(to: CGPoint(x: 256, y: 344))
-        nose.close()
-        UIColor(red: 1.0, green: 0.48, blue: 0.78, alpha: 0.94).setFill()
-        nose.fill()
-        UIColor(red: 0.44, green: 0.90, blue: 1.0, alpha: 0.88).setStroke()
-        for offset in [-28.0, 0.0, 28.0] {
-            let whiskers = UIBezierPath()
-            whiskers.move(to: CGPoint(x: 210, y: 346 + offset * 0.28))
-            whiskers.addLine(to: CGPoint(x: 68, y: 326 + offset))
-            whiskers.move(to: CGPoint(x: 302, y: 346 + offset * 0.28))
-            whiskers.addLine(to: CGPoint(x: 444, y: 326 + offset))
-            whiskers.lineWidth = 5.0
-            whiskers.stroke()
-        }
-    }
-
-    private static func drawIncognito(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 28.0, color: UIColor(red: 0.34, green: 0.68, blue: 1.0, alpha: 0.68).cgColor)
-        let mask = UIBezierPath(roundedRect: CGRect(x: 104, y: 96, width: 304, height: 350), cornerRadius: 136)
-        UIColor(red: 0.02, green: 0.03, blue: 0.06, alpha: 0.86).setFill()
-        UIColor.white.withAlphaComponent(0.78).setStroke()
-        mask.lineWidth = 6.0
-        mask.fill(); mask.stroke()
-        context.restoreGState()
-        let band = UIBezierPath(roundedRect: CGRect(x: 126, y: 210, width: 260, height: 106), cornerRadius: 50)
-        UIColor(white: 0.02, alpha: 0.94).setFill()
-        UIColor(red: 0.36, green: 0.76, blue: 1.0, alpha: 0.84).setStroke()
-        band.lineWidth = 4.0
-        band.fill(); band.stroke()
-        UIColor.white.withAlphaComponent(0.92).setFill()
-        UIBezierPath(ovalIn: CGRect(x: 176, y: 246, width: 22, height: 22)).fill()
-        UIBezierPath(ovalIn: CGRect(x: 314, y: 246, width: 22, height: 22)).fill()
-        let gloss = UIBezierPath(arcCenter: CGPoint(x: 225, y: 160), radius: 102, startAngle: 3.62, endAngle: 5.0, clockwise: true)
-        UIColor.white.withAlphaComponent(0.30).setStroke()
-        gloss.lineWidth = 13.0
-        gloss.stroke()
-    }
-
-    private static func drawChrome(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 30.0, color: UIColor(red: 0.55, green: 0.82, blue: 1.0, alpha: 0.66).cgColor)
-        let shell = UIBezierPath(roundedRect: CGRect(x: 112, y: 76, width: 288, height: 374), cornerRadius: 138)
-        UIColor(white: 0.72, alpha: 0.46).setFill()
-        UIColor.white.withAlphaComponent(0.92).setStroke()
-        shell.lineWidth = 7.0
-        shell.fill(); shell.stroke()
-        context.restoreGState()
-
-        let visor = UIBezierPath(roundedRect: CGRect(x: 142, y: 188, width: 228, height: 102), cornerRadius: 48)
-        UIColor(red: 0.02, green: 0.05, blue: 0.10, alpha: 0.82).setFill()
-        UIColor(red: 0.44, green: 0.88, blue: 1.0, alpha: 0.88).setStroke()
-        visor.lineWidth = 5.0
-        visor.fill(); visor.stroke()
-
-        let reflection = UIBezierPath()
-        reflection.move(to: CGPoint(x: 166, y: 128))
-        reflection.addCurve(to: CGPoint(x: 330, y: 108), controlPoint1: CGPoint(x: 214, y: 82), controlPoint2: CGPoint(x: 282, y: 78))
-        UIColor.white.withAlphaComponent(0.56).setStroke()
-        reflection.lineWidth = 15.0
-        reflection.stroke()
-        let jaw = UIBezierPath(arcCenter: CGPoint(x: 256, y: 328), radius: 76, startAngle: 0.24, endAngle: 2.90, clockwise: true)
-        UIColor.white.withAlphaComponent(0.42).setStroke()
-        jaw.lineWidth = 8.0
-        jaw.stroke()
-    }
-
-    private static func drawOni(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 28.0, color: UIColor(red: 1.0, green: 0.12, blue: 0.24, alpha: 0.76).cgColor)
-        let shell = UIBezierPath(roundedRect: CGRect(x: 116, y: 120, width: 280, height: 326), cornerRadius: 112)
-        UIColor(red: 0.34, green: 0.015, blue: 0.055, alpha: 0.70).setFill()
-        UIColor(red: 1.0, green: 0.27, blue: 0.30, alpha: 0.92).setStroke()
-        shell.lineWidth = 7.0
-        shell.fill(); shell.stroke()
-        context.restoreGState()
-
-        UIColor(red: 1.0, green: 0.66, blue: 0.20, alpha: 0.98).setFill()
-        let leftEye = UIBezierPath()
-        leftEye.move(to: CGPoint(x: 148, y: 228)); leftEye.addLine(to: CGPoint(x: 232, y: 244)); leftEye.addLine(to: CGPoint(x: 170, y: 272)); leftEye.close(); leftEye.fill()
-        let rightEye = UIBezierPath()
-        rightEye.move(to: CGPoint(x: 364, y: 228)); rightEye.addLine(to: CGPoint(x: 280, y: 244)); rightEye.addLine(to: CGPoint(x: 342, y: 272)); rightEye.close(); rightEye.fill()
-
-        UIColor.white.withAlphaComponent(0.92).setFill()
-        for x in [194.0, 238.0, 274.0, 318.0] {
-            let fang = UIBezierPath()
-            fang.move(to: CGPoint(x: x, y: 346)); fang.addLine(to: CGPoint(x: x + 16.0, y: 410)); fang.addLine(to: CGPoint(x: x + 32.0, y: 346)); fang.close(); fang.fill()
-        }
-        UIColor(red: 1.0, green: 0.30, blue: 0.38, alpha: 0.86).setStroke()
-        let forehead = UIBezierPath()
-        forehead.move(to: CGPoint(x: 256, y: 142)); forehead.addLine(to: CGPoint(x: 224, y: 206)); forehead.addLine(to: CGPoint(x: 256, y: 188)); forehead.addLine(to: CGPoint(x: 288, y: 206))
-        forehead.lineWidth = 8.0
-        forehead.stroke()
-    }
-
-    private static func drawHalo(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 34.0, color: UIColor(red: 1.0, green: 0.79, blue: 0.28, alpha: 0.92).cgColor)
-        let halo = UIBezierPath(ovalIn: CGRect(x: 104, y: 54, width: 304, height: 106))
-        UIColor(red: 1.0, green: 0.84, blue: 0.38, alpha: 0.96).setStroke()
-        halo.lineWidth = 15.0
-        halo.stroke()
-        context.restoreGState()
-
-        let glass = UIBezierPath(roundedRect: CGRect(x: 126, y: 150, width: 260, height: 278), cornerRadius: 122)
-        UIColor(red: 1.0, green: 0.94, blue: 0.70, alpha: 0.13).setFill()
-        UIColor.white.withAlphaComponent(0.28).setStroke()
-        glass.lineWidth = 4.0
-        glass.fill(); glass.stroke()
-        UIColor.white.withAlphaComponent(0.82).setStroke()
-        let flare = UIBezierPath(arcCenter: CGPoint(x: 222, y: 212), radius: 88, startAngle: 3.7, endAngle: 5.1, clockwise: true)
-        flare.lineWidth = 10.0
-        flare.stroke()
-    }
-
-    private static func drawAurora(in context: CGContext) {
-        context.saveGState()
-        context.setShadow(offset: .zero, blur: 30.0, color: UIColor(red: 0.28, green: 0.92, blue: 1.0, alpha: 0.74).cgColor)
-        let leftWing = UIBezierPath()
-        leftWing.move(to: CGPoint(x: 246, y: 258)); leftWing.addCurve(to: CGPoint(x: 58, y: 104), controlPoint1: CGPoint(x: 150, y: 190), controlPoint2: CGPoint(x: 82, y: 138)); leftWing.addCurve(to: CGPoint(x: 118, y: 354), controlPoint1: CGPoint(x: 36, y: 226), controlPoint2: CGPoint(x: 68, y: 326)); leftWing.close()
-        let rightWing = UIBezierPath()
-        rightWing.move(to: CGPoint(x: 266, y: 258)); rightWing.addCurve(to: CGPoint(x: 454, y: 104), controlPoint1: CGPoint(x: 362, y: 190), controlPoint2: CGPoint(x: 430, y: 138)); rightWing.addCurve(to: CGPoint(x: 394, y: 354), controlPoint1: CGPoint(x: 476, y: 226), controlPoint2: CGPoint(x: 444, y: 326)); rightWing.close()
-        UIColor(red: 0.25, green: 0.72, blue: 1.0, alpha: 0.24).setFill()
-        UIColor(red: 0.30, green: 0.92, blue: 1.0, alpha: 0.88).setStroke()
-        leftWing.lineWidth = 7.0; rightWing.lineWidth = 7.0
-        leftWing.fill(); leftWing.stroke(); rightWing.fill(); rightWing.stroke()
-        context.restoreGState()
-        UIColor(red: 0.84, green: 0.32, blue: 1.0, alpha: 0.84).setStroke()
-        let ribbon = UIBezierPath()
-        ribbon.move(to: CGPoint(x: 70, y: 286)); ribbon.addCurve(to: CGPoint(x: 442, y: 252), controlPoint1: CGPoint(x: 168, y: 198), controlPoint2: CGPoint(x: 320, y: 342))
-        ribbon.lineWidth = 8.0
-        ribbon.stroke()
-        UIColor.white.withAlphaComponent(0.48).setStroke()
-        let highlight = UIBezierPath()
-        highlight.move(to: CGPoint(x: 100, y: 150)); highlight.addCurve(to: CGPoint(x: 410, y: 136), controlPoint1: CGPoint(x: 190, y: 86), controlPoint2: CGPoint(x: 330, y: 92))
-        highlight.lineWidth = 6.0
-        highlight.stroke()
+    private static func rotate(_ point: CGPoint, around center: CGPoint, angle: CGFloat) -> CGPoint {
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        let c = cos(angle)
+        let s = sin(angle)
+        return CGPoint(x: center.x + dx * c - dy * s, y: center.y + dx * s + dy * c)
     }
 
     private static func inverse(_ orientation: CGImagePropertyOrientation) -> CGImagePropertyOrientation {
         switch orientation {
-        case .right: return .left
+        case .up: return .up
+        case .upMirrored: return .upMirrored
+        case .down: return .down
+        case .downMirrored: return .downMirrored
         case .left: return .right
-        default: return orientation
+        case .leftMirrored: return .rightMirrored
+        case .right: return .left
+        case .rightMirrored: return .leftMirrored
         }
     }
-
-    private static func mix(_ lhs: CGFloat, _ rhs: CGFloat, factor: CGFloat) -> CGFloat {
-        return lhs + (rhs - lhs) * factor
-    }
-}
-
-/// C ABI bridge used by the Objective-C++ WebRTC capturer. Keeping this bridge
-/// module-free avoids enabling Clang C++ modules across the entire tgcalls target.
-@_cdecl("AorusVideoMaskProcessPixelBuffer")
-public func AorusVideoMaskProcessPixelBuffer(_ pixelBuffer: CVPixelBuffer, _ orientation: Int32, _ mirrored: Int32) -> CVPixelBuffer? {
-    return AorusVideoMaskProcessor.shared.process(pixelBuffer: pixelBuffer, orientation: orientation, mirrored: mirrored != 0)
 }
 
 public extension Notification.Name {
     static let aorusVideoMaskPreviewUpdated = Notification.Name("aorusgram.videoMask.previewUpdated")
     static let aorusVideoMaskPreviewHidden = Notification.Name("aorusgram.videoMask.previewHidden")
+}
+
+@_cdecl("AorusVideoMaskProcessPixelBuffer")
+public func AorusVideoMaskProcessPixelBuffer(_ pixelBuffer: CVPixelBuffer, _ orientation: Int32, _ mirrored: Int32) -> CVPixelBuffer? {
+    return AorusVideoMaskProcessor.shared.process(pixelBuffer: pixelBuffer, orientation: orientation, mirrored: mirrored != 0)
 }

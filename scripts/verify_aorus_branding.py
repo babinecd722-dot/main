@@ -183,6 +183,23 @@ def main() -> None:
         mask_text = mask_processor.read_text(encoding="utf-8")
         if "processingLock.try()" not in mask_text or "VNDetectFaceLandmarksRequest" not in mask_text:
             err.append("VideoMasks: fail-open Vision tracking pipeline is incomplete")
+        if "CIPerspectiveTransform" not in mask_text or "observation.yaw" not in mask_text or "landmarks?.leftEye" not in mask_text:
+            err.append("VideoMasks: landmark-anchored perspective tracking is incomplete")
+        if "AorusVideoMaskAssets" not in mask_text or "custom-mask.png" not in mask_text:
+            err.append("VideoMasks: PNG asset/custom-mask loading is incomplete")
+
+    mask_assets = tg / "submodules" / "AorusGram" / "Resources" / "VideoMasks"
+    expected_mask_assets = {"skull.png", "cyber.png", "oni.png", "phantom.png", "chrome.png", "aurora.png", "neoncat.png"}
+    if not mask_assets.is_dir() or not expected_mask_assets.issubset({path.name for path in mask_assets.glob("*.png")}):
+        err.append("VideoMasks: generated PNG mask assets are incomplete")
+
+    mask_editor = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMaskEditorController.swift"
+    if not mask_editor.is_file():
+        err.append("VideoMasks: custom mask editor is missing")
+    else:
+        editor_text = mask_editor.read_text(encoding="utf-8")
+        if "renderedImage()" not in editor_text or "blendMode(stroke.erasing ? .clear : .normal)" not in editor_text:
+            err.append("VideoMasks: custom mask drawing/eraser pipeline is incomplete")
 
     camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file() or "AorusGram: real-time video mask" not in camera_output.read_text(encoding="utf-8"):
