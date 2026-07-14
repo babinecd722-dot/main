@@ -314,6 +314,8 @@ def main() -> None:
             err.append("VideoMasks: precision canvas/text zoom is incomplete")
         if "disablesInteractiveTransitionGestureRecognizerNow = { true }" not in editor_text:
             err.append("VideoMasks: editor must block swipe-back while drawing")
+        if "override func gestureRecognizerShouldBegin" not in editor_text:
+            err.append("VideoMasks: canvas gesture gate must override UIView's implementation")
 
     misc_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
     if not misc_controller.is_file():

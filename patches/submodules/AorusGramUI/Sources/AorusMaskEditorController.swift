@@ -566,7 +566,7 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         return true
     }
 
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         if gestureRecognizer is UIPinchGestureRecognizer || gestureRecognizer is UIRotationGestureRecognizer {
             return self.tool == .move && self.hasTransformSelection
         }
