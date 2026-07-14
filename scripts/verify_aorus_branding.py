@@ -191,14 +191,38 @@ def main() -> None:
         animated_text = animated_profile.read_text(encoding="utf-8")
         if "AorusAnimatedProfileBackgroundStore" not in animated_text or "AorusAnimatedProfileBackgroundPicker" not in animated_text:
             err.append("ProfilePersonalization: animated background storage/picker is incomplete")
-        if "AVPlayerLooper" not in animated_text or "player.isMuted = true" not in animated_text:
-            err.append("ProfilePersonalization: silent looping playback is incomplete")
+        if "AVSampleBufferDisplayLayer" not in animated_text or "AVAssetReaderTrackOutput" not in animated_text:
+            err.append("ProfilePersonalization: video-only looping renderer is incomplete")
+        if "AVQueuePlayer" in animated_text or "AVPlayerLooper" in animated_text:
+            err.append("ProfilePersonalization: AVPlayer playback can activate the shared audio session")
         if "AVAudioSession" in animated_text or "withMediaType: .audio" in animated_text:
             err.append("ProfilePersonalization: profile background must not create an audio track/session")
         if "guard seconds <= 30.0" not in animated_text or "guard totalDuration <= 30.0" not in animated_text:
             err.append("ProfilePersonalization: video/GIF duration must be capped at 30 seconds")
         if 'sourceType as String == "com.compuserve.gif"' not in animated_text:
             err.append("ProfilePersonalization: imported images are not validated as GIF")
+        if "maximumEncodedBytes = 5_750_000" not in animated_text or "AVAssetExportPresetLowQuality" not in animated_text:
+            err.append("ProfilePersonalization: imported media is not bounded below the banner API upload limit")
+
+    banner_service = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Profile" / "AorusBannerService.swift"
+    if not banner_service.is_file():
+        err.append("ProfilePersonalization: public banner service is missing")
+    else:
+        banner_text = banner_service.read_text(encoding="utf-8")
+        required_banner_markers = [
+            "X-Aorus-Telegram-Id",
+            "X-Aorus-Body-Sha256",
+            "AorusBannerPublicationMode",
+            "lookupCompletions",
+            "URLSessionConfiguration.ephemeral",
+            "tracks(withMediaType: .audio).isEmpty",
+            "LicenseKeyProvider.licenseHmacKeyBytes()",
+        ]
+        for marker in required_banner_markers:
+            if marker not in banner_text:
+                err.append(f"ProfilePersonalization: banner service is missing {marker}")
+        if "BANNER_HMAC_KEY" in banner_text or "__AORUS_BANNER_KEY" in banner_text:
+            err.append("ProfilePersonalization: banner key material must not be stored in source")
 
     profile_header = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoHeaderNode.swift"
     avatar_renderer = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoAvatarTransformContainerNode.swift"

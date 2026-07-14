@@ -54,13 +54,18 @@ def _patch_profile_header(tg: Path) -> None:
         "            // AorusGram: animated profile background layer. Its normalized MP4\n"
         "            // has no audio track and never activates or changes AVAudioSession.\n"
         "            let aorusProfileAccountId = self.context.account.peerId.id._internalGetInt64Value()\n"
-        "            self.aorusAnimatedProfileBackgroundView.configure(\n"
-        "                accountId: aorusProfileAccountId,\n"
-        "                visible: peer?.id == self.context.account.peerId\n"
-        "            )\n"
-        "            if self.aorusAnimatedProfileBackgroundView.superview == nil {\n"
-        "                self.backgroundBannerView.insertSubview(self.aorusAnimatedProfileBackgroundView, aboveSubview: backgroundCoverView)\n"
+        "            let aorusTargetProfileId: Int64?\n"
+        "            if let peer, case .user = peer {\n"
+        "                aorusTargetProfileId = peer.id.id._internalGetInt64Value()\n"
+        "            } else {\n"
+        "                aorusTargetProfileId = nil\n"
         "            }\n"
+        "            self.aorusAnimatedProfileBackgroundView.configure(\n"
+        "                viewerAccountId: aorusProfileAccountId,\n"
+        "                targetId: aorusTargetProfileId,\n"
+        "                visible: aorusTargetProfileId != nil\n"
+        "            )\n"
+        "            self.backgroundBannerView.insertSubview(self.aorusAnimatedProfileBackgroundView, aboveSubview: backgroundCoverView)\n"
         "            let aorusBackgroundFrame = CGRect(origin: CGPoint(x: -bannerInset, y: bannerFrame.height - backgroundCoverSize.height), size: backgroundCoverSize)\n"
         "            if additive {\n"
         "                transition.updateFrameAdditive(view: self.aorusAnimatedProfileBackgroundView, frame: aorusBackgroundFrame)\n"
@@ -225,12 +230,11 @@ def _patch_profile_preview(tg: Path) -> None:
         "                    // AorusGram: animated background in profile preview\n"
         "                    let aorusAccountId = item.context.account.peerId.id._internalGetInt64Value()\n"
         "                    self.aorusAnimatedBackground.configure(\n"
-        "                        accountId: aorusAccountId,\n"
+        "                        viewerAccountId: aorusAccountId,\n"
+        "                        targetId: aorusAccountId,\n"
         "                        visible: item.peer?.id == item.context.account.peerId\n"
         "                    )\n"
-        "                    if self.aorusAnimatedBackground.superview == nil {\n"
-        "                        self.view.insertSubview(self.aorusAnimatedBackground, aboveSubview: backgroundView)\n"
-        "                    }\n"
+        "                    self.view.insertSubview(self.aorusAnimatedBackground, aboveSubview: backgroundView)\n"
         "                    self.aorusAnimatedBackground.frame = coverFrame\n"
         "                }\n"
         "                \n"
@@ -284,8 +288,17 @@ def _patch_personal_colors(tg: Path) -> None:
                         title: aorusL10n.animatedProfileBackground,
                         value: aorusAnimatedBackgroundEnabled,
                         valueUpdated: { [weak self] value in
-                            AorusAnimatedProfileBackgroundStore.setEnabled(value, accountId: aorusProfileAccountId)
-                            self?.state?.updated(transition: .spring(duration: 0.4))
+                            AorusAnimatedProfileBackgroundStore.setEnabled(value, accountId: aorusProfileAccountId) { [weak self] result in
+                                self?.state?.updated(transition: .spring(duration: 0.4))
+                                if case let .failure(error) = result,
+                                   let controller = self?.environment?.controller() {
+                                    AorusAnimatedProfileBackgroundFeedback.presentOperationError(
+                                        from: controller,
+                                        languageCode: environment.strings.baseLanguageCode,
+                                        error: error
+                                    )
+                                }
+                            }
                         }
                     )))
                 ]
@@ -356,9 +369,9 @@ def _patch_personal_colors(tg: Path) -> None:
                 if case .starGift = resolvedState.emojiStatus?.content {
                     displayResetProfileColor = true
                 }
-                let aorusDisplayResetProfileSection = displayResetProfileColor || aorusAnimatedBackgroundHasMedia
+                let aorusDisplayResetProfileSection = displayResetProfileColor || aorusAnimatedBackgroundEnabled || aorusAnimatedBackgroundHasMedia
                 var aorusAnimatedResetItems: [AnyComponentWithIdentity<Empty>] = []
-                if aorusAnimatedBackgroundHasMedia {
+                if aorusAnimatedBackgroundEnabled || aorusAnimatedBackgroundHasMedia {
                     aorusAnimatedResetItems.append(AnyComponentWithIdentity(id: 100, component: AnyComponent(ListActionItemComponent(
                         theme: environment.theme,
                         style: .glass,
@@ -373,8 +386,17 @@ def _patch_personal_colors(tg: Path) -> None:
                         icon: nil,
                         accessory: nil,
                         action: { [weak self] _ in
-                            AorusAnimatedProfileBackgroundStore.reset(accountId: aorusProfileAccountId)
-                            self?.state?.updated(transition: .spring(duration: 0.4))
+                            AorusAnimatedProfileBackgroundStore.reset(accountId: aorusProfileAccountId) { [weak self] result in
+                                self?.state?.updated(transition: .spring(duration: 0.4))
+                                if case let .failure(error) = result,
+                                   let controller = self?.environment?.controller() {
+                                    AorusAnimatedProfileBackgroundFeedback.presentOperationError(
+                                        from: controller,
+                                        languageCode: environment.strings.baseLanguageCode,
+                                        error: error
+                                    )
+                                }
+                            }
                         }
                     ))))
                 }

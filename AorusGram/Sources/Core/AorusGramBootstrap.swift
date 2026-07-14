@@ -148,6 +148,7 @@ public final class AorusGramBootstrap {
         ) { note in
             if let uid = (note.userInfo?["telegramUserId"] as? NSNumber)?.int64Value {
                 LicenseGate.shared.setTelegramUserId(uid)
+                AorusBannerService.shared.prewarm(accountId: uid)
             }
         }
 
@@ -210,6 +211,9 @@ public final class AorusGramBootstrap {
         // Re-validate the system proxy on every foreground (TTL-aware inside).
         AorusProxyManager.shared.refresh()
         AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()
+        if let uid = LicenseStore.shared.telegramUserId {
+            AorusBannerService.shared.prewarm(accountId: uid)
+        }
     }
 
     @objc private func appDidEnterBackground() {

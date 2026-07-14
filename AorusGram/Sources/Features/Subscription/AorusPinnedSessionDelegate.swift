@@ -30,6 +30,14 @@ final class AorusPinnedSessionDelegate: NSObject, URLSessionDelegate {
             completionHandler(.performDefaultHandling, nil); return
         }
 
+        // These pins belong to the license endpoint only. Other isolated Aorus
+        // services (for example banner.aorusgram.com) use normal system trust until
+        // they receive their own independently rotatable pin set.
+        guard let pinnedHost = URL(string: SubscriptionConfig.baseURLString)?.host,
+              challenge.protectionSpace.host.caseInsensitiveCompare(pinnedHost) == .orderedSame else {
+            completionHandler(.performDefaultHandling, nil); return
+        }
+
         let pins = SubscriptionConfig.pinnedSPKIHashesBase64
         guard !pins.isEmpty else {
             completionHandler(.performDefaultHandling, nil); return   // pinning disabled
@@ -48,6 +56,22 @@ final class AorusPinnedSessionDelegate: NSObject, URLSessionDelegate {
             }
         }
         completionHandler(.cancelAuthenticationChallenge, nil)
+    }
+
+    func urlSession(_ session: URLSession,
+                    task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        guard let sourceURL = task.currentRequest?.url,
+              let targetURL = request.url,
+              sourceURL.scheme?.lowercased() == "https",
+              targetURL.scheme?.lowercased() == "https",
+              sourceURL.host?.caseInsensitiveCompare(targetURL.host ?? "") == .orderedSame else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 
     private func certificateChain(_ trust: SecTrust) -> [SecCertificate] {

@@ -8,6 +8,7 @@ import ImageIO
 import ComponentFlow
 import TelegramPresentationData
 import Display
+import AorusGram
 
 // MARK: - Persistent state
 
@@ -42,6 +43,13 @@ public enum AorusAnimatedProfileBackgroundStore {
         return directory.appendingPathComponent("profile-\(suffix(accountId)).mp4")
     }
 
+    public static func posterURL(accountId: Int64) -> URL? {
+        guard let directory = try? directoryURL() else {
+            return nil
+        }
+        return directory.appendingPathComponent("profile-\(suffix(accountId)).jpg")
+    }
+
     public static func hasMedia(accountId: Int64) -> Bool {
         guard let url = mediaURL(accountId: accountId) else {
             return false
@@ -50,12 +58,16 @@ public enum AorusAnimatedProfileBackgroundStore {
     }
 
     public static func isEnabled(accountId: Int64) -> Bool {
-        return UserDefaults.standard.bool(forKey: key(enabledPrefix, accountId: accountId))
+        if UserDefaults.standard.bool(forKey: key(enabledPrefix, accountId: accountId)) {
+            return true
+        }
+        return AorusBannerService.shared.publicationMode(for: accountId) == .publicOwner
+            && AorusBannerService.shared.cachedBanner(for: accountId) != nil
     }
 
     public static func isEffectivelyEnabled(accountId: Int64) -> Bool {
         return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
-            && isEnabled(accountId: accountId)
+            && UserDefaults.standard.bool(forKey: key(enabledPrefix, accountId: accountId))
             && hasMedia(accountId: accountId)
     }
 
@@ -78,10 +90,60 @@ public enum AorusAnimatedProfileBackgroundStore {
         return UserDefaults.standard.integer(forKey: key(revisionPrefix, accountId: accountId))
     }
 
-    public static func setEnabled(_ enabled: Bool, accountId: Int64) {
-        UserDefaults.standard.set(enabled, forKey: key(enabledPrefix, accountId: accountId))
-        bumpRevision(accountId: accountId)
-        postChanged(accountId: accountId)
+    public static func setEnabled(
+        _ enabled: Bool,
+        accountId: Int64,
+        completion: @escaping (Result<Void, AorusBannerServiceError>) -> Void
+    ) {
+        guard enabled != isEnabled(accountId: accountId) else {
+            completion(.success(()))
+            return
+        }
+
+        if enabled && !hasMedia(accountId: accountId) {
+            setEnabledLocally(true, accountId: accountId)
+            completion(.success(()))
+            return
+        }
+
+        let mode = AorusBannerService.shared.publicationMode(for: accountId)
+        guard mode != .localOnly else {
+            setEnabledLocally(enabled, accountId: accountId)
+            completion(.success(()))
+            return
+        }
+
+        if enabled {
+            guard let mediaURL = mediaURL(accountId: accountId) else {
+                completion(.failure(.invalidMedia))
+                return
+            }
+            AorusBannerService.shared.uploadBanner(fileURL: mediaURL, accountId: accountId) { result in
+                switch result {
+                case .success:
+                    setEnabledLocally(true, accountId: accountId)
+                    completion(.success(()))
+                case let .failure(error) where error.allowsLocalFallback:
+                    setEnabledLocally(true, accountId: accountId)
+                    completion(.success(()))
+                case let .failure(error):
+                    completion(.failure(error))
+                }
+            }
+        } else {
+            AorusBannerService.shared.deleteBanner(accountId: accountId) { result in
+                switch result {
+                case .success:
+                    setEnabledLocally(false, accountId: accountId)
+                    completion(.success(()))
+                case let .failure(error) where error.allowsLocalFallback:
+                    setEnabledLocally(false, accountId: accountId)
+                    completion(.success(()))
+                case let .failure(error):
+                    completion(.failure(error))
+                }
+            }
+        }
     }
 
     public static func setTransparency(_ value: CGFloat, accountId: Int64, persist: Bool) {
@@ -95,7 +157,32 @@ public enum AorusAnimatedProfileBackgroundStore {
         postChanged(accountId: accountId)
     }
 
-    public static func reset(accountId: Int64) {
+    public static func reset(
+        accountId: Int64,
+        completion: @escaping (Result<Void, AorusBannerServiceError>) -> Void
+    ) {
+        let finishLocalReset = {
+            resetLocally(accountId: accountId)
+            completion(.success(()))
+        }
+        let mode = AorusBannerService.shared.publicationMode(for: accountId)
+        guard mode != .localOnly else {
+            finishLocalReset()
+            return
+        }
+        AorusBannerService.shared.deleteBanner(accountId: accountId) { result in
+            switch result {
+            case .success:
+                finishLocalReset()
+            case let .failure(error) where error.allowsLocalFallback:
+                finishLocalReset()
+            case let .failure(error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private static func resetLocally(accountId: Int64) {
         UserDefaults.standard.set(false, forKey: key(enabledPrefix, accountId: accountId))
         UserDefaults.standard.removeObject(forKey: key(transparencyPrefix, accountId: accountId))
         stateLock.lock()
@@ -104,23 +191,85 @@ public enum AorusAnimatedProfileBackgroundStore {
         if let url = mediaURL(accountId: accountId) {
             try? FileManager.default.removeItem(at: url)
         }
+        if let url = posterURL(accountId: accountId) {
+            try? FileManager.default.removeItem(at: url)
+        }
         bumpRevision(accountId: accountId)
         postChanged(accountId: accountId)
     }
 
-    fileprivate static func installProcessedFile(_ temporaryURL: URL, accountId: Int64) throws {
-        guard let destinationURL = mediaURL(accountId: accountId) else {
+    fileprivate static func installProcessedFile(
+        _ temporaryURL: URL,
+        posterTemporaryURL: URL,
+        accountId: Int64
+    ) throws {
+        guard let destinationURL = mediaURL(accountId: accountId),
+              let destinationPosterURL = posterURL(accountId: accountId),
+              let directory = try? directoryURL() else {
             throw AorusAnimatedProfileMediaError.storage
         }
         let fileManager = FileManager.default
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            _ = try fileManager.replaceItemAt(destinationURL, withItemAt: temporaryURL)
-        } else {
-            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        let stagedMedia = directory.appendingPathComponent(".\(UUID().uuidString).mp4")
+        let stagedPoster = directory.appendingPathComponent(".\(UUID().uuidString).jpg")
+        do {
+            try fileManager.copyItem(at: temporaryURL, to: stagedMedia)
+            try fileManager.copyItem(at: posterTemporaryURL, to: stagedPoster)
+            try replaceItem(stagedURL: stagedPoster, destinationURL: destinationPosterURL)
+            try replaceItem(stagedURL: stagedMedia, destinationURL: destinationURL)
+        } catch {
+            try? fileManager.removeItem(at: stagedMedia)
+            try? fileManager.removeItem(at: stagedPoster)
+            throw error
         }
         UserDefaults.standard.set(true, forKey: key(enabledPrefix, accountId: accountId))
         bumpRevision(accountId: accountId)
         postChanged(accountId: accountId)
+    }
+
+    fileprivate static func installSelectedMedia(
+        mediaURL: URL,
+        posterURL: URL,
+        accountId: Int64,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        let installLocally = {
+            do {
+                try installProcessedFile(mediaURL, posterTemporaryURL: posterURL, accountId: accountId)
+                completion(.success(()))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+        let mode = AorusBannerService.shared.publicationMode(for: accountId)
+        guard mode != .localOnly else {
+            installLocally()
+            return
+        }
+        AorusBannerService.shared.uploadBanner(fileURL: mediaURL, accountId: accountId) { result in
+            switch result {
+            case .success:
+                installLocally()
+            case let .failure(error) where error.allowsLocalFallback:
+                installLocally()
+            case let .failure(error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private static func setEnabledLocally(_ enabled: Bool, accountId: Int64) {
+        UserDefaults.standard.set(enabled, forKey: key(enabledPrefix, accountId: accountId))
+        bumpRevision(accountId: accountId)
+        postChanged(accountId: accountId)
+    }
+
+    private static func replaceItem(stagedURL: URL, destinationURL: URL) throws {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            _ = try fileManager.replaceItemAt(destinationURL, withItemAt: stagedURL)
+        } else {
+            try fileManager.moveItem(at: stagedURL, to: destinationURL)
+        }
     }
 
     private static func bumpRevision(accountId: Int64) {
@@ -145,20 +294,175 @@ public enum AorusAnimatedProfileBackgroundStore {
     }
 }
 
-// MARK: - Silent playback view
+public enum AorusAnimatedProfileBackgroundFeedback {
+    public static func presentOperationError(
+        from controller: UIViewController,
+        languageCode: String?,
+        error: Error
+    ) {
+        let l10n = AorusL10n(languageCode)
+        let message: String
+        if let serviceError = error as? AorusBannerServiceError {
+            switch serviceError {
+            case .rateLimited:
+                message = l10n.animatedProfileRateLimited
+            case .uploadTooLarge:
+                message = l10n.animatedProfileUploadTooLarge
+            default:
+                message = l10n.animatedProfileSyncFailed
+            }
+        } else {
+            message = l10n.animatedProfileSyncFailed
+        }
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        controller.present(alert, animated: true)
+    }
+}
+
+// MARK: - Video-only playback
+
+private final class AorusVideoOnlyLoopRenderer {
+    let layer = AVSampleBufferDisplayLayer()
+    var firstFrameEnqueued: (() -> Void)?
+
+    private let queue = DispatchQueue(label: "com.aorusgram.profile-background.renderer", qos: .userInitiated)
+    private var generation = 0
+    private var reader: AVAssetReader?
+    private var output: AVAssetReaderTrackOutput?
+    private var timebase: CMTimebase?
+    private var duration = 0.0
+    private var wantsPlayback = false
+    private var firstFrameDelivered = false
+
+    init() {
+        self.layer.videoGravity = .resizeAspectFill
+        self.layer.backgroundColor = UIColor.clear.cgColor
+    }
+
+    func load(url: URL) {
+        self.queue.async {
+            self.generation &+= 1
+            let generation = self.generation
+            self.firstFrameDelivered = false
+            self.startCycle(url: url, generation: generation)
+        }
+    }
+
+    func setPlaying(_ playing: Bool) {
+        self.queue.async {
+            self.wantsPlayback = playing
+            if let timebase = self.timebase {
+                CMTimebaseSetRate(timebase, rate: playing ? 1.0 : 0.0)
+            }
+        }
+    }
+
+    func invalidate() {
+        self.queue.async {
+            self.generation &+= 1
+            self.reader?.cancelReading()
+            self.reader = nil
+            self.output = nil
+            self.timebase = nil
+            self.layer.stopRequestingMediaData()
+            self.layer.flushAndRemoveImage()
+        }
+    }
+
+    private func startCycle(url: URL, generation: Int) {
+        guard generation == self.generation else { return }
+        self.reader?.cancelReading()
+        self.layer.stopRequestingMediaData()
+        self.layer.flush()
+
+        let asset = AVURLAsset(url: url)
+        guard let track = asset.tracks(withMediaType: .video).first,
+              let reader = try? AVAssetReader(asset: asset) else {
+            return
+        }
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { return }
+        reader.add(output)
+        guard reader.startReading() else { return }
+
+        var createdTimebase: CMTimebase?
+        guard CMTimebaseCreateWithSourceClock(
+            allocator: kCFAllocatorDefault,
+            sourceClock: CMClockGetHostTimeClock(),
+            timebaseOut: &createdTimebase
+        ) == noErr, let timebase = createdTimebase else {
+            reader.cancelReading()
+            return
+        }
+        CMTimebaseSetTime(timebase, time: .zero)
+        CMTimebaseSetRate(timebase, rate: self.wantsPlayback ? 1.0 : 0.0)
+        self.layer.controlTimebase = timebase
+        self.reader = reader
+        self.output = output
+        self.timebase = timebase
+        self.duration = max(0.05, CMTimeGetSeconds(asset.duration))
+
+        self.layer.requestMediaDataWhenReady(on: self.queue) { [weak self] in
+            guard let self, generation == self.generation else { return }
+            while self.layer.isReadyForMoreMediaData {
+                if let sample = output.copyNextSampleBuffer() {
+                    self.layer.enqueue(sample)
+                    if !self.firstFrameDelivered {
+                        self.firstFrameDelivered = true
+                        DispatchQueue.main.async { [weak self] in
+                            self?.firstFrameEnqueued?()
+                        }
+                    }
+                } else {
+                    self.layer.stopRequestingMediaData()
+                    self.waitForCycleEnd(url: url, generation: generation)
+                    break
+                }
+            }
+        }
+    }
+
+    private func waitForCycleEnd(url: URL, generation: Int) {
+        guard generation == self.generation, let timebase = self.timebase else { return }
+        let current = max(0.0, CMTimeGetSeconds(CMTimebaseGetTime(timebase)))
+        let remaining = max(0.03, self.duration - current)
+        self.queue.asyncAfter(deadline: .now() + min(remaining, 0.25)) {
+            guard generation == self.generation else { return }
+            guard self.wantsPlayback else {
+                self.waitForCycleEnd(url: url, generation: generation)
+                return
+            }
+            guard let timebase = self.timebase else { return }
+            let current = CMTimeGetSeconds(CMTimebaseGetTime(timebase))
+            if current + 0.025 >= self.duration {
+                self.startCycle(url: url, generation: generation)
+            } else {
+                self.waitForCycleEnd(url: url, generation: generation)
+            }
+        }
+    }
+}
+
+// MARK: - Animated background view
 
 public final class AorusAnimatedProfileBackgroundView: UIView {
-    private static let thumbnailCache = NSCache<NSString, UIImage>()
+    private static let thumbnailCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 24
+        return cache
+    }()
 
     private let posterView = UIImageView()
-    private var playerLayer: AVPlayerLayer?
-    private var player: AVQueuePlayer?
-    private var looper: AVPlayerLooper?
+    private var renderer: AorusVideoOnlyLoopRenderer?
     private var notificationTokens: [NSObjectProtocol] = []
-    private var accountId: Int64?
+    private var viewerAccountId: Int64?
+    private var targetId: Int64?
     private var requestedVisible = false
-    private var loadedRevision = -1
-    private var representedThumbnailKey: String?
+    private var representedAssetKey: String?
+    private var lastLookupTargetId: Int64?
+    private var lastLookupTime: TimeInterval = 0.0
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -179,34 +483,45 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         ) { [weak self] notification in
             guard let self else { return }
             if let changedAccountId = notification.userInfo?["accountId"] as? Int64,
-               let accountId = self.accountId,
-               changedAccountId != accountId {
+               let targetId = self.targetId,
+               changedAccountId != targetId {
                 return
             }
-            // Opacity changes are emitted continuously while the slider moves.
-            // The revision check below reloads media only when the file changes.
-            self.reload(force: false)
+            self.reload(force: false, requestRemote: false)
+        })
+        self.notificationTokens.append(center.addObserver(
+            forName: AorusBannerService.changedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self else { return }
+            if let changedTargetId = notification.userInfo?["targetId"] as? Int64,
+               let targetId = self.targetId,
+               changedTargetId != targetId {
+                return
+            }
+            self.reload(force: true, requestRemote: false)
         })
         self.notificationTokens.append(center.addObserver(
             forName: Notification.Name("aorusgram.licenseLockChanged"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.reload(force: true)
+            self?.reload(force: true, requestRemote: true)
         })
         self.notificationTokens.append(center.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.updatePlayback()
+            self?.reload(force: false, requestRemote: true)
         })
         self.notificationTokens.append(center.addObserver(
             forName: UIApplication.willResignActiveNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.player?.pause()
+            self?.renderer?.setPlaying(false)
         })
     }
 
@@ -219,15 +534,20 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         for token in self.notificationTokens {
             NotificationCenter.default.removeObserver(token)
         }
-        self.teardownPlayer()
+        self.teardownRenderer()
     }
 
-    public func configure(accountId: Int64, visible: Bool) {
-        let accountChanged = self.accountId != accountId
+    public func configure(viewerAccountId: Int64, targetId: Int64?, visible: Bool) {
+        let identityChanged = self.viewerAccountId != viewerAccountId || self.targetId != targetId
         let visibilityChanged = self.requestedVisible != visible
-        self.accountId = accountId
+        self.viewerAccountId = viewerAccountId
+        self.targetId = targetId
         self.requestedVisible = visible
-        self.reload(force: accountChanged || visibilityChanged)
+        if identityChanged {
+            self.lastLookupTargetId = nil
+            self.lastLookupTime = 0.0
+        }
+        self.reload(force: identityChanged || visibilityChanged, requestRemote: true)
     }
 
     public override func didMoveToWindow() {
@@ -238,103 +558,164 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     public override func layoutSubviews() {
         super.layoutSubviews()
         self.posterView.frame = self.bounds
-        self.playerLayer?.frame = self.bounds
+        self.renderer?.layer.frame = self.bounds
     }
 
-    private func reload(force: Bool) {
-        guard let accountId else {
+    private func reload(force: Bool, requestRemote: Bool) {
+        guard let viewerAccountId,
+              let targetId,
+              targetId != 0,
+              self.requestedVisible,
+              !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") else {
             self.isHidden = true
-            self.teardownPlayer()
+            self.teardownRenderer()
             return
         }
 
-        self.alpha = 1.0 - AorusAnimatedProfileBackgroundStore.transparency(accountId: accountId)
-        let shouldDisplay = self.requestedVisible
-            && AorusAnimatedProfileBackgroundStore.isEffectivelyEnabled(accountId: accountId)
-        self.isHidden = !shouldDisplay
-        guard shouldDisplay,
-              let mediaURL = AorusAnimatedProfileBackgroundStore.mediaURL(accountId: accountId) else {
-            self.teardownPlayer()
-            self.posterView.image = nil
-            return
+        if targetId == viewerAccountId,
+           AorusAnimatedProfileBackgroundStore.isEffectivelyEnabled(accountId: viewerAccountId),
+           let mediaURL = AorusAnimatedProfileBackgroundStore.mediaURL(accountId: viewerAccountId) {
+            let revision = AorusAnimatedProfileBackgroundStore.revision(accountId: viewerAccountId)
+            self.displayAsset(
+                mediaURL: mediaURL,
+                posterURL: AorusAnimatedProfileBackgroundStore.posterURL(accountId: viewerAccountId),
+                key: "local:\(viewerAccountId):\(revision)",
+                opacity: 1.0 - AorusAnimatedProfileBackgroundStore.transparency(accountId: viewerAccountId),
+                force: force
+            )
+        } else if let asset = AorusBannerService.shared.cachedBanner(for: targetId) {
+            self.displayAsset(
+                mediaURL: asset.mediaURL,
+                posterURL: asset.posterURL,
+                key: "public:\(targetId):\(asset.bannerId):\(asset.version)",
+                opacity: 1.0,
+                force: force
+            )
+        } else {
+            self.isHidden = true
+            self.teardownRenderer()
         }
 
-        let revision = AorusAnimatedProfileBackgroundStore.revision(accountId: accountId)
-        if force || self.player == nil || self.loadedRevision != revision {
-            self.loadedRevision = revision
-            self.setupPlayer(url: mediaURL, revision: revision)
+        if requestRemote {
+            self.requestRemoteBanner(targetId: targetId, viewerAccountId: viewerAccountId, force: force)
         }
+    }
+
+    private func requestRemoteBanner(targetId: Int64, viewerAccountId: Int64, force: Bool) {
+        let now = Date().timeIntervalSinceReferenceDate
+        if !force,
+           self.lastLookupTargetId == targetId,
+           now - self.lastLookupTime < 60.0 {
+            return
+        }
+        self.lastLookupTargetId = targetId
+        self.lastLookupTime = now
+        AorusBannerService.shared.resolveBanner(
+            targetId: targetId,
+            preferredCallerId: viewerAccountId
+        ) { [weak self] _ in
+            guard let self,
+                  self.targetId == targetId,
+                  self.viewerAccountId == viewerAccountId else { return }
+            self.reload(force: true, requestRemote: false)
+        }
+    }
+
+    private func displayAsset(
+        mediaURL: URL,
+        posterURL: URL?,
+        key: String,
+        opacity: CGFloat,
+        force: Bool
+    ) {
+        self.alpha = min(1.0, max(0.0, opacity))
+        if !force, self.representedAssetKey == key, self.renderer != nil {
+            self.isHidden = false
+            self.updatePlayback()
+            return
+        }
+        self.representedAssetKey = key
+        self.isHidden = true
+        self.teardownRenderer()
+
+        if let posterURL,
+           let image = UIImage(contentsOfFile: posterURL.path) {
+            Self.thumbnailCache.setObject(image, forKey: key as NSString)
+            self.setupRenderer(mediaURL: mediaURL, poster: image, key: key)
+        } else if let image = Self.thumbnailCache.object(forKey: key as NSString) {
+            self.setupRenderer(mediaURL: mediaURL, poster: image, key: key)
+        } else {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let image = Self.makePoster(url: mediaURL)
+                if let image {
+                    Self.thumbnailCache.setObject(image, forKey: key as NSString)
+                    if let posterURL,
+                       let data = image.jpegData(compressionQuality: 0.86) {
+                        try? data.write(to: posterURL, options: .atomic)
+                    }
+                }
+                DispatchQueue.main.async {
+                    guard let self, self.representedAssetKey == key, let image else { return }
+                    self.setupRenderer(mediaURL: mediaURL, poster: image, key: key)
+                }
+            }
+        }
+    }
+
+    private func setupRenderer(mediaURL: URL, poster: UIImage, key: String) {
+        guard self.representedAssetKey == key else { return }
+        self.posterView.image = poster
+        self.posterView.alpha = 1.0
+        let renderer = AorusVideoOnlyLoopRenderer()
+        renderer.layer.frame = self.bounds
+        renderer.firstFrameEnqueued = { [weak self, weak renderer] in
+            guard let self,
+                  let renderer,
+                  self.renderer === renderer,
+                  self.representedAssetKey == key else { return }
+            UIView.animate(withDuration: 0.16, delay: 0.05, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                self.posterView.alpha = 0.0
+            }
+        }
+        self.layer.insertSublayer(renderer.layer, at: 0)
+        self.renderer = renderer
+        renderer.load(url: mediaURL)
+        self.isHidden = false
         self.updatePlayback()
-    }
-
-    private func setupPlayer(url: URL, revision: Int) {
-        self.teardownPlayer()
-
-        let item = AVPlayerItem(url: url)
-        let player = AVQueuePlayer()
-        player.isMuted = true
-        player.volume = 0.0
-        player.actionAtItemEnd = .none
-        player.automaticallyWaitsToMinimizeStalling = true
-        if #available(iOS 12.0, *) {
-            player.preventsDisplaySleepDuringVideoPlayback = false
-        }
-
-        let looper = AVPlayerLooper(player: player, templateItem: item)
-        let layer = AVPlayerLayer(player: player)
-        layer.videoGravity = .resizeAspectFill
-        layer.backgroundColor = UIColor.clear.cgColor
-        layer.frame = self.bounds
-        self.layer.addSublayer(layer)
-
-        self.player = player
-        self.looper = looper
-        self.playerLayer = layer
-        self.loadPoster(url: url, revision: revision)
-    }
-
-    private func teardownPlayer() {
-        self.player?.pause()
-        self.playerLayer?.removeFromSuperlayer()
-        self.playerLayer = nil
-        self.looper = nil
-        self.player = nil
     }
 
     private func updatePlayback() {
         guard !self.isHidden,
               self.alpha > 0.001,
-              self.window != nil,
+              let window = self.window,
+              !self.bounds.isEmpty,
+              self.convert(self.bounds, to: window).intersects(window.bounds),
               UIApplication.shared.applicationState == .active else {
-            self.player?.pause()
+            self.renderer?.setPlaying(false)
             return
         }
-        self.player?.play()
+        self.renderer?.setPlaying(true)
     }
 
-    private func loadPoster(url: URL, revision: Int) {
-        let key = "\(url.path)#\(revision)"
-        self.representedThumbnailKey = key
-        if let cached = Self.thumbnailCache.object(forKey: key as NSString) {
-            self.posterView.image = cached
-            return
-        }
+    private func teardownRenderer() {
+        self.renderer?.invalidate()
+        self.renderer?.layer.removeFromSuperlayer()
+        self.renderer = nil
         self.posterView.image = nil
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let asset = AVURLAsset(url: url)
-            let generator = AVAssetImageGenerator(asset: asset)
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 960.0, height: 960.0)
-            guard let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) else {
-                return
-            }
-            let image = UIImage(cgImage: cgImage)
-            Self.thumbnailCache.setObject(image, forKey: key as NSString)
-            DispatchQueue.main.async {
-                guard let self, self.representedThumbnailKey == key else { return }
-                self.posterView.image = image
-            }
+        self.posterView.alpha = 1.0
+    }
+
+    private static func makePoster(url: URL) -> UIImage? {
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 1280.0, height: 720.0)
+        let time = CMTime(seconds: 0.05, preferredTimescale: 600)
+        guard let cgImage = (try? generator.copyCGImage(at: time, actualTime: nil))
+            ?? (try? generator.copyCGImage(at: .zero, actualTime: nil)) else {
+            return nil
         }
+        return UIImage(cgImage: cgImage)
     }
 }
 
@@ -468,24 +849,33 @@ private enum AorusAnimatedProfileMediaError: Error {
     case storage
 }
 
+private struct AorusProcessedProfileMedia {
+    let mediaURL: URL
+    let posterURL: URL
+}
+
 private enum AorusAnimatedProfileMediaProcessor {
+    // Leave headroom for the API envelope and container metadata below the
+    // server's 6 MiB input limit. Short clips keep the highest useful preset;
+    // longer clips fall back only when the encoded result is still too large.
+    private static let maximumEncodedBytes = 5_750_000
+
     static func process(
         sourceURL: URL,
         kind: AorusAnimatedProfileMediaKind,
-        accountId: Int64,
-        completion: @escaping (Result<Void, Error>) -> Void
+        completion: @escaping (Result<AorusProcessedProfileMedia, Error>) -> Void
     ) {
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("aorus-profile-\(UUID().uuidString).mp4")
         switch kind {
         case .video:
             processVideo(sourceURL: sourceURL, outputURL: outputURL) { result in
-                finish(result: result, outputURL: outputURL, accountId: accountId, completion: completion)
+                finish(result: result, outputURL: outputURL, completion: completion)
             }
         case .gif:
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = convertGif(sourceURL: sourceURL, outputURL: outputURL)
-                finish(result: result, outputURL: outputURL, accountId: accountId, completion: completion)
+                finish(result: result, outputURL: outputURL, completion: completion)
             }
         }
     }
@@ -493,21 +883,50 @@ private enum AorusAnimatedProfileMediaProcessor {
     private static func finish(
         result: Result<Void, Error>,
         outputURL: URL,
-        accountId: Int64,
-        completion: @escaping (Result<Void, Error>) -> Void
+        completion: @escaping (Result<AorusProcessedProfileMedia, Error>) -> Void
     ) {
         switch result {
         case .success:
-            do {
-                try AorusAnimatedProfileBackgroundStore.installProcessedFile(outputURL, accountId: accountId)
-                DispatchQueue.main.async { completion(.success(())) }
-            } catch {
+            guard let fileSize = ((try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size]) as? NSNumber)?.intValue,
+                  fileSize > 0,
+                  fileSize <= maximumEncodedBytes else {
                 try? FileManager.default.removeItem(at: outputURL)
-                DispatchQueue.main.async { completion(.failure(error)) }
+                DispatchQueue.main.async { completion(.failure(AorusBannerServiceError.uploadTooLarge)) }
+                return
             }
+            let posterURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("aorus-profile-poster-\(UUID().uuidString).jpg")
+            guard createPoster(videoURL: outputURL, destinationURL: posterURL) else {
+                try? FileManager.default.removeItem(at: outputURL)
+                try? FileManager.default.removeItem(at: posterURL)
+                DispatchQueue.main.async { completion(.failure(AorusAnimatedProfileMediaError.conversion)) }
+                return
+            }
+            let media = AorusProcessedProfileMedia(mediaURL: outputURL, posterURL: posterURL)
+            DispatchQueue.main.async { completion(.success(media)) }
         case let .failure(error):
             try? FileManager.default.removeItem(at: outputURL)
             DispatchQueue.main.async { completion(.failure(error)) }
+        }
+    }
+
+    private static func createPoster(videoURL: URL, destinationURL: URL) -> Bool {
+        let asset = AVURLAsset(url: videoURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 1280.0, height: 720.0)
+        let preferredTime = CMTime(seconds: 0.05, preferredTimescale: 600)
+        let cgImage = (try? generator.copyCGImage(at: preferredTime, actualTime: nil))
+            ?? (try? generator.copyCGImage(at: .zero, actualTime: nil))
+        guard let cgImage,
+              let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.86) else {
+            return false
+        }
+        do {
+            try data.write(to: destinationURL, options: .atomic)
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -552,22 +971,65 @@ private enum AorusAnimatedProfileMediaProcessor {
                 return
             }
 
-            try? FileManager.default.removeItem(at: outputURL)
-            let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1280x720)
-                ?? AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality)
-            guard let exporter else {
-                completion(.failure(AorusAnimatedProfileMediaError.conversion))
+            let byteBudgetBitRate = Double(maximumEncodedBytes * 8) / seconds
+            let presets: [String]
+            if byteBudgetBitRate >= 3_000_000.0 {
+                presets = [AVAssetExportPreset1280x720, AVAssetExportPreset960x540, AVAssetExportPresetMediumQuality, AVAssetExportPresetLowQuality]
+            } else if byteBudgetBitRate >= 1_800_000.0 {
+                presets = [AVAssetExportPreset960x540, AVAssetExportPresetMediumQuality, AVAssetExportPresetLowQuality]
+            } else {
+                presets = [AVAssetExportPresetMediumQuality, AVAssetExportPresetLowQuality]
+            }
+            exportVideo(
+                composition: composition,
+                outputURL: outputURL,
+                presets: presets[...],
+                completion: completion
+            )
+        }
+    }
+
+    private static func exportVideo(
+        composition: AVComposition,
+        outputURL: URL,
+        presets: ArraySlice<String>,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        guard let preset = presets.first else {
+            completion(.failure(AorusBannerServiceError.uploadTooLarge))
+            return
+        }
+        guard let exporter = AVAssetExportSession(asset: composition, presetName: preset),
+              exporter.supportedFileTypes.contains(.mp4) else {
+            exportVideo(
+                composition: composition,
+                outputURL: outputURL,
+                presets: presets.dropFirst(),
+                completion: completion
+            )
+            return
+        }
+
+        try? FileManager.default.removeItem(at: outputURL)
+        exporter.outputURL = outputURL
+        exporter.outputFileType = .mp4
+        exporter.shouldOptimizeForNetworkUse = true
+        exporter.exportAsynchronously {
+            guard exporter.status == .completed else {
+                try? FileManager.default.removeItem(at: outputURL)
+                completion(.failure(exporter.error ?? AorusAnimatedProfileMediaError.conversion))
                 return
             }
-            exporter.outputURL = outputURL
-            exporter.outputFileType = .mp4
-            exporter.shouldOptimizeForNetworkUse = true
-            exporter.exportAsynchronously {
-                if exporter.status == .completed {
-                    completion(.success(()))
-                } else {
-                    completion(.failure(exporter.error ?? AorusAnimatedProfileMediaError.conversion))
-                }
+            let fileSize = ((try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size]) as? NSNumber)?.intValue ?? 0
+            if fileSize > 0, fileSize <= maximumEncodedBytes {
+                completion(.success(()))
+            } else {
+                exportVideo(
+                    composition: composition,
+                    outputURL: outputURL,
+                    presets: presets.dropFirst(),
+                    completion: completion
+                )
             }
         }
     }
@@ -631,7 +1093,8 @@ private enum AorusAnimatedProfileMediaProcessor {
             return .failure(AorusAnimatedProfileMediaError.conversion)
         }
         let pixels = width * height
-        let averageBitRate = min(4_000_000, max(1_200_000, pixels * 4))
+        let sizeBudgetBitRate = Int((Double(maximumEncodedBytes * 8) / max(0.1, totalDuration)) * 0.92)
+        let averageBitRate = min(4_000_000, max(350_000, min(pixels * 4, sizeBudgetBitRate)))
         let outputSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: width,
@@ -986,17 +1449,30 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject, U
     private func process(url: URL, kind: AorusAnimatedProfileMediaKind) {
         AorusAnimatedProfileMediaProcessor.process(
             sourceURL: url,
-            kind: kind,
-            accountId: self.accountId
+            kind: kind
         ) { [weak self] result in
             try? FileManager.default.removeItem(at: url)
             guard let self else { return }
             switch result {
-            case .success:
-                self.hud?.removeFromSuperview()
-                self.hud = nil
-                self.completion(true)
-                self.finished()
+            case let .success(media):
+                AorusAnimatedProfileBackgroundStore.installSelectedMedia(
+                    mediaURL: media.mediaURL,
+                    posterURL: media.posterURL,
+                    accountId: self.accountId
+                ) { [weak self] installationResult in
+                    try? FileManager.default.removeItem(at: media.mediaURL)
+                    try? FileManager.default.removeItem(at: media.posterURL)
+                    guard let self else { return }
+                    switch installationResult {
+                    case .success:
+                        self.hud?.removeFromSuperview()
+                        self.hud = nil
+                        self.completion(true)
+                        self.finished()
+                    case let .failure(error):
+                        self.finish(error: error)
+                    }
+                }
             case let .failure(error):
                 self.finish(error: error)
             }
@@ -1038,6 +1514,15 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject, U
                 message = self.l10n.animatedProfileMediaUnsupported
             default:
                 message = self.l10n.animatedProfileMediaFailed
+            }
+        } else if let error = error as? AorusBannerServiceError {
+            switch error {
+            case .rateLimited:
+                message = self.l10n.animatedProfileRateLimited
+            case .uploadTooLarge:
+                message = self.l10n.animatedProfileUploadTooLarge
+            default:
+                message = self.l10n.animatedProfileSyncFailed
             }
         } else {
             message = self.l10n.animatedProfileMediaFailed
