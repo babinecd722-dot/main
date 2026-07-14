@@ -750,9 +750,10 @@ private enum AorusAnimatedProfileMediaProcessor {
             return nil
         }
         context.setFillColor(UIColor.black.cgColor)
-        context.fill(CGRect(x: 0.0, y: 0.0, width: width, height: height))
+        let outputRect = CGRect(x: 0.0, y: 0.0, width: CGFloat(width), height: CGFloat(height))
+        context.fill(outputRect)
         context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0.0, y: 0.0, width: width, height: height))
+        context.draw(image, in: outputRect)
         return pixelBuffer
     }
 }
