@@ -130,6 +130,15 @@ public struct AorusL10n {
     public var siriShortcuts: String { t("Siri Shortcuts", "Siri Shortcuts") }
     public var amoledMode: String { t("AMOLED интерфейс", "AMOLED Interface") }
     public var profileReportButton: String { t("Кнопка «Пожаловаться»", "Report Button") }
+    public var squareAvatars: String { t("Квадратные аватарки", "Square Avatars") }
+    public var animatedProfileBackground: String { t("Анимированный фон", "Animated Background") }
+    public var chooseAnimatedProfileMedia: String { t("Выбрать медиа", "Choose Media") }
+    public var animatedProfileTransparency: String { t("Прозрачность", "Transparency") }
+    public var resetAnimatedProfileBackground: String { t("Сбросить анимированный фон", "Reset Animated Background") }
+    public var preparingAnimatedProfileBackground: String { t("Подготовка анимированного фона…", "Preparing animated background…") }
+    public var animatedProfileMediaTooLong: String { t("Выберите видео или GIF длительностью не более 30 секунд.", "Choose a video or GIF no longer than 30 seconds.") }
+    public var animatedProfileMediaUnsupported: String { t("Поддерживаются только видео и GIF.", "Only videos and GIFs are supported.") }
+    public var animatedProfileMediaFailed: String { t("Не удалось подготовить анимированный фон.", "Could not prepare the animated background.") }
 
     // Badge picker (notch-area logo): AorusGram / ATunnel / off.
     public var appBadge: String { t("Бейдж", "Badge") }

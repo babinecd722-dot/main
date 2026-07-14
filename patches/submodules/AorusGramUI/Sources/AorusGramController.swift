@@ -321,6 +321,7 @@ private struct AorusState: Equatable {
     var hideContactsTab: Bool
     var siriShortcuts: Bool
     var appBadge: String
+    var squareAvatars: Bool
     var antiSpoofDeleted: Bool
     var antiSpoofOnline: Bool
     var aorusCodeEnabled: Bool
@@ -428,6 +429,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case hideContactsTab(PresentationTheme, String, Bool)
     case siriShortcuts(PresentationTheme, String, Bool)
     case appBadge(PresentationTheme, String, String)
+    case squareAvatars(PresentationTheme, String, Bool)
 
     case editLocalHeader(PresentationTheme, String)
     case shareButton(PresentationTheme, String, Bool)
@@ -474,7 +476,7 @@ private enum AorusEntry: ItemListNodeEntry {
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge:
+        case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge, .squareAvatars:
             return AorusSection.ui.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
@@ -538,25 +540,26 @@ private enum AorusEntry: ItemListNodeEntry {
         case .hideContactsTab:      return 55
         case .siriShortcuts:        return 56
         case .appBadge:             return 57
-        case .editLocalHeader:      return 58
-        case .messagesDoubleCopy:   return 59
-        case .messagesTripleDelete: return 60
-        case .editLocalEnabled:     return 61
-        case .userMessagesEnabled:  return 62
-        case .translator:           return 63
-        case .voiceTranscription:   return 64
-        case .shareButton:          return 65
-        case .videoMessagesHeader:  return 66
-        case .videoMessagesRearCamera: return 67
-        case .callsHeader:          return 68
-        case .masks:                return 69
-        case .voiceTwin:            return 70
-        case .deviceSpoofHeader:    return 71
-        case .deviceSpoof:          return 72
-        case .bypassHeader:         return 73
-        case .bypassSavePaid:       return 74
-        case .bypassSaveViewOnce:   return 75
-        case .bypassStoryDownload:  return 76
+        case .squareAvatars:        return 58
+        case .editLocalHeader:      return 59
+        case .messagesDoubleCopy:   return 60
+        case .messagesTripleDelete: return 61
+        case .editLocalEnabled:     return 62
+        case .userMessagesEnabled:  return 63
+        case .translator:           return 64
+        case .voiceTranscription:   return 65
+        case .shareButton:          return 66
+        case .videoMessagesHeader:  return 67
+        case .videoMessagesRearCamera: return 68
+        case .callsHeader:          return 69
+        case .masks:                return 70
+        case .voiceTwin:            return 71
+        case .deviceSpoofHeader:    return 72
+        case .deviceSpoof:          return 73
+        case .bypassHeader:         return 74
+        case .bypassSavePaid:       return 75
+        case .bypassSaveViewOnce:   return 76
+        case .bypassStoryDownload:  return 77
         case .antiSpoofHeader:      return 81
         case .antiSpoofDeleted:     return 82
         case .antiSpoofOnline:      return 83
@@ -661,6 +664,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .siriShortcuts(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .appBadge(lt, ls, lv):
             if case let .appBadge(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .squareAvatars(lt, ls, lv):
+            if case let .squareAvatars(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .editLocalHeader(lt, ls):
             if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .shareButton(lt, ls, lv):
@@ -812,6 +817,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.siriShortcuts, $0) })
         case let .appBadge(_, title, label):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: args.openAppBadgePicker)
+        case let .squareAvatars(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.squareAvatars, $0) })
         case let .editLocalHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .messagesDoubleCopy(_, title, value):
@@ -907,6 +914,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .hideContactsTab(theme, l10n.hideContactsTab, !state.hideContactsTab),
         .siriShortcuts(theme, l10n.siriShortcuts, state.siriShortcuts),
         .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
+        .squareAvatars(theme, l10n.squareAvatars, state.squareAvatars),
 
         .editLocalHeader(theme, l10n.messagesHeader),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
@@ -1072,6 +1080,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
         hideContactsTab:    mgr.hideContactsTab,
         siriShortcuts:      mgr.siriShortcuts,
         appBadge:           UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram",
+        squareAvatars:      mgr.squareAvatars,
         antiSpoofDeleted:   spoof.antiSpoofDeleted,
         antiSpoofOnline:    spoof.antiSpoofOnline,
         aorusCodeEnabled:   stealth.isEnabled,
@@ -1139,6 +1148,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
             mgr.hideCallsTab        = s.hideCallsTab
             mgr.hideContactsTab     = s.hideContactsTab
             mgr.siriShortcuts       = s.siriShortcuts
+            mgr.squareAvatars       = s.squareAvatars
             spoof.antiSpoofDeleted  = s.antiSpoofDeleted
             spoof.antiSpoofOnline   = s.antiSpoofOnline
             stealth.isEnabled       = s.aorusCodeEnabled

@@ -9,6 +9,8 @@ import re
 import sys
 from pathlib import Path
 
+from profile_personalization_patch import patch_profile_personalization
+
 # ---------------------------------------------------------------------------
 # Security: opaque per-deployment keys — replace the grep-able "aorusgram_*"
 # identifiers in the compiled binary with UUIDs that carry no semantic meaning.
@@ -17840,6 +17842,7 @@ def main() -> None:
     patch_peer_info_account_details(tg)
     patch_phone_spoof_profile_display(tg)
     patch_phone_spoof_profile_header(tg)
+    patch_profile_personalization(tg)
     patch_chat_title_anti_spoof_status(tg)
     patch_client_spoof_app_version(tg)
     patch_app_delegate_import_aorusgram(tg)

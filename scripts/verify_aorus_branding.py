@@ -176,6 +176,62 @@ def main() -> None:
     else:
         err.append("QuickReplies: AorusQuickRepliesController.swift is missing")
 
+    aorus_manager = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramManager.swift"
+    if not aorus_manager.is_file():
+        err.append("ProfilePersonalization: AorusGramManager.swift is missing")
+    else:
+        manager_text = aorus_manager.read_text(encoding="utf-8")
+        if "var squareAvatars: Bool" not in manager_text or 'forKey: "aorusgram_square_avatars"' not in manager_text:
+            err.append("ProfilePersonalization: square-avatar setting is not persisted/mirrored")
+
+    animated_profile = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusAnimatedProfileBackground.swift"
+    if not animated_profile.is_file():
+        err.append("ProfilePersonalization: animated profile background implementation is missing")
+    else:
+        animated_text = animated_profile.read_text(encoding="utf-8")
+        if "AorusAnimatedProfileBackgroundStore" not in animated_text or "AorusAnimatedProfileBackgroundPicker" not in animated_text:
+            err.append("ProfilePersonalization: animated background storage/picker is incomplete")
+        if "AVPlayerLooper" not in animated_text or "player.isMuted = true" not in animated_text:
+            err.append("ProfilePersonalization: silent looping playback is incomplete")
+        if "AVAudioSession" in animated_text or "withMediaType: .audio" in animated_text:
+            err.append("ProfilePersonalization: profile background must not create an audio track/session")
+        if "guard seconds <= 30.0" not in animated_text or "guard totalDuration <= 30.0" not in animated_text:
+            err.append("ProfilePersonalization: video/GIF duration must be capped at 30 seconds")
+        if 'sourceType as String == "com.compuserve.gif"' not in animated_text:
+            err.append("ProfilePersonalization: imported images are not validated as GIF")
+
+    profile_header = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoHeaderNode.swift"
+    avatar_renderer = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoAvatarTransformContainerNode.swift"
+    editing_avatar = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoEditingAvatarNode.swift"
+    editing_overlay = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoEditingAvatarOverlayNode.swift"
+    profile_preview = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "Sources" / "PeerNameColorProfilePreviewItem.swift"
+    personal_colors = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "Sources" / "UserApperanceScreen.swift"
+    profile_sentinels = [
+        (profile_header, "AorusGram: animated profile background layer"),
+        (avatar_renderer, "AorusGram: square avatar story ring"),
+        (editing_avatar, "AorusGram: square avatar while editing"),
+        (editing_overlay, "AorusGram: square editing overlay"),
+        (profile_preview, "AorusGram: animated background in profile preview"),
+        (personal_colors, "AorusGram: animated profile background controls"),
+    ]
+    for profile_path, sentinel in profile_sentinels:
+        if not profile_path.is_file():
+            err.append(f"ProfilePersonalization: {profile_path.name} is missing")
+        elif sentinel not in profile_path.read_text(encoding="utf-8"):
+            err.append(f"ProfilePersonalization: {profile_path.name} patch is missing")
+
+    personal_colors_build = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "BUILD"
+    if personal_colors_build.is_file():
+        personal_colors_build_text = personal_colors_build.read_text(encoding="utf-8")
+        if "//submodules/AorusGramUI" not in personal_colors_build_text or "ListSwitchItemComponent" not in personal_colors_build_text:
+            err.append("ProfilePersonalization: Personal Colors BUILD dependencies are incomplete")
+    else:
+        err.append("ProfilePersonalization: PeerNameColorScreen BUILD is missing")
+
+    peer_info_build = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "BUILD"
+    if not peer_info_build.is_file() or "//submodules/AorusGramUI" not in peer_info_build.read_text(encoding="utf-8"):
+        err.append("ProfilePersonalization: PeerInfoScreen AorusGramUI dependency is missing")
+
     mask_processor = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "AorusVideoMaskProcessor.swift"
     if not mask_processor.is_file():
         err.append("VideoMasks: AorusVideoMaskProcessor.swift is missing")

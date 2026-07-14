@@ -53,6 +53,7 @@ public final class AorusGramManager {
     public var callRecording: Bool     = false { didSet { save() } }
     public var streaks: Bool           = false { didSet { save() } }
     public var siriShortcuts: Bool     = false { didSet { save() } }
+    public var squareAvatars: Bool     = false { didSet { save() } }
     public var autoReply: Bool         = false { didSet { save() } }
 
     // Local editing — context-menu action to edit any message in the local DB only.
@@ -127,6 +128,7 @@ public final class AorusGramManager {
         ud.set(effective(hideContactsTab),     forKey: "aorusgram_hide_contacts_tab")
         ud.set(effective(streaks),             forKey: "aorusgram_feature_streaks")
         ud.set(effective(siriShortcuts),       forKey: "aorusgram_feature_siri_shortcuts")
+        ud.set(effective(squareAvatars),       forKey: "aorusgram_square_avatars")
         ud.set(effective(editLocally),         forKey: "aorusgram_feature_edit_locally")
         ud.set(effective(userMessagesInGroup), forKey: "aorusgram_feature_user_messages")
         ud.set(effective(doubleTapCopy),       forKey: "aorusgram_feature_double_copy")
@@ -165,6 +167,7 @@ public final class AorusGramManager {
         callRecording       = d["callRecording"]       as? Bool ?? false
         streaks             = d["streaks"]             as? Bool ?? false
         siriShortcuts       = d["siriShortcuts"]       as? Bool ?? false
+        squareAvatars       = d["squareAvatars"]       as? Bool ?? false
         autoReply           = d["autoReply"]           as? Bool ?? false
         editLocally         = d["editLocally"]         as? Bool ?? false
         userMessagesInGroup = d["userMessagesInGroup"] as? Bool ?? false
@@ -220,6 +223,7 @@ public final class AorusGramManager {
             "callRecording":       callRecording,
             "streaks":             streaks,
             "siriShortcuts":       siriShortcuts,
+            "squareAvatars":       squareAvatars,
             "autoReply":           autoReply,
             "editLocally":         editLocally,
             "userMessagesInGroup": userMessagesInGroup,

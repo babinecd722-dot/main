@@ -20,6 +20,7 @@ swift_library(
         "//submodules/ItemListPeerActionItem:ItemListPeerActionItem",
         "//submodules/PresentationDataUtils:PresentationDataUtils",
         "//submodules/AccountContext:AccountContext",
+        "//submodules/ComponentFlow",
         "//submodules/AppBundle:AppBundle",
         "//submodules/MediaResources:MediaResources",
         "//submodules/AnimatedStickerNode:AnimatedStickerNode",
