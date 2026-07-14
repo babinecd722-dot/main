@@ -206,22 +206,37 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     var guideAccentColor = UIColor.systemPurple
     var onContentChanged: (() -> Void)?
     var onLayerSelected: ((AorusMaskLayer) -> Void)?
+    var onTransformSelectionChanged: ((Bool) -> Void)?
 
     private var baseImage: UIImage?
     private var photoCenter = CGPoint.zero
     private var photoScale: CGFloat = 1.0
     private var photoRotation: CGFloat = 0.0
-    private var photoSelected = false
+    private var photoSelected = false {
+        didSet {
+            if oldValue != self.photoSelected {
+                self.onTransformSelectionChanged?(self.hasTransformSelection)
+            }
+        }
+    }
     private var movingPhoto = false
     private var movingPhotoOffset = CGPoint.zero
     private var strokes: [AorusMaskStroke] = []
     private var textItems: [AorusMaskTextItem] = []
     private var undoStack: [AorusMaskCanvasState] = []
     private var activeStroke: AorusMaskStroke?
-    private var selectedTextIndex: Int?
+    private var selectedTextIndex: Int? {
+        didSet {
+            if oldValue != self.selectedTextIndex {
+                self.onTransformSelectionChanged?(self.hasTransformSelection)
+            }
+        }
+    }
     private var movingTextIndex: Int?
     private var movingTextOffset = CGPoint.zero
     private var gestureSnapshotStored = false
+    private var pinchStartTextSize: CGFloat?
+    private var pinchStartPhotoScale: CGFloat?
 
     init(image: UIImage?) {
         self.baseImage = image
@@ -474,7 +489,12 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        self.finishTouchEditing()
+        // A two-finger zoom may cancel a just-started drawing touch. Discard
+        // that transient stroke instead of leaving a dot on the mask.
+        self.activeStroke = nil
+        self.movingTextIndex = nil
+        self.movingPhoto = false
+        self.setNeedsDisplay()
     }
 
     private func finishTouchEditing() {
@@ -496,18 +516,28 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         guard self.tool == .move, self.hasTransformSelection else { return }
         if recognizer.state == .began {
             self.storeGestureUndoState()
+            if let index = self.selectedTextIndex, index < self.textItems.count {
+                self.pinchStartTextSize = self.textItems[index].fontSize
+                self.pinchStartPhotoScale = nil
+            } else if self.photoSelected {
+                self.pinchStartTextSize = nil
+                self.pinchStartPhotoScale = self.photoScale
+            }
         }
         if recognizer.state == .began || recognizer.state == .changed {
-            if let index = self.selectedTextIndex, index < self.textItems.count {
-                self.textItems[index].fontSize = min(220.0, max(12.0, self.textItems[index].fontSize * recognizer.scale))
-            } else if self.photoSelected {
-                self.photoScale = min(5.0, max(0.15, self.photoScale * recognizer.scale))
+            if let index = self.selectedTextIndex,
+               index < self.textItems.count,
+               let startSize = self.pinchStartTextSize {
+                self.textItems[index].fontSize = min(480.0, max(8.0, startSize * recognizer.scale))
+            } else if self.photoSelected, let startScale = self.pinchStartPhotoScale {
+                self.photoScale = min(8.0, max(0.10, startScale * recognizer.scale))
             }
-            recognizer.scale = 1.0
             self.setNeedsDisplay()
         }
         if recognizer.state == .ended || recognizer.state == .cancelled || recognizer.state == .failed {
             self.gestureSnapshotStored = false
+            self.pinchStartTextSize = nil
+            self.pinchStartPhotoScale = nil
             self.onContentChanged?()
         }
     }
@@ -536,6 +566,13 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         return true
     }
 
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if gestureRecognizer is UIPinchGestureRecognizer || gestureRecognizer is UIRotationGestureRecognizer {
+            return self.tool == .move && self.hasTransformSelection
+        }
+        return true
+    }
+
     private func storeUndoState() {
         self.undoStack.append(AorusMaskCanvasState(
             baseImage: self.baseImage,
@@ -557,7 +594,7 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
         self.storeUndoState()
     }
 
-    private var hasTransformSelection: Bool {
+    var hasTransformSelection: Bool {
         return self.hasSelectedText || (self.photoSelected && self.baseImage != nil)
     }
 
@@ -790,10 +827,11 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
     }
 }
 
-final class AorusMaskEditorController: ViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+final class AorusMaskEditorController: ViewController, UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIScrollViewDelegate {
     private let presentationData: PresentationData
     private let onSaved: (AorusCustomMaskRecord) -> Void
     private let canvas: AorusMaskCanvasView
+    private let canvasScrollView = UIScrollView()
     private let toolsView = UIView()
     private let actionsStack = UIStackView()
     private let colorStack = UIStackView()
@@ -832,8 +870,24 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     override func loadDisplayNode() {
         self.displayNode = ViewControllerTracingNode()
         self.displayNode.backgroundColor = self.presentationData.theme.list.blocksBackgroundColor
+        self.displayNode.view.disablesInteractiveTransitionGestureRecognizerNow = { true }
         self.canvas.guideAccentColor = self.presentationData.theme.list.itemAccentColor
-        self.displayNode.view.addSubview(self.canvas)
+        self.canvasScrollView.delegate = self
+        self.canvasScrollView.minimumZoomScale = 1.0
+        self.canvasScrollView.maximumZoomScale = 4.0
+        self.canvasScrollView.bouncesZoom = true
+        self.canvasScrollView.alwaysBounceHorizontal = false
+        self.canvasScrollView.alwaysBounceVertical = false
+        self.canvasScrollView.showsHorizontalScrollIndicator = false
+        self.canvasScrollView.showsVerticalScrollIndicator = false
+        self.canvasScrollView.delaysContentTouches = false
+        self.canvasScrollView.contentInsetAdjustmentBehavior = .never
+        self.canvasScrollView.clipsToBounds = true
+        self.canvasScrollView.layer.cornerRadius = 8.0
+        self.canvasScrollView.panGestureRecognizer.minimumNumberOfTouches = 2
+        self.canvasScrollView.panGestureRecognizer.maximumNumberOfTouches = 2
+        self.displayNode.view.addSubview(self.canvasScrollView)
+        self.canvasScrollView.addSubview(self.canvas)
         self.displayNode.view.addSubview(self.toolsView)
 
         self.toolsView.backgroundColor = self.presentationData.theme.list.itemBlocksBackgroundColor
@@ -856,7 +910,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             self.actionsStack.addArrangedSubview($0)
         }
 
-        self.widthSlider.minimumValue = 5.0
+        self.widthSlider.minimumValue = 1.0
         self.widthSlider.maximumValue = 48.0
         self.widthSlider.value = 16.0
         self.widthSlider.minimumTrackTintColor = self.presentationData.theme.list.itemAccentColor
@@ -902,6 +956,10 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             self.selectTool(.draw)
             UISelectionFeedbackGenerator().selectionChanged()
         }
+        self.canvas.onTransformSelectionChanged = { [weak self] hasSelection in
+            guard let self else { return }
+            self.canvasScrollView.pinchGestureRecognizer?.isEnabled = !hasSelection
+        }
         self.selectTool(.pickLayer)
         self.widthChanged()
         self.refreshControls()
@@ -916,7 +974,12 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         let availableHeight = max(180.0, layout.size.height - navigationBottom - layout.intrinsicInsets.bottom - toolHeight - 32.0)
         let canvasSide = min(layout.size.width - sideInset * 2.0, availableHeight)
         let canvasFrame = CGRect(x: floor((layout.size.width - canvasSide) * 0.5), y: navigationBottom + 12.0, width: canvasSide, height: canvasSide)
-        transition.updateFrame(view: self.canvas, frame: canvasFrame)
+        transition.updateFrame(view: self.canvasScrollView, frame: canvasFrame)
+        if self.canvas.bounds.size != canvasFrame.size {
+            self.canvasScrollView.setZoomScale(1.0, animated: false)
+            self.canvas.frame = CGRect(origin: .zero, size: canvasFrame.size)
+            self.canvasScrollView.contentSize = canvasFrame.size
+        }
         let toolsFrame = CGRect(x: sideInset, y: canvasFrame.maxY + 10.0, width: layout.size.width - sideInset * 2.0, height: toolHeight)
         transition.updateFrame(view: self.toolsView, frame: toolsFrame)
         self.actionsStack.frame = CGRect(x: 16.0, y: 10.0, width: toolsFrame.width - 32.0, height: 44.0)
@@ -924,6 +987,10 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.widthSlider.frame = CGRect(x: 46.0, y: 63.0, width: toolsFrame.width - 64.0, height: 34.0)
         self.colorStack.frame = CGRect(x: 16.0, y: 106.0, width: toolsFrame.width - 32.0, height: 34.0)
         self.widthChanged()
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        return scrollView === self.canvasScrollView ? self.canvas : nil
     }
 
     private func configureToolButton(_ button: UIButton, symbol: String?, action: Selector) {

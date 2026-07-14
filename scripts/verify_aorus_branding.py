@@ -197,6 +197,8 @@ def main() -> None:
             err.append("ProfilePersonalization: AVPlayer playback can activate the shared audio session")
         if "AVAudioSession" in animated_text or "withMediaType: .audio" in animated_text:
             err.append("ProfilePersonalization: profile background must not create an audio track/session")
+        if "prepareForLifecyclePause" not in animated_text or "rendererHasDisplayedFrame" not in animated_text:
+            err.append("ProfilePersonalization: foreground/background poster continuity is incomplete")
         if "guard seconds <= 30.0" not in animated_text or "guard totalDuration <= 30.0" not in animated_text:
             err.append("ProfilePersonalization: video/GIF duration must be capped at 30 seconds")
         if 'sourceType as String == "com.compuserve.gif"' not in animated_text:
@@ -243,6 +245,8 @@ def main() -> None:
             err.append(f"ProfilePersonalization: {profile_path.name} is missing")
         elif sentinel not in profile_path.read_text(encoding="utf-8"):
             err.append(f"ProfilePersonalization: {profile_path.name} patch is missing")
+    if profile_header.is_file() and "aorusBackgroundVerticalBleed" not in profile_header.read_text(encoding="utf-8"):
+        err.append("ProfilePersonalization: animated cover overscroll bleed is missing")
 
     personal_colors_build = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "BUILD"
     if personal_colors_build.is_file():
@@ -271,6 +275,8 @@ def main() -> None:
             err.append("VideoMasks: PNG asset/custom-mask loading is incomplete")
         if 'Self.customPreset + ":"' not in mask_text or "customMaskURL(for preset:" not in mask_text:
             err.append("VideoMasks: named custom-mask loading is incomplete")
+        if "Vision's face box can end above the visible jaw" not in mask_text:
+            err.append("VideoMasks: full-face mask coverage geometry is missing")
 
     mask_assets = tg / "submodules" / "AorusGram" / "Resources" / "VideoMasks"
     expected_mask_assets = {"skull.png", "cyber.png", "oni.png", "phantom.png", "chrome.png", "aurora.png", "neoncat.png"}
@@ -304,6 +310,18 @@ def main() -> None:
             err.append("VideoMasks: imported photos must be clipped to the face template")
         if "static func delete(_ record: AorusCustomMaskRecord)" not in editor_text:
             err.append("VideoMasks: custom-mask deletion storage is incomplete")
+        if "maximumZoomScale = 4.0" not in editor_text or "pinchStartTextSize" not in editor_text:
+            err.append("VideoMasks: precision canvas/text zoom is incomplete")
+        if "disablesInteractiveTransitionGestureRecognizerNow = { true }" not in editor_text:
+            err.append("VideoMasks: editor must block swipe-back while drawing")
+
+    misc_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
+    if not misc_controller.is_file():
+        err.append("PhoneSpoof: AorusMiscController.swift is missing")
+    else:
+        misc_text = misc_controller.read_text(encoding="utf-8")
+        if "returnKeyType: .done" not in misc_text or "#selector(UIResponder.resignFirstResponder)" not in misc_text:
+            err.append("PhoneSpoof: Return must apply the number and dismiss the keyboard")
 
     masks_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMasksController.swift"
     if not masks_controller.is_file():

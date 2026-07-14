@@ -461,6 +461,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     private var targetId: Int64?
     private var requestedVisible = false
     private var representedAssetKey: String?
+    private var rendererHasDisplayedFrame = false
     private var lastLookupTargetId: Int64?
     private var lastLookupTime: TimeInterval = 0.0
 
@@ -514,14 +515,16 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.reload(force: false, requestRemote: true)
+            guard let self else { return }
+            self.reload(force: false, requestRemote: true)
+            self.resumeAfterLifecyclePause()
         })
         self.notificationTokens.append(center.addObserver(
             forName: UIApplication.willResignActiveNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.renderer?.setPlaying(false)
+            self?.prepareForLifecyclePause()
         })
     }
 
@@ -626,10 +629,13 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         posterURL: URL?,
         key: String,
         opacity: CGFloat,
-        force: Bool
+        force _: Bool
     ) {
         self.alpha = min(1.0, max(0.0, opacity))
-        if !force, self.representedAssetKey == key, self.renderer != nil {
+        // A remote refresh can confirm the same banner while it is already on
+        // screen. Keep the current layer alive instead of briefly exposing the
+        // Telegram cover during an unnecessary teardown/rebuild.
+        if self.representedAssetKey == key, self.renderer != nil {
             self.isHidden = false
             self.updatePlayback()
             return
@@ -667,12 +673,14 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.posterView.image = poster
         self.posterView.alpha = 1.0
         let renderer = AorusVideoOnlyLoopRenderer()
+        self.rendererHasDisplayedFrame = false
         renderer.layer.frame = self.bounds
         renderer.firstFrameEnqueued = { [weak self, weak renderer] in
             guard let self,
                   let renderer,
                   self.renderer === renderer,
                   self.representedAssetKey == key else { return }
+            self.rendererHasDisplayedFrame = true
             UIView.animate(withDuration: 0.16, delay: 0.05, options: [.beginFromCurrentState, .allowUserInteraction]) {
                 self.posterView.alpha = 0.0
             }
@@ -697,10 +705,35 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.renderer?.setPlaying(true)
     }
 
+    private func prepareForLifecyclePause() {
+        self.posterView.layer.removeAllAnimations()
+        if self.posterView.image != nil {
+            self.posterView.alpha = 1.0
+        }
+        self.renderer?.setPlaying(false)
+    }
+
+    private func resumeAfterLifecyclePause() {
+        self.updatePlayback()
+        guard self.rendererHasDisplayedFrame,
+              self.posterView.image != nil,
+              !self.isHidden else {
+            return
+        }
+        UIView.animate(
+            withDuration: 0.18,
+            delay: 0.08,
+            options: [.beginFromCurrentState, .allowUserInteraction]
+        ) {
+            self.posterView.alpha = 0.0
+        }
+    }
+
     private func teardownRenderer() {
         self.renderer?.invalidate()
         self.renderer?.layer.removeFromSuperlayer()
         self.renderer = nil
+        self.rendererHasDisplayedFrame = false
         self.posterView.image = nil
         self.posterView.alpha = 1.0
     }

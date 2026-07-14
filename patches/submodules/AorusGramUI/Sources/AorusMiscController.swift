@@ -318,7 +318,25 @@ private enum MiscEntry: ItemListNodeEntry {
         case let .phoneSpoof(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setPhoneSpoof($0) })
         case let .phoneSpoofNumber(_, placeholder, value):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, sectionId: section, textUpdated: { text in args.setPhoneSpoofNumber(text) }, action: {})
+            return ItemListSingleLineInputItem(
+                presentationData: presentationData,
+                title: NSAttributedString(string: ""),
+                text: value,
+                placeholder: placeholder,
+                returnKeyType: .done,
+                sectionId: section,
+                textUpdated: { text in
+                    args.setPhoneSpoofNumber(text)
+                },
+                action: {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil,
+                        from: nil,
+                        for: nil
+                    )
+                }
+            )
         case let .phoneSpoofRandomize(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, disclosureStyle: .none, action: args.randomizePhoneSpoof)
         case let .phoneSpoofInfo(_, text):

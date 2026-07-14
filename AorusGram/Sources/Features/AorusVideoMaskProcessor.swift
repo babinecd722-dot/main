@@ -396,19 +396,21 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     private func destinationQuad(for pose: FacePose, preset: String) -> Quad {
         let eyeDistance = max(pose.eyeDistance, pose.face.width * 0.30)
-        let widthFactor: CGFloat = preset == "neonCat" || preset == "oni" ? 1.05 : 1.0
-        let width = max(pose.face.width * 1.30, eyeDistance / 0.34) * widthFactor
+        let widthFactor: CGFloat = preset == "neonCat" || preset == "oni" ? 1.06 : 1.0
+        // Vision's face box can end above the visible jaw. Size from both the
+        // box and inter-eye distance, with enough bleed to cover cheeks and chin.
+        let width = max(pose.face.width * 1.38, eyeDistance / 0.33) * widthFactor
         let heightFactor: CGFloat
         switch preset {
         case "oni":
-            heightFactor = 1.18
+            heightFactor = 1.24
         case "neonCat", "phantom":
-            heightFactor = 1.14
+            heightFactor = 1.20
         default:
-            heightFactor = 1.12
+            heightFactor = 1.18
         }
         let height = width * heightFactor
-        let eyeAnchorY: CGFloat = preset == "oni" ? 0.57 : (preset == "neonCat" ? 0.55 : 0.56)
+        let eyeAnchorY: CGFloat = preset == "oni" ? 0.60 : (preset == "neonCat" ? 0.58 : 0.59)
         let eyeMid = pose.eyeMidpoint
         let originX = eyeMid.x - width * 0.5
         let originY = eyeMid.y - height * eyeAnchorY
