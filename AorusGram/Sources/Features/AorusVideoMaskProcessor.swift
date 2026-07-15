@@ -83,6 +83,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     private var lastSuccessfulDetectionTime: CFTimeInterval = 0.0
     private var frameGeometry: FrameGeometry?
     private var processingEnabled = false
+    private var hasRenderedMaskedFrame = false
     private var publishesPreview = true
     private var lastPreset = ""
     private var templates: [String: CIImage] = [:]
@@ -133,12 +134,28 @@ public final class AorusVideoMaskProcessor: NSObject {
         self.stateLock.unlock()
     }
 
+    /// Round-video recording must not accept the original camera frame while
+    /// an enabled mask is still acquiring its first face pose. The rendered
+    /// frame latch closes a race where Vision finishes between `process` and
+    /// this query, but no masked frame has actually been produced yet.
+    public var shouldDiscardUnmaskedVideoFrame: Bool {
+        let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+            && UserDefaults.standard.bool(forKey: Self.enabledKey)
+        guard enabled else { return false }
+
+        self.stateLock.lock()
+        let result = self.processingEnabled && (!self.hasRenderedMaskedFrame || self.smoothedPose == nil)
+        self.stateLock.unlock()
+        return result
+    }
+
     private func resetTrackingLocked(clearGeometry: Bool) {
         self.trackingGeneration &+= 1
         self.smoothedPose = nil
         self.missedDetections = 0
         self.lastSuccessfulDetectionTime = 0.0
         self.lastDetectionTime = 0.0
+        self.hasRenderedMaskedFrame = false
         if clearGeometry {
             self.frameGeometry = nil
         }
@@ -296,6 +313,11 @@ public final class AorusVideoMaskProcessor: NSObject {
             bounds: CGRect(x: 0.0, y: 0.0, width: CGFloat(width), height: CGFloat(height)),
             colorSpace: self.colorSpace
         )
+        self.stateLock.lock()
+        if self.processingEnabled, snapshot.generation == self.trackingGeneration {
+            self.hasRenderedMaskedFrame = true
+        }
+        self.stateLock.unlock()
         return output
     }
 

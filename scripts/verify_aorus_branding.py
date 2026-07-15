@@ -347,6 +347,8 @@ def main() -> None:
             err.append("VideoMasks: output-buffer isolation or pose outlier rejection is missing")
         if "processingEnabled" not in mask_text or "deactivateTrackingIfNeeded" not in mask_text:
             err.append("VideoMasks: enable/disable tracking lifecycle reset is missing")
+        if "shouldDiscardUnmaskedVideoFrame" not in mask_text or "hasRenderedMaskedFrame" not in mask_text:
+            err.append("VideoMasks: initial masked-frame recording latch is missing")
         if "DetectionFrame" not in mask_text or "VNImageRequestHandler(cgImage:" not in mask_text:
             err.append("VideoMasks: Vision must own an immutable camera-frame snapshot")
         if "roundVideoBack" not in mask_text or "roundVideoFront" not in mask_text or "publishesPreview" not in mask_text:
@@ -386,6 +388,10 @@ def main() -> None:
             err.append("VideoMasks: round-video source streams are not isolated by physical camera")
         if "synchronouslyAcquireInitialPose" in camera_output_text:
             err.append("VideoMasks: CameraOutput still blocks capture on synchronous Vision detection")
+        if "discard unmasked recording frames" not in camera_output_text or "if shouldRecordSampleBuffer {" not in camera_output_text:
+            err.append("VideoMasks: unmasked round-video frames can still reach the recorder")
+        if "processor.shouldDiscardUnmaskedVideoFrame" not in camera_output_text:
+            err.append("VideoMasks: CameraOutput is not connected to the masked-frame latch")
 
     mask_editor = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMaskEditorController.swift"
     if not mask_editor.is_file():

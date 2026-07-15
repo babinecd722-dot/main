@@ -11951,8 +11951,9 @@ def patch_video_masks(tg: Path) -> None:
     """Render Aorus face masks into outgoing call and round-video frames.
 
     Vision runs away from the capture thread and updates a retained pose snapshot.
-    Before the first reliable pose (or after a sustained loss), processing remains
-    fail-open so calls keep flowing on unsupported or thermally constrained devices.
+    Calls remain fail-open on unsupported inputs. Round-video recording alone
+    skips original video frames until the asynchronous tracker has rendered a
+    masked frame, so the encoded file cannot begin with an exposed face.
     """
     camera = tg / "submodules/Camera/Sources/CameraOutput.swift"
     if camera.is_file():
@@ -11968,8 +11969,11 @@ def patch_video_masks(tg: Path) -> None:
         text = text.replace(", synchronouslyAcquireInitialPose: true", "")
         sentinel = "// AorusGram: real-time video mask"
         stream_sentinel = "// AorusGram: stream-isolated round-video mask"
+        recording_gate_sentinel = "// AorusGram: discard unmasked recording frames"
+        needs_recording_gate_migration = sentinel in text and recording_gate_sentinel not in text
         mask_block = (
             "        var effectiveSampleBuffer = sampleBuffer\n"
+            "        var shouldRecordSampleBuffer = true " + recording_gate_sentinel + "\n"
             "        if self.isVideoMessage, sampleBuffer.type == kCMMediaType_Video { " + sentinel + "\n"
             "            let orientation: Int32\n"
             "            switch self.captureOrientation {\n"
@@ -11991,8 +11995,26 @@ def patch_video_masks(tg: Path) -> None:
             "            let processor = isFrontSource ? AorusVideoMaskProcessor.roundVideoFront : AorusVideoMaskProcessor.roundVideoBack\n"
             "            if let masked = processor.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: isFrontSource, publishesPreview: publishesPreview) {\n"
             "                effectiveSampleBuffer = masked\n"
+            "            } else if processor.shouldDiscardUnmaskedVideoFrame {\n"
+            "                shouldRecordSampleBuffer = false\n"
             "            }\n"
             "        }\n\n"
+        )
+        recorder_block = (
+            "        if let masterOutput = self.masterOutput {\n"
+            "            masterOutput.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: true)\n"
+            "        } else {\n"
+            "            self.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: false)\n"
+            "        }\n"
+        )
+        gated_recorder_block = (
+            "        if shouldRecordSampleBuffer {\n"
+            "            if let masterOutput = self.masterOutput {\n"
+            "                masterOutput.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: true)\n"
+            "            } else {\n"
+            "                self.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: false)\n"
+            "            }\n"
+            "        }\n"
         )
         if sentinel in text and stream_sentinel not in text:
             legacy_pattern = re.compile(
@@ -12006,6 +12028,22 @@ def patch_video_masks(tg: Path) -> None:
             if count != 1:
                 raise RuntimeError("VideoMasks: cached round-video mask block migration failed")
             print("VideoMasks: migrated cached pipeline to isolated camera streams")
+        if needs_recording_gate_migration:
+            if recording_gate_sentinel not in text:
+                cached_pattern = re.compile(
+                    r"        var effectiveSampleBuffer = sampleBuffer\n"
+                    r".*?"
+                    r"        }\n\n"
+                    r"(?=        if let masterOutput = self\.masterOutput)",
+                    re.DOTALL,
+                )
+                text, count = cached_pattern.subn(mask_block, text, count=1)
+                if count != 1:
+                    raise RuntimeError("VideoMasks: cached initial-frame gate migration failed")
+            if recorder_block not in text:
+                raise RuntimeError("VideoMasks: cached recorder block migration anchor not found")
+            text = text.replace(recorder_block, gated_recorder_block, 1)
+            print("VideoMasks: protected cached recording from unmasked initial frames")
         if sentinel not in text:
             if "import AorusGram\n" not in text:
                 anchor = "import Foundation\n"
@@ -12024,12 +12062,9 @@ def patch_video_masks(tg: Path) -> None:
                 "            self.processSampleBuffer?(sampleBuffer, videoPixelBuffer, connection)\n"
             )
             replacement = (
-                mask_block + "        if let masterOutput = self.masterOutput {\n"
-                "            masterOutput.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: true)\n"
-                "        } else {\n"
-                "            self.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: false)\n"
-                "        }\n"
-                "        \n"
+                mask_block
+                + gated_recorder_block
+                + "        \n"
                 "        if let videoPixelBuffer = CMSampleBufferGetImageBuffer(effectiveSampleBuffer) {\n"
                 "            self.processSampleBuffer?(effectiveSampleBuffer, videoPixelBuffer, connection)\n"
             )
