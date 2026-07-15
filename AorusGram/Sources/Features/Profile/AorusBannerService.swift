@@ -113,6 +113,7 @@ public final class AorusBannerService {
     public func resolveBanner(
         targetId: Int64,
         preferredCallerId: Int64,
+        forceRefresh: Bool = false,
         completion: @escaping (Result<AorusBannerAsset?, AorusBannerServiceError>) -> Void
     ) {
         guard targetId != 0 else {
@@ -129,7 +130,8 @@ public final class AorusBannerService {
         }
 
         self.stateQueue.async {
-            if let freshness = self.lookupFreshness[targetId],
+            if !forceRefresh,
+               let freshness = self.lookupFreshness[targetId],
                Date().timeIntervalSinceReferenceDate - freshness.time < 60.0 {
                 if !freshness.exists {
                     Self.completeOnMain(completion, with: .success(nil))

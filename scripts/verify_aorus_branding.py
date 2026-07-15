@@ -209,6 +209,8 @@ def main() -> None:
             err.append("ProfilePersonalization: same-banner visual continuity is incomplete")
         if "lastPlaybackRequest" not in animated_text or "self.updatePlayback()" not in animated_text:
             err.append("ProfilePersonalization: post-layout playback recovery is incomplete")
+        if "remoteRefreshTimer" not in animated_text or "requestCurrentRemoteBanner(force: true)" not in animated_text:
+            err.append("ProfilePersonalization: visible remote banners do not refresh live")
         if "guard seconds <= 30.0" not in animated_text or "guard totalDuration <= 30.0" not in animated_text:
             err.append("ProfilePersonalization: video/GIF duration must be capped at 30 seconds")
         if 'sourceType as String == "com.compuserve.gif"' not in animated_text:
@@ -233,6 +235,8 @@ def main() -> None:
         for marker in required_banner_markers:
             if marker not in banner_text:
                 err.append(f"ProfilePersonalization: banner service is missing {marker}")
+        if "forceRefresh: Bool = false" not in banner_text or "if !forceRefresh," not in banner_text:
+            err.append("ProfilePersonalization: forced banner version refresh is missing")
         if r".download-\(UUID().uuidString).mp4" not in banner_text or "sourceURL: retainedURL" not in banner_text:
             err.append("ProfilePersonalization: remote banner download is not retained beyond URLSession completion")
         if "BANNER_HMAC_KEY" in banner_text or "__AORUS_BANNER_KEY" in banner_text:
@@ -249,6 +253,14 @@ def main() -> None:
             err.append("VideoMessagesRearCamera: preview and camera state are not synchronized")
         if "? .back : self.cameraState.position" in video_message_camera_text:
             err.append("VideoMessagesRearCamera: legacy configuration-only override is still present")
+
+    camera_core = tg / "submodules" / "Camera" / "Sources" / "Camera.swift"
+    if not camera_core.is_file():
+        err.append("VideoMessagesRearCamera: Camera.swift is missing")
+    else:
+        camera_core_text = camera_core.read_text(encoding="utf-8")
+        if "synchronize round-video recorder position" not in camera_core_text or "output.markPositionChange(position: configuration.position)" not in camera_core_text:
+            err.append("VideoMessagesRearCamera: recorder source is not synchronized with preview position")
 
     profile_header = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoHeaderNode.swift"
     avatar_renderer = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoAvatarTransformContainerNode.swift"
@@ -331,6 +343,10 @@ def main() -> None:
             err.append("VideoMasks: output-buffer isolation or pose outlier rejection is missing")
         if "processingEnabled" not in mask_text or "deactivateTrackingIfNeeded" not in mask_text:
             err.append("VideoMasks: enable/disable tracking lifecycle reset is missing")
+        if "DetectionFrame" not in mask_text or "VNImageRequestHandler(cgImage:" not in mask_text:
+            err.append("VideoMasks: Vision must own an immutable camera-frame snapshot")
+        if "roundVideoBack" not in mask_text or "roundVideoFront" not in mask_text or "publishesPreview" not in mask_text:
+            err.append("VideoMasks: front and rear round-video streams are not isolated")
         if "CIPerspectiveTransform" not in mask_text or "observation.yaw" not in mask_text or "landmarks?.leftEye" not in mask_text:
             err.append("VideoMasks: landmark-anchored perspective tracking is incomplete")
         if "AorusVideoMaskAssets" not in mask_text or "custom-mask.png" not in mask_text:
@@ -354,6 +370,14 @@ def main() -> None:
             err.append("VideoMasks: local preview must reuse its cached artwork")
         if "updateMaskFrame(animated: true)" in overlay_text or "shouldRasterize = true" in overlay_text:
             err.append("VideoMasks: local preview reintroduces delayed/rasterized tracking")
+
+    camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
+    if not camera_output.is_file():
+        err.append("VideoMasks: CameraOutput.swift is missing")
+    else:
+        camera_output_text = camera_output.read_text(encoding="utf-8")
+        if "stream-isolated round-video mask" not in camera_output_text or "sourcePosition == .front" not in camera_output_text:
+            err.append("VideoMasks: round-video source streams are not isolated by physical camera")
 
     mask_editor = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMaskEditorController.swift"
     if not mask_editor.is_file():

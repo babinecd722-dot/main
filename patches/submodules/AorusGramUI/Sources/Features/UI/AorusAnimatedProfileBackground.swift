@@ -478,6 +478,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     private var lastPlaybackRequest: Bool?
     private var lastLookupTargetId: Int64?
     private var lastLookupTime: TimeInterval = 0.0
+    private var remoteRefreshTimer: Timer?
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -539,14 +540,18 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            self.reload(force: false, requestRemote: true)
+            self.reload(force: false, requestRemote: false)
+            self.requestCurrentRemoteBanner(force: true)
             self.resumeAfterLifecyclePause()
+            self.updateRemoteRefreshTimer()
         })
         self.notificationTokens.append(center.addObserver(
             forName: UIApplication.willResignActiveNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            self?.remoteRefreshTimer?.invalidate()
+            self?.remoteRefreshTimer = nil
             self?.prepareForLifecyclePause()
         })
     }
@@ -557,6 +562,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     }
 
     deinit {
+        self.remoteRefreshTimer?.invalidate()
         for token in self.notificationTokens {
             NotificationCenter.default.removeObserver(token)
         }
@@ -574,11 +580,19 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
             self.lastLookupTime = 0.0
         }
         self.reload(force: identityChanged || visibilityChanged, requestRemote: true)
+        self.updateRemoteRefreshTimer()
     }
 
     public override func didMoveToWindow() {
         super.didMoveToWindow()
         self.updatePlayback()
+        if self.window != nil {
+            // A profile controller can be reused for the same peer. Always
+            // validate the server version when its header becomes visible;
+            // otherwise the service's normal TTL can survive profile re-entry.
+            self.requestCurrentRemoteBanner(force: true)
+        }
+        self.updateRemoteRefreshTimer()
     }
 
     public override func layoutSubviews() {
@@ -601,6 +615,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
               !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") else {
             self.isHidden = true
             self.teardownRenderer()
+            self.updateRemoteRefreshTimer()
             return
         }
 
@@ -644,13 +659,51 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.lastLookupTime = now
         AorusBannerService.shared.resolveBanner(
             targetId: targetId,
-            preferredCallerId: viewerAccountId
+            preferredCallerId: viewerAccountId,
+            forceRefresh: force
         ) { [weak self] _ in
             guard let self,
                   self.targetId == targetId,
                   self.viewerAccountId == viewerAccountId else { return }
             self.reload(force: true, requestRemote: false)
         }
+    }
+
+    private func requestCurrentRemoteBanner(force: Bool) {
+        guard let viewerAccountId,
+              let targetId,
+              targetId != 0,
+              targetId != viewerAccountId,
+              self.requestedVisible,
+              self.window != nil,
+              UIApplication.shared.applicationState == .active,
+              !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") else {
+            return
+        }
+        self.requestRemoteBanner(targetId: targetId, viewerAccountId: viewerAccountId, force: force)
+    }
+
+    private func updateRemoteRefreshTimer() {
+        let shouldPoll = self.viewerAccountId != nil
+            && self.targetId != nil
+            && self.targetId != self.viewerAccountId
+            && self.targetId != 0
+            && self.requestedVisible
+            && self.window != nil
+            && UIApplication.shared.applicationState == .active
+            && !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+        guard shouldPoll else {
+            self.remoteRefreshTimer?.invalidate()
+            self.remoteRefreshTimer = nil
+            return
+        }
+        guard self.remoteRefreshTimer == nil else { return }
+        let timer = Timer(timeInterval: 15.0, repeats: true) { [weak self] _ in
+            self?.requestCurrentRemoteBanner(force: true)
+        }
+        timer.tolerance = 3.0
+        RunLoop.main.add(timer, forMode: .common)
+        self.remoteRefreshTimer = timer
     }
 
     private func displayAsset(

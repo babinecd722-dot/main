@@ -1652,32 +1652,54 @@ def patch_video_message_rear_camera(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: rear camera for video messages (native initial state)"
-    if sentinel in t:
-        print("VideoMessagesRearCamera: already patched")
-        return
+    if sentinel not in t:
+        # Migrate the first implementation, which changed only Camera.Configuration.
+        # That left Telegram's placeholder and CameraState on `.front`, causing a
+        # visible flip and allowing the native state signal to overwrite the choice.
+        legacy = (
+            "                    // AorusGram: rear camera for video messages\n"
+            "                    position: (!UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)) ? .back : self.cameraState.position,\n"
+        )
+        if legacy in t:
+            t = t.replace(legacy, "                    position: self.cameraState.position,\n", 1)
 
-    # Migrate the first implementation, which changed only Camera.Configuration.
-    # That left Telegram's placeholder and CameraState on `.front`, causing a
-    # visible flip and allowing the native state signal to overwrite the choice.
-    legacy = (
-        "                    // AorusGram: rear camera for video messages\n"
-        "                    position: (!UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)) ? .back : self.cameraState.position,\n"
-    )
-    if legacy in t:
-        t = t.replace(legacy, "                    position: self.cameraState.position,\n", 1)
+        anchor = '            let isFrontPosition = "".isEmpty\n'
+        replacement = (
+            "            " + sentinel + "\n"
+            "            let aorusStartWithRearCamera = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\")\n"
+            "                && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)\n"
+            "            let isFrontPosition = !aorusStartWithRearCamera\n"
+        )
+        if anchor not in t:
+            raise RuntimeError("VideoMessagesRearCamera: native initial-position anchor not found")
+        t = t.replace(anchor, replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("VideoMessagesRearCamera: patched native round-video initial state")
+    else:
+        print("VideoMessagesRearCamera: screen initial state already patched")
 
-    anchor = '            let isFrontPosition = "".isEmpty\n'
-    replacement = (
-        "            " + sentinel + "\n"
-        "            let aorusStartWithRearCamera = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\")\n"
-        "                && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)\n"
-        "            let isFrontPosition = !aorusStartWithRearCamera\n"
-    )
-    if anchor not in t:
-        raise RuntimeError("VideoMessagesRearCamera: native initial-position anchor not found")
-    t = t.replace(anchor, replacement, 1)
-    path.write_text(t, encoding="utf-8")
-    print("VideoMessagesRearCamera: patched native round-video initial state")
+    # CameraOutput has its own selected-position state that decides which stream
+    # is encoded in dual-camera mode. Initialize it from the same configuration;
+    # otherwise the preview can show the rear camera while recording the front.
+    camera_path = tg / "submodules/Camera/Sources/Camera.swift"
+    if not camera_path.is_file():
+        raise RuntimeError("VideoMessagesRearCamera: Camera.swift not found")
+    camera_text = camera_path.read_text(encoding="utf-8")
+    output_sentinel = "// AorusGram: synchronize round-video recorder position"
+    if output_sentinel not in camera_text:
+        anchor = "        self.setDualCameraEnabled(configuration.isDualEnabled, change: false)\n"
+        replacement = (
+            anchor
+            + "        " + output_sentinel + "\n"
+            + "        self.mainDeviceContext?.output.markPositionChange(position: configuration.position)\n"
+        )
+        if anchor not in camera_text:
+            raise RuntimeError("VideoMessagesRearCamera: CameraContext initialization anchor not found")
+        camera_text = camera_text.replace(anchor, replacement, 1)
+        camera_path.write_text(camera_text, encoding="utf-8")
+        print("VideoMessagesRearCamera: synchronized preview and recorder positions")
+    else:
+        print("VideoMessagesRearCamera: recorder position already synchronized")
 
 
 def patch_ghost_mode_hooks(tg: Path) -> None:
@@ -11940,6 +11962,45 @@ def patch_video_masks(tg: Path) -> None:
             "AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: self.currentPosition == .front)"
         )
         sentinel = "// AorusGram: real-time video mask"
+        stream_sentinel = "// AorusGram: stream-isolated round-video mask"
+        mask_block = (
+            "        var effectiveSampleBuffer = sampleBuffer\n"
+            "        if self.isVideoMessage, sampleBuffer.type == kCMMediaType_Video { " + sentinel + "\n"
+            "            let orientation: Int32\n"
+            "            switch self.captureOrientation {\n"
+            "            case .portrait: orientation = 6\n"
+            "            case .portraitUpsideDown: orientation = 8\n"
+            "            case .landscapeRight: orientation = 1\n"
+            "            case .landscapeLeft: orientation = 3\n"
+            "            @unknown default: orientation = 6\n"
+            "            }\n"
+            "            " + stream_sentinel + "\n"
+            "            var isFrontSource = self.currentPosition == .front\n"
+            "            if #available(iOS 13.0, *) {\n"
+            "                if let sourcePosition = connection.inputPorts.first?.sourceDevicePosition, sourcePosition != .unspecified {\n"
+            "                    isFrontSource = sourcePosition == .front\n"
+            "                }\n"
+            "            }\n"
+            "            let selectedPosition = self.masterOutput?.currentPosition ?? self.currentPosition\n"
+            "            let publishesPreview = self.exclusive || (isFrontSource ? selectedPosition == .front : selectedPosition == .back)\n"
+            "            let processor = isFrontSource ? AorusVideoMaskProcessor.roundVideoFront : AorusVideoMaskProcessor.roundVideoBack\n"
+            "            if let masked = processor.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: isFrontSource, publishesPreview: publishesPreview) {\n"
+            "                effectiveSampleBuffer = masked\n"
+            "            }\n"
+            "        }\n\n"
+        )
+        if sentinel in text and stream_sentinel not in text:
+            legacy_pattern = re.compile(
+                r"        var effectiveSampleBuffer = sampleBuffer\n"
+                r".*?"
+                r"        }\n\n"
+                r"(?=        if let masterOutput = self\.masterOutput)",
+                re.DOTALL,
+            )
+            text, count = legacy_pattern.subn(mask_block, text, count=1)
+            if count != 1:
+                raise RuntimeError("VideoMasks: cached round-video mask block migration failed")
+            print("VideoMasks: migrated cached pipeline to isolated camera streams")
         if sentinel not in text:
             if "import AorusGram\n" not in text:
                 anchor = "import Foundation\n"
@@ -11958,21 +12019,7 @@ def patch_video_masks(tg: Path) -> None:
                 "            self.processSampleBuffer?(sampleBuffer, videoPixelBuffer, connection)\n"
             )
             replacement = (
-                "        var effectiveSampleBuffer = sampleBuffer\n"
-                "        if self.isVideoMessage, sampleBuffer.type == kCMMediaType_Video { " + sentinel + "\n"
-                "            let orientation: Int32\n"
-                "            switch self.captureOrientation {\n"
-                "            case .portrait: orientation = 6\n"
-                "            case .portraitUpsideDown: orientation = 8\n"
-                "            case .landscapeRight: orientation = 1\n"
-                "            case .landscapeLeft: orientation = 3\n"
-                "            @unknown default: orientation = 6\n"
-                "            }\n"
-                "            if let masked = AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: self.currentPosition == .front) {\n"
-                "                effectiveSampleBuffer = masked\n"
-                "            }\n"
-                "        }\n\n"
-                "        if let masterOutput = self.masterOutput {\n"
+                mask_block + "        if let masterOutput = self.masterOutput {\n"
                 "            masterOutput.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: true)\n"
                 "        } else {\n"
                 "            self.processVideoRecording(effectiveSampleBuffer, fromAdditionalOutput: false)\n"
