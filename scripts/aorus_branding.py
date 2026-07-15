@@ -1642,30 +1642,42 @@ def patch_max_media_quality(tg: Path) -> None:
 def patch_video_message_rear_camera(tg: Path) -> None:
     """Start round video messages with the rear camera when enabled.
 
-    Telegram's dedicated round-video screen creates Camera.Configuration with
-    `position: self.cameraState.position`. The setting only changes this initial
-    position; the native switch-camera button and Camera.position signal keep working.
+    Telegram derives the preview placeholder, CameraState and Camera.Configuration
+    from `isFrontPosition`. Patch that single native source of truth so all three
+    agree from the first frame while the stock switch-camera flow keeps working.
     """
     path = tg / "submodules/TelegramUI/Components/VideoMessageCameraScreen/Sources/VideoMessageCameraScreen.swift"
     if not path.is_file():
         print("VideoMessagesRearCamera: VideoMessageCameraScreen.swift not found — skip")
         return
     t = path.read_text(encoding="utf-8")
-    sentinel = "// AorusGram: rear camera for video messages"
+    sentinel = "// AorusGram: rear camera for video messages (native initial state)"
     if sentinel in t:
         print("VideoMessagesRearCamera: already patched")
         return
-    anchor = "                    position: self.cameraState.position,\n"
-    replacement = (
-        "                    " + sentinel + "\n"
+
+    # Migrate the first implementation, which changed only Camera.Configuration.
+    # That left Telegram's placeholder and CameraState on `.front`, causing a
+    # visible flip and allowing the native state signal to overwrite the choice.
+    legacy = (
+        "                    // AorusGram: rear camera for video messages\n"
         "                    position: (!UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)) ? .back : self.cameraState.position,\n"
     )
+    if legacy in t:
+        t = t.replace(legacy, "                    position: self.cameraState.position,\n", 1)
+
+    anchor = '            let isFrontPosition = "".isEmpty\n'
+    replacement = (
+        "            " + sentinel + "\n"
+        "            let aorusStartWithRearCamera = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\")\n"
+        "                && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)\n"
+        "            let isFrontPosition = !aorusStartWithRearCamera\n"
+    )
     if anchor not in t:
-        print("VideoMessagesRearCamera: camera configuration anchor not found — skipped")
-        return
+        raise RuntimeError("VideoMessagesRearCamera: native initial-position anchor not found")
     t = t.replace(anchor, replacement, 1)
     path.write_text(t, encoding="utf-8")
-    print("VideoMessagesRearCamera: patched initial round-video camera position")
+    print("VideoMessagesRearCamera: patched native round-video initial state")
 
 
 def patch_ghost_mode_hooks(tg: Path) -> None:

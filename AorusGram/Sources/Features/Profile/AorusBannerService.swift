@@ -504,9 +504,25 @@ public final class AorusBannerService {
                 completion(.failure(.invalidMedia))
                 return
             }
+
+            // URLSession owns temporaryURL and may remove it as soon as this
+            // completion handler returns. Retain a private copy synchronously
+            // before handing validation and poster generation to mediaQueue.
+            let retainedURL: URL
+            do {
+                let directory = try self.cacheDirectoryURL()
+                retainedURL = directory.appendingPathComponent(".download-\(UUID().uuidString).mp4")
+                try FileManager.default.copyItem(at: temporaryURL, to: retainedURL)
+            } catch {
+                completion(.failure(.invalidMedia))
+                return
+            }
             self.mediaQueue.async {
+                defer {
+                    try? FileManager.default.removeItem(at: retainedURL)
+                }
                 do {
-                    let asset = try self.installCacheCopy(sourceURL: temporaryURL, metadata: metadata)
+                    let asset = try self.installCacheCopy(sourceURL: retainedURL, metadata: metadata)
                     completion(.success(asset))
                 } catch {
                     completion(.failure(.invalidMedia))

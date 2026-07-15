@@ -233,8 +233,22 @@ def main() -> None:
         for marker in required_banner_markers:
             if marker not in banner_text:
                 err.append(f"ProfilePersonalization: banner service is missing {marker}")
+        if r".download-\(UUID().uuidString).mp4" not in banner_text or "sourceURL: retainedURL" not in banner_text:
+            err.append("ProfilePersonalization: remote banner download is not retained beyond URLSession completion")
         if "BANNER_HMAC_KEY" in banner_text or "__AORUS_BANNER_KEY" in banner_text:
             err.append("ProfilePersonalization: banner key material must not be stored in source")
+
+    video_message_camera = tg / "submodules" / "TelegramUI" / "Components" / "VideoMessageCameraScreen" / "Sources" / "VideoMessageCameraScreen.swift"
+    if not video_message_camera.is_file():
+        err.append("VideoMessagesRearCamera: VideoMessageCameraScreen.swift is missing")
+    else:
+        video_message_camera_text = video_message_camera.read_text(encoding="utf-8")
+        if "rear camera for video messages (native initial state)" not in video_message_camera_text:
+            err.append("VideoMessagesRearCamera: native initial camera state patch is missing")
+        if "let isFrontPosition = !aorusStartWithRearCamera" not in video_message_camera_text:
+            err.append("VideoMessagesRearCamera: preview and camera state are not synchronized")
+        if "? .back : self.cameraState.position" in video_message_camera_text:
+            err.append("VideoMessagesRearCamera: legacy configuration-only override is still present")
 
     profile_header = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoHeaderNode.swift"
     avatar_renderer = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoAvatarTransformContainerNode.swift"
