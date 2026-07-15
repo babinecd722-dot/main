@@ -321,10 +321,16 @@ def main() -> None:
         err.append("VideoMasks: AorusVideoMaskProcessor.swift is missing")
     else:
         mask_text = mask_processor.read_text(encoding="utf-8")
-        if "processingLock.try()" not in mask_text or "VNDetectFaceLandmarksRequest" not in mask_text:
-            err.append("VideoMasks: fail-open Vision tracking pipeline is incomplete")
+        if "RenderSnapshot" not in mask_text or "private let stateLock" not in mask_text or "VNDetectFaceLandmarksRequest" not in mask_text:
+            err.append("VideoMasks: stable Vision/render state pipeline is incomplete")
+        if "processingLock.try()" in mask_text:
+            err.append("VideoMasks: lock contention can still emit unmasked video frames")
         if "detectionQueue.async" not in mask_text or "detectionInFlight" not in mask_text:
             err.append("VideoMasks: face detection must stay off the WebRTC capture thread")
+        if "private let poolLock" not in mask_text or "isPlausible" not in mask_text or "FrameGeometry" not in mask_text:
+            err.append("VideoMasks: output-buffer isolation or pose outlier rejection is missing")
+        if "processingEnabled" not in mask_text or "deactivateTrackingIfNeeded" not in mask_text:
+            err.append("VideoMasks: enable/disable tracking lifecycle reset is missing")
         if "CIPerspectiveTransform" not in mask_text or "observation.yaw" not in mask_text or "landmarks?.leftEye" not in mask_text:
             err.append("VideoMasks: landmark-anchored perspective tracking is incomplete")
         if "AorusVideoMaskAssets" not in mask_text or "custom-mask.png" not in mask_text:

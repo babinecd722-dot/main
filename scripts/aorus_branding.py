@@ -11928,9 +11928,9 @@ def patch_voice_twin_video_notes(tg: Path) -> None:
 def patch_video_masks(tg: Path) -> None:
     """Render Aorus face masks into outgoing call and round-video frames.
 
-    The processor is deliberately fail-open: when Vision is busy or cannot find a
-    face, Telegram receives its original CMSampleBuffer. Calls therefore keep
-    flowing even under thermal pressure or on older devices.
+    Vision runs away from the capture thread and updates a retained pose snapshot.
+    Before the first reliable pose (or after a sustained loss), processing remains
+    fail-open so calls keep flowing on unsupported or thermally constrained devices.
     """
     camera = tg / "submodules/Camera/Sources/CameraOutput.swift"
     if camera.is_file():

@@ -42,7 +42,26 @@ public final class AorusVideoMaskProcessor: NSObject {
         }
     }
 
-    private let processingLock = NSLock()
+    /// Immutable per-frame state. Vision updates the next snapshot while Core
+    /// Image renders the current one, so detector work cannot leak an unmasked
+    /// frame into the outgoing video.
+    private struct RenderSnapshot {
+        let pose: FacePose?
+        let template: CIImage?
+        let preset: String
+        let generation: UInt
+        let needsDetection: Bool
+    }
+
+    private struct FrameGeometry: Equatable {
+        let orientation: Int32
+        let mirrored: Bool
+        let width: Int
+        let height: Int
+    }
+
+    private let stateLock = NSLock()
+    private let poolLock = NSLock()
     private let detectionQueue = DispatchQueue(label: "com.aorusgram.video-masks.detection", qos: .userInitiated)
     private let ciContext = CIContext(options: [
         .cacheIntermediates: false,
@@ -54,11 +73,13 @@ public final class AorusVideoMaskProcessor: NSObject {
     private var trackingGeneration: UInt = 0
     private var smoothedPose: FacePose?
     private var missedDetections = 0
+    private var lastSuccessfulDetectionTime: CFTimeInterval = 0.0
+    private var frameGeometry: FrameGeometry?
+    private var processingEnabled = false
     private var lastPreset = ""
     private var templates: [String: CIImage] = [:]
     private var templateImages: [String: UIImage] = [:]
     private var pools: [String: CVPixelBufferPool] = [:]
-    private var previewMirrored = false
     private var customMaskModificationDates: [String: Date] = [:]
 
     private override init() {
@@ -99,12 +120,35 @@ public final class AorusVideoMaskProcessor: NSObject {
     }
 
     public func resetTracking() {
-        self.processingLock.lock()
+        self.stateLock.lock()
+        self.resetTrackingLocked(clearGeometry: true)
+        self.stateLock.unlock()
+    }
+
+    private func resetTrackingLocked(clearGeometry: Bool) {
         self.trackingGeneration &+= 1
         self.smoothedPose = nil
         self.missedDetections = 0
+        self.lastSuccessfulDetectionTime = 0.0
         self.lastDetectionTime = 0.0
-        self.processingLock.unlock()
+        if clearGeometry {
+            self.frameGeometry = nil
+        }
+    }
+
+    private func deactivateTrackingIfNeeded() {
+        self.stateLock.lock()
+        let wasEnabled = self.processingEnabled
+        if wasEnabled {
+            self.processingEnabled = false
+            self.resetTrackingLocked(clearGeometry: true)
+        }
+        self.stateLock.unlock()
+        if wasEnabled {
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .aorusVideoMaskPreviewHidden, object: nil)
+            }
+        }
     }
 
     @objc(processPixelBuffer:orientation:)
@@ -113,24 +157,11 @@ public final class AorusVideoMaskProcessor: NSObject {
     }
 
     public func process(pixelBuffer: CVPixelBuffer, orientation rawOrientation: Int32, mirrored: Bool) -> CVPixelBuffer? {
-        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"),
-              UserDefaults.standard.bool(forKey: Self.enabledKey),
-              self.processingLock.try() else {
+        let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+            && UserDefaults.standard.bool(forKey: Self.enabledKey)
+        guard enabled else {
+            self.deactivateTrackingIfNeeded()
             return nil
-        }
-        defer { self.processingLock.unlock() }
-
-        let configured = UserDefaults.standard.string(forKey: Self.presetKey) ?? "skull"
-        let preset = Self.isSupportedPreset(configured) ? configured : "skull"
-        self.previewMirrored = mirrored
-        if preset != self.lastPreset {
-            self.lastPreset = preset
-            self.trackingGeneration &+= 1
-            self.templates.removeAll(keepingCapacity: true)
-            self.templateImages.removeAll(keepingCapacity: true)
-            self.smoothedPose = nil
-            self.missedDetections = 0
-            self.lastDetectionTime = 0.0
         }
 
         guard let orientation = CGImagePropertyOrientation(rawValue: UInt32(rawOrientation)) else {
@@ -144,20 +175,64 @@ public final class AorusVideoMaskProcessor: NSObject {
         }
 
         let now = CACurrentMediaTime()
-        let interval: CFTimeInterval = self.smoothedPose == nil ? 0.055 : 0.085
-        if now - self.lastDetectionTime >= interval {
+        let snapshot: RenderSnapshot
+        self.stateLock.lock()
+        if !self.processingEnabled {
+            self.processingEnabled = true
+            self.resetTrackingLocked(clearGeometry: true)
+        }
+        let configured = UserDefaults.standard.string(forKey: Self.presetKey) ?? "skull"
+        let preset = Self.isSupportedPreset(configured) ? configured : "skull"
+        let geometry = FrameGeometry(
+            orientation: rawOrientation,
+            mirrored: mirrored,
+            width: Int(image.extent.width.rounded()),
+            height: Int(image.extent.height.rounded())
+        )
+        let presetChanged = preset != self.lastPreset
+        let geometryChanged = geometry != self.frameGeometry
+        if presetChanged {
+            self.lastPreset = preset
+            self.templates.removeAll(keepingCapacity: true)
+            self.templateImages.removeAll(keepingCapacity: true)
+        }
+        if presetChanged || geometryChanged {
+            self.frameGeometry = geometry
+            self.resetTrackingLocked(clearGeometry: false)
+        }
+        let interval: CFTimeInterval = self.smoothedPose == nil ? 0.05 : 0.066
+        let needsDetection = !self.detectionInFlight && now - self.lastDetectionTime >= interval
+        if needsDetection {
             self.lastDetectionTime = now
-            self.schedulePoseUpdate(in: image)
+            self.detectionInFlight = true
+        }
+        snapshot = RenderSnapshot(
+            pose: self.smoothedPose,
+            template: self.template(for: preset),
+            preset: preset,
+            generation: self.trackingGeneration,
+            needsDetection: needsDetection
+        )
+        self.stateLock.unlock()
+
+        if snapshot.needsDetection {
+            self.schedulePoseUpdate(
+                in: image,
+                generation: snapshot.generation,
+                previous: snapshot.pose,
+                preset: snapshot.preset,
+                mirrored: mirrored
+            )
         }
 
-        guard let pose = self.smoothedPose,
+        guard let pose = snapshot.pose,
               pose.face.width > 4.0,
               pose.face.height > 4.0,
-              let template = self.template(for: preset) else {
+              let template = snapshot.template else {
             return nil
         }
 
-        let quad = self.destinationQuad(for: pose, preset: preset)
+        let quad = self.destinationQuad(for: pose, preset: snapshot.preset)
         let mask = template.applyingFilter("CIPerspectiveTransform", parameters: [
             "inputTopLeft": CIVector(cgPoint: quad.topLeft),
             "inputTopRight": CIVector(cgPoint: quad.topRight),
@@ -226,25 +301,28 @@ public final class AorusVideoMaskProcessor: NSObject {
         return result
     }
 
-    private func schedulePoseUpdate(in image: CIImage) {
-        guard !self.detectionInFlight else { return }
-        self.detectionInFlight = true
-        let generation = self.trackingGeneration
-        let previous = self.smoothedPose
+    private func schedulePoseUpdate(
+        in image: CIImage,
+        generation: UInt,
+        previous: FacePose?,
+        preset: String,
+        mirrored: Bool
+    ) {
         self.detectionQueue.async { [weak self] in
             guard let self else { return }
             let detected: FacePose? = autoreleasepool {
                 self.detectPose(in: image, previous: previous)
             }
-            self.processingLock.lock()
-            defer { self.processingLock.unlock() }
+            self.stateLock.lock()
+            defer { self.stateLock.unlock() }
             self.detectionInFlight = false
-            guard generation == self.trackingGeneration else { return }
-            guard let detected else {
+            guard generation == self.trackingGeneration, preset == self.lastPreset else { return }
+            guard let detected,
+                  previous.map({ self.isPlausible(detected, comparedTo: $0, extent: image.extent) }) ?? true else {
                 self.registerMiss()
                 return
             }
-            self.applyDetectedPose(detected, extent: image.extent)
+            self.applyDetectedPose(detected, extent: image.extent, preset: preset, mirrored: mirrored)
         }
     }
 
@@ -354,7 +432,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         )
     }
 
-    private func applyDetectedPose(_ detected: FacePose, extent: CGRect) {
+    private func applyDetectedPose(_ detected: FacePose, extent: CGRect, preset: String, mirrored: Bool) {
         self.smoothedPose = self.smoothedPose.map { previous in
             let movement = hypot(
                 detected.eyeMidpoint.x - previous.eyeMidpoint.x,
@@ -365,9 +443,25 @@ public final class AorusVideoMaskProcessor: NSObject {
             return self.mix(previous, detected, factor: factor)
         } ?? detected
         self.missedDetections = 0
+        self.lastSuccessfulDetectionTime = CACurrentMediaTime()
         if let pose = self.smoothedPose {
-            self.publishPreview(pose: pose, extent: extent)
+            self.publishPreview(pose: pose, extent: extent, preset: preset, mirrored: mirrored)
         }
+    }
+
+    private func isPlausible(_ detected: FacePose, comparedTo previous: FacePose, extent: CGRect) -> Bool {
+        let referenceWidth = max(max(previous.face.width, detected.face.width), 1.0)
+        let centerTravel = hypot(
+            detected.face.midX - previous.face.midX,
+            detected.face.midY - previous.face.midY
+        ) / referenceWidth
+        let widthRatio = detected.face.width / max(previous.face.width, 1.0)
+        let eyeRatio = detected.eyeDistance / max(previous.eyeDistance, 1.0)
+        let expandedExtent = extent.insetBy(dx: -extent.width * 0.15, dy: -extent.height * 0.15)
+        return detected.face.intersects(expandedExtent)
+            && centerTravel < 1.35
+            && widthRatio > 0.48 && widthRatio < 2.1
+            && eyeRatio > 0.42 && eyeRatio < 2.35
     }
 
     private func center(of region: VNFaceLandmarkRegion2D?, in face: CGRect) -> CGPoint? {
@@ -384,7 +478,8 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     private func registerMiss() {
         self.missedDetections += 1
-        if self.missedDetections >= 14 {
+        let elapsed = CACurrentMediaTime() - self.lastSuccessfulDetectionTime
+        if self.missedDetections >= 14 && elapsed >= 0.9 {
             self.smoothedPose = nil
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .aorusVideoMaskPreviewHidden, object: nil)
@@ -497,15 +592,15 @@ public final class AorusVideoMaskProcessor: NSObject {
     }
 
     public func previewImage(for preset: String) -> UIImage? {
-        self.processingLock.lock()
-        defer { self.processingLock.unlock() }
+        self.stateLock.lock()
+        defer { self.stateLock.unlock() }
         let resolved = Self.isSupportedPreset(preset) ? preset : "skull"
         _ = self.template(for: resolved)
         return self.templateImages[resolved]
     }
 
-    private func publishPreview(pose: FacePose, extent: CGRect) {
-        let quad = self.destinationQuad(for: pose, preset: self.lastPreset)
+    private func publishPreview(pose: FacePose, extent: CGRect, preset: String, mirrored: Bool) {
+        let quad = self.destinationQuad(for: pose, preset: preset)
         let xs = [quad.topLeft.x, quad.topRight.x, quad.bottomRight.x, quad.bottomLeft.x]
         let ys = [quad.topLeft.y, quad.topRight.y, quad.bottomRight.y, quad.bottomLeft.y]
         guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else { return }
@@ -515,8 +610,6 @@ public final class AorusVideoMaskProcessor: NSObject {
             width: (maxX - minX) / extent.width,
             height: (maxY - minY) / extent.height
         )
-        let preset = self.lastPreset
-        let mirrored = self.previewMirrored
         let aspect = extent.width / max(extent.height, 1.0)
         DispatchQueue.main.async {
             NotificationCenter.default.post(
@@ -536,6 +629,8 @@ public final class AorusVideoMaskProcessor: NSObject {
     }
 
     private func makeOutputBuffer(width: Int, height: Int) -> CVPixelBuffer? {
+        self.poolLock.lock()
+        defer { self.poolLock.unlock() }
         let key = "\(width)x\(height)"
         let pool: CVPixelBufferPool
         if let current = self.pools[key] {
