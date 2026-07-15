@@ -11961,6 +11961,14 @@ def patch_video_masks(tg: Path) -> None:
             "AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation)",
             "AorusVideoMaskProcessor.shared.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: self.currentPosition == .front)"
         )
+        text = text.replace(
+            "processor.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: isFrontSource, publishesPreview: publishesPreview)",
+            "processor.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: isFrontSource, publishesPreview: publishesPreview, synchronouslyAcquireInitialPose: publishesPreview)"
+        )
+        text = text.replace(
+            "synchronouslyAcquireInitialPose: true)",
+            "synchronouslyAcquireInitialPose: publishesPreview)"
+        )
         sentinel = "// AorusGram: real-time video mask"
         stream_sentinel = "// AorusGram: stream-isolated round-video mask"
         mask_block = (
@@ -11984,7 +11992,7 @@ def patch_video_masks(tg: Path) -> None:
             "            let selectedPosition = self.masterOutput?.currentPosition ?? self.currentPosition\n"
             "            let publishesPreview = self.exclusive || (isFrontSource ? selectedPosition == .front : selectedPosition == .back)\n"
             "            let processor = isFrontSource ? AorusVideoMaskProcessor.roundVideoFront : AorusVideoMaskProcessor.roundVideoBack\n"
-            "            if let masked = processor.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: isFrontSource, publishesPreview: publishesPreview) {\n"
+            "            if let masked = processor.process(sampleBuffer: sampleBuffer, orientation: orientation, mirrored: isFrontSource, publishesPreview: publishesPreview, synchronouslyAcquireInitialPose: publishesPreview) {\n"
             "                effectiveSampleBuffer = masked\n"
             "            }\n"
             "        }\n\n"

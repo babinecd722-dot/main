@@ -359,6 +359,10 @@ def main() -> None:
             err.append("VideoMasks: named custom-mask loading is incomplete")
         if "Vision's face box can end above the visible jaw" not in mask_text:
             err.append("VideoMasks: full-face mask coverage geometry is missing")
+        if "synchronouslyAcquireInitialPose" not in mask_text or "snapshot.synchronouslyDetect" not in mask_text:
+            err.append("VideoMasks: round videos can still expose frames before initial face acquisition")
+        if ".cropped(to: image.extent)" not in mask_text:
+            err.append("VideoMasks: transformed masks can expand the frame and produce black borders")
 
     mask_assets = tg / "submodules" / "AorusGram" / "Resources" / "VideoMasks"
     expected_mask_assets = {"skull.png", "cyber.png", "oni.png", "phantom.png", "chrome.png", "aurora.png", "neoncat.png"}
@@ -382,6 +386,8 @@ def main() -> None:
         camera_output_text = camera_output.read_text(encoding="utf-8")
         if "stream-isolated round-video mask" not in camera_output_text or "sourcePosition == .front" not in camera_output_text:
             err.append("VideoMasks: round-video source streams are not isolated by physical camera")
+        if "synchronouslyAcquireInitialPose: publishesPreview" not in camera_output_text:
+            err.append("VideoMasks: CameraOutput does not request protected initial round-video acquisition")
 
     mask_editor = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMaskEditorController.swift"
     if not mask_editor.is_file():

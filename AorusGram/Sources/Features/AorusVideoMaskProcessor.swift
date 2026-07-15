@@ -53,6 +53,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         let preset: String
         let generation: UInt
         let needsDetection: Bool
+        let synchronouslyDetect: Bool
     }
 
     private struct FrameGeometry: Equatable {
@@ -77,6 +78,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private var lastDetectionTime: CFTimeInterval = 0.0
     private var detectionInFlight = false
+    private var synchronousAcquisitionAttempts = 0
     private var trackingGeneration: UInt = 0
     private var smoothedPose: FacePose?
     private var missedDetections = 0
@@ -139,6 +141,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         self.missedDetections = 0
         self.lastSuccessfulDetectionTime = 0.0
         self.lastDetectionTime = 0.0
+        self.synchronousAcquisitionAttempts = 0
         if clearGeometry {
             self.frameGeometry = nil
         }
@@ -172,7 +175,8 @@ public final class AorusVideoMaskProcessor: NSObject {
         pixelBuffer: CVPixelBuffer,
         orientation rawOrientation: Int32,
         mirrored: Bool,
-        publishesPreview: Bool
+        publishesPreview: Bool,
+        synchronouslyAcquireInitialPose: Bool = false
     ) -> CVPixelBuffer? {
         let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
             && UserDefaults.standard.bool(forKey: Self.enabledKey)
@@ -237,12 +241,20 @@ public final class AorusVideoMaskProcessor: NSObject {
             self.lastDetectionTime = now
             self.detectionInFlight = true
         }
+        let synchronouslyDetect = needsDetection
+            && self.smoothedPose == nil
+            && synchronouslyAcquireInitialPose
+            && self.synchronousAcquisitionAttempts < 2
+        if synchronouslyDetect {
+            self.synchronousAcquisitionAttempts += 1
+        }
         snapshot = RenderSnapshot(
             pose: self.smoothedPose,
             template: self.template(for: preset),
             preset: preset,
             generation: self.trackingGeneration,
-            needsDetection: needsDetection
+            needsDetection: needsDetection,
+            synchronouslyDetect: synchronouslyDetect
         )
         self.stateLock.unlock()
 
@@ -250,21 +262,43 @@ public final class AorusVideoMaskProcessor: NSObject {
             self.publishPreview(pose: pose, extent: image.extent, preset: snapshot.preset, mirrored: mirrored)
         }
 
+        var renderPose = snapshot.pose
         if snapshot.needsDetection {
             if let detectionFrame = self.makeDetectionFrame(from: image) {
-                self.schedulePoseUpdate(
-                    frame: detectionFrame,
-                    generation: snapshot.generation,
-                    previous: snapshot.pose,
-                    preset: snapshot.preset,
-                    mirrored: mirrored
-                )
+                if snapshot.synchronouslyDetect {
+                    // Round videos must never record an exposed first frame while
+                    // the initial Vision request is still queued. This one-time
+                    // acquisition is intentionally not used by the WebRTC path.
+                    let detected: FacePose? = autoreleasepool {
+                        self.detectPose(in: detectionFrame.image, sourceExtent: detectionFrame.sourceExtent, previous: snapshot.pose)
+                    }
+                    self.stateLock.lock()
+                    self.detectionInFlight = false
+                    if snapshot.generation == self.trackingGeneration, snapshot.preset == self.lastPreset {
+                        if let detected,
+                           snapshot.pose.map({ self.isPlausible(detected, comparedTo: $0, extent: detectionFrame.sourceExtent) }) ?? true {
+                            self.applyDetectedPose(detected, extent: detectionFrame.sourceExtent, preset: snapshot.preset, mirrored: mirrored)
+                            renderPose = self.smoothedPose
+                        } else {
+                            self.registerMiss()
+                        }
+                    }
+                    self.stateLock.unlock()
+                } else {
+                    self.schedulePoseUpdate(
+                        frame: detectionFrame,
+                        generation: snapshot.generation,
+                        previous: snapshot.pose,
+                        preset: snapshot.preset,
+                        mirrored: mirrored
+                    )
+                }
             } else {
                 self.completeFailedDetection(generation: snapshot.generation, preset: snapshot.preset)
             }
         }
 
-        guard let pose = snapshot.pose,
+        guard let pose = renderPose,
               pose.face.width > 4.0,
               pose.face.height > 4.0,
               let template = snapshot.template else {
@@ -278,7 +312,10 @@ public final class AorusVideoMaskProcessor: NSObject {
             "inputBottomRight": CIVector(cgPoint: quad.bottomRight),
             "inputBottomLeft": CIVector(cgPoint: quad.bottomLeft)
         ])
-        let composited = mask.composited(over: image)
+        // A close face can push the transformed artwork outside the camera
+        // extent. Crop before restoring orientation so the union extent cannot
+        // shift the frame and expose black borders.
+        let composited = mask.composited(over: image).cropped(to: image.extent)
         let restored = composited.oriented(Self.inverse(orientation))
         let normalized = restored.transformed(by: CGAffineTransform(translationX: -restored.extent.minX, y: -restored.extent.minY))
 
@@ -309,14 +346,16 @@ public final class AorusVideoMaskProcessor: NSObject {
         sampleBuffer: CMSampleBuffer,
         orientation: Int32,
         mirrored: Bool,
-        publishesPreview: Bool
+        publishesPreview: Bool,
+        synchronouslyAcquireInitialPose: Bool = false
     ) -> CMSampleBuffer? {
         guard let input = CMSampleBufferGetImageBuffer(sampleBuffer),
               let output = self.process(
-                pixelBuffer: input,
-                orientation: orientation,
-                mirrored: mirrored,
-                publishesPreview: publishesPreview
+                  pixelBuffer: input,
+                  orientation: orientation,
+                  mirrored: mirrored,
+                  publishesPreview: publishesPreview,
+                  synchronouslyAcquireInitialPose: synchronouslyAcquireInitialPose
               ) else {
             return nil
         }
