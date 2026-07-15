@@ -41,14 +41,14 @@ public enum AorusBadge {
     // Toast text shown when the badge is tapped. Follows the in-app Telegram
     // language via the shared "aorusgram_lang" key (written by AppDelegate);
     // anything other than Russian → English.
-    public static func toastText(forPeerRawId id: Int64, peerName: String) -> String? {
+    public static func toastText(forPeerRawId id: Int64, peerName _: String) -> String? {
         guard let kind = kind(forPeerRawId: id) else { return nil }
         let isRu = UserDefaults.standard.string(forKey: "aorusgram_lang") == "ru"
         switch kind {
         case .dev:
             return isRu ? "Разработчик AorusGram" : "AorusGram Developer"
         case .meme:
-            return isRu ? "\(peerName) — Гл. Администратор AorusGram" : "\(peerName) — AorusGram Head Administrator"
+            return isRu ? "Гл. Администратор AorusGram" : "AorusGram Head Administrator"
         }
     }
 

@@ -16,9 +16,12 @@ import AppBundle
 final class AorusFormattingToolbarModel: ObservableObject {
     // Whether the current input has text that can be formatted.
     @Published var canFormat: Bool
+    // Whether Telegram's native clear-formatting operation would change it.
+    @Published var canClearFormatting: Bool
 
-    init(canFormat: Bool = false) {
+    init(canFormat: Bool = false, canClearFormatting: Bool = false) {
         self.canFormat = canFormat
+        self.canClearFormatting = canClearFormatting
     }
 }
 
@@ -82,7 +85,7 @@ struct AorusFormattingToolbarView: View {
                 .buttonStyle(AorusToolbarButtonStyle())
 
                 // Clear formatting.
-                formatButton(systemName: "pencil.slash", action: onClearFormatting)
+                clearFormattingButton()
 
                 Spacer()
 
@@ -124,6 +127,16 @@ struct AorusFormattingToolbarView: View {
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canFormat)
+    }
+
+    private func clearFormattingButton() -> some View {
+        Button(action: { if self.model.canClearFormatting { self.onClearFormatting() } }) {
+            Image(systemName: "pencil.slash")
+                .foregroundColor(self.model.canClearFormatting ? Color.primary : Color.secondary.opacity(0.45))
+        }
+        .buttonStyle(AorusToolbarButtonStyle())
+        .disabled(!self.model.canClearFormatting)
+        .accessibility(label: Text("Clear Formatting"))
     }
 
     private func monospaceButton() -> some View {

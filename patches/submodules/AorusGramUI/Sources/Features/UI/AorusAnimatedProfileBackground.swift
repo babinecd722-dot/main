@@ -753,6 +753,10 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         if self.posterView.image != nil {
             self.posterView.alpha = 1.0
         }
+        // Keep the de-duplicated playback state in sync with the direct pause.
+        // Otherwise didBecomeActive considers playback already requested and
+        // leaves the display layer's timebase paused after Control Center.
+        self.lastPlaybackRequest = false
         self.renderer?.setPlaying(false)
     }
 

@@ -132,6 +132,10 @@ def main() -> None:
             err.append("FormattingPanel: clipboard action is not wired")
         if "private func aorusPresentClipboard()" not in chat_text:
             err.append("FormattingPanel: native clipboard presenter is missing")
+        if "model.canClearFormatting" not in chat_text or "chatTextInputClearFormattingAttributes(fullInputState)" not in chat_text:
+            err.append("FormattingPanel: clear button state is not driven by native formatting attributes")
+        if "self?.aorusUpdateToolbarSelectionState()" not in chat_text:
+            err.append("FormattingPanel: formatting actions do not refresh the clear-button state")
     else:
         err.append("VoiceToText: ChatTextInputPanelNode.swift is missing")
 
@@ -151,6 +155,8 @@ def main() -> None:
         code_index = toolbar_text.find('formatButton(systemName: "chevron.left.forwardslash.chevron.right"')
         if clipboard_index < 0 or code_index < 0 or clipboard_index > code_index:
             err.append("FormattingPanel: clipboard button must be immediately before Code")
+        if "@Published var canClearFormatting" not in toolbar_text or "clearFormattingButton()" not in toolbar_text:
+            err.append("FormattingPanel: clear-formatting button does not expose disabled/enabled state")
     else:
         err.append("FormattingPanel: AorusInputToolbar.swift is missing")
 
@@ -262,6 +268,8 @@ def main() -> None:
             err.append("ProfilePersonalization: animated view must be sized before configure/insertion")
         if "content: .universalImage(image: aorusImg" not in profile_header_text:
             err.append("Badges: profile badge must use Telegram's native UndoOverlay UI")
+        if "let aorusToastSize" not in profile_header_text or "size: aorusToastSize" not in profile_header_text:
+            err.append("Badges: profile toast icon must preserve the badge aspect ratio")
         if "AorusBadgeToast.present" in profile_header_text:
             err.append("Badges: legacy custom profile toast is still wired")
 
@@ -272,6 +280,15 @@ def main() -> None:
         badge_text = badge_source.read_text(encoding="utf-8")
         if "Гл. Администратор AorusGram" not in badge_text or "является жопой" in badge_text:
             err.append("Badges: administrator badge text is not production-ready")
+        if "peerName) —" in badge_text:
+            err.append("Badges: administrator toast must not include the peer nickname")
+
+    animated_background = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusAnimatedProfileBackground.swift"
+    if animated_background.is_file():
+        animated_background_text = animated_background.read_text(encoding="utf-8")
+        lifecycle_resume_guard = "self.lastPlaybackRequest = false\n        self.renderer?.setPlaying(false)"
+        if lifecycle_resume_guard not in animated_background_text:
+            err.append("ProfilePersonalization: animated background lifecycle resume guard is missing")
 
     personal_colors_build = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "BUILD"
     if personal_colors_build.is_file():

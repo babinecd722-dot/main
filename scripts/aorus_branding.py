@@ -6058,6 +6058,27 @@ def patch_aorus_badges(tg: Path) -> None:
         native_profile_toast = (
             "            let aorusAspect = aorusImg.size.width / max(1.0, aorusImg.size.height)\n"
             "            let aorusW = floor(25.0 * aorusAspect)\n"
+            "            let aorusToastHeight: CGFloat = aorusAspect > 1.25 ? 22.0 : 30.0\n"
+            "            let aorusToastSize = CGSize(width: floor(aorusToastHeight * aorusAspect), height: aorusToastHeight)\n"
+            "            let aorusOnTap: () -> Void = { [weak self] in\n"
+            "                guard let self, let controller = self.controller else { return }\n"
+            "                let text = AorusBadge.toastText(forPeerRawId: aorusRawId, peerName: aorusName) ?? \"\"\n"
+            "                controller.present(\n"
+            "                    UndoOverlayController(\n"
+            "                        presentationData: presentationData,\n"
+            "                        content: .universalImage(image: aorusImg, size: aorusToastSize, title: nil, text: text, customUndoText: nil, timeout: 3.0),\n"
+            "                        elevatedLayout: false,\n"
+            "                        position: .bottom,\n"
+            "                        animateInAsReplacement: false,\n"
+            "                        action: { _ in return false }\n"
+            "                    ),\n"
+            "                    in: .window(.root)\n"
+            "                )\n"
+            "            }\n"
+        )
+        previous_native_profile_toast = (
+            "            let aorusAspect = aorusImg.size.width / max(1.0, aorusImg.size.height)\n"
+            "            let aorusW = floor(25.0 * aorusAspect)\n"
             "            let aorusOnTap: () -> Void = { [weak self] in\n"
             "                guard let self, let controller = self.controller else { return }\n"
             "                let text = AorusBadge.toastText(forPeerRawId: aorusRawId, peerName: aorusName) ?? \"\"\n"
@@ -6076,6 +6097,8 @@ def patch_aorus_badges(tg: Path) -> None:
         )
         if legacy_profile_toast in t:
             t = t.replace(legacy_profile_toast, native_profile_toast, 1)
+        elif previous_native_profile_toast in t:
+            t = t.replace(previous_native_profile_toast, native_profile_toast, 1)
         if "// AorusGram profile badge" not in t and layout_anchor in t:
             layout_inject = (
                 "        // AorusGram profile badge (display + tap→toast), shown in BOTH the\n"
@@ -17250,6 +17273,57 @@ def patch_formatting_panel(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     if "aorusLayoutToolbar" in t:
         original = t
+        cached_toolbar_state = (
+            "    private func aorusUpdateToolbarSelectionState() {\n"
+            "        if let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel {\n"
+            "            let hasText = ((self.textInputNode?.textView.text ?? \"\").isEmpty == false)\n"
+            "            if model.canFormat != hasText {\n"
+            "                model.canFormat = hasText\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+        )
+        current_toolbar_state = (
+            "    private func aorusUpdateToolbarSelectionState() {\n"
+            "        guard let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel else { return }\n"
+            "        let inputState = self.presentationInterfaceState?.interfaceState.effectiveInputState\n"
+            "        let hasText = (inputState?.inputText.length ?? 0) > 0\n"
+            "        var hasFormatting = false\n"
+            "        if let inputState, inputState.inputText.length > 0 {\n"
+            "            let fullRange = 0 ..< inputState.inputText.length\n"
+            "            let fullInputState = ChatTextInputState(inputText: inputState.inputText, selectionRange: fullRange)\n"
+            "            let clearedText = chatTextInputClearFormattingAttributes(fullInputState).inputText\n"
+            "            hasFormatting = !clearedText.isEqual(to: inputState.inputText)\n"
+            "        }\n"
+            "        if model.canFormat != hasText {\n"
+            "            model.canFormat = hasText\n"
+            "        }\n"
+            "        if model.canClearFormatting != hasFormatting {\n"
+            "            model.canClearFormatting = hasFormatting\n"
+            "        }\n"
+            "    }\n"
+        )
+        if cached_toolbar_state in t:
+            t = t.replace(cached_toolbar_state, current_toolbar_state, 1)
+        cached_format_action = (
+            "    private func aorusRunFormattingPreservingIdleSelection(_ action: () -> Void) {\n"
+            "        let restorePosition = self.aorusSelectWholeTextIfIdle()\n"
+            "        action()\n"
+            "        self.aorusRestoreIdleSelection(restorePosition)\n"
+            "    }\n"
+        )
+        current_format_action = (
+            "    private func aorusRunFormattingPreservingIdleSelection(_ action: () -> Void) {\n"
+            "        let restorePosition = self.aorusSelectWholeTextIfIdle()\n"
+            "        action()\n"
+            "        self.aorusRestoreIdleSelection(restorePosition)\n"
+            "        DispatchQueue.main.async { [weak self] in\n"
+            "            self?.aorusUpdateToolbarSelectionState()\n"
+            "        }\n"
+            "    }\n"
+        )
+        if cached_format_action in t:
+            t = t.replace(cached_format_action, current_format_action, 1)
         if "onClipboard:" not in t:
             t = t.replace(
                 "            onStrikethrough: { [weak self] in guard let s = self else { return }; s.aorusRunFormattingPreservingIdleSelection { s.formatAttributesStrikethrough(s) } },\n"
@@ -17489,14 +17563,27 @@ def patch_formatting_panel(tg: Path) -> None:
         "        let restorePosition = self.aorusSelectWholeTextIfIdle()\n"
         "        action()\n"
         "        self.aorusRestoreIdleSelection(restorePosition)\n"
+        "        DispatchQueue.main.async { [weak self] in\n"
+        "            self?.aorusUpdateToolbarSelectionState()\n"
+        "        }\n"
         "    }\n"
         "\n"
         "    private func aorusUpdateToolbarSelectionState() {\n"
-        "        if let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel {\n"
-        "            let hasText = ((self.textInputNode?.textView.text ?? \"\").isEmpty == false)\n"
-        "            if model.canFormat != hasText {\n"
-        "                model.canFormat = hasText\n"
-        "            }\n"
+        "        guard let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel else { return }\n"
+        "        let inputState = self.presentationInterfaceState?.interfaceState.effectiveInputState\n"
+        "        let hasText = (inputState?.inputText.length ?? 0) > 0\n"
+        "        var hasFormatting = false\n"
+        "        if let inputState, inputState.inputText.length > 0 {\n"
+        "            let fullRange = 0 ..< inputState.inputText.length\n"
+        "            let fullInputState = ChatTextInputState(inputText: inputState.inputText, selectionRange: fullRange)\n"
+        "            let clearedText = chatTextInputClearFormattingAttributes(fullInputState).inputText\n"
+        "            hasFormatting = !clearedText.isEqual(to: inputState.inputText)\n"
+        "        }\n"
+        "        if model.canFormat != hasText {\n"
+        "            model.canFormat = hasText\n"
+        "        }\n"
+        "        if model.canClearFormatting != hasFormatting {\n"
+        "            model.canClearFormatting = hasFormatting\n"
         "        }\n"
         "    }\n"
         "\n"
