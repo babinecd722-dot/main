@@ -136,6 +136,10 @@ def main() -> None:
             err.append("FormattingPanel: clear button state is not driven by native formatting attributes")
         if "self?.aorusUpdateToolbarSelectionState()" not in chat_text:
             err.append("FormattingPanel: formatting actions do not refresh the clear-button state")
+        if "aorusMediaInputIsActive" not in chat_text:
+            err.append("FormattingPanel: toolbar is not hidden for emoji/sticker media input")
+        if "AorusGram: dismiss keyboard when media recording starts" not in chat_text or "strongSelf.ensureUnfocused()" not in chat_text:
+            err.append("MediaRecording: keyboard is not dismissed at the native recording start callback")
     else:
         err.append("VoiceToText: ChatTextInputPanelNode.swift is missing")
 

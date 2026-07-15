@@ -17330,8 +17330,47 @@ def patch_formatting_panel(tg: Path) -> None:
         print("FormattingPanel: ChatTextInputPanelNode.swift not found — skipped")
         return
     t = path.read_text(encoding="utf-8")
+    original_source = t
+
+    recording_anchor = "                interfaceInteraction.beginMediaRecording(isVideo)\n"
+    recording_replacement = (
+        "                // AorusGram: dismiss keyboard when media recording starts\n"
+        "                strongSelf.ensureUnfocused()\n"
+        "                interfaceInteraction.beginMediaRecording(isVideo)\n"
+    )
+    if "AorusGram: dismiss keyboard when media recording starts" not in t:
+        if recording_anchor not in t:
+            raise RuntimeError("FormattingPanel: beginMediaRecording anchor not found")
+        t = t.replace(recording_anchor, recording_replacement, 1)
+
     if "aorusLayoutToolbar" in t:
-        original = t
+        original = original_source
+        cached_toolbar_layout = (
+            "    private func aorusLayoutToolbar(transition: ContainedViewLayoutTransition, panelHeight: CGFloat, width: CGFloat, leftInset: CGFloat, rightInset: CGFloat) -> CGFloat {\n"
+            "        self.aorusInitToolbarIfNeeded()\n"
+            "        guard let node = self.aorusToolbarNode else { return 0.0 }\n"
+            "        if !(self.aorusFormattingPanelEnabled && self.isFocused) {\n"
+            "            transition.updateAlpha(node: node, alpha: 0.0)\n"
+            "            return 0.0\n"
+            "        }\n"
+        )
+        current_toolbar_layout = (
+            "    private func aorusLayoutToolbar(transition: ContainedViewLayoutTransition, panelHeight: CGFloat, width: CGFloat, leftInset: CGFloat, rightInset: CGFloat) -> CGFloat {\n"
+            "        self.aorusInitToolbarIfNeeded()\n"
+            "        guard let node = self.aorusToolbarNode else { return 0.0 }\n"
+            "        let aorusMediaInputIsActive: Bool\n"
+            "        if let presentationInterfaceState = self.presentationInterfaceState, case .media = presentationInterfaceState.inputMode {\n"
+            "            aorusMediaInputIsActive = true\n"
+            "        } else {\n"
+            "            aorusMediaInputIsActive = false\n"
+            "        }\n"
+            "        if !(self.aorusFormattingPanelEnabled && self.isFocused && !aorusMediaInputIsActive) {\n"
+            "            transition.updateAlpha(node: node, alpha: 0.0)\n"
+            "            return 0.0\n"
+            "        }\n"
+        )
+        if cached_toolbar_layout in t:
+            t = t.replace(cached_toolbar_layout, current_toolbar_layout, 1)
         cached_toolbar_state = (
             "    private func aorusUpdateToolbarSelectionState() {\n"
             "        if let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel {\n"
@@ -17649,7 +17688,13 @@ def patch_formatting_panel(tg: Path) -> None:
         "    private func aorusLayoutToolbar(transition: ContainedViewLayoutTransition, panelHeight: CGFloat, width: CGFloat, leftInset: CGFloat, rightInset: CGFloat) -> CGFloat {\n"
         "        self.aorusInitToolbarIfNeeded()\n"
         "        guard let node = self.aorusToolbarNode else { return 0.0 }\n"
-        "        if !(self.aorusFormattingPanelEnabled && self.isFocused) {\n"
+        "        let aorusMediaInputIsActive: Bool\n"
+        "        if let presentationInterfaceState = self.presentationInterfaceState, case .media = presentationInterfaceState.inputMode {\n"
+        "            aorusMediaInputIsActive = true\n"
+        "        } else {\n"
+        "            aorusMediaInputIsActive = false\n"
+        "        }\n"
+        "        if !(self.aorusFormattingPanelEnabled && self.isFocused && !aorusMediaInputIsActive) {\n"
         "            transition.updateAlpha(node: node, alpha: 0.0)\n"
         "            return 0.0\n"
         "        }\n"

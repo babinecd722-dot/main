@@ -551,8 +551,12 @@ public final class AorusVideoMaskProcessor: NSObject {
         let elapsed = CACurrentMediaTime() - self.lastSuccessfulDetectionTime
         if self.missedDetections >= 14 && elapsed >= 0.9 {
             self.smoothedPose = nil
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .aorusVideoMaskPreviewHidden, object: nil)
+            // The inactive round-video camera keeps a low-rate tracker warm. It
+            // must not hide the overlay published by the camera on screen.
+            if self.publishesPreview {
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .aorusVideoMaskPreviewHidden, object: nil)
+                }
             }
         }
     }
@@ -575,7 +579,20 @@ public final class AorusVideoMaskProcessor: NSObject {
             heightFactor = 1.18
         }
         let height = width * heightFactor
-        let eyeAnchorY: CGFloat = preset == "oni" ? 0.60 : (preset == "neonCat" ? 0.58 : 0.59)
+        // Artwork eye openings are not vertically centered. Anchor each family
+        // to its actual eye line instead of pushing the rendered eyes below the
+        // detected landmarks.
+        let eyeAnchorY: CGFloat
+        switch preset {
+        case "oni":
+            eyeAnchorY = 0.53
+        case "neonCat":
+            eyeAnchorY = 0.51
+        case "skull", "cyber", "phantom", "chrome", "aurora":
+            eyeAnchorY = 0.545
+        default:
+            eyeAnchorY = 0.55
+        }
         let eyeMid = pose.eyeMidpoint
         let originX = eyeMid.x - width * 0.5
         let originY = eyeMid.y - height * eyeAnchorY
