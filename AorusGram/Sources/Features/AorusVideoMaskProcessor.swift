@@ -134,17 +134,17 @@ public final class AorusVideoMaskProcessor: NSObject {
         self.stateLock.unlock()
     }
 
-    /// Round-video recording must not accept the original camera frame while
-    /// an enabled mask is still acquiring its first face pose. The rendered
-    /// frame latch closes a race where Vision finishes between `process` and
-    /// this query, but no masked frame has actually been produced yet.
+    /// Round-video recording must not accept the original camera frame before
+    /// the first masked frame has actually been rendered. After that initial
+    /// gate, preserve the fail-open behavior from Telegram's capture path so a
+    /// transient Vision miss cannot reduce the encoded video's frame rate.
     public var shouldDiscardUnmaskedVideoFrame: Bool {
         let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
             && UserDefaults.standard.bool(forKey: Self.enabledKey)
         guard enabled else { return false }
 
         self.stateLock.lock()
-        let result = self.processingEnabled && (!self.hasRenderedMaskedFrame || self.smoothedPose == nil)
+        let result = self.processingEnabled && !self.hasRenderedMaskedFrame
         self.stateLock.unlock()
         return result
     }

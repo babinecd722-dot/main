@@ -349,6 +349,8 @@ def main() -> None:
             err.append("VideoMasks: enable/disable tracking lifecycle reset is missing")
         if "shouldDiscardUnmaskedVideoFrame" not in mask_text or "hasRenderedMaskedFrame" not in mask_text:
             err.append("VideoMasks: initial masked-frame recording latch is missing")
+        if "let result = self.processingEnabled && !self.hasRenderedMaskedFrame" not in mask_text:
+            err.append("VideoMasks: recording gate must close only before the first masked frame")
         if "DetectionFrame" not in mask_text or "VNImageRequestHandler(cgImage:" not in mask_text:
             err.append("VideoMasks: Vision must own an immutable camera-frame snapshot")
         if "roundVideoBack" not in mask_text or "roundVideoFront" not in mask_text or "publishesPreview" not in mask_text:
