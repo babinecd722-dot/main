@@ -473,7 +473,9 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     private var targetId: Int64?
     private var requestedVisible = false
     private var representedAssetKey: String?
+    private var representedTargetId: Int64?
     private var rendererHasDisplayedFrame = false
+    private var lastPlaybackRequest: Bool?
     private var lastLookupTargetId: Int64?
     private var lastLookupTime: TimeInterval = 0.0
 
@@ -585,6 +587,10 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.contentView.frame = self.contentFrame ?? self.bounds
         self.posterView.frame = self.contentView.bounds
         self.renderer?.layer.frame = self.contentView.bounds
+        // The view is created before Telegram assigns its final header frame.
+        // Re-evaluate playback after layout, but updatePlayback de-duplicates
+        // the request so profile scrolling does not flood the renderer queue.
+        self.updatePlayback()
     }
 
     private func reload(force: Bool, requestRemote: Bool) {
@@ -654,7 +660,8 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         opacity: CGFloat,
         force _: Bool
     ) {
-        self.alpha = min(1.0, max(0.0, opacity))
+        let resolvedOpacity = min(1.0, max(0.0, opacity))
+        self.alpha = resolvedOpacity
         // A remote refresh can confirm the same banner while it is already on
         // screen. Keep the current layer alive instead of briefly exposing the
         // Telegram cover during an unnecessary teardown/rebuild.
@@ -663,9 +670,12 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
             self.updatePlayback()
             return
         }
+        let canPreserveCurrentVisual = self.representedTargetId == self.targetId
+            && (self.backdropView.image != nil || self.posterView.image != nil)
         self.representedAssetKey = key
-        self.isHidden = true
-        self.teardownRenderer()
+        self.representedTargetId = self.targetId
+        self.isHidden = !canPreserveCurrentVisual
+        self.teardownRenderer(clearVisuals: !canPreserveCurrentVisual)
 
         if let posterURL,
            let image = UIImage(contentsOfFile: posterURL.path) {
@@ -698,6 +708,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.posterView.alpha = 1.0
         let renderer = AorusVideoOnlyLoopRenderer()
         self.rendererHasDisplayedFrame = false
+        self.lastPlaybackRequest = nil
         renderer.layer.frame = self.contentView.bounds
         renderer.firstFrameEnqueued = { [weak self, weak renderer] in
             guard let self,
@@ -717,16 +728,24 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     }
 
     private func updatePlayback() {
-        guard !self.isHidden,
-              self.alpha > 0.001,
-              let window = self.window,
-              !self.bounds.isEmpty,
-              self.convert(self.bounds, to: window).intersects(window.bounds),
-              UIApplication.shared.applicationState == .active else {
-            self.renderer?.setPlaying(false)
+        guard let renderer = self.renderer else {
+            self.lastPlaybackRequest = nil
             return
         }
-        self.renderer?.setPlaying(true)
+        let shouldPlay: Bool
+        if !self.isHidden,
+           self.alpha > 0.001,
+           let window = self.window,
+           !self.bounds.isEmpty,
+           self.convert(self.bounds, to: window).intersects(window.bounds),
+           UIApplication.shared.applicationState == .active {
+            shouldPlay = true
+        } else {
+            shouldPlay = false
+        }
+        guard self.lastPlaybackRequest != shouldPlay else { return }
+        self.lastPlaybackRequest = shouldPlay
+        renderer.setPlaying(shouldPlay)
     }
 
     private func prepareForLifecyclePause() {
@@ -753,14 +772,23 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         }
     }
 
-    private func teardownRenderer() {
+    private func teardownRenderer(clearVisuals: Bool = true) {
         self.renderer?.invalidate()
         self.renderer?.layer.removeFromSuperlayer()
         self.renderer = nil
         self.rendererHasDisplayedFrame = false
-        self.backdropView.image = nil
-        self.posterView.image = nil
-        self.posterView.alpha = 1.0
+        self.lastPlaybackRequest = nil
+        if clearVisuals {
+            self.backdropView.image = nil
+            self.posterView.image = nil
+            self.posterView.alpha = 1.0
+        } else if self.posterView.image != nil {
+            // The video layer is about to be replaced. Bring its matching
+            // poster back immediately so the preserved visual is exact, not
+            // the stretched overscroll guard underneath it.
+            self.posterView.layer.removeAllAnimations()
+            self.posterView.alpha = 1.0
+        }
     }
 
     private static func makeOverscrollBackdrop(from image: UIImage) -> UIImage {

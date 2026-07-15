@@ -199,6 +199,10 @@ def main() -> None:
             err.append("ProfilePersonalization: profile background must not create an audio track/session")
         if "prepareForLifecyclePause" not in animated_text or "rendererHasDisplayedFrame" not in animated_text:
             err.append("ProfilePersonalization: foreground/background poster continuity is incomplete")
+        if "canPreserveCurrentVisual" not in animated_text or "teardownRenderer(clearVisuals:" not in animated_text:
+            err.append("ProfilePersonalization: same-banner visual continuity is incomplete")
+        if "lastPlaybackRequest" not in animated_text or "self.updatePlayback()" not in animated_text:
+            err.append("ProfilePersonalization: post-layout playback recovery is incomplete")
         if "guard seconds <= 30.0" not in animated_text or "guard totalDuration <= 30.0" not in animated_text:
             err.append("ProfilePersonalization: video/GIF duration must be capped at 30 seconds")
         if 'sourceType as String == "com.compuserve.gif"' not in animated_text:
@@ -249,6 +253,13 @@ def main() -> None:
         err.append("ProfilePersonalization: full-height animated cover guard is missing")
     if profile_header.is_file():
         profile_header_text = profile_header.read_text(encoding="utf-8")
+        if "Prepare the first frame synchronously" not in profile_header_text:
+            err.append("ProfilePersonalization: first-frame stock-cover guard is missing")
+        geometry_index = profile_header_text.find("self.aorusAnimatedProfileBackgroundView.frame = aorusBackgroundFrame")
+        configure_index = profile_header_text.find("self.aorusAnimatedProfileBackgroundView.configure(")
+        insert_index = profile_header_text.find("self.backgroundBannerView.insertSubview(self.aorusAnimatedProfileBackgroundView")
+        if min(geometry_index, configure_index, insert_index) < 0 or not geometry_index < configure_index < insert_index:
+            err.append("ProfilePersonalization: animated view must be sized before configure/insertion")
         if "content: .universalImage(image: aorusImg" not in profile_header_text:
             err.append("Badges: profile badge must use Telegram's native UndoOverlay UI")
         if "AorusBadgeToast.present" in profile_header_text:
