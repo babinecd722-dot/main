@@ -15,7 +15,38 @@ def _patch_profile_header(tg: Path) -> None:
         raise RuntimeError("ProfilePersonalization: PeerInfoHeaderNode.swift is missing")
     text = path.read_text(encoding="utf-8")
     if "// AorusGram: animated profile background layer" in text:
-        print("ProfilePersonalization: PeerInfoHeaderNode already patched")
+        legacy_geometry = (
+            "            // Keep the animated cover beyond every edge of Telegram's dynamic\n"
+            "            // header frame. The parent clips it, so pull-to-expand and collapse\n"
+            "            // transitions cannot reveal the stock cover underneath.\n"
+            "            let aorusBackgroundVerticalBleed = max(96.0, min(240.0, backgroundCoverSize.height * 0.45))\n"
+            "            let aorusBackgroundHorizontalBleed: CGFloat = 8.0\n"
+            "            let aorusBackgroundFrame = CGRect(\n"
+            "                x: -bannerInset - aorusBackgroundHorizontalBleed,\n"
+            "                y: bannerFrame.height - backgroundCoverSize.height - aorusBackgroundVerticalBleed,\n"
+            "                width: backgroundCoverSize.width + aorusBackgroundHorizontalBleed * 2.0,\n"
+            "                height: backgroundCoverSize.height + aorusBackgroundVerticalBleed * 2.0\n"
+            "            )\n"
+        )
+        guarded_geometry = (
+            "            // Cover Telegram's complete 2000 pt backing view. The media itself\n"
+            "            // stays in the native cover viewport, while AorusGramUI provides a\n"
+            "            // static edge guard for extreme pull-to-expand overscroll.\n"
+            "            let aorusBackgroundFrame = CGRect(origin: .zero, size: bannerFrame.size)\n"
+            "            self.aorusAnimatedProfileBackgroundView.contentFrame = CGRect(\n"
+            "                x: -bannerInset,\n"
+            "                y: bannerFrame.height - backgroundCoverSize.height,\n"
+            "                width: backgroundCoverSize.width,\n"
+            "                height: backgroundCoverSize.height\n"
+            "            )\n"
+        )
+        if legacy_geometry in text:
+            path.write_text(text.replace(legacy_geometry, guarded_geometry, 1), encoding="utf-8")
+            print("ProfilePersonalization: upgraded cached profile overscroll guard")
+        elif "aorusAnimatedProfileBackgroundView.contentFrame" in text:
+            print("ProfilePersonalization: PeerInfoHeaderNode already patched")
+        else:
+            raise RuntimeError("ProfilePersonalization: unknown cached animated-cover layout")
         return
 
     if "import AorusGramUI\n" not in text:
@@ -66,16 +97,15 @@ def _patch_profile_header(tg: Path) -> None:
         "                visible: aorusTargetProfileId != nil\n"
         "            )\n"
         "            self.backgroundBannerView.insertSubview(self.aorusAnimatedProfileBackgroundView, aboveSubview: backgroundCoverView)\n"
-        "            // Keep the animated cover beyond every edge of Telegram's dynamic\n"
-        "            // header frame. The parent clips it, so pull-to-expand and collapse\n"
-        "            // transitions cannot reveal the stock cover underneath.\n"
-        "            let aorusBackgroundVerticalBleed = max(96.0, min(240.0, backgroundCoverSize.height * 0.45))\n"
-        "            let aorusBackgroundHorizontalBleed: CGFloat = 8.0\n"
-        "            let aorusBackgroundFrame = CGRect(\n"
-        "                x: -bannerInset - aorusBackgroundHorizontalBleed,\n"
-        "                y: bannerFrame.height - backgroundCoverSize.height - aorusBackgroundVerticalBleed,\n"
-        "                width: backgroundCoverSize.width + aorusBackgroundHorizontalBleed * 2.0,\n"
-        "                height: backgroundCoverSize.height + aorusBackgroundVerticalBleed * 2.0\n"
+        "            // Cover Telegram's complete 2000 pt backing view. The media itself\n"
+        "            // stays in the native cover viewport, while AorusGramUI provides a\n"
+        "            // static edge guard for extreme pull-to-expand overscroll.\n"
+        "            let aorusBackgroundFrame = CGRect(origin: .zero, size: bannerFrame.size)\n"
+        "            self.aorusAnimatedProfileBackgroundView.contentFrame = CGRect(\n"
+        "                x: -bannerInset,\n"
+        "                y: bannerFrame.height - backgroundCoverSize.height,\n"
+        "                width: backgroundCoverSize.width,\n"
+        "                height: backgroundCoverSize.height\n"
         "            )\n"
         "            if additive {\n"
         "                transition.updateFrameAdditive(view: self.aorusAnimatedProfileBackgroundView, frame: aorusBackgroundFrame)\n"

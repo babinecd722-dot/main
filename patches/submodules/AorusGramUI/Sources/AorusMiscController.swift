@@ -284,7 +284,29 @@ private enum MiscEntry: ItemListNodeEntry {
         case let .fakeStars(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setFakeStars($0) })
         case let .fakeStarsCount(_, placeholder, value):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: ""), text: value, placeholder: placeholder, type: .number, sectionId: section, textUpdated: { text in args.setFakeStarsAmount(text) }, action: {})
+            return ItemListSingleLineInputItem(
+                presentationData: presentationData,
+                title: NSAttributedString(string: ""),
+                text: value,
+                placeholder: placeholder,
+                type: .regular(capitalization: false, autocorrection: false),
+                returnKeyType: .done,
+                sectionId: section,
+                textUpdated: { text in
+                    args.setFakeStarsAmount(text)
+                },
+                shouldUpdateText: { text in
+                    return text.allSatisfy { $0.isNumber }
+                },
+                action: {
+                    UIApplication.shared.sendAction(
+                        #selector(UIResponder.resignFirstResponder),
+                        to: nil,
+                        from: nil,
+                        for: nil
+                    )
+                }
+            )
         case let .fakeStarsInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .callsHeader(_, text):

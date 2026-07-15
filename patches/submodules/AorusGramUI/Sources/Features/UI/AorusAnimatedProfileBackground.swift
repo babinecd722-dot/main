@@ -454,6 +454,18 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         return cache
     }()
 
+    /// The Telegram header uses a 2000 pt clipped backing view and moves its
+    /// visible cover inside that view while the user pulls the profile. Keep
+    /// our outer view full-size, but render the media in Telegram's cover
+    /// viewport so aggressive overscroll can never expose the stock cover.
+    public var contentFrame: CGRect? {
+        didSet {
+            self.setNeedsLayout()
+        }
+    }
+
+    private let backdropView = UIImageView()
+    private let contentView = UIView()
     private let posterView = UIImageView()
     private var renderer: AorusVideoOnlyLoopRenderer?
     private var notificationTokens: [NSObjectProtocol] = []
@@ -471,10 +483,19 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.clipsToBounds = true
         self.backgroundColor = .clear
 
+        self.backdropView.contentMode = .scaleToFill
+        self.backdropView.clipsToBounds = true
+        self.backdropView.backgroundColor = .clear
+        self.addSubview(self.backdropView)
+
+        self.contentView.clipsToBounds = true
+        self.contentView.backgroundColor = .clear
+        self.addSubview(self.contentView)
+
         self.posterView.contentMode = .scaleAspectFill
         self.posterView.clipsToBounds = true
         self.posterView.backgroundColor = .clear
-        self.addSubview(self.posterView)
+        self.contentView.addSubview(self.posterView)
 
         let center = NotificationCenter.default
         self.notificationTokens.append(center.addObserver(
@@ -560,8 +581,10 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
-        self.posterView.frame = self.bounds
-        self.renderer?.layer.frame = self.bounds
+        self.backdropView.frame = self.bounds
+        self.contentView.frame = self.contentFrame ?? self.bounds
+        self.posterView.frame = self.contentView.bounds
+        self.renderer?.layer.frame = self.contentView.bounds
     }
 
     private func reload(force: Bool, requestRemote: Bool) {
@@ -670,11 +693,12 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
 
     private func setupRenderer(mediaURL: URL, poster: UIImage, key: String) {
         guard self.representedAssetKey == key else { return }
+        self.backdropView.image = Self.makeOverscrollBackdrop(from: poster)
         self.posterView.image = poster
         self.posterView.alpha = 1.0
         let renderer = AorusVideoOnlyLoopRenderer()
         self.rendererHasDisplayedFrame = false
-        renderer.layer.frame = self.bounds
+        renderer.layer.frame = self.contentView.bounds
         renderer.firstFrameEnqueued = { [weak self, weak renderer] in
             guard let self,
                   let renderer,
@@ -685,7 +709,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
                 self.posterView.alpha = 0.0
             }
         }
-        self.layer.insertSublayer(renderer.layer, at: 0)
+        self.contentView.layer.insertSublayer(renderer.layer, at: 0)
         self.renderer = renderer
         renderer.load(url: mediaURL)
         self.isHidden = false
@@ -734,8 +758,30 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         self.renderer?.layer.removeFromSuperlayer()
         self.renderer = nil
         self.rendererHasDisplayedFrame = false
+        self.backdropView.image = nil
         self.posterView.image = nil
         self.posterView.alpha = 1.0
+    }
+
+    private static func makeOverscrollBackdrop(from image: UIImage) -> UIImage {
+        let width = image.size.width
+        let height = image.size.height
+        guard width > 4.0, height > 4.0 else {
+            return image
+        }
+        // Only this static guard is stretched. The actual poster/video remains
+        // aspect-filled inside contentView, so normal profile rendering is
+        // pixel-identical while extreme pull gestures reveal a continuation of
+        // the selected banner instead of Telegram's stock background.
+        return image.resizableImage(
+            withCapInsets: UIEdgeInsets(
+                top: floor(height * 0.49),
+                left: floor(width * 0.49),
+                bottom: floor(height * 0.49),
+                right: floor(width * 0.49)
+            ),
+            resizingMode: .stretch
+        )
     }
 
     private static func makePoster(url: URL) -> UIImage? {

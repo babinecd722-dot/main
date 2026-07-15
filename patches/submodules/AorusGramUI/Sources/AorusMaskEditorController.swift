@@ -444,6 +444,13 @@ private final class AorusMaskCanvasView: UIView, UIGestureRecognizerDelegate {
                     x: point.x - self.textItems[index].center.x,
                     y: point.y - self.textItems[index].center.y
                 )
+            } else if self.selectedTextIndex != nil {
+                // Keep an explicitly selected text item active when the first
+                // finger of a canvas-wide pinch lands outside its small glyph
+                // bounds. This lets the user zoom/rotate the selected text from
+                // anywhere on the editor instead of aiming at a tiny box.
+                self.movingTextIndex = nil
+                self.movingPhoto = false
             } else if self.baseImageContains(point) {
                 self.storeUndoState()
                 self.selectedTextIndex = nil

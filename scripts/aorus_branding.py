@@ -6047,6 +6047,35 @@ def patch_aorus_badges(tg: Path) -> None:
                 1,
             )
         layout_anchor = "        var titleFrame: CGRect\n        var subtitleFrame: CGRect\n"
+        legacy_profile_toast = (
+            "            let aorusAccent = presentationData.theme.list.itemAccentColor\n"
+            "            let aorusAspect = aorusImg.size.width / max(1.0, aorusImg.size.height)\n"
+            "            let aorusW = floor(25.0 * aorusAspect)\n"
+            "            let aorusOnTap: () -> Void = {\n"
+            "                AorusBadgeToast.present(icon: aorusImg, text: AorusBadge.toastText(forPeerRawId: aorusRawId, peerName: aorusName) ?? \"\", accent: aorusAccent)\n"
+            "            }\n"
+        )
+        native_profile_toast = (
+            "            let aorusAspect = aorusImg.size.width / max(1.0, aorusImg.size.height)\n"
+            "            let aorusW = floor(25.0 * aorusAspect)\n"
+            "            let aorusOnTap: () -> Void = { [weak self] in\n"
+            "                guard let self, let controller = self.controller else { return }\n"
+            "                let text = AorusBadge.toastText(forPeerRawId: aorusRawId, peerName: aorusName) ?? \"\"\n"
+            "                controller.present(\n"
+            "                    UndoOverlayController(\n"
+            "                        presentationData: presentationData,\n"
+            "                        content: .universalImage(image: aorusImg, size: CGSize(width: 30.0, height: 30.0), title: nil, text: text, customUndoText: nil, timeout: 3.0),\n"
+            "                        elevatedLayout: false,\n"
+            "                        position: .bottom,\n"
+            "                        animateInAsReplacement: false,\n"
+            "                        action: { _ in return false }\n"
+            "                    ),\n"
+            "                    in: .window(.root)\n"
+            "                )\n"
+            "            }\n"
+        )
+        if legacy_profile_toast in t:
+            t = t.replace(legacy_profile_toast, native_profile_toast, 1)
         if "// AorusGram profile badge" not in t and layout_anchor in t:
             layout_inject = (
                 "        // AorusGram profile badge (display + tap→toast), shown in BOTH the\n"
@@ -6054,13 +6083,8 @@ def patch_aorus_badges(tg: Path) -> None:
                 "        // disappears when the avatar is enlarged.\n"
                 "        if let aorusRawId = self.aorusBadgeRawId, let aorusImg = AorusBadge.image(forPeerRawId: aorusRawId, height: 25.0, accent: presentationData.theme.list.itemAccentColor) {\n"
                 "            let aorusName = self.aorusBadgePeerName\n"
-                "            let aorusAccent = presentationData.theme.list.itemAccentColor\n"
-                "            let aorusAspect = aorusImg.size.width / max(1.0, aorusImg.size.height)\n"
-                "            let aorusW = floor(25.0 * aorusAspect)\n"
-                "            let aorusOnTap: () -> Void = {\n"
-                "                AorusBadgeToast.present(icon: aorusImg, text: AorusBadge.toastText(forPeerRawId: aorusRawId, peerName: aorusName) ?? \"\", accent: aorusAccent)\n"
-                "            }\n"
-                "            // Collapsed (regular) title state\n"
+                + native_profile_toast
+                + "            // Collapsed (regular) title state\n"
                 "            let aorusBadge: AorusTappableBadgeView\n"
                 "            if let cur = self.aorusBadgeView {\n"
                 "                aorusBadge = cur\n"

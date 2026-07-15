@@ -245,8 +245,22 @@ def main() -> None:
             err.append(f"ProfilePersonalization: {profile_path.name} is missing")
         elif sentinel not in profile_path.read_text(encoding="utf-8"):
             err.append(f"ProfilePersonalization: {profile_path.name} patch is missing")
-    if profile_header.is_file() and "aorusBackgroundVerticalBleed" not in profile_header.read_text(encoding="utf-8"):
-        err.append("ProfilePersonalization: animated cover overscroll bleed is missing")
+    if profile_header.is_file() and "aorusAnimatedProfileBackgroundView.contentFrame" not in profile_header.read_text(encoding="utf-8"):
+        err.append("ProfilePersonalization: full-height animated cover guard is missing")
+    if profile_header.is_file():
+        profile_header_text = profile_header.read_text(encoding="utf-8")
+        if "content: .universalImage(image: aorusImg" not in profile_header_text:
+            err.append("Badges: profile badge must use Telegram's native UndoOverlay UI")
+        if "AorusBadgeToast.present" in profile_header_text:
+            err.append("Badges: legacy custom profile toast is still wired")
+
+    badge_source = tg / "submodules" / "AorusBadge" / "Sources" / "AorusBadge.swift"
+    if not badge_source.is_file():
+        err.append("Badges: AorusBadge.swift is missing")
+    else:
+        badge_text = badge_source.read_text(encoding="utf-8")
+        if "Гл. Администратор AorusGram" not in badge_text or "является жопой" in badge_text:
+            err.append("Badges: administrator badge text is not production-ready")
 
     personal_colors_build = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "BUILD"
     if personal_colors_build.is_file():
@@ -312,6 +326,8 @@ def main() -> None:
             err.append("VideoMasks: custom-mask deletion storage is incomplete")
         if "maximumZoomScale = 4.0" not in editor_text or "pinchStartTextSize" not in editor_text:
             err.append("VideoMasks: precision canvas/text zoom is incomplete")
+        if "Keep an explicitly selected text item active" not in editor_text:
+            err.append("VideoMasks: selected text does not support canvas-wide pinch")
         if "disablesInteractiveTransitionGestureRecognizerNow = { true }" not in editor_text:
             err.append("VideoMasks: editor must block swipe-back while drawing")
         if "override func gestureRecognizerShouldBegin" not in editor_text:
@@ -324,6 +340,8 @@ def main() -> None:
         misc_text = misc_controller.read_text(encoding="utf-8")
         if "returnKeyType: .done" not in misc_text or "#selector(UIResponder.resignFirstResponder)" not in misc_text:
             err.append("PhoneSpoof: Return must apply the number and dismiss the keyboard")
+        if "shouldUpdateText: { text in" not in misc_text or "text.allSatisfy { $0.isNumber }" not in misc_text:
+            err.append("FakeStars: Return input must remain numeric-only")
 
     masks_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMasksController.swift"
     if not masks_controller.is_file():

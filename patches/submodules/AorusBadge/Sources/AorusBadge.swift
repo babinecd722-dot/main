@@ -48,7 +48,7 @@ public enum AorusBadge {
         case .dev:
             return isRu ? "Разработчик AorusGram" : "AorusGram Developer"
         case .meme:
-            return isRu ? "\(peerName) является жопой AorusGram" : "\(peerName) is AorusGram's ass"
+            return isRu ? "\(peerName) — Гл. Администратор AorusGram" : "\(peerName) — AorusGram Head Administrator"
         }
     }
 
