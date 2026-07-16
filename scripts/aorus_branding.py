@@ -10015,27 +10015,7 @@ def patch_fake_stars_statistics(tg: Path) -> None:
     for anchor, replacement, _ in replacements:
         text = text.replace(anchor, replacement, 1)
     stats.write_text(text, encoding="utf-8")
-
-    # The server graph is revenue, while the local graph represents purchases. Keep
-    # Telegram's own title everywhere else and label only the account Fake Stars graph.
-    screen = tg / "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsStatisticsScreen.swift"
-    if not screen.is_file():
-        raise RuntimeError("FakeStarsStatistics: StarsStatisticsScreen.swift is missing")
-    screen_text = screen.read_text(encoding="utf-8")
-    screen_marker = "// AorusGram: Fake Stars spending graph title"
-    if screen_marker not in screen_text:
-        title_anchor = "                                string: strings.Stars_BotRevenue_Revenue_Title.uppercased(),\n"
-        title_replacement = (
-            "                                // AorusGram: Fake Stars spending graph title\n"
-            "                                string: (AorusFakeStarsStore.isEnabled && component.peerId == component.context.account.peerId\n"
-            "                                    ? (presentationData.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Расходы\" : \"Spending\")\n"
-            "                                    : strings.Stars_BotRevenue_Revenue_Title).uppercased(),\n"
-        )
-        if title_anchor not in screen_text:
-            raise RuntimeError("FakeStarsStatistics: graph title anchor not found")
-        screen_text = screen_text.replace(title_anchor, title_replacement, 1)
-        screen.write_text(screen_text, encoding="utf-8")
-    print("FakeStarsStatistics: patched live balances, local spending graph and title")
+    print("FakeStarsStatistics: patched live balances and local spending graph")
 
 
 def patch_fake_stars_purchases(tg: Path) -> None:
