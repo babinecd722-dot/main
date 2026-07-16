@@ -507,7 +507,10 @@ def main() -> None:
         fake_store_text = fake_store.read_text(encoding="utf-8")
         required_store_markers = (
             "public var ownerPeerId: Int64",
+            "public var instanceId: Int64",
+            "public var purchasedLocally: Bool",
             "public static func ownProfileGifts()",
+            "public static func remove(instanceId: Int64)",
             "storedOwner == 0 && !isEnabled",
             "public static func recordLocalGiftMessage",
             "public static func recordLocalPremiumMessage",
@@ -517,6 +520,10 @@ def main() -> None:
             err.append("FakeStars: local balance/gift persistence pipeline is incomplete")
         if "where gifts[index].ownerPeerId == 0" not in fake_store_text:
             err.append("FakeGifts: own-profile mutations are not isolated from recipient gifts")
+        if "Keep every regular purchase as its own local instance" not in fake_store_text:
+            err.append("FakeGifts: repeated regular purchases are not stored independently")
+        if 'dict["fromPeerId"] = ["iv": stored.senderPeerId]' not in fake_store_text:
+            err.append("FakeGifts: edited sender is not reflected by regular gift wrappers")
 
     gift_setup = tg / "submodules" / "TelegramUI" / "Components" / "Gifts" / "GiftSetupScreen" / "Sources" / "GiftSetupScreen.swift"
     if not gift_setup.is_file() or "AorusGram: local-only Stars purchase" not in gift_setup.read_text(encoding="utf-8"):
@@ -532,6 +539,8 @@ def main() -> None:
         err.append("FakeGifts: recipient gifts can leak into the manager list")
     if not fake_gift_manage_controller.is_file() or "AorusFakeGiftsStore.ownProfileGifts()" not in fake_gift_manage_controller.read_text(encoding="utf-8"):
         err.append("FakeGifts: recipient gifts can leak into the manager editor")
+    elif "AorusFakeGiftsStore.remove(instanceId: giftInstanceId)" not in fake_gift_manage_controller.read_text(encoding="utf-8"):
+        err.append("FakeGifts: manager does not remove the selected gift instance")
 
     masks_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMasksController.swift"
     if not masks_controller.is_file():

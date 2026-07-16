@@ -7661,6 +7661,9 @@ import SwiftSignalKit
 
 public struct AorusStoredGift: Codable, Equatable {
     public var giftData: Data
+    public var instanceId: Int64     // stable local identity; separates repeated generic purchases
+    public var referencePeerId: Int64 // real profile peer used by the native per-gift reference
+    public var purchasedLocally: Bool // true only for Fake Stars purchases
     public var ownerPeerId: Int64    // 0 = legacy own-profile gift
     public var senderPeerId: Int64   // 0 = no sender / anonymous
     public var date: Int32
@@ -7673,8 +7676,11 @@ public struct AorusStoredGift: Codable, Equatable {
     public var resellCurrency: Int32   // resale currency: 0 = stars, 1 = TON (matches CurrencyAmount.Currency)
     public var collectionIds: [Int32]   // ids of the user's gift collections this fake gift belongs to
 
-    public init(giftData: Data, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = []) {
+    public init(giftData: Data, instanceId: Int64 = Int64.random(in: 1 ... Int64.max), referencePeerId: Int64 = 0, purchasedLocally: Bool = false, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = []) {
         self.giftData = giftData
+        self.instanceId = instanceId
+        self.referencePeerId = referencePeerId
+        self.purchasedLocally = purchasedLocally
         self.ownerPeerId = ownerPeerId
         self.senderPeerId = senderPeerId
         self.date = date
@@ -7689,13 +7695,16 @@ public struct AorusStoredGift: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, ownerPeerId, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds
+        case giftData, instanceId, referencePeerId, purchasedLocally, ownerPeerId, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds
     }
 
     // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars/collectionIds existed still load.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.giftData = try c.decode(Data.self, forKey: .giftData)
+        self.instanceId = try c.decodeIfPresent(Int64.self, forKey: .instanceId) ?? 0
+        self.referencePeerId = try c.decodeIfPresent(Int64.self, forKey: .referencePeerId) ?? 0
+        self.purchasedLocally = try c.decodeIfPresent(Bool.self, forKey: .purchasedLocally) ?? false
         self.ownerPeerId = try c.decodeIfPresent(Int64.self, forKey: .ownerPeerId) ?? 0
         self.senderPeerId = try c.decode(Int64.self, forKey: .senderPeerId)
         self.date = try c.decode(Int32.self, forKey: .date)
@@ -7719,7 +7728,7 @@ public struct AorusStoredGift: Codable, Equatable {
     }
 
     public var storageKey: String {
-        return "\\(self.ownerPeerId)_\\(self.key)"
+        return "i_\\(self.instanceId)"
     }
 }
 
@@ -7765,16 +7774,50 @@ public enum AorusFakeGiftsStore {
         }
     }
 
+    private static func decodeAndMigrate(_ data: Data) -> ([AorusStoredGift], Data?) {
+        guard var gifts = try? JSONDecoder().decode([AorusStoredGift].self, from: data) else {
+            return ([], nil)
+        }
+        var usedIds = Set<Int64>()
+        var changed = false
+        for index in gifts.indices {
+            if gifts[index].instanceId == 0 || usedIds.contains(gifts[index].instanceId) {
+                var value: Int64
+                repeat {
+                    value = Int64.random(in: 1 ... Int64.max)
+                } while usedIds.contains(value)
+                gifts[index].instanceId = value
+                changed = true
+            }
+            usedIds.insert(gifts[index].instanceId)
+            if gifts[index].referencePeerId == 0 && gifts[index].ownerPeerId != 0 {
+                gifts[index].referencePeerId = gifts[index].ownerPeerId
+                changed = true
+            }
+        }
+        return (gifts, changed ? (try? JSONEncoder().encode(gifts)) : nil)
+    }
+
     public static func all() -> [AorusStoredGift] {
         if let data = UserDefaults.standard.data(forKey: listKey) {
-            return (try? JSONDecoder().decode([AorusStoredGift].self, from: data)) ?? []
+            let (gifts, migratedData) = decodeAndMigrate(data)
+            if let migratedData {
+                UserDefaults.standard.set(migratedData, forKey: listKey)
+                aorusKeychainSet(migratedData, account: keychainListAccount)
+            }
+            return gifts
         }
         // No UserDefaults value at all (fresh install or reinstall — note this is distinct
         // from an empty array, which is written when the user clears every gift). Restore
         // from the Keychain mirror, which outlives an app deletion, and re-seed.
         if let data = aorusKeychainGet(account: keychainListAccount),
-           let gifts = try? JSONDecoder().decode([AorusStoredGift].self, from: data) {
-            UserDefaults.standard.set(data, forKey: listKey)
+           !data.isEmpty {
+            let (gifts, migratedData) = decodeAndMigrate(data)
+            let restoredData = migratedData ?? data
+            UserDefaults.standard.set(restoredData, forKey: listKey)
+            if let migratedData {
+                aorusKeychainSet(migratedData, account: keychainListAccount)
+            }
             return gifts
         }
         return []
@@ -7829,6 +7872,12 @@ public enum AorusFakeGiftsStore {
         }
     }
 
+    public static func remove(instanceId: Int64) {
+        var gifts = all()
+        gifts.removeAll(where: { $0.ownerPeerId == 0 && $0.instanceId == instanceId })
+        persist(gifts)
+    }
+
     public static func remove(key removeKey: String) {
         var gifts = all()
         gifts.removeAll(where: { $0.ownerPeerId == 0 && $0.key == removeKey })
@@ -7839,29 +7888,39 @@ public enum AorusFakeGiftsStore {
         return all().filter { $0.ownerPeerId == 0 }
     }
 
-    public static func contains(_ gift: StarGift) -> Bool {
-        let k = key(for: gift)
-        return all().contains(where: { $0.ownerPeerId == 0 && $0.key == k })
-    }
-
-    public static func stored(for gift: StarGift) -> AorusStoredGift? {
+    public static func stored(for gift: StarGift, reference: StarGiftReference?) -> AorusStoredGift? {
+        if case let .peer(_, id)? = reference {
+            return all().first(where: { $0.ownerPeerId == 0 && $0.instanceId == id })
+        }
         let k = key(for: gift)
         return all().first(where: { $0.ownerPeerId == 0 && $0.key == k })
     }
 
-    public static func isPinned(_ gift: StarGift) -> Bool {
-        return stored(for: gift)?.pinnedToTop ?? false
+    public static func contains(_ gift: StarGift, reference: StarGiftReference? = nil) -> Bool {
+        return stored(for: gift, reference: reference) != nil
+    }
+
+    public static func stored(for gift: StarGift) -> AorusStoredGift? {
+        return stored(for: gift, reference: nil)
+    }
+
+    public static func isPinned(_ gift: StarGift, reference: StarGiftReference? = nil) -> Bool {
+        return stored(for: gift, reference: reference)?.pinnedToTop ?? false
     }
 
     public static func setPinned(_ gift: StarGift, _ value: Bool) {
-        let k = key(for: gift)
+        setPinned(gift, reference: nil, value)
+    }
+
+    public static func setPinned(_ gift: StarGift, reference: StarGiftReference?, _ value: Bool) {
         var gifts = all()
-        if let index = gifts.firstIndex(where: { $0.ownerPeerId == 0 && $0.key == k }) {
+        let target = stored(for: gift, reference: reference)
+        if let target, let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) {
             gifts[index].pinnedToTop = value
             if value {
                 // Append to the end of the pinned sequence: 1, 2, 3, … so the first
                 // pinned gift stays first in the list.
-                let maxOrder = gifts.filter { $0.ownerPeerId == 0 && $0.pinnedToTop && $0.key != k }.map { $0.pinnedOrder }.max() ?? 0
+                let maxOrder = gifts.filter { $0.ownerPeerId == 0 && $0.pinnedToTop && $0.instanceId != target.instanceId }.map { $0.pinnedOrder }.max() ?? 0
                 gifts[index].pinnedOrder = maxOrder + 1
             } else {
                 gifts[index].pinnedOrder = 0
@@ -7932,10 +7991,17 @@ public enum AorusFakeGiftsStore {
     public static func addGift(_ gift: StarGift, selfPeerId: Int64, date: Int32) {
         guard let baseData = try? JSONEncoder().encode(gift) else { return }
         let ownedData = dataWithOwner(baseData, ownerPeerId: selfPeerId) ?? baseData
-        let stored = AorusStoredGift(giftData: ownedData, senderPeerId: 0, date: date, comment: "", showInProfile: true)
+        let stored = AorusStoredGift(giftData: ownedData, referencePeerId: selfPeerId, senderPeerId: 0, date: date, comment: "", showInProfile: true)
         var gifts = all()
         let newKey = key(for: gift)
-        gifts.removeAll(where: { $0.ownerPeerId == 0 && $0.key == newKey })
+        // The manual "Add to Profile" action keeps its previous idempotent behaviour.
+        // Only purchases may create multiple copies of the same generic gift.
+        switch gift {
+        case .unique:
+            gifts.removeAll(where: { $0.ownerPeerId == 0 && $0.key == newKey })
+        case .generic:
+            gifts.removeAll(where: { $0.ownerPeerId == 0 && !$0.purchasedLocally && $0.key == newKey })
+        }
         gifts.insert(stored, at: 0)
         persist(gifts)
     }
@@ -7949,6 +8015,8 @@ public enum AorusFakeGiftsStore {
         let storedOwner = ownerPeerId == accountPeerId ? 0 : ownerPeerId
         let stored = AorusStoredGift(
             giftData: ownedData,
+            referencePeerId: ownerPeerId,
+            purchasedLocally: true,
             ownerPeerId: storedOwner,
             senderPeerId: hideName ? 0 : accountPeerId,
             date: date,
@@ -7956,7 +8024,11 @@ public enum AorusFakeGiftsStore {
             showInProfile: true
         )
         var gifts = all()
-        gifts.removeAll(where: { $0.storageKey == stored.storageKey })
+        // Collectibles are globally unique, while a regular gift can legitimately be
+        // bought more than once. Keep every regular purchase as its own local instance.
+        if case .unique = gift {
+            gifts.removeAll(where: { $0.ownerPeerId == storedOwner && $0.key == stored.key })
+        }
         gifts.insert(stored, at: 0)
         persist(gifts)
         if storedOwner == 0 && !isEnabled {
@@ -8106,11 +8178,21 @@ public enum AorusFakeGiftsStore {
             "pinnedToTop": stored.pinnedToTop,
             "canUpgrade": false
         ]
-        // Give every fake a stable, unique reference (.slug -> {"type":2,"slug":...}). Without it
-        // reference == nil for all fakes, and the native collection "add gifts" picker keys its
-        // selection on reference.stringValue (nil -> ""), so selecting one fake selects them all.
-        if let giftValue = stored.gift, case let .unique(uniqueGift) = giftValue {
-            dict["reference"] = ["type": 2, "slug": uniqueGift.slug] as [String: Any]
+        if stored.senderPeerId != 0 {
+            dict["fromPeerId"] = ["iv": stored.senderPeerId]
+        }
+        // Give every fake a stable reference: collectible gifts keep their slug, while
+        // regular gifts use the local purchase instance id. The native collection picker
+        // keys selection on reference.stringValue, so every repeated purchase must differ.
+        if let giftValue = stored.gift {
+            switch giftValue {
+            case let .unique(uniqueGift):
+                dict["reference"] = ["type": 2, "slug": uniqueGift.slug] as [String: Any]
+            case .generic:
+                if stored.referencePeerId != 0 {
+                    dict["reference"] = ["type": 1, "peerId": ["iv": stored.referencePeerId], "id": stored.instanceId] as [String: Any]
+                }
+            }
         }
         if !stored.comment.isEmpty {
             dict["text"] = stored.comment
@@ -8159,10 +8241,10 @@ public enum AorusFakeGiftsStore {
 
     // Assign a fake gift to a native profile gift collection. Mirrors the native
     // "add to collection" flow so the membership survives a relaunch.
-    public static func addToCollection(_ gift: StarGift, collectionId: Int32) {
-        let k = key(for: gift)
+    public static func addToCollection(_ gift: StarGift, reference: StarGiftReference? = nil, collectionId: Int32) {
         var gifts = all()
-        if let index = gifts.firstIndex(where: { $0.ownerPeerId == 0 && $0.key == k }) {
+        let target = stored(for: gift, reference: reference)
+        if let target, let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) {
             if !gifts[index].collectionIds.contains(collectionId) {
                 gifts[index].collectionIds.append(collectionId)
                 persist(gifts)
@@ -8171,10 +8253,10 @@ public enum AorusFakeGiftsStore {
     }
 
     // Remove a fake gift from a collection by gift.
-    public static func removeFromCollection(_ gift: StarGift, collectionId: Int32) {
-        let k = key(for: gift)
+    public static func removeFromCollection(_ gift: StarGift, reference: StarGiftReference? = nil, collectionId: Int32) {
         var gifts = all()
-        if let index = gifts.firstIndex(where: { $0.ownerPeerId == 0 && $0.key == k }) {
+        let target = stored(for: gift, reference: reference)
+        if let target, let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) {
             if let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
                 gifts[index].collectionIds.remove(at: pos)
                 persist(gifts)
@@ -8186,6 +8268,15 @@ public enum AorusFakeGiftsStore {
     // remove-from-collection flow hands back references, not gifts). Matches a fake unique
     // gift by slug.
     public static func removeFromCollection(reference: StarGiftReference, collectionId: Int32) {
+        if case let .peer(_, id) = reference {
+            var gifts = all()
+            if let index = gifts.firstIndex(where: { $0.ownerPeerId == 0 && $0.instanceId == id }),
+               let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
+                gifts[index].collectionIds.remove(at: pos)
+                persist(gifts)
+            }
+            return
+        }
         var gifts = all()
         var changed = false
         for index in gifts.indices where gifts[index].ownerPeerId == 0 {
@@ -8405,14 +8496,14 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Link\"), color: theme.contextMenu.primaryColor)\n"
             )
             pin_injection = (
-                "                if AorusFakeGiftsStore.contains(arguments.gift) {\n"
+                "                if AorusFakeGiftsStore.contains(arguments.gift, reference: arguments.reference) {\n"
                 "                    let aorusFakeIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
-                "                    let aorusPinned = AorusFakeGiftsStore.isPinned(arguments.gift)\n"
+                "                    let aorusPinned = AorusFakeGiftsStore.isPinned(arguments.gift, reference: arguments.reference)\n"
                 "                    items.append(.action(ContextMenuActionItem(text: aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpin + "\" : \"Unpin\") : (aorusFakeIsRu ? \"" + ru_pin + "\" : \"Pin\"), icon: { theme in\n"
                 "                        return generateTintedImage(image: UIImage(bundleImageName: aorusPinned ? \"Chat/Context Menu/Unpin\" : \"Chat/Context Menu/Pin\"), color: theme.contextMenu.primaryColor)\n"
                 "                    }, action: { [weak controller] c, _ in\n"
                 "                        c?.dismiss(completion: nil)\n"
-                "                        AorusFakeGiftsStore.setPinned(arguments.gift, !aorusPinned)\n"
+                "                        AorusFakeGiftsStore.setPinned(arguments.gift, reference: arguments.reference, !aorusPinned)\n"
                 "                        let aorusToast = aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpinned + "\" : \"Gift unpinned\") : (aorusFakeIsRu ? \"" + ru_pinned + "\" : \"Gift pinned\")\n"
                 "                        controller?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusToast, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
                 "                    })))\n"
@@ -8431,13 +8522,14 @@ def patch_fake_gifts(tg: Path) -> None:
             )
             share_injection = share_anchor + (
                 "                let aorusGiftIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
-                "                if AorusFakeGiftsStore.contains(arguments.gift) {\n"
+                "                if AorusFakeGiftsStore.contains(arguments.gift, reference: arguments.reference) {\n"
                 "                    items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"" + ru_transfer + "\" : \"Transfer\", icon: { theme in\n"
                 "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Replace\"), color: theme.contextMenu.primaryColor)\n"
                 "                    }, action: { [weak self, weak controller] c, _ in\n"
                 "                        c?.dismiss(completion: nil)\n"
                 "                        guard let self else { return }\n"
                 "                        let aorusGiftForTransfer = arguments.gift\n"
+                "                        let aorusStoredGiftForTransfer = AorusFakeGiftsStore.stored(for: arguments.gift, reference: arguments.reference)\n"
                 "                        let aorusContext = self.context\n"
                 "                        let aorusPickerParams = PeerSelectionControllerParams(context: aorusContext, title: aorusGiftIsRu ? \"" + ru_transfer_title + "\" : \"Transfer Gift\")\n"
                 "                        let aorusPicker = aorusContext.sharedContext.makePeerSelectionController(aorusPickerParams)\n"
@@ -8461,7 +8553,11 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                            let _ = (aorusContext.account.postbox.transaction { transaction -> Void in\n"
                 "                                let _ = transaction.addMessages([aorusStoreMessage], location: .Random)\n"
                 "                            } |> deliverOnMainQueue).startStandalone(completed: {\n"
-                "                                AorusFakeGiftsStore.remove(key: AorusFakeGiftsStore.key(for: aorusGiftForTransfer))\n"
+                "                                if let aorusStoredGiftForTransfer {\n"
+                "                                    AorusFakeGiftsStore.remove(instanceId: aorusStoredGiftForTransfer.instanceId)\n"
+                "                                } else {\n"
+                "                                    AorusFakeGiftsStore.remove(key: AorusFakeGiftsStore.key(for: aorusGiftForTransfer))\n"
+                "                                }\n"
                 "                                let aorusDoneText = aorusGiftIsRu ? \"" + ru_transferred + "\" : \"Gift transferred\"\n"
                 "                                aorusPicker?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusDoneText, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
                 "                                aorusPicker?.dismiss()\n"
@@ -8682,8 +8778,14 @@ def patch_fake_gifts(tg: Path) -> None:
                 "            // Drop any baseline copy of a fake gift. The native add-to-collection\n"
                 "            // flow caches the gift inside the collection (Postbox), which would\n"
                 "            // otherwise render it twice until the server reply lands and clears it.\n"
-                "            let aorusFakeKeys = Set(aorusFakeGifts.map { AorusFakeGiftsStore.key(for: $0.gift) })\n"
-                "            let aorusBaseline = baseline.filter { !aorusFakeKeys.contains(AorusFakeGiftsStore.key(for: $0.gift)) }\n"
+                "            let aorusFakeUniqueKeys = Set(aorusFakeGifts.compactMap { item -> String? in\n"
+                "                if case .unique = item.gift { return AorusFakeGiftsStore.key(for: item.gift) }\n"
+                "                return nil\n"
+                "            })\n"
+                "            let aorusBaseline = baseline.filter { item in\n"
+                "                if case .unique = item.gift { return !aorusFakeUniqueKeys.contains(AorusFakeGiftsStore.key(for: item.gift)) }\n"
+                "                return true\n"
+                "            }\n"
                 "            self.starsProducts = aorusFakeGifts + aorusBaseline\n"
                 "            // A collection (or the All tab) that holds local fakes must not render the\n"
                 "            // native \"empty collection\" placeholder, which is driven purely by the\n"
@@ -9026,8 +9128,8 @@ def patch_fake_gifts(tg: Path) -> None:
             add_inject = (
                 "        case let .addGifts(gifts):\n"
                 "            for aorusGift in gifts {\n"
-                "                if AorusFakeGiftsStore.contains(aorusGift.gift) {\n"
-                "                    AorusFakeGiftsStore.addToCollection(aorusGift.gift, collectionId: collectionId)\n"
+                "                if AorusFakeGiftsStore.contains(aorusGift.gift, reference: aorusGift.reference) {\n"
+                "                    AorusFakeGiftsStore.addToCollection(aorusGift.gift, reference: aorusGift.reference, collectionId: collectionId)\n"
                 "                }\n"
                 "            }\n"
                 "            let gifts = gifts.map { gift in\n"
@@ -9066,8 +9168,8 @@ def patch_fake_gifts(tg: Path) -> None:
                 "        |> beforeNext { collection in\n"
                 "            if let collection {\n"
                 "                for aorusGift in starGifts {\n"
-                "                    if AorusFakeGiftsStore.contains(aorusGift.gift) {\n"
-                "                        AorusFakeGiftsStore.addToCollection(aorusGift.gift, collectionId: collection.id)\n"
+                "                    if AorusFakeGiftsStore.contains(aorusGift.gift, reference: aorusGift.reference) {\n"
+                "                        AorusFakeGiftsStore.addToCollection(aorusGift.gift, reference: aorusGift.reference, collectionId: collection.id)\n"
                 "                    }\n"
                 "                }\n"
                 "            }\n"

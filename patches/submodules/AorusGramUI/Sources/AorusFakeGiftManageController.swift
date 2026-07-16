@@ -173,7 +173,7 @@ private func manageEntries(state: ManageState, theme: PresentationTheme) -> [Man
 }
 
 public func aorusFakeGiftManageController(context: AccountContext, stored: AorusStoredGift, onChanged: @escaping () -> Void) -> ViewController {
-    let giftKey = stored.key
+    let giftInstanceId = stored.instanceId
 
     var initialDate = stored.date
     if initialDate <= 0 {
@@ -199,7 +199,7 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
         // Start from the freshest stored copy so collection membership changed natively
         // (from the profile's collection tabs) while this screen is open is preserved —
         // this screen only edits sender / date / comment / visibility.
-        var updated = AorusFakeGiftsStore.ownProfileGifts().first(where: { $0.key == giftKey }) ?? stored
+        var updated = AorusFakeGiftsStore.ownProfileGifts().first(where: { $0.instanceId == giftInstanceId }) ?? stored
         updated.senderPeerId = current.senderPeerId
         updated.date = current.date
         updated.comment = current.comment
@@ -301,7 +301,7 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
             persist()
         },
         delete: {
-            AorusFakeGiftsStore.remove(key: giftKey)
+            AorusFakeGiftsStore.remove(instanceId: giftInstanceId)
             onChanged()
             if let navigationController = weakController?.navigationController as? NavigationController {
                 navigationController.popViewController(animated: true)
