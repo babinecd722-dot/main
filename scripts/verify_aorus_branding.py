@@ -320,6 +320,14 @@ def main() -> None:
         if lifecycle_resume_guard not in animated_background_text:
             err.append("ProfilePersonalization: animated background lifecycle resume guard is missing")
 
+    aorus_l10n = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift"
+    if aorus_l10n.is_file():
+        aorus_l10n_text = aorus_l10n.read_text(encoding="utf-8")
+        if 't("Анимированный баннер", "Animated Banner")' not in aorus_l10n_text:
+            err.append("ProfilePersonalization: animated banner title is not localized consistently")
+        if 't("Сбросить анимированный баннер", "Reset Animated Banner")' not in aorus_l10n_text:
+            err.append("ProfilePersonalization: animated banner reset title is not localized consistently")
+
     personal_colors_build = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "BUILD"
     if personal_colors_build.is_file():
         personal_colors_build_text = personal_colors_build.read_text(encoding="utf-8")
@@ -332,6 +340,12 @@ def main() -> None:
         personal_colors_text = personal_colors.read_text(encoding="utf-8")
         if "AorusGram: animated banner shortcut focus" not in personal_colors_text or "aorusAnimatedBackgroundTag" not in personal_colors_text:
             err.append("SettingsShortcuts: animated banner focus/highlight patch is missing")
+        if "let targetView = self.profileColorSection.findTaggedView(tag: aorusAnimatedBackgroundTag)" not in personal_colors_text:
+            err.append("SettingsShortcuts: animated banner focus must wait for the exact toggle view")
+        if "if aorusAnimatedBackgroundHasMedia {" not in personal_colors_text:
+            err.append("ProfilePersonalization: animated banner reset must require stored media")
+        if "aorusAnimatedBackgroundEnabled || aorusAnimatedBackgroundHasMedia" in personal_colors_text:
+            err.append("ProfilePersonalization: reset button must stay hidden until banner media exists")
 
     list_switch_source = tg / "submodules" / "TelegramUI" / "Components" / "ListSwitchItemComponent" / "Sources" / "ListSwitchItemComponent.swift"
     if not list_switch_source.is_file() or "AorusGram: component tag support" not in list_switch_source.read_text(encoding="utf-8"):
@@ -368,6 +382,10 @@ def main() -> None:
         font_picker_text = font_picker.read_text(encoding="utf-8")
         if "highlightFontBlock" not in font_picker_text or "highlightFirstFont" in font_picker_text:
             err.append("SettingsShortcuts: font shortcut must highlight the complete font block")
+
+    display_font = tg / "submodules" / "Display" / "Source" / "Font.swift"
+    if display_font.is_file() and 'if designKey == "monospace"' not in display_font.read_text(encoding="utf-8"):
+        err.append("CustomFont: formatting panel monospace must override the selected client font")
 
     aorus_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
     misc_controller_shortcuts = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"

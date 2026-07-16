@@ -132,10 +132,10 @@ public struct AorusL10n {
     public var profileReportButton: String { t("Кнопка «Пожаловаться»", "Report Button") }
     public var squareAvatars: String { t("Квадратные аватарки", "Square Avatars") }
     public var customFont: String { t("Кастомный шрифт", "Custom Font") }
-    public var animatedProfileBackground: String { t("Анимированный фон", "Animated Background") }
+    public var animatedProfileBackground: String { t("Анимированный баннер", "Animated Banner") }
     public var chooseAnimatedProfileMedia: String { t("Выбрать медиа", "Choose Media") }
     public var animatedProfileTransparency: String { t("Прозрачность", "Transparency") }
-    public var resetAnimatedProfileBackground: String { t("Сбросить анимированный фон", "Reset Animated Background") }
+    public var resetAnimatedProfileBackground: String { t("Сбросить анимированный баннер", "Reset Animated Banner") }
     public var preparingAnimatedProfileBackground: String { t("Подготовка анимированного фона…", "Preparing animated background…") }
     public var animatedProfileMediaTooLong: String { t("Выберите видео или GIF длительностью не более 30 секунд.", "Choose a video or GIF no longer than 30 seconds.") }
     public var animatedProfileMediaUnsupported: String { t("Поддерживаются только видео и GIF.", "Only videos and GIFs are supported.") }

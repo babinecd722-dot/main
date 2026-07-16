@@ -442,9 +442,9 @@ def _patch_personal_colors(tg: Path) -> None:
                 if case .starGift = resolvedState.emojiStatus?.content {
                     displayResetProfileColor = true
                 }
-                let aorusDisplayResetProfileSection = displayResetProfileColor || aorusAnimatedBackgroundEnabled || aorusAnimatedBackgroundHasMedia
+                let aorusDisplayResetProfileSection = displayResetProfileColor || aorusAnimatedBackgroundHasMedia
                 var aorusAnimatedResetItems: [AnyComponentWithIdentity<Empty>] = []
-                if aorusAnimatedBackgroundEnabled || aorusAnimatedBackgroundHasMedia {
+                if aorusAnimatedBackgroundHasMedia {
                     aorusAnimatedResetItems.append(AnyComponentWithIdentity(id: 100, component: AnyComponent(ListActionItemComponent(
                         theme: environment.theme,
                         style: .glass,
@@ -582,16 +582,17 @@ def _patch_personal_colors_shortcut(tg: Path) -> None:
         "                if !self.didFocusAorusAnimatedBackground,\n"
         "                   let controller = environment.controller() as? UserAppearanceScreen,\n"
         "                   case .aorusAnimatedBackground? = controller.focusOnItemTag,\n"
+        "                   let targetView = self.profileColorSection.findTaggedView(tag: aorusAnimatedBackgroundTag),\n"
         "                   AorusSettingsShortcutHighlight.consume(.animatedBanner) {\n"
         "                    self.didFocusAorusAnimatedBackground = true\n"
-        "                    Queue.mainQueue().after(0.25) { [weak self] in\n"
-        "                        guard let self,\n"
-        "                              let targetView = self.profileColorSection.findTaggedView(tag: aorusAnimatedBackgroundTag) else { return }\n"
+        "                    Queue.mainQueue().after(0.1) { [weak self, weak targetView] in\n"
+        "                        guard let self, let targetView else { return }\n"
         "                        let targetFrame = targetView.convert(targetView.bounds, to: self.scrollView)\n"
         "                        let maxOffset = max(0.0, self.scrollView.contentSize.height - self.scrollView.bounds.height)\n"
-        "                        let targetOffset = min(maxOffset, max(0.0, targetFrame.minY - 12.0))\n"
+        "                        let targetOffset = min(maxOffset, max(0.0, targetFrame.midY - self.scrollView.bounds.height * 0.42))\n"
         "                        self.scrollView.setContentOffset(CGPoint(x: 0.0, y: targetOffset), animated: true)\n"
-        "                        Queue.mainQueue().after(0.28) {\n"
+        "                        Queue.mainQueue().after(0.35) { [weak targetView] in\n"
+        "                            guard let targetView else { return }\n"
         "                            AorusSettingsShortcutHighlight.pulse(view: targetView, color: environment.theme.list.itemAccentColor)\n"
         "                        }\n"
         "                    }\n"

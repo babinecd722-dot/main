@@ -14872,6 +14872,19 @@ private enum AorusRuntimeFont {
         let choice = selectedChoice
         guard choice != "system" else { return nil }
 
+        // Formatting panel `M` must remain visibly monospaced even when a
+        // client-wide custom font is selected.
+        if designKey == "monospace" {
+            let base: UIFont
+            if #available(iOS 13.0, *) {
+                base = UIFont.monospacedSystemFont(ofSize: size, weight: weight)
+            } else {
+                base = UIFont(name: "Courier", size: size) ?? UIFont.systemFont(ofSize: size, weight: weight)
+            }
+            let descriptor = applyTraits(to: base.fontDescriptor, weight: weight, traitsRaw: traitsRaw)
+            return UIFont(descriptor: descriptor, size: size)
+        }
+
         if #available(iOS 13.0, *) {
             let systemDesign: UIFontDescriptor.SystemDesign?
             switch choice {
