@@ -14830,7 +14830,13 @@ def patch_aorus_custom_font(tg: Path) -> None:
     if font_path.is_file():
         t = font_path.read_text(encoding="utf-8")
         orig = t
-        if "AorusRuntimeFont" in t and "fontNames(for choice" in t and "weight.rawValue != UIFont.Weight.regular.rawValue" in t and "importedFontsKey" in t:
+        if (
+            "AorusRuntimeFont" in t
+            and "fontNames(for choice" in t
+            and "weight.rawValue != UIFont.Weight.regular.rawValue" in t
+            and "importedFontsKey" in t
+            and 'if designKey == "monospace"' in t
+        ):
             print("CustomFont: Display Font.swift already patched")
         else:
             if "AorusRuntimeFont" in t:
