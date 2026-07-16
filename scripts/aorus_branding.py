@@ -8453,11 +8453,13 @@ public enum AorusFakeStarsStore {
     private static let enabledKey = "aorusgram_fake_stars_enabled"
     private static let amountKey = "aorusgram_fake_stars_amount"
     private static let transactionsKey = "aorusgram_fake_stars_transactions_v1"
+    private static let spentTotalsKey = "aorusgram_fake_stars_spent_totals_v1"
 
     private static let keychainService = "aorusgram.fakestars"
     private static let keychainEnabledAccount = "enabled"
     private static let keychainAmountAccount = "amount"
     private static let keychainTransactionsAccount = "transactions_v1"
+    private static let keychainSpentTotalsAccount = "spent_totals_v1"
 
     // Posted on every change so a live StarsContext can re-publish its state at once.
     public static let changedNotification = Notification.Name("AorusGramFakeStarsChanged")
@@ -8540,8 +8542,37 @@ public enum AorusFakeStarsStore {
         aorusKeychainSet(data, account: keychainTransactionsAccount)
     }
 
+    private static func storedSpentTotals() -> [String: Int64] {
+        var data = UserDefaults.standard.data(forKey: spentTotalsKey)
+        if data == nil, let restored = aorusKeychainGet(account: keychainSpentTotalsAccount) {
+            UserDefaults.standard.set(restored, forKey: spentTotalsKey)
+            data = restored
+        }
+        if let data, let values = try? JSONDecoder().decode([String: Int64].self, from: data) {
+            return values
+        }
+        // One-time migration for purchases created before the cumulative counter existed.
+        var migrated: [String: Int64] = [:]
+        for item in storedTransactions() {
+            let key = String(item.accountPeerId)
+            let (value, overflow) = (migrated[key] ?? 0).addingReportingOverflow(item.amount)
+            migrated[key] = overflow ? Int64.max : value
+        }
+        persistSpentTotals(migrated)
+        return migrated
+    }
+
+    private static func persistSpentTotals(_ values: [String: Int64]) {
+        guard let data = try? JSONEncoder().encode(values) else { return }
+        UserDefaults.standard.set(data, forKey: spentTotalsKey)
+        aorusKeychainSet(data, account: keychainSpentTotalsAccount)
+    }
+
     public static func recordPurchase(accountPeerId: PeerId, recipientPeerId: PeerId, amount: Int64, gift: StarGift?, premiumMonths: Int32?, text: String) {
         guard isEnabled, amount > 0 else { return }
+        // Load/migrate totals before inserting the new row, so the current purchase is
+        // counted exactly once when upgrading from transaction-only storage.
+        var spentTotals = storedSpentTotals()
         let giftData = gift.flatMap { try? JSONEncoder().encode($0) }
         let isResale: Bool
         if let gift {
@@ -8568,7 +8599,27 @@ public enum AorusFakeStarsStore {
         var values = storedTransactions()
         values.insert(value, at: 0)
         persistTransactions(values)
+        let accountKey = String(accountPeerId.toInt64())
+        let (updatedTotal, overflow) = (spentTotals[accountKey] ?? 0).addingReportingOverflow(amount)
+        spentTotals[accountKey] = overflow ? Int64.max : updatedTotal
+        persistSpentTotals(spentTotals)
         NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    public static func statisticsBalances(accountPeerId: PeerId) -> StarsRevenueStats.Balances {
+        let currentValue = amount
+        let spentValue = storedSpentTotals()[String(accountPeerId.toInt64())] ?? 0
+        let (combinedValue, overflow) = currentValue.addingReportingOverflow(spentValue)
+        let lifetimeValue = overflow ? Int64.max : combinedValue
+        let current = CurrencyAmount(amount: StarsAmount(value: currentValue, nanos: 0), currency: .stars)
+        let lifetime = CurrencyAmount(amount: StarsAmount(value: lifetimeValue, nanos: 0), currency: .stars)
+        return StarsRevenueStats.Balances(
+            currentBalance: current,
+            availableBalance: current,
+            overallRevenue: lifetime,
+            withdrawEnabled: false,
+            nextWithdrawalTimestamp: nil
+        )
     }
 
     public static func nativeTransactions(accountPeerId: PeerId, mode: StarsTransactionsContext.Mode, transaction: Transaction) -> [StarsContext.State.Transaction] {
@@ -9734,6 +9785,120 @@ def patch_fake_stars(tg: Path) -> None:
     if ok:
         stars.write_text(t, encoding="utf-8")
         print("FakeStars: patched Stars.swift (local balance override)")
+
+
+def patch_fake_stars_statistics(tg: Path) -> None:
+    """Keep Telegram's Stars statistics balances in sync with local Fake Stars."""
+    stats = tg / "submodules/TelegramCore/Sources/Statistics/StarsRevenueStatistics.swift"
+    if not stats.is_file():
+        raise RuntimeError("FakeStarsStatistics: StarsRevenueStatistics.swift is missing")
+    text = stats.read_text(encoding="utf-8")
+    marker = "// AorusGram: live Fake Stars statistics"
+    if marker in text:
+        print("FakeStarsStatistics: already patched")
+        return
+
+    replacements = []
+    property_anchor = (
+        "    private let disposable = MetaDisposable()\n"
+        "    private let updateDisposable = MetaDisposable()\n"
+    )
+    property_inject = property_anchor + (
+        "    // AorusGram: live Fake Stars statistics\n"
+        "    private var aorusServerStats: StarsRevenueStats?\n"
+        "    private var aorusFakeStarsObserver: NSObjectProtocol?\n"
+    )
+    replacements.append((property_anchor, property_inject, "properties"))
+
+    init_anchor = (
+        "        self._state = StarsRevenueStatsContextState(stats: nil)\n"
+        "        self._statePromise.set(.single(self._state))\n"
+        "        \n"
+        "        self.load()\n"
+    )
+    init_inject = (
+        "        self._state = StarsRevenueStatsContextState(stats: nil)\n"
+        "        self._statePromise.set(.single(self._state))\n"
+        "        self.aorusFakeStarsObserver = NotificationCenter.default.addObserver(forName: AorusFakeStarsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
+        "            guard let self else { return }\n"
+        "            self._state = StarsRevenueStatsContextState(stats: self.aorusDisplayedStats(self.aorusServerStats))\n"
+        "        }\n"
+        "        \n"
+        "        self.load()\n"
+    )
+    replacements.append((init_anchor, init_inject, "initializer"))
+
+    cache_anchor = (
+        "        |> deliverOnMainQueue).start(next: { [weak self] cachedResult in\n"
+        "            guard let self, let cachedResult else {\n"
+        "                return\n"
+        "            }\n"
+        "            self._state = StarsRevenueStatsContextState(stats: cachedResult)\n"
+        "            self._statePromise.set(.single(self._state))\n"
+        "        })\n"
+    )
+    cache_inject = (
+        "        |> deliverOnMainQueue).start(next: { [weak self] cachedResult in\n"
+        "            guard let self, let cachedResult, self.aorusServerStats == nil else {\n"
+        "                return\n"
+        "            }\n"
+        "            self.aorusServerStats = cachedResult\n"
+        "            self._state = StarsRevenueStatsContextState(stats: self.aorusDisplayedStats(cachedResult))\n"
+        "            self._statePromise.set(.single(self._state))\n"
+        "        })\n"
+    )
+    replacements.append((cache_anchor, cache_inject, "cached state"))
+
+    deinit_anchor = (
+        "    deinit {\n"
+        "        assert(Queue.mainQueue().isCurrent())\n"
+        "        self.disposable.dispose()\n"
+        "        self.updateDisposable.dispose()\n"
+        "    }\n"
+    )
+    deinit_inject = (
+        "    private func aorusDisplayedStats(_ stats: StarsRevenueStats?) -> StarsRevenueStats? {\n"
+        "        guard let stats, !self.ton, self.peerId == self.account.peerId, AorusFakeStarsStore.isEnabled else {\n"
+        "            return stats\n"
+        "        }\n"
+        "        return stats.withUpdated(balances: AorusFakeStarsStore.statisticsBalances(accountPeerId: self.account.peerId))\n"
+        "    }\n"
+        "    \n"
+        "    deinit {\n"
+        "        assert(Queue.mainQueue().isCurrent())\n"
+        "        self.disposable.dispose()\n"
+        "        self.updateDisposable.dispose()\n"
+        "        if let aorusFakeStarsObserver = self.aorusFakeStarsObserver {\n"
+        "            NotificationCenter.default.removeObserver(aorusFakeStarsObserver)\n"
+        "        }\n"
+        "    }\n"
+    )
+    replacements.append((deinit_anchor, deinit_inject, "state adapter"))
+
+    network_anchor = (
+        "            if let self {\n"
+        "                self._state = StarsRevenueStatsContextState(stats: stats)\n"
+        "                self._statePromise.set(.single(self._state))\n"
+        "                \n"
+        "                if let stats {\n"
+    )
+    network_inject = (
+        "            if let self {\n"
+        "                self.aorusServerStats = stats\n"
+        "                self._state = StarsRevenueStatsContextState(stats: self.aorusDisplayedStats(stats))\n"
+        "                self._statePromise.set(.single(self._state))\n"
+        "                \n"
+        "                if let stats {\n"
+    )
+    replacements.append((network_anchor, network_inject, "network state"))
+
+    missing = [name for anchor, _, name in replacements if anchor not in text]
+    if missing:
+        raise RuntimeError("FakeStarsStatistics: anchors not found: " + ", ".join(missing))
+    for anchor, replacement, _ in replacements:
+        text = text.replace(anchor, replacement, 1)
+    stats.write_text(text, encoding="utf-8")
+    print("FakeStarsStatistics: patched live balances and spending totals")
 
 
 def patch_fake_stars_purchases(tg: Path) -> None:
@@ -18810,6 +18975,7 @@ def main() -> None:
     patch_local_premium(tg)
     patch_fake_gifts(tg)
     patch_fake_stars(tg)
+    patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
