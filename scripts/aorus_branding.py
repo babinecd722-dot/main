@@ -7036,8 +7036,13 @@ def patch_local_premium(tg: Path) -> None:
         "public enum AorusGramPremium {\n"
         "    private static let lock = NSLock()\n"
         "    private static var accountPeerRawIds = Set<Int64>()\n"
-        "    private static var giftedPremiumCache: Set<Int64>?\n"
-        "    private static let giftedPremiumAccount = \"gifted_premium_peers_v1\"\n"
+        "    private struct GiftedPremium: Codable {\n"
+        "        let peerId: Int64\n"
+        "        var untilDate: Int32\n"
+        "    }\n"
+        "\n"
+        "    private static var giftedPremiumCache: [Int64: Int32]?\n"
+        "    private static let giftedPremiumAccount = \"gifted_premium_peers_v2\"\n"
         "\n"
         "    // Local premium master toggle (\"Прочее\" → Локальный премиум). Default ON:\n"
         "    // a fresh install (key absent) keeps premium enabled.\n"
@@ -7061,41 +7066,64 @@ def patch_local_premium(tg: Path) -> None:
         "        return result\n"
         "    }\n"
         "\n"
-        "    private static func giftedPremiumPeerIds() -> Set<Int64> {\n"
+        "    private static func giftedPremiumExpirations() -> [Int64: Int32] {\n"
         "        lock.lock()\n"
         "        defer { lock.unlock() }\n"
         "        if let giftedPremiumCache { return giftedPremiumCache }\n"
-        "        let defaultsKey = \"aorusgram_gifted_premium_peers_v1\"\n"
+        "        let defaultsKey = \"aorusgram_gifted_premium_peers_v2\"\n"
         "        var data = UserDefaults.standard.data(forKey: defaultsKey)\n"
         "        if data == nil {\n"
         "            data = keychainGet(account: giftedPremiumAccount)\n"
         "            if let data { UserDefaults.standard.set(data, forKey: defaultsKey) }\n"
         "        }\n"
-        "        let result: Set<Int64>\n"
-        "        if let data, let values = try? JSONDecoder().decode([Int64].self, from: data) {\n"
-        "            result = Set(values)\n"
+        "        var result: [Int64: Int32] = [:]\n"
+        "        if let data, let values = try? JSONDecoder().decode([GiftedPremium].self, from: data) {\n"
+        "            for value in values { result[value.peerId] = value.untilDate }\n"
         "        } else {\n"
-        "            result = []\n"
+        "            // Migrate the old id-only registry without dropping an already issued gift.\n"
+        "            let legacyKey = \"aorusgram_gifted_premium_peers_v1\"\n"
+        "            var legacyData = UserDefaults.standard.data(forKey: legacyKey)\n"
+        "            if legacyData == nil { legacyData = keychainGet(account: \"gifted_premium_peers_v1\") }\n"
+        "            if let legacyData, let legacyIds = try? JSONDecoder().decode([Int64].self, from: legacyData) {\n"
+        "                for encodedPeerId in legacyIds {\n"
+        "                    let peerId = PeerId(encodedPeerId)\n"
+        "                    result[peerId.id._internalGetInt64Value()] = Int32.max\n"
+        "                }\n"
+        "            }\n"
         "        }\n"
         "        giftedPremiumCache = result\n"
         "        return result\n"
         "    }\n"
         "\n"
-        "    public static func grantGiftedPremium(_ rawId: Int64) {\n"
-        "        _ = giftedPremiumPeerIds()\n"
+        "    private static func persistGiftedPremium() {\n"
         "        lock.lock()\n"
-        "        var values = giftedPremiumCache ?? []\n"
-        "        let inserted = values.insert(rawId).inserted\n"
+        "        let values = giftedPremiumCache ?? [:]\n"
+        "        let encoded = values.map { GiftedPremium(peerId: $0.key, untilDate: $0.value) }.sorted { $0.peerId < $1.peerId }\n"
+        "        guard let data = try? JSONEncoder().encode(encoded) else { lock.unlock(); return }\n"
+        "        UserDefaults.standard.set(data, forKey: \"aorusgram_gifted_premium_peers_v2\")\n"
+        "        keychainSet(data, account: giftedPremiumAccount)\n"
+        "        lock.unlock()\n"
+        "    }\n"
+        "\n"
+        "    public static func grantGiftedPremium(_ rawId: Int64, months: Int32) {\n"
+        "        _ = giftedPremiumExpirations()\n"
+        "        let now = Int64(Date().timeIntervalSince1970)\n"
+        "        let duration = max(Int64(1), Int64(months)) * 30 * 24 * 60 * 60\n"
+        "        lock.lock()\n"
+        "        var values = giftedPremiumCache ?? [:]\n"
+        "        let previous = values[rawId]\n"
+        "        let base = previous == Int32.max ? now : max(now, Int64(previous ?? 0))\n"
+        "        values[rawId] = Int32(clamping: min(Int64(Int32.max), base + duration))\n"
         "        giftedPremiumCache = values\n"
         "        lock.unlock()\n"
-        "        guard inserted, let data = try? JSONEncoder().encode(values.sorted()) else { return }\n"
-        "        UserDefaults.standard.set(data, forKey: \"aorusgram_gifted_premium_peers_v1\")\n"
-        "        keychainSet(data, account: giftedPremiumAccount)\n"
+        "        persistGiftedPremium()\n"
         "        NotificationCenter.default.post(name: Notification.Name(\"AorusGramGiftedPremiumChanged\"), object: nil)\n"
         "    }\n"
         "\n"
         "    public static func isLocallyPremium(_ rawId: Int64) -> Bool {\n"
-        "        return isOwnAccount(rawId) || giftedPremiumPeerIds().contains(rawId)\n"
+        "        if isOwnAccount(rawId) { return true }\n"
+        "        guard let untilDate = giftedPremiumExpirations()[rawId] else { return false }\n"
+        "        return untilDate == Int32.max || untilDate > Int32(Date().timeIntervalSince1970)\n"
         "    }\n"
         "\n"
         "    // MARK: - Worn fake-gift emoji status persistence\n"
@@ -7896,6 +7924,17 @@ public enum AorusFakeGiftsStore {
         return all().first(where: { $0.ownerPeerId == 0 && $0.key == k })
     }
 
+    public static func stored(reference: StarGiftReference) -> AorusStoredGift? {
+        if case let .peer(_, id) = reference {
+            return all().first(where: { $0.ownerPeerId == 0 && $0.instanceId == id })
+        }
+        return nil
+    }
+
+    public static func contains(reference: StarGiftReference) -> Bool {
+        return stored(reference: reference) != nil
+    }
+
     public static func contains(_ gift: StarGift, reference: StarGiftReference? = nil) -> Bool {
         return stored(for: gift, reference: reference) != nil
     }
@@ -7927,6 +7966,48 @@ public enum AorusFakeGiftsStore {
             }
             persist(gifts)
         }
+    }
+
+    @discardableResult
+    public static func setPinned(reference: StarGiftReference, _ value: Bool) -> Bool {
+        guard let target = stored(reference: reference) else { return false }
+        var gifts = all()
+        guard let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) else { return false }
+        gifts[index].pinnedToTop = value
+        if value {
+            let maxOrder = gifts.filter { $0.ownerPeerId == 0 && $0.pinnedToTop && $0.instanceId != target.instanceId }.map { $0.pinnedOrder }.max() ?? 0
+            gifts[index].pinnedOrder = maxOrder + 1
+        } else {
+            gifts[index].pinnedOrder = 0
+        }
+        persist(gifts)
+        return true
+    }
+
+    // Apply Telegram's reordered top list to local gifts while leaving server gifts to
+    // ProfileGiftsContext. This also enforces the app-config pin cap after drag/reorder.
+    public static func updatePinnedReferences(_ references: [StarGiftReference], maxCount: Int) {
+        let limited = Array(references.prefix(max(0, maxCount)))
+        var localOrder: [Int64: Int32] = [:]
+        var nextOrder: Int32 = 1
+        for reference in limited {
+            if let stored = stored(reference: reference) {
+                localOrder[stored.instanceId] = nextOrder
+            }
+            nextOrder += 1
+        }
+        var gifts = all()
+        var changed = false
+        for index in gifts.indices where gifts[index].ownerPeerId == 0 {
+            let order = localOrder[gifts[index].instanceId]
+            let pinned = order != nil
+            if gifts[index].pinnedToTop != pinned || gifts[index].pinnedOrder != (order ?? 0) {
+                gifts[index].pinnedToTop = pinned
+                gifts[index].pinnedOrder = order ?? 0
+                changed = true
+            }
+        }
+        if changed { persist(gifts) }
     }
 
     public static func setWorn(_ gift: StarGift, _ value: Bool) {
@@ -8047,7 +8128,7 @@ public enum AorusFakeGiftsStore {
         return all().contains(where: { $0.showInProfile && $0.ownerPeerId == ownerPeerId })
     }
 
-    public static func recordLocalGiftMessage(account: Account, recipientPeerId: PeerId, gift: StarGift, text: String, entities: [MessageTextEntity], hideName: Bool) {
+    public static func recordLocalGiftMessage(account: Account, recipientPeerId: PeerId, gift: StarGift, stars: Int64, text: String, entities: [MessageTextEntity], hideName: Bool) {
         let accountPeerId = account.peerId
         let timestamp = Int32(Date().timeIntervalSince1970)
         addPurchasedGift(
@@ -8058,6 +8139,7 @@ public enum AorusFakeGiftsStore {
             comment: text,
             hideName: hideName
         )
+        AorusFakeStarsStore.recordPurchase(accountPeerId: accountPeerId, recipientPeerId: recipientPeerId, amount: stars, gift: gift, premiumMonths: nil, text: text)
         let ownedGift = giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64())
         let action: TelegramMediaActionType
         switch ownedGift {
@@ -8073,7 +8155,11 @@ public enum AorusFakeGiftsStore {
     }
 
     public static func recordLocalPremiumMessage(account: Account, recipientPeerId: PeerId, months: Int32, stars: Int64, text: String, entities: [MessageTextEntity]) {
-        AorusGramPremium.grantGiftedPremium(recipientPeerId.toInt64())
+        // Peer.isPremium is keyed by the raw Telegram user id, not PeerId's encoded
+        // namespace+id representation. Keeping both sides identical makes the badge
+        // visible immediately when the recipient profile/chat is rendered.
+        AorusGramPremium.grantGiftedPremium(recipientPeerId.id._internalGetInt64Value(), months: months)
+        AorusFakeStarsStore.recordPurchase(accountPeerId: account.peerId, recipientPeerId: recipientPeerId, amount: stars, gift: nil, premiumMonths: months, text: text)
         let action = TelegramMediaActionType.giftPremium(currency: "XTR", amount: stars, days: months * 30, cryptoCurrency: nil, cryptoAmount: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities)
         let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: account.peerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
         let _ = account.postbox.transaction { transaction -> Void in
@@ -8346,6 +8432,18 @@ public enum AorusFakeGiftsStore {
     }
 }
 
+public struct AorusStoredStarsTransaction: Codable, Equatable {
+    public let id: String
+    public let amount: Int64
+    public let date: Int32
+    public let accountPeerId: Int64
+    public let peerId: Int64
+    public let giftData: Data?
+    public let premiumMonths: Int32?
+    public let text: String
+    public let isResale: Bool
+}
+
 // AorusGram local "fake stars" — a purely local override of the displayed Telegram Stars
 // balance. When enabled, the user types an amount and the Stars balance shown across the
 // app reads that value instead of the real server balance. Nothing is sent to the server;
@@ -8354,10 +8452,12 @@ public enum AorusFakeGiftsStore {
 public enum AorusFakeStarsStore {
     private static let enabledKey = "aorusgram_fake_stars_enabled"
     private static let amountKey = "aorusgram_fake_stars_amount"
+    private static let transactionsKey = "aorusgram_fake_stars_transactions_v1"
 
     private static let keychainService = "aorusgram.fakestars"
     private static let keychainEnabledAccount = "enabled"
     private static let keychainAmountAccount = "amount"
+    private static let keychainTransactionsAccount = "transactions_v1"
 
     // Posted on every change so a live StarsContext can re-publish its state at once.
     public static let changedNotification = Notification.Name("AorusGramFakeStarsChanged")
@@ -8417,6 +8517,93 @@ public enum AorusFakeStarsStore {
         guard current >= value else { return false }
         setAmount(current - value)
         return true
+    }
+
+    private static func storedTransactions() -> [AorusStoredStarsTransaction] {
+        var data = UserDefaults.standard.data(forKey: transactionsKey)
+        if data == nil, let restored = aorusKeychainGet(account: keychainTransactionsAccount) {
+            UserDefaults.standard.set(restored, forKey: transactionsKey)
+            data = restored
+        }
+        guard let data, let values = try? JSONDecoder().decode([AorusStoredStarsTransaction].self, from: data) else {
+            return []
+        }
+        return values
+    }
+
+    private static func persistTransactions(_ values: [AorusStoredStarsTransaction]) {
+        // Keep history useful but bounded: StarGift includes media metadata, so an
+        // unbounded duplicate archive would eventually make every balance refresh slow.
+        let bounded = Array(values.prefix(200))
+        guard let data = try? JSONEncoder().encode(bounded) else { return }
+        UserDefaults.standard.set(data, forKey: transactionsKey)
+        aorusKeychainSet(data, account: keychainTransactionsAccount)
+    }
+
+    public static func recordPurchase(accountPeerId: PeerId, recipientPeerId: PeerId, amount: Int64, gift: StarGift?, premiumMonths: Int32?, text: String) {
+        guard isEnabled, amount > 0 else { return }
+        let giftData = gift.flatMap { try? JSONEncoder().encode($0) }
+        let isResale: Bool
+        if let gift {
+            switch gift {
+            case .unique:
+                isResale = true
+            case .generic:
+                isResale = false
+            }
+        } else {
+            isResale = false
+        }
+        let value = AorusStoredStarsTransaction(
+            id: "aorus_\\(UUID().uuidString.lowercased())",
+            amount: amount,
+            date: Int32(Date().timeIntervalSince1970),
+            accountPeerId: accountPeerId.toInt64(),
+            peerId: recipientPeerId.toInt64(),
+            giftData: giftData,
+            premiumMonths: premiumMonths,
+            text: text,
+            isResale: isResale
+        )
+        var values = storedTransactions()
+        values.insert(value, at: 0)
+        persistTransactions(values)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    public static func nativeTransactions(accountPeerId: PeerId, mode: StarsTransactionsContext.Mode, transaction: Transaction) -> [StarsContext.State.Transaction] {
+        if case .incoming = mode { return [] }
+        return storedTransactions().filter { $0.accountPeerId == accountPeerId.toInt64() }.compactMap { stored -> StarsContext.State.Transaction? in
+            guard let peer = transaction.getPeer(PeerId(stored.peerId)) else { return nil }
+            let gift = stored.giftData.flatMap { try? JSONDecoder().decode(StarGift.self, from: $0) }
+            var flags: StarsContext.State.Transaction.Flags = [.isLocal, .isGift]
+            if stored.isResale { flags.insert(.isStarGiftResale) }
+            return StarsContext.State.Transaction(
+                flags: flags,
+                id: stored.id,
+                count: CurrencyAmount(amount: StarsAmount(value: -stored.amount, nanos: 0), currency: .stars),
+                date: stored.date,
+                peer: .peer(EnginePeer(peer)),
+                title: nil,
+                description: stored.text.isEmpty ? nil : stored.text,
+                photo: nil,
+                transactionDate: stored.date,
+                transactionUrl: nil,
+                paidMessageId: nil,
+                giveawayMessageId: nil,
+                media: [],
+                subscriptionPeriod: nil,
+                starGift: gift,
+                floodskipNumber: nil,
+                starrefCommissionPermille: nil,
+                starrefPeerId: nil,
+                starrefAmount: nil,
+                paidMessageCount: nil,
+                premiumGiftMonths: stored.premiumMonths,
+                adsProceedsFromDate: nil,
+                adsProceedsToDate: nil
+            )
+        }
     }
 
     private static func aorusKeychainSet(_ data: Data, account: String) {
@@ -8503,7 +8690,14 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                        return generateTintedImage(image: UIImage(bundleImageName: aorusPinned ? \"Chat/Context Menu/Unpin\" : \"Chat/Context Menu/Pin\"), color: theme.contextMenu.primaryColor)\n"
                 "                    }, action: { [weak controller] c, _ in\n"
                 "                        c?.dismiss(completion: nil)\n"
-                "                        AorusFakeGiftsStore.setPinned(arguments.gift, reference: arguments.reference, !aorusPinned)\n"
+                "                        guard let aorusReference = arguments.reference else { return }\n"
+                "                        let aorusDidToggle: Bool\n"
+                "                        if let aorusToggle = controller?.togglePinnedToTop {\n"
+                "                            aorusDidToggle = aorusToggle(aorusReference, !aorusPinned)\n"
+                "                        } else {\n"
+                "                            aorusDidToggle = AorusFakeGiftsStore.setPinned(reference: aorusReference, !aorusPinned)\n"
+                "                        }\n"
+                "                        guard aorusDidToggle else { return }\n"
                 "                        let aorusToast = aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpinned + "\" : \"Gift unpinned\") : (aorusFakeIsRu ? \"" + ru_pinned + "\" : \"Gift pinned\")\n"
                 "                        controller?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusToast, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
                 "                    })))\n"
@@ -8793,6 +8987,9 @@ def patch_fake_gifts(tg: Path) -> None:
                 "            self.resultsAreEmpty = false\n"
                 "            self.filteredResultsAreEmpty = false\n"
                 "        }\n"
+                "        if self.profileGifts.collectionId == nil {\n"
+                "            self.pinnedReferences = Array((self.starsProducts ?? []).filter { $0.pinnedToTop }.compactMap { $0.reference })\n"
+                "        }\n"
                 "    }\n"
                 "\n"
             ) + helper_anchor
@@ -8801,6 +8998,52 @@ def patch_fake_gifts(tg: Path) -> None:
             else:
                 ok = False
                 print("FakeGifts: WARNING GiftsListView helper anchor not found")
+
+            # 3f) Route pinning of local gifts through the same config-driven limit as
+            #     Telegram's server gifts. The merged pinnedReferences count includes both.
+            toggle_anchor = (
+                "                                            if pinnedToTop && self.pinnedReferences.count >= self.maxPinnedCount {\n"
+                "                                                self.displayUnpinScreen?(product, {\n"
+                "                                                    dismissImpl?()\n"
+                "                                                })\n"
+                "                                                return false\n"
+                "                                            }\n"
+                "                                            self.profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)\n"
+            )
+            toggle_inject = (
+                "                                            if pinnedToTop && self.pinnedReferences.count >= self.maxPinnedCount {\n"
+                "                                                if AorusFakeGiftsStore.contains(reference: reference) {\n"
+                "                                                    self.parentController?.present(UndoOverlayController(presentationData: params.presentationData, content: .info(title: nil, text: params.presentationData.strings.PeerInfo_Gifts_ToastPinLimit_Text(Int32(self.maxPinnedCount)), timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
+                "                                                } else {\n"
+                "                                                    self.displayUnpinScreen?(product, { dismissImpl?() })\n"
+                "                                                }\n"
+                "                                                return false\n"
+                "                                            }\n"
+                "                                            if AorusFakeGiftsStore.contains(reference: reference) {\n"
+                "                                                guard AorusFakeGiftsStore.setPinned(reference: reference, pinnedToTop) else { return false }\n"
+                "                                            } else {\n"
+                "                                                self.profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)\n"
+                "                                            }\n"
+            )
+            if toggle_anchor in t:
+                t = t.replace(toggle_anchor, toggle_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView pin-limit anchor not found")
+
+            reorder_anchor = (
+                "                    self.profileGifts.updatePinnedToTopStarGifts(references: pinnedReferences)\n"
+            )
+            reorder_inject = (
+                "                    AorusFakeGiftsStore.updatePinnedReferences(pinnedReferences, maxCount: self.maxPinnedCount)\n"
+                "                    let serverPinnedReferences = pinnedReferences.filter { !AorusFakeGiftsStore.contains(reference: $0) }\n"
+                "                    self.profileGifts.updatePinnedToTopStarGifts(references: serverPinnedReferences)\n"
+            )
+            if reorder_anchor in t:
+                t = t.replace(reorder_anchor, reorder_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView reorder-pins anchor not found")
 
             if ok:
                 gl.write_text(t, encoding="utf-8")
@@ -9366,6 +9609,41 @@ def patch_fake_stars(tg: Path) -> None:
         return
     ok = True
 
+    # 0) Merge persisted local purchases into Telegram's parsed first transaction page.
+    #    This keeps the stock All / Incoming / Outgoing tabs and transaction details;
+    #    subsequent server pages must not prepend the same local rows again.
+    history_anchor = (
+        "                    if let transactions {\n"
+        "                        for entry in transactions {\n"
+        "                            if let parsedTransaction = StarsContext.State.Transaction(apiTransaction: entry, peerId: peerId != account.peerId ? peerId : nil, transaction: transaction) {\n"
+        "                                parsedTransactions.append(parsedTransaction)\n"
+        "                            }\n"
+        "                        }\n"
+        "                    }\n"
+        "                    return InternalStarsStatus(\n"
+    )
+    history_inject = (
+        "                    if let transactions {\n"
+        "                        for entry in transactions {\n"
+        "                            if let parsedTransaction = StarsContext.State.Transaction(apiTransaction: entry, peerId: peerId != account.peerId ? peerId : nil, transaction: transaction) {\n"
+        "                                parsedTransactions.append(parsedTransaction)\n"
+        "                            }\n"
+        "                        }\n"
+        "                    }\n"
+        "                    if !ton, peerId == account.peerId, AorusFakeStarsStore.isEnabled, offset == nil || offset?.isEmpty == true {\n"
+        "                        let localTransactions = AorusFakeStarsStore.nativeTransactions(accountPeerId: account.peerId, mode: mode, transaction: transaction)\n"
+        "                        let localIds = Set(localTransactions.map(\\.id))\n"
+        "                        parsedTransactions.removeAll(where: { localIds.contains($0.id) })\n"
+        "                        parsedTransactions.insert(contentsOf: localTransactions, at: 0)\n"
+        "                    }\n"
+        "                    return InternalStarsStatus(\n"
+    )
+    if history_anchor in t:
+        t = t.replace(history_anchor, history_inject, 1)
+    else:
+        ok = False
+        print("FakeStars: WARNING transaction history anchor not found")
+
     # 1) Rewrite the published balance at the single choke point.
     state_anchor = (
         "    private func updateState(_ state: StarsContext.State) {\n"
@@ -9422,13 +9700,9 @@ def patch_fake_stars(tg: Path) -> None:
         "\n"
         "        self.aorusFakeStarsObserver = NotificationCenter.default.addObserver(forName: AorusFakeStarsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
         "            guard let self, !self.ton else { return }\n"
-        "            if AorusFakeStarsStore.isEnabled {\n"
-        "                if let state = self._state {\n"
-        "                    self.updateState(state)\n"
-        "                }\n"
-        "            } else {\n"
-        "                self.load(force: true)\n"
-        "            }\n"
+        "            // Refetch the first native page so both balance and persisted local\n"
+        "            // purchase history are rebuilt from the same source of truth.\n"
+        "            self.load(force: true)\n"
         "        }\n"
         "    }\n"
         "    \n"
@@ -9497,7 +9771,7 @@ def patch_fake_stars_purchases(tg: Path) -> None:
             "                        case let .premium(product):\n"
             "                            AorusFakeGiftsStore.recordLocalPremiumMessage(account: component.context.account, recipientPeerId: peerId, months: product.months, stars: finalPrice, text: textInputText.string, entities: entities)\n"
             "                        case let .starGift(starGift, _):\n"
-            "                            AorusFakeGiftsStore.recordLocalGiftMessage(account: component.context.account, recipientPeerId: peerId, gift: .generic(starGift), text: textInputText.string, entities: entities, hideName: self.hideName)\n"
+            "                            AorusFakeGiftsStore.recordLocalGiftMessage(account: component.context.account, recipientPeerId: peerId, gift: .generic(starGift), stars: finalPrice, text: textInputText.string, entities: entities, hideName: self.hideName)\n"
             "                        }\n"
             "                        signal = .single(.done(receiptMessageId: nil, subscriptionPeerId: nil, uniqueStarGift: nil))\n"
             "                    } else {\n"
@@ -9548,7 +9822,7 @@ def patch_fake_stars_purchases(tg: Path) -> None:
             "                    HapticFeedback().error()\n"
             "                    return\n"
             "                }\n"
-            "                AorusFakeGiftsStore.recordLocalGiftMessage(account: context.account, recipientPeerId: recipientPeerId, gift: .unique(uniqueGift), text: \"\", entities: [], hideName: false)\n"
+            "                AorusFakeGiftsStore.recordLocalGiftMessage(account: context.account, recipientPeerId: recipientPeerId, gift: .unique(uniqueGift), stars: finalPrice.amount.value, text: \"\", entities: [], hideName: false)\n"
             "                beforeCompletion()\n"
             "                completion()\n"
             "                updateProgress(false)\n"
