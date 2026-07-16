@@ -8454,12 +8454,14 @@ public enum AorusFakeStarsStore {
     private static let amountKey = "aorusgram_fake_stars_amount"
     private static let transactionsKey = "aorusgram_fake_stars_transactions_v1"
     private static let spentTotalsKey = "aorusgram_fake_stars_spent_totals_v1"
+    private static let dailySpendingKey = "aorusgram_fake_stars_daily_spending_v1"
 
     private static let keychainService = "aorusgram.fakestars"
     private static let keychainEnabledAccount = "enabled"
     private static let keychainAmountAccount = "amount"
     private static let keychainTransactionsAccount = "transactions_v1"
     private static let keychainSpentTotalsAccount = "spent_totals_v1"
+    private static let keychainDailySpendingAccount = "daily_spending_v1"
 
     // Posted on every change so a live StarsContext can re-publish its state at once.
     public static let changedNotification = Notification.Name("AorusGramFakeStarsChanged")
@@ -8568,11 +8570,69 @@ public enum AorusFakeStarsStore {
         aorusKeychainSet(data, account: keychainSpentTotalsAccount)
     }
 
+    private static func addingClamped(_ lhs: Int64, _ rhs: Int64) -> Int64 {
+        let (value, overflow) = lhs.addingReportingOverflow(rhs)
+        return overflow ? Int64.max : value
+    }
+
+    private static func utcDay(_ timestamp: Int32) -> Int64 {
+        return max(0, Int64(timestamp)) / 86_400
+    }
+
+    private static func storedDailySpending() -> [String: [String: Int64]] {
+        var data = UserDefaults.standard.data(forKey: dailySpendingKey)
+        if data == nil, let restored = aorusKeychainGet(account: keychainDailySpendingAccount) {
+            UserDefaults.standard.set(restored, forKey: dailySpendingKey)
+            data = restored
+        }
+        if let data, let values = try? JSONDecoder().decode([String: [String: Int64]].self, from: data) {
+            return values
+        }
+
+        // Migrate existing installs. The transaction archive is deliberately bounded,
+        // while spentTotals is lifetime data, so preserve any older remainder as one
+        // synthetic bucket immediately before the oldest retained purchase.
+        var migrated: [String: [String: Int64]] = [:]
+        var migratedTotals: [String: Int64] = [:]
+        var oldestDay: [String: Int64] = [:]
+        for item in storedTransactions() {
+            let accountKey = String(item.accountPeerId)
+            let day = utcDay(item.date)
+            let dayKey = String(day)
+            var accountDays = migrated[accountKey] ?? [:]
+            accountDays[dayKey] = addingClamped(accountDays[dayKey] ?? 0, item.amount)
+            migrated[accountKey] = accountDays
+            migratedTotals[accountKey] = addingClamped(migratedTotals[accountKey] ?? 0, item.amount)
+            oldestDay[accountKey] = min(oldestDay[accountKey] ?? day, day)
+        }
+        let lifetimeTotals = storedSpentTotals()
+        let today = max(0, Int64(Date().timeIntervalSince1970) / 86_400)
+        for (accountKey, lifetimeTotal) in lifetimeTotals {
+            let retainedTotal = migratedTotals[accountKey] ?? 0
+            if lifetimeTotal > retainedTotal {
+                let remainderDay = max(0, (oldestDay[accountKey] ?? today) - 1)
+                let dayKey = String(remainderDay)
+                var accountDays = migrated[accountKey] ?? [:]
+                accountDays[dayKey] = addingClamped(accountDays[dayKey] ?? 0, lifetimeTotal - retainedTotal)
+                migrated[accountKey] = accountDays
+            }
+        }
+        persistDailySpending(migrated)
+        return migrated
+    }
+
+    private static func persistDailySpending(_ values: [String: [String: Int64]]) {
+        guard let data = try? JSONEncoder().encode(values) else { return }
+        UserDefaults.standard.set(data, forKey: dailySpendingKey)
+        aorusKeychainSet(data, account: keychainDailySpendingAccount)
+    }
+
     public static func recordPurchase(accountPeerId: PeerId, recipientPeerId: PeerId, amount: Int64, gift: StarGift?, premiumMonths: Int32?, text: String) {
         guard isEnabled, amount > 0 else { return }
         // Load/migrate totals before inserting the new row, so the current purchase is
         // counted exactly once when upgrading from transaction-only storage.
         var spentTotals = storedSpentTotals()
+        var dailySpending = storedDailySpending()
         let giftData = gift.flatMap { try? JSONEncoder().encode($0) }
         let isResale: Bool
         if let gift {
@@ -8603,6 +8663,11 @@ public enum AorusFakeStarsStore {
         let (updatedTotal, overflow) = (spentTotals[accountKey] ?? 0).addingReportingOverflow(amount)
         spentTotals[accountKey] = overflow ? Int64.max : updatedTotal
         persistSpentTotals(spentTotals)
+        let dayKey = String(utcDay(value.date))
+        var accountDays = dailySpending[accountKey] ?? [:]
+        accountDays[dayKey] = addingClamped(accountDays[dayKey] ?? 0, amount)
+        dailySpending[accountKey] = accountDays
+        persistDailySpending(dailySpending)
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
@@ -8619,6 +8684,55 @@ public enum AorusFakeStarsStore {
             overallRevenue: lifetime,
             withdrawEnabled: false,
             nextWithdrawalTimestamp: nil
+        )
+    }
+
+    public static func statisticsGraph(accountPeerId: PeerId) -> StatsGraph {
+        let accountKey = String(accountPeerId.toInt64())
+        let storedDays = storedDailySpending()[accountKey] ?? [:]
+        var valuesByDay: [Int64: Int64] = [:]
+        for (key, value) in storedDays {
+            if let day = Int64(key), day >= 0, value >= 0 {
+                valuesByDay[day] = addingClamped(valuesByDay[day] ?? 0, value)
+            }
+        }
+
+        // A minimum seven-day window keeps Telegram's native bar controller stable and
+        // useful before the first purchase. Non-zero historical days stay in the graph;
+        // zero-filled dates are only added for the recent window, keeping storage and
+        // rendering bounded even after years of use.
+        let today = max(0, Int64(Date().timeIntervalSince1970) / 86_400)
+        for offset in 0 ..< 7 {
+            valuesByDay[today - Int64(offset)] = valuesByDay[today - Int64(offset)] ?? 0
+        }
+        let days = valuesByDay.keys.sorted()
+        var timestamps: [Any] = ["x"]
+        var spending: [Any] = ["y0"]
+        for day in days {
+            timestamps.append(day * 86_400_000)
+            spending.append(valuesByDay[day] ?? 0)
+        }
+        let isRussian = (UserDefaults.standard.string(forKey: "aorusgram_lang") ?? Locale.current.languageCode ?? "en").lowercased().hasPrefix("ru")
+        let payload: [String: Any] = [
+            "columns": [timestamps, spending],
+            "types": ["x": "x", "y0": "bar"],
+            "names": ["y0": isRussian ? "Расходы" : "Spending"],
+            "colors": ["y0": "#A855F7"],
+            "stacked": true
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else {
+            return .Empty
+        }
+        return .Loaded(token: nil, data: json)
+    }
+
+    public static func statisticsStats(serverStats: StarsRevenueStats?, accountPeerId: PeerId) -> StarsRevenueStats {
+        return StarsRevenueStats(
+            topHoursGraph: serverStats?.topHoursGraph,
+            revenueGraph: statisticsGraph(accountPeerId: accountPeerId),
+            balances: statisticsBalances(accountPeerId: accountPeerId),
+            usdRate: serverStats?.usdRate ?? 0.0
         )
     }
 
@@ -9788,7 +9902,7 @@ def patch_fake_stars(tg: Path) -> None:
 
 
 def patch_fake_stars_statistics(tg: Path) -> None:
-    """Keep Telegram's Stars statistics balances in sync with local Fake Stars."""
+    """Keep Telegram's complete Stars statistics in sync with local Fake Stars."""
     stats = tg / "submodules/TelegramCore/Sources/Statistics/StarsRevenueStatistics.swift"
     if not stats.is_file():
         raise RuntimeError("FakeStarsStatistics: StarsRevenueStatistics.swift is missing")
@@ -9823,6 +9937,9 @@ def patch_fake_stars_statistics(tg: Path) -> None:
         "            guard let self else { return }\n"
         "            self._state = StarsRevenueStatsContextState(stats: self.aorusDisplayedStats(self.aorusServerStats))\n"
         "        }\n"
+        "        // Publish local statistics immediately; do not flash an empty/server\n"
+        "        // graph while the cache and network request are still loading.\n"
+        "        self._state = StarsRevenueStatsContextState(stats: self.aorusDisplayedStats(nil))\n"
         "        \n"
         "        self.load()\n"
     )
@@ -9858,10 +9975,10 @@ def patch_fake_stars_statistics(tg: Path) -> None:
     )
     deinit_inject = (
         "    private func aorusDisplayedStats(_ stats: StarsRevenueStats?) -> StarsRevenueStats? {\n"
-        "        guard let stats, !self.ton, self.peerId == self.account.peerId, AorusFakeStarsStore.isEnabled else {\n"
+        "        guard !self.ton, self.peerId == self.account.peerId, AorusFakeStarsStore.isEnabled else {\n"
         "            return stats\n"
         "        }\n"
-        "        return stats.withUpdated(balances: AorusFakeStarsStore.statisticsBalances(accountPeerId: self.account.peerId))\n"
+        "        return AorusFakeStarsStore.statisticsStats(serverStats: stats, accountPeerId: self.account.peerId)\n"
         "    }\n"
         "    \n"
         "    deinit {\n"
@@ -9898,7 +10015,27 @@ def patch_fake_stars_statistics(tg: Path) -> None:
     for anchor, replacement, _ in replacements:
         text = text.replace(anchor, replacement, 1)
     stats.write_text(text, encoding="utf-8")
-    print("FakeStarsStatistics: patched live balances and spending totals")
+
+    # The server graph is revenue, while the local graph represents purchases. Keep
+    # Telegram's own title everywhere else and label only the account Fake Stars graph.
+    screen = tg / "submodules/TelegramUI/Components/Stars/StarsTransactionsScreen/Sources/StarsStatisticsScreen.swift"
+    if not screen.is_file():
+        raise RuntimeError("FakeStarsStatistics: StarsStatisticsScreen.swift is missing")
+    screen_text = screen.read_text(encoding="utf-8")
+    screen_marker = "// AorusGram: Fake Stars spending graph title"
+    if screen_marker not in screen_text:
+        title_anchor = "                                string: strings.Stars_BotRevenue_Revenue_Title.uppercased(),\n"
+        title_replacement = (
+            "                                // AorusGram: Fake Stars spending graph title\n"
+            "                                string: (AorusFakeStarsStore.isEnabled && component.peerId == component.context.account.peerId\n"
+            "                                    ? (presentationData.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Расходы\" : \"Spending\")\n"
+            "                                    : strings.Stars_BotRevenue_Revenue_Title).uppercased(),\n"
+        )
+        if title_anchor not in screen_text:
+            raise RuntimeError("FakeStarsStatistics: graph title anchor not found")
+        screen_text = screen_text.replace(title_anchor, title_replacement, 1)
+        screen.write_text(screen_text, encoding="utf-8")
+    print("FakeStarsStatistics: patched live balances, local spending graph and title")
 
 
 def patch_fake_stars_purchases(tg: Path) -> None:
