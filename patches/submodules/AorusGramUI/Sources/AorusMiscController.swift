@@ -476,7 +476,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     return entries
 }
 
-public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes? = nil) -> ViewController {
+public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes) -> ViewController {
     let initialFakeStars = AorusFakeStarsStore.isEnabled
     let initialFakeStarsAmount = AorusFakeStarsStore.amount > 0 ? "\(AorusFakeStarsStore.amount)" : ""
     let initialProfileLinkTargetPeerId = Int64(UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_peer_id") ?? "") ?? 0
@@ -644,8 +644,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         },
         openAnimatedWallpapers: {
             guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController,
-                  let shortcutRoutes else {
+                  let navigationController = controller.navigationController as? NavigationController else {
                 return
             }
             AorusSettingsShortcutHighlight.request(.animatedWallpapers)
@@ -653,8 +652,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         },
         openAnimatedBanner: {
             guard let controller = weakController,
-                  let navigationController = controller.navigationController as? NavigationController,
-                  let shortcutRoutes else {
+                  let navigationController = controller.navigationController as? NavigationController else {
                 return
             }
             AorusSettingsShortcutHighlight.request(.animatedBanner)

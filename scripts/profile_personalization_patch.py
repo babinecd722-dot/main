@@ -654,6 +654,56 @@ def _patch_list_switch_tag_support(tg: Path) -> None:
     print("ProfilePersonalization: patched ListSwitch tag support")
 
 
+def _patch_settings_shortcut_routes(tg: Path) -> None:
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift"
+    if not path.is_file():
+        raise RuntimeError("ProfilePersonalization: PeerInfoScreenSettingsActions.swift is missing")
+    text = path.read_text(encoding="utf-8")
+
+    for module in ("PeerNameColorScreen", "WallpaperGridScreen"):
+        import_line = f"import {module}\n"
+        if import_line not in text:
+            anchor = "import AorusGramUI\n"
+            if anchor not in text:
+                raise RuntimeError("ProfilePersonalization: AorusGramUI import is missing from settings actions")
+            text = text.replace(anchor, anchor + import_line, 1)
+
+    marker = "shortcutRoutes: AorusSettingsShortcutRoutes("
+    if marker not in text:
+        old_case = (
+            "        case .aorusGram:\n"
+            "            push(aorusGramController(context: self.context))\n"
+        )
+        new_case = (
+            "        case .aorusGram:\n"
+            "            let context = self.context\n"
+            "            let updatedPresentationData = self.controller?.updatedPresentationData\n"
+            "            push(aorusGramController(\n"
+            "                context: context,\n"
+            "                shortcutRoutes: AorusSettingsShortcutRoutes(\n"
+            "                    animatedWallpapers: {\n"
+            "                        return ThemeGridController(context: context)\n"
+            "                    },\n"
+            "                    animatedBanner: {\n"
+            "                        return UserAppearanceScreen(\n"
+            "                            context: context,\n"
+            "                            updatedPresentationData: updatedPresentationData,\n"
+            "                            focusOnItemTag: .aorusAnimatedBackground\n"
+            "                        )\n"
+            "                    }\n"
+            "                )\n"
+            "            ))\n"
+        )
+        if old_case not in text:
+            raise RuntimeError("ProfilePersonalization: AorusGram settings route anchor is missing")
+        text = text.replace(old_case, new_case, 1)
+        print("ProfilePersonalization: patched appearance shortcut routes")
+    else:
+        print("ProfilePersonalization: appearance shortcut routes already patched")
+
+    path.write_text(text, encoding="utf-8")
+
+
 def _patch_build(tg: Path) -> None:
     personal_colors_build = tg / "submodules/TelegramUI/Components/Settings/PeerNameColorScreen/BUILD"
     if not personal_colors_build.is_file():
@@ -683,6 +733,7 @@ def _patch_build(tg: Path) -> None:
     peer_info_text = peer_info_build.read_text(encoding="utf-8")
     peer_info_deps = [
         "//submodules/AorusGramUI",
+        "//submodules/TelegramUI/Components/Settings/PeerNameColorScreen",
         "//submodules/TelegramUI/Components/Settings/WallpaperGridScreen",
     ]
     missing_peer_info_deps = [dep for dep in peer_info_deps if f'"{dep}"' not in peer_info_text]
@@ -708,4 +759,5 @@ def patch_profile_personalization(tg: Path) -> None:
     _patch_list_switch_tag_support(tg)
     _patch_personal_colors(tg)
     _patch_personal_colors_shortcut(tg)
+    _patch_settings_shortcut_routes(tg)
     _patch_build(tg)

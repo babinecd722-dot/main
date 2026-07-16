@@ -707,12 +707,12 @@ private final class AorusFontImportDelegate: NSObject, UIDocumentPickerDelegate 
 
 private var aorusFontImportDelegate: AorusFontImportDelegate?
 
-private func aorusFontEntries(selectedId: String, theme: PresentationTheme, highlightFirstFont: Bool) -> [AorusFontEntry] {
+private func aorusFontEntries(selectedId: String, theme: PresentationTheme, highlightFontBlock: Bool) -> [AorusFontEntry] {
     let isRu = AorusLang.current == .ru
     var entries: [AorusFontEntry] = []
     entries.append(.header(theme, isRu ? "ШРИФТ" : "FONT"))
-    for (index, choice) in AorusFontStore.choices.enumerated() {
-        entries.append(.font(theme, choice, choice.id == selectedId, highlightFirstFont && index == 0))
+    for choice in AorusFontStore.choices {
+        entries.append(.font(theme, choice, choice.id == selectedId, highlightFontBlock))
     }
     entries.append(.importFont(theme, isRu ? "Импортировать шрифт" : "Import Font"))
     entries.append(.footer(theme, isRu
@@ -722,7 +722,7 @@ private func aorusFontEntries(selectedId: String, theme: PresentationTheme, high
 }
 
 public func aorusFontPickerController(context: AccountContext) -> ViewController {
-    let highlightFirstFont = AorusSettingsShortcutHighlight.consume(.font)
+    let highlightFontBlock = AorusSettingsShortcutHighlight.consume(.font)
     let statePromise = ValuePromise(AorusFontStore.selectedId, ignoreRepeated: true)
     let stateValue = Atomic(value: AorusFontStore.selectedId)
     let updateSelected: (String) -> Void = { id in
@@ -753,7 +753,7 @@ public func aorusFontPickerController(context: AccountContext) -> ViewController
         |> map { selectedId -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
-            let entries = aorusFontEntries(selectedId: selectedId, theme: presentationData.theme, highlightFirstFont: highlightFirstFont)
+            let entries = aorusFontEntries(selectedId: selectedId, theme: presentationData.theme, highlightFontBlock: highlightFontBlock)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(isRu ? "Шрифт" : "Font"),

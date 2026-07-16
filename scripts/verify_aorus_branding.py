@@ -346,6 +346,36 @@ def main() -> None:
             err.append("ProfilePersonalization: PeerInfoScreen AorusGramUI dependency is missing")
         if "//submodules/TelegramUI/Components/Settings/WallpaperGridScreen" not in peer_info_build_text:
             err.append("SettingsShortcuts: PeerInfoScreen wallpaper dependency is missing")
+        if "//submodules/TelegramUI/Components/Settings/PeerNameColorScreen" not in peer_info_build_text:
+            err.append("SettingsShortcuts: PeerInfoScreen appearance dependency is missing")
+
+    peer_info_actions = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoScreenSettingsActions.swift"
+    if not peer_info_actions.is_file():
+        err.append("SettingsShortcuts: PeerInfoScreenSettingsActions.swift is missing")
+    else:
+        peer_info_actions_text = peer_info_actions.read_text(encoding="utf-8")
+        if "shortcutRoutes: AorusSettingsShortcutRoutes(" not in peer_info_actions_text:
+            err.append("SettingsShortcuts: appearance routes are not passed to AorusGram")
+        if "ThemeGridController(context: context)" not in peer_info_actions_text:
+            err.append("SettingsShortcuts: native wallpaper route is missing")
+        if "focusOnItemTag: .aorusAnimatedBackground" not in peer_info_actions_text:
+            err.append("SettingsShortcuts: animated banner route is missing")
+
+    font_picker = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFontPickerController.swift"
+    if not font_picker.is_file():
+        err.append("SettingsShortcuts: font picker is missing")
+    else:
+        font_picker_text = font_picker.read_text(encoding="utf-8")
+        if "highlightFontBlock" not in font_picker_text or "highlightFirstFont" in font_picker_text:
+            err.append("SettingsShortcuts: font shortcut must highlight the complete font block")
+
+    aorus_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
+    misc_controller_shortcuts = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
+    for controller_path in (aorus_controller, misc_controller_shortcuts):
+        if not controller_path.is_file():
+            err.append(f"SettingsShortcuts: {controller_path.name} is missing")
+        elif "shortcutRoutes: AorusSettingsShortcutRoutes? = nil" in controller_path.read_text(encoding="utf-8"):
+            err.append(f"SettingsShortcuts: {controller_path.name} must require non-optional routes")
 
     wallpaper_grid = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "WallpaperGridScreen" / "Sources" / "ThemeGridControllerNode.swift"
     if not wallpaper_grid.is_file() or "AorusGram: animated wallpaper shortcut highlight" not in wallpaper_grid.read_text(encoding="utf-8"):
