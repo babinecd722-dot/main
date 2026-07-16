@@ -17,6 +17,8 @@ import TelegramPresentationData
 import PresentationDataUtils
 import PasswordSetupUI
 import InstantPageCache
+import PeerNameColorScreen
+import WallpaperGridScreen
 
 extension PeerInfoScreenNode {
     func openSettings(section: PeerInfoSettingsSection) {
@@ -191,7 +193,23 @@ extension PeerInfoScreenNode {
                     }))
                 })]), in: .window(.root))
         case .aorusGram:
-            push(aorusGramController(context: self.context))
+            let context = self.context
+            let updatedPresentationData = self.controller?.updatedPresentationData
+            push(aorusGramController(
+                context: context,
+                shortcutRoutes: AorusSettingsShortcutRoutes(
+                    animatedWallpapers: {
+                        return ThemeGridController(context: context)
+                    },
+                    animatedBanner: {
+                        return UserAppearanceScreen(
+                            context: context,
+                            updatedPresentationData: updatedPresentationData,
+                            focusOnItemTag: .aorusAnimatedBackground
+                        )
+                    }
+                )
+            ))
         case .faq:
             self.openFaq()
         case .tips:

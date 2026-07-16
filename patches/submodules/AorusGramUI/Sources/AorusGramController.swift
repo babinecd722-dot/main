@@ -1025,7 +1025,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 
 // MARK: - Public factory
 
-public func aorusGramController(context: AccountContext) -> ViewController {
+public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes? = nil) -> ViewController {
     // License gate: opening the AorusGram settings while the subscription is locked
     // routes to the purchase/subscription screen instead (LicenseGate handles the
     // notification). Fail-open — an active user (flag absent/false) is never affected.
@@ -1217,7 +1217,7 @@ public func aorusGramController(context: AccountContext) -> ViewController {
                   let navigationController = controller.navigationController as? NavigationController else {
                 return
             }
-            navigationController.pushViewController(aorusMiscController(context: context))
+            navigationController.pushViewController(aorusMiscController(context: context, shortcutRoutes: shortcutRoutes))
         },
         openAntiSpamManage: {
             guard let controller = weakController,

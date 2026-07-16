@@ -371,7 +371,8 @@ def _patch_personal_colors(tg: Path) -> None:
                                     )
                                 }
                             }
-                        }
+                        },
+                        tag: aorusAnimatedBackgroundTag
                     )))
                 ]
                 if aorusAnimatedBackgroundEnabled {
@@ -532,6 +533,127 @@ def _patch_personal_colors(tg: Path) -> None:
     print("ProfilePersonalization: patched Personal Colors controls")
 
 
+def _patch_personal_colors_shortcut(tg: Path) -> None:
+    path = tg / "submodules/TelegramUI/Components/Settings/PeerNameColorScreen/Sources/UserApperanceScreen.swift"
+    if not path.is_file():
+        raise RuntimeError("ProfilePersonalization: UserApperanceScreen.swift is missing")
+    text = path.read_text(encoding="utf-8")
+    marker = "// AorusGram: animated banner shortcut focus"
+    if marker in text:
+        print("ProfilePersonalization: animated banner shortcut already patched")
+        return
+
+    text = _replace_once(
+        text,
+        "private let useGiftTag = GenericComponentViewTag()\n",
+        "private let useGiftTag = GenericComponentViewTag()\n"
+        "private let aorusAnimatedBackgroundTag = GenericComponentViewTag()\n",
+        "animated banner component tag",
+    )
+    text = _replace_once(
+        text,
+        "public enum UserAppearanceEntryTag {\n    case profile\n",
+        "public enum UserAppearanceEntryTag {\n    case profile\n    case aorusAnimatedBackground\n",
+        "animated banner focus tag",
+    )
+    text = _replace_once(
+        text,
+        "        private var isUpdating: Bool = false\n",
+        "        private var isUpdating: Bool = false\n"
+        "        private var didFocusAorusAnimatedBackground = false\n",
+        "animated banner focus state",
+    )
+    text = _replace_once(
+        text,
+        "        case .profile, .profileAddIcons, .profileUseGift, nil:\n",
+        "        case .profile, .profileAddIcons, .profileUseGift, .aorusAnimatedBackground, nil:\n",
+        "animated banner initial section",
+    )
+    frame_anchor = (
+        "                if let profileColorSectionView = self.profileColorSection.view {\n"
+        "                    if profileColorSectionView.superview == nil {\n"
+        "                        self.scrollView.addSubview(profileColorSectionView)\n"
+        "                    }\n"
+        "                    transition.setFrame(view: profileColorSectionView, frame: profileColorSectionFrame)\n"
+        "                }\n"
+    )
+    focus_code = frame_anchor + (
+        "                // AorusGram: animated banner shortcut focus\n"
+        "                if !self.didFocusAorusAnimatedBackground,\n"
+        "                   let controller = environment.controller() as? UserAppearanceScreen,\n"
+        "                   case .aorusAnimatedBackground? = controller.focusOnItemTag,\n"
+        "                   AorusSettingsShortcutHighlight.consume(.animatedBanner) {\n"
+        "                    self.didFocusAorusAnimatedBackground = true\n"
+        "                    Queue.mainQueue().after(0.25) { [weak self] in\n"
+        "                        guard let self,\n"
+        "                              let targetView = self.profileColorSection.findTaggedView(tag: aorusAnimatedBackgroundTag) else { return }\n"
+        "                        let targetFrame = targetView.convert(targetView.bounds, to: self.scrollView)\n"
+        "                        let maxOffset = max(0.0, self.scrollView.contentSize.height - self.scrollView.bounds.height)\n"
+        "                        let targetOffset = min(maxOffset, max(0.0, targetFrame.minY - 12.0))\n"
+        "                        self.scrollView.setContentOffset(CGPoint(x: 0.0, y: targetOffset), animated: true)\n"
+        "                        Queue.mainQueue().after(0.28) {\n"
+        "                            AorusSettingsShortcutHighlight.pulse(view: targetView, color: environment.theme.list.itemAccentColor)\n"
+        "                        }\n"
+        "                    }\n"
+        "                }\n"
+    )
+    text = _replace_once(text, frame_anchor, focus_code, "animated banner focus layout")
+    path.write_text(text, encoding="utf-8")
+    print("ProfilePersonalization: patched animated banner shortcut focus")
+
+
+def _patch_list_switch_tag_support(tg: Path) -> None:
+    path = tg / "submodules/TelegramUI/Components/ListSwitchItemComponent/Sources/ListSwitchItemComponent.swift"
+    if not path.is_file():
+        raise RuntimeError("ProfilePersonalization: ListSwitchItemComponent.swift is missing")
+    text = path.read_text(encoding="utf-8")
+    marker = "// AorusGram: component tag support"
+    if marker in text:
+        print("ProfilePersonalization: ListSwitch tag support already patched")
+        return
+
+    text = _replace_once(
+        text,
+        "    let valueUpdated: (Bool) -> Void\n",
+        "    let valueUpdated: (Bool) -> Void\n"
+        "    // AorusGram: component tag support\n"
+        "    let tag: AnyObject?\n",
+        "ListSwitch tag property",
+    )
+    text = _replace_once(
+        text,
+        "        value: Bool,\n        valueUpdated: @escaping (Bool) -> Void\n",
+        "        value: Bool,\n        valueUpdated: @escaping (Bool) -> Void,\n        tag: AnyObject? = nil\n",
+        "ListSwitch tag initializer parameter",
+    )
+    text = _replace_once(
+        text,
+        "        self.valueUpdated = valueUpdated\n",
+        "        self.valueUpdated = valueUpdated\n        self.tag = tag\n",
+        "ListSwitch tag assignment",
+    )
+    text = _replace_once(
+        text,
+        "        if lhs.value != rhs.value {\n            return false\n        }\n        return true\n",
+        "        if lhs.value != rhs.value {\n            return false\n        }\n"
+        "        if lhs.tag !== rhs.tag {\n            return false\n        }\n"
+        "        return true\n",
+        "ListSwitch tag equality",
+    )
+    text = _replace_once(
+        text,
+        "    public final class View: UIView {\n",
+        "    public final class View: UIView, ComponentTaggedView {\n"
+        "        public func matches(tag: Any) -> Bool {\n"
+        "            guard let componentTag = self.component?.tag else { return false }\n"
+        "            return componentTag === (tag as AnyObject)\n"
+        "        }\n\n",
+        "ListSwitch tagged view",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("ProfilePersonalization: patched ListSwitch tag support")
+
+
 def _patch_build(tg: Path) -> None:
     personal_colors_build = tg / "submodules/TelegramUI/Components/Settings/PeerNameColorScreen/BUILD"
     if not personal_colors_build.is_file():
@@ -559,17 +681,23 @@ def _patch_build(tg: Path) -> None:
     if not peer_info_build.is_file():
         raise RuntimeError("ProfilePersonalization: PeerInfoScreen BUILD is missing")
     peer_info_text = peer_info_build.read_text(encoding="utf-8")
-    if "//submodules/AorusGramUI" in peer_info_text:
-        print("ProfilePersonalization: PeerInfoScreen dependency already present")
-    else:
+    peer_info_deps = [
+        "//submodules/AorusGramUI",
+        "//submodules/TelegramUI/Components/Settings/WallpaperGridScreen",
+    ]
+    missing_peer_info_deps = [dep for dep in peer_info_deps if f'"{dep}"' not in peer_info_text]
+    if missing_peer_info_deps:
         anchor = "    deps = [\n"
         if anchor not in peer_info_text:
             raise RuntimeError("ProfilePersonalization: PeerInfoScreen BUILD deps anchor is missing")
+        insertion = "".join(f'        "{dep}",\n' for dep in missing_peer_info_deps)
         peer_info_build.write_text(
-            peer_info_text.replace(anchor, anchor + '        "//submodules/AorusGramUI",\n', 1),
+            peer_info_text.replace(anchor, anchor + insertion, 1),
             encoding="utf-8",
         )
-        print("ProfilePersonalization: added PeerInfoScreen dependency")
+        print("ProfilePersonalization: added PeerInfoScreen dependencies")
+    else:
+        print("ProfilePersonalization: PeerInfoScreen dependencies already present")
 
 
 def patch_profile_personalization(tg: Path) -> None:
@@ -577,5 +705,7 @@ def patch_profile_personalization(tg: Path) -> None:
     _patch_avatar_renderer(tg)
     _patch_editing_avatar(tg)
     _patch_profile_preview(tg)
+    _patch_list_switch_tag_support(tg)
     _patch_personal_colors(tg)
+    _patch_personal_colors_shortcut(tg)
     _patch_build(tg)

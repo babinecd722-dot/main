@@ -328,9 +328,28 @@ def main() -> None:
     else:
         err.append("ProfilePersonalization: PeerNameColorScreen BUILD is missing")
 
+    if personal_colors.is_file():
+        personal_colors_text = personal_colors.read_text(encoding="utf-8")
+        if "AorusGram: animated banner shortcut focus" not in personal_colors_text or "aorusAnimatedBackgroundTag" not in personal_colors_text:
+            err.append("SettingsShortcuts: animated banner focus/highlight patch is missing")
+
+    list_switch_source = tg / "submodules" / "TelegramUI" / "Components" / "ListSwitchItemComponent" / "Sources" / "ListSwitchItemComponent.swift"
+    if not list_switch_source.is_file() or "AorusGram: component tag support" not in list_switch_source.read_text(encoding="utf-8"):
+        err.append("SettingsShortcuts: ListSwitch component tag support is missing")
+
     peer_info_build = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "BUILD"
-    if not peer_info_build.is_file() or "//submodules/AorusGramUI" not in peer_info_build.read_text(encoding="utf-8"):
-        err.append("ProfilePersonalization: PeerInfoScreen AorusGramUI dependency is missing")
+    if not peer_info_build.is_file():
+        err.append("ProfilePersonalization: PeerInfoScreen BUILD is missing")
+    else:
+        peer_info_build_text = peer_info_build.read_text(encoding="utf-8")
+        if "//submodules/AorusGramUI" not in peer_info_build_text:
+            err.append("ProfilePersonalization: PeerInfoScreen AorusGramUI dependency is missing")
+        if "//submodules/TelegramUI/Components/Settings/WallpaperGridScreen" not in peer_info_build_text:
+            err.append("SettingsShortcuts: PeerInfoScreen wallpaper dependency is missing")
+
+    wallpaper_grid = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "WallpaperGridScreen" / "Sources" / "ThemeGridControllerNode.swift"
+    if not wallpaper_grid.is_file() or "AorusGram: animated wallpaper shortcut highlight" not in wallpaper_grid.read_text(encoding="utf-8"):
+        err.append("SettingsShortcuts: animated wallpaper highlight patch is missing")
 
     mask_processor = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "AorusVideoMaskProcessor.swift"
     if not mask_processor.is_file():

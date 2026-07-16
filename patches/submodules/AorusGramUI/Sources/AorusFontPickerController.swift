@@ -394,7 +394,7 @@ private final class AorusFontArguments {
 
 private enum AorusFontEntry: ItemListNodeEntry {
     case header(PresentationTheme, String)
-    case font(PresentationTheme, AorusFontChoice, Bool)
+    case font(PresentationTheme, AorusFontChoice, Bool, Bool)
     case importFont(PresentationTheme, String)
     case footer(PresentationTheme, String)
 
@@ -411,7 +411,7 @@ private enum AorusFontEntry: ItemListNodeEntry {
         switch self {
         case .header:
             return -1
-        case let .font(_, choice, _):
+        case let .font(_, choice, _, _):
             return AorusFontStore.stableId(for: choice)
         case .importFont:
             return 20000
@@ -428,8 +428,8 @@ private enum AorusFontEntry: ItemListNodeEntry {
         switch lhs {
         case let .header(lt, ls):
             if case let .header(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .font(lt, lc, ls):
-            if case let .font(rt, rc, rs) = rhs { return lt === rt && lc == rc && ls == rs }
+        case let .font(lt, lc, ls, lh):
+            if case let .font(rt, rc, rs, rh) = rhs { return lt === rt && lc == rc && ls == rs && lh == rh }
         case let .importFont(lt, ls):
             if case let .importFont(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .footer(lt, ls):
@@ -443,8 +443,8 @@ private enum AorusFontEntry: ItemListNodeEntry {
         switch self {
         case let .header(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .font(theme, choice, selected):
-            return AorusFontPreviewItem(theme: theme, choice: choice, selected: selected, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: choice.id.hasPrefix("imported:") ? {
+        case let .font(theme, choice, selected, highlight):
+            return AorusFontPreviewItem(theme: theme, choice: choice, selected: selected, highlight: highlight, deleteTitle: presentationData.strings.Common_Delete, sectionId: section, deleteAction: choice.id.hasPrefix("imported:") ? {
                 args.delete(choice)
             } : nil, action: {
                 args.select(choice)
@@ -461,16 +461,18 @@ private final class AorusFontPreviewItem: ListViewItem, ItemListItem {
     let theme: PresentationTheme
     let choice: AorusFontChoice
     let selected: Bool
+    let highlight: Bool
     let deleteTitle: String
     let sectionId: ItemListSectionId
     let requestsNoInset: Bool = false
     let deleteAction: (() -> Void)?
     let action: () -> Void
 
-    init(theme: PresentationTheme, choice: AorusFontChoice, selected: Bool, deleteTitle: String, sectionId: ItemListSectionId, deleteAction: (() -> Void)?, action: @escaping () -> Void) {
+    init(theme: PresentationTheme, choice: AorusFontChoice, selected: Bool, highlight: Bool, deleteTitle: String, sectionId: ItemListSectionId, deleteAction: (() -> Void)?, action: @escaping () -> Void) {
         self.theme = theme
         self.choice = choice
         self.selected = selected
+        self.highlight = highlight
         self.deleteTitle = deleteTitle
         self.sectionId = sectionId
         self.deleteAction = deleteAction
@@ -523,6 +525,7 @@ private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
     private weak var checkLabel: UILabel?
     private var item: AorusFontPreviewItem?
     private var layoutParams: ListViewItemLayoutParams?
+    private var didPulseShortcutHighlight = false
 
     init() {
         backgroundNode.isLayerBacked = true
@@ -658,6 +661,13 @@ private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
                 self.layoutSubviews()
                 self.updateLayout(size: contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
                 self.updateRevealOptionsSeparatorNodes(top: self.topStripeNode, bottom: self.bottomStripeNode, topIsHidden: self.topStripeNode.isHidden, bottomIsHidden: self.bottomStripeNode.isHidden, topHiddenByPreviousRevealOptions: neighbors.topHasActiveRevealOptions, bottomHiddenByNextRevealOptions: neighbors.bottomHasActiveRevealOptions)
+                if item.highlight && !self.didPulseShortcutHighlight {
+                    self.didPulseShortcutHighlight = true
+                    Queue.mainQueue().after(0.12) { [weak self] in
+                        guard let self else { return }
+                        AorusSettingsShortcutHighlight.pulse(view: self.view, color: item.theme.list.itemAccentColor)
+                    }
+                }
                 if let _ = item.deleteAction {
                     let trashIcon: UIImage?
                     if #available(iOS 13.0, *) {
@@ -697,12 +707,12 @@ private final class AorusFontImportDelegate: NSObject, UIDocumentPickerDelegate 
 
 private var aorusFontImportDelegate: AorusFontImportDelegate?
 
-private func aorusFontEntries(selectedId: String, theme: PresentationTheme) -> [AorusFontEntry] {
+private func aorusFontEntries(selectedId: String, theme: PresentationTheme, highlightFirstFont: Bool) -> [AorusFontEntry] {
     let isRu = AorusLang.current == .ru
     var entries: [AorusFontEntry] = []
     entries.append(.header(theme, isRu ? "ШРИФТ" : "FONT"))
-    for choice in AorusFontStore.choices {
-        entries.append(.font(theme, choice, choice.id == selectedId))
+    for (index, choice) in AorusFontStore.choices.enumerated() {
+        entries.append(.font(theme, choice, choice.id == selectedId, highlightFirstFont && index == 0))
     }
     entries.append(.importFont(theme, isRu ? "Импортировать шрифт" : "Import Font"))
     entries.append(.footer(theme, isRu
@@ -712,6 +722,7 @@ private func aorusFontEntries(selectedId: String, theme: PresentationTheme) -> [
 }
 
 public func aorusFontPickerController(context: AccountContext) -> ViewController {
+    let highlightFirstFont = AorusSettingsShortcutHighlight.consume(.font)
     let statePromise = ValuePromise(AorusFontStore.selectedId, ignoreRepeated: true)
     let stateValue = Atomic(value: AorusFontStore.selectedId)
     let updateSelected: (String) -> Void = { id in
@@ -742,7 +753,7 @@ public func aorusFontPickerController(context: AccountContext) -> ViewController
         |> map { selectedId -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
-            let entries = aorusFontEntries(selectedId: selectedId, theme: presentationData.theme)
+            let entries = aorusFontEntries(selectedId: selectedId, theme: presentationData.theme, highlightFirstFont: highlightFirstFont)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(isRu ? "Шрифт" : "Font"),

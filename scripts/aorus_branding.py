@@ -15888,6 +15888,40 @@ def patch_gif_wallpaper(tg: Path) -> None:
         grid.write_text(t, encoding="utf-8")
         print("GifWallpaper: patched ThemeGridControllerNode.swift")
 
+    # A shortcut from AorusGram opens this screen directly. Pulse the existing
+    # native GIF row once, after its layout has settled, without changing the
+    # normal wallpaper-grid behavior.
+    t = grid.read_text(encoding="utf-8")
+    shortcut_marker = "// AorusGram: animated wallpaper shortcut highlight"
+    if shortcut_marker not in t:
+        shortcut_anchor = (
+            "        self.updateWallpapers()\n"
+            "    }\n"
+            "    \n"
+            "    deinit {\n"
+        )
+        shortcut_code = (
+            "        self.updateWallpapers()\n"
+            "        // AorusGram: animated wallpaper shortcut highlight\n"
+            "        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in\n"
+            "            guard AorusSettingsShortcutHighlight.consume(.animatedWallpapers) else { return }\n"
+            "            guard let self else { return }\n"
+            "            self.gifItemNode.setHighlighted(true, at: CGPoint(), animated: true)\n"
+            "            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in\n"
+            "                self?.gifItemNode.setHighlighted(false, at: CGPoint(), animated: true)\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "    \n"
+            "    deinit {\n"
+        )
+        if shortcut_anchor not in t:
+            raise RuntimeError("GifWallpaper: animated wallpaper shortcut anchor is missing")
+        grid.write_text(t.replace(shortcut_anchor, shortcut_code, 1), encoding="utf-8")
+        print("GifWallpaper: patched animated wallpaper shortcut highlight")
+    else:
+        print("GifWallpaper: animated wallpaper shortcut already patched")
+
     # BUILD dep
     if grid_build.is_file():
         bt = grid_build.read_text(encoding="utf-8")
