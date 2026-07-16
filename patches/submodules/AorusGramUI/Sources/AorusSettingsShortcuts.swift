@@ -43,7 +43,10 @@ public enum AorusSettingsShortcutHighlight {
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         overlay.backgroundColor = color
         overlay.alpha = 0.0
-        overlay.layer.cornerRadius = view.layer.cornerRadius
+        // Component rows can inherit the section's capsule radius. Reusing it made
+        // the animated-banner shortcut look like an oval around the switch instead
+        // of the same full-row highlight used by Telegram's other settings rows.
+        overlay.layer.cornerRadius = min(10.0, view.bounds.height * 0.2)
         overlay.layer.masksToBounds = true
         view.addSubview(overlay)
 
@@ -56,5 +59,24 @@ public enum AorusSettingsShortcutHighlight {
                 overlay.removeFromSuperview()
             })
         })
+    }
+
+    public static func pulseRow(containing view: UIView, color: UIColor) {
+        var target = view
+        var candidate = view.superview
+        while let current = candidate {
+            let isRowSized = current.bounds.width >= view.bounds.width + 40.0
+                && current.bounds.height >= 40.0
+                && current.bounds.height <= 72.0
+            if isRowSized {
+                target = current
+                break
+            }
+            if current.bounds.height > 96.0 {
+                break
+            }
+            candidate = current.superview
+        }
+        pulse(view: target, color: color)
     }
 }

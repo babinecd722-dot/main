@@ -507,6 +507,22 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
 
     weak var weakController: ItemListController?
     let actionsDisposable = DisposableSet()
+    let fakeStarsObserver = NotificationCenter.default.addObserver(
+        forName: AorusFakeStarsStore.changedNotification,
+        object: nil,
+        queue: .main
+    ) { _ in
+        updateState { current in
+            var next = current
+            next.fakeStars = AorusFakeStarsStore.isEnabled
+            let amount = AorusFakeStarsStore.amount
+            next.fakeStarsAmount = amount > 0 ? "\(amount)" : ""
+            return next
+        }
+    }
+    actionsDisposable.add(ActionDisposable {
+        NotificationCenter.default.removeObserver(fakeStarsObserver)
+    })
 
     let arguments = MiscArguments(
         setLocalPremium: { value in

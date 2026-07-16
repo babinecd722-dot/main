@@ -497,6 +497,41 @@ def main() -> None:
             err.append("PhoneSpoof: Return must apply the number and dismiss the keyboard")
         if "shouldUpdateText: { text in" not in misc_text or "text.allSatisfy { $0.isNumber }" not in misc_text:
             err.append("FakeStars: Return input must remain numeric-only")
+        if "AorusFakeStarsStore.changedNotification" not in misc_text:
+            err.append("FakeStars: settings amount does not observe local purchases")
+
+    fake_store = tg / "submodules" / "TelegramCore" / "Sources" / "AorusFakeGiftsStore.swift"
+    if not fake_store.is_file():
+        err.append("FakeStars: local gift store is missing")
+    else:
+        fake_store_text = fake_store.read_text(encoding="utf-8")
+        required_store_markers = (
+            "public var ownerPeerId: Int64",
+            "public static func ownProfileGifts()",
+            "storedOwner == 0 && !isEnabled",
+            "public static func recordLocalGiftMessage",
+            "public static func recordLocalPremiumMessage",
+            "public static func spend(_ value: Int64)",
+        )
+        if any(marker not in fake_store_text for marker in required_store_markers):
+            err.append("FakeStars: local balance/gift persistence pipeline is incomplete")
+        if "where gifts[index].ownerPeerId == 0" not in fake_store_text:
+            err.append("FakeGifts: own-profile mutations are not isolated from recipient gifts")
+
+    gift_setup = tg / "submodules" / "TelegramUI" / "Components" / "Gifts" / "GiftSetupScreen" / "Sources" / "GiftSetupScreen.swift"
+    if not gift_setup.is_file() or "AorusGram: local-only Stars purchase" not in gift_setup.read_text(encoding="utf-8"):
+        err.append("FakeStars: native gift/Premium purchase hook is missing")
+
+    gift_buy = tg / "submodules" / "TelegramUI" / "Components" / "Gifts" / "GiftViewScreen" / "Sources" / "GiftViewBuyGift.swift"
+    if not gift_buy.is_file() or "AorusGram: local-only collectible purchase" not in gift_buy.read_text(encoding="utf-8"):
+        err.append("FakeStars: native collectible purchase hook is missing")
+
+    fake_gifts_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftsController.swift"
+    fake_gift_manage_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftManageController.swift"
+    if not fake_gifts_controller.is_file() or "AorusFakeGiftsStore.ownProfileGifts()" not in fake_gifts_controller.read_text(encoding="utf-8"):
+        err.append("FakeGifts: recipient gifts can leak into the manager list")
+    if not fake_gift_manage_controller.is_file() or "AorusFakeGiftsStore.ownProfileGifts()" not in fake_gift_manage_controller.read_text(encoding="utf-8"):
+        err.append("FakeGifts: recipient gifts can leak into the manager editor")
 
     masks_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMasksController.swift"
     if not masks_controller.is_file():

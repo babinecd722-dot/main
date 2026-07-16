@@ -593,7 +593,7 @@ def _patch_personal_colors_shortcut(tg: Path) -> None:
         "                        self.scrollView.setContentOffset(CGPoint(x: 0.0, y: targetOffset), animated: true)\n"
         "                        Queue.mainQueue().after(0.35) { [weak targetView] in\n"
         "                            guard let targetView else { return }\n"
-        "                            AorusSettingsShortcutHighlight.pulse(view: targetView, color: environment.theme.list.itemAccentColor)\n"
+        "                            AorusSettingsShortcutHighlight.pulseRow(containing: targetView, color: environment.theme.list.itemAccentColor)\n"
         "                        }\n"
         "                    }\n"
         "                }\n"

@@ -199,7 +199,7 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
         // Start from the freshest stored copy so collection membership changed natively
         // (from the profile's collection tabs) while this screen is open is preserved —
         // this screen only edits sender / date / comment / visibility.
-        var updated = AorusFakeGiftsStore.all().first(where: { $0.key == giftKey }) ?? stored
+        var updated = AorusFakeGiftsStore.ownProfileGifts().first(where: { $0.key == giftKey }) ?? stored
         updated.senderPeerId = current.senderPeerId
         updated.date = current.date
         updated.comment = current.comment

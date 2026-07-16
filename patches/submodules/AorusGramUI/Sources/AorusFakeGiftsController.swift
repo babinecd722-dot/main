@@ -130,7 +130,7 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
         : "These gifts are visible only to you, locally. Nothing is sent to the server."))
 
     entries.append(.listHeader(theme, isRu ? "ДОБАВЛЕННЫЕ ПОДАРКИ" : "ADDED GIFTS"))
-    let gifts = AorusFakeGiftsStore.all()
+    let gifts = AorusFakeGiftsStore.ownProfileGifts()
     if gifts.isEmpty {
         entries.append(.empty(theme, isRu
             ? "Нет локальных подарков. Откройте подарок другого пользователя и нажмите «Добавить в профиль»."
