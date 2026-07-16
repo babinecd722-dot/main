@@ -348,6 +348,7 @@ private final class AorusArguments {
     let setCacheInterval: (Int) -> Void
     let openProxyDiagnostics: () -> Void // AORUS-DIAG
     let openAppBadgePicker: () -> Void
+    let openFont: () -> Void
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
          openChannel: @escaping () -> Void,
@@ -362,7 +363,8 @@ private final class AorusArguments {
          setRAMCleanInterval: @escaping (Int) -> Void,
          setCacheInterval: @escaping (Int) -> Void,
          openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
-         openAppBadgePicker: @escaping () -> Void) {
+         openAppBadgePicker: @escaping () -> Void,
+         openFont: @escaping () -> Void) {
         self.set = set
         self.openChannel = openChannel
         self.openSubscription = openSubscription
@@ -377,6 +379,7 @@ private final class AorusArguments {
         self.setCacheInterval = setCacheInterval
         self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
         self.openAppBadgePicker = openAppBadgePicker
+        self.openFont = openFont
     }
 }
 
@@ -430,6 +433,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case siriShortcuts(PresentationTheme, String, Bool)
     case appBadge(PresentationTheme, String, String)
     case squareAvatars(PresentationTheme, String, Bool)
+    case customFont(PresentationTheme, String)
 
     case editLocalHeader(PresentationTheme, String)
     case shareButton(PresentationTheme, String, Bool)
@@ -476,7 +480,7 @@ private enum AorusEntry: ItemListNodeEntry {
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge, .squareAvatars:
+        case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge, .squareAvatars, .customFont:
             return AorusSection.ui.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
@@ -541,25 +545,26 @@ private enum AorusEntry: ItemListNodeEntry {
         case .siriShortcuts:        return 56
         case .appBadge:             return 57
         case .squareAvatars:        return 58
-        case .editLocalHeader:      return 59
-        case .messagesDoubleCopy:   return 60
-        case .messagesTripleDelete: return 61
-        case .editLocalEnabled:     return 62
-        case .userMessagesEnabled:  return 63
-        case .translator:           return 64
-        case .voiceTranscription:   return 65
-        case .shareButton:          return 66
-        case .videoMessagesHeader:  return 67
-        case .videoMessagesRearCamera: return 68
-        case .callsHeader:          return 69
-        case .masks:                return 70
-        case .voiceTwin:            return 71
-        case .deviceSpoofHeader:    return 72
-        case .deviceSpoof:          return 73
-        case .bypassHeader:         return 74
-        case .bypassSavePaid:       return 75
-        case .bypassSaveViewOnce:   return 76
-        case .bypassStoryDownload:  return 77
+        case .customFont:           return 59
+        case .editLocalHeader:      return 60
+        case .messagesDoubleCopy:   return 61
+        case .messagesTripleDelete: return 62
+        case .editLocalEnabled:     return 63
+        case .userMessagesEnabled:  return 64
+        case .translator:           return 65
+        case .voiceTranscription:   return 66
+        case .shareButton:          return 67
+        case .videoMessagesHeader:  return 68
+        case .videoMessagesRearCamera: return 69
+        case .callsHeader:          return 70
+        case .masks:                return 71
+        case .voiceTwin:            return 72
+        case .deviceSpoofHeader:    return 73
+        case .deviceSpoof:          return 74
+        case .bypassHeader:         return 75
+        case .bypassSavePaid:       return 76
+        case .bypassSaveViewOnce:   return 77
+        case .bypassStoryDownload:  return 78
         case .antiSpoofHeader:      return 81
         case .antiSpoofDeleted:     return 82
         case .antiSpoofOnline:      return 83
@@ -666,6 +671,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .appBadge(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .squareAvatars(lt, ls, lv):
             if case let .squareAvatars(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .customFont(lt, ls):
+            if case let .customFont(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .editLocalHeader(lt, ls):
             if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .shareButton(lt, ls, lv):
@@ -819,6 +826,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: args.openAppBadgePicker)
         case let .squareAvatars(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.squareAvatars, $0) })
+        case let .customFont(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openFont)
         case let .editLocalHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .messagesDoubleCopy(_, title, value):
@@ -915,6 +924,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .siriShortcuts(theme, l10n.siriShortcuts, state.siriShortcuts),
         .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
         .squareAvatars(theme, l10n.squareAvatars, state.squareAvatars),
+        .customFont(theme, l10n.customFont),
 
         .editLocalHeader(theme, l10n.messagesHeader),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
@@ -1404,6 +1414,14 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 popover.permittedArrowDirections = []
             }
             controller.present(sheet, animated: true)
+        },
+        openFont: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            AorusSettingsShortcutHighlight.request(.font)
+            navigationController.pushViewController(aorusFontPickerController(context: context))
         }
     )
 

@@ -131,6 +131,7 @@ public struct AorusL10n {
     public var amoledMode: String { t("AMOLED интерфейс", "AMOLED Interface") }
     public var profileReportButton: String { t("Кнопка «Пожаловаться»", "Report Button") }
     public var squareAvatars: String { t("Квадратные аватарки", "Square Avatars") }
+    public var customFont: String { t("Кастомный шрифт", "Custom Font") }
     public var animatedProfileBackground: String { t("Анимированный фон", "Animated Background") }
     public var chooseAnimatedProfileMedia: String { t("Выбрать медиа", "Choose Media") }
     public var animatedProfileTransparency: String { t("Прозрачность", "Transparency") }
