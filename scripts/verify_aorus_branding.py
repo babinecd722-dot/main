@@ -524,6 +524,26 @@ def main() -> None:
             err.append("FakeGifts: repeated regular purchases are not stored independently")
         if 'dict["fromPeerId"] = ["iv": stored.senderPeerId]' not in fake_store_text:
             err.append("FakeGifts: edited sender is not reflected by regular gift wrappers")
+        fake_gift_view = (
+            tg
+            / "submodules"
+            / "TelegramUI"
+            / "Components"
+            / "Gifts"
+            / "GiftViewScreen"
+            / "Sources"
+            / "GiftViewScreen.swift"
+        )
+        if not fake_gift_view.is_file() or "guard AorusFakeGiftsStore.setPinned(reference: aorusReference" not in fake_gift_view.read_text(encoding="utf-8"):
+            err.append("FakeGifts: local Pin/Unpin is not routed directly to the local store")
+        if "peerId: nil, senderId: nil" not in fake_store_text or "messageAuthorId = nil" not in fake_store_text:
+            err.append("FakeGifts: collectible purchases expose invalid from/to attribution")
+        if "StarsContext.State.Transaction.Flags = [.isLocal" in fake_store_text:
+            err.append("FakeStars: completed local transactions are incorrectly non-interactive")
+        if "if gift != nil { flags.insert(.isGift) }" not in fake_store_text:
+            err.append("FakeStars: transaction type flags do not distinguish StarGift from Premium")
+        if "for day in startDay ... today" not in fake_store_text:
+            err.append("FakeStars: statistics graph does not use a continuous native time axis")
 
     gift_setup = tg / "submodules" / "TelegramUI" / "Components" / "Gifts" / "GiftSetupScreen" / "Sources" / "GiftSetupScreen.swift"
     if not gift_setup.is_file() or "AorusGram: local-only Stars purchase" not in gift_setup.read_text(encoding="utf-8"):

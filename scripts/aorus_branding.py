@@ -8142,13 +8142,18 @@ public enum AorusFakeGiftsStore {
         AorusFakeStarsStore.recordPurchase(accountPeerId: accountPeerId, recipientPeerId: recipientPeerId, amount: stars, gift: gift, premiumMonths: nil, text: text)
         let ownedGift = giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64())
         let action: TelegramMediaActionType
+        let messageAuthorId: PeerId?
         switch ownedGift {
         case .unique:
-            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
+            // A collectible purchase can have a native gift card, but it is not a
+            // directed gift and therefore has no "from" / "to" attribution or comment.
+            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: nil, senderId: nil, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
+            messageAuthorId = nil
         case .generic:
             action = .starGift(gift: ownedGift, convertStars: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
+            messageAuthorId = accountPeerId
         }
-        let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
+        let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: messageAuthorId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
         let _ = account.postbox.transaction { transaction -> Void in
             let _ = transaction.addMessages([message], location: .Random)
         }.startStandalone()
@@ -8697,18 +8702,16 @@ public enum AorusFakeStarsStore {
             }
         }
 
-        // A minimum seven-day window keeps Telegram's native bar controller stable and
-        // useful before the first purchase. Non-zero historical days stay in the graph;
-        // zero-filled dates are only added for the recent window, keeping storage and
-        // rendering bounded even after years of use.
+        // Telegram's bar controller expects a regular time series. Sparse historical
+        // points mixed with a short recent window produce stretched, irregular bars, so
+        // build one continuous daily range. Keep at least seven days and at most one year;
+        // lifetime totals remain available in the native balance cards above the graph.
         let today = max(0, Int64(Date().timeIntervalSince1970) / 86_400)
-        for offset in 0 ..< 7 {
-            valuesByDay[today - Int64(offset)] = valuesByDay[today - Int64(offset)] ?? 0
-        }
-        let days = valuesByDay.keys.sorted()
+        let earliestStoredDay = valuesByDay.keys.min() ?? today
+        let startDay = max(0, max(min(earliestStoredDay, today - 6), today - 365))
         var timestamps: [Any] = ["x"]
         var spending: [Any] = ["y0"]
-        for day in days {
+        for day in startDay ... today {
             timestamps.append(day * 86_400_000)
             spending.append(valuesByDay[day] ?? 0)
         }
@@ -8741,7 +8744,12 @@ public enum AorusFakeStarsStore {
         return storedTransactions().filter { $0.accountPeerId == accountPeerId.toInt64() }.compactMap { stored -> StarsContext.State.Transaction? in
             guard let peer = transaction.getPeer(PeerId(stored.peerId)) else { return nil }
             let gift = stored.giftData.flatMap { try? JSONDecoder().decode(StarGift.self, from: $0) }
-            var flags: StarsContext.State.Transaction.Flags = [.isLocal, .isGift]
+            // `.isLocal` is reserved by Telegram for temporary App Store rows and the
+            // native lists deliberately disable taps for it. Mark only actual StarGift
+            // purchases as gifts; Premium uses `premiumGiftMonths` and its own native
+            // transaction-details branch.
+            var flags: StarsContext.State.Transaction.Flags = []
+            if gift != nil { flags.insert(.isGift) }
             if stored.isResale { flags.insert(.isStarGiftResale) }
             return StarsContext.State.Transaction(
                 flags: flags,
@@ -8856,13 +8864,7 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                    }, action: { [weak controller] c, _ in\n"
                 "                        c?.dismiss(completion: nil)\n"
                 "                        guard let aorusReference = arguments.reference else { return }\n"
-                "                        let aorusDidToggle: Bool\n"
-                "                        if let aorusToggle = controller?.togglePinnedToTop {\n"
-                "                            aorusDidToggle = aorusToggle(aorusReference, !aorusPinned)\n"
-                "                        } else {\n"
-                "                            aorusDidToggle = AorusFakeGiftsStore.setPinned(reference: aorusReference, !aorusPinned)\n"
-                "                        }\n"
-                "                        guard aorusDidToggle else { return }\n"
+                "                        guard AorusFakeGiftsStore.setPinned(reference: aorusReference, !aorusPinned) else { return }\n"
                 "                        let aorusToast = aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpinned + "\" : \"Gift unpinned\") : (aorusFakeIsRu ? \"" + ru_pinned + "\" : \"Gift pinned\")\n"
                 "                        controller?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusToast, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
                 "                    })))\n"
