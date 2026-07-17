@@ -534,16 +534,39 @@ def main() -> None:
             / "Sources"
             / "GiftViewScreen.swift"
         )
-        if not fake_gift_view.is_file() or "guard AorusFakeGiftsStore.setPinned(reference: aorusReference" not in fake_gift_view.read_text(encoding="utf-8"):
-            err.append("FakeGifts: local Pin/Unpin is not routed directly to the local store")
-        if "peerId: nil, senderId: nil" not in fake_store_text or "messageAuthorId = nil" not in fake_store_text:
-            err.append("FakeGifts: collectible purchases expose invalid from/to attribution")
+        fake_gift_view_text = fake_gift_view.read_text(encoding="utf-8") if fake_gift_view.is_file() else ""
+        if "if let aorusToggle = controller?.togglePinnedToTop" not in fake_gift_view_text:
+            err.append("FakeGifts: local Pin/Unpin no longer uses the established toggle route")
+        fake_gifts_list = (
+            tg
+            / "submodules"
+            / "TelegramUI"
+            / "Components"
+            / "PeerInfo"
+            / "PeerInfoVisualMediaPaneNode"
+            / "Sources"
+            / "GiftsListView.swift"
+        )
+        fake_gifts_list_text = fake_gifts_list.read_text(encoding="utf-8") if fake_gifts_list.is_file() else ""
+        if (
+            "stargifts_pinned_to_top_limit" not in fake_gifts_list_text
+            or "self.pinnedReferences.count >= self.maxPinnedCount" not in fake_gifts_list_text
+            or "AorusFakeGiftsStore.setPinned(reference: reference, pinnedToTop)" not in fake_gifts_list_text
+            or "PeerInfo_Gifts_ToastPinLimit_Text" not in fake_gifts_list_text
+        ):
+            err.append("FakeGifts: established Pin/Unpin route does not enforce Telegram's native pin limit")
+        if "case let .slug(slug)" not in fake_store_text:
+            err.append("FakeGifts: collectible slug references cannot resolve to local gifts")
+        if "if case .unique = gift { return }" not in fake_store_text:
+            err.append("FakeGifts: collectible purchases inject a non-native directed chat message")
         if "StarsContext.State.Transaction.Flags = [.isLocal" in fake_store_text:
             err.append("FakeStars: completed local transactions are incorrectly non-interactive")
         if "if gift != nil { flags.insert(.isGift) }" not in fake_store_text:
             err.append("FakeStars: transaction type flags do not distinguish StarGift from Premium")
-        if "for day in startDay ... today" not in fake_store_text:
-            err.append("FakeStars: statistics graph does not use a continuous native time axis")
+        if "revenueGraph: serverStats?.revenueGraph ?? .Empty" not in fake_store_text:
+            err.append("FakeStars: native server revenue graph is replaced by local spending data")
+        if "public static func statisticsGraph(" in fake_store_text:
+            err.append("FakeStars: obsolete custom spending graph is still generated")
 
     gift_setup = tg / "submodules" / "TelegramUI" / "Components" / "Gifts" / "GiftSetupScreen" / "Sources" / "GiftSetupScreen.swift"
     if not gift_setup.is_file() or "AorusGram: local-only Stars purchase" not in gift_setup.read_text(encoding="utf-8"):

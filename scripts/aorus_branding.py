@@ -7925,10 +7925,19 @@ public enum AorusFakeGiftsStore {
     }
 
     public static func stored(reference: StarGiftReference) -> AorusStoredGift? {
-        if case let .peer(_, id) = reference {
+        switch reference {
+        case let .peer(_, id):
             return all().first(where: { $0.ownerPeerId == 0 && $0.instanceId == id })
+        case let .slug(slug):
+            return all().first(where: { stored in
+                guard stored.ownerPeerId == 0, let gift = stored.gift, case let .unique(uniqueGift) = gift else {
+                    return false
+                }
+                return uniqueGift.slug == slug
+            })
+        default:
+            return nil
         }
-        return nil
     }
 
     public static func contains(reference: StarGiftReference) -> Bool {
@@ -8140,20 +8149,18 @@ public enum AorusFakeGiftsStore {
             hideName: hideName
         )
         AorusFakeStarsStore.recordPurchase(accountPeerId: accountPeerId, recipientPeerId: recipientPeerId, amount: stars, gift: gift, premiumMonths: nil, text: text)
+        // A native collectible purchase is represented by the owned gift and Stars
+        // transaction. Telegram does not synthesize a directed chat gift message here.
+        if case .unique = gift { return }
         let ownedGift = giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64())
         let action: TelegramMediaActionType
-        let messageAuthorId: PeerId?
         switch ownedGift {
         case .unique:
-            // A collectible purchase can have a native gift card, but it is not a
-            // directed gift and therefore has no "from" / "to" attribution or comment.
-            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: nil, senderId: nil, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
-            messageAuthorId = nil
+            return
         case .generic:
             action = .starGift(gift: ownedGift, convertStars: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
-            messageAuthorId = accountPeerId
         }
-        let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: messageAuthorId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
+        let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
         let _ = account.postbox.transaction { transaction -> Void in
             let _ = transaction.addMessages([message], location: .Random)
         }.startStandalone()
@@ -8692,48 +8699,12 @@ public enum AorusFakeStarsStore {
         )
     }
 
-    public static func statisticsGraph(accountPeerId: PeerId) -> StatsGraph {
-        let accountKey = String(accountPeerId.toInt64())
-        let storedDays = storedDailySpending()[accountKey] ?? [:]
-        var valuesByDay: [Int64: Int64] = [:]
-        for (key, value) in storedDays {
-            if let day = Int64(key), day >= 0, value >= 0 {
-                valuesByDay[day] = addingClamped(valuesByDay[day] ?? 0, value)
-            }
-        }
-
-        // Telegram's bar controller expects a regular time series. Sparse historical
-        // points mixed with a short recent window produce stretched, irregular bars, so
-        // build one continuous daily range. Keep at least seven days and at most one year;
-        // lifetime totals remain available in the native balance cards above the graph.
-        let today = max(0, Int64(Date().timeIntervalSince1970) / 86_400)
-        let earliestStoredDay = valuesByDay.keys.min() ?? today
-        let startDay = max(0, max(min(earliestStoredDay, today - 6), today - 365))
-        var timestamps: [Any] = ["x"]
-        var spending: [Any] = ["y0"]
-        for day in startDay ... today {
-            timestamps.append(day * 86_400_000)
-            spending.append(valuesByDay[day] ?? 0)
-        }
-        let isRussian = (UserDefaults.standard.string(forKey: "aorusgram_lang") ?? Locale.current.languageCode ?? "en").lowercased().hasPrefix("ru")
-        let payload: [String: Any] = [
-            "columns": [timestamps, spending],
-            "types": ["x": "x", "y0": "bar"],
-            "names": ["y0": isRussian ? "Расходы" : "Spending"],
-            "colors": ["y0": "#A855F7"],
-            "stacked": true
-        ]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
-              let json = String(data: data, encoding: .utf8) else {
-            return .Empty
-        }
-        return .Loaded(token: nil, data: json)
-    }
-
     public static func statisticsStats(serverStats: StarsRevenueStats?, accountPeerId: PeerId) -> StarsRevenueStats {
         return StarsRevenueStats(
             topHoursGraph: serverStats?.topHoursGraph,
-            revenueGraph: statisticsGraph(accountPeerId: accountPeerId),
+            // Revenue is server-owned Telegram data. Local spending is not revenue and
+            // must never be rendered as a custom replacement for this native graph.
+            revenueGraph: serverStats?.revenueGraph ?? .Empty,
             balances: statisticsBalances(accountPeerId: accountPeerId),
             usdRate: serverStats?.usdRate ?? 0.0
         )
@@ -8864,7 +8835,13 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                    }, action: { [weak controller] c, _ in\n"
                 "                        c?.dismiss(completion: nil)\n"
                 "                        guard let aorusReference = arguments.reference else { return }\n"
-                "                        guard AorusFakeGiftsStore.setPinned(reference: aorusReference, !aorusPinned) else { return }\n"
+                "                        let aorusDidToggle: Bool\n"
+                "                        if let aorusToggle = controller?.togglePinnedToTop {\n"
+                "                            aorusDidToggle = aorusToggle(aorusReference, !aorusPinned)\n"
+                "                        } else {\n"
+                "                            aorusDidToggle = AorusFakeGiftsStore.setPinned(reference: aorusReference, !aorusPinned)\n"
+                "                        }\n"
+                "                        guard aorusDidToggle else { return }\n"
                 "                        let aorusToast = aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpinned + "\" : \"Gift unpinned\") : (aorusFakeIsRu ? \"" + ru_pinned + "\" : \"Gift pinned\")\n"
                 "                        controller?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusToast, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
                 "                    })))\n"
@@ -10017,7 +9994,7 @@ def patch_fake_stars_statistics(tg: Path) -> None:
     for anchor, replacement, _ in replacements:
         text = text.replace(anchor, replacement, 1)
     stats.write_text(text, encoding="utf-8")
-    print("FakeStarsStatistics: patched live balances and local spending graph")
+    print("FakeStarsStatistics: patched live balances with native server revenue graph")
 
 
 def patch_fake_stars_purchases(tg: Path) -> None:
