@@ -15,12 +15,17 @@ import AccountContext
 // added from another user's gift detail "..." menu ("Добавить в профиль"); tapping a
 // gift opens its management screen (sender / date / comment / visibility / remove).
 
-private func aorusGiftTitleAndNumber(_ gift: StarGift) -> (String, Int32?) {
+private func aorusGiftTitleAndNumber(_ gift: StarGift, isRu: Bool) -> (String, Int32?) {
     switch gift {
     case let .unique(uniqueGift):
         return (uniqueGift.title, uniqueGift.number)
     case let .generic(genericGift):
-        return (genericGift.title ?? "Gift", nil)
+        if let title = genericGift.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty, title.caseInsensitiveCompare("gift") != .orderedSame {
+            return (title, nil)
+        }
+        // Older regular gifts do not have a title in Telegram's StarGift model.
+        // They also have no user-facing number, so keep the native localized fallback.
+        return (isRu ? "Подарок" : "Gift", nil)
     }
 }
 
@@ -140,7 +145,7 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
             let title: String
             let label: String
             if let gift = stored.gift {
-                let (t, number) = aorusGiftTitleAndNumber(gift)
+                let (t, number) = aorusGiftTitleAndNumber(gift, isRu: isRu)
                 title = t
                 label = number.flatMap { "#\($0)" } ?? ""
             } else {

@@ -8039,6 +8039,10 @@ public enum AorusFakeGiftsStore {
         }
     }
 
+    public static func isWorn(reference: StarGiftReference) -> Bool {
+        return stored(reference: reference)?.worn ?? false
+    }
+
     public static func clearWorn() {
         var gifts = all()
         var changed = false
@@ -8144,14 +8148,22 @@ public enum AorusFakeGiftsStore {
         guard let baseData = try? JSONEncoder().encode(gift) else { return }
         let ownedData = dataWithOwner(baseData, ownerPeerId: ownerPeerId) ?? baseData
         let storedOwner = ownerPeerId == accountPeerId ? 0 : ownerPeerId
+        let isCollectiblePurchase: Bool
+        if case .unique = gift {
+            isCollectiblePurchase = true
+        } else {
+            isCollectiblePurchase = false
+        }
         let stored = AorusStoredGift(
             giftData: ownedData,
             referencePeerId: ownerPeerId,
             purchasedLocally: true,
             ownerPeerId: storedOwner,
-            senderPeerId: hideName ? 0 : accountPeerId,
+            // A collectible keeps the immutable originalInfo of the ordinary gift it
+            // originated from. Buying/reselling it never creates a new sender/recipient.
+            senderPeerId: isCollectiblePurchase || hideName ? 0 : accountPeerId,
             date: date,
-            comment: comment,
+            comment: isCollectiblePurchase ? "" : comment,
             showInProfile: true
         )
         var gifts = all()
@@ -8266,6 +8278,16 @@ public enum AorusFakeGiftsStore {
         guard var giftObject = try? JSONSerialization.jsonObject(with: stored.giftData, options: []) else {
             return nil
         }
+        let preservePurchasedCollectibleProvenance: Bool
+        if stored.purchasedLocally, let storedGift = stored.gift, case .unique = storedGift {
+            // Migration for every collectible bought by older builds. A resale changes
+            // ownership, but the embedded originalInfo (the original gift's from/to)
+            // remains immutable and must never be replaced with buyer -> current owner.
+            preservePurchasedCollectibleProvenance = true
+        } else {
+            preservePurchasedCollectibleProvenance = false
+        }
+        let renderedSenderPeerId = preservePurchasedCollectibleProvenance ? 0 : stored.senderPeerId
         // Reflect the local resale state on the unique gift (nested under "value"), and
         // rewrite its originalInfo attribute so the native gift detail shows the chosen
         // sender, the user as recipient and the local comment — exactly like a real
@@ -8288,7 +8310,8 @@ public enum AorusFakeGiftsStore {
             }
             if var attributes = value["attributes"] as? [[String: Any]],
                let ownerId = (value["ownerPeerId"] as? NSNumber)?.int64Value,
-               stored.senderPeerId != 0 || !stored.comment.isEmpty {
+               !preservePurchasedCollectibleProvenance,
+               (renderedSenderPeerId != 0 || !stored.comment.isEmpty) {
                 // Drop any pre-existing originalInfo (type 3) so the original owner's
                 // sender/recipient does not leak through, then add ours.
                 attributes.removeAll { (($0["type"] as? NSNumber)?.intValue ?? -1) == 3 }
@@ -8297,8 +8320,8 @@ public enum AorusFakeGiftsStore {
                     "recipientPeerId": ownerId,
                     "date": Int(stored.date)
                 ]
-                if stored.senderPeerId != 0 {
-                    originalInfo["sendPeerId"] = stored.senderPeerId
+                if renderedSenderPeerId != 0 {
+                    originalInfo["sendPeerId"] = renderedSenderPeerId
                 }
                 if !stored.comment.isEmpty {
                     originalInfo["text"] = stored.comment
@@ -8312,13 +8335,13 @@ public enum AorusFakeGiftsStore {
         var dict: [String: Any] = [
             "gift": giftObject,
             "date": Int(stored.date),
-            "nameHidden": stored.senderPeerId == 0,
+            "nameHidden": renderedSenderPeerId == 0,
             "savedToProfile": true,
             "pinnedToTop": stored.pinnedToTop,
             "canUpgrade": false
         ]
-        if stored.senderPeerId != 0 {
-            dict["fromPeerId"] = ["iv": stored.senderPeerId]
+        if renderedSenderPeerId != 0 {
+            dict["fromPeerId"] = ["iv": renderedSenderPeerId]
         }
         // Give every fake a stable reference: collectible gifts keep their slug, while
         // regular gifts use the local purchase instance id. The native collection picker
@@ -8327,13 +8350,17 @@ public enum AorusFakeGiftsStore {
             switch giftValue {
             case let .unique(uniqueGift):
                 dict["reference"] = ["type": 2, "slug": uniqueGift.slug] as [String: Any]
+                // Telegram uses a non-nil transferStars value to expose its native
+                // Transfer action and the three-button collectible header. Local gifts
+                // transfer without a Stars fee through the established local route.
+                dict["transferStars"] = 0
             case .generic:
                 if stored.referencePeerId != 0 {
                     dict["reference"] = ["type": 1, "peerId": ["iv": stored.referencePeerId], "id": stored.instanceId] as [String: Any]
                 }
             }
         }
-        if !stored.comment.isEmpty {
+        if !stored.comment.isEmpty && !preservePurchasedCollectibleProvenance {
             dict["text"] = stored.comment
         }
         if !stored.collectionIds.isEmpty {
@@ -8888,7 +8915,7 @@ def patch_fake_gifts(tg: Path) -> None:
     ru_unpin = _swift_uescape("Открепить")
     ru_pinned = _swift_uescape("Подарок закреплён")
     ru_unpinned = _swift_uescape("Подарок откреплён")
-    ru_transfer = _swift_uescape("Передать")
+    # Shared by the separate long-press Transfer route in the profile grid.
     ru_transfer_title = _swift_uescape("Передать подарок")
     ru_transferred = _swift_uescape("Подарок передан")
 
@@ -8926,7 +8953,8 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                }\n"
             ) + copylink_anchor
 
-            # 2b) Transfer (own fake gift) OR Add to Profile (any other gift), after Share.
+            # 2b) Add to Profile for gifts that are not already stored. Local owned
+            #     collectibles use Telegram's native Transfer item below.
             share_anchor = (
                 "                items.append(.action(ContextMenuActionItem(text: presentationData.strings.Gift_View_Context_Share, icon: { theme in\n"
                 "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Forward\"), color: theme.contextMenu.primaryColor)\n"
@@ -8938,51 +8966,7 @@ def patch_fake_gifts(tg: Path) -> None:
             )
             share_injection = share_anchor + (
                 "                let aorusGiftIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
-                "                if AorusFakeGiftsStore.contains(arguments.gift, reference: arguments.reference) {\n"
-                "                    items.append(.action(ContextMenuActionItem(text: aorusGiftIsRu ? \"" + ru_transfer + "\" : \"Transfer\", icon: { theme in\n"
-                "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Replace\"), color: theme.contextMenu.primaryColor)\n"
-                "                    }, action: { [weak self, weak controller] c, _ in\n"
-                "                        c?.dismiss(completion: nil)\n"
-                "                        guard let self else { return }\n"
-                "                        let aorusGiftForTransfer = arguments.gift\n"
-                "                        let aorusStoredGiftForTransfer = AorusFakeGiftsStore.stored(for: arguments.gift, reference: arguments.reference)\n"
-                "                        let aorusContext = self.context\n"
-                "                        let aorusPickerParams = PeerSelectionControllerParams(context: aorusContext, title: aorusGiftIsRu ? \"" + ru_transfer_title + "\" : \"Transfer Gift\")\n"
-                "                        let aorusPicker = aorusContext.sharedContext.makePeerSelectionController(aorusPickerParams)\n"
-                "                        aorusPicker.peerSelected = { [weak controller, weak aorusPicker] aorusPeer, _ in\n"
-                "                            let aorusRecipientId = aorusPeer.id\n"
-                "                            let aorusMyId = aorusContext.account.peerId\n"
-                "                            // Rewrite the gift's owner to the recipient so that, after the\n"
-                "                            // transfer, the new owner shown on the gift is the person it was\n"
-                "                            // given to — not the sender.\n"
-                "                            let aorusOwnedGift = AorusFakeGiftsStore.giftWithOwner(aorusGiftForTransfer, ownerPeerId: aorusRecipientId.toInt64())\n"
-                "                            let aorusActionType: TelegramMediaActionType\n"
-                "                            switch aorusOwnedGift {\n"
-                "                            case .unique:\n"
-                "                                aorusActionType = .starGiftUnique(gift: aorusOwnedGift, isUpgrade: false, isTransferred: true, savedToProfile: false, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)\n"
-                "                            case .generic:\n"
-                "                                aorusActionType = .starGift(gift: aorusOwnedGift, convertStars: nil, text: nil, entities: nil, nameHidden: false, savedToProfile: false, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: aorusRecipientId, senderId: aorusMyId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: aorusRecipientId, number: nil)\n"
-                "                            }\n"
-                "                            let aorusRandomId = Int64.random(in: Int64.min ... Int64.max)\n"
-                "                            let aorusTimestamp = Int32(Date().timeIntervalSince1970)\n"
-                "                            let aorusStoreMessage = StoreMessage(peerId: aorusRecipientId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: aorusRandomId, groupingKey: nil, threadId: nil, timestamp: aorusTimestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: aorusMyId, text: \"\", attributes: [], media: [TelegramMediaAction(action: aorusActionType)])\n"
-                "                            let _ = (aorusContext.account.postbox.transaction { transaction -> Void in\n"
-                "                                let _ = transaction.addMessages([aorusStoreMessage], location: .Random)\n"
-                "                            } |> deliverOnMainQueue).startStandalone(completed: {\n"
-                "                                if let aorusStoredGiftForTransfer {\n"
-                "                                    AorusFakeGiftsStore.remove(instanceId: aorusStoredGiftForTransfer.instanceId)\n"
-                "                                } else {\n"
-                "                                    AorusFakeGiftsStore.remove(key: AorusFakeGiftsStore.key(for: aorusGiftForTransfer))\n"
-                "                                }\n"
-                "                                let aorusDoneText = aorusGiftIsRu ? \"" + ru_transferred + "\" : \"Gift transferred\"\n"
-                "                                aorusPicker?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusDoneText, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
-                "                                aorusPicker?.dismiss()\n"
-                "                                controller?.dismissAnimated()\n"
-                "                            })\n"
-                "                        }\n"
-                "                        controller?.push(aorusPicker)\n"
-                "                    })))\n"
-                "                } else {\n"
+                "                if !AorusFakeGiftsStore.contains(arguments.gift, reference: arguments.reference) {\n"
                 "                    var aorusGiftFile: TelegramMediaFile?\n"
                 "                    switch arguments.gift {\n"
                 "                    case let .unique(aorusUnique):\n"
@@ -9053,35 +9037,8 @@ def patch_fake_gifts(tg: Path) -> None:
                 print("FakeGifts: WARNING GiftViewScreen native pin anchor not found")
 
             if ok:
-                # The Transfer flow constructs a StoreMessage (a Postbox type) to inject
-                # the local-only gift message; make sure the module is imported.
-                if "import Postbox" not in t:
-                    if "import TelegramCore\n" in t:
-                        t = t.replace("import TelegramCore\n", "import TelegramCore\nimport Postbox\n", 1)
-                    else:
-                        t = t.replace("import Foundation\n", "import Foundation\nimport Postbox\n", 1)
                 gv.write_text(t, encoding="utf-8")
                 print("FakeGifts: patched GiftViewScreen (Pin/Unpin/Transfer + Add to Profile)")
-                # GiftViewScreen's Bazel target depends on TelegramCore but NOT on Postbox,
-                # and TelegramCore does not re-export it — so `import Postbox` needs an
-                # explicit build dep or it fails with "No such module 'Postbox'".
-                bf = gv.parent.parent / "BUILD"
-                if bf.is_file():
-                    bt = bf.read_text(encoding="utf-8")
-                    if "//submodules/Postbox" not in bt:
-                        done = False
-                        for dep in ('"//submodules/TelegramCore:TelegramCore",', '"//submodules/TelegramCore",'):
-                            if dep in bt:
-                                newdep = dep.replace("TelegramCore", "Postbox")
-                                bt = bt.replace(dep, dep + "\n        " + newdep, 1)
-                                bf.write_text(bt, encoding="utf-8")
-                                print("FakeGifts: added Postbox BUILD dep to GiftViewScreen")
-                                done = True
-                                break
-                        if not done:
-                            print("FakeGifts: WARNING GiftViewScreen BUILD — TelegramCore dep anchor not found")
-                else:
-                    print("FakeGifts: WARNING GiftViewScreen BUILD not found")
     else:
         print("FakeGifts: GiftViewScreen.swift not found — skip menu item")
 
@@ -9252,6 +9209,36 @@ def patch_fake_gifts(tg: Path) -> None:
             else:
                 ok = False
                 print("FakeGifts: WARNING GiftsListView pin-limit anchor not found")
+
+            # The native GiftView header calls this closure for its Transfer button. Route
+            # only stored local gifts through the local store; server gifts retain the
+            # exact upstream ProfileGiftsContext operation.
+            transfer_anchor = (
+                "                                        transferGift: { [weak self] prepaid, reference, peerId in\n"
+                "                                            guard let self else {\n"
+                "                                                return .complete()\n"
+                "                                            }\n"
+                "                                            return self.profileGifts.transferStarGift(prepaid: prepaid, reference: reference, peerId: peerId)\n"
+                "                                        },\n"
+            )
+            transfer_inject = (
+                "                                        transferGift: { [weak self] prepaid, reference, peerId in\n"
+                "                                            guard let self else {\n"
+                "                                                return .complete()\n"
+                "                                            }\n"
+                "                                            // AorusGram: native header Transfer for local fake gifts\n"
+                "                                            if AorusFakeGiftsStore.contains(reference: reference) {\n"
+                "                                                _ = AorusFakeGiftsStore.transfer(reference: reference, gift: product.gift, account: self.context.account, recipientPeerId: peerId)\n"
+                "                                                return .complete()\n"
+                "                                            }\n"
+                "                                            return self.profileGifts.transferStarGift(prepaid: prepaid, reference: reference, peerId: peerId)\n"
+                "                                        },\n"
+            )
+            if transfer_anchor in t:
+                t = t.replace(transfer_anchor, transfer_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView native Transfer anchor not found")
 
             reorder_anchor = (
                 "                    self.profileGifts.updatePinnedToTopStarGifts(references: pinnedReferences)\n"
@@ -9741,31 +9728,43 @@ def patch_fake_gifts(tg: Path) -> None:
         else:
             raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode context Pin/Unpin anchor not found")
 
-        # Wearing is already persisted by the TelegramEngineAccountData interception.
-        # Let a stored fake gift use that route even when the account does not have
-        # server Premium; real gifts retain Telegram's native Premium gate.
+        # Wearing is persisted by the TelegramEngineAccountData interception. Mirror the
+        # local worn state in the long-press title/icon and make the action reversible.
+        # Real gifts retain Telegram's original Premium gate and behavior.
         t = pane.read_text(encoding="utf-8")
-        context_wear_marker = "// AorusGram: local fake gift context Wear"
-        context_wear_anchor = (
+        context_wear_marker = "// AorusGram: local fake gift context Wear/TakeOff"
+        context_wear_header_anchor = (
+            "            if case let .unique(uniqueGift) = gift.gift, self.peerId == self.context.account.peerId {\n"
+            "                items.append(.action(ContextMenuActionItem(text: strings.PeerInfo_Gifts_Context_Wear, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: \"Peer Info/WearIcon\"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, f in\n"
+        )
+        context_wear_header_inject = (
+            "            if case let .unique(uniqueGift) = gift.gift, self.peerId == self.context.account.peerId {\n"
+            "                " + context_wear_marker + "\n"
+            "                let aorusIsFakeGift = AorusFakeGiftsStore.contains(.unique(uniqueGift), reference: gift.reference)\n"
+            "                let aorusIsWorn = gift.reference.flatMap { AorusFakeGiftsStore.isWorn(reference: $0) } ?? false\n"
+            "                items.append(.action(ContextMenuActionItem(text: aorusIsFakeGift && aorusIsWorn ? strings.Gift_View_Header_TakeOff : strings.PeerInfo_Gifts_Context_Wear, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: aorusIsFakeGift && aorusIsWorn ? \"Premium/Collectible/Unwear\" : \"Peer Info/WearIcon\"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, f in\n"
+        )
+        context_wear_action_anchor = (
             "                        if self.context.isPremium {\n"
             "                            let _ = self.context.engine.accountData.setStarGiftStatus(starGift: uniqueGift, expirationDate: nil).startStandalone()\n"
             "                        } else {\n"
         )
-        context_wear_inject = (
-            "                        " + context_wear_marker + "\n"
-            "                        let aorusIsFakeGift = AorusFakeGiftsStore.contains(.unique(uniqueGift), reference: gift.reference)\n"
-            "                        if aorusIsFakeGift || self.context.isPremium {\n"
+        context_wear_action_inject = (
+            "                        if aorusIsFakeGift && aorusIsWorn {\n"
+            "                            let _ = self.context.engine.accountData.setEmojiStatus(file: nil, expirationDate: nil).startStandalone()\n"
+            "                        } else if aorusIsFakeGift || self.context.isPremium {\n"
             "                            let _ = self.context.engine.accountData.setStarGiftStatus(starGift: uniqueGift, expirationDate: nil).startStandalone()\n"
             "                        } else {\n"
         )
         if context_wear_marker in t:
-            print("FakeGifts: PeerInfoGiftsPaneNode context Wear already patched")
-        elif context_wear_anchor in t:
-            t = t.replace(context_wear_anchor, context_wear_inject, 1)
+            print("FakeGifts: PeerInfoGiftsPaneNode context Wear/TakeOff already patched")
+        elif context_wear_header_anchor in t and context_wear_action_anchor in t:
+            t = t.replace(context_wear_header_anchor, context_wear_header_inject, 1)
+            t = t.replace(context_wear_action_anchor, context_wear_action_inject, 1)
             pane.write_text(t, encoding="utf-8")
-            print("FakeGifts: patched long-press context Wear for local gifts")
+            print("FakeGifts: patched long-press context Wear/TakeOff for local gifts")
         else:
-            raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode context Wear anchor not found")
+            raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode context Wear/TakeOff anchor not found")
 
         # Hide/Show mutates the local profile visibility for fake gifts. Keep the native
         # animation and toast below this branch, and leave the server call intact for real gifts.

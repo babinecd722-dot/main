@@ -518,6 +518,7 @@ def main() -> None:
             "public static func setProfileVisibility(reference: StarGiftReference",
             "public static func transfer(reference: StarGiftReference",
             "public static func updateCollectionOrder(collectionId: Int32",
+            "public static func isWorn(reference: StarGiftReference)",
         )
         if any(marker not in fake_store_text for marker in required_store_markers):
             err.append("FakeStars: local balance/gift persistence pipeline is incomplete")
@@ -525,7 +526,7 @@ def main() -> None:
             err.append("FakeGifts: own-profile mutations are not isolated from recipient gifts")
         if "Keep every regular purchase as its own local instance" not in fake_store_text:
             err.append("FakeGifts: repeated regular purchases are not stored independently")
-        if 'dict["fromPeerId"] = ["iv": stored.senderPeerId]' not in fake_store_text:
+        if 'dict["fromPeerId"] = ["iv": renderedSenderPeerId]' not in fake_store_text:
             err.append("FakeGifts: edited sender is not reflected by regular gift wrappers")
         fake_gift_view = (
             tg
@@ -579,7 +580,7 @@ def main() -> None:
         ):
             err.append("FakeGifts: long-press Pin/Unpin is not synchronized with local gift state and native limits")
         context_action_markers = (
-            "// AorusGram: local fake gift context Wear",
+            "// AorusGram: local fake gift context Wear/TakeOff",
             "// AorusGram: local fake gift context Hide/Show",
             "// AorusGram: local fake gift context Transfer",
             "AorusFakeGiftsStore.setProfileVisibility(reference: reference, added)",
@@ -589,10 +590,45 @@ def main() -> None:
         )
         if any(marker not in fake_gifts_pane_text for marker in context_action_markers):
             err.append("FakeGifts: long-press Wear/Hide/Transfer routes are incomplete or replace native gift behavior")
+        if (
+            "strings.Gift_View_Header_TakeOff" not in fake_gifts_pane_text
+            or "AorusFakeGiftsStore.isWorn(reference:" not in fake_gifts_pane_text
+            or "setEmojiStatus(file: nil, expirationDate: nil)" not in fake_gifts_pane_text
+        ):
+            err.append("FakeGifts: long-press Wear action does not reflect or clear the local worn state")
         if "case let .slug(slug)" not in fake_store_text:
             err.append("FakeGifts: collectible slug references cannot resolve to local gifts")
         if "if case .unique = gift { return }" not in fake_store_text:
             err.append("FakeGifts: collectible purchases inject a non-native directed chat message")
+        if 'dict["transferStars"] = 0' not in fake_store_text:
+            err.append("FakeGifts: local collectibles do not expose Telegram's native Transfer button")
+        if (
+            "preservePurchasedCollectibleProvenance" not in fake_store_text
+            or "if stored.purchasedLocally, let storedGift = stored.gift, case .unique = storedGift" not in fake_store_text
+        ):
+            err.append("FakeGifts: collectible purchases replace immutable original gift provenance")
+        if (
+            "// AorusGram: native header Transfer for local fake gifts" not in fake_gifts_list_text
+            or "AorusFakeGiftsStore.transfer(reference: reference, gift: product.gift" not in fake_gifts_list_text
+            or "return self.profileGifts.transferStarGift(prepaid: prepaid, reference: reference, peerId: peerId)" not in fake_gifts_list_text
+        ):
+            err.append("FakeGifts: native Transfer header is not routed locally without replacing Telegram's server route")
+        fake_gift_view = (
+            tg
+            / "submodules"
+            / "TelegramUI"
+            / "Components"
+            / "Gifts"
+            / "GiftViewScreen"
+            / "Sources"
+            / "GiftViewScreen.swift"
+        )
+        fake_gift_view_text = fake_gift_view.read_text(encoding="utf-8") if fake_gift_view.is_file() else ""
+        if (
+            "if let _ = arguments.transferStars {" not in fake_gift_view_text
+            or "presentationData.strings.Gift_View_Context_Transfer" not in fake_gift_view_text
+        ):
+            err.append("FakeGifts: Telegram's native Transfer overflow action is missing")
         if "StarsContext.State.Transaction.Flags = [.isLocal" in fake_store_text:
             err.append("FakeStars: completed local transactions are incorrectly non-interactive")
         if "if gift != nil { flags.insert(.isGift) }" not in fake_store_text:
@@ -612,8 +648,15 @@ def main() -> None:
 
     fake_gifts_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftsController.swift"
     fake_gift_manage_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftManageController.swift"
-    if not fake_gifts_controller.is_file() or "AorusFakeGiftsStore.ownProfileGifts()" not in fake_gifts_controller.read_text(encoding="utf-8"):
+    fake_gifts_controller_text = fake_gifts_controller.read_text(encoding="utf-8") if fake_gifts_controller.is_file() else ""
+    if "AorusFakeGiftsStore.ownProfileGifts()" not in fake_gifts_controller_text:
         err.append("FakeGifts: recipient gifts can leak into the manager list")
+    if (
+        "genericGift.title?.trimmingCharacters" not in fake_gifts_controller_text
+        or 'return (isRu ? "Подарок" : "Gift", nil)' not in fake_gifts_controller_text
+        or 'genericGift.id)' in fake_gifts_controller_text
+    ):
+        err.append("FakeGifts: regular gift list does not use Telegram titles without exposing internal ids")
     if not fake_gift_manage_controller.is_file() or "AorusFakeGiftsStore.ownProfileGifts()" not in fake_gift_manage_controller.read_text(encoding="utf-8"):
         err.append("FakeGifts: recipient gifts can leak into the manager editor")
     elif "AorusFakeGiftsStore.remove(instanceId: giftInstanceId)" not in fake_gift_manage_controller.read_text(encoding="utf-8"):
