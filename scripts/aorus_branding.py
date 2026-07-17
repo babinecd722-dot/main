@@ -7703,8 +7703,9 @@ public struct AorusStoredGift: Codable, Equatable {
     public var resellStars: Int64   // resale price amount (stars count, or TON in nanotons); 0 = not listed
     public var resellCurrency: Int32   // resale currency: 0 = stars, 1 = TON (matches CurrencyAmount.Currency)
     public var collectionIds: [Int32]   // ids of the user's gift collections this fake gift belongs to
+    public var collectionOrders: [String: Int32] // stable local order inside each collection
 
-    public init(giftData: Data, instanceId: Int64 = Int64.random(in: 1 ... Int64.max), referencePeerId: Int64 = 0, purchasedLocally: Bool = false, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = []) {
+    public init(giftData: Data, instanceId: Int64 = Int64.random(in: 1 ... Int64.max), referencePeerId: Int64 = 0, purchasedLocally: Bool = false, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = [], collectionOrders: [String: Int32] = [:]) {
         self.giftData = giftData
         self.instanceId = instanceId
         self.referencePeerId = referencePeerId
@@ -7720,10 +7721,11 @@ public struct AorusStoredGift: Codable, Equatable {
         self.resellStars = resellStars
         self.resellCurrency = resellCurrency
         self.collectionIds = collectionIds
+        self.collectionOrders = collectionOrders
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, instanceId, referencePeerId, purchasedLocally, ownerPeerId, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds
+        case giftData, instanceId, referencePeerId, purchasedLocally, ownerPeerId, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds, collectionOrders
     }
 
     // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars/collectionIds existed still load.
@@ -7744,6 +7746,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.resellStars = try c.decodeIfPresent(Int64.self, forKey: .resellStars) ?? 0
         self.resellCurrency = try c.decodeIfPresent(Int32.self, forKey: .resellCurrency) ?? 0
         self.collectionIds = try c.decodeIfPresent([Int32].self, forKey: .collectionIds) ?? []
+        self.collectionOrders = try c.decodeIfPresent([String: Int32].self, forKey: .collectionOrders) ?? [:]
     }
 
     public var gift: StarGift? {
@@ -8048,6 +8051,44 @@ public enum AorusFakeGiftsStore {
         }
     }
 
+    @discardableResult
+    public static func setProfileVisibility(reference: StarGiftReference, _ visible: Bool) -> Bool {
+        guard let target = stored(reference: reference) else { return false }
+        var gifts = all()
+        guard let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) else { return false }
+        gifts[index].showInProfile = visible
+        if !visible {
+            gifts[index].pinnedToTop = false
+            gifts[index].pinnedOrder = 0
+        }
+        persist(gifts)
+        return true
+    }
+
+    // Move a local gift to another peer using the same local message representation as
+    // the established GiftView transfer flow. The server path is never touched.
+    @discardableResult
+    public static func transfer(reference: StarGiftReference, gift: StarGift, account: Account, recipientPeerId: PeerId) -> Bool {
+        guard let target = stored(reference: reference) else { return false }
+        let senderPeerId = account.peerId
+        let ownedGift = giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64())
+        let action: TelegramMediaActionType
+        switch ownedGift {
+        case .unique:
+            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: true, savedToProfile: false, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: senderPeerId, savedId: nil, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
+        case .generic:
+            action = .starGift(gift: ownedGift, convertStars: nil, text: nil, entities: nil, nameHidden: false, savedToProfile: false, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: senderPeerId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
+        }
+        let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: senderPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
+        var gifts = all()
+        gifts.removeAll(where: { $0.instanceId == target.instanceId })
+        persist(gifts)
+        let _ = account.postbox.transaction { transaction -> Void in
+            let _ = transaction.addMessages([message], location: .Random)
+        }.startStandalone()
+        return true
+    }
+
     // True if a unique gift with this slug is one of our local fake gifts.
     public static func isFakeBySlug(_ slug: String) -> Bool {
         return all().contains(where: {
@@ -8319,6 +8360,14 @@ public enum AorusFakeGiftsStore {
     // never polluting every collection.
     public static func profileWrappers(inCollection collectionId: Int32) -> [ProfileGiftsContext.State.StarGift] {
         let visible = all().filter { $0.showInProfile && $0.ownerPeerId == 0 && $0.collectionIds.contains(collectionId) }
+        let orderKey = String(collectionId)
+        if visible.contains(where: { $0.collectionOrders[orderKey] != nil }) {
+            return visible.sorted {
+                let lhs = $0.collectionOrders[orderKey] ?? Int32.max
+                let rhs = $1.collectionOrders[orderKey] ?? Int32.max
+                return lhs == rhs ? $0.date > $1.date : lhs < rhs
+            }.compactMap { wrapper(for: $0) }
+        }
         let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
         let unpinned = visible.filter { !$0.pinnedToTop }
         return (pinned + unpinned).compactMap { wrapper(for: $0) }
@@ -8345,6 +8394,9 @@ public enum AorusFakeGiftsStore {
         if let target, let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) {
             if !gifts[index].collectionIds.contains(collectionId) {
                 gifts[index].collectionIds.append(collectionId)
+                let orderKey = String(collectionId)
+                let maxOrder = gifts.compactMap { $0.collectionOrders[orderKey] }.max() ?? 0
+                gifts[index].collectionOrders[orderKey] = maxOrder + 1
                 persist(gifts)
             }
         }
@@ -8357,6 +8409,7 @@ public enum AorusFakeGiftsStore {
         if let target, let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) {
             if let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
                 gifts[index].collectionIds.remove(at: pos)
+                gifts[index].collectionOrders.removeValue(forKey: String(collectionId))
                 persist(gifts)
             }
         }
@@ -8371,6 +8424,7 @@ public enum AorusFakeGiftsStore {
             if let index = gifts.firstIndex(where: { $0.ownerPeerId == 0 && $0.instanceId == id }),
                let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
                 gifts[index].collectionIds.remove(at: pos)
+                gifts[index].collectionOrders.removeValue(forKey: String(collectionId))
                 persist(gifts)
             }
             return
@@ -8385,6 +8439,7 @@ public enum AorusFakeGiftsStore {
             }
             if matches, let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
                 gifts[index].collectionIds.remove(at: pos)
+                gifts[index].collectionOrders.removeValue(forKey: String(collectionId))
                 changed = true
             }
         }
@@ -8401,12 +8456,35 @@ public enum AorusFakeGiftsStore {
         for index in gifts.indices where gifts[index].ownerPeerId == 0 {
             if let pos = gifts[index].collectionIds.firstIndex(of: collectionId) {
                 gifts[index].collectionIds.remove(at: pos)
+                gifts[index].collectionOrders.removeValue(forKey: String(collectionId))
                 changed = true
             }
         }
         if changed {
             persist(gifts)
         }
+    }
+
+    public static func updateCollectionOrder(collectionId: Int32, references: [StarGiftReference]) {
+        let orderKey = String(collectionId)
+        var orderByInstance: [Int64: Int32] = [:]
+        var nextOrder: Int32 = 1
+        for reference in references {
+            if let stored = stored(reference: reference) {
+                orderByInstance[stored.instanceId] = nextOrder
+                nextOrder += 1
+            }
+        }
+        guard !orderByInstance.isEmpty else { return }
+        var gifts = all()
+        var changed = false
+        for index in gifts.indices where gifts[index].ownerPeerId == 0 && gifts[index].collectionIds.contains(collectionId) {
+            if let order = orderByInstance[gifts[index].instanceId], gifts[index].collectionOrders[orderKey] != order {
+                gifts[index].collectionOrders[orderKey] = order
+                changed = true
+            }
+        }
+        if changed { persist(gifts) }
     }
 
     // The gift's visual file (the animated sticker shown in the gift cell). Used as a
@@ -9189,6 +9267,22 @@ def patch_fake_gifts(tg: Path) -> None:
                 ok = False
                 print("FakeGifts: WARNING GiftsListView reorder-pins anchor not found")
 
+            collection_reorder_anchor = (
+                "                    let _ = self.giftsCollections?.reorderGifts(id: collectionId, gifts: orderedReferences).start()\n"
+            )
+            collection_reorder_inject = (
+                "                    AorusFakeGiftsStore.updateCollectionOrder(collectionId: collectionId, references: orderedReferences)\n"
+                "                    let serverOrderedReferences = orderedReferences.filter { !AorusFakeGiftsStore.contains(reference: $0) }\n"
+                "                    if !serverOrderedReferences.isEmpty {\n"
+                "                        let _ = self.giftsCollections?.reorderGifts(id: collectionId, gifts: serverOrderedReferences).start()\n"
+                "                    }\n"
+            )
+            if collection_reorder_anchor in t:
+                t = t.replace(collection_reorder_anchor, collection_reorder_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView collection reorder anchor not found")
+
             if ok:
                 gl.write_text(t, encoding="utf-8")
                 print("FakeGifts: patched GiftsListView (own-profile injection + live refresh)")
@@ -9605,6 +9699,139 @@ def patch_fake_gifts(tg: Path) -> None:
     #    the list-view pattern: snapshot server collections, enrich, and re-enrich live.
     pane = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift"
     if pane.is_file():
+        t = pane.read_text(encoding="utf-8")
+
+        # The long-press gift context menu owns a separate Pin/Unpin action and normally
+        # sends it straight to ProfileGiftsContext. Route only stored fake gifts through
+        # the established local mutation while preserving Telegram's native limit and
+        # success toast. Real gifts keep their original server path unchanged.
+        context_pin_marker = "// AorusGram: local fake gift context Pin/Unpin"
+        context_pin_anchor = (
+            "                        if pinnedToTop && self.giftsListView.pinnedReferences.count >= self.giftsListView.maxPinnedCount {\n"
+            "                            self.displayUnpinScreen(gift: gift)\n"
+            "                            return\n"
+            "                        }\n"
+            "                        \n"
+            "                        profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)\n"
+        )
+        context_pin_inject = (
+            "                        " + context_pin_marker + "\n"
+            "                        let aorusIsFakeGift = AorusFakeGiftsStore.contains(reference: reference)\n"
+            "                        if pinnedToTop && self.giftsListView.pinnedReferences.count >= self.giftsListView.maxPinnedCount {\n"
+            "                            if aorusIsFakeGift {\n"
+            "                                self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: strings.PeerInfo_Gifts_ToastPinLimit_Text(Int32(self.giftsListView.maxPinnedCount)), timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
+            "                            } else {\n"
+            "                                self.displayUnpinScreen(gift: gift)\n"
+            "                            }\n"
+            "                            return\n"
+            "                        }\n"
+            "                        \n"
+            "                        if aorusIsFakeGift {\n"
+            "                            guard AorusFakeGiftsStore.setPinned(reference: reference, pinnedToTop) else { return }\n"
+            "                        } else {\n"
+            "                            profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)\n"
+            "                        }\n"
+        )
+        if context_pin_marker in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode context Pin/Unpin already patched")
+        elif context_pin_anchor in t:
+            t = t.replace(context_pin_anchor, context_pin_inject, 1)
+            pane.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched long-press context Pin/Unpin for local gifts")
+        else:
+            raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode context Pin/Unpin anchor not found")
+
+        # Wearing is already persisted by the TelegramEngineAccountData interception.
+        # Let a stored fake gift use that route even when the account does not have
+        # server Premium; real gifts retain Telegram's native Premium gate.
+        t = pane.read_text(encoding="utf-8")
+        context_wear_marker = "// AorusGram: local fake gift context Wear"
+        context_wear_anchor = (
+            "                        if self.context.isPremium {\n"
+            "                            let _ = self.context.engine.accountData.setStarGiftStatus(starGift: uniqueGift, expirationDate: nil).startStandalone()\n"
+            "                        } else {\n"
+        )
+        context_wear_inject = (
+            "                        " + context_wear_marker + "\n"
+            "                        let aorusIsFakeGift = AorusFakeGiftsStore.contains(.unique(uniqueGift), reference: gift.reference)\n"
+            "                        if aorusIsFakeGift || self.context.isPremium {\n"
+            "                            let _ = self.context.engine.accountData.setStarGiftStatus(starGift: uniqueGift, expirationDate: nil).startStandalone()\n"
+            "                        } else {\n"
+        )
+        if context_wear_marker in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode context Wear already patched")
+        elif context_wear_anchor in t:
+            t = t.replace(context_wear_anchor, context_wear_inject, 1)
+            pane.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched long-press context Wear for local gifts")
+        else:
+            raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode context Wear anchor not found")
+
+        # Hide/Show mutates the local profile visibility for fake gifts. Keep the native
+        # animation and toast below this branch, and leave the server call intact for real gifts.
+        t = pane.read_text(encoding="utf-8")
+        context_visibility_marker = "// AorusGram: local fake gift context Hide/Show"
+        context_visibility_anchor = (
+            "                        let added = !gift.savedToProfile\n"
+            "                        profileGifts.updateStarGiftAddedToProfile(reference: reference, added: added)\n"
+        )
+        context_visibility_inject = (
+            "                        let added = !gift.savedToProfile\n"
+            "                        " + context_visibility_marker + "\n"
+            "                        if AorusFakeGiftsStore.contains(reference: reference) {\n"
+            "                            guard AorusFakeGiftsStore.setProfileVisibility(reference: reference, added) else { return }\n"
+            "                        } else {\n"
+            "                            profileGifts.updateStarGiftAddedToProfile(reference: reference, added: added)\n"
+            "                        }\n"
+        )
+        if context_visibility_marker in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode context Hide/Show already patched")
+        elif context_visibility_anchor in t:
+            t = t.replace(context_visibility_anchor, context_visibility_inject, 1)
+            pane.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched long-press context Hide/Show for local gifts")
+        else:
+            raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode context Hide/Show anchor not found")
+
+        # The native transfer controller would send a fake reference to Telegram. For a
+        # stored gift, open the same local recipient picker used by the working GiftView
+        # action and commit the transfer to AorusFakeGiftsStore. Real gifts continue below.
+        t = pane.read_text(encoding="utf-8")
+        context_transfer_marker = "// AorusGram: local fake gift context Transfer"
+        context_transfer_anchor = (
+            "                        let context = self.context\n"
+            "                        \n"
+            "                        guard uniqueGift.hostPeerId == nil else {\n"
+        )
+        context_transfer_inject = (
+            "                        let context = self.context\n"
+            "                        " + context_transfer_marker + "\n"
+            "                        if let reference = gift.reference, AorusFakeGiftsStore.contains(reference: reference) {\n"
+            "                            let aorusIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
+            "                            let aorusPicker = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: context, title: aorusIsRu ? \"" + ru_transfer_title + "\" : \"Transfer Gift\"))\n"
+            "                            aorusPicker.peerSelected = { [weak aorusPicker] peer, _ in\n"
+            "                                guard AorusFakeGiftsStore.transfer(reference: reference, gift: gift.gift, account: context.account, recipientPeerId: peer.id) else { return }\n"
+            "                                let text = aorusIsRu ? \"" + ru_transferred + "\" : \"Gift transferred\"\n"
+            "                                aorusPicker?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: text, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
+            "                                aorusPicker?.dismiss()\n"
+            "                            }\n"
+            "                            self.parentController?.push(aorusPicker)\n"
+            "                            return\n"
+            "                        }\n"
+            "                        \n"
+            "                        guard uniqueGift.hostPeerId == nil else {\n"
+        )
+        if context_transfer_marker in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode context Transfer already patched")
+        elif context_transfer_anchor in t:
+            t = t.replace(context_transfer_anchor, context_transfer_inject, 1)
+            pane.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched long-press context Transfer for local gifts")
+        else:
+            raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode context Transfer anchor not found")
+
+        # Reload after the independent context-menu patch so the collection-thumbnail
+        # patch below sees and preserves the latest source on first and cached runs.
         t = pane.read_text(encoding="utf-8")
         if "aorusEnrichCollections" in t:
             print("FakeGifts: PeerInfoGiftsPaneNode already patched (live collection icons)")

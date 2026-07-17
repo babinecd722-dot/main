@@ -515,6 +515,9 @@ def main() -> None:
             "public static func recordLocalGiftMessage",
             "public static func recordLocalPremiumMessage",
             "public static func spend(_ value: Int64)",
+            "public static func setProfileVisibility(reference: StarGiftReference",
+            "public static func transfer(reference: StarGiftReference",
+            "public static func updateCollectionOrder(collectionId: Int32",
         )
         if any(marker not in fake_store_text for marker in required_store_markers):
             err.append("FakeStars: local balance/gift persistence pipeline is incomplete")
@@ -553,8 +556,39 @@ def main() -> None:
             or "self.pinnedReferences.count >= self.maxPinnedCount" not in fake_gifts_list_text
             or "AorusFakeGiftsStore.setPinned(reference: reference, pinnedToTop)" not in fake_gifts_list_text
             or "PeerInfo_Gifts_ToastPinLimit_Text" not in fake_gifts_list_text
+            or "AorusFakeGiftsStore.updateCollectionOrder(collectionId: collectionId" not in fake_gifts_list_text
+            or "let serverOrderedReferences = orderedReferences.filter" not in fake_gifts_list_text
         ):
             err.append("FakeGifts: established Pin/Unpin route does not enforce Telegram's native pin limit")
+        fake_gifts_pane = (
+            tg
+            / "submodules"
+            / "TelegramUI"
+            / "Components"
+            / "PeerInfo"
+            / "PeerInfoVisualMediaPaneNode"
+            / "Sources"
+            / "PeerInfoGiftsPaneNode.swift"
+        )
+        fake_gifts_pane_text = fake_gifts_pane.read_text(encoding="utf-8") if fake_gifts_pane.is_file() else ""
+        if (
+            "// AorusGram: local fake gift context Pin/Unpin" not in fake_gifts_pane_text
+            or "AorusFakeGiftsStore.setPinned(reference: reference, pinnedToTop)" not in fake_gifts_pane_text
+            or "profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)" not in fake_gifts_pane_text
+            or "PeerInfo_Gifts_ToastPinLimit_Text" not in fake_gifts_pane_text
+        ):
+            err.append("FakeGifts: long-press Pin/Unpin is not synchronized with local gift state and native limits")
+        context_action_markers = (
+            "// AorusGram: local fake gift context Wear",
+            "// AorusGram: local fake gift context Hide/Show",
+            "// AorusGram: local fake gift context Transfer",
+            "AorusFakeGiftsStore.setProfileVisibility(reference: reference, added)",
+            "AorusFakeGiftsStore.transfer(reference: reference, gift: gift.gift",
+            "profileGifts.updateStarGiftAddedToProfile(reference: reference, added: added)",
+            "return profileGifts.transferStarGift(prepaid: transferStars == 0, reference: reference, peerId: peerId)",
+        )
+        if any(marker not in fake_gifts_pane_text for marker in context_action_markers):
+            err.append("FakeGifts: long-press Wear/Hide/Transfer routes are incomplete or replace native gift behavior")
         if "case let .slug(slug)" not in fake_store_text:
             err.append("FakeGifts: collectible slug references cannot resolve to local gifts")
         if "if case .unique = gift { return }" not in fake_store_text:
