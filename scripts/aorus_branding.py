@@ -11451,6 +11451,69 @@ public enum AorusPremiumEmojiGuard {
         }
     }
 }
+
+// AorusGram: forward from copy-protected chats as a NEW message.
+//
+// Channels/groups with content protection reject `messages.forwardMessages`
+// server-side (CHAT_FORWARDS_RESTRICTED), so a real forward never delivers even
+// with the client restriction removed. Instead, rewrite each `.forward` whose
+// source is protected into a fresh `.message` rebuilt from the source's own text,
+// entities and media — that is a normal outgoing send (no source reference), which
+// the server accepts. Applies to every "share"/forward entry point because they
+// all funnel through enqueueMessages. Non-protected forwards are left untouched so
+// normal forwards keep their "Forwarded from" header.
+public enum AorusForwardBypass {
+    public static func rewriteProtectedForwards(transaction: Transaction, messages: [EnqueueMessage]) -> [EnqueueMessage] {
+        return messages.map { message in
+            guard case let .forward(source, threadId, _, _, correlationId) = message else {
+                return message
+            }
+            guard let sourceMessage = transaction.getMessage(source) else {
+                return message
+            }
+            var isProtected = sourceMessage.flags.contains(.CopyProtected)
+            if !isProtected, let peer = transaction.getPeer(source.peerId) {
+                if let channel = peer as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {
+                    isProtected = true
+                } else if let group = peer as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {
+                    isProtected = true
+                }
+            }
+            guard isProtected else {
+                return message
+            }
+            // Keep only text entities from the source; drop forward/service attributes.
+            var newAttributes: [MessageAttribute] = []
+            for attribute in sourceMessage.attributes {
+                if let entities = attribute as? TextEntitiesMessageAttribute {
+                    newAttributes.append(entities)
+                }
+            }
+            // Re-send the first real media by reference (skip service + web-page media;
+            // the URL in the text regenerates its own preview).
+            var mediaReference: AnyMediaReference?
+            for media in sourceMessage.media {
+                if media is TelegramMediaAction || media is TelegramMediaWebpage {
+                    continue
+                }
+                mediaReference = .message(message: MessageReference(sourceMessage), media: media)
+                break
+            }
+            return .message(
+                text: sourceMessage.text,
+                attributes: newAttributes,
+                inlineStickers: [:],
+                mediaReference: mediaReference,
+                threadId: threadId,
+                replyToMessageId: nil,
+                replyToStoryId: nil,
+                localGroupingKey: sourceMessage.groupingKey,
+                correlationId: correlationId,
+                bubbleUpEmojiOrStickersets: []
+            )
+        }
+    }
+}
 '''
 
 
@@ -11470,7 +11533,7 @@ def patch_anti_search(tg: Path) -> None:
     if enqueue.is_file():
         t = enqueue.read_text(encoding="utf-8")
         enqueue_function = """public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {
-    let aorusContextSignal: Signal<(Bool, Bool, Int64?), NoError> = account.postbox.transaction { transaction -> (Bool, Bool, Int64?) in
+    let aorusContextSignal: Signal<(Bool, Bool, Int64?, [EnqueueMessage]), NoError> = account.postbox.transaction { transaction -> (Bool, Bool, Int64?, [EnqueueMessage]) in
         var aorusIsBotChat = false
         if let user = transaction.getPeer(peerId) as? TelegramUser, user.botInfo != nil {
             aorusIsBotChat = true
@@ -11483,17 +11546,18 @@ def patch_anti_search(tg: Path) -> None:
         if let cachedData = transaction.getPeerCachedData(peerId: peerId) as? CachedChannelData, let emojiPack = cachedData.emojiPack {
             aorusAllowedPackId = emojiPack.id.id
         }
-        return (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId)
+        let aorusRewritten = AorusForwardBypass.rewriteProtectedForwards(transaction: transaction, messages: messages)
+        return (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId, aorusRewritten)
     }
 
     return aorusContextSignal
     |> mapToSignal { aorusContext -> Signal<[MessageId?], NoError> in
-        let (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId) = aorusContext
+        let (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId, aorusMessages) = aorusContext
         var outboundMessages: [EnqueueMessage]
         if AorusOutgoingPrivacy.hasActiveTransforms {
-            outboundMessages = messages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox, disableAntiSearch: aorusIsBotChat) }
+            outboundMessages = aorusMessages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox, disableAntiSearch: aorusIsBotChat) }
         } else {
-            outboundMessages = messages
+            outboundMessages = aorusMessages
         }
         outboundMessages = outboundMessages.map { AorusPremiumEmojiGuard.strip($0, isAccountPremium: aorusIsPremium, allowedPackId: aorusAllowedPackId) }
         let signal: Signal<[(Bool, EnqueueMessage)], NoError>
