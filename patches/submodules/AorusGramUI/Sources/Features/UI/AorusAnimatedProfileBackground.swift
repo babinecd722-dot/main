@@ -334,6 +334,7 @@ private final class AorusVideoOnlyLoopRenderer {
     private var duration = 0.0
     private var wantsPlayback = false
     private var firstFrameDelivered = false
+    private var url: URL?
 
     init() {
         self.layer.videoGravity = .resizeAspectFill
@@ -342,9 +343,28 @@ private final class AorusVideoOnlyLoopRenderer {
 
     func load(url: URL) {
         self.queue.async {
+            self.url = url
             self.generation &+= 1
             let generation = self.generation
             self.firstFrameDelivered = false
+            self.startCycle(url: url, generation: generation)
+        }
+    }
+
+    // Re-arm the read/enqueue pump after a lifecycle pause. iOS stops calling the
+    // requestMediaDataWhenReady handler while the app is suspended, and an
+    // AVSampleBufferDisplayLayer can fall into a .failed state after a long
+    // background — leaving the last frame frozen (and the stretched overscroll
+    // backdrop showing through) even once playback rate is restored. Rebuilding
+    // the cycle re-creates the reader + timebase and re-arms the pump. startCycle
+    // uses flush() (not flushAndRemoveImage), so the last displayed frame stays
+    // visible during the rebuild — no black flash. firstFrameDelivered is left as
+    // is so the poster fade does not re-trigger.
+    func recover() {
+        self.queue.async {
+            guard let url = self.url else { return }
+            self.generation &+= 1
+            let generation = self.generation
             self.startCycle(url: url, generation: generation)
         }
     }
@@ -815,6 +835,10 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
 
     private func resumeAfterLifecyclePause() {
         self.updatePlayback()
+        // A long suspension leaves the reader pump stopped / the display layer
+        // failed, so restoring the playback rate alone keeps the frame frozen.
+        // Re-arm the read cycle so the loop actually moves again.
+        self.renderer?.recover()
         guard self.rendererHasDisplayedFrame,
               self.posterView.image != nil,
               !self.isHidden else {

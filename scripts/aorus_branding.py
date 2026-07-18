@@ -14708,6 +14708,45 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
             else:
                 print(f"StatusIcons: sticker edited anchor not found — skip ({st_path.name})")
 
+    # --- Remaining bubble content nodes: contact / location / poll / giveaway /
+    #     web-page attachment / rich-data / todo. Each builds its own standalone
+    #     ChatMessageDateAndStatusNode, so the trash icon shows on those deleted
+    #     variants too. `item.message` is the content item's message; the (indent,
+    #     edited-expression) pair is the exact anchor per file.
+    # (relative path, indent, edited-expression, message-variable). The attached
+    # web-page node exposes the message as a local `message` (EngineRawMessage);
+    # the rest are ChatMessageBubbleContentNode subclasses with `item.message`.
+    content_status_nodes = [
+        ("submodules/TelegramUI/Components/Chat/ChatMessageAttachedContentNode/Sources/ChatMessageAttachedContentNode.swift", 32, "edited && !isPreview", "message"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageContactBubbleContentNode/Sources/ChatMessageContactBubbleContentNode.swift", 24, "edited", "item.message"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageGiveawayBubbleContentNode/Sources/ChatMessageGiveawayBubbleContentNode.swift", 24, "edited", "item.message"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageMapBubbleContentNode/Sources/ChatMessageMapBubbleContentNode.swift", 24, "edited", "item.message"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessagePollBubbleContentNode/Sources/ChatMessagePollBubbleContentNode.swift", 24, "edited", "item.message"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageRichDataBubbleContentNode/Sources/ChatMessageRichDataBubbleContentNode.swift", 24, "edited && !item.presentationData.isPreview", "item.message"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageTodoBubbleContentNode/Sources/ChatMessageTodoBubbleContentNode.swift", 24, "edited", "item.message"),
+    ]
+    for content_rel, content_indent, content_expr, content_msg in content_status_nodes:
+        cn_path = tg / content_rel
+        if not cn_path.is_file():
+            print(f"StatusIcons: content node not found — skip ({content_rel.rsplit('/', 1)[-1]})")
+            continue
+        cn = cn_path.read_text(encoding="utf-8")
+        pad = " " * content_indent
+        cn_anchor = f"{pad}edited: {content_expr},\n{pad}impressionCount:"
+        cn_inject = (
+            f"{pad}edited: {content_expr},\n"
+            f"{pad}isDeleted: {content_msg}.text.hasSuffix(\"\\u{{2063}}\\u{{2064}}\"),\n"
+            f"{pad}impressionCount:"
+        )
+        if "isDeleted: item.message.text.hasSuffix" in cn:
+            print(f"StatusIcons: content node isDeleted already present ({cn_path.name})")
+        elif cn_anchor in cn:
+            cn = cn.replace(cn_anchor, cn_inject, 1)
+            cn_path.write_text(cn, encoding="utf-8")
+            print(f"StatusIcons: content node passes isDeleted ({cn_path.name})")
+        else:
+            print(f"StatusIcons: content node edited anchor not found — skip ({cn_path.name})")
+
     # --- Bubble item node: dim the bubble cloud (background) to 50% for deleted; text stays opaque ---
     bi_path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
     if bi_path.is_file():
