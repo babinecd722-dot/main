@@ -12314,16 +12314,8 @@ def patch_view_once_direct_save_button(tg: Path) -> None:
         '        let dstPath = NSTemporaryDirectory() + "_ag_save_" + UUID().uuidString + "." + dstExt\n'
         "        do { try FileManager.default.copyItem(atPath: path, toPath: dstPath) } catch { return }\n"
         "        let dstURL = URL(fileURLWithPath: dstPath)\n"
-        "        // Capture key window now — controller may be gone by callback time.\n"
-        "        var _agHostWin: UIWindow?\n"
-        "        for _agScene in UIApplication.shared.connectedScenes {\n"
-        "            if let _agWS = _agScene as? UIWindowScene {\n"
-        "                _agHostWin = _agWS.windows.first(where: { $0.isKeyWindow }) ?? _agWS.windows.first\n"
-        "                if _agHostWin != nil { break }\n"
-        "            }\n"
-        "        }\n"
         "        let _agRu = UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\"\n"
-        "        let doSave: () -> Void = { [_agHostWin] in\n"
+        "        let doSave: () -> Void = { [weak self] in\n"
         "            PHPhotoLibrary.shared().performChanges({\n"
         "                if isVideo {\n"
         "                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: dstURL)\n"
@@ -12332,63 +12324,13 @@ def patch_view_once_direct_save_button(tg: Path) -> None:
         "                }\n"
         "            }) { success, _ in\n"
         "                do { try FileManager.default.removeItem(atPath: dstPath) } catch {}\n"
-        "                guard success, let hostWin = _agHostWin else { return }\n"
+        "                guard success else { return }\n"
         "                DispatchQueue.main.async {\n"
+        "                    guard let self = self else { return }\n"
         "                    let _agText = _agRu\n"
         '                        ? (isVideo ? "Видео сохранено в галерею" : "Фото сохранено в галерею")\n'
-        '                        : (isVideo ? "Video saved" : "Photo saved")\n'
-        "                    let _agCont = UIView()\n"
-        "                    _agCont.translatesAutoresizingMaskIntoConstraints = false\n"
-        "                    _agCont.isUserInteractionEnabled = false\n"
-        "                    _agCont.alpha = 0\n"
-        "                    _agCont.transform = CGAffineTransform(translationX: 0, y: 18)\n"
-        "                    _agCont.layer.shadowColor = UIColor.black.cgColor\n"
-        "                    _agCont.layer.shadowOpacity = 0.3\n"
-        "                    _agCont.layer.shadowRadius = 12\n"
-        "                    _agCont.layer.shadowOffset = CGSize(width: 0, height: 4)\n"
-        "                    let _agBlur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))\n"
-        "                    _agBlur.translatesAutoresizingMaskIntoConstraints = false\n"
-        "                    _agBlur.layer.cornerRadius = 20\n"
-        "                    _agBlur.clipsToBounds = true\n"
-        "                    _agBlur.layer.borderWidth = 0.5\n"
-        "                    _agBlur.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor\n"
-        "                    _agCont.addSubview(_agBlur)\n"
-        '                    let _agIcon = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))\n'
-        "                    _agIcon.tintColor = UIColor(red: 0.27, green: 0.84, blue: 0.55, alpha: 1)\n"
-        "                    _agIcon.translatesAutoresizingMaskIntoConstraints = false\n"
-        "                    _agIcon.contentMode = .scaleAspectFit\n"
-        "                    let _agLbl = UILabel()\n"
-        "                    _agLbl.text = _agText\n"
-        "                    _agLbl.textColor = .white\n"
-        "                    _agLbl.font = .systemFont(ofSize: 15, weight: .semibold)\n"
-        "                    _agLbl.translatesAutoresizingMaskIntoConstraints = false\n"
-        "                    _agBlur.contentView.addSubview(_agIcon)\n"
-        "                    _agBlur.contentView.addSubview(_agLbl)\n"
-        "                    hostWin.addSubview(_agCont)\n"
-        "                    NSLayoutConstraint.activate([\n"
-        "                        _agBlur.leadingAnchor.constraint(equalTo: _agCont.leadingAnchor),\n"
-        "                        _agBlur.trailingAnchor.constraint(equalTo: _agCont.trailingAnchor),\n"
-        "                        _agBlur.topAnchor.constraint(equalTo: _agCont.topAnchor),\n"
-        "                        _agBlur.bottomAnchor.constraint(equalTo: _agCont.bottomAnchor),\n"
-        "                        _agBlur.heightAnchor.constraint(equalToConstant: 46),\n"
-        "                        _agIcon.leadingAnchor.constraint(equalTo: _agBlur.contentView.leadingAnchor, constant: 14),\n"
-        "                        _agIcon.centerYAnchor.constraint(equalTo: _agBlur.contentView.centerYAnchor),\n"
-        "                        _agIcon.widthAnchor.constraint(equalToConstant: 22),\n"
-        "                        _agIcon.heightAnchor.constraint(equalToConstant: 22),\n"
-        "                        _agLbl.leadingAnchor.constraint(equalTo: _agIcon.trailingAnchor, constant: 9),\n"
-        "                        _agLbl.trailingAnchor.constraint(equalTo: _agBlur.contentView.trailingAnchor, constant: -16),\n"
-        "                        _agLbl.centerYAnchor.constraint(equalTo: _agBlur.contentView.centerYAnchor),\n"
-        "                        _agCont.centerXAnchor.constraint(equalTo: hostWin.centerXAnchor),\n"
-        "                        _agCont.bottomAnchor.constraint(equalTo: hostWin.safeAreaLayoutGuide.bottomAnchor, constant: -28),\n"
-        "                    ])\n"
-        "                    UIView.animate(withDuration: 0.26, delay: 0, options: [.curveEaseOut]) {\n"
-        "                        _agCont.alpha = 1; _agCont.transform = .identity\n"
-        "                    } completion: { _ in\n"
-        "                        UIView.animate(withDuration: 0.25, delay: 2.2, options: [.curveEaseIn]) {\n"
-        "                            _agCont.alpha = 0\n"
-        "                            _agCont.transform = CGAffineTransform(translationX: 0, y: 14)\n"
-        "                        } completion: { _ in _agCont.removeFromSuperview() }\n"
-        "                    }\n"
+        '                        : (isVideo ? "Video saved to gallery" : "Photo saved to gallery")\n'
+        "                    self.present(UndoOverlayController(presentationData: self.presentationData, content: .actionSucceeded(title: nil, text: _agText, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
         "                }\n"
         "            }\n"
         "        }\n"
@@ -12419,6 +12361,8 @@ def patch_view_once_direct_save_button(tg: Path) -> None:
     else:
         print("VODirectSave: WARNING — P6 class-end anchor not found")
 
+    if "import UndoUI\n" not in t:
+        t = t.replace("import AccountContext\n", "import AccountContext\nimport UndoUI\n", 1)
     f.write_text(t, encoding="utf-8")
     print("VODirectSave: SecretMediaPreviewController patched — direct Save button injected")
 
@@ -19257,6 +19201,76 @@ def patch_voice_to_text(tg: Path) -> None:
         print("VoiceToText: layout geometry applied (" + ", ".join(repairs) + ")")
 
 
+def patch_disable_copy_protection(tg: Path) -> None:
+    """Client-side: ignore channel/group content-protection so protected messages
+    can still be forwarded / copied / saved. Both the per-message and per-peer
+    checks funnel through two accessors — neutralising those covers every UI gate
+    (context menu forward/copy/save, screenshot protection) without touching the
+    server or adding any UI. Silent, always on."""
+    msg = tg / "submodules/TelegramCore/Sources/Utils/MessageUtils.swift"
+    if msg.is_file():
+        t = msg.read_text(encoding="utf-8")
+        anchor = (
+            "    func isCopyProtected() -> Bool {\n"
+            "        if self.flags.contains(.CopyProtected) {\n"
+            "            return true\n"
+            "        } else if let group = self.peers[self.id.peerId] as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {\n"
+            "            return true\n"
+            "        } else if let channel = self.peers[self.id.peerId] as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {\n"
+            "            return true\n"
+            "        } else {\n"
+            "            return false\n"
+            "        }\n"
+            "    }\n"
+        )
+        replacement = (
+            "    func isCopyProtected() -> Bool {\n"
+            "        // AorusGram: never treat content as copy-protected on the client.\n"
+            "        return false\n"
+            "    }\n"
+        )
+        if "// AorusGram: never treat content as copy-protected" in t:
+            print("CopyProtection: message accessor already patched")
+        elif anchor in t:
+            msg.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
+            print("CopyProtection: neutralised Message.isCopyProtected()")
+        else:
+            print("CopyProtection: MessageUtils anchor not found — skip")
+    else:
+        print("CopyProtection: MessageUtils.swift not found — skip")
+
+    peer = tg / "submodules/TelegramCore/Sources/Utils/PeerUtils.swift"
+    if peer.is_file():
+        t = peer.read_text(encoding="utf-8")
+        anchor = (
+            "    var isCopyProtectionEnabled: Bool {\n"
+            "        switch self {\n"
+            "        case let group as TelegramGroup:\n"
+            "            return group.flags.contains(.copyProtectionEnabled)\n"
+            "        case let channel as TelegramChannel:\n"
+            "            return channel.flags.contains(.copyProtectionEnabled)\n"
+            "        default:\n"
+            "            return false\n"
+            "        }\n"
+            "    }\n"
+        )
+        replacement = (
+            "    var isCopyProtectionEnabled: Bool {\n"
+            "        // AorusGram: report peers as not copy-protected on the client.\n"
+            "        return false\n"
+            "    }\n"
+        )
+        if "// AorusGram: report peers as not copy-protected" in t:
+            print("CopyProtection: peer accessor already patched")
+        elif anchor in t:
+            peer.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
+            print("CopyProtection: neutralised Peer.isCopyProtectionEnabled")
+        else:
+            print("CopyProtection: PeerUtils anchor not found — skip")
+    else:
+        print("CopyProtection: PeerUtils.swift not found — skip")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -19350,6 +19364,7 @@ def main() -> None:
     patch_login_backup_key_button(tg)
     patch_formatting_panel(tg)
     patch_voice_to_text(tg)
+    patch_disable_copy_protection(tg)
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_media_caption_rich_edit(tg)
