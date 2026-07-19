@@ -19334,6 +19334,63 @@ def patch_disable_copy_protection(tg: Path) -> None:
     else:
         print("CopyProtection: PeerUtils.swift not found — skip")
 
+    # UI-level gates that read protection from cached maps / a passed-in Bool,
+    # bypassing the two accessors above. Neutralise the copy-protection part only
+    # (keep paid-content and self-destruct handling intact).
+    ctx = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
+    if ctx.is_file():
+        t = ctx.read_text(encoding="utf-8")
+        anchor = (
+            "        func isPeerCopyProtected(_ peerId: EnginePeer.Id) -> Bool? {\n"
+            "            let copyProtection = copyProtectionMap[peerId]\n"
+            "            let myCopyProtection = myCopyProtectionMap[peerId]\n"
+            "            if copyProtection == true || myCopyProtection == true {\n"
+            "                return true\n"
+            "            } else {\n"
+            "                return nil\n"
+            "            }\n"
+            "        }\n"
+        )
+        replacement = (
+            "        func isPeerCopyProtected(_ peerId: EnginePeer.Id) -> Bool? {\n"
+            "            // AorusGram: treat no peer as copy-protected (unlocks forward/copy/save menu).\n"
+            "            return nil\n"
+            "        }\n"
+        )
+        if "AorusGram: treat no peer as copy-protected" in t:
+            print("CopyProtection: context-menu already patched")
+        elif anchor in t:
+            ctx.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
+            print("CopyProtection: neutralised context-menu isPeerCopyProtected")
+        else:
+            print("CopyProtection: context-menu anchor not found — skip")
+
+    footer = tg / "submodules/GalleryUI/Sources/ChatItemGalleryFooterContentNode.swift"
+    if footer.is_file():
+        t = footer.read_text(encoding="utf-8")
+        anchor = "        if message.isCopyProtected() || peerIsCopyProtected || message.paidContent != nil {\n"
+        replacement = "        if message.paidContent != nil {\n"
+        if anchor in t:
+            footer.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
+            print("CopyProtection: unblocked media-viewer share/forward button")
+        elif replacement in t:
+            print("CopyProtection: media-viewer footer already patched")
+        else:
+            print("CopyProtection: media-viewer footer anchor not found — skip")
+
+    gallery = tg / "submodules/GalleryUI/Sources/GalleryController.swift"
+    if gallery.is_file():
+        t = gallery.read_text(encoding="utf-8")
+        cap_anchor = "let captureProtected = message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil || peerIsCopyProtected"
+        cap_new = "let captureProtected = message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil"
+        n = t.count(cap_anchor)
+        if n:
+            t = t.replace(cap_anchor, cap_new)
+            gallery.write_text(t, encoding="utf-8")
+            print(f"CopyProtection: dropped copy-protection from gallery captureProtected ({n})")
+        else:
+            print("CopyProtection: gallery captureProtected anchor not found — skip")
+
 
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
