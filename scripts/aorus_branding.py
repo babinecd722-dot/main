@@ -11489,14 +11489,24 @@ public enum AorusForwardBypass {
                     newAttributes.append(entities)
                 }
             }
-            // Re-send the first real media by reference (skip service + web-page media;
-            // the URL in the text regenerates its own preview).
+            // Re-send the first real media as a genuinely NEW upload (skip service +
+            // web-page media; the URL in the text regenerates its own preview).
+            //
+            // Must be `.standalone`, NOT `.message(message: MessageReference(source), ...)`:
+            // a message reference links the outgoing media back to the copy-protected
+            // source, and the upload path then tries to revalidate/reuse that protected
+            // cloud file — which the server refuses (text has no media reference, which is
+            // exactly why text forwards but media/files did not). `.standalone` carries the
+            // cloud resource's own self-contained remote location (dcId/fileId/accessHash/
+            // fileReference), so the client re-uploads the already-downloaded bytes as a
+            // fresh file with no tie to the protected message. This mirrors TelegramCore's
+            // own resendMessages() copy path (EnqueueMessage.swift: AnyMediaReference.standalone).
             var mediaReference: AnyMediaReference?
             for media in sourceMessage.media {
                 if media is TelegramMediaAction || media is TelegramMediaWebpage {
                     continue
                 }
-                mediaReference = .message(message: MessageReference(sourceMessage), media: media)
+                mediaReference = .standalone(media: media)
                 break
             }
             return .message(
