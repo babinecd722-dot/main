@@ -38,7 +38,20 @@ jobs:
           git clone --depth=1 --branch release-12.8 \
             https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios
           cd telegram-ios
-          git submodule update --init --depth=1 --jobs=4 || true
+          # Retry submodule fetch: a single --jobs=4 pass intermittently leaves a
+          # submodule half-populated (e.g. webrtc missing experiments/field_trials.py),
+          # which used to be silently swallowed by `|| true` and only surfaced as a
+          # Bazel genrule "input file does not exist" failure much later. Retry a few
+          # times so a transient network hiccup on one submodule self-heals.
+          for attempt in 1 2 3; do
+            echo "=== submodule update attempt $attempt ==="
+            if git submodule update --init --force --depth=1 --jobs=4; then
+              echo "submodule update succeeded"
+              break
+            fi
+            echo "submodule update attempt $attempt failed; retrying..."
+            sleep $((attempt * 4))
+          done
 
       - name: Ensure rlottie submodule
         run: |
@@ -51,6 +64,43 @@ jobs:
             git clone --depth=1 https://github.com/TelegramMessenger/rlottie.git submodules/rlottie/rlottie
           fi
           echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
+
+      - name: Ensure webrtc submodule
+        run: |
+          cd telegram-ios
+          # The WebRTC submodule feeds a Bazel genrule (generate_field_trials_header)
+          # that reads webrtc/experiments/field_trials.py. If the submodule fetch left
+          # the tree incomplete, that file is missing and the build dies with
+          # "1 input file(s) do not exist" long before any Swift compiles. Guard it the
+          # same way as rlottie: check for the sentinel file, re-fetch if absent.
+          WEBRTC_DIR="third-party/webrtc/webrtc"
+          SENTINEL="$WEBRTC_DIR/experiments/field_trials.py"
+          if [ ! -f "$SENTINEL" ]; then
+            echo "webrtc submodule incomplete (missing $SENTINEL) — re-fetching..."
+            for attempt in 1 2 3; do
+              echo "=== webrtc fetch attempt $attempt ==="
+              if git submodule update --init --force --depth=1 "$WEBRTC_DIR"; then
+                [ -f "$SENTINEL" ] && break
+              fi
+              echo "webrtc still incomplete; retrying..."
+              sleep $((attempt * 4))
+            done
+          fi
+          if [ ! -f "$SENTINEL" ]; then
+            echo "webrtc submodule update did not restore sentinel — cloning directly..."
+            WEBRTC_SHA=$(git ls-tree HEAD "$WEBRTC_DIR" 2>/dev/null | awk '{print $3}')
+            rm -rf "$WEBRTC_DIR"
+            git clone https://github.com/ali-fareed/webrtc.git "$WEBRTC_DIR"
+            if [ -n "$WEBRTC_SHA" ]; then
+              ( cd "$WEBRTC_DIR" && git checkout -q "$WEBRTC_SHA" ) || echo "WARNING: could not check out pinned webrtc sha $WEBRTC_SHA"
+            fi
+          fi
+          if [ -f "$SENTINEL" ]; then
+            echo "webrtc OK: $SENTINEL present"
+          else
+            echo "FATAL: webrtc field_trials.py still missing after all recovery attempts"
+            exit 1
+          fi
 
       # Cosmetic: a few upstream icons ship as sub-8-bit or 16-bit PNGs, which makes
       # CopyPng emit "Input PNG does not have an 8 bit input depth" warnings. Re-encode
