@@ -10489,6 +10489,7 @@ def patch_stars_purchase_redirects(tg: Path) -> None:
 
 AORUS_ANTI_SEARCH_SWIFT = '''import Foundation
 import Postbox
+import SwiftSignalKit
 
 // AorusGram AntiSearch — swap visually identical Cyrillic <-> Latin letters on outgoing
 // text at send and edit time so the rendered message looks pixel-identical but no longer
@@ -11463,65 +11464,137 @@ public enum AorusPremiumEmojiGuard {
 // all funnel through enqueueMessages. Non-protected forwards are left untouched so
 // normal forwards keep their "Forwarded from" header.
 public enum AorusForwardBypass {
-    public static func rewriteProtectedForwards(transaction: Transaction, messages: [EnqueueMessage]) -> [EnqueueMessage] {
-        return messages.map { message in
-            guard case let .forward(source, threadId, _, _, correlationId) = message else {
-                return message
-            }
-            guard let sourceMessage = transaction.getMessage(source) else {
-                return message
-            }
-            var isProtected = sourceMessage.flags.contains(.CopyProtected)
-            if !isProtected, let peer = transaction.getPeer(source.peerId) {
-                if let channel = peer as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {
-                    isProtected = true
-                } else if let group = peer as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {
-                    isProtected = true
+    // Forwarding out of a copy-protected (noforwards) chat is refused by the server for
+    // messages.forwardMessages AND for any send that merely *references* the original cloud
+    // file. In TelegramCore's upload path (mediaContentToUpload) a TelegramMediaFile backed
+    // by a CloudDocumentMediaResource, or a TelegramMediaImage with a .cloud reference, is
+    // always sent as inputMediaDocument / inputMediaPhoto (a pointer to the existing cloud
+    // file) — never re-uploaded. The server rejects that pointer because it belongs to a
+    // protected message, so the outgoing message fails with a red "!". Text carries no such
+    // reference, which is exactly why text forwarded but media/files did not.
+    //
+    // The only reliable way to resend protected media is to strip it down to a genuinely
+    // LOCAL file resource: download the bytes (they are already fetchable — the user can see
+    // the media), then rebuild the media on a LocalFileReferenceMediaResource pointing at the
+    // downloaded file. mediaContentToUpload then takes the upload branch and sends a fresh
+    // inputMediaUploadedDocument / inputMediaUploadedPhoto, which the server accepts.
+    public static func rewriteProtectedForwards(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[EnqueueMessage], NoError> {
+        return account.postbox.transaction { transaction -> [Signal<EnqueueMessage, NoError>] in
+            return messages.map { message -> Signal<EnqueueMessage, NoError> in
+                guard case let .forward(source, threadId, _, _, correlationId) = message else {
+                    return .single(message)
+                }
+                guard let sourceMessage = transaction.getMessage(source) else {
+                    return .single(message)
+                }
+                var isProtected = sourceMessage.flags.contains(.CopyProtected)
+                if !isProtected, let peer = transaction.getPeer(source.peerId) {
+                    if let channel = peer as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {
+                        isProtected = true
+                    } else if let group = peer as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {
+                        isProtected = true
+                    }
+                }
+                guard isProtected else {
+                    return .single(message)
+                }
+                // Keep only text entities from the source; drop forward/service attributes.
+                var newAttributes: [MessageAttribute] = []
+                for attribute in sourceMessage.attributes {
+                    if let entities = attribute as? TextEntitiesMessageAttribute {
+                        newAttributes.append(entities)
+                    }
+                }
+                var sourceMedia: Media?
+                for media in sourceMessage.media {
+                    if media is TelegramMediaAction || media is TelegramMediaWebpage {
+                        continue
+                    }
+                    sourceMedia = media
+                    break
+                }
+                let text = sourceMessage.text
+                let groupingKey = sourceMessage.groupingKey
+                let build: (Media?) -> EnqueueMessage = { localMedia in
+                    let reference: AnyMediaReference? = localMedia.flatMap { AnyMediaReference.standalone(media: $0) }
+                    return .message(
+                        text: text,
+                        attributes: newAttributes,
+                        inlineStickers: [:],
+                        mediaReference: reference,
+                        threadId: threadId,
+                        replyToMessageId: nil,
+                        replyToStoryId: nil,
+                        localGroupingKey: groupingKey,
+                        correlationId: correlationId,
+                        bubbleUpEmojiOrStickersets: []
+                    )
+                }
+                guard let media = sourceMedia else {
+                    return .single(build(nil))
+                }
+                return AorusForwardBypass.localizedMedia(account: account, message: sourceMessage, media: media)
+                |> map { localMedia -> EnqueueMessage in
+                    return build(localMedia)
                 }
             }
-            guard isProtected else {
-                return message
-            }
-            // Keep only text entities from the source; drop forward/service attributes.
-            var newAttributes: [MessageAttribute] = []
-            for attribute in sourceMessage.attributes {
-                if let entities = attribute as? TextEntitiesMessageAttribute {
-                    newAttributes.append(entities)
-                }
-            }
-            // Re-send the first real media as a genuinely NEW upload (skip service +
-            // web-page media; the URL in the text regenerates its own preview).
-            //
-            // Must be `.standalone`, NOT `.message(message: MessageReference(source), ...)`:
-            // a message reference links the outgoing media back to the copy-protected
-            // source, and the upload path then tries to revalidate/reuse that protected
-            // cloud file — which the server refuses (text has no media reference, which is
-            // exactly why text forwards but media/files did not). `.standalone` carries the
-            // cloud resource's own self-contained remote location (dcId/fileId/accessHash/
-            // fileReference), so the client re-uploads the already-downloaded bytes as a
-            // fresh file with no tie to the protected message. This mirrors TelegramCore's
-            // own resendMessages() copy path (EnqueueMessage.swift: AnyMediaReference.standalone).
-            var mediaReference: AnyMediaReference?
-            for media in sourceMessage.media {
-                if media is TelegramMediaAction || media is TelegramMediaWebpage {
-                    continue
-                }
-                mediaReference = .standalone(media: media)
-                break
-            }
-            return .message(
-                text: sourceMessage.text,
-                attributes: newAttributes,
-                inlineStickers: [:],
-                mediaReference: mediaReference,
-                threadId: threadId,
-                replyToMessageId: nil,
-                replyToStoryId: nil,
-                localGroupingKey: sourceMessage.groupingKey,
-                correlationId: correlationId,
-                bubbleUpEmojiOrStickersets: []
-            )
         }
+        |> mapToSignal { signals -> Signal<[EnqueueMessage], NoError> in
+            if signals.isEmpty {
+                return .single([])
+            }
+            return combineLatest(signals)
+        }
+    }
+
+    // Download the media (if not already local) and return a copy whose resource is a plain
+    // on-disk file, forcing a fresh re-upload. On any failure the original media is returned
+    // unchanged (best effort — no worse than before).
+    private static func localizedMedia(account: Account, message: Message, media: Media) -> Signal<Media?, NoError> {
+        if let file = media as? TelegramMediaFile {
+            return AorusForwardBypass.ensureLocalPath(account: account, message: message, media: media, resource: file.resource, contentType: .file)
+            |> map { path -> Media? in
+                guard let path = path else {
+                    return file
+                }
+                let localResource = LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: false, size: file.size)
+                return file.withUpdatedResource(localResource)
+            }
+        } else if let image = media as? TelegramMediaImage, let largest = largestImageRepresentation(image.representations) {
+            return AorusForwardBypass.ensureLocalPath(account: account, message: message, media: media, resource: largest.resource, contentType: .image)
+            |> map { path -> Media? in
+                guard let path = path else {
+                    return image
+                }
+                let localResource = LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: false, size: nil)
+                let newRepresentation = TelegramMediaImageRepresentation(dimensions: largest.dimensions, resource: localResource, progressiveSizes: [], immediateThumbnailData: largest.immediateThumbnailData, hasVideo: false, isPersonal: false)
+                return TelegramMediaImage(imageId: MediaId(namespace: Namespaces.Media.LocalImage, id: Int64.random(in: Int64.min ... Int64.max)), representations: [newRepresentation], immediateThumbnailData: image.immediateThumbnailData, reference: nil, partialReference: nil, flags: [])
+            }
+        }
+        return .single(media)
+    }
+
+    private static func ensureLocalPath(account: Account, message: Message, media: Media, resource: MediaResource, contentType: MediaResourceUserContentType) -> Signal<String?, NoError> {
+        let mediaBox = account.postbox.mediaBox
+        if let path = mediaBox.completedResourcePath(resource) {
+            return .single(path)
+        }
+        let mediaReference = AnyMediaReference.message(message: MessageReference(message), media: media)
+        let fetchSignal = fetchedMediaResource(mediaBox: mediaBox, userLocation: .other, userContentType: contentType, reference: mediaReference.resourceReference(resource))
+        return Signal<String?, NoError> { subscriber in
+            let fetchDisposable = fetchSignal.start()
+            let dataDisposable = mediaBox.resourceData(resource, option: .complete(waitUntilFetchStatus: false)).start(next: { data in
+                if data.complete {
+                    subscriber.putNext(data.path)
+                    subscriber.putCompletion()
+                }
+            })
+            return ActionDisposable {
+                fetchDisposable.dispose()
+                dataDisposable.dispose()
+            }
+        }
+        |> take(1)
     }
 }
 '''
@@ -11543,43 +11616,46 @@ def patch_anti_search(tg: Path) -> None:
     if enqueue.is_file():
         t = enqueue.read_text(encoding="utf-8")
         enqueue_function = """public func enqueueMessages(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[MessageId?], NoError> {
-    let aorusContextSignal: Signal<(Bool, Bool, Int64?, [EnqueueMessage]), NoError> = account.postbox.transaction { transaction -> (Bool, Bool, Int64?, [EnqueueMessage]) in
-        var aorusIsBotChat = false
-        if let user = transaction.getPeer(peerId) as? TelegramUser, user.botInfo != nil {
-            aorusIsBotChat = true
+    return AorusForwardBypass.rewriteProtectedForwards(account: account, peerId: peerId, messages: messages)
+    |> mapToSignal { aorusRewritten -> Signal<[MessageId?], NoError> in
+        let aorusContextSignal: Signal<(Bool, Bool, Int64?), NoError> = account.postbox.transaction { transaction -> (Bool, Bool, Int64?) in
+            var aorusIsBotChat = false
+            if let user = transaction.getPeer(peerId) as? TelegramUser, user.botInfo != nil {
+                aorusIsBotChat = true
+            }
+            var aorusIsPremium = false
+            if let accountUser = transaction.getPeer(account.peerId) as? TelegramUser, accountUser.flags.contains(.isPremium) {
+                aorusIsPremium = true
+            }
+            var aorusAllowedPackId: Int64?
+            if let cachedData = transaction.getPeerCachedData(peerId: peerId) as? CachedChannelData, let emojiPack = cachedData.emojiPack {
+                aorusAllowedPackId = emojiPack.id.id
+            }
+            return (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId)
         }
-        var aorusIsPremium = false
-        if let accountUser = transaction.getPeer(account.peerId) as? TelegramUser, accountUser.flags.contains(.isPremium) {
-            aorusIsPremium = true
-        }
-        var aorusAllowedPackId: Int64?
-        if let cachedData = transaction.getPeerCachedData(peerId: peerId) as? CachedChannelData, let emojiPack = cachedData.emojiPack {
-            aorusAllowedPackId = emojiPack.id.id
-        }
-        let aorusRewritten = AorusForwardBypass.rewriteProtectedForwards(transaction: transaction, messages: messages)
-        return (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId, aorusRewritten)
-    }
 
-    return aorusContextSignal
-    |> mapToSignal { aorusContext -> Signal<[MessageId?], NoError> in
-        let (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId, aorusMessages) = aorusContext
-        var outboundMessages: [EnqueueMessage]
-        if AorusOutgoingPrivacy.hasActiveTransforms {
-            outboundMessages = aorusMessages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox, disableAntiSearch: aorusIsBotChat) }
-        } else {
-            outboundMessages = aorusMessages
-        }
-        outboundMessages = outboundMessages.map { AorusPremiumEmojiGuard.strip($0, isAccountPremium: aorusIsPremium, allowedPackId: aorusAllowedPackId) }
-        let signal: Signal<[(Bool, EnqueueMessage)], NoError>
-        if let transformOutgoingMessageMedia = account.transformOutgoingMessageMedia {
-            signal = opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)
-        } else {
-            signal = .single(outboundMessages.map { (false, $0) })
-        }
-        return signal
-        |> mapToSignal { messages -> Signal<[MessageId?], NoError> in
-            return account.postbox.transaction { transaction -> [MessageId?] in
-                return enqueueMessages(transaction: transaction, account: account, peerId: peerId, messages: messages)
+        return aorusContextSignal
+        |> mapToSignal { aorusContext -> Signal<[MessageId?], NoError> in
+            let (aorusIsBotChat, aorusIsPremium, aorusAllowedPackId) = aorusContext
+            let aorusMessages = aorusRewritten
+            var outboundMessages: [EnqueueMessage]
+            if AorusOutgoingPrivacy.hasActiveTransforms {
+                outboundMessages = aorusMessages.map { AorusOutgoingPrivacy.transform($0, accountPeerId: account.peerId, mediaBox: account.postbox.mediaBox, disableAntiSearch: aorusIsBotChat) }
+            } else {
+                outboundMessages = aorusMessages
+            }
+            outboundMessages = outboundMessages.map { AorusPremiumEmojiGuard.strip($0, isAccountPremium: aorusIsPremium, allowedPackId: aorusAllowedPackId) }
+            let signal: Signal<[(Bool, EnqueueMessage)], NoError>
+            if let transformOutgoingMessageMedia = account.transformOutgoingMessageMedia {
+                signal = opportunisticallyTransformOutgoingMedia(network: account.network, postbox: account.postbox, transformOutgoingMessageMedia: transformOutgoingMessageMedia, messages: outboundMessages, userInteractive: true)
+            } else {
+                signal = .single(outboundMessages.map { (false, $0) })
+            }
+            return signal
+            |> mapToSignal { messages -> Signal<[MessageId?], NoError> in
+                return account.postbox.transaction { transaction -> [MessageId?] in
+                    return enqueueMessages(transaction: transaction, account: account, peerId: peerId, messages: messages)
+                }
             }
         }
     }
