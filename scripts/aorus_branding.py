@@ -11552,13 +11552,31 @@ public enum AorusForwardBypass {
     // unchanged (best effort — no worse than before).
     private static func localizedMedia(account: Account, message: Message, media: Media) -> Signal<Media?, NoError> {
         if let file = media as? TelegramMediaFile {
+            // Covers EVERY document / video / voice / gif / sticker / audio — they are all
+            // TelegramMediaFile. Rebuild with a FRESH local media id and a local resource,
+            // dropping the cloud fileId, partialReference and all cloud thumbnail sub-
+            // resources. withUpdatedResource() is deliberately NOT used: it keeps the cloud
+            // fileId, which ties the media straight back to the protected file and the send
+            // reverts to inputMediaDocument (rejected). Thumbnails regenerate on upload.
             return AorusForwardBypass.ensureLocalPath(account: account, message: message, media: media, resource: file.resource, contentType: .file)
             |> map { path -> Media? in
                 guard let path = path else {
                     return file
                 }
                 let localResource = LocalFileReferenceMediaResource(localFilePath: path, randomId: Int64.random(in: Int64.min ... Int64.max), isUniquelyReferencedTemporaryFile: false, size: file.size)
-                return file.withUpdatedResource(localResource)
+                return TelegramMediaFile(
+                    fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: Int64.random(in: Int64.min ... Int64.max)),
+                    partialReference: nil,
+                    resource: localResource,
+                    previewRepresentations: [],
+                    videoThumbnails: [],
+                    videoCover: nil,
+                    immediateThumbnailData: file.immediateThumbnailData,
+                    mimeType: file.mimeType,
+                    size: file.size,
+                    attributes: file.attributes,
+                    alternativeRepresentations: []
+                )
             }
         } else if let image = media as? TelegramMediaImage, let largest = largestImageRepresentation(image.representations) {
             return AorusForwardBypass.ensureLocalPath(account: account, message: message, media: media, resource: largest.resource, contentType: .image)
