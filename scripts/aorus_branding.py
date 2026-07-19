@@ -11600,7 +11600,14 @@ public enum AorusForwardBypass {
         let mediaReference = AnyMediaReference.message(message: MessageReference(message), media: media)
         let fetchSignal = fetchedMediaResource(mediaBox: mediaBox, userLocation: .other, userContentType: contentType, reference: mediaReference.resourceReference(resource))
         return Signal<String?, NoError> { subscriber in
-            let fetchDisposable = fetchSignal.start()
+            // A fetch error (e.g. an unresolvable file reference) must resolve the signal
+            // with nil instead of hanging forever — otherwise combineLatest never fires and
+            // the whole forward silently gets stuck. On completion, wait for the resource to
+            // actually be present in the media box, then hand back its on-disk path.
+            let fetchDisposable = fetchSignal.start(error: { _ in
+                subscriber.putNext(nil)
+                subscriber.putCompletion()
+            })
             let dataDisposable = mediaBox.resourceData(resource, option: .complete(waitUntilFetchStatus: false)).start(next: { data in
                 if data.complete {
                     subscriber.putNext(data.path)
@@ -11613,6 +11620,9 @@ public enum AorusForwardBypass {
             }
         }
         |> take(1)
+        // Belt-and-suspenders: if a download neither completes nor errors within 10 minutes
+        // (a stalled server reference), fall back to nil so the batch is never wedged.
+        |> timeout(600.0, queue: Queue.concurrentDefaultQueue(), alternate: .single(nil))
     }
 }
 '''
