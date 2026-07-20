@@ -11480,6 +11480,19 @@ public enum AorusForwardBypass {
     // inputMediaUploadedDocument / inputMediaUploadedPhoto, which the server accepts.
     public static func rewriteProtectedForwards(account: Account, peerId: PeerId, messages: [EnqueueMessage]) -> Signal<[EnqueueMessage], NoError> {
         return account.postbox.transaction { transaction -> [Signal<EnqueueMessage, NoError>] in
+            // Albums: forwarding a grouped post produces one .forward per media, all sharing
+            // the SAME source grouping key. Mirror TelegramCore's own forward path — assign a
+            // single FRESH local grouping key per source group so the items regroup into one
+            // album in the target chat, and only when 2+ items actually share the key (a lone
+            // item must never become a broken 1-item group that sendMultiMedia rejects). Reusing
+            // the raw server key directly is wrong: it is per-chat and can collide.
+            var aorusSourceKeyCounts: [Int64: Int] = [:]
+            for message in messages {
+                if case let .forward(source, _, _, _, _) = message, let sourceMessage = transaction.getMessage(source), let groupingKey = sourceMessage.groupingKey {
+                    aorusSourceKeyCounts[groupingKey] = (aorusSourceKeyCounts[groupingKey] ?? 0) + 1
+                }
+            }
+            var aorusLocalGroupingKeyBySourceKey: [Int64: Int64] = [:]
             return messages.map { message -> Signal<EnqueueMessage, NoError> in
                 guard case let .forward(source, threadId, _, _, correlationId) = message else {
                     return .single(message)
@@ -11514,7 +11527,16 @@ public enum AorusForwardBypass {
                     break
                 }
                 let text = sourceMessage.text
-                let groupingKey = sourceMessage.groupingKey
+                var groupingKey: Int64?
+                if let sourceGroupingKey = sourceMessage.groupingKey, (aorusSourceKeyCounts[sourceGroupingKey] ?? 0) >= 2 {
+                    if let mapped = aorusLocalGroupingKeyBySourceKey[sourceGroupingKey] {
+                        groupingKey = mapped
+                    } else {
+                        let generated = Int64.random(in: Int64.min ... Int64.max)
+                        aorusLocalGroupingKeyBySourceKey[sourceGroupingKey] = generated
+                        groupingKey = generated
+                    }
+                }
                 let build: (Media?) -> EnqueueMessage = { localMedia in
                     let reference: AnyMediaReference? = localMedia.flatMap { AnyMediaReference.standalone(media: $0) }
                     return .message(
