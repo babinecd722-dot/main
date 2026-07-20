@@ -150,6 +150,10 @@ def main() -> None:
             err.append("ComposerTranslator: active controls do not follow Telegram's current chat theme")
         if "private var aorusTranslatorExpanded: Bool" not in chat_text:
             err.append("ComposerTranslator: UIKit layout state is not synchronized with the SwiftUI model")
+        if "self.updateHeight(true)" not in chat_text or "only lays out this node and discards its new height" not in chat_text:
+            err.append("ComposerTranslator: expansion does not notify Telegram's parent input-panel layout")
+        if "DispatchQueue.main.asyncAfter(deadline: .now() + 0.12)" not in chat_text:
+            err.append("ComposerTranslator: collapse removes its content before the native height animation finishes")
         if "leftInset - self.leftMenuInset" not in chat_text:
             err.append("FormattingPanel: bot-menu inset incorrectly shifts the full-width toolbar")
         if "self.isFocused || aorusTranslatorIsExpanded" not in chat_text:
