@@ -18749,6 +18749,37 @@ def patch_formatting_panel(tg: Path) -> None:
 
     if "aorusLayoutToolbar" in t:
         original = original_source
+        if "private var aorusTranslatorExpanded: Bool" not in t:
+            t = t.replace(
+                "    private var aorusTranslationRevision: Int = 0\n",
+                "    private var aorusTranslationRevision: Int = 0\n"
+                "    private var aorusTranslatorExpanded: Bool = false\n",
+                1,
+            )
+        t = t.replace(
+            "        let model = AorusFormattingToolbarModel(interfaceLanguageCode: self.presentationInterfaceState?.strings.baseLanguageCode ?? \"en\")\n",
+            "        let model = AorusFormattingToolbarModel(\n"
+            "            interfaceLanguageCode: self.presentationInterfaceState?.strings.baseLanguageCode ?? \"en\",\n"
+            "            themeAccentColor: self.presentationInterfaceState?.theme.chat.inputPanel.panelControlAccentColor ?? .systemBlue\n"
+            "        )\n",
+            1,
+        )
+        t = t.replace(
+            "        hosting.view.backgroundColor = .clear\n"
+            "        self.aorusToolbarHostBox = hosting\n",
+            "        hosting.view.backgroundColor = .clear\n"
+            "        hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]\n"
+            "        self.aorusToolbarHostBox = hosting\n",
+            1,
+        )
+        t = t.replace(
+            "        let expanded = !model.isTranslatorExpanded\n"
+            "        model.isTranslatorExpanded = expanded\n",
+            "        let expanded = !self.aorusTranslatorExpanded\n"
+            "        self.aorusTranslatorExpanded = expanded\n"
+            "        model.isTranslatorExpanded = expanded\n",
+            1,
+        )
         cached_toolbar_layout = (
             "    private func aorusLayoutToolbar(transition: ContainedViewLayoutTransition, panelHeight: CGFloat, width: CGFloat, leftInset: CGFloat, rightInset: CGFloat) -> CGFloat {\n"
             "        self.aorusInitToolbarIfNeeded()\n"
@@ -18790,6 +18821,35 @@ def patch_formatting_panel(tg: Path) -> None:
         )
         if focused_toolbar_guard in t:
             t = t.replace(focused_toolbar_guard, translator_toolbar_guard, 1)
+        t = t.replace(
+            "        let aorusTranslatorIsExpanded = (self.aorusToolbarModelBox as? AorusFormattingToolbarModel)?.isTranslatorExpanded == true\n",
+            "        let aorusTranslatorIsExpanded = self.aorusTranslatorExpanded\n",
+        )
+        t = t.replace(
+            "        let toolbarHeight: CGFloat = (self.aorusToolbarModelBox as? AorusFormattingToolbarModel)?.isTranslatorExpanded == true ? 142.0 : 44.0\n",
+            "        let toolbarHeight: CGFloat = self.aorusTranslatorExpanded ? 142.0 : 44.0\n",
+            1,
+        )
+        t = t.replace(
+            "        let toolbarX = leftInset\n"
+            "        let toolbarWidth = max(0.0, width - leftInset - rightInset)\n",
+            "        // `leftInset` already includes Telegram's bot-menu width at this point.\n"
+            "        // The formatting row is independent of the composer controls, so remove only\n"
+            "        // that dynamic inset while preserving the real device safe-area inset.\n"
+            "        let toolbarX = max(0.0, leftInset - self.leftMenuInset)\n"
+            "        let toolbarWidth = max(0.0, width - toolbarX - rightInset)\n",
+            1,
+        )
+        cached_layout_theme_anchor = "        let toolbarHeight: CGFloat = self.aorusTranslatorExpanded ? 142.0 : 44.0\n"
+        cached_layout_theme_update = (
+            "        if let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel,\n"
+            "           let accentColor = self.presentationInterfaceState?.theme.chat.inputPanel.panelControlAccentColor,\n"
+            "           !model.themeAccentColor.isEqual(accentColor) {\n"
+            "            model.themeAccentColor = accentColor\n"
+            "        }\n"
+        )
+        if cached_layout_theme_update not in t and cached_layout_theme_anchor in t:
+            t = t.replace(cached_layout_theme_anchor, cached_layout_theme_update + cached_layout_theme_anchor, 1)
         collapsed_translator = (
             "        } else {\n"
             "            self.aorusCancelComposerTranslation()\n"
@@ -18938,6 +18998,7 @@ def patch_formatting_panel(tg: Path) -> None:
         "    private var aorusTranslationDisposable: Disposable?\n"
         "    private var aorusTranslationWorkItem: DispatchWorkItem?\n"
         "    private var aorusTranslationRevision: Int = 0\n"
+        "    private var aorusTranslatorExpanded: Bool = false\n"
         "\n"
         "    private var aorusFormattingPanelEnabled: Bool {\n"
         "        return UserDefaults.standard.bool(forKey: \"aorusgram_formatting_panel\")\n"
@@ -18945,7 +19006,10 @@ def patch_formatting_panel(tg: Path) -> None:
         "\n"
         "    private func aorusInitToolbarIfNeeded() {\n"
         "        guard self.aorusToolbarNode == nil, self.aorusFormattingPanelEnabled else { return }\n"
-        "        let model = AorusFormattingToolbarModel(interfaceLanguageCode: self.presentationInterfaceState?.strings.baseLanguageCode ?? \"en\")\n"
+        "        let model = AorusFormattingToolbarModel(\n"
+        "            interfaceLanguageCode: self.presentationInterfaceState?.strings.baseLanguageCode ?? \"en\",\n"
+        "            themeAccentColor: self.presentationInterfaceState?.theme.chat.inputPanel.panelControlAccentColor ?? .systemBlue\n"
+        "        )\n"
         "        self.aorusToolbarModelBox = model\n"
         "        let toolbarView = AorusFormattingToolbarView(\n"
         "            model: model,\n"
@@ -18976,6 +19040,7 @@ def patch_formatting_panel(tg: Path) -> None:
         "        )\n"
         "        let hosting = UIHostingController(rootView: toolbarView)\n"
         "        hosting.view.backgroundColor = .clear\n"
+        "        hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]\n"
         "        self.aorusToolbarHostBox = hosting\n"
         "        let node = ASDisplayNode(viewBlock: { hosting.view })\n"
         "        self.aorusToolbarNode = node\n"
@@ -18992,7 +19057,8 @@ def patch_formatting_panel(tg: Path) -> None:
         "\n"
         "    private func aorusToggleComposerTranslator() {\n"
         "        guard let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel else { return }\n"
-        "        let expanded = !model.isTranslatorExpanded\n"
+        "        let expanded = !self.aorusTranslatorExpanded\n"
+        "        self.aorusTranslatorExpanded = expanded\n"
         "        model.isTranslatorExpanded = expanded\n"
         "        if expanded {\n"
         "            if model.sourceText.isEmpty, let currentText = self.presentationInterfaceState?.interfaceState.effectiveInputState.inputText.string, !currentText.isEmpty {\n"
@@ -19213,15 +19279,23 @@ def patch_formatting_panel(tg: Path) -> None:
         "        } else {\n"
         "            aorusMediaInputIsActive = false\n"
         "        }\n"
-        "        let aorusTranslatorIsExpanded = (self.aorusToolbarModelBox as? AorusFormattingToolbarModel)?.isTranslatorExpanded == true\n"
+        "        let aorusTranslatorIsExpanded = self.aorusTranslatorExpanded\n"
         "        if !(self.aorusFormattingPanelEnabled && (self.isFocused || aorusTranslatorIsExpanded) && !aorusMediaInputIsActive) {\n"
         "            transition.updateAlpha(node: node, alpha: 0.0)\n"
         "            return 0.0\n"
         "        }\n"
-        "        let toolbarHeight: CGFloat = (self.aorusToolbarModelBox as? AorusFormattingToolbarModel)?.isTranslatorExpanded == true ? 142.0 : 44.0\n"
+        "        if let model = self.aorusToolbarModelBox as? AorusFormattingToolbarModel,\n"
+        "           let accentColor = self.presentationInterfaceState?.theme.chat.inputPanel.panelControlAccentColor,\n"
+        "           !model.themeAccentColor.isEqual(accentColor) {\n"
+        "            model.themeAccentColor = accentColor\n"
+        "        }\n"
+        "        let toolbarHeight: CGFloat = self.aorusTranslatorExpanded ? 142.0 : 44.0\n"
         "        let toolbarSpacing: CGFloat = 6.0\n"
-        "        let toolbarX = leftInset\n"
-        "        let toolbarWidth = max(0.0, width - leftInset - rightInset)\n"
+        "        // `leftInset` already includes Telegram's bot-menu width at this point.\n"
+        "        // The formatting row is independent of the composer controls, so remove only\n"
+        "        // that dynamic inset while preserving the real device safe-area inset.\n"
+        "        let toolbarX = max(0.0, leftInset - self.leftMenuInset)\n"
+        "        let toolbarWidth = max(0.0, width - toolbarX - rightInset)\n"
         "        transition.updateFrame(node: node, frame: CGRect(origin: CGPoint(x: toolbarX, y: panelHeight + toolbarSpacing), size: CGSize(width: toolbarWidth, height: toolbarHeight)))\n"
         "        transition.updateAlpha(node: node, alpha: 1.0)\n"
         "        self.aorusUpdateToolbarSelectionState()\n"

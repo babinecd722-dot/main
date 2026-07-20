@@ -24,16 +24,23 @@ final class AorusFormattingToolbarModel: ObservableObject {
     @Published var sourceText: String = ""
     @Published var isTranslating: Bool = false
     @Published var translationFailed: Bool = false
+    @Published var themeAccentColor: UIColor
 
     let interfaceLanguageCode: String
 
     private static let sourceLanguageKey = "aorusgram_composer_translation_source"
     private static let targetLanguageKey = "aorusgram_composer_translation_target"
 
-    init(canFormat: Bool = false, canClearFormatting: Bool = false, interfaceLanguageCode: String = "en") {
+    init(
+        canFormat: Bool = false,
+        canClearFormatting: Bool = false,
+        interfaceLanguageCode: String = "en",
+        themeAccentColor: UIColor = .systemBlue
+    ) {
         self.canFormat = canFormat
         self.canClearFormatting = canClearFormatting
         self.interfaceLanguageCode = interfaceLanguageCode
+        self.themeAccentColor = themeAccentColor
 
         let storedSource = UserDefaults.standard.string(forKey: Self.sourceLanguageKey) ?? "auto"
         let storedTarget = UserDefaults.standard.string(forKey: Self.targetLanguageKey) ?? "en"
@@ -118,15 +125,14 @@ struct AorusFormattingToolbarView: View {
 
             if self.model.isTranslatorExpanded {
                 translatorPanel
-                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.24), value: self.model.isTranslatorExpanded)
         .sheet(item: self.$languagePicker) { kind in
             AorusTranslationLanguagePicker(
                 kind: kind,
                 interfaceLanguageCode: self.model.interfaceLanguageCode,
                 selectedCode: kind == .source ? self.model.sourceLanguageCode : self.model.targetLanguageCode,
+                accentColor: self.model.themeAccentColor,
                 onSelect: { code in
                     if kind == .source {
                         self.model.setSourceLanguage(code)
@@ -137,7 +143,9 @@ struct AorusFormattingToolbarView: View {
                 }
             )
         }
+        .accentColor(Color(self.model.themeAccentColor))
         .background(Color(UIColor.clear))
+        .clipped()
     }
 
     private var formattingToolbar: some View {
@@ -183,7 +191,6 @@ struct AorusFormattingToolbarView: View {
                 aorusCodeButton()
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 8)
         }
         .background(Color(UIColor.clear))
     }
@@ -212,9 +219,8 @@ struct AorusFormattingToolbarView: View {
             )
 
             HStack(spacing: 9) {
-                Image(systemName: "character.bubble")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(Color.accentColor)
+                translationGlyph(size: 18)
+                    .foregroundColor(Color(self.model.themeAccentColor))
 
                 TextField(
                     self.isRussian ? "Введите текст для перевода" : "Enter text to translate",
@@ -280,17 +286,25 @@ struct AorusFormattingToolbarView: View {
 
     private func translatorButton() -> some View {
         Button(action: self.onTranslator) {
-            Group {
-                if #available(iOS 15.0, *) {
-                    Image(systemName: "character.bubble")
-                } else {
-                    Image(systemName: "globe")
-                }
-            }
-            .foregroundColor(self.model.isTranslatorExpanded ? Color.accentColor : Color.primary)
+            translationGlyph(size: 21)
+                .foregroundColor(self.model.isTranslatorExpanded ? Color(self.model.themeAccentColor) : Color.primary)
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .accessibility(label: Text(self.isRussian ? "Переводчик" : "Translator"))
+    }
+
+    @ViewBuilder
+    private func translationGlyph(size: CGFloat) -> some View {
+        if let icon = aorusTranslateToolbarIcon {
+            Image(uiImage: icon)
+                .resizable()
+                .renderingMode(.template)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+        } else {
+            Image(systemName: "globe")
+                .font(.system(size: size - 2.0, weight: .medium))
+        }
     }
 
     private func swapLanguages() {
@@ -447,6 +461,7 @@ private struct AorusTranslationLanguagePicker: View {
     let kind: AorusLanguagePickerKind
     let interfaceLanguageCode: String
     let selectedCode: String
+    let accentColor: UIColor
     let onSelect: (String) -> Void
 
     @Environment(\.presentationMode) private var presentationMode
@@ -507,6 +522,7 @@ private struct AorusTranslationLanguagePicker: View {
                 self.presentationMode.wrappedValue.dismiss()
             })
         }
+        .accentColor(Color(self.accentColor))
     }
 
     private func languageRow(code: String) -> some View {
@@ -521,7 +537,7 @@ private struct AorusTranslationLanguagePicker: View {
                 if code == self.selectedCode {
                     Image(systemName: "checkmark")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(Color.accentColor)
+                        .foregroundColor(Color(self.accentColor))
                 }
             }
             .contentShape(Rectangle())
@@ -549,6 +565,7 @@ private struct AorusActivityIndicator: UIViewRepresentable {
 // template so it follows the toolbar's grey/white foreground colour. On-theme for a
 // hidden message and distinct from the other panel icons (no reused code/eye glyph).
 private let aorusCodeToolbarIcon: UIImage? = UIImage(bundleImageName: "Avatar/AnonymousSenderIcon")?.withRenderingMode(.alwaysTemplate)
+private let aorusTranslateToolbarIcon: UIImage? = UIImage(bundleImageName: "Chat/Context Menu/Translate")?.withRenderingMode(.alwaysTemplate)
 
 // iOS 13–14 blur fallback.
 private struct AorusBlurView: UIViewRepresentable {

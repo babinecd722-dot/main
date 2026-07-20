@@ -144,8 +144,14 @@ def main() -> None:
             err.append("ComposerTranslator: Telegram native translation API is not used")
         if "DispatchQueue.main.asyncAfter(deadline: .now() + 0.35" not in chat_text or "aorusTranslationRevision" not in chat_text:
             err.append("ComposerTranslator: debounce or stale-result protection is missing")
-        if "isTranslatorExpanded == true ? 142.0 : 44.0" not in chat_text:
+        if "self.aorusTranslatorExpanded ? 142.0 : 44.0" not in chat_text:
             err.append("ComposerTranslator: formatting panel height is not dynamic")
+        if "theme.chat.inputPanel.panelControlAccentColor" not in chat_text or "model.themeAccentColor = accentColor" not in chat_text:
+            err.append("ComposerTranslator: active controls do not follow Telegram's current chat theme")
+        if "private var aorusTranslatorExpanded: Bool" not in chat_text:
+            err.append("ComposerTranslator: UIKit layout state is not synchronized with the SwiftUI model")
+        if "leftInset - self.leftMenuInset" not in chat_text:
+            err.append("FormattingPanel: bot-menu inset incorrectly shifts the full-width toolbar")
         if "self.isFocused || aorusTranslatorIsExpanded" not in chat_text:
             err.append("ComposerTranslator: panel does not survive focus transfer to its text field")
         if "self.aorusTranslationDisposable?.dispose()" not in chat_text:
@@ -173,6 +179,12 @@ def main() -> None:
             err.append("FormattingPanel: clipboard button must be immediately before Code")
         if "@Published var canClearFormatting" not in toolbar_text or "clearFormattingButton()" not in toolbar_text:
             err.append("FormattingPanel: clear-formatting button does not expose disabled/enabled state")
+        if 'UIImage(bundleImageName: "Chat/Context Menu/Translate")' not in toolbar_text:
+            err.append("ComposerTranslator: Telegram's native translation glyph is not used")
+        if "@Published var themeAccentColor: UIColor" not in toolbar_text or ".accentColor(Color(self.model.themeAccentColor))" not in toolbar_text:
+            err.append("ComposerTranslator: SwiftUI controls do not inherit the current Telegram theme accent")
+        if ".transition(.move(edge: .top)" in toolbar_text or ".padding(.vertical, 8)" in toolbar_text:
+            err.append("ComposerTranslator: obsolete double animation or overflowing toolbar padding remains")
         spoiler_index = toolbar_text.find('formatButton(systemName: "eye.slash"')
         translator_index = toolbar_text.find("translatorButton()")
         bold_index = toolbar_text.find('formatButton(systemName: "bold"')
