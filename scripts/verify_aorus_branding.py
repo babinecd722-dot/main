@@ -138,6 +138,18 @@ def main() -> None:
             err.append("FormattingPanel: formatting actions do not refresh the clear-button state")
         if "aorusMediaInputIsActive" not in chat_text:
             err.append("FormattingPanel: toolbar is not hidden for emoji/sticker media input")
+        if "onTranslator: { [weak self] in self?.aorusToggleComposerTranslator() }" not in chat_text:
+            err.append("ComposerTranslator: toolbar action is not wired")
+        if "context.engine.messages.translate(text: text, toLang: targetLanguage)" not in chat_text:
+            err.append("ComposerTranslator: Telegram native translation API is not used")
+        if "DispatchQueue.main.asyncAfter(deadline: .now() + 0.35" not in chat_text or "aorusTranslationRevision" not in chat_text:
+            err.append("ComposerTranslator: debounce or stale-result protection is missing")
+        if "isTranslatorExpanded == true ? 142.0 : 44.0" not in chat_text:
+            err.append("ComposerTranslator: formatting panel height is not dynamic")
+        if "self.isFocused || aorusTranslatorIsExpanded" not in chat_text:
+            err.append("ComposerTranslator: panel does not survive focus transfer to its text field")
+        if "self.aorusTranslationDisposable?.dispose()" not in chat_text:
+            err.append("ComposerTranslator: request cancellation is missing")
         if "AorusGram: dismiss keyboard when media recording starts" not in chat_text or "strongSelf.ensureUnfocused()" not in chat_text:
             err.append("MediaRecording: keyboard is not dismissed at the native recording start callback")
     else:
@@ -161,6 +173,17 @@ def main() -> None:
             err.append("FormattingPanel: clipboard button must be immediately before Code")
         if "@Published var canClearFormatting" not in toolbar_text or "clearFormattingButton()" not in toolbar_text:
             err.append("FormattingPanel: clear-formatting button does not expose disabled/enabled state")
+        spoiler_index = toolbar_text.find('formatButton(systemName: "eye.slash"')
+        translator_index = toolbar_text.find("translatorButton()")
+        bold_index = toolbar_text.find('formatButton(systemName: "bold"')
+        if spoiler_index < 0 or translator_index < 0 or bold_index < 0 or not (spoiler_index < translator_index < bold_index):
+            err.append("ComposerTranslator: button must be directly after Spoiler")
+        if "AorusTranslationLanguagePicker" not in toolbar_text or "Search Languages" not in toolbar_text:
+            err.append("ComposerTranslator: searchable language picker is missing")
+        if 'sourceLanguageCode = AorusTranslationLanguage' not in toolbar_text or '?? "auto"' not in toolbar_text or '?? "en"' not in toolbar_text:
+            err.append("ComposerTranslator: automatic source or English target defaults are missing")
+        if "localizedName(for code:" not in toolbar_text or "localizedString(forLanguageCode:" not in toolbar_text:
+            err.append("ComposerTranslator: full localized language names are missing")
     else:
         err.append("FormattingPanel: AorusInputToolbar.swift is missing")
 

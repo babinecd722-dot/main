@@ -18,10 +18,39 @@ final class AorusFormattingToolbarModel: ObservableObject {
     @Published var canFormat: Bool
     // Whether Telegram's native clear-formatting operation would change it.
     @Published var canClearFormatting: Bool
+    @Published var isTranslatorExpanded: Bool = false
+    @Published var sourceLanguageCode: String
+    @Published var targetLanguageCode: String
+    @Published var sourceText: String = ""
+    @Published var isTranslating: Bool = false
+    @Published var translationFailed: Bool = false
 
-    init(canFormat: Bool = false, canClearFormatting: Bool = false) {
+    let interfaceLanguageCode: String
+
+    private static let sourceLanguageKey = "aorusgram_composer_translation_source"
+    private static let targetLanguageKey = "aorusgram_composer_translation_target"
+
+    init(canFormat: Bool = false, canClearFormatting: Bool = false, interfaceLanguageCode: String = "en") {
         self.canFormat = canFormat
         self.canClearFormatting = canClearFormatting
+        self.interfaceLanguageCode = interfaceLanguageCode
+
+        let storedSource = UserDefaults.standard.string(forKey: Self.sourceLanguageKey) ?? "auto"
+        let storedTarget = UserDefaults.standard.string(forKey: Self.targetLanguageKey) ?? "en"
+        self.sourceLanguageCode = AorusTranslationLanguage.isSupported(storedSource, allowAutomatic: true) ? storedSource : "auto"
+        self.targetLanguageCode = AorusTranslationLanguage.isSupported(storedTarget, allowAutomatic: false) ? storedTarget : "en"
+    }
+
+    func setSourceLanguage(_ code: String) {
+        guard AorusTranslationLanguage.isSupported(code, allowAutomatic: true) else { return }
+        self.sourceLanguageCode = code
+        UserDefaults.standard.set(code, forKey: Self.sourceLanguageKey)
+    }
+
+    func setTargetLanguage(_ code: String) {
+        guard AorusTranslationLanguage.isSupported(code, allowAutomatic: false) else { return }
+        self.targetLanguageCode = code
+        UserDefaults.standard.set(code, forKey: Self.targetLanguageKey)
     }
 }
 
@@ -32,6 +61,8 @@ struct AorusFormattingToolbarView: View {
     private let onClearFormatting: () -> Void
     private let onQuote: () -> Void
     private let onSpoiler: () -> Void
+    private let onTranslator: () -> Void
+    private let onTranslateText: (String, String, String) -> Void
     private let onBold: () -> Void
     private let onItalic: () -> Void
     private let onMonospace: () -> Void
@@ -42,12 +73,16 @@ struct AorusFormattingToolbarView: View {
     private let onCode: () -> Void
     private let onAorusCode: () -> Void
 
+    @State private var languagePicker: AorusLanguagePickerKind?
+
     init(
         model: AorusFormattingToolbarModel,
         onNewLine: @escaping () -> Void,
         onClearFormatting: @escaping () -> Void,
         onQuote: @escaping () -> Void,
         onSpoiler: @escaping () -> Void,
+        onTranslator: @escaping () -> Void,
+        onTranslateText: @escaping (String, String, String) -> Void,
         onBold: @escaping () -> Void,
         onItalic: @escaping () -> Void,
         onMonospace: @escaping () -> Void,
@@ -63,6 +98,8 @@ struct AorusFormattingToolbarView: View {
         self.onClearFormatting = onClearFormatting
         self.onQuote = onQuote
         self.onSpoiler = onSpoiler
+        self.onTranslator = onTranslator
+        self.onTranslateText = onTranslateText
         self.onBold = onBold
         self.onItalic = onItalic
         self.onMonospace = onMonospace
@@ -75,6 +112,35 @@ struct AorusFormattingToolbarView: View {
     }
 
     var body: some View {
+        VStack(spacing: 6) {
+            formattingToolbar
+                .frame(height: 44)
+
+            if self.model.isTranslatorExpanded {
+                translatorPanel
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.24), value: self.model.isTranslatorExpanded)
+        .sheet(item: self.$languagePicker) { kind in
+            AorusTranslationLanguagePicker(
+                kind: kind,
+                interfaceLanguageCode: self.model.interfaceLanguageCode,
+                selectedCode: kind == .source ? self.model.sourceLanguageCode : self.model.targetLanguageCode,
+                onSelect: { code in
+                    if kind == .source {
+                        self.model.setSourceLanguage(code)
+                    } else {
+                        self.model.setTargetLanguage(code)
+                    }
+                    self.translateCurrentText()
+                }
+            )
+        }
+        .background(Color(UIColor.clear))
+    }
+
+    private var formattingToolbar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 // New line — always available.
@@ -94,6 +160,8 @@ struct AorusFormattingToolbarView: View {
                     formatButton(systemName: "text.quote", action: onQuote)
                     // Spoiler
                     formatButton(systemName: "eye.slash", action: onSpoiler)
+                    // Real-time composer translator.
+                    translatorButton()
                     // Bold
                     formatButton(systemName: "bold", action: onBold)
                     // Italic
@@ -118,6 +186,137 @@ struct AorusFormattingToolbarView: View {
             .padding(.vertical, 8)
         }
         .background(Color(UIColor.clear))
+    }
+
+    private var translatorPanel: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                languageButton(kind: .source, code: self.model.sourceLanguageCode)
+
+                Button(action: self.swapLanguages) {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Color.secondary)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibility(label: Text(self.isRussian ? "Поменять языки" : "Swap Languages"))
+
+                languageButton(kind: .target, code: self.model.targetLanguageCode)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(Color(UIColor.secondarySystemBackground).opacity(0.94))
+            )
+
+            HStack(spacing: 9) {
+                Image(systemName: "character.bubble")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(Color.accentColor)
+
+                TextField(
+                    self.isRussian ? "Введите текст для перевода" : "Enter text to translate",
+                    text: Binding(
+                        get: { self.model.sourceText },
+                        set: { value in
+                            self.model.sourceText = value
+                            self.translateCurrentText()
+                        }
+                    )
+                )
+                .font(.system(size: 16))
+                .autocapitalization(.sentences)
+                .disableAutocorrection(false)
+
+                if self.model.isTranslating {
+                    AorusActivityIndicator()
+                        .frame(width: 18, height: 18)
+                } else if self.model.translationFailed {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(Color.orange)
+                        .accessibility(label: Text(self.isRussian ? "Не удалось перевести" : "Translation failed"))
+                }
+
+                if !self.model.sourceText.isEmpty {
+                    Button(action: {
+                        self.model.sourceText = ""
+                        self.translateCurrentText()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(Color.secondary.opacity(0.75))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+            .background(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(Color(UIColor.secondarySystemBackground).opacity(0.94))
+            )
+        }
+        .padding(.horizontal, 8)
+    }
+
+    private func languageButton(kind: AorusLanguagePickerKind, code: String) -> some View {
+        Button(action: { self.languagePicker = kind }) {
+            HStack(spacing: 5) {
+                Text(AorusTranslationLanguage.localizedName(for: code, interfaceLanguageCode: self.model.interfaceLanguageCode))
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(Color.secondary)
+            }
+            .foregroundColor(Color.primary)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    private func translatorButton() -> some View {
+        Button(action: self.onTranslator) {
+            Group {
+                if #available(iOS 15.0, *) {
+                    Image(systemName: "character.bubble")
+                } else {
+                    Image(systemName: "globe")
+                }
+            }
+            .foregroundColor(self.model.isTranslatorExpanded ? Color.accentColor : Color.primary)
+        }
+        .buttonStyle(AorusToolbarButtonStyle())
+        .accessibility(label: Text(self.isRussian ? "Переводчик" : "Translator"))
+    }
+
+    private func swapLanguages() {
+        let previousSource = self.model.sourceLanguageCode
+        let previousTarget = self.model.targetLanguageCode
+        self.model.setSourceLanguage(previousTarget)
+
+        if previousSource == "auto" {
+            let interfaceCode = String(self.model.interfaceLanguageCode.prefix(2)).lowercased()
+            self.model.setTargetLanguage(
+                AorusTranslationLanguage.isSupported(interfaceCode, allowAutomatic: false) && interfaceCode != previousTarget
+                    ? interfaceCode
+                    : (previousTarget == "en" ? "ru" : "en")
+            )
+        } else {
+            self.model.setTargetLanguage(previousSource)
+        }
+        self.translateCurrentText()
+    }
+
+    private func translateCurrentText() {
+        self.onTranslateText(self.model.sourceText, self.model.sourceLanguageCode, self.model.targetLanguageCode)
+    }
+
+    private var isRussian: Bool {
+        self.model.interfaceLanguageCode.lowercased().hasPrefix("ru")
     }
 
     private func formatButton(systemName: String, action: @escaping () -> Void) -> some View {
@@ -186,6 +385,163 @@ struct AorusFormattingToolbarView: View {
         }
         .buttonStyle(AorusToolbarButtonStyle())
         .disabled(!self.model.canFormat)
+    }
+}
+
+private enum AorusLanguagePickerKind: String, Identifiable {
+    case source
+    case target
+
+    var id: String { self.rawValue }
+}
+
+private enum AorusTranslationLanguage {
+    private static let fallbackNames: [String: (english: String, russian: String)] = [
+        "bho": ("Bhojpuri", "Бходжпури"), "ceb": ("Cebuano", "Себуанский"), "doi": ("Dogri", "Догри"),
+        "ee": ("Ewe", "Эве"), "fil": ("Filipino", "Филиппинский"), "gn": ("Guarani", "Гуарани"),
+        "haw": ("Hawaiian", "Гавайский"), "hmn": ("Hmong", "Хмонг"), "ilo": ("Ilocano", "Илоканский"),
+        "gom": ("Konkani", "Конкани"), "kri": ("Krio", "Крио"), "ckb": ("Kurdish (Sorani)", "Курдский (сорани)"),
+        "mai": ("Maithili", "Майтхили"), "mni-Mtei": ("Meiteilon", "Мейтейлон"), "lus": ("Mizo", "Мизо"),
+        "ny": ("Chichewa", "Чичева"), "or": ("Odia", "Одиа"), "om": ("Oromo", "Оромо"),
+        "qu": ("Quechua", "Кечуа"), "sm": ("Samoan", "Самоанский"), "nso": ("Sepedi", "Сепеди"),
+        "st": ("Sesotho", "Сесото"), "sn": ("Shona", "Шона"), "su": ("Sundanese", "Сунданский"),
+        "ti": ("Tigrinya", "Тигринья"), "ts": ("Tsonga", "Тсонга"), "ak": ("Akan", "Акан")
+    ]
+
+    static let supportedCodes: [String] = [
+        "af", "sq", "am", "ar", "hy", "az", "eu", "be", "bn", "bs", "bg", "ca", "ceb", "zh", "co", "hr", "cs", "da",
+        "nl", "en", "eo", "et", "fi", "fr", "fy", "gl", "ka", "de", "el", "gu", "ht", "ha", "haw", "he", "hi", "hmn",
+        "hu", "is", "ig", "id", "ga", "it", "ja", "jv", "kn", "kk", "km", "rw", "ko", "ku", "ky", "lo", "lv", "lt", "lb",
+        "mk", "mg", "ms", "ml", "mt", "mi", "mr", "mn", "my", "ne", "no", "ny", "or", "ps", "fa", "pl", "pt", "pt-BR",
+        "pa", "ro", "ru", "sm", "gd", "sr", "st", "sn", "sd", "si", "sk", "sl", "so", "es", "su", "sw", "sv", "tl", "tg",
+        "ta", "tt", "te", "th", "tr", "tk", "uk", "ur", "ug", "uz", "vi", "cy", "xh", "yi", "yo", "zu"
+    ]
+
+    static func isSupported(_ code: String, allowAutomatic: Bool) -> Bool {
+        (allowAutomatic && code == "auto") || self.supportedCodes.contains(code)
+    }
+
+    static func localizedName(for code: String, interfaceLanguageCode: String) -> String {
+        let isRussian = interfaceLanguageCode.lowercased().hasPrefix("ru")
+        if code == "auto" {
+            return isRussian ? "Автоматически" : "Automatic"
+        }
+        if code == "pt-BR" {
+            return isRussian ? "Португальский (Бразилия)" : "Portuguese (Brazil)"
+        }
+        let baseCode = code.split(separator: "-").first.map(String.init) ?? code
+        if let fallback = self.fallbackNames[code] {
+            return isRussian ? fallback.russian : fallback.english
+        }
+        let locale = Locale(identifier: interfaceLanguageCode)
+        let localizedValue = locale.localizedString(forLanguageCode: baseCode)
+        let englishValue = Locale(identifier: "en").localizedString(forLanguageCode: baseCode)
+        let value = localizedValue.flatMap { $0.lowercased() == baseCode.lowercased() ? nil : $0 }
+            ?? englishValue.flatMap { $0.lowercased() == baseCode.lowercased() ? nil : $0 }
+            ?? (isRussian ? "Неизвестный язык" : "Unknown Language")
+        return value.prefix(1).uppercased() + value.dropFirst()
+    }
+}
+
+private struct AorusTranslationLanguagePicker: View {
+    let kind: AorusLanguagePickerKind
+    let interfaceLanguageCode: String
+    let selectedCode: String
+    let onSelect: (String) -> Void
+
+    @Environment(\.presentationMode) private var presentationMode
+    @State private var query: String = ""
+
+    private var isRussian: Bool {
+        self.interfaceLanguageCode.lowercased().hasPrefix("ru")
+    }
+
+    private var filteredCodes: [String] {
+        AorusTranslationLanguage.supportedCodes
+            .map { ($0, AorusTranslationLanguage.localizedName(for: $0, interfaceLanguageCode: self.interfaceLanguageCode)) }
+            .filter { self.query.isEmpty || $0.1.localizedCaseInsensitiveContains(self.query) || $0.0.localizedCaseInsensitiveContains(self.query) }
+            .sorted { $0.1.localizedCaseInsensitiveCompare($1.1) == .orderedAscending }
+            .map(\.0)
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                HStack(spacing: 9) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(Color.secondary)
+                    TextField(self.isRussian ? "Поиск языка" : "Search Languages", text: self.$query)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    if !self.query.isEmpty {
+                        Button(action: { self.query = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(Color.secondary)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(UIColor.secondarySystemBackground))
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+                List {
+                    if self.kind == .source {
+                        languageRow(code: "auto")
+                    }
+                    ForEach(self.filteredCodes, id: \.self) { code in
+                        languageRow(code: code)
+                    }
+                }
+                .listStyle(PlainListStyle())
+            }
+            .navigationBarTitle(self.kind == .source
+                ? (self.isRussian ? "Язык оригинала" : "Source Language")
+                : (self.isRussian ? "Язык перевода" : "Translation Language"), displayMode: .inline)
+            .navigationBarItems(trailing: Button(self.isRussian ? "Готово" : "Done") {
+                self.presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+
+    private func languageRow(code: String) -> some View {
+        Button(action: {
+            self.onSelect(code)
+            self.presentationMode.wrappedValue.dismiss()
+        }) {
+            HStack {
+                Text(AorusTranslationLanguage.localizedName(for: code, interfaceLanguageCode: self.interfaceLanguageCode))
+                    .foregroundColor(Color.primary)
+                Spacer()
+                if code == self.selectedCode {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+private struct AorusActivityIndicator: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIActivityIndicatorView {
+        let view = UIActivityIndicatorView(style: .medium)
+        view.hidesWhenStopped = true
+        view.startAnimating()
+        return view
+    }
+
+    func updateUIView(_ uiView: UIActivityIndicatorView, context: Context) {
+        if !uiView.isAnimating {
+            uiView.startAnimating()
+        }
     }
 }
 
