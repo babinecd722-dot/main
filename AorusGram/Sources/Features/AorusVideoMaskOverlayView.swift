@@ -19,9 +19,13 @@ public final class AorusVideoMaskOverlayView: UIView {
     public override init(frame: CGRect) {
         super.init(frame: frame)
         self.isUserInteractionEnabled = false
+        self.isOpaque = false
+        self.layer.isOpaque = false
         self.clipsToBounds = true
         self.backgroundColor = .clear
         self.imageView.contentMode = .scaleToFill
+        self.imageView.isOpaque = false
+        self.imageView.layer.isOpaque = false
         self.imageView.backgroundColor = .clear
         self.imageView.layer.allowsEdgeAntialiasing = true
         self.imageView.layer.shouldRasterize = false

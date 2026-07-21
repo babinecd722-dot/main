@@ -8179,11 +8179,11 @@ public enum AorusFakeGiftsStore {
         }
     }
 
-    public static func profileWrappers(ownerPeerId: Int64) -> [ProfileGiftsContext.State.StarGift] {
+    public static func profileWrappers(ownerPeerId: Int64, senderPeer: EnginePeer? = nil) -> [ProfileGiftsContext.State.StarGift] {
         let visible = all().filter { $0.showInProfile && $0.ownerPeerId == ownerPeerId }
         let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
         let unpinned = visible.filter { !$0.pinnedToTop }
-        return (pinned + unpinned).compactMap { wrapper(for: $0) }
+        return (pinned + unpinned).compactMap { wrapper(for: $0, senderPeer: senderPeer) }
     }
 
     public static func hasProfileGift(ownerPeerId: Int64) -> Bool {
@@ -8274,7 +8274,7 @@ public enum AorusFakeGiftsStore {
     }
 
     // Build the native profile wrapper from a stored gift (date + comment applied).
-    public static func wrapper(for stored: AorusStoredGift) -> ProfileGiftsContext.State.StarGift? {
+    public static func wrapper(for stored: AorusStoredGift, senderPeer: EnginePeer? = nil) -> ProfileGiftsContext.State.StarGift? {
         guard var giftObject = try? JSONSerialization.jsonObject(with: stored.giftData, options: []) else {
             return nil
         }
@@ -8370,22 +8370,54 @@ public enum AorusFakeGiftsStore {
               let wrapper = try? JSONDecoder().decode(ProfileGiftsContext.State.StarGift.self, from: data) else {
             return nil
         }
-        return wrapper
+        guard renderedSenderPeerId != 0,
+              let senderPeer,
+              senderPeer.id.toInt64() == renderedSenderPeerId else {
+            return wrapper
+        }
+        // JSON decoding preserves only the sender id. Server gifts are normally
+        // resolved by CachedProfileGifts before they reach TelegramUI; local gifts
+        // bypass that cache, so attach the already-loaded account peer explicitly.
+        return ProfileGiftsContext.State.StarGift(
+            gift: wrapper.gift,
+            reference: wrapper.reference,
+            fromPeer: senderPeer,
+            date: wrapper.date,
+            text: wrapper.text,
+            entities: wrapper.entities,
+            nameHidden: false,
+            savedToProfile: wrapper.savedToProfile,
+            pinnedToTop: wrapper.pinnedToTop,
+            convertStars: wrapper.convertStars,
+            canUpgrade: wrapper.canUpgrade,
+            canExportDate: wrapper.canExportDate,
+            upgradeStars: wrapper.upgradeStars,
+            transferStars: wrapper.transferStars,
+            canTransferDate: wrapper.canTransferDate,
+            canResaleDate: wrapper.canResaleDate,
+            collectionIds: wrapper.collectionIds,
+            prepaidUpgradeHash: wrapper.prepaidUpgradeHash,
+            upgradeSeparate: wrapper.upgradeSeparate,
+            dropOriginalDetailsStars: wrapper.dropOriginalDetailsStars,
+            number: wrapper.number,
+            isRefunded: wrapper.isRefunded,
+            canCraftAt: wrapper.canCraftAt
+        )
     }
 
     // The wrappers to inject into the user's own profile gifts pane: pinned gifts first
     // (in pin order 1, 2, 3…), then the rest in stored order — like real Telegram.
-    public static func profileWrappers() -> [ProfileGiftsContext.State.StarGift] {
+    public static func profileWrappers(senderPeer: EnginePeer? = nil) -> [ProfileGiftsContext.State.StarGift] {
         let visible = all().filter { $0.showInProfile && $0.ownerPeerId == 0 }
         let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
         let unpinned = visible.filter { !$0.pinnedToTop }
-        return (pinned + unpinned).compactMap { wrapper(for: $0) }
+        return (pinned + unpinned).compactMap { wrapper(for: $0, senderPeer: senderPeer) }
     }
 
     // Fakes assigned to a specific collection (profile sub-tab), pinned-first like the
     // "All gifts" view. Used so a fake only shows inside the collections it belongs to,
     // never polluting every collection.
-    public static func profileWrappers(inCollection collectionId: Int32) -> [ProfileGiftsContext.State.StarGift] {
+    public static func profileWrappers(inCollection collectionId: Int32, senderPeer: EnginePeer? = nil) -> [ProfileGiftsContext.State.StarGift] {
         let visible = all().filter { $0.showInProfile && $0.ownerPeerId == 0 && $0.collectionIds.contains(collectionId) }
         let orderKey = String(collectionId)
         if visible.contains(where: { $0.collectionOrders[orderKey] != nil }) {
@@ -8393,11 +8425,11 @@ public enum AorusFakeGiftsStore {
                 let lhs = $0.collectionOrders[orderKey] ?? Int32.max
                 let rhs = $1.collectionOrders[orderKey] ?? Int32.max
                 return lhs == rhs ? $0.date > $1.date : lhs < rhs
-            }.compactMap { wrapper(for: $0) }
+            }.compactMap { wrapper(for: $0, senderPeer: senderPeer) }
         }
         let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
         let unpinned = visible.filter { !$0.pinnedToTop }
-        return (pinned + unpinned).compactMap { wrapper(for: $0) }
+        return (pinned + unpinned).compactMap { wrapper(for: $0, senderPeer: senderPeer) }
     }
 
     // Only the gifts pinned to top, in pin order — drives the badges around the avatar.
@@ -9047,6 +9079,54 @@ def patch_fake_gifts(tg: Path) -> None:
     if gl.is_file():
         t = gl.read_text(encoding="utf-8")
         if "AorusFakeGiftsStore.profileWrappers" in t:
+            if "private var aorusSenderPeer: EnginePeer?" not in t:
+                t = t.replace(
+                    "    private var aorusFakeObserver: NSObjectProtocol?\n",
+                    "    private var aorusFakeObserver: NSObjectProtocol?\n"
+                    "    private var aorusSenderPeer: EnginePeer?\n"
+                    "    private var aorusSenderPeerDisposable: Disposable?\n",
+                    1,
+                )
+                cached_init_anchor = (
+                    "        self.aorusFakeObserver = NotificationCenter.default.addObserver(forName: AorusFakeGiftsStore.changedNotification, object: nil, queue: .main) { [weak self] _ in\n"
+                    "            guard let self else { return }\n"
+                    "            self.aorusApplyFakeGifts()\n"
+                    "            let _ = self.updateScrolling(transition: .easeInOut(duration: 0.25))\n"
+                    "            Queue.mainQueue().justDispatch { self.onContentUpdated() }\n"
+                    "        }\n"
+                )
+                cached_init_update = cached_init_anchor + (
+                    "        self.aorusSenderPeerDisposable = (self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: self.context.account.peerId))\n"
+                    "        |> deliverOnMainQueue).startStrict(next: { [weak self] peer in\n"
+                    "            guard let self else { return }\n"
+                    "            self.aorusSenderPeer = peer\n"
+                    "            self.aorusApplyFakeGifts()\n"
+                    "            let _ = self.updateScrolling(transition: .easeInOut(duration: 0.25))\n"
+                    "            Queue.mainQueue().justDispatch { self.onContentUpdated() }\n"
+                    "        })\n"
+                )
+                if cached_init_anchor not in t:
+                    raise RuntimeError("FakeGifts: cached sender-peer init anchor not found")
+                t = t.replace(cached_init_anchor, cached_init_update, 1)
+                t = t.replace(
+                    "        self.dataDisposable?.dispose()\n",
+                    "        self.dataDisposable?.dispose()\n"
+                    "        self.aorusSenderPeerDisposable?.dispose()\n",
+                    1,
+                )
+            t = t.replace(
+                "AorusFakeGiftsStore.profileWrappers(ownerPeerId: self.peerId.toInt64())",
+                "AorusFakeGiftsStore.profileWrappers(ownerPeerId: self.peerId.toInt64(), senderPeer: self.aorusSenderPeer)",
+            )
+            t = t.replace(
+                "AorusFakeGiftsStore.profileWrappers(inCollection: aorusCollectionId)",
+                "AorusFakeGiftsStore.profileWrappers(inCollection: aorusCollectionId, senderPeer: self.aorusSenderPeer)",
+            )
+            t = t.replace(
+                "AorusFakeGiftsStore.profileWrappers()",
+                "AorusFakeGiftsStore.profileWrappers(senderPeer: self.aorusSenderPeer)",
+            )
+            gl.write_text(t, encoding="utf-8")
             print("FakeGifts: GiftsListView already patched")
         else:
             ok = True
@@ -9059,6 +9139,8 @@ def patch_fake_gifts(tg: Path) -> None:
                 "    private var starsProducts: [ProfileGiftsContext.State.StarGift]?\n"
                 "    private var aorusServerProducts: [ProfileGiftsContext.State.StarGift]?\n"
                 "    private var aorusFakeObserver: NSObjectProtocol?\n"
+                "    private var aorusSenderPeer: EnginePeer?\n"
+                "    private var aorusSenderPeerDisposable: Disposable?\n"
             )
             if props_anchor in t:
                 t = t.replace(props_anchor, props_inject, 1)
@@ -9097,6 +9179,14 @@ def patch_fake_gifts(tg: Path) -> None:
                 "            let _ = self.updateScrolling(transition: .easeInOut(duration: 0.25))\n"
                 "            Queue.mainQueue().justDispatch { self.onContentUpdated() }\n"
                 "        }\n"
+                "        self.aorusSenderPeerDisposable = (self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: self.context.account.peerId))\n"
+                "        |> deliverOnMainQueue).startStrict(next: { [weak self] peer in\n"
+                "            guard let self else { return }\n"
+                "            self.aorusSenderPeer = peer\n"
+                "            self.aorusApplyFakeGifts()\n"
+                "            let _ = self.updateScrolling(transition: .easeInOut(duration: 0.25))\n"
+                "            Queue.mainQueue().justDispatch { self.onContentUpdated() }\n"
+                "        })\n"
                 "    }\n"
             )
             if init_anchor in t:
@@ -9114,6 +9204,7 @@ def patch_fake_gifts(tg: Path) -> None:
             deinit_inject = (
                 "    deinit {\n"
                 "        self.dataDisposable?.dispose()\n"
+                "        self.aorusSenderPeerDisposable?.dispose()\n"
                 "        if let aorusFakeObserver = self.aorusFakeObserver {\n"
                 "            NotificationCenter.default.removeObserver(aorusFakeObserver)\n"
                 "        }\n"
@@ -9137,13 +9228,13 @@ def patch_fake_gifts(tg: Path) -> None:
                 "        let baseline = self.aorusServerProducts ?? self.starsProducts ?? []\n"
                 "        let aorusFakeGifts: [ProfileGiftsContext.State.StarGift]\n"
                 "        if self.peerId != self.context.account.peerId {\n"
-                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers(ownerPeerId: self.peerId.toInt64())\n"
+                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers(ownerPeerId: self.peerId.toInt64(), senderPeer: self.aorusSenderPeer)\n"
                 "        } else if let aorusCollectionId = self.profileGifts.collectionId {\n"
                 "            // A collection sub-tab: only fakes the user assigned to it.\n"
-                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers(inCollection: aorusCollectionId)\n"
+                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers(inCollection: aorusCollectionId, senderPeer: self.aorusSenderPeer)\n"
                 "        } else {\n"
                 "            // The \"All gifts\" tab: every visible fake.\n"
-                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers()\n"
+                "            aorusFakeGifts = AorusFakeGiftsStore.profileWrappers(senderPeer: self.aorusSenderPeer)\n"
                 "        }\n"
                 "        if aorusFakeGifts.isEmpty {\n"
                 "            self.starsProducts = baseline\n"
@@ -18801,6 +18892,26 @@ def patch_formatting_panel(tg: Path) -> None:
             "        // `requestLayout()` only lays out this node and discards its new height.\n"
             "        // `updateHeight` is Telegram's native callback that makes ChatController move\n"
             "        // the composer and keyboard together with the changing input-panel height.\n"
+            "        withAnimation(.easeInOut(duration: 0.16)) {\n"
+            "            model.isTranslatorExpanded = expanded\n"
+            "        }\n"
+            "        self.updateHeight(true)\n"
+            "        if expanded {\n"
+            "            if model.sourceText.isEmpty, let currentText = self.presentationInterfaceState?.interfaceState.effectiveInputState.inputText.string, !currentText.isEmpty {\n"
+            "                model.sourceText = currentText\n"
+            "            }\n"
+            "            self.aorusScheduleComposerTranslation(text: model.sourceText, sourceLanguage: model.sourceLanguageCode, targetLanguage: model.targetLanguageCode)\n"
+            "        } else {\n"
+            "            self.aorusCancelComposerTranslation()\n"
+            "            DispatchQueue.main.async { [weak self] in self?.ensureFocused() }\n"
+            "        }\n"
+        )
+        delayed_parent_translator_toggle = (
+            "        let expanded = !self.aorusTranslatorExpanded\n"
+            "        self.aorusTranslatorExpanded = expanded\n"
+            "        // `requestLayout()` only lays out this node and discards its new height.\n"
+            "        // `updateHeight` is Telegram's native callback that makes ChatController move\n"
+            "        // the composer and keyboard together with the changing input-panel height.\n"
             "        self.updateHeight(true)\n"
             "        if expanded {\n"
             "            model.isTranslatorExpanded = true\n"
@@ -18819,6 +18930,8 @@ def patch_formatting_panel(tg: Path) -> None:
             "            }\n"
             "        }\n"
         )
+        if delayed_parent_translator_toggle in t:
+            t = t.replace(delayed_parent_translator_toggle, parent_driven_translator_toggle, 1)
         if cached_translator_toggle in t:
             t = t.replace(cached_translator_toggle, parent_driven_translator_toggle, 1)
         cached_toolbar_layout = (
@@ -19103,22 +19216,18 @@ def patch_formatting_panel(tg: Path) -> None:
         "        // `requestLayout()` only lays out this node and discards its new height.\n"
         "        // `updateHeight` is Telegram's native callback that makes ChatController move\n"
         "        // the composer and keyboard together with the changing input-panel height.\n"
+        "        withAnimation(.easeInOut(duration: 0.16)) {\n"
+        "            model.isTranslatorExpanded = expanded\n"
+        "        }\n"
         "        self.updateHeight(true)\n"
         "        if expanded {\n"
-        "            model.isTranslatorExpanded = true\n"
         "            if model.sourceText.isEmpty, let currentText = self.presentationInterfaceState?.interfaceState.effectiveInputState.inputText.string, !currentText.isEmpty {\n"
         "                model.sourceText = currentText\n"
         "            }\n"
         "            self.aorusScheduleComposerTranslation(text: model.sourceText, sourceLanguage: model.sourceLanguageCode, targetLanguage: model.targetLanguageCode)\n"
         "        } else {\n"
         "            self.aorusCancelComposerTranslation()\n"
-        "            // Keep the expanded SwiftUI content alive while the native parent frame\n"
-        "            // shrinks. The host clips it progressively, avoiding a blank gap.\n"
-        "            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self, weak model] in\n"
-        "                guard let self, let model, !self.aorusTranslatorExpanded else { return }\n"
-        "                model.isTranslatorExpanded = false\n"
-        "                self.ensureFocused()\n"
-        "            }\n"
+        "            DispatchQueue.main.async { [weak self] in self?.ensureFocused() }\n"
         "        }\n"
         "    }\n"
         "\n"

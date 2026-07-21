@@ -125,8 +125,14 @@ struct AorusFormattingToolbarView: View {
 
             if self.model.isTranslatorExpanded {
                 translatorPanel
+                    .transition(
+                        .opacity.combined(
+                            with: .scale(scale: 0.985, anchor: .top)
+                        )
+                    )
             }
         }
+        .animation(.easeInOut(duration: 0.16), value: self.model.isTranslatorExpanded)
         .sheet(item: self.$languagePicker) { kind in
             AorusTranslationLanguagePicker(
                 kind: kind,

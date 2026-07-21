@@ -152,8 +152,10 @@ def main() -> None:
             err.append("ComposerTranslator: UIKit layout state is not synchronized with the SwiftUI model")
         if "self.updateHeight(true)" not in chat_text or "only lays out this node and discards its new height" not in chat_text:
             err.append("ComposerTranslator: expansion does not notify Telegram's parent input-panel layout")
-        if "DispatchQueue.main.asyncAfter(deadline: .now() + 0.12)" not in chat_text:
-            err.append("ComposerTranslator: collapse removes its content before the native height animation finishes")
+        if "withAnimation(.easeInOut(duration: 0.16))" not in chat_text:
+            err.append("ComposerTranslator: SwiftUI state is not synchronized with the native height animation")
+        if "DispatchQueue.main.asyncAfter(deadline: .now() + 0.12)" in chat_text:
+            err.append("ComposerTranslator: delayed collapse still causes a second layout pass")
         if "leftInset - self.leftMenuInset" not in chat_text:
             err.append("FormattingPanel: bot-menu inset incorrectly shifts the full-width toolbar")
         if "self.isFocused || aorusTranslatorIsExpanded" not in chat_text:
@@ -189,6 +191,8 @@ def main() -> None:
             err.append("ComposerTranslator: SwiftUI controls do not inherit the current Telegram theme accent")
         if ".transition(.move(edge: .top)" in toolbar_text or ".padding(.vertical, 8)" in toolbar_text:
             err.append("ComposerTranslator: obsolete double animation or overflowing toolbar padding remains")
+        if ".scale(scale: 0.985, anchor: .top)" not in toolbar_text or ".animation(.easeInOut(duration: 0.16)" not in toolbar_text:
+            err.append("ComposerTranslator: panel open/close transition is missing")
         spoiler_index = toolbar_text.find('formatButton(systemName: "eye.slash"')
         translator_index = toolbar_text.find("translatorButton()")
         bold_index = toolbar_text.find('formatButton(systemName: "bold"')
@@ -486,6 +490,8 @@ def main() -> None:
             err.append("VideoMasks: local preview must reuse its cached artwork")
         if "updateMaskFrame(animated: true)" in overlay_text or "shouldRasterize = true" in overlay_text:
             err.append("VideoMasks: local preview reintroduces delayed/rasterized tracking")
+        if "self.isOpaque = false" not in overlay_text or "self.imageView.isOpaque = false" not in overlay_text:
+            err.append("VideoMasks: local call overlay can render transparent pixels as black")
 
     camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file():
@@ -567,6 +573,8 @@ def main() -> None:
             err.append("FakeGifts: repeated regular purchases are not stored independently")
         if 'dict["fromPeerId"] = ["iv": renderedSenderPeerId]' not in fake_store_text:
             err.append("FakeGifts: edited sender is not reflected by regular gift wrappers")
+        if "senderPeer.id.toInt64() == renderedSenderPeerId" not in fake_store_text or "fromPeer: senderPeer" not in fake_store_text:
+            err.append("FakeGifts: non-anonymous local purchases do not resolve their sender peer")
         fake_gift_view = (
             tg
             / "submodules"
@@ -591,6 +599,8 @@ def main() -> None:
             / "GiftsListView.swift"
         )
         fake_gifts_list_text = fake_gifts_list.read_text(encoding="utf-8") if fake_gifts_list.is_file() else ""
+        if "private var aorusSenderPeer: EnginePeer?" not in fake_gifts_list_text or "senderPeer: self.aorusSenderPeer" not in fake_gifts_list_text:
+            err.append("FakeGifts: profile UI does not attach the loaded sender to local regular gifts")
         if (
             "stargifts_pinned_to_top_limit" not in fake_gifts_list_text
             or "self.pinnedReferences.count >= self.maxPinnedCount" not in fake_gifts_list_text
