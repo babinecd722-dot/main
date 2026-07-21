@@ -20,6 +20,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     public static let enabledKey = "aorusgram_video_masks_enabled"
     public static let presetKey = "aorusgram_video_mask_preset"
     public static let customPreset = "custom"
+    private static let callPhaseKey = "aorusgram_video_mask_call_phase"
 
     public static var supportedPresets: [String] {
         return ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", Self.customPreset]
@@ -71,7 +72,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     private let poolLock = NSLock()
     private let callRenderLock = NSLock()
     private let detectionQueue = DispatchQueue(label: "com.aorusgram.video-masks.detection", qos: .userInitiated)
-    private let callRenderQueue = DispatchQueue(label: "com.aorusgram.video-masks.call-render", qos: .userInteractive)
+    private let callRenderQueue = DispatchQueue(label: "com.aorusgram.video-masks.call-render", qos: .userInitiated)
     private let ciContext = CIContext(options: [
         .cacheIntermediates: false,
         .name: "AorusVideoMasks"
@@ -102,6 +103,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     private var callRenderGeneration: UInt = 0
     private var latestCallFrame: CVPixelBuffer?
     private var latestCallGeometry: FrameGeometry?
+    private var lastCallRenderTime: CFTimeInterval = 0.0
 
     private override init() {
         super.init()
@@ -223,15 +225,29 @@ public final class AorusVideoMaskProcessor: NSObject {
             width: CVPixelBufferGetWidth(pixelBuffer),
             height: CVPixelBufferGetHeight(pixelBuffer)
         )
+        let callPhase = UserDefaults.standard.integer(forKey: Self.callPhaseKey)
+        let now = CACurrentMediaTime()
         self.callRenderLock.lock()
         if self.latestCallGeometry != geometry {
             self.callRenderGeneration &+= 1
             self.latestCallFrame = nil
             self.latestCallGeometry = geometry
+            self.lastCallRenderTime = 0.0
         }
         let completedFrame = self.latestCallFrame
-        if !self.callRenderInFlight {
+        // Before the peer answers, prepare one masked frame and then leave the
+        // shared AVCaptureSession entirely to Telegram's native preview layer.
+        // Once connected, refresh the outgoing mask at a bounded cadence while
+        // WebRTC keeps receiving the most recent completed frame.
+        let isWaitingForPeer = callPhase == 1
+        let renderInterval: CFTimeInterval = isWaitingForPeer ? 0.10 : 0.05
+        let needsPreparedFrame = isWaitingForPeer && completedFrame == nil
+        let needsActiveRefresh = !isWaitingForPeer && now - self.lastCallRenderTime >= renderInterval
+        if !self.callRenderInFlight,
+           (needsPreparedFrame || needsActiveRefresh),
+           now - self.lastCallRenderTime >= renderInterval {
             self.callRenderInFlight = true
+            self.lastCallRenderTime = now
             let generation = self.callRenderGeneration
             self.callRenderQueue.async { [weak self] in
                 guard let self else { return }

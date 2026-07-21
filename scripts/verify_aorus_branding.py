@@ -491,6 +491,10 @@ def main() -> None:
             err.append("VideoMasks: face detection must stay off the WebRTC capture thread")
         if "processCallFrame(" not in mask_text or "callRenderQueue.async" not in mask_text or "callRenderInFlight" not in mask_text:
             err.append("VideoMasks: call compositor still blocks Telegram's native camera preview")
+        if "aorusgram_video_mask_call_phase" not in mask_text or "needsPreparedFrame" not in mask_text or "needsActiveRefresh" not in mask_text:
+            err.append("VideoMasks: pre-answer compositor still competes with the native local preview")
+        if "lastCallRenderTime" not in mask_text or "renderInterval" not in mask_text:
+            err.append("VideoMasks: outgoing call-mask renderer has no bounded refresh cadence")
         if "private let detectionContext" not in mask_text or "self.detectionContext.createCGImage" not in mask_text:
             err.append("VideoMasks: Vision proxy generation can still block outgoing camera delivery")
         detection_schedule_start = mask_text.find("if snapshot.needsDetection {")
@@ -799,6 +803,26 @@ def main() -> None:
             err.append("VideoMasks: local call preview still runs the duplicate mask overlay")
         if "[AVCaptureVideoPreviewLayer class]" not in call_preview_text:
             err.append("VideoMasks: local call preview no longer uses Telegram's native preview layer")
+
+    presentation_call = tg / "submodules" / "TelegramCallsUI" / "Sources" / "PresentationCall.swift"
+    if not presentation_call.is_file():
+        err.append("VideoMasks: PresentationCall.swift is missing")
+    else:
+        presentation_call_text = presentation_call.read_text(encoding="utf-8")
+        if "publish video-mask call phase" not in presentation_call_text or presentation_call_text.count('UserDefaults.standard.set(2, forKey: "aorusgram_video_mask_call_phase")') < 2:
+            err.append("VideoMasks: Telegram call lifecycle is not connected to the mask compositor")
+        if 'UserDefaults.standard.set(0, forKey: "aorusgram_video_mask_call_phase")' not in presentation_call_text:
+            err.append("VideoMasks: call-mask phase is not cleared after calls and conferences")
+
+    login_phone_entry = tg / "submodules" / "AuthorizationUI" / "Sources" / "AuthorizationSequencePhoneEntryController.swift"
+    if not login_phone_entry.is_file():
+        err.append("LoginBackupKey: phone-entry controller is missing")
+    else:
+        login_phone_entry_text = login_phone_entry.read_text(encoding="utf-8")
+        if "if AorusLoginBackupPickerController.hasBackup() {" not in login_phone_entry_text:
+            err.append("LoginBackupKey: backup entry is missing from the add-account flow")
+        if "otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup()" in login_phone_entry_text:
+            err.append("LoginBackupKey: backup entry is still hidden while adding an account")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:

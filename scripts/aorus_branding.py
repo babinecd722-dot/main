@@ -13652,6 +13652,105 @@ def patch_video_masks(tg: Path) -> None:
     voip_build.write_text(text, encoding="utf-8")
 
 
+def patch_video_mask_call_phase(tg: Path) -> None:
+    """Publish Telegram's one-to-one call phase for the mask compositor.
+
+    While a call is waiting/ringing/connecting, the compositor only prepares a
+    single masked frame and leaves the native local AVCapture preview untouched.
+    Active/reconnecting calls resume the normal outgoing masked-frame pipeline.
+    """
+    path = tg / "submodules/TelegramCallsUI/Sources/PresentationCall.swift"
+    if not path.is_file():
+        raise RuntimeError("VideoMasks: PresentationCall.swift not found")
+    text = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: publish video-mask call phase"
+
+    init_anchor = "        self.isOutgoing = isOutgoing\n"
+    init_block = (
+        init_anchor
+        + "        UserDefaults.standard.set(1, forKey: \"aorusgram_video_mask_call_phase\") " + sentinel + "\n"
+    )
+    if sentinel not in text:
+        if init_anchor not in text:
+            raise RuntimeError("VideoMasks: PresentationCall init phase anchor not found")
+        text = text.replace(init_anchor, init_block, 1)
+
+    deinit_anchor = "    deinit {\n"
+    deinit_block = (
+        deinit_anchor
+        + "        UserDefaults.standard.set(0, forKey: \"aorusgram_video_mask_call_phase\")\n"
+    )
+    deinit_marker = "deinit {\n        UserDefaults.standard.set(0, forKey: \"aorusgram_video_mask_call_phase\")"
+    if deinit_marker not in text:
+        if deinit_anchor not in text:
+            raise RuntimeError("VideoMasks: PresentationCall deinit phase anchor not found")
+        text = text.replace(deinit_anchor, deinit_block, 1)
+
+    conference_anchor = (
+        "        if isConference {\n"
+        "            if self.currentTone != nil {\n"
+    )
+    conference_block = (
+        "        if isConference {\n"
+        "            UserDefaults.standard.set(0, forKey: \"aorusgram_video_mask_call_phase\")\n"
+        "            if self.currentTone != nil {\n"
+    )
+    conference_marker = "if isConference {\n            UserDefaults.standard.set(0, forKey: \"aorusgram_video_mask_call_phase\")"
+    if conference_marker not in text:
+        if conference_anchor not in text:
+            raise RuntimeError("VideoMasks: PresentationCall conference phase anchor not found")
+        text = text.replace(conference_anchor, conference_block, 1)
+
+    # Migrate the first implementation away from matching PresentationCallState's
+    # associated-value enum. The concrete Telegram call-context branches are both
+    # simpler and resilient to enum signature changes across source updates.
+    legacy_publish_block = (
+        "            if let presentationState {\n"
+        "                let aorusVideoMaskCallPhase: Int\n"
+        "                switch presentationState.state {\n"
+        "                case .active, .reconnecting:\n"
+        "                    aorusVideoMaskCallPhase = 2\n"
+        "                case .terminating, .terminated:\n"
+        "                    aorusVideoMaskCallPhase = 0\n"
+        "                default:\n"
+        "                    aorusVideoMaskCallPhase = 1\n"
+        "                }\n"
+        "                UserDefaults.standard.set(aorusVideoMaskCallPhase, forKey: \"aorusgram_video_mask_call_phase\")\n"
+        "                self.statePromise.set(presentationState)\n"
+    )
+    publish_anchor = (
+        "            if let presentationState {\n"
+        "                self.statePromise.set(presentationState)\n"
+    )
+    if legacy_publish_block in text:
+        text = text.replace(legacy_publish_block, publish_anchor, 1)
+
+    connected_anchor = "                    case .connected:\n"
+    connected_block = (
+        connected_anchor
+        + "                        UserDefaults.standard.set(2, forKey: \"aorusgram_video_mask_call_phase\")\n"
+    )
+    connected_marker = "case .connected:\n                        UserDefaults.standard.set(2, forKey: \"aorusgram_video_mask_call_phase\")"
+    if connected_marker not in text:
+        if connected_anchor not in text:
+            raise RuntimeError("VideoMasks: connected call phase anchor not found")
+        text = text.replace(connected_anchor, connected_block, 1)
+
+    reconnecting_anchor = "                    case .reconnecting:\n"
+    reconnecting_block = (
+        reconnecting_anchor
+        + "                        UserDefaults.standard.set(2, forKey: \"aorusgram_video_mask_call_phase\")\n"
+    )
+    reconnecting_marker = "case .reconnecting:\n                        UserDefaults.standard.set(2, forKey: \"aorusgram_video_mask_call_phase\")"
+    if reconnecting_marker not in text:
+        if reconnecting_anchor not in text:
+            raise RuntimeError("VideoMasks: reconnecting call phase anchor not found")
+        text = text.replace(reconnecting_anchor, reconnecting_block, 1)
+
+    path.write_text(text, encoding="utf-8")
+    print("VideoMasks: one-to-one call phase published for nonblocking local preview")
+
+
 # Self-contained C++ port of the validated Swift Voice Twin DSP
 # (AorusGram/Sources/Features/AorusVoiceTwin.swift). Runs on the WebRTC capture
 # thread; mutates the microphone PCM in place inside RecordedDataIsAvailable,
@@ -18720,11 +18819,10 @@ def patch_login_backup_key_button(tg: Path) -> None:
     login-by-backup account picker.
 
     The button sits opposite the back arrow (top-right) and takes the theme accent
-    color — not a hardcoded blue. It is shown ONLY on a genuine primary login (no
-    other account already signed in) and ONLY when a durable Keychain backup exists,
-    so it can never surprise an already-logged-in user in the add-account flow. The
-    picker itself is AorusLoginBackupPickerController, copied into this same module
-    (AuthorizationUI) by the workflow.
+    color — not Telegram's hardcoded blue. It is shown on both the primary login
+    and add-account phone-entry screens whenever a durable Keychain backup exists.
+    The picker itself is AorusLoginBackupPickerController, copied into this same
+    module (AuthorizationUI) by the workflow.
     """
     path = tg / "submodules/AuthorizationUI/Sources/AuthorizationSequencePhoneEntryController.swift"
     if not path.is_file():
@@ -18733,6 +18831,11 @@ def patch_login_backup_key_button(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
     if "aorusBackupKeyPressed" in t:
         changed = False
+        old_condition = "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
+        new_condition = "        if AorusLoginBackupPickerController.hasBackup() {\n"
+        if old_condition in t:
+            t = t.replace(old_condition, new_condition, 1)
+            changed = True
         old_image = "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
         new_image = (
             "            let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
@@ -18761,9 +18864,9 @@ def patch_login_backup_key_button(tg: Path) -> None:
     )
     button_inject = button_anchor + (
         "\n        // AorusGram: login-by-backup key button — themed, opposite the back arrow.\n"
-        "        // Only on a genuine primary login (no other account signed in) and only when a\n"
-        "        // durable Keychain backup exists, so it never overwrites a live session.\n"
-        "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
+        "        // Available on both primary login and add-account flows whenever a durable\n"
+        "        // Keychain backup exists.\n"
+        "        if AorusLoginBackupPickerController.hasBackup() {\n"
         "            let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
         "            let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
         "            let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
@@ -19942,6 +20045,7 @@ def main() -> None:
     patch_voice_twin_video_notes(tg)
     patch_voice_twin_calls(tg)
     patch_video_masks(tg)
+    patch_video_mask_call_phase(tg)
     patch_aorus_code_compose(tg)
     patch_aorus_code_reveal(tg)
     patch_status_edit_delete_icons(tg)
