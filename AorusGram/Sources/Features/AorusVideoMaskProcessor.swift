@@ -256,7 +256,8 @@ public final class AorusVideoMaskProcessor: NSObject {
                         pixelBuffer: pixelBuffer,
                         orientation: rawOrientation,
                         mirrored: mirrored,
-                        publishesPreview: true
+                        publishesPreview: false,
+                        realtimeTracking: true
                     )
                 }
                 self.callRenderLock.lock()
@@ -278,6 +279,22 @@ public final class AorusVideoMaskProcessor: NSObject {
         orientation rawOrientation: Int32,
         mirrored: Bool,
         publishesPreview: Bool
+    ) -> CVPixelBuffer? {
+        return self.process(
+            pixelBuffer: pixelBuffer,
+            orientation: rawOrientation,
+            mirrored: mirrored,
+            publishesPreview: publishesPreview,
+            realtimeTracking: publishesPreview
+        )
+    }
+
+    private func process(
+        pixelBuffer: CVPixelBuffer,
+        orientation rawOrientation: Int32,
+        mirrored: Bool,
+        publishesPreview: Bool,
+        realtimeTracking: Bool
     ) -> CVPixelBuffer? {
         let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
             && UserDefaults.standard.bool(forKey: Self.enabledKey)
@@ -335,7 +352,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         if self.smoothedPose == nil {
             interval = 0.05
         } else {
-            interval = publishesPreview ? 0.066 : 0.18
+            interval = realtimeTracking ? 0.066 : 0.18
         }
         let needsDetection = !self.detectionInFlight && now - self.lastDetectionTime >= interval
         if needsDetection {

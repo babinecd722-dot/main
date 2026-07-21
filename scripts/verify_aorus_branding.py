@@ -491,6 +491,8 @@ def main() -> None:
             err.append("VideoMasks: face detection must stay off the WebRTC capture thread")
         if "processCallFrame(" not in mask_text or "callRenderQueue.async" not in mask_text or "callRenderInFlight" not in mask_text:
             err.append("VideoMasks: call compositor still blocks Telegram's native camera preview")
+        if "publishesPreview: false,\n                        realtimeTracking: true" not in mask_text:
+            err.append("VideoMasks: calls still publish unused local preview updates or lost realtime tracking")
         if "aorusgram_video_mask_call_phase" not in mask_text or "needsPreparedFrame" not in mask_text or "needsActiveRefresh" not in mask_text:
             err.append("VideoMasks: pre-answer compositor still competes with the native local preview")
         if "lastCallRenderTime" not in mask_text or "renderInterval" not in mask_text:
@@ -819,10 +821,12 @@ def main() -> None:
         err.append("LoginBackupKey: phone-entry controller is missing")
     else:
         login_phone_entry_text = login_phone_entry.read_text(encoding="utf-8")
-        if "if AorusLoginBackupPickerController.hasBackup() {" not in login_phone_entry_text:
-            err.append("LoginBackupKey: backup entry is missing from the add-account flow")
-        if "otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup()" in login_phone_entry_text:
-            err.append("LoginBackupKey: backup entry is still hidden while adding an account")
+        if "private func aorusInstallBackupKeyButton()" not in login_phone_entry_text:
+            err.append("LoginBackupKey: persistent backup-key installer is missing")
+        if "!self.otherAccountPhoneNumbers.1.isEmpty || AorusLoginBackupPickerController.hasBackup()" not in login_phone_entry_text:
+            err.append("LoginBackupKey: add-account flow is not guaranteed to expose the backup entry")
+        if login_phone_entry_text.count("self.aorusInstallBackupKeyButton()") < 3:
+            err.append("LoginBackupKey: key is not restored after navigation/layout updates")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:

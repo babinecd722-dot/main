@@ -18829,40 +18829,11 @@ def patch_login_backup_key_button(tg: Path) -> None:
         print("LoginBackupKey: AuthorizationSequencePhoneEntryController.swift not found — skipped")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusBackupKeyPressed" in t:
-        changed = False
-        old_condition = "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
-        new_condition = "        if AorusLoginBackupPickerController.hasBackup() {\n"
-        if old_condition in t:
-            t = t.replace(old_condition, new_condition, 1)
-            changed = True
-        old_image = "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
-        new_image = (
-            "            let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
-            "            let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
-            "            let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
-        )
-        if old_image in t:
-            t = t.replace(old_image, new_image, 1)
-            changed = True
-        old = "            aorusKeyItem.tintColor = self.presentationData.theme.list.itemAccentColor\n"
-        new = "            aorusKeyItem.tintColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
-        if old in t:
-            t = t.replace(old, new, 1)
-            changed = True
-        if changed:
-            path.write_text(t, encoding="utf-8")
-            print("LoginBackupKey: repaired cached key tint")
-        else:
-            print("LoginBackupKey: already injected")
-        return
 
-    button_anchor = (
-        "        if !otherAccountPhoneNumbers.1.isEmpty {\n"
-        "            self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: \"___close\", style: .plain, target: self, action: #selector(self.cancelPressed))\n"
-        "        }\n"
-    )
-    button_inject = button_anchor + (
+    # Migrate the initializer-only implementation from older cached Telegram
+    # sources. Telegram rebuilds the right navigation item after layout and
+    # progress changes, so an item installed only in init can disappear.
+    legacy_button = (
         "\n        // AorusGram: login-by-backup key button — themed, opposite the back arrow.\n"
         "        // Available on both primary login and add-account flows whenever a durable\n"
         "        // Keychain backup exists.\n"
@@ -18877,6 +18848,15 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "            self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
         "        }\n"
     )
+    if legacy_button in t:
+        t = t.replace(legacy_button, "\n        self.aorusInstallBackupKeyButton()\n", 1)
+
+    button_anchor = (
+        "        if !otherAccountPhoneNumbers.1.isEmpty {\n"
+        "            self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: \"___close\", style: .plain, target: self, action: #selector(self.cancelPressed))\n"
+        "        }\n"
+    )
+    button_inject = button_anchor + "\n        self.aorusInstallBackupKeyButton()\n"
 
     method_anchor = (
         "    @objc private func cancelPressed() {\n"
@@ -18884,21 +18864,77 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "    }\n"
     )
     method_inject = method_anchor + (
+        "\n    private func aorusInstallBackupKeyButton() {\n"
+        "        // In add-account mode Telegram can construct this controller before the\n"
+        "        // Keychain metadata lookup settles. Telegram's existing-account list is\n"
+        "        // the authoritative signal that this is the add-account phone screen.\n"
+        "        guard !self.otherAccountPhoneNumbers.1.isEmpty || AorusLoginBackupPickerController.hasBackup() else {\n"
+        "            return\n"
+        "        }\n"
+        "        let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
+        "        let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
+        "        let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
+        "        aorusKeyItem.tintColor = aorusKeyColor\n"
+        "        self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
+        "    }\n"
         "\n    @objc private func aorusBackupKeyPressed() {\n"
         "        AorusLoginBackupPickerController.presentIfPossible(from: self.view.window, theme: self.presentationData.theme, strings: self.presentationData.strings)\n"
         "    }\n"
     )
 
-    if button_anchor not in t:
-        print("LoginBackupKey: WARNING leftBarButtonItem anchor not found — skipped")
-        return
-    if method_anchor not in t:
-        print("LoginBackupKey: WARNING cancelPressed anchor not found — skipped")
-        return
-    t = t.replace(button_anchor, button_inject, 1)
-    t = t.replace(method_anchor, method_inject, 1)
+    if "self.aorusInstallBackupKeyButton()" not in t:
+        if button_anchor not in t:
+            print("LoginBackupKey: WARNING leftBarButtonItem anchor not found — skipped")
+            return
+        t = t.replace(button_anchor, button_inject, 1)
+    if "private func aorusInstallBackupKeyButton()" not in t:
+        if method_anchor not in t:
+            print("LoginBackupKey: WARNING cancelPressed anchor not found — skipped")
+            return
+        t = t.replace(method_anchor, method_inject, 1)
+
+    navigation_anchor = (
+        "        } else {\n"
+        "            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+        "    public func updateData"
+    )
+    navigation_inject = (
+        "        } else {\n"
+        "            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))\n"
+        "        }\n"
+        "        if !self.inProgress {\n"
+        "            self.aorusInstallBackupKeyButton()\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+        "    public func updateData"
+    )
+    if "if !self.inProgress {\n            self.aorusInstallBackupKeyButton()" not in t:
+        if navigation_anchor not in t:
+            print("LoginBackupKey: WARNING updateNavigationItems anchor not found — skipped")
+            return
+        t = t.replace(navigation_anchor, navigation_inject, 1)
+
+    appearance_anchor = (
+        "    override public func viewDidAppear(_ animated: Bool) {\n"
+        "        super.viewDidAppear(animated)\n"
+    )
+    appearance_inject = appearance_anchor + (
+        "        if !self.inProgress {\n"
+        "            self.aorusInstallBackupKeyButton()\n"
+        "        }\n"
+    )
+    if "super.viewDidAppear(animated)\n        if !self.inProgress" not in t:
+        if appearance_anchor not in t:
+            print("LoginBackupKey: WARNING viewDidAppear anchor not found — skipped")
+            return
+        t = t.replace(appearance_anchor, appearance_inject, 1)
+
     path.write_text(t, encoding="utf-8")
-    print("LoginBackupKey: themed key button + picker hook injected into phone-entry screen")
+    print("LoginBackupKey: persistent themed key button + picker hook injected into phone-entry screen")
 
 
 def patch_undo_button_theme_color(tg: Path) -> None:
