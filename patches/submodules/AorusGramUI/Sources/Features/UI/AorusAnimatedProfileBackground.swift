@@ -499,6 +499,8 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     private var lastLookupTargetId: Int64?
     private var lastLookupTime: TimeInterval = 0.0
     private var remoteRefreshTimer: Timer?
+    private var stableMediaViewportWidth: CGFloat?
+    private var stableMediaViewportHeight: CGFloat?
 
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -598,6 +600,8 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         if identityChanged {
             self.lastLookupTargetId = nil
             self.lastLookupTime = 0.0
+            self.stableMediaViewportWidth = nil
+            self.stableMediaViewportHeight = nil
         }
         self.reload(force: identityChanged || visibilityChanged, requestRemote: true)
         self.updateRemoteRefreshTimer()
@@ -618,9 +622,37 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     public override func layoutSubviews() {
         super.layoutSubviews()
         self.backdropView.frame = self.bounds
-        self.contentView.frame = self.contentFrame ?? self.bounds
-        self.posterView.frame = self.contentView.bounds
-        self.renderer?.layer.frame = self.contentView.bounds
+        let viewportFrame = self.contentFrame ?? self.bounds
+        self.contentView.transform = .identity
+        self.contentView.frame = viewportFrame
+
+        // Telegram expands the native cover viewport during pull-to-stretch. Do
+        // not feed that transient height into AVSampleBufferDisplayLayer: doing
+        // so continuously changes aspect-fill scale and makes the banner appear
+        // to stretch under aggressive swipes. Capture the resting viewport once
+        // per profile/width and keep the media bottom-anchored inside the dynamic
+        // clipped viewport. The full 2000 pt backdrop remains behind it, so the
+        // stock Telegram cover is never exposed during extreme overscroll.
+        let viewportWidth = max(1.0, viewportFrame.width)
+        if let stableWidth = self.stableMediaViewportWidth,
+           abs(stableWidth - viewportWidth) > 1.0 {
+            self.stableMediaViewportWidth = nil
+            self.stableMediaViewportHeight = nil
+        }
+        if self.stableMediaViewportHeight == nil,
+           viewportFrame.height > 1.0 {
+            self.stableMediaViewportWidth = viewportWidth
+            self.stableMediaViewportHeight = viewportFrame.height
+        }
+        let mediaHeight = max(1.0, self.stableMediaViewportHeight ?? viewportFrame.height)
+        let mediaFrame = CGRect(
+            x: 0.0,
+            y: viewportFrame.height - mediaHeight,
+            width: viewportWidth,
+            height: mediaHeight
+        )
+        self.posterView.frame = mediaFrame
+        self.renderer?.layer.frame = mediaFrame
         // The view is created before Telegram assigns its final header frame.
         // Re-evaluate playback after layout, but updatePlayback de-duplicates
         // the request so profile scrolling does not flood the renderer queue.
@@ -878,19 +910,22 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         guard width > 4.0, height > 4.0 else {
             return image
         }
-        // Only this static guard is stretched. The actual poster/video remains
-        // aspect-filled inside contentView, so normal profile rendering is
-        // pixel-identical while extreme pull gestures reveal a continuation of
-        // the selected banner instead of Telegram's stock background.
-        return image.resizableImage(
-            withCapInsets: UIEdgeInsets(
-                top: floor(height * 0.49),
-                left: floor(width * 0.49),
-                bottom: floor(height * 0.49),
-                right: floor(width * 0.49)
-            ),
-            resizingMode: .stretch
-        )
+        // This image is only the 2000 pt safety guard behind the real media.
+        // Stretching a one-pixel center cap preserved sharp details as long
+        // vertical bands during extreme pull gestures. A tiny downsample keeps
+        // the banner's colour field while removing geometry that could visibly
+        // deform. The actual poster/video above remains full-resolution.
+        let guardSize = CGSize(width: 8.0, height: 24.0)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: guardSize, format: format).image { context in
+            context.cgContext.setFillColor(UIColor.black.cgColor)
+            context.cgContext.fill(CGRect(origin: .zero, size: guardSize))
+            image.draw(in: CGRect(origin: .zero, size: guardSize))
+            context.cgContext.setFillColor(UIColor.black.withAlphaComponent(0.08).cgColor)
+            context.cgContext.fill(CGRect(origin: .zero, size: guardSize))
+        }
     }
 
     private static func makePoster(url: URL) -> UIImage? {

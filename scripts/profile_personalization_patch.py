@@ -442,9 +442,10 @@ def _patch_personal_colors(tg: Path) -> None:
                 if case .starGift = resolvedState.emojiStatus?.content {
                     displayResetProfileColor = true
                 }
-                let aorusDisplayResetProfileSection = displayResetProfileColor || aorusAnimatedBackgroundHasMedia
+                let aorusCanResetAnimatedBackground = aorusAnimatedBackgroundEnabled && aorusAnimatedBackgroundHasMedia
+                let aorusDisplayResetProfileSection = displayResetProfileColor || aorusCanResetAnimatedBackground
                 var aorusAnimatedResetItems: [AnyComponentWithIdentity<Empty>] = []
-                if aorusAnimatedBackgroundHasMedia {
+                if aorusCanResetAnimatedBackground {
                     aorusAnimatedResetItems.append(AnyComponentWithIdentity(id: 100, component: AnyComponent(ListActionItemComponent(
                         theme: environment.theme,
                         style: .glass,

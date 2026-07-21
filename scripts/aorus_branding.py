@@ -13573,11 +13573,6 @@ def patch_video_masks(tg: Path) -> None:
     text = call_preview.read_text(encoding="utf-8")
     call_preview_sentinel = "// AorusGram: local call mask preview"
     overlay_factory_declaration = 'extern "C" UIView * _Nonnull AorusVideoMaskCreateOverlayView(CGRect frame);\n'
-    if overlay_factory_declaration not in text:
-        import_anchor = '#import "VideoCaptureView.h"\n'
-        if import_anchor not in text:
-            raise RuntimeError("VideoMasks: call preview import anchor not found")
-        text = text.replace(import_anchor, import_anchor + overlay_factory_declaration, 1)
     legacy_overlay_factory = (
         "    Class aorusOverlayClass = NSClassFromString(@\"AorusGram.AorusVideoMaskOverlayView\");\n"
         "    if (aorusOverlayClass != Nil && [aorusOverlayClass isSubclassOfClass:[UIView class]]) {\n"
@@ -13586,37 +13581,40 @@ def patch_video_masks(tg: Path) -> None:
         "        [self addSubview:_aorusMaskOverlayView];\n"
         "    }\n"
     )
-    text = text.replace(
-        legacy_overlay_factory,
+    call_overlay_block = (
+        "    " + call_preview_sentinel + "\n"
         "    _aorusMaskOverlayView = AorusVideoMaskCreateOverlayView(self.bounds);\n"
         "    _aorusMaskOverlayView.userInteractionEnabled = false;\n"
         "    [self addSubview:_aorusMaskOverlayView];\n"
     )
-    if call_preview_sentinel not in text:
-        ivar_anchor = "    VideoCaptureContentView *_captureView;\n"
-        if ivar_anchor not in text:
-            raise RuntimeError("VideoMasks: call preview ivar anchor not found")
-        text = text.replace(ivar_anchor, ivar_anchor + "    UIView *_aorusMaskOverlayView;\n", 1)
-        configure_anchor = "    [self addSubview:_captureView];\n"
-        configure_replacement = (
-            configure_anchor
-            + "    " + call_preview_sentinel + "\n"
-            + "    _aorusMaskOverlayView = AorusVideoMaskCreateOverlayView(self.bounds);\n"
-            + "    _aorusMaskOverlayView.userInteractionEnabled = false;\n"
-            + "    [self addSubview:_aorusMaskOverlayView];\n"
-        )
-        if configure_anchor not in text:
-            raise RuntimeError("VideoMasks: call preview configure anchor not found")
-        text = text.replace(configure_anchor, configure_replacement, 1)
-        layout_anchor = "    _captureView.frame = bounds;\n"
-        if layout_anchor not in text:
-            raise RuntimeError("VideoMasks: call preview layout anchor not found")
-        text = text.replace(layout_anchor, layout_anchor + "    _aorusMaskOverlayView.frame = bounds;\n", 1)
-        call_preview.write_text(text, encoding="utf-8")
-        print("VideoMasks: local call preview overlay patched")
-    else:
-        print("VideoMasks: local call preview already patched")
+    had_call_overlay = any(token in text for token in (
+        call_preview_sentinel,
+        "AorusVideoMaskCreateOverlayView",
+        "_aorusMaskOverlayView",
+        "AorusGram.AorusVideoMaskOverlayView",
+    ))
+    # The native self-preview is an AVCaptureVideoPreviewLayer. Running a second
+    # Vision-backed Swift overlay above it duplicates face tracking and can stall
+    # the local camera surface. Keep masks exclusively in VideoCameraCapturer's
+    # outgoing pixel-buffer path: the remote participant still receives the mask,
+    # while the local preview remains Telegram's zero-copy native preview.
+    text = text.replace(overlay_factory_declaration, "")
+    text = text.replace(legacy_overlay_factory, "")
+    text = text.replace(call_overlay_block, "")
+    text = text.replace("    UIView *_aorusMaskOverlayView;\n", "")
+    text = text.replace("    _aorusMaskOverlayView.frame = bounds;\n", "")
+    if any(token in text for token in (
+        call_preview_sentinel,
+        "AorusVideoMaskCreateOverlayView",
+        "_aorusMaskOverlayView",
+        "AorusGram.AorusVideoMaskOverlayView",
+    )):
+        raise RuntimeError("VideoMasks: failed to remove cached local call preview overlay")
     call_preview.write_text(text, encoding="utf-8")
+    if had_call_overlay:
+        print("VideoMasks: removed local call preview overlay; outgoing mask preserved")
+    else:
+        print("VideoMasks: native local call preview already preserved")
 
     voip_build = tg / "submodules/TgVoipWebrtc/BUILD"
     if not voip_build.is_file():

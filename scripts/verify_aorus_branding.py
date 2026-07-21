@@ -258,6 +258,12 @@ def main() -> None:
             err.append("ProfilePersonalization: post-layout playback recovery is incomplete")
         if "remoteRefreshTimer" not in animated_text or "requestCurrentRemoteBanner(force: true)" not in animated_text:
             err.append("ProfilePersonalization: visible remote banners do not refresh live")
+        if "stableMediaViewportHeight" not in animated_text or "viewportFrame.height - mediaHeight" not in animated_text:
+            err.append("ProfilePersonalization: animated banner can still rescale during profile overscroll")
+        if "self.backdropView.frame = self.bounds" not in animated_text:
+            err.append("ProfilePersonalization: full-height overscroll guard is not preserved")
+        if "let guardSize = CGSize(width: 8.0, height: 24.0)" not in animated_text or ".resizableImage(" in animated_text:
+            err.append("ProfilePersonalization: overscroll guard can still stretch banner details into artifacts")
         if "guard seconds <= 30.0" not in animated_text or "guard totalDuration <= 30.0" not in animated_text:
             err.append("ProfilePersonalization: video/GIF duration must be capped at 30 seconds")
         if 'sourceType as String == "com.compuserve.gif"' not in animated_text:
@@ -385,8 +391,10 @@ def main() -> None:
             err.append("SettingsShortcuts: animated banner focus/highlight patch is missing")
         if "let targetView = self.profileColorSection.findTaggedView(tag: aorusAnimatedBackgroundTag)" not in personal_colors_text:
             err.append("SettingsShortcuts: animated banner focus must wait for the exact toggle view")
-        if "if aorusAnimatedBackgroundHasMedia {" not in personal_colors_text:
-            err.append("ProfilePersonalization: animated banner reset must require stored media")
+        if "let aorusCanResetAnimatedBackground = aorusAnimatedBackgroundEnabled && aorusAnimatedBackgroundHasMedia" not in personal_colors_text:
+            err.append("ProfilePersonalization: animated banner reset must require an enabled stored banner")
+        if "if aorusCanResetAnimatedBackground {" not in personal_colors_text:
+            err.append("ProfilePersonalization: disabled animated banner still exposes its reset action")
         if "aorusAnimatedBackgroundEnabled || aorusAnimatedBackgroundHasMedia" in personal_colors_text:
             err.append("ProfilePersonalization: reset button must stay hidden until banner media exists")
 
@@ -747,11 +755,18 @@ def main() -> None:
             err.append("VideoMasks: module-free C bridge is missing")
     call_preview = tg / "submodules" / "TgVoipWebrtc" / "tgcalls" / "tgcalls" / "platform" / "darwin" / "VideoCaptureView.mm"
     if not call_preview.is_file():
-        err.append("VideoMasks: local call preview overlay is missing")
+        err.append("VideoMasks: native call preview source is missing")
     else:
         call_preview_text = call_preview.read_text(encoding="utf-8")
-        if "AorusGram: local call mask preview" not in call_preview_text or "AorusVideoMaskCreateOverlayView" not in call_preview_text:
-            err.append("VideoMasks: local call preview overlay is missing")
+        if any(token in call_preview_text for token in (
+            "AorusGram: local call mask preview",
+            "AorusVideoMaskCreateOverlayView",
+            "_aorusMaskOverlayView",
+            "AorusGram.AorusVideoMaskOverlayView",
+        )):
+            err.append("VideoMasks: local call preview still runs the duplicate mask overlay")
+        if "[AVCaptureVideoPreviewLayer class]" not in call_preview_text:
+            err.append("VideoMasks: local call preview no longer uses Telegram's native preview layer")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:
