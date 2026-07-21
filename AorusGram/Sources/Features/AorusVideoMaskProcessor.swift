@@ -74,6 +74,12 @@ public final class AorusVideoMaskProcessor: NSObject {
         .cacheIntermediates: false,
         .name: "AorusVideoMasks"
     ])
+    /// Keep Vision's proxy generation off the serial camera callback and away
+    /// from the context that renders the outgoing call frame.
+    private let detectionContext = CIContext(options: [
+        .cacheIntermediates: false,
+        .name: "AorusVideoMasks.Detection"
+    ])
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
     private var lastDetectionTime: CFTimeInterval = 0.0
     private var detectionInFlight = false
@@ -268,17 +274,13 @@ public final class AorusVideoMaskProcessor: NSObject {
         }
 
         if snapshot.needsDetection {
-            if let detectionFrame = self.makeDetectionFrame(from: image) {
-                self.schedulePoseUpdate(
-                    frame: detectionFrame,
-                    generation: snapshot.generation,
-                    previous: snapshot.pose,
-                    preset: snapshot.preset,
-                    mirrored: mirrored
-                )
-            } else {
-                self.completeFailedDetection(generation: snapshot.generation, preset: snapshot.preset)
-            }
+            self.schedulePoseUpdate(
+                image: image,
+                generation: snapshot.generation,
+                previous: snapshot.pose,
+                preset: snapshot.preset,
+                mirrored: mirrored
+            )
         }
 
         guard let pose = snapshot.pose,
@@ -384,23 +386,14 @@ public final class AorusVideoMaskProcessor: NSObject {
         let scale = min(1.0, 420.0 / max(longestSide, 1.0))
         var proxy = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         proxy = proxy.transformed(by: CGAffineTransform(translationX: -proxy.extent.minX, y: -proxy.extent.minY))
-        guard let snapshot = self.ciContext.createCGImage(proxy, from: proxy.extent) else {
+        guard let snapshot = self.detectionContext.createCGImage(proxy, from: proxy.extent) else {
             return nil
         }
         return DetectionFrame(image: snapshot, sourceExtent: image.extent)
     }
 
-    private func completeFailedDetection(generation: UInt, preset: String) {
-        self.stateLock.lock()
-        self.detectionInFlight = false
-        if generation == self.trackingGeneration, preset == self.lastPreset {
-            self.registerMiss()
-        }
-        self.stateLock.unlock()
-    }
-
     private func schedulePoseUpdate(
-        frame: DetectionFrame,
+        image: CIImage,
         generation: UInt,
         previous: FacePose?,
         preset: String,
@@ -408,19 +401,26 @@ public final class AorusVideoMaskProcessor: NSObject {
     ) {
         self.detectionQueue.async { [weak self] in
             guard let self else { return }
-            let detected: FacePose? = autoreleasepool {
-                self.detectPose(in: frame.image, sourceExtent: frame.sourceExtent, previous: previous)
+            let result: (FacePose?, CGRect)? = autoreleasepool {
+                guard let frame = self.makeDetectionFrame(from: image) else {
+                    return nil
+                }
+                return (
+                    self.detectPose(in: frame.image, sourceExtent: frame.sourceExtent, previous: previous),
+                    frame.sourceExtent
+                )
             }
             self.stateLock.lock()
             defer { self.stateLock.unlock() }
             self.detectionInFlight = false
             guard generation == self.trackingGeneration, preset == self.lastPreset else { return }
-            guard let detected,
-                  previous.map({ self.isPlausible(detected, comparedTo: $0, extent: frame.sourceExtent) }) ?? true else {
+            guard let (detected, sourceExtent) = result,
+                  let detected,
+                  previous.map({ self.isPlausible(detected, comparedTo: $0, extent: sourceExtent) }) ?? true else {
                 self.registerMiss()
                 return
             }
-            self.applyDetectedPose(detected, extent: frame.sourceExtent, preset: preset, mirrored: mirrored)
+            self.applyDetectedPose(detected, extent: sourceExtent, preset: preset, mirrored: mirrored)
         }
     }
 

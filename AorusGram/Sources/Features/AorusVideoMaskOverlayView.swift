@@ -140,17 +140,27 @@ public final class AorusVideoMaskOverlayView: UIView {
         let updates = {
             self.imageView.bounds = CGRect(origin: .zero, size: targetFrame.size)
             self.imageView.center = CGPoint(x: targetFrame.midX, y: targetFrame.midY)
-            self.imageView.transform = .identity
-            var transform = CATransform3DIdentity
-            transform.m34 = -1.0 / max(self.bounds.width * 4.0, 900.0)
+            // Keep the local mask in the same 2D compositor as the native
+            // AVCaptureVideoPreviewLayer. A perspective CATransform3D forces
+            // Core Animation to flatten the live camera surface and can leave
+            // a frozen snapshot while a face is tracked. The outgoing frame
+            // retains the full perspective transform in the CI compositor.
+            var transform = CGAffineTransform.identity
             if self.mirrored {
-                transform = CATransform3DScale(transform, -1.0, 1.0, 1.0)
+                transform = transform.scaledBy(x: -1.0, y: 1.0)
             }
-            transform = CATransform3DRotate(transform, self.mirrored ? self.roll : -self.roll, 0.0, 0.0, 1.0)
+            transform = transform.rotated(by: self.mirrored ? self.roll : -self.roll)
             let displayedYaw = self.mirrored ? -self.yaw : self.yaw
-            transform = CATransform3DRotate(transform, -displayedYaw * 0.48, 0.0, 1.0, 0.0)
-            transform = CATransform3DRotate(transform, self.pitch * 0.30, 1.0, 0.0, 0.0)
-            self.imageView.layer.transform = transform
+            let horizontalScale = max(0.82, 1.0 - abs(displayedYaw) * 0.16)
+            let verticalScale = max(0.88, 1.0 - abs(self.pitch) * 0.10)
+            transform = transform
+                .translatedBy(
+                    x: displayedYaw * targetFrame.width * 0.035,
+                    y: -self.pitch * targetFrame.height * 0.025
+                )
+                .scaledBy(x: horizontalScale, y: verticalScale)
+            self.imageView.layer.transform = CATransform3DIdentity
+            self.imageView.transform = transform
         }
         if animated {
             UIView.animate(

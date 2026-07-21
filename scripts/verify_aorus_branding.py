@@ -453,6 +453,12 @@ def main() -> None:
             err.append("VideoMasks: lock contention can still emit unmasked video frames")
         if "detectionQueue.async" not in mask_text or "detectionInFlight" not in mask_text:
             err.append("VideoMasks: face detection must stay off the WebRTC capture thread")
+        if "private let detectionContext" not in mask_text or "self.detectionContext.createCGImage" not in mask_text:
+            err.append("VideoMasks: Vision proxy generation can still block outgoing camera delivery")
+        detection_schedule_start = mask_text.find("if snapshot.needsDetection {")
+        pose_guard_start = mask_text.find("guard let pose = snapshot.pose", detection_schedule_start)
+        if detection_schedule_start == -1 or pose_guard_start == -1 or "makeDetectionFrame" in mask_text[detection_schedule_start:pose_guard_start]:
+            err.append("VideoMasks: Vision proxy work still runs synchronously in the capture callback")
         if "private let poolLock" not in mask_text or "isPlausible" not in mask_text or "FrameGeometry" not in mask_text:
             err.append("VideoMasks: output-buffer isolation or pose outlier rejection is missing")
         if "processingEnabled" not in mask_text or "deactivateTrackingIfNeeded" not in mask_text:
@@ -492,6 +498,8 @@ def main() -> None:
             err.append("VideoMasks: local preview reintroduces delayed/rasterized tracking")
         if "self.isOpaque = false" not in overlay_text or "self.imageView.isOpaque = false" not in overlay_text:
             err.append("VideoMasks: local call overlay can render transparent pixels as black")
+        if "self.imageView.layer.transform = CATransform3DIdentity" not in overlay_text or "CATransform3DRotate" in overlay_text:
+            err.append("VideoMasks: local call overlay can freeze the native preview through 3D flattening")
 
     camera_output = tg / "submodules" / "Camera" / "Sources" / "CameraOutput.swift"
     if not camera_output.is_file():
