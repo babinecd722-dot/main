@@ -13492,6 +13492,23 @@ def patch_video_masks(tg: Path) -> None:
         raise RuntimeError("VideoMasks: VideoCameraCapturer.mm not found")
     text = capturer.read_text(encoding="utf-8")
     sentinel = "// AorusGram: real-time outgoing call mask"
+    late_frame_sentinel = "// AorusGram: keep native call preview responsive under mask load"
+    late_frame_original = "    videoDataOutput.alwaysDiscardsLateVideoFrames = NO;\n"
+    late_frame_patched = (
+        "    videoDataOutput.alwaysDiscardsLateVideoFrames = YES; "
+        + late_frame_sentinel
+        + "\n"
+    )
+    if late_frame_sentinel not in text:
+        if late_frame_original not in text:
+            raise RuntimeError("VideoMasks: call late-frame policy anchor not found")
+        text = text.replace(late_frame_original, late_frame_patched, 1)
+        print("VideoMasks: protected native call preview from mask backpressure")
+    text = text.replace(
+        "    // delayed as we set alwaysDiscardsLateVideoFrames to NO.\n",
+        "    // Read the sample metadata so camera switches cannot race the queued frame.\n",
+        1,
+    )
     # Migrate the first implementation from Swift module import to a stable C ABI.
     # Telegram caches its source tree between CI runs, so this must happen even
     # when the frame-hook sentinel is already present.

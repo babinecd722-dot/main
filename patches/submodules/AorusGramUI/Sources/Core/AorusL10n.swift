@@ -134,6 +134,13 @@ public struct AorusL10n {
     public var customFont: String { t("Кастомный шрифт", "Custom Font") }
     public var animatedProfileBackground: String { t("Анимированный баннер", "Animated Banner") }
     public var chooseAnimatedProfileMedia: String { t("Выбрать медиа", "Choose Media") }
+    public var animatedProfileGalleryTitle: String { t("Видео и GIF", "Videos and GIFs") }
+    public var animatedProfileCropTitle: String { t("Настройка баннера", "Adjust Banner") }
+    public var animatedProfileCropHint: String { t("Перемещайте и масштабируйте медиа", "Move and scale the media") }
+    public var animatedProfileCropApply: String { t("Применить", "Apply") }
+    public var cancel: String { t("Отмена", "Cancel") }
+    public var animatedProfileGalleryEmpty: String { t("Нет видео до 30 секунд или GIF", "No videos up to 30 seconds or GIFs") }
+    public var animatedProfileGalleryAccessDenied: String { t("Разрешите доступ к медиатеке в настройках iOS.", "Allow photo library access in iOS Settings.") }
     public var animatedProfileTransparency: String { t("Прозрачность", "Transparency") }
     public var resetAnimatedProfileBackground: String { t("Сбросить анимированный баннер", "Reset Animated Banner") }
     public var preparingAnimatedProfileBackground: String { t("Подготовка анимированного фона…", "Preparing animated background…") }

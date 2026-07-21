@@ -2,8 +2,6 @@ import Foundation
 import UIKit
 import AVFoundation
 import Photos
-import PhotosUI
-import UniformTypeIdentifiers
 import ImageIO
 import ComponentFlow
 import TelegramPresentationData
@@ -1063,6 +1061,24 @@ private enum AorusAnimatedProfileMediaKind {
     case gif
 }
 
+private struct AorusAnimatedProfileCrop {
+    static let aspectRatio: CGFloat = 16.0 / 9.0
+    static let outputSize = CGSize(width: 1280.0, height: 720.0)
+
+    let normalizedRect: CGRect
+
+    var clampedRect: CGRect {
+        let width = min(1.0, max(0.001, self.normalizedRect.width))
+        let height = min(1.0, max(0.001, self.normalizedRect.height))
+        return CGRect(
+            x: min(1.0 - width, max(0.0, self.normalizedRect.minX)),
+            y: min(1.0 - height, max(0.0, self.normalizedRect.minY)),
+            width: width,
+            height: height
+        )
+    }
+}
+
 private enum AorusAnimatedProfileMediaError: Error {
     case cancelled
     case unsupported
@@ -1086,18 +1102,19 @@ private enum AorusAnimatedProfileMediaProcessor {
     static func process(
         sourceURL: URL,
         kind: AorusAnimatedProfileMediaKind,
+        crop: AorusAnimatedProfileCrop,
         completion: @escaping (Result<AorusProcessedProfileMedia, Error>) -> Void
     ) {
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("aorus-profile-\(UUID().uuidString).mp4")
         switch kind {
         case .video:
-            processVideo(sourceURL: sourceURL, outputURL: outputURL) { result in
+            processVideo(sourceURL: sourceURL, outputURL: outputURL, crop: crop) { result in
                 finish(result: result, outputURL: outputURL, completion: completion)
             }
         case .gif:
             DispatchQueue.global(qos: .userInitiated).async {
-                let result = convertGif(sourceURL: sourceURL, outputURL: outputURL)
+                let result = convertGif(sourceURL: sourceURL, outputURL: outputURL, crop: crop)
                 finish(result: result, outputURL: outputURL, completion: completion)
             }
         }
@@ -1156,6 +1173,7 @@ private enum AorusAnimatedProfileMediaProcessor {
     private static func processVideo(
         sourceURL: URL,
         outputURL: URL,
+        crop: AorusAnimatedProfileCrop,
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -1188,11 +1206,53 @@ private enum AorusAnimatedProfileMediaProcessor {
                     of: sourceTrack,
                     at: .zero
                 )
-                targetTrack.preferredTransform = sourceTrack.preferredTransform
+                targetTrack.preferredTransform = .identity
             } catch {
                 completion(.failure(error))
                 return
             }
+
+            let transformedBounds = CGRect(origin: .zero, size: sourceTrack.naturalSize)
+                .applying(sourceTrack.preferredTransform)
+            let orientedSize = CGSize(
+                width: abs(transformedBounds.width),
+                height: abs(transformedBounds.height)
+            )
+            guard orientedSize.width > 1.0, orientedSize.height > 1.0 else {
+                completion(.failure(AorusAnimatedProfileMediaError.unreadable))
+                return
+            }
+            let cropRect = crop.clampedRect
+            let sourceCrop = CGRect(
+                x: cropRect.minX * orientedSize.width,
+                y: cropRect.minY * orientedSize.height,
+                width: cropRect.width * orientedSize.width,
+                height: cropRect.height * orientedSize.height
+            )
+            let outputSize = AorusAnimatedProfileCrop.outputSize
+            let scale = max(outputSize.width / sourceCrop.width, outputSize.height / sourceCrop.height)
+            var transform = sourceTrack.preferredTransform
+            transform = transform.concatenating(CGAffineTransform(
+                translationX: -transformedBounds.minX,
+                y: -transformedBounds.minY
+            ))
+            transform = transform.concatenating(CGAffineTransform(
+                translationX: -sourceCrop.minX,
+                y: -sourceCrop.minY
+            ))
+            transform = transform.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: .zero, duration: composition.duration)
+            let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: targetTrack)
+            layerInstruction.setTransform(transform, at: .zero)
+            instruction.layerInstructions = [layerInstruction]
+            let videoComposition = AVMutableVideoComposition()
+            videoComposition.renderSize = outputSize
+            let sourceFPS = sourceTrack.nominalFrameRate
+            let frameRate = min(30, max(15, Int32(sourceFPS.rounded())))
+            videoComposition.frameDuration = CMTime(value: 1, timescale: frameRate)
+            videoComposition.instructions = [instruction]
 
             let byteBudgetBitRate = Double(maximumEncodedBytes * 8) / seconds
             let presets: [String]
@@ -1205,6 +1265,7 @@ private enum AorusAnimatedProfileMediaProcessor {
             }
             exportVideo(
                 composition: composition,
+                videoComposition: videoComposition,
                 outputURL: outputURL,
                 presets: presets[...],
                 completion: completion
@@ -1214,6 +1275,7 @@ private enum AorusAnimatedProfileMediaProcessor {
 
     private static func exportVideo(
         composition: AVComposition,
+        videoComposition: AVVideoComposition,
         outputURL: URL,
         presets: ArraySlice<String>,
         completion: @escaping (Result<Void, Error>) -> Void
@@ -1226,6 +1288,7 @@ private enum AorusAnimatedProfileMediaProcessor {
               exporter.supportedFileTypes.contains(.mp4) else {
             exportVideo(
                 composition: composition,
+                videoComposition: videoComposition,
                 outputURL: outputURL,
                 presets: presets.dropFirst(),
                 completion: completion
@@ -1237,6 +1300,7 @@ private enum AorusAnimatedProfileMediaProcessor {
         exporter.outputURL = outputURL
         exporter.outputFileType = .mp4
         exporter.shouldOptimizeForNetworkUse = true
+        exporter.videoComposition = videoComposition
         exporter.exportAsynchronously {
             guard exporter.status == .completed else {
                 try? FileManager.default.removeItem(at: outputURL)
@@ -1249,6 +1313,7 @@ private enum AorusAnimatedProfileMediaProcessor {
             } else {
                 exportVideo(
                     composition: composition,
+                    videoComposition: videoComposition,
                     outputURL: outputURL,
                     presets: presets.dropFirst(),
                     completion: completion
@@ -1271,7 +1336,11 @@ private enum AorusAnimatedProfileMediaProcessor {
         return 0.1
     }
 
-    private static func convertGif(sourceURL: URL, outputURL: URL) -> Result<Void, Error> {
+    private static func convertGif(
+        sourceURL: URL,
+        outputURL: URL,
+        crop: AorusAnimatedProfileCrop
+    ) -> Result<Void, Error> {
         guard let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else {
             return .failure(AorusAnimatedProfileMediaError.unreadable)
         }
@@ -1297,16 +1366,8 @@ private enum AorusAnimatedProfileMediaProcessor {
             return .failure(AorusAnimatedProfileMediaError.tooLong)
         }
 
-        var width = firstFrame.width
-        var height = firstFrame.height
-        let maximumDimension = 1280
-        if max(width, height) > maximumDimension {
-            let scale = Double(maximumDimension) / Double(max(width, height))
-            width = max(2, Int((Double(width) * scale).rounded()))
-            height = max(2, Int((Double(height) * scale).rounded()))
-        }
-        width -= width % 2
-        height -= height % 2
+        let width = Int(AorusAnimatedProfileCrop.outputSize.width)
+        let height = Int(AorusAnimatedProfileCrop.outputSize.height)
         guard width >= 2, height >= 2 else {
             return .failure(AorusAnimatedProfileMediaError.unreadable)
         }
@@ -1369,6 +1430,7 @@ private enum AorusAnimatedProfileMediaProcessor {
                         image: frame,
                         width: width,
                         height: height,
+                        crop: crop,
                         pool: adaptor.pixelBufferPool
                       ),
                       adaptor.append(pixelBuffer, withPresentationTime: currentTime) else {
@@ -1400,6 +1462,7 @@ private enum AorusAnimatedProfileMediaProcessor {
         image: CGImage,
         width: Int,
         height: Int,
+        crop: AorusAnimatedProfileCrop,
         pool: CVPixelBufferPool?
     ) -> CVPixelBuffer? {
         var pixelBuffer: CVPixelBuffer?
@@ -1438,8 +1501,21 @@ private enum AorusAnimatedProfileMediaProcessor {
         context.setFillColor(UIColor.black.cgColor)
         let outputRect = CGRect(x: 0.0, y: 0.0, width: CGFloat(width), height: CGFloat(height))
         context.fill(outputRect)
+        let normalizedCrop = crop.clampedRect
+        let imageSize = CGSize(width: image.width, height: image.height)
+        let sourceCrop = CGRect(
+            x: normalizedCrop.minX * imageSize.width,
+            y: normalizedCrop.minY * imageSize.height,
+            width: normalizedCrop.width * imageSize.width,
+            height: normalizedCrop.height * imageSize.height
+        ).integral.intersection(CGRect(origin: .zero, size: imageSize))
+        guard sourceCrop.width > 1.0,
+              sourceCrop.height > 1.0,
+              let croppedImage = image.cropping(to: sourceCrop) else {
+            return nil
+        }
         context.interpolationQuality = .high
-        context.draw(image, in: outputRect)
+        context.draw(croppedImage, in: outputRect)
         return pixelBuffer
     }
 }
@@ -1515,14 +1591,13 @@ private final class AorusAnimatedProfileImportHUD: UIView {
     }
 }
 
-private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject {
     private weak var controller: UIViewController?
     private let accountId: Int64
     private let l10n: AorusL10n
     private let completion: (Bool) -> Void
     private let finished: () -> Void
     private var hud: AorusAnimatedProfileImportHUD?
-    private var modernPickerDelegate: AnyObject?
 
     init(
         controller: UIViewController,
@@ -1543,136 +1618,222 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject, U
             self.finished()
             return
         }
-        if #available(iOS 14.0, *) {
-            self.presentModernPicker(from: controller)
+        self.requestGalleryAccess(from: controller)
+    }
+
+    private func requestGalleryAccess(from controller: UIViewController) {
+        let presentAuthorized = { [weak self, weak controller] in
+            guard let self, let controller else { return }
+            self.loadGalleryItems { [weak self, weak controller] items in
+                guard let self, let controller else { return }
+                let gallery = AorusAnimatedProfileMediaGalleryController(
+                    items: items,
+                    l10n: self.l10n,
+                    selected: { [weak self] asset, kind, gallery in
+                        self?.load(asset: asset, kind: kind, from: gallery)
+                    },
+                    cancelled: { [weak self] gallery in
+                        gallery.dismiss(animated: true) {
+                            self?.finish(cancelled: true)
+                        }
+                    }
+                )
+                let navigation = UINavigationController(rootViewController: gallery)
+                navigation.modalPresentationStyle = .fullScreen
+                controller.present(navigation, animated: true)
+            }
+        }
+
+        let status = PHPhotoLibrary.authorizationStatus()
+        let isAuthorized: Bool
+        if status == .authorized {
+            isAuthorized = true
+        } else if #available(iOS 14.0, *) {
+            isAuthorized = status == .limited
         } else {
-            let picker = UIImagePickerController()
-            picker.sourceType = .photoLibrary
-            picker.mediaTypes = ["public.movie", "public.image"]
-            picker.videoMaximumDuration = 30.0
-            picker.delegate = self
-            controller.present(picker, animated: true)
+            isAuthorized = false
+        }
+        if isAuthorized {
+            presentAuthorized()
+        } else if status == .notDetermined {
+            PHPhotoLibrary.requestAuthorization { status in
+                DispatchQueue.main.async {
+                    let authorized: Bool
+                    if status == .authorized {
+                        authorized = true
+                    } else if #available(iOS 14.0, *) {
+                        authorized = status == .limited
+                    } else {
+                        authorized = false
+                    }
+                    if authorized {
+                        presentAuthorized()
+                    } else {
+                        self.finish(error: AorusAnimatedProfileMediaError.unsupported)
+                    }
+                }
+            }
+        } else {
+            let alert = UIAlertController(
+                title: nil,
+                message: self.l10n.animatedProfileGalleryAccessDenied,
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+                self?.finish(cancelled: true)
+            })
+            controller.present(alert, animated: true)
         }
     }
 
-    @available(iOS 14.0, *)
-    private func presentModernPicker(from controller: UIViewController) {
-        var configuration = PHPickerConfiguration(photoLibrary: .shared())
-        configuration.selectionLimit = 1
-        configuration.filter = .any(of: [.videos, .images])
-        configuration.preferredAssetRepresentationMode = .current
-        let picker = PHPickerViewController(configuration: configuration)
-        let pickerDelegate = AorusAnimatedProfilePHPickerDelegate(coordinator: self)
-        self.modernPickerDelegate = pickerDelegate
-        picker.delegate = pickerDelegate
-        controller.present(picker, animated: true)
+    private func loadGalleryItems(completion: @escaping ([AorusAnimatedProfileGalleryItem]) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let options = PHFetchOptions()
+            options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            var items: [AorusAnimatedProfileGalleryItem] = []
+
+            let videos = PHAsset.fetchAssets(with: .video, options: options)
+            videos.enumerateObjects { asset, _, _ in
+                if asset.duration > 0.0, asset.duration <= 30.0 {
+                    items.append(AorusAnimatedProfileGalleryItem(asset: asset, kind: .video))
+                }
+            }
+
+            let images = PHAsset.fetchAssets(with: .image, options: options)
+            images.enumerateObjects { asset, _, _ in
+                let isGIF = PHAssetResource.assetResources(for: asset).contains { resource in
+                    let type = resource.uniformTypeIdentifier.lowercased()
+                    return type == "com.compuserve.gif"
+                        || type.hasSuffix(".gif")
+                        || resource.originalFilename.lowercased().hasSuffix(".gif")
+                }
+                if isGIF {
+                    items.append(AorusAnimatedProfileGalleryItem(asset: asset, kind: .gif))
+                }
+            }
+            items.sort { ($0.asset.creationDate ?? .distantPast) > ($1.asset.creationDate ?? .distantPast) }
+            DispatchQueue.main.async { completion(items) }
+        }
     }
 
-    @available(iOS 14.0, *)
-    fileprivate func handleModernPicker(_ picker: PHPickerViewController, results: [PHPickerResult]) {
-        guard let result = results.first else {
-            picker.dismiss(animated: true) { [weak self] in self?.finish(cancelled: true) }
-            return
-        }
-        let provider = result.itemProvider
-        let kind: AorusAnimatedProfileMediaKind
-        let typeIdentifier: String
-        if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
-            kind = .video
-            typeIdentifier = UTType.movie.identifier
-        } else if provider.hasItemConformingToTypeIdentifier(UTType.gif.identifier) {
-            kind = .gif
-            typeIdentifier = UTType.gif.identifier
-        } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-            // Some photo libraries expose an animated GIF only as public.image.
-            // The decoder still validates the actual source type before conversion.
-            kind = .gif
-            typeIdentifier = UTType.image.identifier
-        } else {
-            picker.dismiss(animated: true) { [weak self] in
-                self?.finish(error: AorusAnimatedProfileMediaError.unsupported)
-            }
-            return
-        }
-        if case .video = kind,
-           let assetIdentifier = result.assetIdentifier,
-           let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetIdentifier], options: nil).firstObject,
-           asset.duration > 30.0 {
-            picker.dismiss(animated: true) { [weak self] in
-                self?.finish(error: AorusAnimatedProfileMediaError.tooLong)
-            }
-            return
-        }
-
-        picker.dismiss(animated: true) { [weak self] in
+    private func load(
+        asset: PHAsset,
+        kind: AorusAnimatedProfileMediaKind,
+        from gallery: UIViewController
+    ) {
+        gallery.dismiss(animated: true) { [weak self] in
             guard let self else { return }
             self.showHUD()
-            provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { [weak self] url, _ in
-                guard let self else { return }
-                guard let url else {
-                    DispatchQueue.main.async { self.finish(error: AorusAnimatedProfileMediaError.unreadable) }
+            switch kind {
+            case .video:
+                let options = PHVideoRequestOptions()
+                options.version = .original
+                options.deliveryMode = .highQualityFormat
+                options.isNetworkAccessAllowed = true
+                PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { [weak self] avAsset, _, _ in
+                    guard let self, let avAsset else {
+                        DispatchQueue.main.async { self?.finish(error: AorusAnimatedProfileMediaError.unreadable) }
+                        return
+                    }
+                    self.copyVideoAsset(avAsset)
+                }
+            case .gif:
+                guard let resource = PHAssetResource.assetResources(for: asset).first(where: {
+                    $0.uniformTypeIdentifier.lowercased().contains("gif")
+                        || $0.originalFilename.lowercased().hasSuffix(".gif")
+                }) else {
+                    self.finish(error: AorusAnimatedProfileMediaError.unreadable)
                     return
                 }
-                let temporaryURL = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("aorus-profile-source-\(UUID().uuidString).\(url.pathExtension)")
-                do {
-                    try FileManager.default.copyItem(at: url, to: temporaryURL)
-                } catch {
-                    DispatchQueue.main.async { self.finish(error: error) }
-                    return
+                let destination = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("aorus-profile-source-\(UUID().uuidString).gif")
+                let options = PHAssetResourceRequestOptions()
+                options.isNetworkAccessAllowed = true
+                PHAssetResourceManager.default().writeData(for: resource, toFile: destination, options: options) { [weak self] error in
+                    DispatchQueue.main.async {
+                        if let error {
+                            self?.finish(error: error)
+                        } else {
+                            self?.presentCrop(url: destination, kind: .gif)
+                        }
+                    }
                 }
-                self.process(url: temporaryURL, kind: kind)
             }
         }
     }
 
-    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-        picker.dismiss(animated: true) { [weak self] in self?.finish(cancelled: true) }
+    private func copyVideoAsset(_ asset: AVAsset) {
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aorus-profile-source-\(UUID().uuidString).mov")
+        if let urlAsset = asset as? AVURLAsset {
+            do {
+                try FileManager.default.copyItem(at: urlAsset.url, to: destination)
+                DispatchQueue.main.async { [weak self] in self?.presentCrop(url: destination, kind: .video) }
+                return
+            } catch {
+                // Some iCloud-backed Photos assets expose a URL that cannot be
+                // copied directly. Exporting the AVAsset is the reliable path.
+            }
+        }
+        self.exportVideoAsset(asset, to: destination)
     }
 
-    func imagePickerController(
-        _ picker: UIImagePickerController,
-        didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-    ) {
-        let mediaType = info[.mediaType] as? String
-        let sourceURL: URL?
-        let kind: AorusAnimatedProfileMediaKind
-        if mediaType == "public.movie", let url = info[.mediaURL] as? URL {
-            sourceURL = url
-            kind = .video
-        } else if let url = info[.imageURL] as? URL,
-                  url.pathExtension.lowercased() == "gif" {
-            sourceURL = url
-            kind = .gif
-        } else {
-            sourceURL = nil
-            kind = .gif
+    private func exportVideoAsset(_ asset: AVAsset, to destination: URL) {
+        guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
+            DispatchQueue.main.async { [weak self] in self?.finish(error: AorusAnimatedProfileMediaError.conversion) }
+            return
         }
-        picker.dismiss(animated: true) { [weak self] in
+        try? FileManager.default.removeItem(at: destination)
+        exporter.outputURL = destination
+        exporter.outputFileType = exporter.supportedFileTypes.contains(.mov) ? .mov : exporter.supportedFileTypes.first
+        exporter.shouldOptimizeForNetworkUse = true
+        exporter.exportAsynchronously { [weak self] in
+            DispatchQueue.main.async {
+                guard exporter.status == .completed else {
+                    self?.finish(error: exporter.error ?? AorusAnimatedProfileMediaError.conversion)
+                    return
+                }
+                self?.presentCrop(url: destination, kind: .video)
+            }
+        }
+    }
+
+    private func presentCrop(url: URL, kind: AorusAnimatedProfileMediaKind) {
+        guard let controller = self.controller,
+              let preview = AorusAnimatedProfileCropController.previewImage(url: url, kind: kind) else {
+            try? FileManager.default.removeItem(at: url)
+            self.finish(error: AorusAnimatedProfileMediaError.unreadable)
+            return
+        }
+        self.hud?.removeFromSuperview()
+        self.hud = nil
+        let cropController = AorusAnimatedProfileCropController(
+            sourceURL: url,
+            kind: kind,
+            preview: preview,
+            l10n: self.l10n
+        ) { [weak self] crop in
             guard let self else { return }
-            guard let sourceURL else {
-                self.finish(error: AorusAnimatedProfileMediaError.unsupported)
+            guard let crop else {
+                try? FileManager.default.removeItem(at: url)
+                self.finish(cancelled: true)
                 return
             }
             self.showHUD()
-            let temporaryURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("aorus-profile-source-\(UUID().uuidString).\(sourceURL.pathExtension)")
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self else { return }
-                do {
-                    try FileManager.default.copyItem(at: sourceURL, to: temporaryURL)
-                    self.process(url: temporaryURL, kind: kind)
-                } catch {
-                    DispatchQueue.main.async { self.finish(error: error) }
-                }
-            }
+            self.process(url: url, kind: kind, crop: crop)
         }
+        controller.present(cropController, animated: true)
     }
 
-    private func process(url: URL, kind: AorusAnimatedProfileMediaKind) {
+    private func process(
+        url: URL,
+        kind: AorusAnimatedProfileMediaKind,
+        crop: AorusAnimatedProfileCrop
+    ) {
         AorusAnimatedProfileMediaProcessor.process(
             sourceURL: url,
-            kind: kind
+            kind: kind,
+            crop: crop
         ) { [weak self] result in
             try? FileManager.default.removeItem(at: url)
             guard let self else { return }
@@ -1713,7 +1874,6 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject, U
     }
 
     private func finish(cancelled: Bool) {
-        self.modernPickerDelegate = nil
         self.hud?.removeFromSuperview()
         self.hud = nil
         if !cancelled {
@@ -1723,7 +1883,6 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject, U
     }
 
     private func finish(error: Error) {
-        self.modernPickerDelegate = nil
         self.hud?.removeFromSuperview()
         self.hud = nil
         self.completion(false)
@@ -1760,15 +1919,478 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject, U
     }
 }
 
-@available(iOS 14.0, *)
-private final class AorusAnimatedProfilePHPickerDelegate: NSObject, PHPickerViewControllerDelegate {
-    private weak var coordinator: AorusAnimatedProfileBackgroundPickerCoordinator?
+// MARK: - Filtered media gallery
 
-    init(coordinator: AorusAnimatedProfileBackgroundPickerCoordinator) {
-        self.coordinator = coordinator
+private struct AorusAnimatedProfileGalleryItem {
+    let asset: PHAsset
+    let kind: AorusAnimatedProfileMediaKind
+}
+
+private final class AorusAnimatedProfileGalleryCell: UICollectionViewCell {
+    static let reuseIdentifier = "AorusAnimatedProfileGalleryCell"
+
+    private let imageView = UIImageView()
+    private let durationLabel = UILabel()
+    private let kindView = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+    var representedIdentifier: String?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.clipsToBounds = true
+        self.layer.cornerRadius = 4.0
+        self.imageView.contentMode = .scaleAspectFill
+        self.imageView.clipsToBounds = true
+        self.contentView.addSubview(self.imageView)
+
+        self.kindView.clipsToBounds = true
+        self.kindView.layer.cornerRadius = 9.0
+        self.contentView.addSubview(self.kindView)
+        self.durationLabel.textColor = .white
+        self.durationLabel.font = .monospacedDigitSystemFont(ofSize: 11.0, weight: .semibold)
+        self.durationLabel.textAlignment = .center
+        self.kindView.contentView.addSubview(self.durationLabel)
     }
 
-    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        self.coordinator?.handleModernPicker(picker, results: results)
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        self.representedIdentifier = nil
+        self.imageView.image = nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.imageView.frame = self.contentView.bounds
+        let size = self.durationLabel.sizeThatFits(CGSize(width: 90.0, height: 18.0))
+        let width = max(28.0, size.width + 10.0)
+        self.kindView.frame = CGRect(
+            x: self.contentView.bounds.width - width - 6.0,
+            y: self.contentView.bounds.height - 24.0,
+            width: width,
+            height: 18.0
+        )
+        self.durationLabel.frame = self.kindView.bounds
+    }
+
+    func update(image: UIImage?, label: String) {
+        self.imageView.image = image
+        self.durationLabel.text = label
+        self.setNeedsLayout()
+    }
+}
+
+private final class AorusAnimatedProfileMediaGalleryController: UIViewController,
+    UICollectionViewDataSource,
+    UICollectionViewDelegateFlowLayout {
+    private let items: [AorusAnimatedProfileGalleryItem]
+    private let l10n: AorusL10n
+    private let selected: (PHAsset, AorusAnimatedProfileMediaKind, UIViewController) -> Void
+    private let cancelled: (UIViewController) -> Void
+    private let imageManager = PHCachingImageManager()
+    private let collectionView: UICollectionView
+    private let emptyLabel = UILabel()
+
+    init(
+        items: [AorusAnimatedProfileGalleryItem],
+        l10n: AorusL10n,
+        selected: @escaping (PHAsset, AorusAnimatedProfileMediaKind, UIViewController) -> Void,
+        cancelled: @escaping (UIViewController) -> Void
+    ) {
+        self.items = items
+        self.l10n = l10n
+        self.selected = selected
+        self.cancelled = cancelled
+        let layout = UICollectionViewFlowLayout()
+        layout.minimumLineSpacing = 2.0
+        layout.minimumInteritemSpacing = 2.0
+        self.collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        super.init(nibName: nil, bundle: nil)
+        self.modalPresentationStyle = .fullScreen
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        self.view.backgroundColor = .systemBackground
+        self.title = self.l10n.animatedProfileGalleryTitle
+        self.navigationItem.leftBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .cancel,
+            target: self,
+            action: #selector(self.cancelPressed)
+        )
+        self.collectionView.backgroundColor = .systemBackground
+        self.collectionView.alwaysBounceVertical = true
+        self.collectionView.dataSource = self
+        self.collectionView.delegate = self
+        self.collectionView.register(
+            AorusAnimatedProfileGalleryCell.self,
+            forCellWithReuseIdentifier: AorusAnimatedProfileGalleryCell.reuseIdentifier
+        )
+        self.view.addSubview(self.collectionView)
+
+        self.emptyLabel.text = self.l10n.animatedProfileGalleryEmpty
+        self.emptyLabel.textColor = .secondaryLabel
+        self.emptyLabel.font = .systemFont(ofSize: 16.0, weight: .medium)
+        self.emptyLabel.textAlignment = .center
+        self.emptyLabel.numberOfLines = 2
+        self.emptyLabel.isHidden = !self.items.isEmpty
+        self.view.addSubview(self.emptyLabel)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        self.collectionView.frame = self.view.bounds
+        self.emptyLabel.frame = self.view.bounds.insetBy(dx: 32.0, dy: 120.0)
+    }
+
+    @objc private func cancelPressed() {
+        self.cancelled(self)
+    }
+
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        return self.items.count
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        cellForItemAt indexPath: IndexPath
+    ) -> UICollectionViewCell {
+        guard let cell = collectionView.dequeueReusableCell(
+            withReuseIdentifier: AorusAnimatedProfileGalleryCell.reuseIdentifier,
+            for: indexPath
+        ) as? AorusAnimatedProfileGalleryCell else {
+            return UICollectionViewCell()
+        }
+        let item = self.items[indexPath.item]
+        let identifier = item.asset.localIdentifier
+        cell.representedIdentifier = identifier
+        let label: String
+        switch item.kind {
+        case .video:
+            let total = max(0, Int(item.asset.duration.rounded()))
+            label = String(format: "%d:%02d", total / 60, total % 60)
+        case .gif:
+            label = "GIF"
+        }
+        cell.update(image: nil, label: label)
+        let scale = UIScreen.main.scale
+        let side = max(120.0, cell.bounds.width * scale)
+        self.imageManager.requestImage(
+            for: item.asset,
+            targetSize: CGSize(width: side, height: side),
+            contentMode: .aspectFill,
+            options: nil
+        ) { image, _ in
+            guard cell.representedIdentifier == identifier else { return }
+            cell.update(image: image, label: label)
+        }
+        return cell
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        layout collectionViewLayout: UICollectionViewLayout,
+        sizeForItemAt indexPath: IndexPath
+    ) -> CGSize {
+        let side = floor((collectionView.bounds.width - 4.0) / 3.0)
+        return CGSize(width: side, height: side)
+    }
+
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        collectionView.isUserInteractionEnabled = false
+        let item = self.items[indexPath.item]
+        self.selected(item.asset, item.kind, self)
+    }
+}
+
+// MARK: - Banner crop editor
+
+private final class AorusAnimatedProfileCropController: UIViewController, UIScrollViewDelegate {
+    private let sourceURL: URL
+    private let kind: AorusAnimatedProfileMediaKind
+    private let preview: UIImage
+    private let l10n: AorusL10n
+    private let completion: (AorusAnimatedProfileCrop?) -> Void
+    private let titleLabel = UILabel()
+    private let cancelButton = UIButton(type: .system)
+    private let applyButton = UIButton(type: .system)
+    private let scrollView = UIScrollView()
+    private let mediaView = UIView()
+    private let imageView = UIImageView()
+    private let borderView = UIView()
+    private let hintLabel = UILabel()
+    private var player: AVPlayer?
+    private var playerLayer: AVPlayerLayer?
+    private var playerObserver: NSObjectProtocol?
+    private var mediaBaseSize = CGSize.zero
+    private var didConfigureViewport = false
+
+    init(
+        sourceURL: URL,
+        kind: AorusAnimatedProfileMediaKind,
+        preview: UIImage,
+        l10n: AorusL10n,
+        completion: @escaping (AorusAnimatedProfileCrop?) -> Void
+    ) {
+        self.sourceURL = sourceURL
+        self.kind = kind
+        self.preview = preview
+        self.l10n = l10n
+        self.completion = completion
+        super.init(nibName: nil, bundle: nil)
+        self.modalPresentationStyle = .fullScreen
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        if let playerObserver {
+            NotificationCenter.default.removeObserver(playerObserver)
+        }
+    }
+
+    static func previewImage(url: URL, kind: AorusAnimatedProfileMediaKind) -> UIImage? {
+        switch kind {
+        case .video:
+            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 1600.0, height: 1600.0)
+            let image = (try? generator.copyCGImage(at: CMTime(seconds: 0.05, preferredTimescale: 600), actualTime: nil))
+                ?? (try? generator.copyCGImage(at: .zero, actualTime: nil))
+            return image.map(UIImage.init(cgImage:))
+        case .gif:
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                return nil
+            }
+            return UIImage(cgImage: image)
+        }
+    }
+
+    private static func videoOnlyPreviewAsset(url: URL) -> AVAsset? {
+        let sourceAsset = AVURLAsset(url: url)
+        guard let sourceTrack = sourceAsset.tracks(withMediaType: .video).first else {
+            return nil
+        }
+        let composition = AVMutableComposition()
+        guard let targetTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            return nil
+        }
+        do {
+            try targetTrack.insertTimeRange(
+                CMTimeRange(start: .zero, duration: sourceAsset.duration),
+                of: sourceTrack,
+                at: .zero
+            )
+            targetTrack.preferredTransform = sourceTrack.preferredTransform
+            return composition
+        } catch {
+            return nil
+        }
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        self.view.backgroundColor = UIColor(white: 0.04, alpha: 1.0)
+
+        self.titleLabel.text = self.l10n.animatedProfileCropTitle
+        self.titleLabel.textColor = .white
+        self.titleLabel.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        self.titleLabel.textAlignment = .center
+        self.view.addSubview(self.titleLabel)
+
+        self.cancelButton.setTitle(self.l10n.cancel, for: .normal)
+        self.cancelButton.setTitleColor(.white, for: .normal)
+        self.cancelButton.titleLabel?.font = .systemFont(ofSize: 17.0)
+        self.cancelButton.addTarget(self, action: #selector(self.cancelPressed), for: .touchUpInside)
+        self.view.addSubview(self.cancelButton)
+
+        self.applyButton.setTitle(self.l10n.animatedProfileCropApply, for: .normal)
+        self.applyButton.setTitleColor(UIColor(red: 0.67, green: 0.31, blue: 1.0, alpha: 1.0), for: .normal)
+        self.applyButton.titleLabel?.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        self.applyButton.addTarget(self, action: #selector(self.applyPressed), for: .touchUpInside)
+        self.view.addSubview(self.applyButton)
+
+        self.scrollView.delegate = self
+        self.scrollView.clipsToBounds = true
+        self.scrollView.backgroundColor = .black
+        self.scrollView.bounces = true
+        self.scrollView.bouncesZoom = true
+        self.scrollView.showsHorizontalScrollIndicator = false
+        self.scrollView.showsVerticalScrollIndicator = false
+        self.scrollView.contentInsetAdjustmentBehavior = .never
+        self.view.addSubview(self.scrollView)
+
+        let longestSide = max(self.preview.size.width, self.preview.size.height)
+        let baseScale = min(1.0, 1600.0 / max(1.0, longestSide))
+        self.mediaBaseSize = CGSize(
+            width: max(1.0, self.preview.size.width * baseScale),
+            height: max(1.0, self.preview.size.height * baseScale)
+        )
+        self.mediaView.frame = CGRect(origin: .zero, size: self.mediaBaseSize)
+        self.scrollView.addSubview(self.mediaView)
+        self.imageView.image = self.preview
+        self.imageView.contentMode = .scaleToFill
+        self.imageView.frame = self.mediaView.bounds
+        self.mediaView.addSubview(self.imageView)
+
+        if case .video = self.kind,
+           let previewAsset = Self.videoOnlyPreviewAsset(url: self.sourceURL) {
+            let player = AVPlayer(playerItem: AVPlayerItem(asset: previewAsset))
+            player.isMuted = true
+            player.actionAtItemEnd = .none
+            let layer = AVPlayerLayer(player: player)
+            layer.videoGravity = .resize
+            layer.frame = self.mediaView.bounds
+            self.mediaView.layer.addSublayer(layer)
+            self.player = player
+            self.playerLayer = layer
+            self.playerObserver = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: player.currentItem,
+                queue: .main
+            ) { [weak player] _ in
+                player?.seek(to: .zero)
+                player?.play()
+            }
+            player.play()
+        }
+
+        self.borderView.isUserInteractionEnabled = false
+        self.borderView.layer.borderColor = UIColor.white.withAlphaComponent(0.92).cgColor
+        self.borderView.layer.borderWidth = 1.0 / UIScreen.main.scale
+        self.borderView.layer.cornerRadius = 8.0
+        self.view.addSubview(self.borderView)
+
+        self.hintLabel.text = self.l10n.animatedProfileCropHint
+        self.hintLabel.textColor = UIColor.white.withAlphaComponent(0.65)
+        self.hintLabel.font = .systemFont(ofSize: 14.0, weight: .medium)
+        self.hintLabel.textAlignment = .center
+        self.view.addSubview(self.hintLabel)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let preservedCrop = self.didConfigureViewport ? self.currentCrop() : nil
+        let safe = self.view.safeAreaInsets
+        let navigationY = safe.top
+        self.cancelButton.frame = CGRect(x: 10.0, y: navigationY, width: 92.0, height: 52.0)
+        self.applyButton.frame = CGRect(x: self.view.bounds.width - 112.0, y: navigationY, width: 102.0, height: 52.0)
+        self.titleLabel.frame = CGRect(x: 104.0, y: navigationY, width: self.view.bounds.width - 208.0, height: 52.0)
+
+        let availableTop = navigationY + 70.0
+        let availableBottom = self.view.bounds.height - safe.bottom - 52.0
+        let maxWidth = max(1.0, self.view.bounds.width - 24.0)
+        let maxHeight = max(1.0, availableBottom - availableTop)
+        let cropWidth = min(maxWidth, maxHeight * AorusAnimatedProfileCrop.aspectRatio)
+        let cropHeight = cropWidth / AorusAnimatedProfileCrop.aspectRatio
+        let cropFrame = CGRect(
+            x: floor((self.view.bounds.width - cropWidth) * 0.5),
+            y: floor(availableTop + (maxHeight - cropHeight) * 0.5),
+            width: cropWidth,
+            height: cropHeight
+        )
+        self.scrollView.frame = cropFrame
+        self.borderView.frame = cropFrame
+        self.hintLabel.frame = CGRect(
+            x: 20.0,
+            y: cropFrame.maxY + 12.0,
+            width: self.view.bounds.width - 40.0,
+            height: 24.0
+        )
+        self.imageView.frame = self.mediaView.bounds
+        self.playerLayer?.frame = self.mediaView.bounds
+        self.configureViewport(crop: preservedCrop)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        self.player?.play()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        self.player?.pause()
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        return self.mediaView
+    }
+
+    private func configureViewport(crop: AorusAnimatedProfileCrop?) {
+        guard self.scrollView.bounds.width > 1.0,
+              self.scrollView.bounds.height > 1.0,
+              self.mediaBaseSize.width > 1.0,
+              self.mediaBaseSize.height > 1.0 else {
+            return
+        }
+        let minimum = max(
+            self.scrollView.bounds.width / self.mediaBaseSize.width,
+            self.scrollView.bounds.height / self.mediaBaseSize.height
+        )
+        self.scrollView.minimumZoomScale = minimum
+        self.scrollView.maximumZoomScale = max(minimum * 6.0, minimum + 0.01)
+        let target = crop?.clampedRect ?? self.centeredInitialCrop().clampedRect
+        let zoom = min(
+            self.scrollView.maximumZoomScale,
+            max(minimum, self.scrollView.bounds.width / (target.width * self.mediaBaseSize.width))
+        )
+        self.scrollView.zoomScale = zoom
+        self.scrollView.contentOffset = CGPoint(
+            x: target.minX * self.mediaBaseSize.width * zoom,
+            y: target.minY * self.mediaBaseSize.height * zoom
+        )
+        self.didConfigureViewport = true
+    }
+
+    private func centeredInitialCrop() -> AorusAnimatedProfileCrop {
+        let sourceAspect = self.mediaBaseSize.width / self.mediaBaseSize.height
+        let targetAspect = AorusAnimatedProfileCrop.aspectRatio
+        if sourceAspect > targetAspect {
+            let width = targetAspect / sourceAspect
+            return AorusAnimatedProfileCrop(normalizedRect: CGRect(x: (1.0 - width) * 0.5, y: 0.0, width: width, height: 1.0))
+        } else {
+            let height = sourceAspect / targetAspect
+            return AorusAnimatedProfileCrop(normalizedRect: CGRect(x: 0.0, y: (1.0 - height) * 0.5, width: 1.0, height: height))
+        }
+    }
+
+    private func currentCrop() -> AorusAnimatedProfileCrop {
+        let zoom = max(self.scrollView.zoomScale, 0.0001)
+        let rect = CGRect(
+            x: self.scrollView.contentOffset.x / zoom / self.mediaBaseSize.width,
+            y: self.scrollView.contentOffset.y / zoom / self.mediaBaseSize.height,
+            width: self.scrollView.bounds.width / zoom / self.mediaBaseSize.width,
+            height: self.scrollView.bounds.height / zoom / self.mediaBaseSize.height
+        )
+        return AorusAnimatedProfileCrop(normalizedRect: rect)
+    }
+
+    @objc private func cancelPressed() {
+        self.dismiss(animated: true) { [completion = self.completion] in
+            completion(nil)
+        }
+    }
+
+    @objc private func applyPressed() {
+        let crop = self.currentCrop()
+        self.applyButton.isEnabled = false
+        self.dismiss(animated: true) { [completion = self.completion] in
+            completion(crop)
+        }
     }
 }

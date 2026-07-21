@@ -270,6 +270,26 @@ def main() -> None:
             err.append("ProfilePersonalization: imported images are not validated as GIF")
         if "maximumEncodedBytes = 5_750_000" not in animated_text or "AVAssetExportPresetLowQuality" not in animated_text:
             err.append("ProfilePersonalization: imported media is not bounded below the banner API upload limit")
+        required_crop_markers = [
+            "AorusAnimatedProfileMediaGalleryController",
+            "PHAsset.fetchAssets(with: .video",
+            "asset.duration <= 30.0",
+            'sourceType as String == "com.compuserve.gif"',
+            "AorusAnimatedProfileCropController",
+            "static let aspectRatio: CGFloat = 16.0 / 9.0",
+            "static let outputSize = CGSize(width: 1280.0, height: 720.0)",
+            "AVMutableVideoComposition()",
+            "exporter.videoComposition = videoComposition",
+            "let croppedImage = image.cropping(to: sourceCrop)",
+            "videoOnlyPreviewAsset",
+        ]
+        for marker in required_crop_markers:
+            if marker not in animated_text:
+                err.append(f"ProfilePersonalization: filtered banner crop flow is missing {marker}")
+        if "PHPickerViewController" in animated_text or "UIImagePickerController" in animated_text:
+            err.append("ProfilePersonalization: unfiltered system media picker is still used for banners")
+        if "self.exportVideoAsset(asset, to: destination)" not in animated_text:
+            err.append("ProfilePersonalization: iCloud-backed video import has no AVAsset export fallback")
 
     banner_service = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Profile" / "AorusBannerService.swift"
     if not banner_service.is_file():
@@ -753,6 +773,8 @@ def main() -> None:
             err.append("VideoMasks: BGRA-to-WebRTC converter is missing")
         if 'int32_t orientation, int32_t mirrored' not in call_text or "@import AorusGram" in call_text:
             err.append("VideoMasks: module-free C bridge is missing")
+        if "keep native call preview responsive under mask load" not in call_text or "alwaysDiscardsLateVideoFrames = YES" not in call_text:
+            err.append("VideoMasks: outgoing mask processing can still backpressure the native call preview")
     call_preview = tg / "submodules" / "TgVoipWebrtc" / "tgcalls" / "tgcalls" / "platform" / "darwin" / "VideoCaptureView.mm"
     if not call_preview.is_file():
         err.append("VideoMasks: native call preview source is missing")
