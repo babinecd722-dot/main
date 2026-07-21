@@ -181,7 +181,9 @@ public enum AorusAnimatedProfileBackgroundStore {
     }
 
     private static func resetLocally(accountId: Int64) {
-        UserDefaults.standard.set(false, forKey: key(enabledPrefix, accountId: accountId))
+        // Reset removes the selected media, not the user's feature preference.
+        // Keeping the switch enabled leaves the picker available immediately.
+        UserDefaults.standard.set(true, forKey: key(enabledPrefix, accountId: accountId))
         UserDefaults.standard.removeObject(forKey: key(transparencyPrefix, accountId: accountId))
         stateLock.lock()
         transientTransparency.removeValue(forKey: accountId)
@@ -1624,8 +1626,13 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject {
     private func requestGalleryAccess(from controller: UIViewController) {
         let presentAuthorized = { [weak self, weak controller] in
             guard let self, let controller else { return }
+            self.showHUD()
             self.loadGalleryItems { [weak self, weak controller] items in
-                guard let self, let controller else { return }
+                guard let self, let controller else {
+                    self?.finish(cancelled: true)
+                    return
+                }
+                self.hideHUD()
                 let gallery = AorusAnimatedProfileMediaGalleryController(
                     items: items,
                     l10n: self.l10n,
@@ -1688,26 +1695,28 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject {
 
     private func loadGalleryItems(completion: @escaping ([AorusAnimatedProfileGalleryItem]) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let options = PHFetchOptions()
-            options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            let sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+            let videoOptions = PHFetchOptions()
+            videoOptions.sortDescriptors = sortDescriptors
             var items: [AorusAnimatedProfileGalleryItem] = []
 
-            let videos = PHAsset.fetchAssets(with: .video, options: options)
+            let videos = PHAsset.fetchAssets(with: .video, options: videoOptions)
             videos.enumerateObjects { asset, _, _ in
                 if asset.duration > 0.0, asset.duration <= 30.0 {
                     items.append(AorusAnimatedProfileGalleryItem(asset: asset, kind: .video))
                 }
             }
 
-            let images = PHAsset.fetchAssets(with: .image, options: options)
-            images.enumerateObjects { asset, _, _ in
-                let isGIF = PHAssetResource.assetResources(for: asset).contains { resource in
-                    let type = resource.uniformTypeIdentifier.lowercased()
-                    return type == "com.compuserve.gif"
-                        || type.hasSuffix(".gif")
-                        || resource.originalFilename.lowercased().hasSuffix(".gif")
-                }
-                if isGIF {
+            let animatedCollections = PHAssetCollection.fetchAssetCollections(
+                with: .smartAlbum,
+                subtype: .smartAlbumAnimated,
+                options: nil
+            )
+            animatedCollections.enumerateObjects { collection, _, _ in
+                let gifOptions = PHFetchOptions()
+                gifOptions.sortDescriptors = sortDescriptors
+                let animatedImages = PHAsset.fetchAssets(in: collection, options: gifOptions)
+                animatedImages.enumerateObjects { asset, _, _ in
                     items.append(AorusAnimatedProfileGalleryItem(asset: asset, kind: .gif))
                 }
             }
@@ -1865,12 +1874,18 @@ private final class AorusAnimatedProfileBackgroundPickerCoordinator: NSObject {
 
     private func showHUD() {
         guard let hostView = self.controller?.view.window ?? self.controller?.view else { return }
+        self.hud?.removeFromSuperview()
         let hud = AorusAnimatedProfileImportHUD(
             text: self.l10n.preparingAnimatedProfileBackground
         )
         hud.frame = hostView.bounds
         hostView.addSubview(hud)
         self.hud = hud
+    }
+
+    private func hideHUD() {
+        self.hud?.removeFromSuperview()
+        self.hud = nil
     }
 
     private func finish(cancelled: Bool) {

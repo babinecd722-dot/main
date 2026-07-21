@@ -273,6 +273,7 @@ def main() -> None:
         required_crop_markers = [
             "AorusAnimatedProfileMediaGalleryController",
             "PHAsset.fetchAssets(with: .video",
+            ".smartAlbumAnimated",
             "asset.duration <= 30.0",
             'sourceType as String == "com.compuserve.gif"',
             "AorusAnimatedProfileCropController",
@@ -288,6 +289,13 @@ def main() -> None:
                 err.append(f"ProfilePersonalization: filtered banner crop flow is missing {marker}")
         if "PHPickerViewController" in animated_text or "UIImagePickerController" in animated_text:
             err.append("ProfilePersonalization: unfiltered system media picker is still used for banners")
+        if "self.showHUD()" not in animated_text or "private func hideHUD()" not in animated_text:
+            err.append("ProfilePersonalization: banner gallery loading has no immediate user feedback")
+        reset_start = animated_text.find("private static func resetLocally(accountId: Int64)")
+        reset_end = animated_text.find("fileprivate static func installProcessedFile", reset_start)
+        reset_body = animated_text[reset_start:reset_end] if reset_start != -1 and reset_end != -1 else ""
+        if 'UserDefaults.standard.set(true, forKey: key(enabledPrefix, accountId: accountId))' not in reset_body:
+            err.append("ProfilePersonalization: resetting media incorrectly disables the banner feature")
         if "self.exportVideoAsset(asset, to: destination)" not in animated_text:
             err.append("ProfilePersonalization: iCloud-backed video import has no AVAsset export fallback")
 
@@ -481,6 +489,8 @@ def main() -> None:
             err.append("VideoMasks: lock contention can still emit unmasked video frames")
         if "detectionQueue.async" not in mask_text or "detectionInFlight" not in mask_text:
             err.append("VideoMasks: face detection must stay off the WebRTC capture thread")
+        if "processCallFrame(" not in mask_text or "callRenderQueue.async" not in mask_text or "callRenderInFlight" not in mask_text:
+            err.append("VideoMasks: call compositor still blocks Telegram's native camera preview")
         if "private let detectionContext" not in mask_text or "self.detectionContext.createCGImage" not in mask_text:
             err.append("VideoMasks: Vision proxy generation can still block outgoing camera delivery")
         detection_schedule_start = mask_text.find("if snapshot.needsDetection {")

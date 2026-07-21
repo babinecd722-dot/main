@@ -69,7 +69,9 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     private let stateLock = NSLock()
     private let poolLock = NSLock()
+    private let callRenderLock = NSLock()
     private let detectionQueue = DispatchQueue(label: "com.aorusgram.video-masks.detection", qos: .userInitiated)
+    private let callRenderQueue = DispatchQueue(label: "com.aorusgram.video-masks.call-render", qos: .userInteractive)
     private let ciContext = CIContext(options: [
         .cacheIntermediates: false,
         .name: "AorusVideoMasks"
@@ -96,6 +98,10 @@ public final class AorusVideoMaskProcessor: NSObject {
     private var templateImages: [String: UIImage] = [:]
     private var pools: [String: CVPixelBufferPool] = [:]
     private var customMaskModificationDates: [String: Date] = [:]
+    private var callRenderInFlight = false
+    private var callRenderGeneration: UInt = 0
+    private var latestCallFrame: CVPixelBuffer?
+    private var latestCallGeometry: FrameGeometry?
 
     private override init() {
         super.init()
@@ -189,6 +195,66 @@ public final class AorusVideoMaskProcessor: NSObject {
 
     public func process(pixelBuffer: CVPixelBuffer, orientation rawOrientation: Int32, mirrored: Bool) -> CVPixelBuffer? {
         return self.process(pixelBuffer: pixelBuffer, orientation: rawOrientation, mirrored: mirrored, publishesPreview: true)
+    }
+
+    /// Keeps Core Image and mask composition away from WebRTC's camera callback.
+    /// Only one render may be in flight; newer camera frames are dropped instead
+    /// of building latency, while WebRTC receives the most recent completed frame.
+    public func processCallFrame(
+        pixelBuffer: CVPixelBuffer,
+        orientation rawOrientation: Int32,
+        mirrored: Bool
+    ) -> CVPixelBuffer? {
+        let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+            && UserDefaults.standard.bool(forKey: Self.enabledKey)
+        guard enabled else {
+            self.callRenderLock.lock()
+            self.callRenderGeneration &+= 1
+            self.latestCallFrame = nil
+            self.latestCallGeometry = nil
+            self.callRenderLock.unlock()
+            self.deactivateTrackingIfNeeded()
+            return nil
+        }
+
+        let geometry = FrameGeometry(
+            orientation: rawOrientation,
+            mirrored: mirrored,
+            width: CVPixelBufferGetWidth(pixelBuffer),
+            height: CVPixelBufferGetHeight(pixelBuffer)
+        )
+        self.callRenderLock.lock()
+        if self.latestCallGeometry != geometry {
+            self.callRenderGeneration &+= 1
+            self.latestCallFrame = nil
+            self.latestCallGeometry = geometry
+        }
+        let completedFrame = self.latestCallFrame
+        if !self.callRenderInFlight {
+            self.callRenderInFlight = true
+            let generation = self.callRenderGeneration
+            self.callRenderQueue.async { [weak self] in
+                guard let self else { return }
+                let output = autoreleasepool {
+                    self.process(
+                        pixelBuffer: pixelBuffer,
+                        orientation: rawOrientation,
+                        mirrored: mirrored,
+                        publishesPreview: true
+                    )
+                }
+                self.callRenderLock.lock()
+                if generation == self.callRenderGeneration,
+                   !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"),
+                   UserDefaults.standard.bool(forKey: Self.enabledKey) {
+                    self.latestCallFrame = output
+                }
+                self.callRenderInFlight = false
+                self.callRenderLock.unlock()
+            }
+        }
+        self.callRenderLock.unlock()
+        return completedFrame
     }
 
     public func process(
@@ -831,5 +897,9 @@ public extension Notification.Name {
 
 @_cdecl("AorusVideoMaskProcessPixelBuffer")
 public func AorusVideoMaskProcessPixelBuffer(_ pixelBuffer: CVPixelBuffer, _ orientation: Int32, _ mirrored: Int32) -> CVPixelBuffer? {
-    return AorusVideoMaskProcessor.shared.process(pixelBuffer: pixelBuffer, orientation: orientation, mirrored: mirrored != 0)
+    return AorusVideoMaskProcessor.shared.processCallFrame(
+        pixelBuffer: pixelBuffer,
+        orientation: orientation,
+        mirrored: mirrored != 0
+    )
 }
