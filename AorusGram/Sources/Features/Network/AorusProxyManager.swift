@@ -89,7 +89,22 @@ private struct ATunnelDiagData: Codable {
 
 public final class AorusProxyManager {
     public static let shared = AorusProxyManager()
+    private let apiSession: URLSession
+
     private init() {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 15
+        configuration.waitsForConnectivity = false
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        self.apiSession = URLSession(
+            configuration: configuration,
+            delegate: AorusPinnedSessionDelegate.shared,
+            delegateQueue: nil
+        )
+
         LicenseStore.shared.load()
         load()
         // Cross-module force-probe signal: ATunnelStatusViewController (AorusGramUI) posts
@@ -276,7 +291,7 @@ public final class AorusProxyManager {
             return
         }
 
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, _ in
+        let task = apiSession.dataTask(with: request) { [weak self] data, response, _ in
             guard let self = self else { return }
 
             // Probing is async, so inFlight is cleared only once selection finishes.

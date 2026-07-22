@@ -97,6 +97,7 @@ private final class AorusPerformanceHUDView: UIView {
     private var rows: [String: UILabel] = [:]
     private var graphHeightConstraint: NSLayoutConstraint?
     private var isGraphVisible = false
+    private var glassEffectsEnabled: Bool?
 
     override init(frame: CGRect) {
         if #available(iOS 13.0, *) {
@@ -144,6 +145,7 @@ private final class AorusPerformanceHUDView: UIView {
             stackView.topAnchor.constraint(equalTo: blurView.contentView.topAnchor, constant: 8.0),
             stackView.bottomAnchor.constraint(equalTo: blurView.contentView.bottomAnchor, constant: -8.0),
         ])
+        updateGlassAppearance(enabled: UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool ?? true)
     }
 
     required init?(coder: NSCoder) {
@@ -151,6 +153,7 @@ private final class AorusPerformanceHUDView: UIView {
     }
 
     func update(snapshot: AorusPerformanceSnapshot, settings: AorusGramManager, l10n: AorusL10n) {
+        updateGlassAppearance(enabled: settings.glassUI)
         var visibleKeys: [String] = []
         if settings.performanceShowRAM {
             setRow("ram", title: l10n.performanceRAM, value: "\(Int(snapshot.ramMB.rounded())) MB", style: .normal)
@@ -207,6 +210,30 @@ private final class AorusPerformanceHUDView: UIView {
         }
         if graphVisible {
             graphView.append(snapshot: snapshot)
+        }
+    }
+
+    private func updateGlassAppearance(enabled: Bool) {
+        guard glassEffectsEnabled != enabled else { return }
+        glassEffectsEnabled = enabled
+        if enabled {
+            if #available(iOS 13.0, *) {
+                blurView.effect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+            } else {
+                blurView.effect = UIBlurEffect(style: .dark)
+            }
+            blurView.contentView.backgroundColor = .clear
+            blurView.layer.borderColor = UIColor.white.withAlphaComponent(0.18).cgColor
+            blurView.layer.shadowOpacity = 0.22
+            blurView.layer.shadowRadius = 12.0
+            blurView.layer.shadowOffset = CGSize(width: 0.0, height: 4.0)
+        } else {
+            blurView.effect = nil
+            blurView.contentView.backgroundColor = UIColor(white: 0.08, alpha: 0.97)
+            blurView.layer.borderColor = UIColor.white.withAlphaComponent(0.10).cgColor
+            blurView.layer.shadowOpacity = 0.10
+            blurView.layer.shadowRadius = 4.0
+            blurView.layer.shadowOffset = CGSize(width: 0.0, height: 2.0)
         }
     }
 

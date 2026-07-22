@@ -587,36 +587,42 @@ private struct AorusBlurView: UIViewRepresentable {
 // Glass circle background — matches Swiftgram's toolbar button glass.
 private struct AorusGlass: View {
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage("aorusgram_feature_glass_ui") private var glassEffectsEnabled = true
 
     var body: some View {
         let isDark = colorScheme == .dark
 
         Group {
-            if #available(iOS 15.0, *) {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Circle()
-                            .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
-                    )
+            if glassEffectsEnabled {
+                if #available(iOS 15.0, *) {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Circle()
+                                .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
+                        )
+                } else {
+                    Circle()
+                        .fill(Color.clear)
+                        .background(
+                            AorusBlurView(style: .systemThinMaterial)
+                                .clipShape(Circle())
+                        )
+                        .overlay(
+                            Circle()
+                                .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
+                        )
+                }
             } else {
                 Circle()
-                    .fill(Color.clear)
-                    .background(
-                        AorusBlurView(style: .systemThinMaterial)
-                            .clipShape(Circle())
-                    )
-                    .overlay(
-                        Circle()
-                            .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
-                    )
+                    .fill(Color(UIColor.secondarySystemBackground))
             }
         }
         .overlay(
             Circle()
-                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                .stroke(Color.white.opacity(glassEffectsEnabled ? 0.25 : 0.10), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
+        .shadow(color: Color.black.opacity(glassEffectsEnabled ? 0.12 : 0.05), radius: glassEffectsEnabled ? 6 : 2, x: 0, y: glassEffectsEnabled ? 3 : 1)
     }
 }
 

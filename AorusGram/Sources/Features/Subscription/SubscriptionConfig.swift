@@ -46,8 +46,21 @@ enum SubscriptionConfig {
     // Max clock skew (seconds) tolerated for the signed response timestamp.
     static let responseMaxSkew: TimeInterval = 300
 
-    // TLS SPKI pins (base64 of SHA256 over the DER SubjectPublicKeyInfo) for the
-    // license endpoint. Empty → pinning disabled (default system trust). Fill ONLY
-    // after verifying the real server SPKI hash.
-    static let pinnedSPKIHashesBase64: [String] = []
+    // TLS SPKI pins (base64 of SHA256 over DER SubjectPublicKeyInfo). Both protected
+    // API hosts currently use the same verified Let's Encrypt chain. The leaf pin is
+    // the strict match; the CA pins keep routine certificate renewal from taking the
+    // client offline. Standard hostname and trust validation still runs first.
+    //
+    // IMPORTANT: rotate these only after checking the live chain. Never replace this
+    // map with a wildcard host: banner/media services have independent lifecycles.
+    static let pinnedSPKIHashesByHost: [String: [String]] = [
+        "license.aorusgram.com": protectedAPISPKIPins,
+        "api.aorusgram.com": protectedAPISPKIPins
+    ]
+
+    private static let protectedAPISPKIPins: [String] = [
+        "3q/xrGVq1Nunte2iV/hnis5DNCAPkT5RwJsRej6w4s0=", // aorusgram.com leaf
+        "s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=", // Let's Encrypt YE2
+        "sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w="  // ISRG Root YE
+    ]
 }
