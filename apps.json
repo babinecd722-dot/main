@@ -16,6 +16,12 @@
       "iconURL": "https://download.aorusgram.com/icon.png",
       "tintColor": "5B4DFF",
       "category": "social",
+      "screenshots": [
+        "https://download.aorusgram.com/screenshots/01_profile.png",
+        "https://download.aorusgram.com/screenshots/02_privacy.png",
+        "https://download.aorusgram.com/screenshots/04_premium.png",
+        "https://download.aorusgram.com/screenshots/03_atunnel.png"
+      ],
       "version": "12.8",
       "versionDate": "2026-07-22",
       "versionDescription": "Первый релиз AorusGram через источник обновлений.\n\n• Пересылка, сохранение и скачивание из чатов с запретом копирования — теперь работает для фото, видео, файлов и альбомов.\n• Голос в текст: быстрая кнопка расшифровки прямо в чате.\n• Маски на видео и изменение голоса в звонках и кружках.\n• Режим призрака, сохранение удалённых сообщений, переводчик и другие функции.\n• Обновления через источник — больше не нужно переустанавливать вручную.\n• Общие улучшения стабильности.",
