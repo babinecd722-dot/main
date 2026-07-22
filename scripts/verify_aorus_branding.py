@@ -827,6 +827,41 @@ def main() -> None:
             err.append("LoginBackupKey: add-account flow is not guaranteed to expose the backup entry")
         if login_phone_entry_text.count("self.aorusInstallBackupKeyButton()") < 3:
             err.append("LoginBackupKey: key is not restored after navigation/layout updates")
+        if "private var aorusBackupPickerPresented = false" not in login_phone_entry_text:
+            err.append("LoginBackupKey: picker/passkey presentation guard is missing")
+        if "guard !self.aorusBackupPickerPresented else { return }" not in login_phone_entry_text:
+            err.append("LoginBackupKey: async passkey result can race the backup picker")
+        if "isAddingAccount: !self.otherAccountPhoneNumbers.1.isEmpty" not in login_phone_entry_text:
+            err.append("LoginBackupKey: add-account mode is not passed to the backup picker")
+
+    login_backup_picker = tg / "submodules" / "AuthorizationUI" / "Sources" / "AorusLoginBackupPicker.swift"
+    if not login_backup_picker.is_file():
+        err.append("LoginBackupKey: backup picker source is missing")
+    else:
+        login_backup_picker_text = login_backup_picker.read_text(encoding="utf-8")
+        if "No saved accounts yet" not in login_backup_picker_text:
+            err.append("LoginBackupKey: empty backup state is missing")
+        if "aorusgram_login_backup_selected_account_id" not in login_backup_picker_text:
+            err.append("LoginBackupKey: selected backup account is not persisted")
+        if "aorusgram_login_backup_add_account" not in login_backup_picker_text:
+            err.append("LoginBackupKey: add-account restore mode is not persisted")
+
+    account_backup_manager = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Accounts" / "AccountBackupManager.swift"
+    if not account_backup_manager.is_file():
+        err.append("LoginBackupKey: account backup manager is missing")
+    else:
+        account_backup_text = account_backup_manager.read_text(encoding="utf-8")
+        for marker, message in (
+            ("prepareRestore(selectedAccountId:", "selected-account restore is missing"),
+            ("mergeIntoExisting", "add-account merge mode is missing"),
+            ("mergedAtomicStateData", "Telegram account-state merge is missing"),
+            ("applyPendingAccountMerge", "pending add-account merge is not applied at launch"),
+        ):
+            if marker not in account_backup_text:
+                err.append(f"LoginBackupKey: {message}")
+
+    if "selectedAccountId: selectedAccountId" not in t or "mergeIntoExisting: isAddingAccount" not in t:
+        err.append("LoginBackupKey: AppDelegate ignores the selected account or add-account mode")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:

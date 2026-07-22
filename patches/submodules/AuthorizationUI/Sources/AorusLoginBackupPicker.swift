@@ -149,14 +149,30 @@ final class AorusLoginBackupPickerController: UIViewController {
     // Presented over the key window's root controller (not the Display controller,
     // whose present(_:in:) only accepts Display controllers) — the same path iOS
     // uses to surface share sheets inside Telegram.
-    static func presentIfPossible(from window: UIWindow?, theme: PresentationTheme, strings: PresentationStrings) {
-        guard let window = window, let meta = readMeta(), !meta.accountIds.isEmpty else { return }
+    @discardableResult
+    static func presentIfPossible(
+        from window: UIWindow?,
+        theme: PresentationTheme,
+        strings: PresentationStrings,
+        isAddingAccount: Bool,
+        onDismiss: @escaping () -> Void
+    ) -> Bool {
+        guard let window = window else { return false }
         let isRu = strings.baseLanguageCode.lowercased().hasPrefix("ru")
-        let controller = AorusLoginBackupPickerController(theme: theme, isRu: isRu, accounts: resolveAccounts(meta: meta, isRu: isRu))
+        let accounts = readMeta().map { resolveAccounts(meta: $0, isRu: isRu) } ?? []
+        let controller = AorusLoginBackupPickerController(
+            theme: theme,
+            isRu: isRu,
+            accounts: accounts,
+            isAddingAccount: isAddingAccount,
+            onDismiss: onDismiss
+        )
         controller.modalPresentationStyle = .fullScreen
         var top = window.rootViewController
         while let presented = top?.presentedViewController { top = presented }
-        top?.present(controller, animated: true, completion: nil)
+        guard let top else { return false }
+        top.present(controller, animated: true, completion: nil)
+        return true
     }
 
     // Merge the id list with the captured name/avatar metadata; fall back to an
@@ -178,19 +194,24 @@ final class AorusLoginBackupPickerController: UIViewController {
     private let theme: PresentationTheme
     private let isRu: Bool
     private let accounts: [PickerAccount]
+    private let isAddingAccount: Bool
+    private let onDismiss: () -> Void
 
     private let scrollView = UIScrollView()
     private let contentView = UIView()
     private let headerIconView = UIImageView()
     private let titleLabel = UILabel()
     private let descriptionLabel = UILabel()
+    private let emptyLabel = UILabel()
     private let closeButton = UIButton(type: .close)
     private var cards: [AorusAccountCardView] = []
 
-    private init(theme: PresentationTheme, isRu: Bool, accounts: [PickerAccount]) {
+    private init(theme: PresentationTheme, isRu: Bool, accounts: [PickerAccount], isAddingAccount: Bool, onDismiss: @escaping () -> Void) {
         self.theme = theme
         self.isRu = isRu
         self.accounts = accounts
+        self.isAddingAccount = isAddingAccount
+        self.onDismiss = onDismiss
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -234,6 +255,14 @@ final class AorusLoginBackupPickerController: UIViewController {
         self.descriptionLabel.numberOfLines = 0
         self.contentView.addSubview(self.descriptionLabel)
 
+        self.emptyLabel.text = self.isRu ? "Сохранённых аккаунтов пока нет" : "No saved accounts yet"
+        self.emptyLabel.font = UIFont.systemFont(ofSize: 17.0, weight: .medium)
+        self.emptyLabel.textColor = self.theme.list.itemSecondaryTextColor
+        self.emptyLabel.textAlignment = .center
+        self.emptyLabel.numberOfLines = 0
+        self.emptyLabel.isHidden = !self.accounts.isEmpty
+        self.contentView.addSubview(self.emptyLabel)
+
         for (index, account) in self.accounts.enumerated() {
             let subtitle = "ID " + self.shortId(account.id)
             let avatar = account.avatar.map { self.circularAvatar(from: $0) } ?? self.lettersAvatar(name: account.name, seed: account.id)
@@ -268,6 +297,13 @@ final class AorusLoginBackupPickerController: UIViewController {
         self.descriptionLabel.frame = CGRect(x: sideMargin, y: y, width: cardWidth, height: descHeight)
         y = self.descriptionLabel.frame.maxY + 28.0
 
+        if self.accounts.isEmpty {
+            self.emptyLabel.frame = CGRect(x: sideMargin, y: y, width: cardWidth, height: 54.0)
+            y = self.emptyLabel.frame.maxY + 12.0
+        } else {
+            self.emptyLabel.frame = .zero
+        }
+
         for card in self.cards {
             card.frame = CGRect(x: sideMargin, y: y, width: cardWidth, height: 82.0)
             y = card.frame.maxY + 12.0
@@ -283,13 +319,14 @@ final class AorusLoginBackupPickerController: UIViewController {
     }
 
     @objc private func closePressed() {
-        self.dismiss(animated: true, completion: nil)
+        self.dismiss(animated: true, completion: self.onDismiss)
     }
 
     @objc private func cardPressed(_ sender: AorusAccountCardView) {
         let index = sender.tag
         guard index >= 0 && index < self.accounts.count else { return }
-        let name = self.accounts[index].name
+        let account = self.accounts[index]
+        let name = account.name
         let alert = UIAlertController(
             title: self.isRu ? "Войти в аккаунт?" : "Sign in to account?",
             message: self.isRu
@@ -299,15 +336,18 @@ final class AorusLoginBackupPickerController: UIViewController {
         )
         alert.addAction(UIAlertAction(title: self.isRu ? "Отмена" : "Cancel", style: .cancel, handler: nil))
         alert.addAction(UIAlertAction(title: self.isRu ? "Войти" : "Sign in", style: .default, handler: { [weak self] _ in
-            self?.armRestoreAndRestart()
+            self?.armRestoreAndRestart(accountId: account.id)
         }))
         alert.view.tintColor = aorusLoginBackupAccent
         self.present(alert, animated: true, completion: nil)
     }
 
     // MARK: Restore + relaunch
-    private func armRestoreAndRestart() {
+    private func armRestoreAndRestart(accountId: String?) {
+        guard let accountId else { return }
         UserDefaults.standard.set(true, forKey: "aorusgram_login_backup_restore_requested")
+        UserDefaults.standard.set(accountId, forKey: "aorusgram_login_backup_selected_account_id")
+        UserDefaults.standard.set(self.isAddingAccount, forKey: "aorusgram_login_backup_add_account")
         let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()
         content.title = "AorusGram"

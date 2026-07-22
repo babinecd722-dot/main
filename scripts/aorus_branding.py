@@ -4100,9 +4100,16 @@ def patch_app_delegate_account_restore_hook(tg: Path) -> None:
         "        // prepares the restore now (rebuilds + decrypts the durable Keychain archive\n"
         "        // into staging); it is then applied below, before any postbox opens.\n"
         "        if UserDefaults.standard.bool(forKey: \"aorusgram_login_backup_restore_requested\") {\n"
+        "            let selectedAccountId = UserDefaults.standard.string(forKey: \"aorusgram_login_backup_selected_account_id\")\n"
+        "            let isAddingAccount = UserDefaults.standard.bool(forKey: \"aorusgram_login_backup_add_account\")\n"
         "            UserDefaults.standard.set(false, forKey: \"aorusgram_login_backup_restore_requested\")\n"
+        "            UserDefaults.standard.removeObject(forKey: \"aorusgram_login_backup_selected_account_id\")\n"
+        "            UserDefaults.standard.removeObject(forKey: \"aorusgram_login_backup_add_account\")\n"
         "            AccountBackupManager.shared.rootPath = rootPath\n"
-        "            _ = AccountBackupManager.shared.prepareRestore()\n"
+        "            _ = AccountBackupManager.shared.prepareRestore(\n"
+        "                selectedAccountId: selectedAccountId,\n"
+        "                mergeIntoExisting: isAddingAccount\n"
+        "            )\n"
         "        }\n"
         "        // AorusGram: apply a pending account-backup restore before any postbox opens\n"
         "        AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath)\n"
@@ -18820,7 +18827,8 @@ def patch_login_backup_key_button(tg: Path) -> None:
 
     The button sits opposite the back arrow (top-right) and takes the theme accent
     color — not Telegram's hardcoded blue. It is shown on both the primary login
-    and add-account phone-entry screens whenever a durable Keychain backup exists.
+    and add-account phone-entry screens. Add-account always exposes the picker so
+    its empty state is reachable even before a backup has been created.
     The picker itself is AorusLoginBackupPickerController, copied into this same
     module (AuthorizationUI) by the workflow.
     """
@@ -18878,7 +18886,22 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "        self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
         "    }\n"
         "\n    @objc private func aorusBackupKeyPressed() {\n"
-        "        AorusLoginBackupPickerController.presentIfPossible(from: self.view.window, theme: self.presentationData.theme, strings: self.presentationData.strings)\n"
+        "        guard !self.aorusBackupPickerPresented else { return }\n"
+        "        self.aorusBackupPickerPresented = true\n"
+        "        self.view.endEditing(true)\n"
+        "        let presented = AorusLoginBackupPickerController.presentIfPossible(\n"
+        "            from: self.view.window,\n"
+        "            theme: self.presentationData.theme,\n"
+        "            strings: self.presentationData.strings,\n"
+        "            isAddingAccount: !self.otherAccountPhoneNumbers.1.isEmpty,\n"
+        "            onDismiss: { [weak self] in\n"
+        "                self?.aorusBackupPickerPresented = false\n"
+        "                self?.controllerNode.activateInput()\n"
+        "            }\n"
+        "        )\n"
+        "        if !presented {\n"
+        "            self.aorusBackupPickerPresented = false\n"
+        "        }\n"
         "    }\n"
     )
 
@@ -18892,6 +18915,30 @@ def patch_login_backup_key_button(tg: Path) -> None:
             print("LoginBackupKey: WARNING cancelPressed anchor not found — skipped")
             return
         t = t.replace(method_anchor, method_inject, 1)
+
+    picker_state_anchor = "    private let termsDisposable = MetaDisposable()\n"
+    picker_state_inject = picker_state_anchor + "    private var aorusBackupPickerPresented = false\n"
+    if "private var aorusBackupPickerPresented" not in t:
+        if picker_state_anchor not in t:
+            print("LoginBackupKey: WARNING picker-state anchor not found — skipped")
+            return
+        t = t.replace(picker_state_anchor, picker_state_inject, 1)
+
+    passkey_guard_anchor = "                guard let self, let account = self.account else {\n"
+    passkey_guard_inject = "                guard let self, let account = self.account, !self.aorusBackupPickerPresented else {\n"
+    if passkey_guard_inject not in t:
+        if passkey_guard_anchor not in t:
+            print("LoginBackupKey: WARNING passkey guard anchor not found — skipped")
+            return
+        t = t.replace(passkey_guard_anchor, passkey_guard_inject, 1)
+
+    passkey_result_anchor = "                let passkeyDataString = await engine.auth.requestPasskeyLoginData(apiId: self.apiId, apiHash: self.apiHash).get()\n"
+    passkey_result_inject = passkey_result_anchor + "                guard !self.aorusBackupPickerPresented else { return }\n"
+    if "requestPasskeyLoginData(apiId: self.apiId, apiHash: self.apiHash).get()\n                guard !self.aorusBackupPickerPresented" not in t:
+        if passkey_result_anchor not in t:
+            print("LoginBackupKey: WARNING async passkey-result anchor not found — skipped")
+            return
+        t = t.replace(passkey_result_anchor, passkey_result_inject, 1)
 
     navigation_anchor = (
         "        } else {\n"

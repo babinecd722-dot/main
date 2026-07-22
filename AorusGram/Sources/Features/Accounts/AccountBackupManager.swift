@@ -92,6 +92,8 @@ public final class AccountBackupManager {
     private static let stagingName  = ".aorus-restore-staging"
     private static let snapshotPrefix = ".aorus-prerestore-"
     private static let pendingFlagKey = "aorusgram_pending_restore_v1"
+    private static let pendingMergeFlagKey = "aorusgram_pending_restore_merge_v1"
+    private static let pendingSelectedAccountKey = "aorusgram_pending_restore_account_id_v1"
 
     // "AORSBK" + format version 1
     private let magic: [UInt8] = [0x41, 0x4F, 0x52, 0x53, 0x42, 0x4B, 0x01]
@@ -365,8 +367,16 @@ public final class AccountBackupManager {
 
     // MARK: - Restore phase 1: prepare
 
-    public func prepareRestore() -> BackupOutcome {
+    public func prepareRestore(selectedAccountId: String? = nil, mergeIntoExisting: Bool = false) -> BackupOutcome {
         guard !rootPath.isEmpty else { return .failure(localized("Путь к данным аккаунтов недоступен", "Account data path is unavailable")) }
+        let defaults = UserDefaults.standard
+        defaults.set(false, forKey: Self.pendingFlagKey)
+        defaults.set(false, forKey: Self.pendingMergeFlagKey)
+        defaults.removeObject(forKey: Self.pendingSelectedAccountKey)
+        let selectedAccountId = selectedAccountId.flatMap { Int64($0) != nil ? $0 : nil }
+        if mergeIntoExisting && selectedAccountId == nil {
+            return .failure(localized("Не выбран аккаунт для добавления", "No account selected to add"))
+        }
         // Rebuild the archive file from the durable Keychain copy if the sandbox
         // was wiped (e.g. after a reinstall) so the streaming decode below works.
         materializeArchiveFromKeychainIfNeeded()
@@ -408,10 +418,20 @@ public final class AccountBackupManager {
                 guard encBody.count == Int(encBodyLen) else { throw BackupError.truncated }
 
                 let relData = try AES.GCM.open(AES.GCM.SealedBox(combined: encPath), using: key)
-                let body = try AES.GCM.open(AES.GCM.SealedBox(combined: encBody), using: key)
                 guard let rel = String(data: relData, encoding: .utf8),
                       isSafeRelativePath(rel) else { throw BackupError.corrupt }
 
+                if mergeIntoExisting, let selectedAccountId {
+                    let accountRoot = "account-" + selectedAccountId
+                    let belongsToSelection = rel == "accounts-metadata/atomic-state"
+                        || rel == accountRoot
+                        || rel.hasPrefix(accountRoot + "/")
+                    if !belongsToSelection {
+                        continue
+                    }
+                }
+
+                let body = try AES.GCM.open(AES.GCM.SealedBox(combined: encBody), using: key)
                 let dest = stagingURL.appendingPathComponent(rel)
                 try fm.createDirectory(at: dest.deletingLastPathComponent(),
                                        withIntermediateDirectories: true)
@@ -424,6 +444,26 @@ public final class AccountBackupManager {
         }
         handle.closeFile()
 
+        if let selectedAccountId {
+            guard Self.selectCurrentAccount(in: stagingURL, accountId: selectedAccountId) else {
+                try? fm.removeItem(at: stagingURL)
+                return .failure(localized("Аккаунт отсутствует в бэкапе", "The selected account is missing from the backup"))
+            }
+        }
+
+        if mergeIntoExisting, let selectedAccountId {
+            let accountURL = stagingURL.appendingPathComponent("account-" + selectedAccountId, isDirectory: true)
+            guard fm.fileExists(atPath: accountURL.path) else {
+                try? fm.removeItem(at: stagingURL)
+                return .failure(localized("Данные выбранного аккаунта отсутствуют", "The selected account data is missing"))
+            }
+            UserDefaults.standard.set(true, forKey: Self.pendingMergeFlagKey)
+            UserDefaults.standard.set(selectedAccountId, forKey: Self.pendingSelectedAccountKey)
+        } else {
+            UserDefaults.standard.set(false, forKey: Self.pendingMergeFlagKey)
+            UserDefaults.standard.removeObject(forKey: Self.pendingSelectedAccountKey)
+        }
+
         UserDefaults.standard.set(true, forKey: pendingRestoreKey)
         let info = backupInfo()
             ?? BackupInfo(date: Date(), accountCount: localAccountIds().count, sizeBytes: 0)
@@ -432,6 +472,8 @@ public final class AccountBackupManager {
 
     public func cancelPendingRestore() {
         UserDefaults.standard.set(false, forKey: pendingRestoreKey)
+        UserDefaults.standard.set(false, forKey: Self.pendingMergeFlagKey)
+        UserDefaults.standard.removeObject(forKey: Self.pendingSelectedAccountKey)
         try? FileManager.default.removeItem(at: stagingURL)
     }
 
@@ -451,8 +493,12 @@ public final class AccountBackupManager {
     public static func applyPendingRestoreIfNeeded(rootPath: String) {
         let ud = UserDefaults.standard
         guard ud.bool(forKey: pendingFlagKey), !rootPath.isEmpty else { return }
+        let mergeIntoExisting = ud.bool(forKey: pendingMergeFlagKey)
+        let selectedAccountId = ud.string(forKey: pendingSelectedAccountKey)
         // Clear the flag up-front — a restore must never loop and brick every launch.
         ud.set(false, forKey: pendingFlagKey)
+        ud.set(false, forKey: pendingMergeFlagKey)
+        ud.removeObject(forKey: pendingSelectedAccountKey)
 
         let fm = FileManager.default
         let staging = URL(fileURLWithPath: rootPath).appendingPathComponent(stagingName)
@@ -469,6 +515,15 @@ public final class AccountBackupManager {
             for name in rootEntries where name.hasPrefix(snapshotPrefix) {
                 try? fm.removeItem(at: URL(fileURLWithPath: rootPath).appendingPathComponent(name))
             }
+        }
+
+        if mergeIntoExisting, let selectedAccountId {
+            _ = applyPendingAccountMerge(
+                rootPath: rootPath,
+                staging: staging,
+                accountId: selectedAccountId
+            )
+            return
         }
 
         // Snapshot whatever currently occupies those top-level slots, so a failed
@@ -505,6 +560,128 @@ public final class AccountBackupManager {
                     try? fm.moveItem(at: snap, to: dst)
                 }
             }
+        }
+    }
+
+    private static func selectCurrentAccount(in root: URL, accountId: String) -> Bool {
+        let atomicState = root.appendingPathComponent("accounts-metadata/atomic-state")
+        guard let data = try? Data(contentsOf: atomicState),
+              var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              record(in: object["records"], accountId: accountId) != nil else {
+            return false
+        }
+        object["currentRecordId"] = accountId
+        object.removeValue(forKey: "currentAuthRecord")
+        guard JSONSerialization.isValidJSONObject(object),
+              let updated = try? JSONSerialization.data(withJSONObject: object) else {
+            return false
+        }
+        do {
+            try updated.write(to: atomicState, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func record(in recordsValue: Any?, accountId: String) -> [String: Any]? {
+        if let records = recordsValue as? [[String: Any]] {
+            return records.first(where: { recordId($0) == accountId })
+        }
+        if let records = recordsValue as? [String: Any] {
+            if let direct = records[accountId] as? [String: Any] {
+                return direct
+            }
+            return records.values.compactMap { $0 as? [String: Any] }.first(where: { recordId($0) == accountId })
+        }
+        return nil
+    }
+
+    private static func recordId(_ record: [String: Any]) -> String? {
+        if let value = record["id"] as? String {
+            return value
+        }
+        if let value = record["id"] as? NSNumber {
+            return value.stringValue
+        }
+        return nil
+    }
+
+    private static func mergedAtomicStateData(live: URL, staged: URL, accountId: String) -> Data? {
+        guard let liveData = try? Data(contentsOf: live),
+              let stagedData = try? Data(contentsOf: staged),
+              var liveObject = (try? JSONSerialization.jsonObject(with: liveData)) as? [String: Any],
+              let stagedObject = (try? JSONSerialization.jsonObject(with: stagedData)) as? [String: Any],
+              let stagedRecord = record(in: stagedObject["records"], accountId: accountId) else {
+            return nil
+        }
+
+        if var records = liveObject["records"] as? [[String: Any]] {
+            if !records.contains(where: { recordId($0) == accountId }) {
+                records.append(stagedRecord)
+            }
+            liveObject["records"] = records
+        } else if var records = liveObject["records"] as? [String: Any] {
+            if record(in: records, accountId: accountId) == nil {
+                records[accountId] = stagedRecord
+            }
+            liveObject["records"] = records
+        } else {
+            return nil
+        }
+
+        liveObject["currentRecordId"] = accountId
+        liveObject.removeValue(forKey: "currentAuthRecord")
+        guard JSONSerialization.isValidJSONObject(liveObject) else { return nil }
+        return try? JSONSerialization.data(withJSONObject: liveObject)
+    }
+
+    @discardableResult
+    private static func applyPendingAccountMerge(rootPath: String, staging: URL, accountId: String) -> Bool {
+        guard Int64(accountId) != nil else {
+            try? FileManager.default.removeItem(at: staging)
+            return false
+        }
+        let fm = FileManager.default
+        let liveAtomic = URL(fileURLWithPath: rootPath).appendingPathComponent("accounts-metadata/atomic-state")
+        let stagedAtomic = staging.appendingPathComponent("accounts-metadata/atomic-state")
+        let stagedAccount = staging.appendingPathComponent("account-" + accountId, isDirectory: true)
+        let liveAccount = URL(fileURLWithPath: rootPath).appendingPathComponent("account-" + accountId, isDirectory: true)
+        guard let mergedState = mergedAtomicStateData(live: liveAtomic, staged: stagedAtomic, accountId: accountId),
+              fm.fileExists(atPath: stagedAccount.path) else {
+            try? fm.removeItem(at: staging)
+            return false
+        }
+
+        let snapshot = URL(fileURLWithPath: rootPath)
+            .appendingPathComponent(snapshotPrefix + String(Int(Date().timeIntervalSince1970)))
+        let snapshotAtomic = snapshot.appendingPathComponent("accounts-metadata/atomic-state")
+        do {
+            try fm.createDirectory(at: snapshotAtomic.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.copyItem(at: liveAtomic, to: snapshotAtomic)
+        } catch {
+            try? fm.removeItem(at: staging)
+            try? fm.removeItem(at: snapshot)
+            return false
+        }
+
+        var movedAccount = false
+        do {
+            if !fm.fileExists(atPath: liveAccount.path) {
+                try fm.moveItem(at: stagedAccount, to: liveAccount)
+                movedAccount = true
+            }
+            try mergedState.write(to: liveAtomic, options: .atomic)
+            try? fm.removeItem(at: staging)
+            return true
+        } catch {
+            if movedAccount {
+                try? fm.removeItem(at: liveAccount)
+            }
+            try? fm.removeItem(at: liveAtomic)
+            try? fm.copyItem(at: snapshotAtomic, to: liveAtomic)
+            try? fm.removeItem(at: staging)
+            return false
         }
     }
 
