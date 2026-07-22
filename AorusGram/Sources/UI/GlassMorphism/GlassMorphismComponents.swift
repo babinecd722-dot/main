@@ -1,6 +1,37 @@
 import SwiftUI
 import UIKit
 
+private final class AorusGlassEffectsPreference: ObservableObject {
+    static let shared = AorusGlassEffectsPreference()
+
+    @Published private(set) var isEnabled: Bool
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        self.isEnabled = Self.currentValue()
+        self.observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            let value = Self.currentValue()
+            if self?.isEnabled != value {
+                self?.isEnabled = value
+            }
+        }
+    }
+
+    deinit {
+        if let observer = self.observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private static func currentValue() -> Bool {
+        UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool ?? true
+    }
+}
+
 // MARK: - Glass Card
 
 struct GlassCard<Content: View>: View {
@@ -8,13 +39,13 @@ struct GlassCard<Content: View>: View {
     var cornerRadius: CGFloat = 20
     var borderOpacity: Double = 0.25
     @ViewBuilder let content: () -> Content
-    @AppStorage("aorusgram_feature_glass_ui") private var glassEffectsEnabled = true
+    @ObservedObject private var glassEffects = AorusGlassEffectsPreference.shared
 
     var body: some View {
         content()
             .background(
                 ZStack {
-                    if glassEffectsEnabled {
+                    if glassEffects.isEnabled {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .fill(.ultraThinMaterial)
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -26,7 +57,7 @@ struct GlassCard<Content: View>: View {
                     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .stroke(
                             LinearGradient(
-                                colors: glassEffectsEnabled
+                                colors: glassEffects.isEnabled
                                     ? [.white.opacity(borderOpacity * 2), .white.opacity(borderOpacity * 0.3)]
                                     : [.white.opacity(0.10), .white.opacity(0.04)],
                                 startPoint: .topLeading,
@@ -37,7 +68,7 @@ struct GlassCard<Content: View>: View {
                 }
             )
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .shadow(color: .black.opacity(glassEffectsEnabled ? 0.18 : 0.08), radius: glassEffectsEnabled ? 20 : 6, x: 0, y: glassEffectsEnabled ? 8 : 2)
+            .shadow(color: .black.opacity(glassEffects.isEnabled ? 0.18 : 0.08), radius: glassEffects.isEnabled ? 20 : 6, x: 0, y: glassEffects.isEnabled ? 8 : 2)
     }
 }
 
@@ -50,7 +81,7 @@ struct GlassButton: View {
     let action: () -> Void
 
     @State private var pressed = false
-    @AppStorage("aorusgram_feature_glass_ui") private var glassEffectsEnabled = true
+    @ObservedObject private var glassEffects = AorusGlassEffectsPreference.shared
 
     var body: some View {
         Button(action: {
@@ -73,8 +104,8 @@ struct GlassButton: View {
             .background(
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(color.opacity(glassEffectsEnabled ? 0.85 : 1.0))
-                    if glassEffectsEnabled {
+                        .fill(color.opacity(glassEffects.isEnabled ? 0.85 : 1.0))
+                    if glassEffects.isEnabled {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(
                                 LinearGradient(
@@ -85,11 +116,11 @@ struct GlassButton: View {
                             )
                     }
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(.white.opacity(glassEffectsEnabled ? 0.3 : 0.12), lineWidth: 1)
+                        .stroke(.white.opacity(glassEffects.isEnabled ? 0.3 : 0.12), lineWidth: 1)
                 }
             )
             .scaleEffect(pressed ? 0.95 : 1.0)
-            .shadow(color: color.opacity(glassEffectsEnabled ? 0.45 : 0.15), radius: pressed ? 4 : (glassEffectsEnabled ? 12 : 5), x: 0, y: pressed ? 2 : (glassEffectsEnabled ? 6 : 2))
+            .shadow(color: color.opacity(glassEffects.isEnabled ? 0.45 : 0.15), radius: pressed ? 4 : (glassEffects.isEnabled ? 12 : 5), x: 0, y: pressed ? 2 : (glassEffects.isEnabled ? 6 : 2))
         }
         .buttonStyle(.plain)
     }

@@ -938,9 +938,15 @@ def main() -> None:
         err.append("GlassEffects: invalid settings key casing")
     elif 'aorusgram_feature_glass_ui' not in glass_components.read_text(encoding="utf-8"):
         err.append("GlassEffects: switch is not connected to glass components")
+    elif "@AppStorage" in glass_components.read_text(encoding="utf-8"):
+        err.append("GlassEffects: AppStorage is unavailable at the iOS 13 deployment target")
 
-    if formatting_toolbar.is_file() and 'aorusgram_feature_glass_ui' not in formatting_toolbar.read_text(encoding="utf-8"):
-        err.append("GlassEffects: formatting toolbar ignores the setting")
+    if formatting_toolbar.is_file():
+        toolbar_text = formatting_toolbar.read_text(encoding="utf-8")
+        if 'aorusgram_feature_glass_ui' not in toolbar_text:
+            err.append("GlassEffects: formatting toolbar ignores the setting")
+        if "@AppStorage" in toolbar_text:
+            err.append("GlassEffects: formatting toolbar uses iOS 14-only AppStorage")
 
     performance_hud = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusPerformanceHUDManager.swift"
     if not performance_hud.is_file() or "updateGlassAppearance(enabled: settings.glassUI)" not in performance_hud.read_text(encoding="utf-8"):
