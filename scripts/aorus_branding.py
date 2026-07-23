@@ -5375,78 +5375,71 @@ def patch_call_proxy(tg: Path) -> None:
 
 
 def patch_call_proxy_tcp_media(tg: Path) -> None:
-    """Make voice/video calls actually reach reflectors THROUGH the SOCKS5 proxy.
+    """Give proxied calls a working SOCKS5 media path WITHOUT touching direct calls.
 
-    Root cause of "calls never connect in RF even with the proxy":
-    Telegram call media defaults to UDP to Telegram reflectors. A SOCKS5 proxy
-    cannot carry UDP, and RF blocks UDP to Telegram — so the proxied call signals
-    fine (over the proxied MTProto link) but the media leg has no path and the call
-    "connects" forever. Three things conspire against a proxied call:
-      1. enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, which
-         is OFF by default, so tgcalls will not use TCP at all.
-      2. For call protocol versions != "12.0.0" the TCP reflectors are diverted to a
-         DIRECT (non-proxied) signaling connection — also blocked in RF.
-      3. network_use_tcponly (the tgcalls "force TCP" switch) is only set in a
-         #if DEBUG block, so release builds never force the TCP leg.
+    Root cause (verified from the full native tgcalls log):
+    Telegram call media defaults to UDP straight to the reflectors. When a SOCKS5 call
+    proxy is configured, tgcalls' NativeNetworkingImpl disables UDP (a SOCKS5 proxy
+    cannot carry UDP) — so the media leg MUST go over a TCP reflector. But two upstream
+    gaps break that leg:
+      • For protocol versions != "12.0.0" the server's TCP reflector is diverted to a
+        signalling-only connection (`continue connectionsLoop`) and dropped from the
+        media set, so there is no TCP reflector to connect to.
+      • enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, OFF by
+        default, so tgcalls would refuse TCP even if a TCP reflector were present.
+    (The remaining gap — tgcalls v2 never actually tunnelling the reflector TCP socket
+    through the proxy — is fixed natively in patch_tgcalls_proxy_socks5.)
 
-    Fix — ONLY when a SOCKS5 call proxy is configured (voipProxyServer != nil):
-      • keep the TCP reflectors as media connections (signalling then rides the
-        already-proxied MTProto link, not a blocked direct connection);
-      • force allowTCP = true so tgcalls may use TCP;
-      • set network_use_tcponly = true, keep only TCP reflector descriptors and
-        disable P2P, so the whole media leg goes over TCP through the proxy.
-    Calls without a proxy are completely untouched (still UDP, still fast).
+    Fix here is PURELY ADDITIVE and only affects calls with a SOCKS5 proxy configured
+    (voipProxyServer != nil):
+      • keep the server's real TCP reflector as an ADDITIONAL media connection instead
+        of diverting it to signalling-only (the UDP reflectors and P2P candidates stay
+        in the set — nothing is removed, filtered, or forced);
+      • allow TCP so tgcalls may use that reflector.
+    A call that works directly still gathers its UDP/P2P candidates and connects on them
+    exactly as before — the proxied TCP reflector is just an extra fallback. Calls with
+    no proxy configured are byte-for-byte unchanged (still UDP, still fast).
+
+    Also (independent of routing) redirects the native tgcalls debug log to
+    Documents/AorusGramCallLogs for every call, writes a per-call setup report, and
+    dumps the full native log on hang-up, so the "Call logs" row has the real record.
     """
     path = tg / "submodules/TelegramVoip/Sources/OngoingCallContext.swift"
     if not path.is_file():
         print("CallProxyTCP: OngoingCallContext.swift not found — skip")
         return
     t = path.read_text(encoding="utf-8")
-    if "AorusGram: force call media over TCP" in t:
+    if "AorusGram: additive proxied TCP reflector" in t:
         print("CallProxyTCP: already patched")
         return
 
     ok = True
 
-    # 0) Guarantee a TCP reflector exists for a proxied call of ANY protocol version.
-    #    Upstream injects the hardcoded Telegram TCP reflector (91.108.9.38:595) only
-    #    for version "12.0.0"; for every other version the server connection set can be
-    #    UDP-only. Since a SOCKS5 proxy cannot carry UDP, forcing network_use_tcponly
-    #    (step 3) with no TCP reflector present leaves ZERO usable media connections and
-    #    the proxied call "connects" forever. Mirror the 12.0.0 injection whenever a
-    #    SOCKS5 call proxy is set so there is always a TCP reflector to route over the
-    #    proxy. Non-proxied calls are untouched.
-    anchor0 = (
-        "                if version == \"12.0.0\" {\n"
-        "                    for connection in unfilteredConnections {\n"
-    )
-    repl0 = (
-        "                if version == \"12.0.0\" || voipProxyServer != nil {\n"
-        "                    for connection in unfilteredConnections {\n"
-    )
-    if anchor0 in t:
-        t = t.replace(anchor0, repl0, 1)
-    else:
-        print("CallProxyTCP: WARNING tcp-reflector-injection anchor not found")
-        ok = False
-
-    # 1) Keep TCP reflectors as media connections when a proxy is set (don't divert
-    #    them to a direct, RF-blocked signaling connection).
-    anchor1 = (
-        "                        if reflector.isTcp {\n"
-        "                            if version == \"12.0.0\" {\n"
-    )
+    # 1) When a SOCKS5 call proxy is set, keep the server's TCP reflector as a media
+    #    connection instead of diverting it to signalling-only. Upstream registers it as
+    #    the signalling reflector then `continue connectionsLoop` skips it from the media
+    #    set; we still register it for signalling but fall through so it is ALSO added to
+    #    the media set. Without a proxy this is a no-op (the `continue` still runs), so
+    #    direct calls are untouched.
+    anchor1 = "                                continue connectionsLoop\n"
     repl1 = (
-        "                        if reflector.isTcp {\n"
-        "                            if version == \"12.0.0\" || voipProxyServer != nil {\n"
+        "                                // AorusGram: additive proxied TCP reflector — with a SOCKS5\n"
+        "                                // call proxy set, do NOT skip this TCP reflector; fall through\n"
+        "                                // so it is ALSO added as a media connection (reachable over the\n"
+        "                                // proxy). The UDP reflectors stay in the set, so a direct call\n"
+        "                                // still connects on UDP exactly as before.\n"
+        "                                if voipProxyServer == nil {\n"
+        "                                    continue connectionsLoop\n"
+        "                                }\n"
     )
-    if anchor1 in t:
+    if t.count(anchor1) == 1:
         t = t.replace(anchor1, repl1, 1)
     else:
-        print("CallProxyTCP: WARNING reflector-diversion anchor not found")
+        print(f"CallProxyTCP: WARNING reflector-diversion anchor count={t.count(anchor1)} (expected 1)")
         ok = False
 
-    # 2) Allow TCP whenever a proxy is set (enableVoipTcp is off by default).
+    # 2) Allow TCP whenever a proxy is set (enableVoipTcp is off by default). Purely
+    #    additive: without a proxy the original enableTCP value is used unchanged.
     anchor2 = "                    allowTCP: enableTCP,\n"
     repl2 = "                    allowTCP: (voipProxyServer != nil ? true : enableTCP),\n"
     if anchor2 in t:
@@ -5455,26 +5448,12 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
         print("CallProxyTCP: WARNING allowTCP anchor not found")
         ok = False
 
-    # 3) Force network_use_tcponly + TCP-only reflectors + no P2P for proxied calls.
+    # 3) Per-call setup diagnostic (diagnostics only — NO behaviour change here).
     anchor3 = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
     block3 = (
         "                #if !DEBUG\n"
-        "                // AorusGram: force call media over TCP through the SOCKS5 proxy so\n"
-        "                // it works where direct UDP voice traffic is blocked (e.g. RF).\n"
-        "                var customParameters = customParameters\n"
-        "                if voipProxyServer != nil {\n"
-        "                    var aorusCP: [String: Any] = ((try? JSONSerialization.jsonObject(with: (customParameters ?? \"{}\").data(using: .utf8)!)) as? [String: Any]) ?? [:]\n"
-        "                    aorusCP[\"network_use_tcponly\"] = true as NSNumber\n"
-        "                    if let aorusData = try? JSONSerialization.data(withJSONObject: aorusCP), let aorusStr = String(data: aorusData, encoding: .utf8) {\n"
-        "                        customParameters = aorusStr\n"
-        "                    }\n"
-        "                    let aorusTcp = filteredConnections.filter { $0.hasTcp }\n"
-        "                    if !aorusTcp.isEmpty {\n"
-        "                        filteredConnections = aorusTcp\n"
-        "                    }\n"
-        "                    allowP2P = false\n"
-        "                }\n"
-        "                // AorusGram: write a call-proxy setup diagnostic to Documents/AorusGramCallLogs.\n"
+        "                // AorusGram: write a call setup diagnostic to Documents/AorusGramCallLogs.\n"
+        "                // Records only what tgcalls was handed — it does not change routing.\n"
         "                if let aorusDocs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
         "                    let aorusDir = aorusDocs.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
         "                    try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
@@ -5550,9 +5529,357 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
 
     if ok:
         path.write_text(t, encoding="utf-8")
-        print("CallProxyTCP: routed proxied call media over TCP (network_use_tcponly + TCP reflectors + allowTCP)")
+        print("CallProxyTCP: additive proxied TCP reflector + allowTCP + diagnostics (direct calls untouched)")
     else:
         print("CallProxyTCP: NOT applied (anchor mismatch)")
+
+
+def patch_tgcalls_v2_set_proxy(tg: Path) -> None:
+    """tgcalls v2: apply the SOCKS5 proxy to the port allocator (v1 does this, v2 omitted it).
+
+    NativeNetworkingImpl (call protocol versions 7/8/9/12/13) stores the proxy in _proxy and
+    uses it only to DISABLE UDP, but — unlike v1 NetworkManager::start() — never calls
+    _portAllocator->set_proxy(...). So cricket::Port::proxy() stays empty and the reflector
+    TCP socket is built with no proxy info: a proxied call has UDP disabled yet still tries to
+    reach the reflector directly → the media leg has no path. Mirror v1 exactly and set the
+    SOCKS5 proxy on the allocator when _proxy is present. Guarded by `if (_proxy)`, so
+    non-proxied calls are byte-for-byte unchanged. Pairs with patch_tgcalls_reflector_socks5,
+    which makes ReflectorPort actually honour proxy(). Idempotent.
+    """
+    path = tg / "submodules/TgVoipWebrtc/tgcalls/tgcalls/v2/NativeNetworkingImpl.cpp"
+    if not path.is_file():
+        print("tgcalls set_proxy: NativeNetworkingImpl.cpp not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: apply SOCKS5 proxy to the port allocator" in t:
+        print("tgcalls set_proxy: already patched")
+        return
+    anchor = "    _portAllocator->set_step_delay(cricket::kMinimumStepDelay);\n"
+    inject = (
+        anchor
+        + "\n"
+        + "    // AorusGram: apply SOCKS5 proxy to the port allocator so reflector/relay TCP\n"
+        + "    // sockets are tunnelled through the call proxy. v1 NetworkManager::start() does\n"
+        + "    // this; v2 omitted it, leaving Port::proxy() empty. Only when a proxy is\n"
+        + "    // configured — direct calls are untouched.\n"
+        + "    if (_proxy) {\n"
+        + "        rtc::ProxyInfo proxyInfo;\n"
+        + "        proxyInfo.type = rtc::ProxyType::PROXY_SOCKS5;\n"
+        + "        proxyInfo.address = rtc::SocketAddress(_proxy->host, _proxy->port);\n"
+        + "        proxyInfo.username = _proxy->login;\n"
+        + "        proxyInfo.password = rtc::CryptString(CryptStringImpl(_proxy->password));\n"
+        + "        _portAllocator->set_proxy(\"t/1.0\", proxyInfo);\n"
+        + "    }\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, inject, 1)
+        path.write_text(t, encoding="utf-8")
+        print("tgcalls set_proxy: applied SOCKS5 proxy to v2 port allocator")
+    else:
+        print("tgcalls set_proxy: WARNING set_step_delay anchor not found — NOT applied")
+
+
+SOCKS5_CLIENT_CLASS = r"""// AorusGram: SOCKS5 client socket for the reflector TCP media leg.
+// This WebRTC fork dropped rtc::AsyncSocksProxySocket (only PROXY_HTTPS survives in
+// rtc_base/socket_adapters), so tgcalls could never actually tunnel call media through a
+// SOCKS5 proxy. We implement a minimal, correct SOCKS5 client here (RFC 1928 + RFC 1929
+// username/password auth) on top of this fork's BufferedReadAdapter, mirroring the historical
+// WebRTC AsyncSocksProxySocket. It performs the handshake to the proxy on Connect(), then the
+// tunnel behaves like a plain TCP socket to the reflector. Only ever instantiated when a
+// SOCKS5 call proxy is configured, so direct calls never touch this code.
+class AorusSocks5ProxySocket : public rtc::BufferedReadAdapter {
+public:
+    AorusSocks5ProxySocket(rtc::Socket* socket,
+                           const rtc::SocketAddress& proxy,
+                           const std::string& username,
+                           const rtc::CryptString& password)
+        : rtc::BufferedReadAdapter(socket, 1024),
+          proxy_(proxy),
+          user_(username),
+          pass_(password),
+          state_(SS_ERROR) {}
+
+    AorusSocks5ProxySocket(const AorusSocks5ProxySocket&) = delete;
+    AorusSocks5ProxySocket& operator=(const AorusSocks5ProxySocket&) = delete;
+
+    int Connect(const rtc::SocketAddress& addr) override {
+        dest_ = addr;
+        state_ = SS_INIT;
+        BufferInput(true);
+        return rtc::BufferedReadAdapter::Connect(proxy_);
+    }
+
+    rtc::SocketAddress GetRemoteAddress() const override { return dest_; }
+
+    int Close() override {
+        state_ = SS_ERROR;
+        return rtc::BufferedReadAdapter::Close();
+    }
+
+    rtc::Socket::ConnState GetState() const override {
+        if (state_ < SS_TUNNEL) {
+            return rtc::Socket::CS_CONNECTING;
+        } else if (state_ == SS_TUNNEL) {
+            return rtc::Socket::CS_CONNECTED;
+        }
+        return rtc::Socket::CS_CLOSED;
+    }
+
+protected:
+    void OnConnectEvent(rtc::Socket* /*socket*/) override {
+        SendHello();
+    }
+
+    void ProcessInput(char* data, size_t* len) override {
+        if (state_ == SS_HELLO) {
+            if (*len < 2) {
+                return;
+            }
+            uint8_t ver = static_cast<uint8_t>(data[0]);
+            uint8_t method = static_cast<uint8_t>(data[1]);
+            Consume(data, len, 2);
+            if (ver != 5) {
+                Error(0);
+                return;
+            }
+            if (method == 0) {
+                SendConnect();
+            } else if (method == 2) {
+                SendAuth();
+            } else {
+                Error(method);
+                return;
+            }
+        } else if (state_ == SS_AUTH) {
+            if (*len < 2) {
+                return;
+            }
+            uint8_t ver = static_cast<uint8_t>(data[0]);
+            uint8_t status = static_cast<uint8_t>(data[1]);
+            Consume(data, len, 2);
+            if (ver != 1) {
+                Error(255);
+                return;
+            }
+            if (status != 0) {
+                Error(status);
+                return;
+            }
+            SendConnect();
+        } else if (state_ == SS_CONNECT) {
+            if (*len < 4) {
+                return;
+            }
+            uint8_t ver = static_cast<uint8_t>(data[0]);
+            uint8_t rep = static_cast<uint8_t>(data[1]);
+            uint8_t atyp = static_cast<uint8_t>(data[3]);
+            size_t needed;
+            if (atyp == 1) {
+                needed = 4 + 4 + 2;
+            } else if (atyp == 4) {
+                needed = 4 + 16 + 2;
+            } else if (atyp == 3) {
+                if (*len < 5) {
+                    return;
+                }
+                needed = 4 + 1 + static_cast<uint8_t>(data[4]) + 2;
+            } else {
+                Error(0);
+                return;
+            }
+            if (*len < needed) {
+                return;
+            }
+            if (ver != 5 || rep != 0) {
+                Error(rep);
+                return;
+            }
+            Consume(data, len, needed);
+            state_ = SS_TUNNEL;
+        }
+
+        if (state_ != SS_TUNNEL) {
+            return;
+        }
+
+        bool remainder = (*len > 0);
+        BufferInput(false);
+        SignalConnectEvent(this);
+        // If SignalConnectEvent destroyed us we must not touch members; the callee owns
+        // that contract exactly as the historical adapter did.
+        if (remainder) {
+            SignalReadEvent(this);
+        }
+    }
+
+private:
+    void Consume(char* data, size_t* len, size_t n) {
+        *len -= n;
+        if (*len > 0) {
+            memmove(data, data + n, *len);
+        }
+    }
+
+    void SendHello() {
+        rtc::ByteBufferWriter request;
+        request.WriteUInt8(5);
+        if (user_.empty()) {
+            request.WriteUInt8(1);
+            request.WriteUInt8(0);  // no authentication
+        } else {
+            request.WriteUInt8(2);
+            request.WriteUInt8(0);  // no authentication
+            request.WriteUInt8(2);  // username/password
+        }
+        DirectSend(request.Data(), request.Length());
+        state_ = SS_HELLO;
+    }
+
+    void SendAuth() {
+        rtc::ByteBufferWriter request;
+        request.WriteUInt8(1);  // version of the auth subnegotiation
+        request.WriteUInt8(static_cast<uint8_t>(user_.size()));
+        request.WriteString(user_);
+        size_t plen = pass_.GetLength();
+        char* sensitive = new char[plen + 1];
+        pass_.CopyTo(sensitive, true);
+        request.WriteUInt8(static_cast<uint8_t>(plen));
+        request.WriteBytes(reinterpret_cast<const uint8_t*>(sensitive), plen);
+        DirectSend(request.Data(), request.Length());
+        state_ = SS_AUTH;
+        memset(sensitive, 0, plen);
+        delete[] sensitive;
+    }
+
+    void SendConnect() {
+        rtc::ByteBufferWriter request;
+        request.WriteUInt8(5);  // version
+        request.WriteUInt8(1);  // command = connect
+        request.WriteUInt8(0);  // reserved
+        rtc::IPAddress ip = dest_.ipaddr();
+        if (dest_.family() == AF_INET6) {
+            request.WriteUInt8(4);
+            in6_addr addr = ip.ipv6_address();
+            request.WriteBytes(reinterpret_cast<const uint8_t*>(&addr.s6_addr), 16);
+        } else if (dest_.family() == AF_INET) {
+            request.WriteUInt8(1);
+            in_addr addr = ip.ipv4_address();
+            request.WriteBytes(reinterpret_cast<const uint8_t*>(&addr.s_addr), 4);
+        } else {
+            std::string hostname = dest_.hostname();
+            request.WriteUInt8(3);
+            request.WriteUInt8(static_cast<uint8_t>(hostname.size()));
+            request.WriteString(hostname);
+        }
+        request.WriteUInt16(dest_.port());
+        DirectSend(request.Data(), request.Length());
+        state_ = SS_CONNECT;
+    }
+
+    void Error(int error) {
+        state_ = SS_ERROR;
+        BufferInput(false);
+        Close();
+        SetError(EPROTO);
+        SignalCloseEvent(this, error);
+    }
+
+    rtc::SocketAddress proxy_;
+    rtc::SocketAddress dest_;
+    std::string user_;
+    rtc::CryptString pass_;
+    enum State {
+        SS_INIT,
+        SS_HELLO,
+        SS_AUTH,
+        SS_CONNECT,
+        SS_TUNNEL,
+        SS_ERROR
+    } state_;
+};
+
+"""
+
+
+def patch_tgcalls_reflector_socks5(tg: Path) -> None:
+    """tgcalls: tunnel the reflector TCP media socket through the SOCKS5 proxy.
+
+    CreateClientRawTcpSocket() in ReflectorPort.cpp takes a proxy_info argument but IGNORES
+    it — it connects the raw socket straight to the reflector, so the Telegram relay leg never
+    used the proxy even when one was set. Worse, this WebRTC fork removed rtc::AsyncSocksProxySocket
+    entirely (its BasicPacketSocketFactory only honours PROXY_HTTPS), so there is no built-in
+    SOCKS5 client to lean on. We inject a small, correct SOCKS5 client (AorusSocks5ProxySocket,
+    RFC 1928 + RFC 1929) and wrap the reflector socket in it before Connect() when proxy_info is
+    SOCKS5. The wrapper does the handshake to the proxy, then tunnels to the reflector address.
+    Only triggers when proxy_info.type == PROXY_SOCKS5 — direct calls take the original path
+    unchanged. Pairs with patch_tgcalls_v2_set_proxy (which populates proxy()). Idempotent.
+    """
+    path = tg / "submodules/TgVoipWebrtc/tgcalls/tgcalls/v2/ReflectorPort.cpp"
+    if not path.is_file():
+        print("tgcalls reflector SOCKS5: ReflectorPort.cpp not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusSocks5ProxySocket" in t:
+        print("tgcalls reflector SOCKS5: already patched")
+        return
+
+    ok = True
+
+    # a) includes: BufferedReadAdapter base, byte buffer, CryptString, memmove/memset.
+    inc_anchor = "#include \"RawTcpSocket.h\"\n"
+    inc_repl = (
+        "#include \"rtc_base/socket_adapters.h\"\n"
+        "#include \"rtc_base/byte_buffer.h\"\n"
+        "#include \"rtc_base/crypt_string.h\"\n"
+        "#include <cstring>\n"
+        "#include <cerrno>\n"
+        "#include \"RawTcpSocket.h\"\n"
+    )
+    if inc_anchor in t:
+        t = t.replace(inc_anchor, inc_repl, 1)
+    else:
+        print("tgcalls reflector SOCKS5: WARNING include anchor not found")
+        ok = False
+
+    # b) define the SOCKS5 client class in the anonymous namespace, right before the
+    #    CreateClientRawTcpSocket free function that uses it.
+    class_anchor = "rtc::AsyncPacketSocket *CreateClientRawTcpSocket(\n"
+    if class_anchor in t:
+        t = t.replace(class_anchor, SOCKS5_CLIENT_CLASS + class_anchor, 1)
+    else:
+        print("tgcalls reflector SOCKS5: WARNING class-insertion anchor not found")
+        ok = False
+
+    # c) wrap the raw socket in the SOCKS5 client right before Connect().
+    conn_anchor = (
+        "    if (socket->Connect(remote_address) < 0) {\n"
+        "        RTC_LOG(LS_ERROR) << \"TCP connect failed with error \" << socket->GetError();\n"
+    )
+    conn_repl = (
+        "    // AorusGram: tunnel the reflector TCP socket through the SOCKS5 call proxy.\n"
+        "    // Upstream ignores proxy_info here, so proxied calls could never reach the\n"
+        "    // reflectors over the proxy. Only wraps when a SOCKS5 proxy is configured;\n"
+        "    // direct calls take the original path unchanged.\n"
+        "    if (proxy_info.type == rtc::ProxyType::PROXY_SOCKS5) {\n"
+        "        RTC_LOG(LS_INFO) << \"AorusGram: routing reflector TCP socket via SOCKS5 proxy \"\n"
+        "        << proxy_info.address.ToString();\n"
+        "        socket = new AorusSocks5ProxySocket(socket, proxy_info.address, proxy_info.username, proxy_info.password);\n"
+        "    }\n"
+        "    \n"
+        "    if (socket->Connect(remote_address) < 0) {\n"
+        "        RTC_LOG(LS_ERROR) << \"TCP connect failed with error \" << socket->GetError();\n"
+    )
+    if conn_anchor in t:
+        t = t.replace(conn_anchor, conn_repl, 1)
+    else:
+        print("tgcalls reflector SOCKS5: WARNING connect anchor not found")
+        ok = False
+
+    if ok:
+        path.write_text(t, encoding="utf-8")
+        print("tgcalls reflector SOCKS5: injected SOCKS5 client; reflector TCP now tunnels through the proxy")
+    else:
+        print("tgcalls reflector SOCKS5: NOT applied (anchor mismatch)")
 
 
 def patch_intro_brand_logo(tg: Path) -> None:
@@ -20376,6 +20703,8 @@ def main() -> None:
     patch_app_bundle_name(tg)
     patch_call_proxy(tg)
     patch_call_proxy_tcp_media(tg)
+    patch_tgcalls_v2_set_proxy(tg)
+    patch_tgcalls_reflector_socks5(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
