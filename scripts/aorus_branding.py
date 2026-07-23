@@ -13340,6 +13340,43 @@ def patch_voice_twin_video_notes(tg: Path) -> None:
         print("VoiceTwinVideo: Camera BUILD not found")
 
 
+def patch_glass_global_toggle(tg: Path) -> None:
+    """Make the "Эффекты стекла" switch disable ALL glass in the client — including
+    Telegram's own native iOS 26 liquid glass (nav back-button / title capsules, etc.),
+    not just the AorusGram-added surfaces.
+
+    Every glass surface in the app funnels through GlassBackgroundView.update(...),
+    which only builds/keeps the UIGlassEffect while `isVisible` is true (the shadow,
+    foreground and glass layers are all gated on it). So the single, comprehensive
+    gate is to force `isVisible = false` at the top of the internal update method when
+    the toggle is off: one place turns off glass everywhere, engine-wide. When the key
+    is on (default) behaviour is byte-for-byte unchanged. Read live per-update so it
+    applies as soon as views re-lay-out (the settings toggle also shows a restart
+    notice for the surfaces that only build their layers once).
+    """
+    path = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
+    if not path.is_file():
+        print("GlassToggle: GlassBackgroundComponent.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: global glass gate" in t:
+        print("GlassToggle: already patched")
+        return
+    anchor = "    func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {\n"
+    inject = (
+        anchor
+        + "        // AorusGram: global glass gate — one switch disables every glass surface\n"
+        + "        // (Telegram's native capsules included) by forcing the whole effect off.\n"
+        + "        let isVisible = isVisible && ((UserDefaults.standard.object(forKey: \"aorusgram_feature_glass_ui\") as? Bool) ?? true)\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, inject, 1)
+        path.write_text(t, encoding="utf-8")
+        print("GlassToggle: global glass gate injected into GlassBackgroundView.update")
+    else:
+        print("GlassToggle: WARNING GlassBackgroundView.update anchor not found — glass NOT globally gated")
+
+
 def patch_video_masks(tg: Path) -> None:
     """Render Aorus face masks into outgoing call and round-video frames.
 
@@ -20152,6 +20189,7 @@ def main() -> None:
     patch_voice_twin_calls(tg)
     patch_video_masks(tg)
     patch_video_mask_call_phase(tg)
+    patch_glass_global_toggle(tg)
     patch_aorus_code_compose(tg)
     patch_aorus_code_reveal(tg)
     patch_status_edit_delete_icons(tg)
