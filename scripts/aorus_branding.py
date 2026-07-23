@@ -4534,6 +4534,33 @@ def patch_info_plist_speech_usage(tg: Path) -> None:
         print(f"{name}: added NSSpeechRecognitionUsageDescription")
 
 
+def patch_info_plist_file_sharing(tg: Path) -> None:
+    """Expose the app's Documents folder in the Files app so the AorusGram call
+    diagnostics (Documents/AorusGramCallLogs/*.log + *-setup.txt) can be retrieved.
+    UIFileSharingEnabled surfaces the folder under On My iPhone / AorusGram;
+    LSSupportsOpeningDocumentsInPlace lets the logs be opened/shared in place.
+    """
+    for name in ("Info.plist", "InfoBazel.plist"):
+        path = tg / "Telegram/Telegram-iOS" / name
+        if not path.is_file():
+            continue
+        with path.open("rb") as f:
+            pl = plistlib.load(f)
+        changed = False
+        if pl.get("UIFileSharingEnabled") is not True:
+            pl["UIFileSharingEnabled"] = True
+            changed = True
+        if pl.get("LSSupportsOpeningDocumentsInPlace") is not True:
+            pl["LSSupportsOpeningDocumentsInPlace"] = True
+            changed = True
+        if changed:
+            with path.open("wb") as f:
+                plistlib.dump(pl, f, fmt=plistlib.FMT_XML)
+            print(f"{name}: enabled Files sharing (Documents visible in Files app)")
+        else:
+            print(f"{name}: Files sharing already enabled")
+
+
 # Inline Swift that builds an MTSocksProxySettings from the ENCRYPTED proxy blob
 # published by AorusProxyManager.ProxyVault. The blob is an AES-GCM sealed box of
 # "server\nport\nsecret\nexpiresAt", base64-encoded, stored under an opaque key in a dedicated
@@ -5447,8 +5474,49 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
         "                    }\n"
         "                    allowP2P = false\n"
         "                }\n"
+        "                // AorusGram: write a call-proxy setup diagnostic to Documents/AorusGramCallLogs.\n"
+        "                if let aorusDocs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
+        "                    let aorusDir = aorusDocs.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
+        "                    try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
+        "                    var aorusReport = \"AorusGram call setup diagnostics\\n\"\n"
+        "                    aorusReport += \"date: \\(Date())\\n\"\n"
+        "                    aorusReport += \"version: \\(version)\\n\"\n"
+        "                    aorusReport += \"isOutgoing: \\(isOutgoing)\\n\"\n"
+        "                    if let aorusPS = proxyServer {\n"
+        "                        switch aorusPS.connection {\n"
+        "                        case .socks5: aorusReport += \"proxyServer: SOCKS5 \\(aorusPS.host):\\(aorusPS.port)\\n\"\n"
+        "                        case .mtp: aorusReport += \"proxyServer: MTProto \\(aorusPS.host):\\(aorusPS.port) (NOT usable for call media)\\n\"\n"
+        "                        }\n"
+        "                    } else {\n"
+        "                        aorusReport += \"proxyServer: nil\\n\"\n"
+        "                    }\n"
+        "                    aorusReport += \"voipProxyServer: \\(voipProxyServer != nil ? \"set\" : \"nil\")\\n\"\n"
+        "                    let aorusTcpN = filteredConnections.filter { $0.hasTcp }.count\n"
+        "                    aorusReport += \"filteredConnections: total=\\(filteredConnections.count) tcp=\\(aorusTcpN)\\n\"\n"
+        "                    aorusReport += \"allowP2P: \\(allowP2P)\\n\"\n"
+        "                    aorusReport += \"enableTCP(param): \\(enableTCP)\\n\"\n"
+        "                    aorusReport += \"customParameters: \\(customParameters ?? \"nil\")\\n\"\n"
+        "                    try? aorusReport.write(to: aorusDir.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-setup.txt\"), atomically: true, encoding: .utf8)\n"
+        "                }\n"
         "                #endif\n"
     )
+    # Also dump the FULL native tgcalls debug log (the definitive record of the media
+    # connection attempts, ICE/reflector/proxy) to Documents when the call ends.
+    stop_anchor = "            context.nativeStop { debugLog, bytesSentWifi, bytesReceivedWifi, bytesSentMobile, bytesReceivedMobile in\n"
+    stop_inject = (
+        stop_anchor
+        + "                #if !DEBUG\n"
+        + "                if let aorusFullLog = debugLog, let aorusDocs2 = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
+        + "                    let aorusDir2 = aorusDocs2.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
+        + "                    try? FileManager.default.createDirectory(at: aorusDir2, withIntermediateDirectories: true)\n"
+        + "                    try? aorusFullLog.write(to: aorusDir2.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-full.log\"), atomically: true, encoding: .utf8)\n"
+        + "                }\n"
+        + "                #endif\n"
+    )
+    if stop_anchor in t:
+        t = t.replace(stop_anchor, stop_inject, 1)
+    else:
+        print("CallProxyTCP: WARNING nativeStop anchor not found — full log dump NOT added")
     if anchor3 in t:
         t = t.replace(anchor3, block3 + anchor3, 1)
     else:
@@ -8824,7 +8892,7 @@ public enum AorusFakeStarsStore {
             isResale = false
         }
         let value = AorusStoredStarsTransaction(
-            id: UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
+            id: Data((0..<24).map { _ in UInt8.random(in: 0...255) }).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_"),
             amount: amount,
             date: Int32(Date().timeIntervalSince1970),
             accountPeerId: accountPeerId.toInt64(),
@@ -13375,6 +13443,33 @@ def patch_glass_global_toggle(tg: Path) -> None:
         print("GlassToggle: global glass gate injected into GlassBackgroundView.update")
     else:
         print("GlassToggle: WARNING GlassBackgroundView.update anchor not found — glass NOT globally gated")
+
+    # Context menus apply UIGlassEffect DIRECTLY (LensTransitionContainerEffectViewImpl),
+    # bypassing GlassBackgroundView, so the global gate above does not reach them. Gate
+    # this one too: when glass is off, fall back to a plain systemMaterial blur so the
+    # menu stays readable but drops the iOS 26 liquid-glass look.
+    ctx = tg / "submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift"
+    if ctx.is_file():
+        ct = ctx.read_text(encoding="utf-8")
+        ctx_anchor = "            self.glassView.effect = glassEffectValue\n"
+        ctx_repl = (
+            "            // AorusGram: honor the global glass toggle in context menus\n"
+            "            if ((UserDefaults.standard.object(forKey: \"aorusgram_feature_glass_ui\") as? Bool) ?? true) {\n"
+            "                self.glassView.effect = glassEffectValue\n"
+            "            } else {\n"
+            "                self.glassView.effect = UIBlurEffect(style: theme.overallDarkAppearance ? .systemMaterialDark : .systemMaterialLight)\n"
+            "            }\n"
+        )
+        if "AorusGram: honor the global glass toggle in context menus" in ct:
+            print("GlassToggle: context menu already patched")
+        elif ctx_anchor in ct:
+            ct = ct.replace(ctx_anchor, ctx_repl, 1)
+            ctx.write_text(ct, encoding="utf-8")
+            print("GlassToggle: gated context-menu UIGlassEffect")
+        else:
+            print("GlassToggle: WARNING context-menu glass anchor not found")
+    else:
+        print("GlassToggle: ContextControllerActionsStackNode.swift not found — skip context menu")
 
 
 def patch_video_masks(tg: Path) -> None:
@@ -20284,6 +20379,7 @@ def main() -> None:
         patch_plist_icons_and_urls(tg / "Telegram/Telegram-iOS" / name)
     patch_info_plist_bgtask(tg)
     patch_info_plist_speech_usage(tg)
+    patch_info_plist_file_sharing(tg)
     patch_info_plist_strings_only(tg)
     patch_localizable_strings_safe(tg)
 
