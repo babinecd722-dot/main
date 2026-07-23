@@ -5381,6 +5381,28 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
 
     ok = True
 
+    # 0) Guarantee a TCP reflector exists for a proxied call of ANY protocol version.
+    #    Upstream injects the hardcoded Telegram TCP reflector (91.108.9.38:595) only
+    #    for version "12.0.0"; for every other version the server connection set can be
+    #    UDP-only. Since a SOCKS5 proxy cannot carry UDP, forcing network_use_tcponly
+    #    (step 3) with no TCP reflector present leaves ZERO usable media connections and
+    #    the proxied call "connects" forever. Mirror the 12.0.0 injection whenever a
+    #    SOCKS5 call proxy is set so there is always a TCP reflector to route over the
+    #    proxy. Non-proxied calls are untouched.
+    anchor0 = (
+        "                if version == \"12.0.0\" {\n"
+        "                    for connection in unfilteredConnections {\n"
+    )
+    repl0 = (
+        "                if version == \"12.0.0\" || voipProxyServer != nil {\n"
+        "                    for connection in unfilteredConnections {\n"
+    )
+    if anchor0 in t:
+        t = t.replace(anchor0, repl0, 1)
+    else:
+        print("CallProxyTCP: WARNING tcp-reflector-injection anchor not found")
+        ok = False
+
     # 1) Keep TCP reflectors as media connections when a proxy is set (don't divert
     #    them to a direct, RF-blocked signaling connection).
     anchor1 = (
