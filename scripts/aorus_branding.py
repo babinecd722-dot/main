@@ -8802,7 +8802,7 @@ public enum AorusFakeStarsStore {
             isResale = false
         }
         let value = AorusStoredStarsTransaction(
-            id: "aorus_\\(UUID().uuidString.lowercased())",
+            id: UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
             amount: amount,
             date: Int32(Date().timeIntervalSince1970),
             accountPeerId: accountPeerId.toInt64(),
@@ -13069,7 +13069,8 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         let size = self.calculatedSize
         if let glassView = self.glassView {
             glassView.frame = CGRect(origin: .zero, size: size)
-            glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: self.ghostVisible, transition: .immediate)
+            let aorusGlassOn = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
+            glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: self.ghostVisible && aorusGlassOn, transition: .immediate)
         }
         if self.ghostVisible {
             self.ghostButtonNode.frame = CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)

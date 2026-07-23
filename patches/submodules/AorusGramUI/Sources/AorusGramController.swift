@@ -1165,6 +1165,12 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             UserDefaults.standard.set(s.bypassSavePaid,      forKey: "aorusgram_bypass_save_paid")
             UserDefaults.standard.set(s.bypassSaveViewOnce,  forKey: "aorusgram_bypass_view_once")
             UserDefaults.standard.set(s.bypassStoryDownload, forKey: "aorusgram_bypass_story_dl")
+            // Glass effects are read once when the nav bar / input panel / HUD build
+            // their layers, so toggling only fully applies (everywhere) after a restart.
+            if keyPath == \AorusState.glassUI {
+                NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
+                aorusPresentRestartNotice(context: context, controller: weakController)
+            }
         },
         openChannel: {
             // Resolve @aorusgram and navigate to the channel inside AorusGram.
