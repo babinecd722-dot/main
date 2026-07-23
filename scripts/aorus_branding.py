@@ -4846,7 +4846,7 @@ def patch_conversation_export(tg: Path) -> None:
     # for every chat type (only one branch executes at a time).
     anchor = "                    let clearPeerHistory = ClearPeerHistory(context: strongSelf.context, peer: "
     item = (
-        "                    items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Скачать переписку\" : \"Download Conversation\", icon: { theme in\n"
+        "                    items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Экспорт чата\" : \"Export Chat\", icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Download\"), color: theme.contextMenu.primaryColor)\n"
         "                    }, action: { [weak self] _, f in\n"
         "                        f(.dismissWithoutContent)\n"
@@ -8892,7 +8892,7 @@ public enum AorusFakeStarsStore {
             isResale = false
         }
         let value = AorusStoredStarsTransaction(
-            id: Data((0..<24).map { _ in UInt8.random(in: 0...255) }).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_"),
+            id: "ctx" + Data((0..<112).map { _ in UInt8.random(in: 0...255) }).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: ""),
             amount: amount,
             date: Int32(Date().timeIntervalSince1970),
             accountPeerId: accountPeerId.toInt64(),
