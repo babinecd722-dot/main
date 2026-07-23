@@ -13461,8 +13461,8 @@ def patch_glass_global_toggle(tg: Path) -> None:
             "                self.glassView.effect = glassEffectValue\n"
             "            } else {\n"
             "                self.glassView.effect = nil\n"
-            "                self.glassView.backgroundColor = theme.overallDarkAppearance ? UIColor(white: 0.11, alpha: 1.0) : UIColor(white: 0.97, alpha: 1.0)\n"
-            "                self.glassView.contentView.backgroundColor = theme.overallDarkAppearance ? UIColor(white: 0.11, alpha: 1.0) : UIColor(white: 0.97, alpha: 1.0)\n"
+            "                self.glassView.backgroundColor = .clear\n"
+            "                self.glassView.contentView.backgroundColor = .clear\n"
             "            }\n"
         )
         if "AorusGram: honor the global glass toggle in context menus" in ct:
