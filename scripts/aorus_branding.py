@@ -5534,7 +5534,7 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
         "                try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
         "                return aorusDir.appendingPathComponent(\"native-\\(callId.id)-\\(Int(Date().timeIntervalSince1970)).log\").path\n"
         "            }\n"
-        "            return logName.isEmpty ? \"\" : callLogsPath(account: self.account) + \"/\" + logName + \".log\"\n"
+        "            return \"\"\n"
         "        }()\n"
     )
     if logpath_anchor in t:
