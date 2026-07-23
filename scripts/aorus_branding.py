@@ -13427,22 +13427,25 @@ def patch_glass_global_toggle(tg: Path) -> None:
         print("GlassToggle: GlassBackgroundComponent.swift not found — skip")
         return
     t = path.read_text(encoding="utf-8")
+    # NOTE: do NOT early-return when the engine gate is already present — the context
+    # menu patch below is independent and must still run (on cache-hit builds the engine
+    # gate can already be applied while the context-menu gate is not).
     if "AorusGram: global glass gate" in t:
-        print("GlassToggle: already patched")
-        return
-    anchor = "    func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {\n"
-    inject = (
-        anchor
-        + "        // AorusGram: global glass gate — one switch disables every glass surface\n"
-        + "        // (Telegram's native capsules included) by forcing the whole effect off.\n"
-        + "        let isVisible = isVisible && ((UserDefaults.standard.object(forKey: \"aorusgram_feature_glass_ui\") as? Bool) ?? true)\n"
-    )
-    if anchor in t:
-        t = t.replace(anchor, inject, 1)
-        path.write_text(t, encoding="utf-8")
-        print("GlassToggle: global glass gate injected into GlassBackgroundView.update")
+        print("GlassToggle: engine gate already present")
     else:
-        print("GlassToggle: WARNING GlassBackgroundView.update anchor not found — glass NOT globally gated")
+        anchor = "    func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {\n"
+        inject = (
+            anchor
+            + "        // AorusGram: global glass gate — one switch disables every glass surface\n"
+            + "        // (Telegram's native capsules included) by forcing the whole effect off.\n"
+            + "        let isVisible = isVisible && ((UserDefaults.standard.object(forKey: \"aorusgram_feature_glass_ui\") as? Bool) ?? true)\n"
+        )
+        if anchor in t:
+            t = t.replace(anchor, inject, 1)
+            path.write_text(t, encoding="utf-8")
+            print("GlassToggle: global glass gate injected into GlassBackgroundView.update")
+        else:
+            print("GlassToggle: WARNING GlassBackgroundView.update anchor not found — glass NOT globally gated")
 
     # Context menus apply UIGlassEffect DIRECTLY (LensTransitionContainerEffectViewImpl),
     # bypassing GlassBackgroundView, so the global gate above does not reach them. Gate
