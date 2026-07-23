@@ -63,7 +63,7 @@
   "news": [
     {
       "appID": "com.aorusgram",
-      "title": "AorusGram 12.8 уже здесь",
+      "title": "",
       "identifier": "release-12-8",
       "caption": "Свежие функции и улучшения уже доступны.",
       "date": "2026-07-22",
@@ -73,7 +73,7 @@
     },
     {
       "appID": "com.aorusgram",
-      "title": "Обновления в один тап",
+      "title": "",
       "identifier": "how-to-update",
       "caption": "Новые версии теперь приходят через источник — переустанавливать вручную больше не нужно.",
       "date": "2026-07-22",
