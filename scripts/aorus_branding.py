@@ -5496,6 +5496,10 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
         "                    aorusReport += \"allowP2P: \\(allowP2P)\\n\"\n"
         "                    aorusReport += \"enableTCP(param): \\(enableTCP)\\n\"\n"
         "                    aorusReport += \"customParameters: \\(customParameters ?? \"nil\")\\n\"\n"
+        "                    aorusReport += \"allowTCP(final): \\(voipProxyServer != nil ? true : enableTCP)\\n\"\n"
+        "                    for aorusC in filteredConnections {\n"
+        "                        aorusReport += \"  conn ip=\\(aorusC.ip) port=\\(aorusC.port) tcp=\\(aorusC.hasTcp) turn=\\(aorusC.hasTurn) stun=\\(aorusC.hasStun) reflectorId=\\(aorusC.reflectorId)\\n\"\n"
+        "                    }\n"
         "                    try? aorusReport.write(to: aorusDir.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-setup.txt\"), atomically: true, encoding: .utf8)\n"
         "                }\n"
         "                #endif\n"
@@ -5517,6 +5521,27 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
         t = t.replace(stop_anchor, stop_inject, 1)
     else:
         print("CallProxyTCP: WARNING nativeStop anchor not found — full log dump NOT added")
+
+    # Redirect the native tgcalls log to our Documents folder for EVERY call and force a
+    # filename even when logName is empty. tgcalls writes this log LIVE during the call,
+    # so the FULL native log (ICE / reflector / proxy attempts) is always on disk — no
+    # dependence on nativeStop returning a debugLog string. The "Call logs" row reads it.
+    logpath_anchor = "        self.logPath = logName.isEmpty ? \"\" : callLogsPath(account: self.account) + \"/\" + logName + \".log\"\n"
+    logpath_repl = (
+        "        self.logPath = {\n"
+        "            if let aorusDocs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
+        "                let aorusDir = aorusDocs.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
+        "                try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
+        "                return aorusDir.appendingPathComponent(\"native-\\(callId.id)-\\(Int(Date().timeIntervalSince1970)).log\").path\n"
+        "            }\n"
+        "            return logName.isEmpty ? \"\" : callLogsPath(account: self.account) + \"/\" + logName + \".log\"\n"
+        "        }()\n"
+    )
+    if logpath_anchor in t:
+        t = t.replace(logpath_anchor, logpath_repl, 1)
+    else:
+        print("CallProxyTCP: WARNING logPath anchor not found — native log NOT redirected")
+
     if anchor3 in t:
         t = t.replace(anchor3, block3 + anchor3, 1)
     else:
@@ -8892,7 +8917,7 @@ public enum AorusFakeStarsStore {
             isResale = false
         }
         let value = AorusStoredStarsTransaction(
-            id: "ctx" + Data((0..<112).map { _ in UInt8.random(in: 0...255) }).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: ""),
+            id: "stx" + Data((0..<112).map { _ in UInt8.random(in: 0...255) }).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: ""),
             amount: amount,
             date: Int32(Date().timeIntervalSince1970),
             accountPeerId: accountPeerId.toInt64(),
