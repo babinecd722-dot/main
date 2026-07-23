@@ -4100,9 +4100,16 @@ def patch_app_delegate_account_restore_hook(tg: Path) -> None:
         "        // prepares the restore now (rebuilds + decrypts the durable Keychain archive\n"
         "        // into staging); it is then applied below, before any postbox opens.\n"
         "        if UserDefaults.standard.bool(forKey: \"aorusgram_login_backup_restore_requested\") {\n"
+        "            let selectedAccountId = UserDefaults.standard.string(forKey: \"aorusgram_login_backup_selected_account_id\")\n"
+        "            let isAddingAccount = UserDefaults.standard.bool(forKey: \"aorusgram_login_backup_add_account\")\n"
         "            UserDefaults.standard.set(false, forKey: \"aorusgram_login_backup_restore_requested\")\n"
+        "            UserDefaults.standard.removeObject(forKey: \"aorusgram_login_backup_selected_account_id\")\n"
+        "            UserDefaults.standard.removeObject(forKey: \"aorusgram_login_backup_add_account\")\n"
         "            AccountBackupManager.shared.rootPath = rootPath\n"
-        "            _ = AccountBackupManager.shared.prepareRestore()\n"
+        "            _ = AccountBackupManager.shared.prepareRestore(\n"
+        "                selectedAccountId: selectedAccountId,\n"
+        "                mergeIntoExisting: isAddingAccount\n"
+        "            )\n"
         "        }\n"
         "        // AorusGram: apply a pending account-backup restore before any postbox opens\n"
         "        AccountBackupManager.applyPendingRestoreIfNeeded(rootPath: rootPath)\n"
@@ -18820,7 +18827,8 @@ def patch_login_backup_key_button(tg: Path) -> None:
 
     The button sits opposite the back arrow (top-right) and takes the theme accent
     color — not Telegram's hardcoded blue. It is shown on both the primary login
-    and add-account phone-entry screens whenever a durable Keychain backup exists.
+    and add-account phone-entry screens. Add-account always exposes the picker so
+    its empty state is reachable even before a backup has been created.
     The picker itself is AorusLoginBackupPickerController, copied into this same
     module (AuthorizationUI) by the workflow.
     """
@@ -18829,40 +18837,11 @@ def patch_login_backup_key_button(tg: Path) -> None:
         print("LoginBackupKey: AuthorizationSequencePhoneEntryController.swift not found — skipped")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusBackupKeyPressed" in t:
-        changed = False
-        old_condition = "        if otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup() {\n"
-        new_condition = "        if AorusLoginBackupPickerController.hasBackup() {\n"
-        if old_condition in t:
-            t = t.replace(old_condition, new_condition, 1)
-            changed = True
-        old_image = "            let aorusKeyItem = UIBarButtonItem(image: UIImage(systemName: \"key.fill\"), style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
-        new_image = (
-            "            let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
-            "            let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
-            "            let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
-        )
-        if old_image in t:
-            t = t.replace(old_image, new_image, 1)
-            changed = True
-        old = "            aorusKeyItem.tintColor = self.presentationData.theme.list.itemAccentColor\n"
-        new = "            aorusKeyItem.tintColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
-        if old in t:
-            t = t.replace(old, new, 1)
-            changed = True
-        if changed:
-            path.write_text(t, encoding="utf-8")
-            print("LoginBackupKey: repaired cached key tint")
-        else:
-            print("LoginBackupKey: already injected")
-        return
 
-    button_anchor = (
-        "        if !otherAccountPhoneNumbers.1.isEmpty {\n"
-        "            self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: \"___close\", style: .plain, target: self, action: #selector(self.cancelPressed))\n"
-        "        }\n"
-    )
-    button_inject = button_anchor + (
+    # Migrate the initializer-only implementation from older cached Telegram
+    # sources. Telegram rebuilds the right navigation item after layout and
+    # progress changes, so an item installed only in init can disappear.
+    legacy_button = (
         "\n        // AorusGram: login-by-backup key button — themed, opposite the back arrow.\n"
         "        // Available on both primary login and add-account flows whenever a durable\n"
         "        // Keychain backup exists.\n"
@@ -18877,6 +18856,15 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "            self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
         "        }\n"
     )
+    if legacy_button in t:
+        t = t.replace(legacy_button, "\n        self.aorusInstallBackupKeyButton()\n", 1)
+
+    button_anchor = (
+        "        if !otherAccountPhoneNumbers.1.isEmpty {\n"
+        "            self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: \"___close\", style: .plain, target: self, action: #selector(self.cancelPressed))\n"
+        "        }\n"
+    )
+    button_inject = button_anchor + "\n        self.aorusInstallBackupKeyButton()\n"
 
     method_anchor = (
         "    @objc private func cancelPressed() {\n"
@@ -18884,21 +18872,116 @@ def patch_login_backup_key_button(tg: Path) -> None:
         "    }\n"
     )
     method_inject = method_anchor + (
+        "\n    private func aorusInstallBackupKeyButton() {\n"
+        "        // In add-account mode Telegram can construct this controller before the\n"
+        "        // Keychain metadata lookup settles. Telegram's existing-account list is\n"
+        "        // the authoritative signal that this is the add-account phone screen.\n"
+        "        guard !self.otherAccountPhoneNumbers.1.isEmpty || AorusLoginBackupPickerController.hasBackup() else {\n"
+        "            return\n"
+        "        }\n"
+        "        let aorusKeyColor = UIColor(red: 0.62, green: 0.28, blue: 1.0, alpha: 1.0)\n"
+        "        let aorusKeyImage = UIImage(systemName: \"key.fill\")?.withTintColor(aorusKeyColor, renderingMode: .alwaysOriginal)\n"
+        "        let aorusKeyItem = UIBarButtonItem(image: aorusKeyImage, style: .plain, target: self, action: #selector(self.aorusBackupKeyPressed))\n"
+        "        aorusKeyItem.tintColor = aorusKeyColor\n"
+        "        self.navigationItem.rightBarButtonItem = aorusKeyItem\n"
+        "    }\n"
         "\n    @objc private func aorusBackupKeyPressed() {\n"
-        "        AorusLoginBackupPickerController.presentIfPossible(from: self.view.window, theme: self.presentationData.theme, strings: self.presentationData.strings)\n"
+        "        guard !self.aorusBackupPickerPresented else { return }\n"
+        "        self.aorusBackupPickerPresented = true\n"
+        "        self.view.endEditing(true)\n"
+        "        let presented = AorusLoginBackupPickerController.presentIfPossible(\n"
+        "            from: self.view.window,\n"
+        "            theme: self.presentationData.theme,\n"
+        "            strings: self.presentationData.strings,\n"
+        "            isAddingAccount: !self.otherAccountPhoneNumbers.1.isEmpty,\n"
+        "            onDismiss: { [weak self] in\n"
+        "                self?.aorusBackupPickerPresented = false\n"
+        "                self?.controllerNode.activateInput()\n"
+        "            }\n"
+        "        )\n"
+        "        if !presented {\n"
+        "            self.aorusBackupPickerPresented = false\n"
+        "        }\n"
         "    }\n"
     )
 
-    if button_anchor not in t:
-        print("LoginBackupKey: WARNING leftBarButtonItem anchor not found — skipped")
-        return
-    if method_anchor not in t:
-        print("LoginBackupKey: WARNING cancelPressed anchor not found — skipped")
-        return
-    t = t.replace(button_anchor, button_inject, 1)
-    t = t.replace(method_anchor, method_inject, 1)
+    if "self.aorusInstallBackupKeyButton()" not in t:
+        if button_anchor not in t:
+            print("LoginBackupKey: WARNING leftBarButtonItem anchor not found — skipped")
+            return
+        t = t.replace(button_anchor, button_inject, 1)
+    if "private func aorusInstallBackupKeyButton()" not in t:
+        if method_anchor not in t:
+            print("LoginBackupKey: WARNING cancelPressed anchor not found — skipped")
+            return
+        t = t.replace(method_anchor, method_inject, 1)
+
+    picker_state_anchor = "    private let termsDisposable = MetaDisposable()\n"
+    picker_state_inject = picker_state_anchor + "    private var aorusBackupPickerPresented = false\n"
+    if "private var aorusBackupPickerPresented" not in t:
+        if picker_state_anchor not in t:
+            print("LoginBackupKey: WARNING picker-state anchor not found — skipped")
+            return
+        t = t.replace(picker_state_anchor, picker_state_inject, 1)
+
+    passkey_guard_anchor = "                guard let self, let account = self.account else {\n"
+    passkey_guard_inject = "                guard let self, let account = self.account, !self.aorusBackupPickerPresented else {\n"
+    if passkey_guard_inject not in t:
+        if passkey_guard_anchor not in t:
+            print("LoginBackupKey: WARNING passkey guard anchor not found — skipped")
+            return
+        t = t.replace(passkey_guard_anchor, passkey_guard_inject, 1)
+
+    passkey_result_anchor = "                let passkeyDataString = await engine.auth.requestPasskeyLoginData(apiId: self.apiId, apiHash: self.apiHash).get()\n"
+    passkey_result_inject = passkey_result_anchor + "                guard !self.aorusBackupPickerPresented else { return }\n"
+    if "requestPasskeyLoginData(apiId: self.apiId, apiHash: self.apiHash).get()\n                guard !self.aorusBackupPickerPresented" not in t:
+        if passkey_result_anchor not in t:
+            print("LoginBackupKey: WARNING async passkey-result anchor not found — skipped")
+            return
+        t = t.replace(passkey_result_anchor, passkey_result_inject, 1)
+
+    navigation_anchor = (
+        "        } else {\n"
+        "            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+        "    public func updateData"
+    )
+    navigation_inject = (
+        "        } else {\n"
+        "            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Next, style: .done, target: self, action: #selector(self.nextPressed))\n"
+        "        }\n"
+        "        if !self.inProgress {\n"
+        "            self.aorusInstallBackupKeyButton()\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+        "    public func updateData"
+    )
+    if "if !self.inProgress {\n            self.aorusInstallBackupKeyButton()" not in t:
+        if navigation_anchor not in t:
+            print("LoginBackupKey: WARNING updateNavigationItems anchor not found — skipped")
+            return
+        t = t.replace(navigation_anchor, navigation_inject, 1)
+
+    appearance_anchor = (
+        "    override public func viewDidAppear(_ animated: Bool) {\n"
+        "        super.viewDidAppear(animated)\n"
+    )
+    appearance_inject = appearance_anchor + (
+        "        if !self.inProgress {\n"
+        "            self.aorusInstallBackupKeyButton()\n"
+        "        }\n"
+    )
+    if "super.viewDidAppear(animated)\n        if !self.inProgress" not in t:
+        if appearance_anchor not in t:
+            print("LoginBackupKey: WARNING viewDidAppear anchor not found — skipped")
+            return
+        t = t.replace(appearance_anchor, appearance_inject, 1)
+
     path.write_text(t, encoding="utf-8")
-    print("LoginBackupKey: themed key button + picker hook injected into phone-entry screen")
+    print("LoginBackupKey: persistent themed key button + picker hook injected into phone-entry screen")
 
 
 def patch_undo_button_theme_color(tg: Path) -> None:

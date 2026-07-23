@@ -491,6 +491,8 @@ def main() -> None:
             err.append("VideoMasks: face detection must stay off the WebRTC capture thread")
         if "processCallFrame(" not in mask_text or "callRenderQueue.async" not in mask_text or "callRenderInFlight" not in mask_text:
             err.append("VideoMasks: call compositor still blocks Telegram's native camera preview")
+        if "publishesPreview: false,\n                        realtimeTracking: true" not in mask_text:
+            err.append("VideoMasks: calls still publish unused local preview updates or lost realtime tracking")
         if "aorusgram_video_mask_call_phase" not in mask_text or "needsPreparedFrame" not in mask_text or "needsActiveRefresh" not in mask_text:
             err.append("VideoMasks: pre-answer compositor still competes with the native local preview")
         if "lastCallRenderTime" not in mask_text or "renderInterval" not in mask_text:
@@ -819,10 +821,47 @@ def main() -> None:
         err.append("LoginBackupKey: phone-entry controller is missing")
     else:
         login_phone_entry_text = login_phone_entry.read_text(encoding="utf-8")
-        if "if AorusLoginBackupPickerController.hasBackup() {" not in login_phone_entry_text:
-            err.append("LoginBackupKey: backup entry is missing from the add-account flow")
-        if "otherAccountPhoneNumbers.1.isEmpty && AorusLoginBackupPickerController.hasBackup()" in login_phone_entry_text:
-            err.append("LoginBackupKey: backup entry is still hidden while adding an account")
+        if "private func aorusInstallBackupKeyButton()" not in login_phone_entry_text:
+            err.append("LoginBackupKey: persistent backup-key installer is missing")
+        if "!self.otherAccountPhoneNumbers.1.isEmpty || AorusLoginBackupPickerController.hasBackup()" not in login_phone_entry_text:
+            err.append("LoginBackupKey: add-account flow is not guaranteed to expose the backup entry")
+        if login_phone_entry_text.count("self.aorusInstallBackupKeyButton()") < 3:
+            err.append("LoginBackupKey: key is not restored after navigation/layout updates")
+        if "private var aorusBackupPickerPresented = false" not in login_phone_entry_text:
+            err.append("LoginBackupKey: picker/passkey presentation guard is missing")
+        if "guard !self.aorusBackupPickerPresented else { return }" not in login_phone_entry_text:
+            err.append("LoginBackupKey: async passkey result can race the backup picker")
+        if "isAddingAccount: !self.otherAccountPhoneNumbers.1.isEmpty" not in login_phone_entry_text:
+            err.append("LoginBackupKey: add-account mode is not passed to the backup picker")
+
+    login_backup_picker = tg / "submodules" / "AuthorizationUI" / "Sources" / "AorusLoginBackupPicker.swift"
+    if not login_backup_picker.is_file():
+        err.append("LoginBackupKey: backup picker source is missing")
+    else:
+        login_backup_picker_text = login_backup_picker.read_text(encoding="utf-8")
+        if "No saved accounts yet" not in login_backup_picker_text:
+            err.append("LoginBackupKey: empty backup state is missing")
+        if "aorusgram_login_backup_selected_account_id" not in login_backup_picker_text:
+            err.append("LoginBackupKey: selected backup account is not persisted")
+        if "aorusgram_login_backup_add_account" not in login_backup_picker_text:
+            err.append("LoginBackupKey: add-account restore mode is not persisted")
+
+    account_backup_manager = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Accounts" / "AccountBackupManager.swift"
+    if not account_backup_manager.is_file():
+        err.append("LoginBackupKey: account backup manager is missing")
+    else:
+        account_backup_text = account_backup_manager.read_text(encoding="utf-8")
+        for marker, message in (
+            ("prepareRestore(selectedAccountId:", "selected-account restore is missing"),
+            ("mergeIntoExisting", "add-account merge mode is missing"),
+            ("mergedAtomicStateData", "Telegram account-state merge is missing"),
+            ("applyPendingAccountMerge", "pending add-account merge is not applied at launch"),
+        ):
+            if marker not in account_backup_text:
+                err.append(f"LoginBackupKey: {message}")
+
+    if "selectedAccountId: selectedAccountId" not in t or "mergeIntoExisting: isAddingAccount" not in t:
+        err.append("LoginBackupKey: AppDelegate ignores the selected account or add-account mode")
 
     # AorusGramBootstrap injection
     if "AorusGramBootstrap" not in t:
@@ -849,6 +888,19 @@ def main() -> None:
             err.append("AorusProxyManager: build-time proxy key was not injected")
         if "/* AORUS-BUILD-PROXY-KEY-INJECTED */" not in proxy_text:
             err.append("AorusProxyManager: trusted build-time proxy injection sentinel is missing")
+        if "private let minFetchInterval: TimeInterval = 3600" not in proxy_text:
+            err.append("AorusProxyManager: the one-hour getProxy cadence changed")
+        if "URLSession.shared.dataTask(with: request)" in proxy_text:
+            err.append("AorusProxyManager: getProxy bypasses the protected API session")
+        for marker in (
+            "URLSessionConfiguration.ephemeral",
+            "delegate: AorusPinnedSessionDelegate.shared",
+            "apiSession.dataTask(with: request)",
+            "ProxyKeychain.write(data)",
+            "ProxyVault.publish(cfg",
+        ):
+            if marker not in proxy_text:
+                err.append(f"AorusProxyManager: protected transport/cache invariant is missing {marker}")
 
     subscription_config = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionConfig.swift"
     if not subscription_config.is_file():
@@ -860,6 +912,45 @@ def main() -> None:
         public_key = re.search(r'responseSigningPublicKeyHex\s*=\s*"([0-9a-fA-F]+)"', config_text)
         if public_key is None or len(public_key.group(1)) != 64:
             err.append("SubscriptionConfig: Ed25519 response public key must be 32 bytes")
+        for host in ("license.aorusgram.com", "api.aorusgram.com"):
+            if f'"{host}": protectedAPISPKIPins' not in config_text:
+                err.append(f"SubscriptionConfig: SPKI pin set is missing for {host}")
+        if len(re.findall(r'"[A-Za-z0-9+/]{43}="', config_text)) < 3:
+            err.append("SubscriptionConfig: protected API SPKI rotation set is incomplete")
+
+    pinning_delegate = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "AorusPinnedSessionDelegate.swift"
+    if not pinning_delegate.is_file():
+        err.append("AorusPinnedSessionDelegate.swift is missing")
+    else:
+        pinning_text = pinning_delegate.read_text(encoding="utf-8")
+        for marker in (
+            "SubscriptionConfig.pinnedSPKIHashesByHost[host]",
+            "SecTrustEvaluateWithError",
+            "completionHandler(.cancelAuthenticationChallenge, nil)",
+        ):
+            if marker not in pinning_text:
+                err.append(f"AorusPinnedSessionDelegate: fail-closed pinning is missing {marker}")
+
+    glass_components = tg / "submodules" / "AorusGramUI" / "Sources" / "UI" / "GlassMorphism" / "GlassMorphismComponents.swift"
+    if not glass_components.is_file():
+        err.append("GlassEffects: component implementation is missing")
+    elif 'AorusGram_feature_glass_ui' in glass_components.read_text(encoding="utf-8"):
+        err.append("GlassEffects: invalid settings key casing")
+    elif 'aorusgram_feature_glass_ui' not in glass_components.read_text(encoding="utf-8"):
+        err.append("GlassEffects: switch is not connected to glass components")
+    elif "@AppStorage" in glass_components.read_text(encoding="utf-8"):
+        err.append("GlassEffects: AppStorage is unavailable at the iOS 13 deployment target")
+
+    if formatting_toolbar.is_file():
+        toolbar_text = formatting_toolbar.read_text(encoding="utf-8")
+        if 'aorusgram_feature_glass_ui' not in toolbar_text:
+            err.append("GlassEffects: formatting toolbar ignores the setting")
+        if "@AppStorage" in toolbar_text:
+            err.append("GlassEffects: formatting toolbar uses iOS 14-only AppStorage")
+
+    performance_hud = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusPerformanceHUDManager.swift"
+    if not performance_hud.is_file() or "updateGlassAppearance(enabled: settings.glassUI)" not in performance_hud.read_text(encoding="utf-8"):
+        err.append("GlassEffects: performance HUD ignores the setting")
 
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"

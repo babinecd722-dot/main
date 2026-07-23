@@ -584,39 +584,79 @@ private struct AorusBlurView: UIViewRepresentable {
     }
 }
 
+// SwiftUI's AppStorage wrapper is iOS 14+, while Telegram builds this for iOS 13.
+// Keep a single process-wide observable mirror so visible toolbars update as soon
+// as AorusGramManager writes the setting, without recreating the chat controller.
+private final class AorusGlassEffectsPreference: ObservableObject {
+    static let shared = AorusGlassEffectsPreference()
+
+    @Published private(set) var isEnabled: Bool
+    private var observer: NSObjectProtocol?
+
+    private init() {
+        self.isEnabled = Self.currentValue()
+        self.observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main
+        ) { [weak self] _ in
+            let value = Self.currentValue()
+            if self?.isEnabled != value {
+                self?.isEnabled = value
+            }
+        }
+    }
+
+    deinit {
+        if let observer = self.observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private static func currentValue() -> Bool {
+        UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool ?? true
+    }
+}
+
 // Glass circle background — matches Swiftgram's toolbar button glass.
 private struct AorusGlass: View {
     @Environment(\.colorScheme) private var colorScheme
+    @ObservedObject private var glassEffects = AorusGlassEffectsPreference.shared
 
     var body: some View {
         let isDark = colorScheme == .dark
 
         Group {
-            if #available(iOS 15.0, *) {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Circle()
-                            .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
-                    )
+            if glassEffects.isEnabled {
+                if #available(iOS 15.0, *) {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            Circle()
+                                .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
+                        )
+                } else {
+                    Circle()
+                        .fill(Color.clear)
+                        .background(
+                            AorusBlurView(style: .systemThinMaterial)
+                                .clipShape(Circle())
+                        )
+                        .overlay(
+                            Circle()
+                                .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
+                        )
+                }
             } else {
                 Circle()
-                    .fill(Color.clear)
-                    .background(
-                        AorusBlurView(style: .systemThinMaterial)
-                            .clipShape(Circle())
-                    )
-                    .overlay(
-                        Circle()
-                            .fill(Color.white.opacity(isDark ? 0.05 : 0.25))
-                    )
+                    .fill(Color(UIColor.secondarySystemBackground))
             }
         }
         .overlay(
             Circle()
-                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                .stroke(Color.white.opacity(glassEffects.isEnabled ? 0.25 : 0.10), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
+        .shadow(color: Color.black.opacity(glassEffects.isEnabled ? 0.12 : 0.05), radius: glassEffects.isEnabled ? 6 : 2, x: 0, y: glassEffects.isEnabled ? 3 : 1)
     }
 }
 

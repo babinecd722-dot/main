@@ -2,17 +2,12 @@ import Foundation
 import CryptoKit
 import Security
 
-// TLS public-key (SPKI) pinning for the license URLSession.
+// TLS public-key (SPKI) pinning for protected Aorus API URLSessions.
 //
 // Pins the SHA256 of the server certificate's SubjectPublicKeyInfo. A normal MITM
 // (a custom root CA trusted on the device, Charles/mitmproxy, etc.) presents a
 // different public key → the pin does not match → the connection is dropped before
 // any license traffic flows.
-//
-// ROLLOUT SAFETY: when SubscriptionConfig.pinnedSPKIHashesBase64 is empty, pinning
-// is DISABLED and the delegate falls back to default system trust — zero behavior
-// change. Fill the pin set only after you have verified the server's real SPKI
-// hash, otherwise legitimate connections would be refused.
 //
 // To compute a pin (base64 of SHA256 over the DER SPKI):
 //   openssl s_client -connect license.aorusgram.com:443 </dev/null 2>/dev/null \
@@ -30,17 +25,17 @@ final class AorusPinnedSessionDelegate: NSObject, URLSessionDelegate {
             completionHandler(.performDefaultHandling, nil); return
         }
 
-        // These pins belong to the license endpoint only. Other isolated Aorus
-        // services (for example banner.aorusgram.com) use normal system trust until
-        // they receive their own independently rotatable pin set.
-        guard let pinnedHost = URL(string: SubscriptionConfig.baseURLString)?.host,
-              challenge.protectionSpace.host.caseInsensitiveCompare(pinnedHost) == .orderedSame else {
+        // Only explicitly listed API hosts are pinned. Independent services (for
+        // example banner media) keep normal system trust and their own lifecycle.
+        let host = challenge.protectionSpace.host.lowercased()
+        guard let pins = SubscriptionConfig.pinnedSPKIHashesByHost[host] else {
             completionHandler(.performDefaultHandling, nil); return
         }
 
-        let pins = SubscriptionConfig.pinnedSPKIHashesBase64
+        // A protected host must never silently fall back to system trust because of
+        // an accidental empty configuration in a release build.
         guard !pins.isEmpty else {
-            completionHandler(.performDefaultHandling, nil); return   // pinning disabled
+            completionHandler(.cancelAuthenticationChallenge, nil); return
         }
 
         // 1) Standard chain validation must pass first.

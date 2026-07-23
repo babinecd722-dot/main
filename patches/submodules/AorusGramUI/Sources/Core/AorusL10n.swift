@@ -126,7 +126,7 @@ public struct AorusL10n {
         let minutes = seconds / 60
         return t("\(minutes) мин", "\(minutes) min")
     }
-    public var glassUI: String { t("Glass UI", "Glass UI") }
+    public var glassUI: String { t("Эффекты стекла", "Glass Effects") }
     public var siriShortcuts: String { t("Siri Shortcuts", "Siri Shortcuts") }
     public var amoledMode: String { t("AMOLED интерфейс", "AMOLED Interface") }
     public var profileReportButton: String { t("Кнопка «Пожаловаться»", "Report Button") }
