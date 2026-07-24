@@ -1191,10 +1191,11 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
                 aorusPresentRestartNotice(context: context, controller: weakController)
             }
-            // The chat-list stories strip is decided during chat-list layout, so the
-            // change only fully applies after the list rebuilds — offer a restart prompt.
+            // The chat-list stories strip re-reads this key on every layout, so posting
+            // this notification makes the chat list re-lay-out and apply the change live —
+            // no restart needed.
             if keyPath == \AorusState.showStories {
-                aorusPresentRestartNotice(context: context, controller: weakController)
+                NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
             }
         },
         openChannel: {

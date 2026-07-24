@@ -4821,6 +4821,44 @@ def patch_show_stories_toggle(tg: Path) -> None:
         print("ShowStories: WARNING shouldDisplayStoriesInChatListHeader anchor not found")
 
 
+def patch_show_stories_live_refresh(tg: Path) -> None:
+    """Apply the Show Stories toggle live (no restart) by re-laying out the chat list.
+
+    `shouldDisplayStoriesInChatListHeader` re-reads `aorusgram_show_stories` on every layout
+    (it runs inside updateNavigationBar), so all we need to apply a toggle live is to force a
+    layout pass when the setting changes. Observe the `aorusgram_settings_changed` notification
+    (posted by the settings screen) in loadDisplayNode and call requestLayout. The observer is
+    added to the controller's existing actionDisposables set, so it is cleaned up in deinit.
+    Idempotent.
+    """
+    path = tg / "submodules/ChatListUI/Sources/ChatListController.swift"
+    if not path.is_file():
+        print("ShowStoriesLive: ChatListController.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: apply the Show Stories toggle live" in t:
+        print("ShowStoriesLive: already patched")
+        return
+    anchor = "    override public func loadDisplayNode() {\n"
+    inject = (
+        anchor
+        + "        // AorusGram: apply the Show Stories toggle live (no restart). When settings\n"
+        + "        // change, re-lay-out the chat list so the header re-reads aorusgram_show_stories.\n"
+        + "        let aorusStoriesObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name(\"aorusgram_settings_changed\"), object: nil, queue: OperationQueue.main) { [weak self] _ in\n"
+        + "            self?.requestLayout(transition: .animated(duration: 0.4, curve: .spring))\n"
+        + "        }\n"
+        + "        self.actionDisposables.add(ActionDisposable {\n"
+        + "            NotificationCenter.default.removeObserver(aorusStoriesObserver)\n"
+        + "        })\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, inject, 1)
+        path.write_text(t, encoding="utf-8")
+        print("ShowStoriesLive: chat list re-lays-out on settings change (live apply)")
+    else:
+        print("ShowStoriesLive: WARNING loadDisplayNode anchor not found")
+
+
 def patch_disable_call_p2p(tg: Path) -> None:
     """Force every call through Telegram relays — never direct peer-to-peer.
 
@@ -20705,6 +20743,7 @@ def main() -> None:
     patch_tgcalls_v2_set_proxy(tg)
     patch_tgcalls_reflector_socks5(tg)
     patch_show_stories_toggle(tg)
+    patch_show_stories_live_refresh(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
