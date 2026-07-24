@@ -1466,10 +1466,13 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         }
     )
 
-    let signal = statePromise.get()
+    // Combine the settings state with the LIVE presentation-data signal (not a one-shot
+    // snapshot) so the screen re-themes the instant the theme changes — e.g. when AMOLED is
+    // toggled, aorusAmoledTrigger re-emits presentationData and this screen goes true-black
+    // immediately, with no need to leave and re-enter.
+    let signal = combineLatest(statePromise.get(), context.sharedContext.presentationData)
         |> deliverOnMainQueue
-        |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        |> map { state, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
             let entries = aorusEntries(state: state, theme: presentationData.theme, l10n: l10n)
             let controllerState = ItemListControllerState(
