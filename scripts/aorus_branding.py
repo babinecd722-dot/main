@@ -5392,13 +5392,18 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
 
     Fix here is PURELY ADDITIVE and only affects calls with a SOCKS5 proxy configured
     (voipProxyServer != nil):
-      • keep the server's real TCP reflector as an ADDITIONAL media connection instead
-        of diverting it to signalling-only (the UDP reflectors and P2P candidates stay
-        in the set — nothing is removed, filtered, or forced);
-      • allow TCP so tgcalls may use that reflector.
+      • inject Telegram's TCP reflector gateway (91.108.9.38:595, exactly as stock does
+        for protocol version 12.0.0) so a TCP media path always EXISTS — otherwise, for
+        non-12.0.0 calls, the server often sends UDP-only reflectors and the tunnel has
+        nothing to carry;
+      • keep TCP reflectors as ADDITIONAL media connections instead of diverting them to
+        signalling-only (the UDP reflectors and P2P candidates stay in the set — nothing
+        is removed, filtered, or forced; signalling still rides the proxied MTProto link);
+      • allow TCP so tgcalls may use those reflectors.
     A call that works directly still gathers its UDP/P2P candidates and connects on them
-    exactly as before — the proxied TCP reflector is just an extra fallback. Calls with
-    no proxy configured are byte-for-byte unchanged (still UDP, still fast).
+    exactly as before — the proxied TCP reflector is just an extra ICE candidate that only
+    wins when the direct paths are blocked. Calls with no proxy configured are
+    byte-for-byte unchanged (still UDP, still fast).
 
     Also (independent of routing) redirects the native tgcalls debug log to
     Documents/AorusGramCallLogs for every call, writes a per-call setup report, and
@@ -5415,27 +5420,47 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
 
     ok = True
 
-    # 1) When a SOCKS5 call proxy is set, keep the server's TCP reflector as a media
-    #    connection instead of diverting it to signalling-only. Upstream registers it as
-    #    the signalling reflector then `continue connectionsLoop` skips it from the media
-    #    set; we still register it for signalling but fall through so it is ALSO added to
-    #    the media set. Without a proxy this is a no-op (the `continue` still runs), so
-    #    direct calls are untouched.
-    anchor1 = "                                continue connectionsLoop\n"
-    repl1 = (
-        "                                // AorusGram: additive proxied TCP reflector — with a SOCKS5\n"
-        "                                // call proxy set, do NOT skip this TCP reflector; fall through\n"
-        "                                // so it is ALSO added as a media connection (reachable over the\n"
-        "                                // proxy). The UDP reflectors stay in the set, so a direct call\n"
-        "                                // still connects on UDP exactly as before.\n"
-        "                                if voipProxyServer == nil {\n"
-        "                                    continue connectionsLoop\n"
-        "                                }\n"
+    # 0) When a SOCKS5 call proxy is set, inject Telegram's TCP reflector gateway so a TCP
+    #    media path exists (stock only injects it for 12.0.0; non-12.0.0 calls otherwise get
+    #    UDP-only reflectors and the tunnel has nothing to carry). Injected BEFORE the
+    #    reflector-id mapping is built, exactly like the stock 12.0.0 path, so the new
+    #    reflector gets a valid id. Additive: the existing (UDP) reflectors are untouched.
+    anchor0 = (
+        "                if version == \"12.0.0\" {\n"
+        "                    for connection in unfilteredConnections {\n"
     )
-    if t.count(anchor1) == 1:
+    repl0 = (
+        "                // AorusGram: additive proxied TCP reflector — inject Telegram's TCP\n"
+        "                // reflector gateway when a SOCKS5 call proxy is set (as stock does for\n"
+        "                // 12.0.0) so the media leg has a TCP path the proxy can carry when direct\n"
+        "                // UDP is blocked. The existing UDP reflectors stay in the set.\n"
+        "                if version == \"12.0.0\" || voipProxyServer != nil {\n"
+        "                    for connection in unfilteredConnections {\n"
+    )
+    if anchor0 in t:
+        t = t.replace(anchor0, repl0, 1)
+    else:
+        print("CallProxyTCP: WARNING tcp-reflector-injection anchor not found")
+        ok = False
+
+    # 1) Keep TCP reflectors as MEDIA connections for proxied calls (like 12.0.0) instead of
+    #    diverting them to a signalling-only connection. Signalling still rides the proxied
+    #    MTProto link. Without a proxy the original `else` branch runs, so direct calls are
+    #    untouched.
+    anchor1 = (
+        "                        if reflector.isTcp {\n"
+        "                            if version == \"12.0.0\" {\n"
+    )
+    repl1 = (
+        "                        if reflector.isTcp {\n"
+        "                            // AorusGram: keep TCP reflectors as media for proxied calls\n"
+        "                            // (like 12.0.0), not signalling-only, so the proxy has a TCP path.\n"
+        "                            if version == \"12.0.0\" || voipProxyServer != nil {\n"
+    )
+    if anchor1 in t:
         t = t.replace(anchor1, repl1, 1)
     else:
-        print(f"CallProxyTCP: WARNING reflector-diversion anchor count={t.count(anchor1)} (expected 1)")
+        print("CallProxyTCP: WARNING reflector-diversion anchor not found")
         ok = False
 
     # 2) Allow TCP whenever a proxy is set (enableVoipTcp is off by default). Purely
