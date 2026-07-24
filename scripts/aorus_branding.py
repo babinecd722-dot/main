@@ -5735,6 +5735,7 @@ protected:
             uint8_t ver = static_cast<uint8_t>(data[0]);
             uint8_t method = static_cast<uint8_t>(data[1]);
             Consume(data, len, 2);
+            RTC_LOG(LS_INFO) << "AorusGram SOCKS5: hello reply ver=" << (int)ver << " method=" << (int)method;
             if (ver != 5) {
                 Error(0);
                 return;
@@ -5754,6 +5755,7 @@ protected:
             uint8_t ver = static_cast<uint8_t>(data[0]);
             uint8_t status = static_cast<uint8_t>(data[1]);
             Consume(data, len, 2);
+            RTC_LOG(LS_INFO) << "AorusGram SOCKS5: auth reply ver=" << (int)ver << " status=" << (int)status;
             if (ver != 1) {
                 Error(255);
                 return;
@@ -5787,11 +5789,13 @@ protected:
             if (*len < needed) {
                 return;
             }
+            RTC_LOG(LS_INFO) << "AorusGram SOCKS5: connect reply ver=" << (int)ver << " rep=" << (int)rep << " atyp=" << (int)atyp;
             if (ver != 5 || rep != 0) {
                 Error(rep);
                 return;
             }
             Consume(data, len, needed);
+            RTC_LOG(LS_INFO) << "AorusGram SOCKS5: tunnel established to the reflector via the proxy";
             state_ = SS_TUNNEL;
         }
 
@@ -5818,6 +5822,7 @@ private:
     }
 
     void SendHello() {
+        RTC_LOG(LS_INFO) << "AorusGram SOCKS5: connected to proxy, sending hello (auth=" << (user_.empty() ? "none" : "user/pass") << ")";
         rtc::ByteBufferWriter request;
         request.WriteUInt8(5);
         if (user_.empty()) {
@@ -5849,31 +5854,31 @@ private:
     }
 
     void SendConnect() {
+        // Send the destination as a domain-name (ATYP=3) using the literal IP string.
+        // Some SOCKS5 proxies reject raw IPv4/IPv6 CONNECT (RFC reply REP=8, "address type
+        // not supported") but accept an IP passed in the domain field (their resolver
+        // inet_pton's it). ATYP=3-with-IP-string is the broadly-compatible form.
+        std::string destName;
+        if (dest_.family() == AF_INET || dest_.family() == AF_INET6) {
+            destName = dest_.ipaddr().ToString();
+        } else {
+            destName = dest_.hostname();
+        }
+        RTC_LOG(LS_INFO) << "AorusGram SOCKS5: sending CONNECT to " << destName << ":" << dest_.port() << " (atyp=domain)";
         rtc::ByteBufferWriter request;
         request.WriteUInt8(5);  // version
         request.WriteUInt8(1);  // command = connect
         request.WriteUInt8(0);  // reserved
-        rtc::IPAddress ip = dest_.ipaddr();
-        if (dest_.family() == AF_INET6) {
-            request.WriteUInt8(4);
-            in6_addr addr = ip.ipv6_address();
-            request.WriteBytes(reinterpret_cast<const uint8_t*>(&addr.s6_addr), 16);
-        } else if (dest_.family() == AF_INET) {
-            request.WriteUInt8(1);
-            in_addr addr = ip.ipv4_address();
-            request.WriteBytes(reinterpret_cast<const uint8_t*>(&addr.s_addr), 4);
-        } else {
-            std::string hostname = dest_.hostname();
-            request.WriteUInt8(3);
-            request.WriteUInt8(static_cast<uint8_t>(hostname.size()));
-            request.WriteString(hostname);
-        }
+        request.WriteUInt8(3);  // ATYP = domain name
+        request.WriteUInt8(static_cast<uint8_t>(destName.size()));
+        request.WriteString(destName);
         request.WriteUInt16(dest_.port());
         DirectSend(request.Data(), request.Length());
         state_ = SS_CONNECT;
     }
 
     void Error(int error) {
+        RTC_LOG(LS_WARNING) << "AorusGram SOCKS5: FAILED at state=" << (int)state_ << " code=" << error << " (SS_HELLO=1 SS_AUTH=2 SS_CONNECT=3; at CONNECT rep 8=addr-type 2=not-allowed 5=refused)";
         state_ = SS_ERROR;
         BufferInput(false);
         Close();
