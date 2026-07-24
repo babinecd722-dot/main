@@ -315,6 +315,7 @@ private struct AorusState: Equatable {
     var doubleTapCopy: Bool
     var tripleTapDelete: Bool
     var glassUI: Bool
+    var showStories: Bool
     var amoledMode: Bool
     var profileReportButton: Bool
     var hideCallsTab: Bool
@@ -437,6 +438,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case appBadge(PresentationTheme, String, String)
     case squareAvatars(PresentationTheme, String, Bool)
     case customFont(PresentationTheme, String)
+    case showStories(PresentationTheme, String, Bool)
 
     case editLocalHeader(PresentationTheme, String)
     case shareButton(PresentationTheme, String, Bool)
@@ -484,7 +486,7 @@ private enum AorusEntry: ItemListNodeEntry {
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge, .squareAvatars, .customFont:
+        case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .showStories:
             return AorusSection.ui.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
             return AorusSection.editLocal.rawValue
@@ -550,25 +552,26 @@ private enum AorusEntry: ItemListNodeEntry {
         case .appBadge:             return 57
         case .squareAvatars:        return 58
         case .customFont:           return 59
-        case .editLocalHeader:      return 60
-        case .messagesDoubleCopy:   return 61
-        case .messagesTripleDelete: return 62
-        case .editLocalEnabled:     return 63
-        case .userMessagesEnabled:  return 64
-        case .translator:           return 65
-        case .voiceTranscription:   return 66
-        case .shareButton:          return 67
-        case .videoMessagesHeader:  return 68
-        case .videoMessagesRearCamera: return 69
-        case .callsHeader:          return 70
-        case .masks:                return 71
-        case .voiceTwin:            return 72
-        case .deviceSpoofHeader:    return 73
-        case .deviceSpoof:          return 74
-        case .bypassHeader:         return 75
-        case .bypassSavePaid:       return 76
-        case .bypassSaveViewOnce:   return 77
-        case .bypassStoryDownload:  return 78
+        case .showStories:          return 60
+        case .editLocalHeader:      return 61
+        case .messagesDoubleCopy:   return 62
+        case .messagesTripleDelete: return 63
+        case .editLocalEnabled:     return 64
+        case .userMessagesEnabled:  return 65
+        case .translator:           return 66
+        case .voiceTranscription:   return 67
+        case .shareButton:          return 68
+        case .videoMessagesHeader:  return 69
+        case .videoMessagesRearCamera: return 70
+        case .callsHeader:          return 71
+        case .masks:                return 72
+        case .voiceTwin:            return 73
+        case .deviceSpoofHeader:    return 74
+        case .deviceSpoof:          return 75
+        case .bypassHeader:         return 76
+        case .bypassSavePaid:       return 77
+        case .bypassSaveViewOnce:   return 78
+        case .bypassStoryDownload:  return 79
         case .antiSpoofHeader:      return 81
         case .antiSpoofDeleted:     return 82
         case .antiSpoofOnline:      return 83
@@ -678,6 +681,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .squareAvatars(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .customFont(lt, ls):
             if case let .customFont(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .showStories(lt, ls, lv):
+            if case let .showStories(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .editLocalHeader(lt, ls):
             if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .shareButton(lt, ls, lv):
@@ -835,6 +840,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.squareAvatars, $0) })
         case let .customFont(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openFont)
+        case let .showStories(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.showStories, $0) })
         case let .editLocalHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .messagesDoubleCopy(_, title, value):
@@ -934,6 +941,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
         .squareAvatars(theme, l10n.squareAvatars, state.squareAvatars),
         .customFont(theme, l10n.customFont),
+        .showStories(theme, l10n.showStories, state.showStories),
 
         .editLocalHeader(theme, l10n.messagesHeader),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
@@ -1094,6 +1102,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         doubleTapCopy:      mgr.doubleTapCopy,
         tripleTapDelete:    mgr.tripleTapDelete,
         glassUI:            mgr.glassUI,
+        showStories:        UserDefaults.standard.object(forKey: "aorusgram_show_stories") as? Bool ?? true,
         amoledMode:         mgr.amoledMode,
         profileReportButton: mgr.profileReportButton,
         hideCallsTab:       mgr.hideCallsTab,
@@ -1175,10 +1184,16 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             UserDefaults.standard.set(s.bypassSavePaid,      forKey: "aorusgram_bypass_save_paid")
             UserDefaults.standard.set(s.bypassSaveViewOnce,  forKey: "aorusgram_bypass_view_once")
             UserDefaults.standard.set(s.bypassStoryDownload, forKey: "aorusgram_bypass_story_dl")
+            UserDefaults.standard.set(s.showStories, forKey: "aorusgram_show_stories")
             // Glass effects are read once when the nav bar / input panel / HUD build
             // their layers, so toggling only fully applies (everywhere) after a restart.
             if keyPath == \AorusState.glassUI {
                 NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
+                aorusPresentRestartNotice(context: context, controller: weakController)
+            }
+            // The chat-list stories strip is decided during chat-list layout, so the
+            // change only fully applies after the list rebuilds — offer a restart prompt.
+            if keyPath == \AorusState.showStories {
                 aorusPresentRestartNotice(context: context, controller: weakController)
             }
         },
