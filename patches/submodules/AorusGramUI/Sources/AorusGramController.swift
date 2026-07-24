@@ -1197,6 +1197,12 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             if keyPath == \AorusState.showStories {
                 NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
             }
+            // AMOLED re-runs the presentation pipeline via aorusAmoledTrigger, which listens
+            // for this notification. Posting it here makes every visible controller — including
+            // THIS settings screen — re-theme to true-black immediately, with no restart.
+            if keyPath == \AorusState.amoledMode {
+                NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
+            }
         },
         openChannel: {
             // Resolve @aorusgram and navigate to the channel inside AorusGram.
