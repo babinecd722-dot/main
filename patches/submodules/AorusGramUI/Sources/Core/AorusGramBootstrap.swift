@@ -34,6 +34,10 @@ public final class AorusGramBootstrap {
             AorusTamperGuard.shared.verify()
         }
 
+        // Clipboard history — start observing in-app copies so the formatting panel's
+        // clipboard offers a rolling history, not just the single most-recent entry.
+        AorusClipboardHistory.shared.start()
+
         // Client spoof — must be before any MTProto connection is made
         ClientSpoofManager.applySwizzle()
 

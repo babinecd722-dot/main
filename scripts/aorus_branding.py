@@ -4787,6 +4787,40 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
         print("WARNING: Account.swift proxy monitor block not found — runtime monitor NOT applied")
 
 
+def patch_show_stories_toggle(tg: Path) -> None:
+    """Hide the chat-list Stories strip when the "Show Stories" toggle is off (default on).
+
+    Every render path that shows the horizontal stories tray at the top of the chat list
+    routes through the single predicate `shouldDisplayStoriesInChatListHeader(...)`. Gating
+    that function to early-return false when `aorusgram_show_stories` is false cleanly hides
+    the strip everywhere. Absent key = true (stock behaviour), so untouched installs keep
+    stories. Idempotent.
+    """
+    path = tg / "submodules/ChatListUI/Sources/ChatListControllerNode.swift"
+    if not path.is_file():
+        print("ShowStories: ChatListControllerNode.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: hide the chat-list stories strip" in t:
+        print("ShowStories: already patched")
+        return
+    anchor = "func shouldDisplayStoriesInChatListHeader(storySubscriptions: EngineStorySubscriptions, isHidden: Bool) -> Bool {\n"
+    inject = (
+        anchor
+        + "    // AorusGram: hide the chat-list stories strip entirely when \"Show Stories\" is\n"
+        + "    // off (default on). Every strip render path routes through this predicate.\n"
+        + "    if !((UserDefaults.standard.object(forKey: \"aorusgram_show_stories\") as? Bool) ?? true) {\n"
+        + "        return false\n"
+        + "    }\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, inject, 1)
+        path.write_text(t, encoding="utf-8")
+        print("ShowStories: gated stories strip on aorusgram_show_stories (default on)")
+    else:
+        print("ShowStories: WARNING shouldDisplayStoriesInChatListHeader anchor not found")
+
+
 def patch_disable_call_p2p(tg: Path) -> None:
     """Force every call through Telegram relays — never direct peer-to-peer.
 
@@ -19830,42 +19864,10 @@ def patch_formatting_panel(tg: Path) -> None:
                 "    }\n"
                 "\n"
                 "    private func aorusPresentClipboard() {\n"
-                "        guard let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
-                "        let pasteboard = UIPasteboard.general\n"
-                "        let value = pasteboard.string ?? pasteboard.url?.absoluteString\n"
-                "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
-                "        let preview: String\n"
-                "        if let value, !value.isEmpty {\n"
-                "            let singleLine = value.replacingOccurrences(of: \"\\n\", with: \" \")\n"
-                "            preview = singleLine.count > 180 ? String(singleLine.prefix(180)) + \"...\" : singleLine\n"
-                "        } else {\n"
-                "            preview = isRu ? \"В буфере нет текста\" : \"The clipboard contains no text\"\n"
+                "        guard let parentVC = self.interfaceInteraction?.chatController() as? UIViewController, let context = self.context else { return }\n"
+                "        aorusPresentClipboardHistory(context: context, parent: parentVC) { [weak self] value, replacingAll in\n"
+                "            self?.aorusInsertClipboardText(value, replacingAll: replacingAll)\n"
                 "        }\n"
-                "        let alert = UIAlertController(title: isRu ? \"Буфер обмена\" : \"Clipboard\", message: preview, preferredStyle: .actionSheet)\n"
-                "        let insertAction = UIAlertAction(title: isRu ? \"Вставить\" : \"Insert\", style: .default) { [weak self] _ in\n"
-                "            guard let value else { return }\n"
-                "            self?.aorusInsertClipboardText(value, replacingAll: false)\n"
-                "        }\n"
-                "        insertAction.isEnabled = value?.isEmpty == false\n"
-                "        alert.addAction(insertAction)\n"
-                "        let replaceAction = UIAlertAction(title: isRu ? \"Заменить весь текст\" : \"Replace All Text\", style: .default) { [weak self] _ in\n"
-                "            guard let value else { return }\n"
-                "            self?.aorusInsertClipboardText(value, replacingAll: true)\n"
-                "        }\n"
-                "        replaceAction.isEnabled = value?.isEmpty == false\n"
-                "        alert.addAction(replaceAction)\n"
-                "        if value?.isEmpty == false {\n"
-                "            alert.addAction(UIAlertAction(title: isRu ? \"Очистить буфер\" : \"Clear Clipboard\", style: .destructive) { _ in\n"
-                "                pasteboard.items = []\n"
-                "            })\n"
-                "        }\n"
-                "        alert.addAction(UIAlertAction(title: isRu ? \"Отмена\" : \"Cancel\", style: .cancel))\n"
-                "        if let popover = alert.popoverPresentationController {\n"
-                "            popover.sourceView = parentVC.view\n"
-                "            popover.sourceRect = CGRect(x: parentVC.view.bounds.midX, y: parentVC.view.bounds.maxY - 1.0, width: 1.0, height: 1.0)\n"
-                "            popover.permittedArrowDirections = []\n"
-                "        }\n"
-                "        parentVC.present(alert, animated: true)\n"
                 "    }\n"
                 "\n"
             )
@@ -19880,6 +19882,10 @@ def patch_formatting_panel(tg: Path) -> None:
     import_anchor = "import Foundation\nimport UniformTypeIdentifiers\n"
     if import_anchor in t and "import SwiftUI\n" not in t:
         t = t.replace(import_anchor, "import Foundation\nimport SwiftUI\nimport UniformTypeIdentifiers\n", 1)
+    # Clipboard history UI lives in AorusGramUI; ensure the import is present regardless of
+    # whether the AorusCode patch (which also adds it) has run yet.
+    if "import AorusGramUI\n" not in t and "import AccountContext\n" in t:
+        t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
 
     methods_anchor = "    public func chatInputTextNodeDidUpdateText() {\n"
     methods = (
@@ -20052,42 +20058,10 @@ def patch_formatting_panel(tg: Path) -> None:
         "    }\n"
         "\n"
         "    private func aorusPresentClipboard() {\n"
-        "        guard let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
-        "        let pasteboard = UIPasteboard.general\n"
-        "        let value = pasteboard.string ?? pasteboard.url?.absoluteString\n"
-        "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
-        "        let preview: String\n"
-        "        if let value, !value.isEmpty {\n"
-        "            let singleLine = value.replacingOccurrences(of: \"\\n\", with: \" \")\n"
-        "            preview = singleLine.count > 180 ? String(singleLine.prefix(180)) + \"...\" : singleLine\n"
-        "        } else {\n"
-        "            preview = isRu ? \"В буфере нет текста\" : \"The clipboard contains no text\"\n"
+        "        guard let parentVC = self.interfaceInteraction?.chatController() as? UIViewController, let context = self.context else { return }\n"
+        "        aorusPresentClipboardHistory(context: context, parent: parentVC) { [weak self] value, replacingAll in\n"
+        "            self?.aorusInsertClipboardText(value, replacingAll: replacingAll)\n"
         "        }\n"
-        "        let alert = UIAlertController(title: isRu ? \"Буфер обмена\" : \"Clipboard\", message: preview, preferredStyle: .actionSheet)\n"
-        "        let insertAction = UIAlertAction(title: isRu ? \"Вставить\" : \"Insert\", style: .default) { [weak self] _ in\n"
-        "            guard let value else { return }\n"
-        "            self?.aorusInsertClipboardText(value, replacingAll: false)\n"
-        "        }\n"
-        "        insertAction.isEnabled = value?.isEmpty == false\n"
-        "        alert.addAction(insertAction)\n"
-        "        let replaceAction = UIAlertAction(title: isRu ? \"Заменить весь текст\" : \"Replace All Text\", style: .default) { [weak self] _ in\n"
-        "            guard let value else { return }\n"
-        "            self?.aorusInsertClipboardText(value, replacingAll: true)\n"
-        "        }\n"
-        "        replaceAction.isEnabled = value?.isEmpty == false\n"
-        "        alert.addAction(replaceAction)\n"
-        "        if value?.isEmpty == false {\n"
-        "            alert.addAction(UIAlertAction(title: isRu ? \"Очистить буфер\" : \"Clear Clipboard\", style: .destructive) { _ in\n"
-        "                pasteboard.items = []\n"
-        "            })\n"
-        "        }\n"
-        "        alert.addAction(UIAlertAction(title: isRu ? \"Отмена\" : \"Cancel\", style: .cancel))\n"
-        "        if let popover = alert.popoverPresentationController {\n"
-        "            popover.sourceView = parentVC.view\n"
-        "            popover.sourceRect = CGRect(x: parentVC.view.bounds.midX, y: parentVC.view.bounds.maxY - 1.0, width: 1.0, height: 1.0)\n"
-        "            popover.permittedArrowDirections = []\n"
-        "        }\n"
-        "        parentVC.present(alert, animated: true)\n"
         "    }\n"
         "\n"
         "    private func aorusPresentCodeComposer() {\n"
@@ -20730,6 +20704,7 @@ def main() -> None:
     patch_call_proxy_tcp_media(tg)
     patch_tgcalls_v2_set_proxy(tg)
     patch_tgcalls_reflector_socks5(tg)
+    patch_show_stories_toggle(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)

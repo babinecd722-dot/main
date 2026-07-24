@@ -40,6 +40,7 @@ private struct MiscState: Equatable {
     var profileLinkTargetPeerId: Int64
     var profileLinkTargetName: String
     var formattingPanel: Bool
+    var showStories: Bool
     var phoneSpoof: Bool
     var phoneSpoofNumber: String
     var mediaMetadata: Bool
@@ -63,6 +64,7 @@ private final class MiscArguments {
     let selectProfileLinkSelf: () -> Void
     let selectProfileLinkPeer: () -> Void
     let setFormattingPanel: (Bool) -> Void
+    let setShowStories: (Bool) -> Void
     let openAnimatedWallpapers: () -> Void
     let openAnimatedBanner: () -> Void
     let setPhoneSpoof: (Bool) -> Void
@@ -73,7 +75,7 @@ private final class MiscArguments {
     let setLinkProtectionRedirects: (Bool) -> Void
     let setLinkProtectionBlockFiles: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, setShowStories: @escaping (Bool) -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -88,6 +90,7 @@ private final class MiscArguments {
         self.selectProfileLinkSelf = selectProfileLinkSelf
         self.selectProfileLinkPeer = selectProfileLinkPeer
         self.setFormattingPanel = setFormattingPanel
+        self.setShowStories = setShowStories
         self.openAnimatedWallpapers = openAnimatedWallpapers
         self.openAnimatedBanner = openAnimatedBanner
         self.setPhoneSpoof = setPhoneSpoof
@@ -123,6 +126,7 @@ private enum MiscEntry: ItemListNodeEntry {
     case profileLinkPeer(PresentationTheme, String, String)
     case profileLinkInfo(PresentationTheme, String)
     case formattingPanel(PresentationTheme, String, Bool)
+    case showStories(PresentationTheme, String, Bool)
     case animatedWallpapers(PresentationTheme, String)
     case animatedBanner(PresentationTheme, String)
     case phoneSpoof(PresentationTheme, String, Bool)
@@ -155,7 +159,7 @@ private enum MiscEntry: ItemListNodeEntry {
              .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
              .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
-        case .formattingPanel:
+        case .formattingPanel, .showStories:
             return MiscSection.formattingPanelS.rawValue
         case .animatedWallpapers:
             return MiscSection.animatedWallpapersS.rawValue
@@ -196,6 +200,7 @@ private enum MiscEntry: ItemListNodeEntry {
         case .mediaMetadata:    return 43
         case .mediaMetadataInfo:return 44
         case .formattingPanel:  return 46
+        case .showStories:      return 45
         case .animatedWallpapers: return 47
         case .animatedBanner:   return 48
         case .securityHeader:   return 50
@@ -256,6 +261,8 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .profileLinkInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .formattingPanel(lt, ls, lv):
             if case let .formattingPanel(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .showStories(lt, ls, lv):
+            if case let .showStories(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .animatedWallpapers(lt, ls):
             if case let .animatedWallpapers(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .animatedBanner(lt, ls):
@@ -355,6 +362,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .formattingPanel(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setFormattingPanel($0) })
+        case let .showStories(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setShowStories($0) })
         case let .animatedWallpapers(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openAnimatedWallpapers)
         case let .animatedBanner(_, title):
@@ -459,6 +468,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.mediaMetadataInfo(theme, isRu
         ? "Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл."
         : "Adds a Metadata item to photos, videos and GIFs and shows available EXIF, GPS, camera, container and file data."))
+    entries.append(.showStories(theme, isRu ? "Показывать истории" : "Show Stories", state.showStories))
     entries.append(.formattingPanel(theme, isRu ? "Панель форматирования" : "Formatting Panel", state.formattingPanel))
     entries.append(.animatedWallpapers(theme, isRu ? "Анимированные обои" : "Animated Wallpapers"))
     entries.append(.animatedBanner(theme, isRu ? "Анимированный баннер" : "Animated Banner"))
@@ -492,6 +502,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         profileLinkTargetPeerId: initialProfileLinkTargetPeerId,
         profileLinkTargetName: UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_name") ?? "",
         formattingPanel: UserDefaults.standard.bool(forKey: "aorusgram_formatting_panel"),
+        showStories: (UserDefaults.standard.object(forKey: "aorusgram_show_stories") as? Bool) ?? true,
         phoneSpoof: AorusPhoneSpoofStore.isEnabled,
         phoneSpoofNumber: AorusPhoneSpoofStore.ensureNumber(),
         mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),
@@ -657,6 +668,17 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 next.formattingPanel = value
                 return next
             }
+        },
+        setShowStories: { value in
+            UserDefaults.standard.set(value, forKey: "aorusgram_show_stories")
+            updateState { current in
+                var next = current
+                next.showStories = value
+                return next
+            }
+            // The chat-list stories strip is decided during chat-list layout, so the
+            // change only fully applies after the list rebuilds — offer a restart prompt.
+            aorusPresentRestartNotice(context: context, controller: weakController)
         },
         openAnimatedWallpapers: {
             guard let controller = weakController,
