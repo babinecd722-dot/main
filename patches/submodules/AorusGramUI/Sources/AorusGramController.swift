@@ -551,8 +551,8 @@ private enum AorusEntry: ItemListNodeEntry {
         case .siriShortcuts:        return 56
         case .appBadge:             return 57
         case .squareAvatars:        return 58
-        case .customFont:           return 59
-        case .showStories:          return 60
+        case .showStories:          return 59
+        case .customFont:           return 60
         case .editLocalHeader:      return 61
         case .messagesDoubleCopy:   return 62
         case .messagesTripleDelete: return 63
@@ -940,8 +940,8 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .siriShortcuts(theme, l10n.siriShortcuts, state.siriShortcuts),
         .appBadge(theme, l10n.appBadge, appBadgeLabel(state.appBadge, l10n)),
         .squareAvatars(theme, l10n.squareAvatars, state.squareAvatars),
-        .customFont(theme, l10n.customFont),
         .showStories(theme, l10n.showStories, state.showStories),
+        .customFont(theme, l10n.customFont),
 
         .editLocalHeader(theme, l10n.messagesHeader),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
