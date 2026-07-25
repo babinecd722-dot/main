@@ -192,6 +192,11 @@ public func aorusChatLockRequiresAuth(_ peerId: Int64) -> Bool {
     return AorusChatLock.requiresAuth(peerId: peerId)
 }
 
+/// Placeholder shown in the chat list instead of a protected chat's last message.
+public func aorusChatLockHiddenMessageText(_ languageCode: String) -> String {
+    return languageCode.lowercased().hasPrefix("ru") ? "Сообщение скрыто" : "Message hidden"
+}
+
 /// Prompt used by the open-chat gate.
 public func aorusChatLockAuthenticate(_ completion: @escaping (Bool) -> Void) {
     let isRu = (Locale.preferredLanguages.first ?? "").hasPrefix("ru")

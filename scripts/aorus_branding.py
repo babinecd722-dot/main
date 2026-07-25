@@ -4930,11 +4930,64 @@ def patch_chat_lock(tg: Path) -> None:
             )
             if anchor in t:
                 t = t.replace(anchor, inject, 1)
-                item.write_text(t, encoding="utf-8")
-                print("ChatLock: added lock badge to chat list rows")
             else:
                 print("ChatLock: WARNING secretIcon anchor not found — badge NOT added")
                 ok = False
+
+            # 3b. Hide the last-message preview. Protecting the chat but leaving its latest
+            #     message readable in the list defeats the "someone picked up my phone" case.
+            #     messageText/entities are already mutable here (stock reassigns messageText
+            #     for PSA chats a few lines above), so this is a plain reassignment.
+            text_anchor = (
+                "                    contentData = .chat(itemPeer: itemPeer, threadInfo: threadInfo, peer: peer, "
+                "hideAuthor: hideAuthor, messageText: messageText, messageEntities: messageEntities, "
+                "spoilers: spoilers, customEmojiRanges: customEmojiRanges)\n"
+            )
+            text_inject = (
+                "                    // AorusGram: Chat Protection — replace the preview of a protected\n"
+                "                    // chat's last message, and drop its entities/spoilers/emoji so no\n"
+                "                    // formatting artefacts survive. hideAuthor also suppresses the\n"
+                "                    // \"Name:\" prefix in groups.\n"
+                "                    if case let .chatList(aorusIdx) = item.index,\n"
+                "                       aorusChatLockIsProtected(aorusIdx.messageIndex.id.peerId.toInt64()) {\n"
+                "                        messageText = aorusChatLockHiddenMessageText(item.presentationData.strings.baseLanguageCode)\n"
+                "                        messageEntities = []\n"
+                # spoilers / customEmojiRanges are Optionals: nil means \"none\", whereas an
+                # empty array would still read as \"has spoilers\" downstream.
+                "                        spoilers = nil\n"
+                "                        customEmojiRanges = nil\n"
+                "                        hideAuthor = true\n"
+                "                    }\n"
+                + text_anchor
+            )
+            if text_anchor in t:
+                t = t.replace(text_anchor, text_inject, 1)
+            else:
+                print("ChatLock: WARNING contentData anchor not found — preview NOT hidden")
+                ok = False
+
+            # 3c. Hide media thumbnails too — an attached photo is as revealing as the text.
+            #     Reuses the stock displayMediaPreviews flag (already used for secret chats).
+            media_anchor = (
+                "                        var displayMediaPreviews = true\n"
+                "                        if message._asMessage().containsSecretMedia {\n"
+            )
+            media_inject = (
+                "                        var displayMediaPreviews = true\n"
+                "                        // AorusGram: Chat Protection — no media thumbnails for protected chats.\n"
+                "                        if aorusChatLockIsProtected(message.id.peerId.toInt64()) {\n"
+                "                            displayMediaPreviews = false\n"
+                "                        }\n"
+                "                        if message._asMessage().containsSecretMedia {\n"
+            )
+            if media_anchor in t:
+                t = t.replace(media_anchor, media_inject, 1)
+            else:
+                print("ChatLock: WARNING displayMediaPreviews anchor not found — thumbnails NOT hidden")
+                ok = False
+
+            item.write_text(t, encoding="utf-8")
+            print("ChatLock: added lock badge + hid message preview and media thumbnails")
     else:
         print("ChatLock: ChatListItem.swift not found — skip")
         ok = False
