@@ -4907,7 +4907,7 @@ def patch_chat_lock(tg: Path) -> None:
     item = tg / "submodules/ChatListUI/Sources/Node/ChatListItem.swift"
     if item.is_file():
         t = item.read_text(encoding="utf-8")
-        if "AorusGram: Chat Lock badge" in t:
+        if "AorusGram: Chat Protection badge" in t:
             print("ChatLock: badge already patched")
         else:
             if "import AorusGramUI\n" not in t:
@@ -4921,11 +4921,12 @@ def patch_chat_lock(tg: Path) -> None:
             )
             inject = (
                 anchor
-                + "            // AorusGram: Chat Lock badge — show the native lock glyph for protected\n"
-                + "            // chats, reusing the secret-chat icon slot so the row layout is unchanged.\n"
+                + "            // AorusGram: Chat Protection badge — closed padlock while protection is\n"
+                + "            // in force, open padlock during the unlock grace period. Reuses the\n"
+                + "            // secret-chat icon slot so the row layout is unchanged.\n"
                 + "            if !isSecret && !isPeerGroup, case let .chatList(aorusIndex) = item.index,\n"
-                + "               aorusChatLockIsProtected(aorusIndex.messageIndex.id.peerId.toInt64()) {\n"
-                + "                currentSecretIconImage = PresentationResourcesChatList.statusLockIcon(item.presentationData.theme)\n"
+                + "               let aorusBadge = aorusChatProtectionBadgeIcon(aorusIndex.messageIndex.id.peerId.toInt64(), item.presentationData.theme) {\n"
+                + "                currentSecretIconImage = aorusBadge\n"
                 + "            }\n"
             )
             if anchor in t:
@@ -4949,7 +4950,7 @@ def patch_chat_lock(tg: Path) -> None:
                 "                    // formatting artefacts survive. hideAuthor also suppresses the\n"
                 "                    // \"Name:\" prefix in groups.\n"
                 "                    if case let .chatList(aorusIdx) = item.index,\n"
-                "                       aorusChatLockIsProtected(aorusIdx.messageIndex.id.peerId.toInt64()) {\n"
+                "                       aorusChatLockRequiresAuth(aorusIdx.messageIndex.id.peerId.toInt64()) {\n"
                 "                        messageText = aorusChatLockHiddenMessageText(item.presentationData.strings.baseLanguageCode)\n"
                 "                        messageEntities = []\n"
                 # spoilers / customEmojiRanges are Optionals: nil means \"none\", whereas an
@@ -4975,7 +4976,7 @@ def patch_chat_lock(tg: Path) -> None:
             media_inject = (
                 "                        var displayMediaPreviews = true\n"
                 "                        // AorusGram: Chat Protection — no media thumbnails for protected chats.\n"
-                "                        if aorusChatLockIsProtected(message.id.peerId.toInt64()) {\n"
+                "                        if aorusChatLockRequiresAuth(message.id.peerId.toInt64()) {\n"
                 "                            displayMediaPreviews = false\n"
                 "                        }\n"
                 "                        if message._asMessage().containsSecretMedia {\n"
@@ -5013,7 +5014,7 @@ def patch_chat_lock(tg: Path) -> None:
                 "                // results, otherwise search leaks the message text the lock hides.\n"
                 "                entries = entries.filter { aorusEntry in\n"
                 "                    if case let .messageId(aorusMessageId, _) = aorusEntry.stableId {\n"
-                "                        return !aorusChatLockIsProtected(aorusMessageId.peerId.toInt64())\n"
+                "                        return !aorusChatLockRequiresAuth(aorusMessageId.peerId.toInt64())\n"
                 "                    }\n"
                 "                    return true\n"
                 "                }\n"
@@ -5029,6 +5030,94 @@ def patch_chat_lock(tg: Path) -> None:
     else:
         print("ChatLock: ChatListSearchListPaneNode.swift not found — skip")
         ok = False
+
+    # --- 3e. Refresh the chat list the moment protection changes ---------------------------
+    #     Adding a chat, removing one, flipping the switch, unlocking, or the grace period
+    #     lapsing must all be reflected right away — otherwise the badge/preview only update
+    #     after leaving and re-entering the list. ChatListNode rebuilds its rows when its
+    #     state changes, and the state is Equatable, so a plain "poke" is ignored. Adding a
+    #     revision counter gives us a legitimate state change to bump. The property carries a
+    #     default value, so every existing ChatListNodeState(...) call site still compiles.
+    node = tg / "submodules/ChatListUI/Sources/Node/ChatListNode.swift"
+    if node.is_file():
+        t = node.read_text(encoding="utf-8")
+        if "aorusProtectionRevision" in t:
+            print("ChatLock: chat-list revision field already patched")
+        else:
+            field_anchor = "    public var archiveStoryState: StoryState?\n"
+            field_inject = (
+                field_anchor
+                + "    // AorusGram: bumped when Chat Protection changes, so rows re-render at once.\n"
+                + "    public var aorusProtectionRevision: Int32 = 0\n"
+            )
+            eq_anchor = (
+                "    public static func ==(lhs: ChatListNodeState, rhs: ChatListNodeState) -> Bool {\n"
+                "        if lhs.presentationData !== rhs.presentationData {\n"
+                "            return false\n"
+                "        }\n"
+            )
+            eq_inject = (
+                "    public static func ==(lhs: ChatListNodeState, rhs: ChatListNodeState) -> Bool {\n"
+                "        if lhs.aorusProtectionRevision != rhs.aorusProtectionRevision {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.presentationData !== rhs.presentationData {\n"
+                "            return false\n"
+                "        }\n"
+            )
+            sub_ok = True
+            if field_anchor in t:
+                t = t.replace(field_anchor, field_inject, 1)
+            else:
+                print("ChatLock: WARNING archiveStoryState anchor not found")
+                sub_ok = False
+            if eq_anchor in t:
+                t = t.replace(eq_anchor, eq_inject, 1)
+            else:
+                print("ChatLock: WARNING ChatListNodeState == anchor not found")
+                sub_ok = False
+            if sub_ok:
+                node.write_text(t, encoding="utf-8")
+                print("ChatLock: added chat-list protection revision field")
+            else:
+                ok = False
+    else:
+        print("ChatLock: ChatListNode.swift not found — skip")
+        ok = False
+
+    # --- 3f. Observe protection changes in the chat list controller ------------------------
+    if cl.is_file():
+        t = cl.read_text(encoding="utf-8")
+        if "AorusGram: Chat Protection — refresh rows" in t:
+            print("ChatLock: chat-list observer already patched")
+        else:
+            anchor = "    override public func loadDisplayNode() {\n"
+            inject = (
+                anchor
+                + "        // AorusGram: Chat Protection — refresh rows whenever protection changes\n"
+                + "        // (chat added/removed, switch flipped, unlocked, or grace period lapsed),\n"
+                + "        // so the badge and hidden preview update without leaving the screen.\n"
+                + "        let aorusProtectionObserver = NotificationCenter.default.addObserver(forName: AorusChatLock.changedNotification, object: nil, queue: OperationQueue.main) { [weak self] _ in\n"
+                + "            guard let self else {\n"
+                + "                return\n"
+                + "            }\n"
+                + "            self.chatListDisplayNode.effectiveContainerNode.updateState { state in\n"
+                + "                var state = state\n"
+                + "                state.aorusProtectionRevision = state.aorusProtectionRevision &+ 1\n"
+                + "                return state\n"
+                + "            }\n"
+                + "        }\n"
+                + "        self.actionDisposables.add(ActionDisposable {\n"
+                + "            NotificationCenter.default.removeObserver(aorusProtectionObserver)\n"
+                + "        })\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
+                cl.write_text(t, encoding="utf-8")
+                print("ChatLock: chat list refreshes live on protection changes")
+            else:
+                print("ChatLock: WARNING loadDisplayNode anchor not found for observer")
+                ok = False
 
     # --- 4. ChatListUI needs the AorusGramUI dep -------------------------------------------
     cl_build = tg / "submodules/ChatListUI/BUILD"
