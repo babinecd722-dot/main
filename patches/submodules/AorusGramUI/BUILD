@@ -19,6 +19,7 @@ swift_library(
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/ItemListUI:ItemListUI",
         "//submodules/ItemListPeerActionItem:ItemListPeerActionItem",
+        "//submodules/ItemListPeerItem:ItemListPeerItem",
         "//submodules/PresentationDataUtils:PresentationDataUtils",
         "//submodules/AccountContext:AccountContext",
         "//submodules/ComponentFlow",

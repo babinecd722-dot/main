@@ -46,6 +46,7 @@ private struct MiscState: Equatable {
     var linkProtection: Bool
     var linkProtectionRedirects: Bool
     var linkProtectionBlockFiles: Bool
+    var chatLockEnabled: Bool
 }
 
 private final class MiscArguments {
@@ -72,8 +73,9 @@ private final class MiscArguments {
     let setLinkProtection: (Bool) -> Void
     let setLinkProtectionRedirects: (Bool) -> Void
     let setLinkProtectionBlockFiles: (Bool) -> Void
+    let openChatLock: () -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -97,6 +99,7 @@ private final class MiscArguments {
         self.setLinkProtection = setLinkProtection
         self.setLinkProtectionRedirects = setLinkProtectionRedirects
         self.setLinkProtectionBlockFiles = setLinkProtectionBlockFiles
+        self.openChatLock = openChatLock
     }
 }
 
@@ -132,6 +135,7 @@ private enum MiscEntry: ItemListNodeEntry {
     case mediaMetadata(PresentationTheme, String, Bool)
     case mediaMetadataInfo(PresentationTheme, String)
     case securityHeader(PresentationTheme, String)
+    case chatLock(PresentationTheme, String, String)
     case linkProtection(PresentationTheme, String, Bool)
     case linkProtectionRedirects(PresentationTheme, String, Bool)
     case linkProtectionBlockFiles(PresentationTheme, String, Bool)
@@ -161,7 +165,7 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.animatedWallpapersS.rawValue
         case .animatedBanner:
             return MiscSection.animatedBannerS.rawValue
-        case .securityHeader, .linkProtection, .linkProtectionRedirects, .linkProtectionBlockFiles, .linkProtectionInfo:
+        case .securityHeader, .linkProtection, .linkProtectionRedirects, .linkProtectionBlockFiles, .linkProtectionInfo, .chatLock:
             return MiscSection.security.rawValue
         }
     }
@@ -203,6 +207,7 @@ private enum MiscEntry: ItemListNodeEntry {
         case .linkProtectionRedirects: return 52
         case .linkProtectionBlockFiles: return 53
         case .linkProtectionInfo: return 54
+        case .chatLock:         return 55
         }
     }
 
@@ -274,6 +279,8 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .mediaMetadataInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .securityHeader(lt, ls):
             if case let .securityHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .chatLock(lt, ls, lv):
+            if case let .chatLock(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .linkProtection(lt, ls, lv):
             if case let .linkProtection(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .linkProtectionRedirects(lt, ls, lv):
@@ -391,6 +398,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .securityHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .chatLock(_, title, label):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: label, sectionId: section, style: .blocks, action: args.openChatLock)
         case let .linkProtection(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setLinkProtection($0) })
         case let .linkProtectionRedirects(_, title, value):
@@ -464,6 +473,8 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.animatedBanner(theme, isRu ? "Анимированный баннер" : "Animated Banner"))
 
     entries.append(.securityHeader(theme, isRu ? "БЕЗОПАСНОСТЬ" : "SECURITY"))
+    entries.append(.chatLock(theme, isRu ? "Замок чатов" : "Chat Lock",
+                             state.chatLockEnabled ? (isRu ? "Вкл" : "On") : ""))
     entries.append(.linkProtection(theme, isRu ? "Защита ссылок" : "Link Protection", state.linkProtection))
     if state.linkProtection {
         entries.append(.linkProtectionRedirects(theme, isRu ? "Проверять редиректы" : "Check Redirects", state.linkProtectionRedirects))
@@ -497,7 +508,8 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),
         linkProtection: AorusLinkProtection.isEnabled,
         linkProtectionRedirects: AorusLinkProtection.checksRedirects,
-        linkProtectionBlockFiles: AorusLinkProtection.blocksDangerousFiles
+        linkProtectionBlockFiles: AorusLinkProtection.blocksDangerousFiles,
+        chatLockEnabled: AorusChatLock.isEnabled
     )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
@@ -520,8 +532,21 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
             return next
         }
     }
+
+    let chatLockObserver = NotificationCenter.default.addObserver(
+        forName: AorusChatLock.changedNotification,
+        object: nil,
+        queue: .main
+    ) { _ in
+        updateState { current in
+            var next = current
+            next.chatLockEnabled = AorusChatLock.isEnabled
+            return next
+        }
+    }
     actionsDisposable.add(ActionDisposable {
         NotificationCenter.default.removeObserver(fakeStarsObserver)
+        NotificationCenter.default.removeObserver(chatLockObserver)
     })
 
     let arguments = MiscArguments(
@@ -730,6 +755,23 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 var next = current
                 next.linkProtectionBlockFiles = value
                 return next
+            }
+        },
+        openChatLock: {
+            // The settings screen itself is protected: it can switch the feature off and
+            // reveals which chats are protected, so it must sit behind the same gate.
+            let present: () -> Void = {
+                weakController?.push(aorusChatLockController(context: context))
+            }
+            if AorusChatLock.settingsRequireAuth() {
+                let isRu = AorusLang.resolve(context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode) == .ru
+                AorusChatLock.authenticate(reason: isRu ? "Разблокируйте настройки замка чатов" : "Unlock Chat Lock settings") { success in
+                    if success {
+                        present()
+                    }
+                }
+            } else {
+                present()
             }
         }
     )

@@ -4534,6 +4534,33 @@ def patch_info_plist_speech_usage(tg: Path) -> None:
         print(f"{name}: added NSSpeechRecognitionUsageDescription")
 
 
+def patch_info_plist_face_id(tg: Path) -> None:
+    """Add NSFaceIDUsageDescription to Info.plist for the Chat Lock feature.
+
+    LAContext.evaluatePolicy(.deviceOwnerAuthentication) hard-crashes on Face ID devices
+    when this key is absent ("attempted to access privacy-sensitive data without a usage
+    description"). Touch ID / passcode-only devices do not need it, but the key must be
+    present for the feature to be usable at all on modern hardware.
+    """
+    description = (
+        "AorusGram использует Face ID, чтобы открывать защищённые чаты только вам. "
+        "Биометрия обрабатывается системой и не покидает устройство."
+    )
+    for name in ("Info.plist", "InfoBazel.plist"):
+        path = tg / "Telegram/Telegram-iOS" / name
+        if not path.is_file():
+            continue
+        with path.open("rb") as f:
+            pl = plistlib.load(f)
+        if pl.get("NSFaceIDUsageDescription"):
+            print(f"{name}: NSFaceIDUsageDescription already present")
+            continue
+        pl["NSFaceIDUsageDescription"] = description
+        with path.open("wb") as f:
+            plistlib.dump(pl, f, fmt=plistlib.FMT_XML)
+        print(f"{name}: added NSFaceIDUsageDescription")
+
+
 def patch_info_plist_file_sharing(tg: Path) -> None:
     """Expose the app's Documents folder in the Files app so the AorusGram call
     diagnostics (Documents/AorusGramCallLogs/*.log + *-setup.txt) can be retrieved.
@@ -4785,6 +4812,152 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
         print("Account.swift: injected system proxy runtime monitor + config-update observer")
     else:
         print("WARNING: Account.swift proxy monitor block not found — runtime monitor NOT applied")
+
+
+def patch_chat_lock(tg: Path) -> None:
+    """Chat Lock — protect selected chats behind Face ID / Touch ID / passcode.
+
+    Three injection points, chosen so there is no way around the lock:
+
+      1. navigateToChatControllerImpl (TelegramUI) — the single funnel EVERY chat opening goes
+         through: tapping the chat list, notifications, deep links, forwards, search results,
+         shared-media jumps. Gating here means one check covers them all. On a protected chat we
+         prompt, and only re-enter the original navigation when authentication succeeds.
+      2. activateChatPreview (ChatListUI) — long-press peek/preview does NOT go through
+         navigation, so it would otherwise leak the chat's content. Cancel the gesture outright.
+      3. ChatListItem (ChatListUI) — draw a lock badge. This reuses the existing secret-chat icon
+         slot, so the row layout (icon width, title offset) is stock-tested and untouched.
+
+    The badge deliberately only lands in the chat list. Peer pickers (adding an admin, contact
+    search, forward target) use ContactsPeerItem, which is not patched — so no lock icons leak
+    into those flows, exactly as requested.
+    """
+    ok = True
+
+    # --- 1. Universal open-chat gate ------------------------------------------------------
+    nav = tg / "submodules/TelegramUI/Sources/NavigateToChatController.swift"
+    if nav.is_file():
+        t = nav.read_text(encoding="utf-8")
+        if "AorusGram: Chat Lock gate" in t:
+            print("ChatLock: navigate gate already patched")
+        else:
+            if "import AorusGramUI\n" not in t:
+                t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+            anchor = "public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParams) {\n"
+            inject = (
+                anchor
+                + "    // AorusGram: Chat Lock gate — every chat opening funnels through here, so a\n"
+                + "    // protected chat cannot be reached by any route (list tap, notification, deep\n"
+                + "    // link, forward, search) without authenticating first.\n"
+                + "    if aorusChatLockRequiresAuth(params.chatLocation.peerId.toInt64()) {\n"
+                + "        aorusChatLockAuthenticate { success in\n"
+                + "            if success {\n"
+                + "                navigateToChatControllerImpl(params)\n"
+                + "            }\n"
+                + "        }\n"
+                + "        return\n"
+                + "    }\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
+                nav.write_text(t, encoding="utf-8")
+                print("ChatLock: gated navigateToChatControllerImpl")
+            else:
+                print("ChatLock: WARNING navigateToChatControllerImpl anchor not found")
+                ok = False
+    else:
+        print("ChatLock: NavigateToChatController.swift not found — skip")
+        ok = False
+
+    # --- 2. Long-press preview gate --------------------------------------------------------
+    cl = tg / "submodules/ChatListUI/Sources/ChatListController.swift"
+    if cl.is_file():
+        t = cl.read_text(encoding="utf-8")
+        if "AorusGram: Chat Lock — never reveal" in t:
+            print("ChatLock: preview gate already patched")
+        else:
+            if "import AorusGramUI\n" not in t:
+                t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+            anchor = (
+                "        self.chatListDisplayNode.mainContainerNode.activateChatPreview = "
+                "{ [weak self] item, threadId, node, gesture, location in\n"
+            )
+            inject = (
+                anchor
+                + "            // AorusGram: Chat Lock — never reveal a protected chat through the\n"
+                + "            // long-press preview; it bypasses navigation and would leak content.\n"
+                + "            if case let .peer(aorusPeerData) = item.content, let aorusPeer = aorusPeerData.peer.peer,\n"
+                + "               aorusChatLockRequiresAuth(aorusPeer.id.toInt64()) {\n"
+                + "                gesture?.cancel()\n"
+                + "                return\n"
+                + "            }\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
+                cl.write_text(t, encoding="utf-8")
+                print("ChatLock: gated long-press chat preview")
+            else:
+                print("ChatLock: WARNING activateChatPreview anchor not found")
+                ok = False
+    else:
+        print("ChatLock: ChatListController.swift not found — skip")
+        ok = False
+
+    # --- 3. Lock badge in the chat list ----------------------------------------------------
+    item = tg / "submodules/ChatListUI/Sources/Node/ChatListItem.swift"
+    if item.is_file():
+        t = item.read_text(encoding="utf-8")
+        if "AorusGram: Chat Lock badge" in t:
+            print("ChatLock: badge already patched")
+        else:
+            if "import AorusGramUI\n" not in t:
+                t = t.replace("import Foundation\n", "import Foundation\nimport AorusGramUI\n", 1)
+            # Reuse the secret-chat icon slot: it is laid out before the title and its width is
+            # already folded into titleIconsWidth, so the row geometry stays stock.
+            anchor = (
+                "            if isSecret {\n"
+                "                currentSecretIconImage = PresentationResourcesChatList.secretIcon(item.presentationData.theme)\n"
+                "            }\n"
+            )
+            inject = (
+                anchor
+                + "            // AorusGram: Chat Lock badge — show the native lock glyph for protected\n"
+                + "            // chats, reusing the secret-chat icon slot so the row layout is unchanged.\n"
+                + "            if !isSecret && !isPeerGroup, case let .chatList(aorusIndex) = item.index,\n"
+                + "               aorusChatLockIsProtected(aorusIndex.messageIndex.id.peerId.toInt64()) {\n"
+                + "                currentSecretIconImage = PresentationResourcesChatList.statusLockIcon(item.presentationData.theme)\n"
+                + "            }\n"
+            )
+            if anchor in t:
+                t = t.replace(anchor, inject, 1)
+                item.write_text(t, encoding="utf-8")
+                print("ChatLock: added lock badge to chat list rows")
+            else:
+                print("ChatLock: WARNING secretIcon anchor not found — badge NOT added")
+                ok = False
+    else:
+        print("ChatLock: ChatListItem.swift not found — skip")
+        ok = False
+
+    # --- 4. ChatListUI needs the AorusGramUI dep -------------------------------------------
+    cl_build = tg / "submodules/ChatListUI/BUILD"
+    if cl_build.is_file():
+        t = cl_build.read_text(encoding="utf-8")
+        dep = '        "//submodules/AorusGramUI:AorusGramUI",\n'
+        if "//submodules/AorusGramUI:AorusGramUI" in t:
+            print("ChatLock: ChatListUI BUILD dep already present")
+        else:
+            needle = '        "//submodules/TelegramPresentationData:TelegramPresentationData",\n'
+            if needle in t:
+                t = t.replace(needle, needle + dep, 1)
+                cl_build.write_text(t, encoding="utf-8")
+                print("ChatLock: added AorusGramUI dep to ChatListUI BUILD")
+            else:
+                print("ChatLock: WARNING ChatListUI BUILD needle not found")
+                ok = False
+
+    if not ok:
+        print("ChatLock: NOT fully applied (see warnings above)")
 
 
 def patch_show_stories_toggle(tg: Path) -> None:
@@ -20749,6 +20922,7 @@ def main() -> None:
     patch_tgcalls_reflector_socks5(tg)
     patch_show_stories_toggle(tg)
     patch_show_stories_live_refresh(tg)
+    patch_chat_lock(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
@@ -20783,6 +20957,7 @@ def main() -> None:
     patch_info_plist_bgtask(tg)
     patch_info_plist_speech_usage(tg)
     patch_info_plist_file_sharing(tg)
+    patch_info_plist_face_id(tg)
     patch_info_plist_strings_only(tg)
     patch_localizable_strings_safe(tg)
 
