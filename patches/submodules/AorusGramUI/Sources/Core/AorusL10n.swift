@@ -168,6 +168,7 @@ public struct AorusL10n {
     public var accountDetails: String { t("Подробнее", "Details") }
     public var officialChannel: String { t("Официальный канал", "Official channel") }
     public var proxyDiagnostics: String { t("Диагностика прокси", "Proxy diagnostics") } // AORUS-DIAG — opens ATunnelStatusViewController
+    public var callLogs: String { t("Логи звонков", "Call logs") }
 
     // MARK: Messages section (tap gestures + local editing)
     public var messagesHeader: String { t("СООБЩЕНИЯ", "MESSAGES") }

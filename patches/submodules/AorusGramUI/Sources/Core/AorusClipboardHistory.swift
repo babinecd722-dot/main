@@ -23,10 +23,101 @@ public final class AorusClipboardHistory {
 
     public static let defaultsKey = "aorusgram_clipboard_history"
     public static let maxEntries = 50
+    private static let maxEntryCharacters = 4_096
+    private static let maxStoredBytes = 128 * 1_024
+    private static let retention: TimeInterval = 7 * 24 * 60 * 60
+
+    private struct Entry: Codable, Equatable {
+        let text: String
+        let createdAt: Date
+    }
 
     private var started = false
+    private static let storageLock = NSLock()
 
     private init() {}
+
+    private static var storageURL: URL? {
+        let fm = FileManager.default
+        guard let root = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let dir = root.appendingPathComponent("AorusGram", isDirectory: true)
+        do {
+            try fm.createDirectory(
+                at: dir,
+                withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+            )
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var mutableDir = dir
+            try? mutableDir.setResourceValues(values)
+            return dir.appendingPathComponent("clipboard-history.json")
+        } catch {
+            return nil
+        }
+    }
+
+    private static func normalized(_ entries: [Entry], now: Date = Date()) -> [Entry] {
+        let cutoff = now.addingTimeInterval(-retention)
+        var result: [Entry] = []
+        var seen = Set<String>()
+        var storedBytes = 0
+        for entry in entries where entry.createdAt >= cutoff {
+            let text = String(entry.text.prefix(maxEntryCharacters))
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  seen.insert(text).inserted else {
+                continue
+            }
+            let byteCount = text.lengthOfBytes(using: .utf8)
+            guard storedBytes + byteCount <= maxStoredBytes else { continue }
+            result.append(Entry(text: text, createdAt: entry.createdAt))
+            storedBytes += byteCount
+            if result.count == maxEntries { break }
+        }
+        return result
+    }
+
+    private static func loadLocked() -> [Entry] {
+        var entries: [Entry] = []
+        var hasLegacyEntries = false
+        if let url = storageURL,
+           let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([Entry].self, from: data) {
+            entries = decoded
+        } else if let legacy = UserDefaults.standard.stringArray(forKey: defaultsKey) {
+            let now = Date()
+            entries = legacy.map { Entry(text: $0, createdAt: now) }
+            hasLegacyEntries = true
+        }
+        let sanitized = normalized(entries)
+        if sanitized != entries || hasLegacyEntries {
+            if saveLocked(sanitized), hasLegacyEntries {
+                UserDefaults.standard.removeObject(forKey: defaultsKey)
+            }
+        }
+        return sanitized
+    }
+
+    @discardableResult
+    private static func saveLocked(_ entries: [Entry]) -> Bool {
+        guard let url = storageURL,
+              let data = try? JSONEncoder().encode(normalized(entries)) else {
+            return false
+        }
+        do {
+            try data.write(to: url, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: url.path
+            )
+            return true
+        } catch {
+            // Clipboard history is optional; never destabilize message input on storage errors.
+            return false
+        }
+    }
 
     /// Begin observing in-app pasteboard changes. Safe to call more than once.
     public func start() {
@@ -59,32 +150,44 @@ public final class AorusClipboardHistory {
     /// Insert `text` at the front of the history, de-duplicating and capping the list.
     @discardableResult
     public static func add(_ text: String) -> Bool {
-        var list = entries()
-        if let index = list.firstIndex(of: text) {
+        let value = String(text.prefix(maxEntryCharacters))
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        var list = loadLocked()
+        if let index = list.firstIndex(where: { $0.text == value }) {
             if index == 0 { return false }
             list.remove(at: index)
         }
-        list.insert(text, at: 0)
-        if list.count > maxEntries {
-            list = Array(list.prefix(maxEntries))
-        }
-        UserDefaults.standard.set(list, forKey: defaultsKey)
+        list.insert(Entry(text: value, createdAt: Date()), at: 0)
+        saveLocked(list)
         return true
     }
 
     public static func entries() -> [String] {
-        return UserDefaults.standard.stringArray(forKey: defaultsKey) ?? []
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        return loadLocked().map(\.text)
     }
 
     public static func remove(at index: Int) {
-        var list = entries()
+        storageLock.lock()
+        defer { storageLock.unlock() }
+        var list = loadLocked()
         guard index >= 0 && index < list.count else { return }
         list.remove(at: index)
-        UserDefaults.standard.set(list, forKey: defaultsKey)
+        saveLocked(list)
     }
 
     public static func clear() {
+        storageLock.lock()
+        defer { storageLock.unlock() }
         UserDefaults.standard.removeObject(forKey: defaultsKey)
+        if let url = storageURL {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 }
 

@@ -73,6 +73,10 @@ def main() -> None:
         err.append(f"CFBundleDisplayName expected Aorusgram, got {pl.get('CFBundleDisplayName')!r}")
     if pl.get("CFBundleName") != "Aorusgram":
         err.append(f"CFBundleName expected Aorusgram, got {pl.get('CFBundleName')!r}")
+    if pl.get("UIFileSharingEnabled") is True:
+        err.append("Info.plist: the whole Documents directory must not be exposed in Files.app")
+    if pl.get("LSSupportsOpeningDocumentsInPlace") is True:
+        err.append("Info.plist: in-place access must not expose the whole Documents directory")
 
     ad = tg / "submodules" / "TelegramUI" / "Sources" / "AppDelegate.swift"
     t = ad.read_text(encoding="utf-8")
@@ -901,6 +905,84 @@ def main() -> None:
         ):
             if marker not in proxy_text:
                 err.append(f"AorusProxyManager: protected transport/cache invariant is missing {marker}")
+
+    call_context = tg / "submodules" / "TelegramVoip" / "Sources" / "OngoingCallContext.swift"
+    call_context_text = call_context.read_text(encoding="utf-8") if call_context.is_file() else ""
+    if "AorusGram: protected bounded call diagnostics" not in call_context_text:
+        err.append("CallProxyUDP: protected bounded call diagnostics are missing")
+    if "AorusGram: additive proxied TCP reflector" in call_context_text:
+        err.append("CallProxyUDP: obsolete forced TCP media patch is still present")
+    if "aorusWriteBoundedCallLog" not in call_context_text:
+        err.append("CallProxyUDP: exported native call diagnostics are not size-bounded")
+
+    presentation_call_manager = (
+        tg / "submodules" / "TelegramCallsUI" / "Sources" / "PresentationCallManager.swift"
+    )
+    presentation_call_text = (
+        presentation_call_manager.read_text(encoding="utf-8")
+        if presentation_call_manager.is_file()
+        else ""
+    )
+    if "ignore the per-user useForCalls toggle" not in presentation_call_text:
+        err.append("CallProxyUDP: active proxy is no longer forced for calls")
+
+    native_networking = (
+        tg
+        / "submodules"
+        / "TgVoipWebrtc"
+        / "tgcalls"
+        / "tgcalls"
+        / "v2"
+        / "NativeNetworkingImpl.cpp"
+    )
+    native_networking_text = native_networking.read_text(encoding="utf-8") if native_networking.is_file() else ""
+    if "AorusGram: apply SOCKS5 proxy to the port allocator" not in native_networking_text:
+        err.append("CallProxyUDP: v2 port allocator does not receive the SOCKS5 proxy")
+    if "AorusGram: keep UDP reflector relay enabled for SOCKS5" not in native_networking_text:
+        err.append("CallProxyUDP: proxied reflector UDP remains disabled")
+
+    reflector_port = (
+        tg
+        / "submodules"
+        / "TgVoipWebrtc"
+        / "tgcalls"
+        / "tgcalls"
+        / "v2"
+        / "ReflectorPort.cpp"
+    )
+    reflector_text = reflector_port.read_text(encoding="utf-8") if reflector_port.is_file() else ""
+    for marker in (
+        "class AorusSocks5UdpProxySocket final",
+        "SOCKS5 UDP ASSOCIATE",
+        "proxy().type == rtc::ProxyType::PROXY_SOCKS5",
+    ):
+        if marker not in reflector_text:
+            err.append(f"CallProxyUDP: reflector transport is missing {marker}")
+    if "class AorusSocks5ProxySocket" in reflector_text:
+        err.append("CallProxyUDP: obsolete TCP SOCKS5 reflector wrapper is still present")
+
+    chat_lock = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "Privacy" / "AorusChatLock.swift"
+    chat_lock_text = chat_lock.read_text(encoding="utf-8") if chat_lock.is_file() else ""
+    for marker in (
+        "enabledKey(accountId:",
+        "peersKey(accountId:",
+        "aorusChatLockIsProtected(_ accountId:",
+        "aorusChatLockAuthenticate(_ accountId:",
+        "completion(false)",
+    ):
+        if marker not in chat_lock_text:
+            err.append(f"ChatProtection: account-scoped fail-closed invariant is missing {marker}")
+
+    clipboard_history = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusClipboardHistory.swift"
+    clipboard_text = clipboard_history.read_text(encoding="utf-8") if clipboard_history.is_file() else ""
+    for marker in (
+        "clipboard-history.json",
+        "completeUntilFirstUserAuthentication",
+        "maxStoredBytes",
+        "retention:",
+    ):
+        if marker not in clipboard_text:
+            err.append(f"ClipboardHistory: protected bounded storage is missing {marker}")
 
     subscription_config = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionConfig.swift"
     if not subscription_config.is_file():

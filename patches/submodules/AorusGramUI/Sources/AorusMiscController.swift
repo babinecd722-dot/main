@@ -488,6 +488,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
 }
 
 public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSettingsShortcutRoutes) -> ViewController {
+    let accountId = context.account.id.int64
     let initialFakeStars = AorusFakeStarsStore.isEnabled
     let initialFakeStarsAmount = AorusFakeStarsStore.amount > 0 ? "\(AorusFakeStarsStore.amount)" : ""
     let initialProfileLinkTargetPeerId = Int64(UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_peer_id") ?? "") ?? 0
@@ -509,7 +510,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         linkProtection: AorusLinkProtection.isEnabled,
         linkProtectionRedirects: AorusLinkProtection.checksRedirects,
         linkProtectionBlockFiles: AorusLinkProtection.blocksDangerousFiles,
-        chatLockEnabled: AorusChatLock.isEnabled
+        chatLockEnabled: AorusChatLock.isEnabled(accountId: accountId)
     )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
@@ -537,10 +538,14 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         forName: AorusChatLock.changedNotification,
         object: nil,
         queue: .main
-    ) { _ in
+    ) { notification in
+        if let changedAccountId = (notification.object as? NSNumber)?.int64Value,
+           changedAccountId != accountId {
+            return
+        }
         updateState { current in
             var next = current
-            next.chatLockEnabled = AorusChatLock.isEnabled
+            next.chatLockEnabled = AorusChatLock.isEnabled(accountId: accountId)
             return next
         }
     }
@@ -763,9 +768,9 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
             let present: () -> Void = {
                 weakController?.push(aorusChatLockController(context: context))
             }
-            if AorusChatLock.settingsRequireAuth() {
+            if AorusChatLock.settingsRequireAuth(accountId: accountId) {
                 let isRu = AorusLang.resolve(context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode) == .ru
-                AorusChatLock.authenticate(reason: isRu ? "Разблокируйте настройки защиты чатов" : "Unlock Chat Protection settings") { success in
+                AorusChatLock.authenticate(accountId: accountId, reason: isRu ? "Разблокируйте настройки защиты чатов" : "Unlock Chat Protection settings") { success in
                     if success {
                         present()
                     }

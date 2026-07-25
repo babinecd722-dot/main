@@ -9,6 +9,11 @@ import re
 import sys
 from pathlib import Path
 
+from aorus_call_proxy_udp import (
+    patch_call_proxy_udp_media,
+    patch_tgcalls_reflector_socks5_udp,
+)
+
 from profile_personalization_patch import patch_profile_personalization
 
 # ---------------------------------------------------------------------------
@@ -4562,10 +4567,10 @@ def patch_info_plist_face_id(tg: Path) -> None:
 
 
 def patch_info_plist_file_sharing(tg: Path) -> None:
-    """Expose the app's Documents folder in the Files app so the AorusGram call
-    diagnostics (Documents/AorusGramCallLogs/*.log + *-setup.txt) can be retrieved.
-    UIFileSharingEnabled surfaces the folder under On My iPhone / AorusGram;
-    LSSupportsOpeningDocumentsInPlace lets the logs be opened/shared in place.
+    """Keep the app container private.
+
+    Call diagnostics are exported explicitly from Settings. Exposing all of Documents through
+    Files.app also exposes unrelated account and feature data and is unnecessary.
     """
     for name in ("Info.plist", "InfoBazel.plist"):
         path = tg / "Telegram/Telegram-iOS" / name
@@ -4574,18 +4579,16 @@ def patch_info_plist_file_sharing(tg: Path) -> None:
         with path.open("rb") as f:
             pl = plistlib.load(f)
         changed = False
-        if pl.get("UIFileSharingEnabled") is not True:
-            pl["UIFileSharingEnabled"] = True
-            changed = True
-        if pl.get("LSSupportsOpeningDocumentsInPlace") is not True:
-            pl["LSSupportsOpeningDocumentsInPlace"] = True
-            changed = True
+        for key in ("UIFileSharingEnabled", "LSSupportsOpeningDocumentsInPlace"):
+            if key in pl:
+                del pl[key]
+                changed = True
         if changed:
             with path.open("wb") as f:
                 plistlib.dump(pl, f, fmt=plistlib.FMT_XML)
-            print(f"{name}: enabled Files sharing (Documents visible in Files app)")
+            print(f"{name}: removed global Documents sharing")
         else:
-            print(f"{name}: Files sharing already enabled")
+            print(f"{name}: Documents sharing already disabled")
 
 
 # Inline Swift that builds an MTSocksProxySettings from the ENCRYPTED proxy blob
@@ -4849,8 +4852,8 @@ def patch_chat_lock(tg: Path) -> None:
                 + "    // AorusGram: Chat Lock gate — every chat opening funnels through here, so a\n"
                 + "    // protected chat cannot be reached by any route (list tap, notification, deep\n"
                 + "    // link, forward, search) without authenticating first.\n"
-                + "    if aorusChatLockRequiresAuth(params.chatLocation.peerId.toInt64()) {\n"
-                + "        aorusChatLockAuthenticate { success in\n"
+                + "    if aorusChatLockRequiresAuth(params.context.account.id.int64, params.chatLocation.peerId.toInt64()) {\n"
+                + "        aorusChatLockAuthenticate(params.context.account.id.int64) { success in\n"
                 + "            if success {\n"
                 + "                navigateToChatControllerImpl(params)\n"
                 + "            }\n"
@@ -4886,8 +4889,12 @@ def patch_chat_lock(tg: Path) -> None:
                 anchor
                 + "            // AorusGram: Chat Lock — never reveal a protected chat through the\n"
                 + "            // long-press preview; it bypasses navigation and would leak content.\n"
+                + "            guard let self else {\n"
+                + "                gesture?.cancel()\n"
+                + "                return\n"
+                + "            }\n"
                 + "            if case let .peer(aorusPeerData) = item.content, let aorusPeer = aorusPeerData.peer.peer,\n"
-                + "               aorusChatLockRequiresAuth(aorusPeer.id.toInt64()) {\n"
+                + "               aorusChatLockRequiresAuth(self.context.account.id.int64, aorusPeer.id.toInt64()) {\n"
                 + "                gesture?.cancel()\n"
                 + "                return\n"
                 + "            }\n"
@@ -4925,7 +4932,7 @@ def patch_chat_lock(tg: Path) -> None:
                 + "            // protected regardless of the unlock state, so it never flickers between\n"
                 + "            // shapes. Reuses the secret-chat icon slot, leaving row layout unchanged.\n"
                 + "            if !isSecret && !isPeerGroup, case let .chatList(aorusIndex) = item.index,\n"
-                + "               aorusChatLockIsProtected(aorusIndex.messageIndex.id.peerId.toInt64()) {\n"
+                + "               aorusChatLockIsProtected(item.context.account.id.int64, aorusIndex.messageIndex.id.peerId.toInt64()) {\n"
                 + "                currentSecretIconImage = PresentationResourcesChatList.statusLockIcon(item.presentationData.theme)\n"
                 + "            }\n"
             )
@@ -4950,7 +4957,7 @@ def patch_chat_lock(tg: Path) -> None:
                 "                    // formatting artefacts survive. hideAuthor also suppresses the\n"
                 "                    // \"Name:\" prefix in groups.\n"
                 "                    if case let .chatList(aorusIdx) = item.index,\n"
-                "                       aorusChatLockRequiresAuth(aorusIdx.messageIndex.id.peerId.toInt64()) {\n"
+                "                       aorusChatLockRequiresAuth(item.context.account.id.int64, aorusIdx.messageIndex.id.peerId.toInt64()) {\n"
                 "                        messageText = aorusChatLockHiddenMessageText(item.presentationData.strings.baseLanguageCode)\n"
                 "                        messageEntities = []\n"
                 # spoilers / customEmojiRanges are Optionals: nil means \"none\", whereas an
@@ -4976,7 +4983,7 @@ def patch_chat_lock(tg: Path) -> None:
             media_inject = (
                 "                        var displayMediaPreviews = true\n"
                 "                        // AorusGram: Chat Protection — no media thumbnails for protected chats.\n"
-                "                        if aorusChatLockRequiresAuth(message.id.peerId.toInt64()) {\n"
+                "                        if aorusChatLockRequiresAuth(item.context.account.id.int64, message.id.peerId.toInt64()) {\n"
                 "                            displayMediaPreviews = false\n"
                 "                        }\n"
                 "                        if message._asMessage().containsSecretMedia {\n"
@@ -5014,7 +5021,7 @@ def patch_chat_lock(tg: Path) -> None:
                 "                // results, otherwise search leaks the message text the lock hides.\n"
                 "                entries = entries.filter { aorusEntry in\n"
                 "                    if case let .messageId(aorusMessageId, _) = aorusEntry.stableId {\n"
-                "                        return !aorusChatLockRequiresAuth(aorusMessageId.peerId.toInt64())\n"
+                "                        return !aorusChatLockRequiresAuth(self.context.account.id.int64, aorusMessageId.peerId.toInt64())\n"
                 "                    }\n"
                 "                    return true\n"
                 "                }\n"
@@ -5067,8 +5074,8 @@ def patch_chat_lock(tg: Path) -> None:
                 "                                self.setInlineChatList(location: .forum(peerId: channel.id))\n"
                 "                            }\n"
                 "                        }\n"
-                "                        if aorusChatLockRequiresAuth(channel.id.toInt64()) {\n"
-                "                            aorusChatLockAuthenticate { success in\n"
+                "                        if aorusChatLockRequiresAuth(self.context.account.id.int64, channel.id.toInt64()) {\n"
+                "                            aorusChatLockAuthenticate(self.context.account.id.int64) { success in\n"
                 "                                if success {\n"
                 "                                    aorusOpenForum()\n"
                 "                                }\n"
@@ -5099,8 +5106,8 @@ def patch_chat_lock(tg: Path) -> None:
                 fn_anchor
                 + "    // AorusGram: Chat Protection — gate the forum topic list opened via this entry\n"
                 + "    // point too (profile / deep links), not just the inline chat-list path.\n"
-                + "    if aorusChatLockRequiresAuth(peerId.toInt64()) {\n"
-                + "        aorusChatLockAuthenticate { success in\n"
+                + "    if aorusChatLockRequiresAuth(context.account.id.int64, peerId.toInt64()) {\n"
+                + "        aorusChatLockAuthenticate(context.account.id.int64) { success in\n"
                 + "            if success {\n"
                 + "                navigateToForumChannelImpl(context: context, peerId: peerId, navigationController: navigationController)\n"
                 + "            }\n"
@@ -6030,16 +6037,11 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
 
 
 def patch_tgcalls_v2_set_proxy(tg: Path) -> None:
-    """tgcalls v2: apply the SOCKS5 proxy to the port allocator (v1 does this, v2 omitted it).
+    """Apply the SOCKS5 proxy to the v2 allocator, matching v1 NetworkManager.
 
-    NativeNetworkingImpl (call protocol versions 7/8/9/12/13) stores the proxy in _proxy and
-    uses it only to DISABLE UDP, but — unlike v1 NetworkManager::start() — never calls
-    _portAllocator->set_proxy(...). So cricket::Port::proxy() stays empty and the reflector
-    TCP socket is built with no proxy info: a proxied call has UDP disabled yet still tries to
-    reach the reflector directly → the media leg has no path. Mirror v1 exactly and set the
-    SOCKS5 proxy on the allocator when _proxy is present. Guarded by `if (_proxy)`, so
-    non-proxied calls are byte-for-byte unchanged. Pairs with patch_tgcalls_reflector_socks5,
-    which makes ReflectorPort actually honour proxy(). Idempotent.
+    NativeNetworkingImpl stores `_proxy` but upstream v2 never forwards it to the
+    allocator, so ReflectorPort sees an empty `proxy()`. The UDP transport patch uses
+    that value to establish RFC 1928 UDP ASSOCIATE. Direct calls remain unchanged.
     """
     path = tg / "submodules/TgVoipWebrtc/tgcalls/tgcalls/v2/NativeNetworkingImpl.cpp"
     if not path.is_file():
@@ -6053,8 +6055,8 @@ def patch_tgcalls_v2_set_proxy(tg: Path) -> None:
     inject = (
         anchor
         + "\n"
-        + "    // AorusGram: apply SOCKS5 proxy to the port allocator so reflector/relay TCP\n"
-        + "    // sockets are tunnelled through the call proxy. v1 NetworkManager::start() does\n"
+        + "    // AorusGram: apply SOCKS5 proxy to the port allocator so reflector media can\n"
+        + "    // use the call proxy. v1 NetworkManager::start() does\n"
         + "    // this; v2 omitted it, leaving Port::proxy() empty. Only when a proxy is\n"
         + "    // configured — direct calls are untouched.\n"
         + "    if (_proxy) {\n"
@@ -21142,9 +21144,9 @@ def main() -> None:
     patch_remove_send_logs(tg)
     patch_app_bundle_name(tg)
     patch_call_proxy(tg)
-    patch_call_proxy_tcp_media(tg)
+    patch_call_proxy_udp_media(tg)
     patch_tgcalls_v2_set_proxy(tg)
-    patch_tgcalls_reflector_socks5(tg)
+    patch_tgcalls_reflector_socks5_udp(tg)
     patch_show_stories_toggle(tg)
     patch_show_stories_live_refresh(tg)
     patch_chat_lock(tg)

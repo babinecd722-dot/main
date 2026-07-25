@@ -985,7 +985,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .subscription(theme, l10n.subscription),
         .officialChannel(theme, l10n.officialChannel),
         .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
-        .callLogs(theme, "Call logs"),
+        .callLogs(theme, l10n.callLogs),
     ]
 
     if state.antiSpamEnabled, let idx = entries.firstIndex(where: {

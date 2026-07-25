@@ -188,22 +188,39 @@ private func chatLockEntries(state: ChatLockState, peers: [EnginePeer], presenta
 }
 
 public func aorusChatLockController(context: AccountContext) -> ViewController {
-    let initialState = ChatLockState(isEnabled: AorusChatLock.isEnabled, revealedPeerId: nil)
+    let accountId = context.account.id.int64
+    let initialState = ChatLockState(isEnabled: AorusChatLock.isEnabled(accountId: accountId), revealedPeerId: nil)
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
     let updateState: ((ChatLockState) -> ChatLockState) -> Void = { f in
         statePromise.set(stateValue.modify(f))
     }
 
-    let peerIdsPromise = ValuePromise<[Int64]>(AorusChatLock.lockedPeerIds(), ignoreRepeated: true)
+    let peerIdsPromise = ValuePromise<[Int64]>(AorusChatLock.lockedPeerIds(accountId: accountId), ignoreRepeated: true)
     let actionsDisposable = DisposableSet()
 
     var pushControllerImpl: ((ViewController) -> Void)?
+    var presentAlertImpl: ((UIAlertController) -> Void)?
 
     let arguments = ChatLockArguments(
         context: context,
         setEnabled: { value in
-            AorusChatLock.isEnabled = value
+            if value && !AorusChatLock.isBiometryAvailable() {
+                let isRu = AorusLang.resolve(
+                    context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode
+                ) == .ru
+                let alert = UIAlertController(
+                    title: nil,
+                    message: isRu
+                        ? "Сначала настройте Face ID, Touch ID или код-пароль устройства."
+                        : "Set up Face ID, Touch ID, or a device passcode first.",
+                    preferredStyle: .alert
+                )
+                alert.addAction(UIAlertAction(title: "OK", style: .default))
+                presentAlertImpl?(alert)
+                return
+            }
+            AorusChatLock.setEnabled(value, accountId: accountId)
             updateState { current in
                 var next = current
                 next.isEnabled = value
@@ -220,15 +237,15 @@ public func aorusChatLockController(context: AccountContext) -> ViewController {
                 hasGlobalSearch: false
             ))
             selectionController.peerSelected = { [weak selectionController] peer, _ in
-                AorusChatLock.add(peerId: peer.id.toInt64())
-                peerIdsPromise.set(AorusChatLock.lockedPeerIds())
+                AorusChatLock.add(accountId: accountId, peerId: peer.id.toInt64())
+                peerIdsPromise.set(AorusChatLock.lockedPeerIds(accountId: accountId))
                 selectionController?.dismiss()
             }
             pushControllerImpl?(selectionController)
         },
         removePeer: { peerId in
-            AorusChatLock.remove(peerId: peerId.toInt64())
-            peerIdsPromise.set(AorusChatLock.lockedPeerIds())
+            AorusChatLock.remove(accountId: accountId, peerId: peerId.toInt64())
+            peerIdsPromise.set(AorusChatLock.lockedPeerIds(accountId: accountId))
             updateState { current in
                 var next = current
                 next.revealedPeerId = nil
@@ -297,6 +314,9 @@ public func aorusChatLockController(context: AccountContext) -> ViewController {
     let controller = ItemListController(context: context, state: signal)
     pushControllerImpl = { [weak controller] c in
         controller?.push(c)
+    }
+    presentAlertImpl = { [weak controller] alert in
+        controller?.present(alert, animated: true)
     }
     return controller
 }
