@@ -312,6 +312,7 @@ private struct AorusState: Equatable {
     var cacheCleanInterval: Int
     var editLocally: Bool
     var userMessages: Bool
+    var messageSeconds: Bool
     var doubleTapCopy: Bool
     var tripleTapDelete: Bool
     var glassUI: Bool
@@ -448,6 +449,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case messagesTripleDelete(PresentationTheme, String, Bool)
     case editLocalEnabled(PresentationTheme, String, Bool)
     case userMessagesEnabled(PresentationTheme, String, Bool)
+    case messageSeconds(PresentationTheme, String, Bool)
 
     case antiSpoofHeader(PresentationTheme, String)
     case antiSpoofDeleted(PresentationTheme, String, Bool)
@@ -488,7 +490,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.performance.rawValue
         case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .hideCallsTab, .hideContactsTab, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .showStories:
             return AorusSection.ui.rawValue
-        case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled:
+        case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled, .messageSeconds:
             return AorusSection.editLocal.rawValue
         case .translator, .voiceTranscription, .shareButton:
             return AorusSection.quickButtons.rawValue
@@ -558,20 +560,21 @@ private enum AorusEntry: ItemListNodeEntry {
         case .messagesTripleDelete: return 63
         case .editLocalEnabled:     return 64
         case .userMessagesEnabled:  return 65
-        case .translator:           return 66
-        case .voiceTranscription:   return 67
-        case .shareButton:          return 68
-        case .videoMessagesHeader:  return 69
-        case .videoMessagesRearCamera: return 70
-        case .callsHeader:          return 71
-        case .masks:                return 72
-        case .voiceTwin:            return 73
-        case .deviceSpoofHeader:    return 74
-        case .deviceSpoof:          return 75
-        case .bypassHeader:         return 76
-        case .bypassSavePaid:       return 77
-        case .bypassSaveViewOnce:   return 78
-        case .bypassStoryDownload:  return 79
+        case .messageSeconds:       return 66
+        case .translator:           return 67
+        case .voiceTranscription:   return 68
+        case .shareButton:          return 69
+        case .videoMessagesHeader:  return 70
+        case .videoMessagesRearCamera: return 71
+        case .callsHeader:          return 72
+        case .masks:                return 73
+        case .voiceTwin:            return 74
+        case .deviceSpoofHeader:    return 75
+        case .deviceSpoof:          return 76
+        case .bypassHeader:         return 77
+        case .bypassSavePaid:       return 78
+        case .bypassSaveViewOnce:   return 79
+        case .bypassStoryDownload:  return 80
         case .antiSpoofHeader:      return 81
         case .antiSpoofDeleted:     return 82
         case .antiSpoofOnline:      return 83
@@ -699,6 +702,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .editLocalEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .userMessagesEnabled(lt, ls, lv):
             if case let .userMessagesEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .messageSeconds(lt, ls, lv):
+            if case let .messageSeconds(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .antiSpoofHeader(lt, ls):
             if case let .antiSpoofHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .antiSpoofDeleted(lt, ls, lv):
@@ -852,6 +857,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.editLocally, $0) })
         case let .userMessagesEnabled(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.userMessages, $0) })
+        case let .messageSeconds(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.messageSeconds, $0) })
         case let .antiSpoofHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .antiSpoofDeleted(_, title, value):
@@ -948,6 +955,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .messagesTripleDelete(theme, l10n.tripleTapDelete, state.tripleTapDelete),
         .editLocalEnabled(theme, l10n.editLocally, state.editLocally),
         .userMessagesEnabled(theme, l10n.userMessagesInGroup, state.userMessages),
+        .messageSeconds(theme, l10n.messageSeconds, state.messageSeconds),
 
         // Unnamed block directly under Messages: the three quick message buttons.
         .translator(theme, l10n.quickTranslateButton, state.translator),
@@ -1099,6 +1107,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         cacheCleanInterval: mgr.cacheCleanInterval,
         editLocally:        mgr.editLocally,
         userMessages:       mgr.userMessagesInGroup,
+        messageSeconds:     mgr.messageSeconds,
         doubleTapCopy:      mgr.doubleTapCopy,
         tripleTapDelete:    mgr.tripleTapDelete,
         glassUI:            mgr.glassUI,
@@ -1169,6 +1178,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             mgr.cacheCleanInterval  = s.cacheCleanInterval
             mgr.editLocally         = s.editLocally
             mgr.userMessagesInGroup = s.userMessages
+            mgr.messageSeconds      = s.messageSeconds
             mgr.doubleTapCopy       = s.doubleTapCopy
             mgr.tripleTapDelete     = s.tripleTapDelete
             mgr.glassUI             = s.glassUI
@@ -1275,114 +1285,37 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             navigationController.pushViewController(aorusAntiSpamController(context: context))
         },
         openDeviceSpoof: {
-            guard let controller = weakController else { return }
-            let isRu = AorusLang.current == .ru
-
-            // Derive a system-version string that matches the device family, so
-            // Telegram's session list shows the correct platform icon (the icon is
-            // chosen from deviceModel + systemVersion). Empty string = keep real iOS.
-            let systemVersionFor: (String) -> String = { model in
-                let m = model.lowercased()
-                if m.contains("windows") { return "Windows 10" }
-                if m.contains("macos") || m.contains("macbook") || m.contains("imac") || m.contains("mac ") { return "macOS 14.0" }
-                if m.contains("ubuntu") { return "Ubuntu 22.04" }
-                if m.contains("linux") { return "Linux" }
-                if m.contains("iphone") || m.contains("ipad") || m.contains("ios") { return "" }
-                if m.contains("web") || m.contains("chrome") || m.contains("safari") || m.contains("firefox") { return "" }
-                // Everything else is treated as an Android handset/tablet.
-                return "Android 14"
+            guard let navigationController = weakController?.navigationController as? NavigationController else {
+                return
             }
-
-            // Apply a chosen device model: nil clears the spoof (real device).
-            let apply: (String?) -> Void = { value in
-                if let value = value, !value.isEmpty {
-                    UserDefaults.standard.set(value, forKey: "aorusgram_spoofed_device")
-                    UserDefaults.standard.set(systemVersionFor(value), forKey: "aorusgram_spoofed_sysver")
-                    updateState { s in var n = s; n.spoofedDeviceName = value; return n }
-                } else {
-                    UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_device")
-                    UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_sysver")
-                    updateState { s in var n = s; n.spoofedDeviceName = nil; return n }
+            let currentModel = UserDefaults.standard.string(forKey: "aorusgram_spoofed_device")
+            let currentSystemVersion = UserDefaults.standard.string(forKey: "aorusgram_spoofed_sysver")
+            let deviceController = aorusDeviceSpoofController(
+                context: context,
+                initialModel: currentModel,
+                initialSystemVersion: currentSystemVersion,
+                selectionChanged: { model, systemVersion in
+                    let previousModel = UserDefaults.standard.string(forKey: "aorusgram_spoofed_device")
+                    let previousVersion = UserDefaults.standard.string(forKey: "aorusgram_spoofed_sysver")
+                    guard previousModel != model || previousVersion != systemVersion else {
+                        return
+                    }
+                    if let model, let systemVersion {
+                        UserDefaults.standard.set(model, forKey: "aorusgram_spoofed_device")
+                        UserDefaults.standard.set(systemVersion, forKey: "aorusgram_spoofed_sysver")
+                    } else {
+                        UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_device")
+                        UserDefaults.standard.removeObject(forKey: "aorusgram_spoofed_sysver")
+                    }
+                    updateState { state in
+                        var updated = state
+                        updated.spoofedDeviceName = model
+                        return updated
+                    }
+                    aorusPresentRestartNotice(context: context, controller: weakController)
                 }
-                // The device model reaches the server only when the network layer
-                // re-initialises, which happens at launch — prompt for a restart.
-                aorusPresentRestartNotice(context: context, controller: weakController)
-            }
-
-            // Position a popover (iPad) at the centre of the controller's view.
-            let anchorPopover: (UIAlertController) -> Void = { alert in
-                if let popover = alert.popoverPresentationController, let view = controller.view {
-                    popover.sourceView = view
-                    popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
-                    popover.permittedArrowDirections = []
-                }
-            }
-
-            // Custom-device flow: pick a form-factor, then type a name.
-            let presentCustom: () -> Void = {
-                let typeTitle = isRu ? "Тип устройства" : "Device Type"
-                let typeSheet = UIAlertController(title: typeTitle, message: nil, preferredStyle: .actionSheet)
-                let types: [(String, String)] = isRu
-                    ? [("Desktop", "Desktop"), ("Веб", "Web"), ("Планшет", "Tablet"), ("Телефон", "Phone")]
-                    : [("Desktop", "Desktop"), ("Web", "Web"), ("Tablet", "Tablet"), ("Phone", "Phone")]
-                for (label, kind) in types {
-                    typeSheet.addAction(UIAlertAction(title: label, style: .default) { _ in
-                        let nameTitle = isRu ? "Название устройства" : "Device Name"
-                        let nameMsg = isRu ? "Как устройство будет видно в сессиях" : "How the device appears in active sessions"
-                        let nameAlert = UIAlertController(title: nameTitle, message: nameMsg, preferredStyle: .alert)
-                        nameAlert.addTextField { tf in
-                            tf.placeholder = kind
-                            tf.autocapitalizationType = .words
-                            tf.clearButtonMode = .whileEditing
-                        }
-                        nameAlert.addAction(UIAlertAction(title: isRu ? "Сохранить" : "Save", style: .default) { _ in
-                            let entered = (nameAlert.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                            apply(entered.isEmpty ? kind : entered)
-                        })
-                        nameAlert.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
-                        controller.present(nameAlert, animated: true)
-                    })
-                }
-                typeSheet.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
-                anchorPopover(typeSheet)
-                controller.present(typeSheet, animated: true)
-            }
-
-            let title = isRu ? "Выбери устройство" : "Select Device"
-            // (label, model-string) — nil model clears the spoof.
-            let devices: [(String, String?)] = [
-                (isRu ? "Выкл. (реальный девайс)" : "Off (real device)", nil),
-                ("iPhone 16 Pro Max",    "iPhone 16 Pro Max"),
-                ("iPhone 16 Pro",        "iPhone 16 Pro"),
-                ("iPhone 16 Plus",       "iPhone 16 Plus"),
-                ("iPhone 16",            "iPhone 16"),
-                ("iPhone 15 Pro Max",    "iPhone 15 Pro Max"),
-                ("iPhone 15 Pro",        "iPhone 15 Pro"),
-                ("iPhone 15 Plus",       "iPhone 15 Plus"),
-                ("iPhone 15",            "iPhone 15"),
-                ("iPhone 14 Pro Max",    "iPhone 14 Pro Max"),
-                ("iPhone 14 Pro",        "iPhone 14 Pro"),
-                ("iPhone 13 Pro Max",    "iPhone 13 Pro Max"),
-                ("iPhone 12 Pro Max",    "iPhone 12 Pro Max"),
-                ("iPhone SE (3rd gen)",  "iPhone SE (3rd gen)"),
-                ("iPad Pro 12.9\"",      "iPad Pro 12.9"),
-                ("Desktop Windows",      "Desktop Windows"),
-                ("Desktop macOS",        "Desktop macOS"),
-                ("AorusGram Web",        "AorusGram Web"),
-                ("Samsung Galaxy S24 Ultra", "Samsung Galaxy S24 Ultra"),
-                ("Xiaomi 14 Pro",        "Xiaomi 14 Pro"),
-                ("Huawei Mate 60 Pro",   "Huawei Mate 60 Pro"),
-            ]
-            let alert = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
-            for (label, value) in devices {
-                alert.addAction(UIAlertAction(title: label, style: .default) { _ in apply(value) })
-            }
-            alert.addAction(UIAlertAction(title: isRu ? "Своё устройство…" : "Custom device…", style: .default) { _ in
-                presentCustom()
-            })
-            alert.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
-            anchorPopover(alert)
-            controller.present(alert, animated: true)
+            )
+            navigationController.pushViewController(deviceController)
         },
         openMasks: {
             guard let controller = weakController,
@@ -1421,37 +1354,35 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             controller.present(nav, animated: true)
         },
         openAppBadgePicker: {
-            // Native action sheet: AorusGram / ATunnel / Отключен. Writing the choice to
-            // UserDefaults + posting the change notification makes WindowContent.swift
-            // swap (or hide) the live notch badge immediately.
             guard let controller = weakController else { return }
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
-            let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
             let current = UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram"
 
-            let sheet = UIAlertController(title: l10n.appBadge, message: nil, preferredStyle: .actionSheet)
+            let sheet = ActionSheetController(presentationData: presentationData)
             let options: [(String, String)] = [
                 ("aorusgram", l10n.appBadgeAorus),
                 ("atunnel",   l10n.appBadgeATunnel),
                 ("off",       l10n.appBadgeOff),
             ]
-            for (id, name) in options {
-                let title = (id == current) ? "\(name)  ✓" : name
-                sheet.addAction(UIAlertAction(title: title, style: .default) { _ in
+            let optionItems: [ActionSheetButtonItem] = options.map { id, name in
+                return ActionSheetButtonItem(title: name, color: .accent, font: id == current ? .bold : .default, action: { [weak sheet] in
+                    sheet?.dismissAnimated()
                     UserDefaults.standard.set(id, forKey: "aorusgram_app_badge")
                     NotificationCenter.default.post(
                         name: NSNotification.Name("aorusgram_app_badge_changed"), object: nil)
                     updateState { s in var n = s; n.appBadge = id; return n }
                 })
             }
-            sheet.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
-            if let popover = sheet.popoverPresentationController, let view = controller.view {
-                popover.sourceView = view
-                popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
-                popover.permittedArrowDirections = []
-            }
-            controller.present(sheet, animated: true)
+            sheet.setItemGroups([
+                ActionSheetItemGroup(items: optionItems),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
+                        sheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            controller.present(sheet, in: .window(.root))
         },
         openFont: {
             guard let controller = weakController,

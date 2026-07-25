@@ -171,6 +171,53 @@ def main() -> None:
     else:
         err.append("VoiceToText: ChatTextInputPanelNode.swift is missing")
 
+    timestamp_status = (
+        tg
+        / "submodules"
+        / "TelegramUI"
+        / "Components"
+        / "Chat"
+        / "ChatMessageDateAndStatusNode"
+        / "Sources"
+        / "StringForMessageTimestampStatus.swift"
+    )
+    if not timestamp_status.is_file():
+        err.append("MessageSeconds: central timestamp formatter is missing")
+    else:
+        timestamp_text = timestamp_status.read_text(encoding="utf-8")
+        if timestamp_text.count("aorusgram_feature_message_seconds") != 3:
+            err.append("MessageSeconds: all three central timestamp call sites must use the setting")
+        if timestamp_text.count("withSeconds: UserDefaults.standard.bool") != 3:
+            err.append("MessageSeconds: Telegram's locale-aware formatter is not used consistently")
+
+    multipart_fetch = tg / "submodules" / "TelegramCore" / "Sources" / "Network" / "MultipartFetch.swift"
+    if not multipart_fetch.is_file():
+        err.append("DownloadAccelerator: MultipartFetch.swift is missing")
+    else:
+        multipart_text = multipart_fetch.read_text(encoding="utf-8")
+        accelerator_line = (
+            'self.parallelParts = UserDefaults.standard.bool(forKey: '
+            '"aorusgram_feature_download_accel") ? 16 : 8'
+        )
+        if multipart_text.count(accelerator_line) != 1:
+            err.append("DownloadAccelerator: large-file MTProto concurrency patch is missing or duplicated")
+        if "self.defaultPartSize = 512 * 1024" not in multipart_text:
+            err.append("DownloadAccelerator: Telegram's native large-file part size changed")
+
+    spoof_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusDeviceSpoofController.swift"
+    if not spoof_controller.is_file():
+        err.append("DeviceSpoof: native settings controller is missing")
+    else:
+        spoof_text = spoof_controller.read_text(encoding="utf-8")
+        for marker in (
+            "animateChanges: true",
+            "aorusDeviceStableId",
+            "Add Custom Device",
+            "ItemListCheckboxItem",
+        ):
+            if marker not in spoof_text:
+                err.append(f"DeviceSpoof: screen invariant is missing {marker}")
+
     formatting_toolbar = (
         tg
         / "submodules"

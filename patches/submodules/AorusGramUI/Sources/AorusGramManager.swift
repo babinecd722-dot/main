@@ -62,6 +62,7 @@ public final class AorusGramManager {
     // "User's messages" — context-menu action (groups only) to open a chat-like
     // screen with all of one user's messages in that group.
     public var userMessagesInGroup: Bool = false { didSet { save() } }
+    public var messageSeconds: Bool       = false { didSet { save() } }
 
     // Message tap gestures (opt-in, off by default).
     public var doubleTapCopy: Bool     = false { didSet { save() } }
@@ -131,6 +132,7 @@ public final class AorusGramManager {
         ud.set(effective(squareAvatars),       forKey: "aorusgram_square_avatars")
         ud.set(effective(editLocally),         forKey: "aorusgram_feature_edit_locally")
         ud.set(effective(userMessagesInGroup), forKey: "aorusgram_feature_user_messages")
+        ud.set(effective(messageSeconds),      forKey: "aorusgram_feature_message_seconds")
         ud.set(effective(doubleTapCopy),       forKey: "aorusgram_feature_double_copy")
         ud.set(effective(tripleTapDelete),     forKey: "aorusgram_feature_triple_delete")
         ud.set(effective(voiceTwinEnabled),    forKey: "aorusgram_voice_twin_enabled")
@@ -171,6 +173,7 @@ public final class AorusGramManager {
         autoReply           = d["autoReply"]           as? Bool ?? false
         editLocally         = d["editLocally"]         as? Bool ?? false
         userMessagesInGroup = d["userMessagesInGroup"] as? Bool ?? false
+        messageSeconds      = d["messageSeconds"]      as? Bool ?? false
         doubleTapCopy       = d["doubleTapCopy"]       as? Bool ?? false
         tripleTapDelete     = d["tripleTapDelete"]     as? Bool ?? false
         cacheAutoClean      = d["cacheAutoClean"]      as? Bool ?? false
@@ -227,6 +230,7 @@ public final class AorusGramManager {
             "autoReply":           autoReply,
             "editLocally":         editLocally,
             "userMessagesInGroup": userMessagesInGroup,
+            "messageSeconds":      messageSeconds,
             "doubleTapCopy":       doubleTapCopy,
             "tripleTapDelete":     tripleTapDelete,
             "cacheAutoClean":      cacheAutoClean,
@@ -270,13 +274,7 @@ public final class AorusGramManager {
     // MARK: - Bootstrap (call from AppDelegate/AppLock)
 
     public func bootstrap() {
-        if effective(downloadAccel)  { applyDownloadAcceleration() }
         if effective(siriShortcuts)  { donateSiriShortcuts() }
-    }
-
-    private func applyDownloadAcceleration() {
-        UserDefaults.standard.set(8, forKey: "aorusgram_mtproto_maxDownloadConnections")
-        UserDefaults.standard.set(2 * 1024 * 1024, forKey: "aorusgram_mtproto_downloadChunkSize")
     }
 
     private func donateSiriShortcuts() {

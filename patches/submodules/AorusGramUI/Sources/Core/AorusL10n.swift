@@ -176,6 +176,7 @@ public struct AorusL10n {
     public var tripleTapDelete: String { t("Тройное нажатие для удаления", "Triple Tap to Delete") }
     public var editLocally: String { t("Изменить локально", "Edit Locally") }
     public var userMessagesInGroup: String { t("Сообщения пользователя", "User's Messages") }
+    public var messageSeconds: String { t("Секунды в сообщениях", "Seconds in Messages") }
     public var editLocallyFooter: String { t("Изменяет текст сообщения только у вас на устройстве. Собеседник изменений не видит.", "Edits a message's text only on your device. Other people don't see the change.") }
 
     // MARK: Voice Twin

@@ -1518,6 +1518,46 @@ def patch_download_accelerator(tg: Path) -> None:
     print("DownloadAccelerator: parallelParts 8 -> 16 when accelerator enabled")
 
 
+def patch_message_timestamp_seconds(tg: Path) -> None:
+    """Show seconds in every chat message timestamp through Telegram's formatter.
+
+    All bubble/media/status variants converge on this helper, so changing it
+    avoids per-node drift and keeps Telegram's locale-aware 12/24-hour format.
+    """
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/StringForMessageTimestampStatus.swift"
+    if not path.is_file():
+        raise RuntimeError("MessageSeconds: StringForMessageTimestampStatus.swift not found")
+    t = path.read_text(encoding="utf-8")
+    key = "aorusgram_feature_message_seconds"
+    expected = 3
+    if key in t:
+        if t.count(key) != expected:
+            raise RuntimeError(f"MessageSeconds: expected {expected} patched calls, found {t.count(key)}")
+        print("MessageSeconds: already patched")
+        return
+    replacements = [
+        (
+            "stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)",
+            f"stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat, withSeconds: UserDefaults.standard.bool(forKey: \"{key}\"))",
+            2,
+        ),
+        (
+            "stringForMessageTimestamp(timestamp: forwardInfo.date, dateTimeFormat: dateTimeFormat)",
+            f"stringForMessageTimestamp(timestamp: forwardInfo.date, dateTimeFormat: dateTimeFormat, withSeconds: UserDefaults.standard.bool(forKey: \"{key}\"))",
+            1,
+        ),
+    ]
+    for anchor, replacement, count in replacements:
+        actual = t.count(anchor)
+        if actual != count:
+            raise RuntimeError(f"MessageSeconds: expected {count} occurrence(s) of {anchor!r}, found {actual}")
+        t = t.replace(anchor, replacement)
+    if t.count(key) != expected:
+        raise RuntimeError("MessageSeconds: patch count mismatch")
+    path.write_text(t, encoding="utf-8")
+    print("MessageSeconds: central Telegram timestamp formatter patched (3 call sites)")
+
+
 def patch_max_media_quality(tg: Path) -> None:
     """Raise outgoing media quality when the Aorus max-media switch is enabled.
 
@@ -21066,6 +21106,7 @@ def main() -> None:
     patch_primary_app_icon(tg)
     patch_settings_entry_point(tg)
     patch_download_accelerator(tg)
+    patch_message_timestamp_seconds(tg)
     patch_max_media_quality(tg)
     patch_video_message_rear_camera(tg)
     patch_deleted_messages_interception(tg)
