@@ -57,7 +57,7 @@ private enum ChatLockEntry: ItemListNodeEntry {
     case toggleInfo(PresentationTheme, String)
     case chatsHeader(PresentationTheme, String)
     case addChats(PresentationTheme, String)
-    case peer(Int32, PresentationTheme, PresentationStrings, PresentationDateTimeFormat, PresentationPersonNameOrder, EnginePeer, Bool)
+    case peer(Int32, PresentationTheme, EnginePeer, Bool)
     case chatsInfo(PresentationTheme, String)
 
     var section: ItemListSectionId {
@@ -75,7 +75,7 @@ private enum ChatLockEntry: ItemListNodeEntry {
         case .toggleInfo:   return .toggleInfo
         case .chatsHeader:  return .chatsHeader
         case .addChats:     return .addChats
-        case let .peer(_, _, _, _, _, peer, _): return .peer(peer.id)
+        case let .peer(_, _, peer, _): return .peer(peer.id)
         case .chatsInfo:    return .chatsInfo
         }
     }
@@ -86,7 +86,7 @@ private enum ChatLockEntry: ItemListNodeEntry {
         case .toggleInfo:   return 1
         case .chatsHeader:  return 2
         case .addChats:     return 3
-        case let .peer(index, _, _, _, _, _, _): return 100 + index
+        case let .peer(index, _, _, _): return 100 + index
         case .chatsInfo:    return 10000
         }
     }
@@ -105,8 +105,8 @@ private enum ChatLockEntry: ItemListNodeEntry {
             if case let .chatsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .addChats(lt, ls):
             if case let .addChats(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .peer(li, lt, _, _, _, lp, lr):
-            if case let .peer(ri, rt, _, _, _, rp, rr) = rhs { return li == ri && lt === rt && lp == rp && lr == rr }
+        case let .peer(li, lt, lp, lr):
+            if case let .peer(ri, rt, rp, rr) = rhs { return li == ri && lt === rt && lp == rp && lr == rr }
         case let .chatsInfo(lt, ls):
             if case let .chatsInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         }
@@ -124,11 +124,11 @@ private enum ChatLockEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .addChats(theme, title):
             return ItemListPeerActionItem(presentationData: presentationData, icon: PresentationResourcesItemList.addPersonIcon(theme), title: title, sectionId: self.section, editing: false, action: { args.addChats() })
-        case let .peer(_, _, _, dateTimeFormat, nameDisplayOrder, peer, revealed):
+        case let .peer(_, _, peer, revealed):
             return ItemListPeerItem(
                 presentationData: presentationData,
-                dateTimeFormat: dateTimeFormat,
-                nameDisplayOrder: nameDisplayOrder,
+                dateTimeFormat: presentationData.dateTimeFormat,
+                nameDisplayOrder: presentationData.nameDisplayOrder,
                 context: args.context,
                 peer: peer,
                 presence: nil,
@@ -171,7 +171,7 @@ private func chatLockEntries(state: ChatLockState, peers: [EnginePeer], presenta
     entries.append(.addChats(theme, isRu ? "Добавить чат" : "Add Chat"))
     var index: Int32 = 0
     for peer in peers {
-        entries.append(.peer(index, theme, presentationData.strings, presentationData.dateTimeFormat, presentationData.nameDisplayOrder, peer, state.revealedPeerId == peer.id))
+        entries.append(.peer(index, theme, peer, state.revealedPeerId == peer.id))
         index += 1
     }
     if peers.isEmpty {
