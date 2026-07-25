@@ -4992,6 +4992,44 @@ def patch_chat_lock(tg: Path) -> None:
         print("ChatLock: ChatListItem.swift not found — skip")
         ok = False
 
+    # --- 3d. Keep protected chats out of message search ------------------------------------
+    #     Global/local search would otherwise hand back the very message text the lock is
+    #     meant to hide. Filtering at the single point where the pane returns its entries
+    #     covers local, remote and public-post results at once. Matching on `stableId`
+    #     (.messageId) rather than the 15-associated-value `.message` case keeps this robust.
+    #     Uses isProtected, so clearing the switch — or removing the chat from the list —
+    #     immediately makes its messages searchable again.
+    search = tg / "submodules/ChatListUI/Sources/ChatListSearchListPaneNode.swift"
+    if search.is_file():
+        t = search.read_text(encoding="utf-8")
+        if "AorusGram: Chat Protection — keep protected chats out of search" in t:
+            print("ChatLock: search filter already patched")
+        else:
+            if "import AorusGramUI\n" not in t:
+                t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+            anchor = "                return (entries, isSearching, query)\n"
+            inject = (
+                "                // AorusGram: Chat Protection — keep protected chats out of search\n"
+                "                // results, otherwise search leaks the message text the lock hides.\n"
+                "                entries = entries.filter { aorusEntry in\n"
+                "                    if case let .messageId(aorusMessageId, _) = aorusEntry.stableId {\n"
+                "                        return !aorusChatLockIsProtected(aorusMessageId.peerId.toInt64())\n"
+                "                    }\n"
+                "                    return true\n"
+                "                }\n"
+                + anchor
+            )
+            if t.count(anchor) == 1:
+                t = t.replace(anchor, inject, 1)
+                search.write_text(t, encoding="utf-8")
+                print("ChatLock: filtered protected chats out of message search")
+            else:
+                print(f"ChatLock: WARNING search return anchor count={t.count(anchor)} (expected 1)")
+                ok = False
+    else:
+        print("ChatLock: ChatListSearchListPaneNode.swift not found — skip")
+        ok = False
+
     # --- 4. ChatListUI needs the AorusGramUI dep -------------------------------------------
     cl_build = tg / "submodules/ChatListUI/BUILD"
     if cl_build.is_file():
