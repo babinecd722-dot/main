@@ -4921,12 +4921,12 @@ def patch_chat_lock(tg: Path) -> None:
             )
             inject = (
                 anchor
-                + "            // AorusGram: Chat Protection badge — closed padlock while protection is\n"
-                + "            // in force, open padlock during the unlock grace period. Reuses the\n"
-                + "            // secret-chat icon slot so the row layout is unchanged.\n"
+                + "            // AorusGram: Chat Protection badge — a constant lock marks the chat as\n"
+                + "            // protected regardless of the unlock state, so it never flickers between\n"
+                + "            // shapes. Reuses the secret-chat icon slot, leaving row layout unchanged.\n"
                 + "            if !isSecret && !isPeerGroup, case let .chatList(aorusIndex) = item.index,\n"
-                + "               let aorusBadge = aorusChatProtectionBadgeIcon(aorusIndex.messageIndex.id.peerId.toInt64(), item.presentationData.theme) {\n"
-                + "                currentSecretIconImage = aorusBadge\n"
+                + "               aorusChatLockIsProtected(aorusIndex.messageIndex.id.peerId.toInt64()) {\n"
+                + "                currentSecretIconImage = PresentationResourcesChatList.statusLockIcon(item.presentationData.theme)\n"
                 + "            }\n"
             )
             if anchor in t:
@@ -5031,59 +5031,90 @@ def patch_chat_lock(tg: Path) -> None:
         print("ChatLock: ChatListSearchListPaneNode.swift not found — skip")
         ok = False
 
-    # --- 3e. Refresh the chat list the moment protection changes ---------------------------
-    #     Adding a chat, removing one, flipping the switch, unlocking, or the grace period
-    #     lapsing must all be reflected right away — otherwise the badge/preview only update
-    #     after leaving and re-entering the list. ChatListNode rebuilds its rows when its
-    #     state changes, and the state is Equatable, so a plain "poke" is ignored. Adding a
-    #     revision counter gives us a legitimate state change to bump. The property carries a
-    #     default value, so every existing ChatListNodeState(...) call site still compiles.
-    node = tg / "submodules/ChatListUI/Sources/Node/ChatListNode.swift"
-    if node.is_file():
-        t = node.read_text(encoding="utf-8")
-        if "aorusProtectionRevision" in t:
-            print("ChatLock: chat-list revision field already patched")
+    # --- 3g. Forum (topic) groups ----------------------------------------------------------
+    #     A forum group opens its TOPIC LIST inline, inside the same chat-list screen, without
+    #     going through navigateToChatController — so the main gate never saw it and the topic
+    #     list was readable (only entering a topic was blocked). Gate the inline path here, and
+    #     the separate navigateToForumChannel entry point below.
+    if cl.is_file():
+        t = cl.read_text(encoding="utf-8")
+        if "AorusGram: Chat Protection — a protected forum" in t:
+            print("ChatLock: inline forum gate already patched")
         else:
-            field_anchor = "    public var archiveStoryState: StoryState?\n"
-            field_inject = (
-                field_anchor
-                + "    // AorusGram: bumped when Chat Protection changes, so rows re-render at once.\n"
-                + "    public var aorusProtectionRevision: Int32 = 0\n"
+            forum_anchor = (
+                "                    if openAsInlineForum, case let .channel(channel) = peer, channel.isForum, threadId == nil {\n"
+                "                        self.chatListDisplayNode.clearHighlightAnimated(true)\n"
+                "                        if self.chatListDisplayNode.inlineStackContainerNode?.location == .forum(peerId: channel.id) {\n"
+                "                            self.setInlineChatList(location: nil)\n"
+                "                        } else {\n"
+                "                            self.setInlineChatList(location: .forum(peerId: channel.id))\n"
+                "                        }\n"
+                "                        return\n"
+                "                    }\n"
             )
-            eq_anchor = (
-                "    public static func ==(lhs: ChatListNodeState, rhs: ChatListNodeState) -> Bool {\n"
-                "        if lhs.presentationData !== rhs.presentationData {\n"
-                "            return false\n"
-                "        }\n"
+            forum_repl = (
+                "                    if openAsInlineForum, case let .channel(channel) = peer, channel.isForum, threadId == nil {\n"
+                "                        // AorusGram: Chat Protection — a protected forum must not reveal even\n"
+                "                        // its topic list, which opens inline and bypasses chat navigation.\n"
+                "                        let aorusOpenForum: () -> Void = { [weak self] in\n"
+                "                            guard let self else {\n"
+                "                                return\n"
+                "                            }\n"
+                "                            self.chatListDisplayNode.clearHighlightAnimated(true)\n"
+                "                            if self.chatListDisplayNode.inlineStackContainerNode?.location == .forum(peerId: channel.id) {\n"
+                "                                self.setInlineChatList(location: nil)\n"
+                "                            } else {\n"
+                "                                self.setInlineChatList(location: .forum(peerId: channel.id))\n"
+                "                            }\n"
+                "                        }\n"
+                "                        if aorusChatLockRequiresAuth(channel.id.toInt64()) {\n"
+                "                            aorusChatLockAuthenticate { success in\n"
+                "                                if success {\n"
+                "                                    aorusOpenForum()\n"
+                "                                }\n"
+                "                            }\n"
+                "                        } else {\n"
+                "                            aorusOpenForum()\n"
+                "                        }\n"
+                "                        return\n"
+                "                    }\n"
             )
-            eq_inject = (
-                "    public static func ==(lhs: ChatListNodeState, rhs: ChatListNodeState) -> Bool {\n"
-                "        if lhs.aorusProtectionRevision != rhs.aorusProtectionRevision {\n"
-                "            return false\n"
-                "        }\n"
-                "        if lhs.presentationData !== rhs.presentationData {\n"
-                "            return false\n"
-                "        }\n"
-            )
-            sub_ok = True
-            if field_anchor in t:
-                t = t.replace(field_anchor, field_inject, 1)
+            if forum_anchor in t:
+                t = t.replace(forum_anchor, forum_repl, 1)
+                cl.write_text(t, encoding="utf-8")
+                print("ChatLock: gated inline forum topic list")
             else:
-                print("ChatLock: WARNING archiveStoryState anchor not found")
-                sub_ok = False
-            if eq_anchor in t:
-                t = t.replace(eq_anchor, eq_inject, 1)
-            else:
-                print("ChatLock: WARNING ChatListNodeState == anchor not found")
-                sub_ok = False
-            if sub_ok:
-                node.write_text(t, encoding="utf-8")
-                print("ChatLock: added chat-list protection revision field")
-            else:
+                print("ChatLock: WARNING inline forum anchor not found — topic list NOT gated")
                 ok = False
-    else:
-        print("ChatLock: ChatListNode.swift not found — skip")
-        ok = False
+
+    if nav.is_file():
+        t = nav.read_text(encoding="utf-8")
+        if "AorusGram: Chat Protection — gate the forum" in t:
+            print("ChatLock: forum navigation gate already patched")
+        else:
+            fn_anchor = (
+                "public func navigateToForumChannelImpl(context: AccountContext, peerId: EnginePeer.Id, navigationController: NavigationController) {\n"
+            )
+            fn_inject = (
+                fn_anchor
+                + "    // AorusGram: Chat Protection — gate the forum topic list opened via this entry\n"
+                + "    // point too (profile / deep links), not just the inline chat-list path.\n"
+                + "    if aorusChatLockRequiresAuth(peerId.toInt64()) {\n"
+                + "        aorusChatLockAuthenticate { success in\n"
+                + "            if success {\n"
+                + "                navigateToForumChannelImpl(context: context, peerId: peerId, navigationController: navigationController)\n"
+                + "            }\n"
+                + "        }\n"
+                + "        return\n"
+                + "    }\n"
+            )
+            if fn_anchor in t:
+                t = t.replace(fn_anchor, fn_inject, 1)
+                nav.write_text(t, encoding="utf-8")
+                print("ChatLock: gated navigateToForumChannel")
+            else:
+                print("ChatLock: WARNING navigateToForumChannelImpl anchor not found")
+                ok = False
 
     # --- 3f. Observe protection changes in the chat list controller ------------------------
     if cl.is_file():
@@ -5103,7 +5134,12 @@ def patch_chat_lock(tg: Path) -> None:
                 + "            }\n"
                 + "            self.chatListDisplayNode.effectiveContainerNode.updateState { state in\n"
                 + "                var state = state\n"
-                + "                state.aorusProtectionRevision = state.aorusProtectionRevision &+ 1\n"
+                + "                // Rebuild the presentation data as a NEW object. Rows are only re-laid\n"
+                + "                // out when the entries differ, and both ChatListNodeState and the peer\n"
+                + "                // entries compare presentationData by identity (!==) — so an identical\n"
+                + "                // copy is exactly the nudge needed, without altering appearance.\n"
+                + "                let aorusPD = state.presentationData\n"
+                + "                state.presentationData = ChatListPresentationData(theme: aorusPD.theme, fontSize: aorusPD.fontSize, strings: aorusPD.strings, dateTimeFormat: aorusPD.dateTimeFormat, nameSortOrder: aorusPD.nameSortOrder, nameDisplayOrder: aorusPD.nameDisplayOrder, disableAnimations: aorusPD.disableAnimations)\n"
                 + "                return state\n"
                 + "            }\n"
                 + "        }\n"

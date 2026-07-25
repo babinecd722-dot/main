@@ -1,8 +1,6 @@
 import Foundation
 import UIKit
 import LocalAuthentication
-import Display
-import TelegramPresentationData
 
 // AorusGram: Chat Protection ("Защита чатов") — protect selected private chats and groups behind
 // Face ID / Touch ID / device passcode.
@@ -220,66 +218,6 @@ public func aorusChatLockIsProtected(_ peerId: Int64) -> Bool {
 /// Gate for opening a chat / showing its long-press preview.
 public func aorusChatLockRequiresAuth(_ peerId: Int64) -> Bool {
     return AorusChatLock.requiresAuth(peerId: peerId)
-}
-
-// MARK: - Unlocked badge
-
-private var aorusUnlockedIconCache: [ObjectIdentifier: UIImage] = [:]
-
-/// The chat list's own lock glyph, redrawn with its shackle slid across so it reads as an
-/// OPEN padlock. Built from the very same asset (Chat List/StatusLockIcon) rather than a
-/// hand-drawn or SF Symbol substitute, so weight, colour and size match the locked state
-/// exactly — only the shackle moves.
-///
-/// The result is cached per theme: this is called for every visible row on every layout pass.
-public func aorusChatProtectionUnlockedIcon(_ theme: PresentationTheme) -> UIImage? {
-    let key = ObjectIdentifier(theme)
-    if let cached = aorusUnlockedIconCache[key] {
-        return cached
-    }
-    guard let base = PresentationResourcesChatList.statusLockIcon(theme), let baseCG = base.cgImage else {
-        return nil
-    }
-
-    let size = base.size
-    // Split the glyph just below the shackle's legs; the lower part is the body.
-    let shackleHeight = floor(size.height * 0.45)
-    // How far the shackle slides. Kept small so the icon still reads as a padlock and its
-    // footprint barely grows (the row reserves width from the returned image).
-    let offset = max(1.0, floor(size.width * 0.22))
-
-    let image = generateImage(CGSize(width: size.width + offset, height: size.height), rotatedContext: { canvasSize, context in
-        context.clear(CGRect(origin: CGPoint(), size: canvasSize))
-        let full = CGRect(origin: CGPoint(), size: size)
-
-        // Body — drawn in place.
-        context.saveGState()
-        context.clip(to: CGRect(x: 0.0, y: shackleHeight, width: size.width, height: size.height - shackleHeight))
-        context.draw(baseCG, in: full)
-        context.restoreGState()
-
-        // Shackle — the same pixels, shifted sideways so the padlock reads as open.
-        context.saveGState()
-        context.clip(to: CGRect(x: offset, y: 0.0, width: size.width, height: shackleHeight))
-        context.draw(baseCG, in: full.offsetBy(dx: offset, dy: 0.0))
-        context.restoreGState()
-    })
-
-    if let image = image {
-        aorusUnlockedIconCache[key] = image
-    }
-    return image
-}
-
-/// The badge a chat-list row should show: nil when the chat is not protected, the stock
-/// closed padlock while protection is actually in force, and the open padlock during the
-/// grace period (protection is configured but currently lifted).
-public func aorusChatProtectionBadgeIcon(_ peerId: Int64, _ theme: PresentationTheme) -> UIImage? {
-    guard AorusChatLock.isProtected(peerId: peerId) else { return nil }
-    if AorusChatLock.isWithinGracePeriod() {
-        return aorusChatProtectionUnlockedIcon(theme)
-    }
-    return PresentationResourcesChatList.statusLockIcon(theme)
 }
 
 /// Placeholder shown in the chat list instead of a protected chat's last message.
