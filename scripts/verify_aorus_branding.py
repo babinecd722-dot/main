@@ -973,6 +973,23 @@ def main() -> None:
         if marker not in chat_lock_text:
             err.append(f"ChatProtection: account-scoped fail-closed invariant is missing {marker}")
 
+    chat_list_controller = tg / "submodules" / "ChatListUI" / "Sources" / "ChatListController.swift"
+    chat_list_controller_text = chat_list_controller.read_text(encoding="utf-8") if chat_list_controller.is_file() else ""
+    if "aorusChatLockRequiresAuth(strongSelf.context.account.id.int64, aorusPeer.id.toInt64())" not in chat_list_controller_text:
+        err.append("ChatProtection: preview gate must reuse Telegram's unwrapped strongSelf")
+    if "AorusGram: Chat Lock — never reveal" in chat_list_controller_text and "guard let self else" in chat_list_controller_text[
+        chat_list_controller_text.find("AorusGram: Chat Lock — never reveal"):
+        chat_list_controller_text.find("AorusGram: Chat Lock — never reveal") + 500
+    ]:
+        err.append("ChatProtection: preview gate introduces a duplicate self unwrap")
+
+    chat_search = tg / "submodules" / "ChatListUI" / "Sources" / "ChatListSearchListPaneNode.swift"
+    chat_search_text = chat_search.read_text(encoding="utf-8") if chat_search.is_file() else ""
+    if "aorusChatLockRequiresAuth(context.account.id.int64, aorusMessageId.peerId.toInt64())" not in chat_search_text:
+        err.append("ChatProtection: search filter must use the captured non-optional account context")
+    if "aorusChatLockRequiresAuth(self.context.account.id.int64, aorusMessageId.peerId.toInt64())" in chat_search_text:
+        err.append("ChatProtection: search filter dereferences optional self")
+
     clipboard_history = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusClipboardHistory.swift"
     clipboard_text = clipboard_history.read_text(encoding="utf-8") if clipboard_history.is_file() else ""
     for marker in (

@@ -4884,17 +4884,17 @@ def patch_chat_lock(tg: Path) -> None:
             anchor = (
                 "        self.chatListDisplayNode.mainContainerNode.activateChatPreview = "
                 "{ [weak self] item, threadId, node, gesture, location in\n"
+                "            guard let strongSelf = self else {\n"
+                "                gesture?.cancel()\n"
+                "                return\n"
+                "            }\n"
             )
             inject = (
                 anchor
                 + "            // AorusGram: Chat Lock — never reveal a protected chat through the\n"
                 + "            // long-press preview; it bypasses navigation and would leak content.\n"
-                + "            guard let self else {\n"
-                + "                gesture?.cancel()\n"
-                + "                return\n"
-                + "            }\n"
                 + "            if case let .peer(aorusPeerData) = item.content, let aorusPeer = aorusPeerData.peer.peer,\n"
-                + "               aorusChatLockRequiresAuth(self.context.account.id.int64, aorusPeer.id.toInt64()) {\n"
+                + "               aorusChatLockRequiresAuth(strongSelf.context.account.id.int64, aorusPeer.id.toInt64()) {\n"
                 + "                gesture?.cancel()\n"
                 + "                return\n"
                 + "            }\n"
@@ -5021,7 +5021,7 @@ def patch_chat_lock(tg: Path) -> None:
                 "                // results, otherwise search leaks the message text the lock hides.\n"
                 "                entries = entries.filter { aorusEntry in\n"
                 "                    if case let .messageId(aorusMessageId, _) = aorusEntry.stableId {\n"
-                "                        return !aorusChatLockRequiresAuth(self.context.account.id.int64, aorusMessageId.peerId.toInt64())\n"
+                "                        return !aorusChatLockRequiresAuth(context.account.id.int64, aorusMessageId.peerId.toInt64())\n"
                 "                    }\n"
                 "                    return true\n"
                 "                }\n"
