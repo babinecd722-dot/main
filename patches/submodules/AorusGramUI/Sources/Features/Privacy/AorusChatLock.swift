@@ -30,14 +30,26 @@ public final class AorusChatLock {
     /// Guards against stacking prompts when several call sites fire at once.
     private static var isPrompting = false
 
+    // isProtected() is called for EVERY visible chat-list row on EVERY layout pass, so it must
+    // not touch UserDefaults. Both the switch and the id set are cached in memory and
+    // invalidated on write; lookups are then O(1) against a Set.
+    private static var cachedEnabled: Bool?
+    private static var cachedIds: Set<Int64>?
+
     private init() {}
 
     // MARK: - State
 
     public static var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: enabledKey) }
+        get {
+            if let cached = cachedEnabled { return cached }
+            let value = UserDefaults.standard.bool(forKey: enabledKey)
+            cachedEnabled = value
+            return value
+        }
         set {
             UserDefaults.standard.set(newValue, forKey: enabledKey)
+            cachedEnabled = newValue
             // Turning the feature on starts the grace period, so the user is not immediately
             // challenged for the chat they were just looking at.
             if newValue { markUnlocked() }
@@ -52,6 +64,15 @@ public final class AorusChatLock {
 
     private static func setLockedPeerIds(_ ids: [Int64]) {
         UserDefaults.standard.set(ids.map { NSNumber(value: $0) }, forKey: peersKey)
+        cachedIds = Set(ids)
+    }
+
+    /// O(1) membership set used by the per-row badge lookup.
+    private static func lockedIdSet() -> Set<Int64> {
+        if let cached = cachedIds { return cached }
+        let set = Set(lockedPeerIds())
+        cachedIds = set
+        return set
     }
 
     public static func add(peerId: Int64) {
@@ -71,7 +92,7 @@ public final class AorusChatLock {
     /// Independent of the grace period — used for the lock badge.
     public static func isProtected(peerId: Int64) -> Bool {
         guard isEnabled else { return false }
-        return lockedPeerIds().contains(peerId)
+        return lockedIdSet().contains(peerId)
     }
 
     // MARK: - Grace period

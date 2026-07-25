@@ -473,7 +473,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.animatedBanner(theme, isRu ? "Анимированный баннер" : "Animated Banner"))
 
     entries.append(.securityHeader(theme, isRu ? "БЕЗОПАСНОСТЬ" : "SECURITY"))
-    entries.append(.chatLock(theme, isRu ? "Замок чатов" : "Chat Lock",
+    entries.append(.chatLock(theme, isRu ? "Защита чатов" : "Chat Protection",
                              state.chatLockEnabled ? (isRu ? "Вкл" : "On") : ""))
     entries.append(.linkProtection(theme, isRu ? "Защита ссылок" : "Link Protection", state.linkProtection))
     if state.linkProtection {
@@ -765,7 +765,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
             }
             if AorusChatLock.settingsRequireAuth() {
                 let isRu = AorusLang.resolve(context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode) == .ru
-                AorusChatLock.authenticate(reason: isRu ? "Разблокируйте настройки замка чатов" : "Unlock Chat Lock settings") { success in
+                AorusChatLock.authenticate(reason: isRu ? "Разблокируйте настройки защиты чатов" : "Unlock Chat Protection settings") { success in
                     if success {
                         present()
                     }

@@ -11,8 +11,9 @@ import ItemListPeerActionItem
 import PresentationDataUtils
 import AccountContext
 
-// AorusGram: Chat Lock settings screen — master switch, "Add Chats" picker (private chats and
-// groups only, no channels) and the list of protected chats with swipe-to-delete.
+// AorusGram: Chat Protection ("Защита чатов") settings screen — master switch, "Add Chat"
+// picker (private chats and groups only, no channels) and the list of protected chats with
+// swipe-to-remove.
 
 private final class ChatLockArguments {
     let context: AccountContext
@@ -39,6 +40,18 @@ private enum ChatLockSection: Int32 {
     case chats
 }
 
+// Identity must be tied to the peer, not to its position: with a positional id, removing a
+// row would shift every id below it and the list would rebuild instead of animating a single
+// deletion. Sorting is handled separately by `sortIndex`.
+private enum ChatLockEntryStableId: Hashable {
+    case toggle
+    case toggleInfo
+    case chatsHeader
+    case addChats
+    case peer(EnginePeer.Id)
+    case chatsInfo
+}
+
 private enum ChatLockEntry: ItemListNodeEntry {
     case toggle(PresentationTheme, String, Bool)
     case toggleInfo(PresentationTheme, String)
@@ -56,7 +69,18 @@ private enum ChatLockEntry: ItemListNodeEntry {
         }
     }
 
-    var stableId: Int32 {
+    var stableId: ChatLockEntryStableId {
+        switch self {
+        case .toggle:       return .toggle
+        case .toggleInfo:   return .toggleInfo
+        case .chatsHeader:  return .chatsHeader
+        case .addChats:     return .addChats
+        case let .peer(_, _, _, _, _, peer, _): return .peer(peer.id)
+        case .chatsInfo:    return .chatsInfo
+        }
+    }
+
+    private var sortIndex: Int32 {
         switch self {
         case .toggle:       return 0
         case .toggleInfo:   return 1
@@ -68,7 +92,7 @@ private enum ChatLockEntry: ItemListNodeEntry {
     }
 
     static func < (lhs: ChatLockEntry, rhs: ChatLockEntry) -> Bool {
-        return lhs.stableId < rhs.stableId
+        return lhs.sortIndex < rhs.sortIndex
     }
 
     static func == (lhs: ChatLockEntry, rhs: ChatLockEntry) -> Bool {
@@ -100,7 +124,7 @@ private enum ChatLockEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case let .addChats(theme, title):
             return ItemListPeerActionItem(presentationData: presentationData, icon: PresentationResourcesItemList.addPersonIcon(theme), title: title, sectionId: self.section, editing: false, action: { args.addChats() })
-        case let .peer(_, _, strings, dateTimeFormat, nameDisplayOrder, peer, revealed):
+        case let .peer(_, _, _, dateTimeFormat, nameDisplayOrder, peer, revealed):
             return ItemListPeerItem(
                 presentationData: presentationData,
                 dateTimeFormat: dateTimeFormat,
@@ -138,7 +162,7 @@ private func chatLockEntries(state: ChatLockState, peers: [EnginePeer], presenta
     let theme = presentationData.theme
     var entries: [ChatLockEntry] = []
 
-    entries.append(.toggle(theme, isRu ? "Замок чатов" : "Chat Lock", state.isEnabled))
+    entries.append(.toggle(theme, isRu ? "Защита чатов" : "Chat Protection", state.isEnabled))
     entries.append(.toggleInfo(theme, isRu
         ? "Защищённые чаты открываются только после Face ID, Touch ID или код-пароля. Предпросмотр по долгому нажатию для них отключён. После разблокировки код не запрашивается 10 минут."
         : "Protected chats open only after Face ID, Touch ID or your passcode. Long-press preview is disabled for them. After unlocking, you are not asked again for 10 minutes."))
@@ -254,7 +278,7 @@ public func aorusChatLockController(context: AccountContext) -> ViewController {
 
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
-            title: .text(isRu ? "Замок чатов" : "Chat Lock"),
+            title: .text(isRu ? "Защита чатов" : "Chat Protection"),
             leftNavigationButton: nil,
             rightNavigationButton: nil,
             backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
