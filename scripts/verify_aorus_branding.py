@@ -1067,8 +1067,11 @@ def main() -> None:
     for marker in (
         "title: AorusL10n.current.wallRefresh",
         'image: UIImage(systemName: "gearshape")',
-        'UIImage(systemName: "house")?.withRenderingMode(.alwaysTemplate)',
-        'UIImage(systemName: "house.fill")?.withRenderingMode(.alwaysTemplate)',
+        "private let aorusFilledHouseTabImage: UIImage?",
+        'UIImage(systemName: "house.fill", withConfiguration: configuration)',
+        "context.cgContext.setBlendMode(.clear)",
+        "controller.tabBarItem.image = tabImage",
+        "controller.tabBarItem.selectedImage = tabImage",
     ):
         if marker not in wall_text:
             err.append(f"Wall: stable native header/tab integration is missing {marker}")

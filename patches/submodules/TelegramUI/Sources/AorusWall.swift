@@ -7,6 +7,36 @@ import AccountContext
 import Display
 import AorusGramUI
 
+private let aorusFilledHouseTabImage: UIImage? = {
+    let configuration = UIImage.SymbolConfiguration(pointSize: 25.0, weight: .medium)
+    guard let symbol = UIImage(systemName: "house.fill", withConfiguration: configuration)?
+        .withTintColor(.black, renderingMode: .alwaysOriginal) else {
+        return nil
+    }
+
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = UIScreen.main.scale
+    format.opaque = false
+    let image = UIGraphicsImageRenderer(size: symbol.size, format: format).image { context in
+        symbol.draw(at: .zero)
+
+        // Continue the native doorway through the bottom edge of the filled house.
+        let doorwayWidth = symbol.size.width * 0.18
+        let doorwayX = (symbol.size.width - doorwayWidth) * 0.5
+        let doorwayY = symbol.size.height * 0.82
+        context.cgContext.setBlendMode(.clear)
+        context.cgContext.fill(CGRect(
+            x: doorwayX,
+            y: doorwayY,
+            width: doorwayWidth,
+            height: symbol.size.height - doorwayY
+        ))
+    }
+    return image
+        .withRenderingMode(.alwaysTemplate)
+        .withAlignmentRectInsets(symbol.alignmentRectInsets)
+}()
+
 public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     public let title = AorusL10n.current.wallTitle
 
@@ -634,7 +664,8 @@ public func makeAorusWallController(context: AccountContext) -> ViewController {
     }
 
     controller.tabBarItem.title = AorusL10n.current.wallTitle
-    controller.tabBarItem.image = UIImage(systemName: "house")?.withRenderingMode(.alwaysTemplate)
-    controller.tabBarItem.selectedImage = UIImage(systemName: "house.fill")?.withRenderingMode(.alwaysTemplate)
+    let tabImage = aorusFilledHouseTabImage
+    controller.tabBarItem.image = tabImage
+    controller.tabBarItem.selectedImage = tabImage
     return controller
 }
