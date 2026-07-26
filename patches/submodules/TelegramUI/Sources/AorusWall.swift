@@ -149,7 +149,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.isVisible = value
             if value && !wasVisible {
                 self.markCurrentSeen()
-                self.reload(updateType: .Generic)
             }
         }
 
