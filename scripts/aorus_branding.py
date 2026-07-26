@@ -15394,16 +15394,83 @@ def patch_hide_tabs(tg: Path) -> None:
 
 def patch_wall_tab(tg: Path) -> None:
     """Add the native AorusGram Wall tab and wire its chat lifecycle."""
+    account_context = tg / "submodules/AccountContext/Sources/ChatController.swift"
     root = tg / "submodules/TelegramUI/Sources/TelegramRootController.swift"
     content_data = tg / "submodules/TelegramUI/Sources/ChatControllerContentData.swift"
     chat_controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
     chat_controller_node = tg / "submodules/TelegramUI/Sources/ChatControllerNode.swift"
     context_menu = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerOpenMessageContextMenu.swift"
     empty_node = tg / "submodules/TelegramUI/Components/Chat/ChatEmptyNode/Sources/ChatEmptyNode.swift"
+    bubble_node = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
 
     if not root.is_file():
         print("Wall: TelegramRootController.swift not found, skip")
         return
+
+    if account_context.is_file():
+        t = account_context.read_text(encoding="utf-8")
+        if "var aorusIsWall: Bool { get }" not in t:
+            protocol_anchor = (
+                "public protocol ChatCustomContentsProtocol: AnyObject {\n"
+                "    var kind: ChatCustomContentsKind { get }\n"
+            )
+            protocol_replacement = (
+                "public protocol ChatCustomContentsProtocol: AnyObject {\n"
+                "    var kind: ChatCustomContentsKind { get }\n"
+                "    var aorusIsWall: Bool { get }\n"
+            )
+            extension_anchor = (
+                "}\n"
+                "\n"
+                "public enum ChatHistoryListDisplayHeaders {\n"
+            )
+            extension_replacement = (
+                "}\n"
+                "\n"
+                "public extension ChatCustomContentsProtocol {\n"
+                "    var aorusIsWall: Bool {\n"
+                "        return false\n"
+                "    }\n"
+                "}\n"
+                "\n"
+                "public enum ChatHistoryListDisplayHeaders {\n"
+            )
+            if protocol_anchor in t and extension_anchor in t:
+                t = t.replace(protocol_anchor, protocol_replacement, 1)
+                t = t.replace(extension_anchor, extension_replacement, 1)
+                account_context.write_text(t, encoding="utf-8")
+                print("Wall: shared custom-content marker integrated")
+            else:
+                print("Wall: WARNING — custom-content protocol anchors not found")
+        else:
+            print("Wall: shared custom-content marker already patched")
+    else:
+        print("Wall: WARNING — AccountContext ChatController.swift not found")
+
+    # The Telegram checkout is restored from a persistent CI cache. Migrate output
+    # produced by older versions of this script even when the individual feature
+    # patchers report "already patched".
+    legacy_type_checks = (
+        ("!(customChatContents is AorusWallChatContents)", "!customChatContents.aorusIsWall"),
+        ("contents is AorusWallChatContents", "contents.aorusIsWall"),
+        (
+            'String(reflecting: type(of: customChatContents)).contains("AorusWallChatContents")',
+            "customChatContents.aorusIsWall",
+        ),
+    )
+    migrated_checks = 0
+    for path in (chat_controller, chat_controller_node, context_menu, empty_node, bubble_node):
+        if not path.is_file():
+            continue
+        t = path.read_text(encoding="utf-8")
+        original = t
+        for old, new in legacy_type_checks:
+            migrated_checks += t.count(old)
+            t = t.replace(old, new)
+        if t != original:
+            path.write_text(t, encoding="utf-8")
+    if migrated_checks:
+        print(f"Wall: migrated {migrated_checks} cached concrete-type check(s)")
 
     t = root.read_text(encoding="utf-8")
     if "AorusGram: Wall tab" not in t:
@@ -15530,7 +15597,7 @@ def patch_wall_tab(tg: Path) -> None:
             )
             new = (
                 "            if case let .customChatContents(customChatContents) = strongSelf.presentationInterfaceState.subject {\n"
-                "                if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts, !(customChatContents is AorusWallChatContents) { // AorusGram: Wall reactions\n"
+                "                if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts, !customChatContents.aorusIsWall { // AorusGram: Wall reactions\n"
                 "                    return\n"
                 "                }\n"
                 "            }\n"
@@ -15615,7 +15682,7 @@ def patch_wall_tab(tg: Path) -> None:
             old = "                        if !canSendReactionsToChat(strongSelf.presentationInterfaceState) {\n"
             new = (
                 "                        let aorusWallAllowsQuickReaction: Bool\n"
-                "                        if case let .customChatContents(contents) = strongSelf.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                        if case let .customChatContents(contents) = strongSelf.presentationInterfaceState.subject, contents.aorusIsWall {\n"
                 "                            aorusWallAllowsQuickReaction = true\n"
                 "                        } else {\n"
                 "                            aorusWallAllowsQuickReaction = false\n"
@@ -15630,7 +15697,7 @@ def patch_wall_tab(tg: Path) -> None:
             old = "                            if !canSendReactionsToChat(strongSelf.presentationInterfaceState) {\n"
             new = (
                 "                            let aorusWallAllowsMenuReaction: Bool\n"
-                "                            if case let .customChatContents(contents) = strongSelf.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                            if case let .customChatContents(contents) = strongSelf.presentationInterfaceState.subject, contents.aorusIsWall {\n"
                 "                                aorusWallAllowsMenuReaction = true\n"
                 "                            } else {\n"
                 "                                aorusWallAllowsMenuReaction = false\n"
@@ -15656,7 +15723,7 @@ def patch_wall_tab(tg: Path) -> None:
             )
             new = (
                 "                if allowedReactions != nil, case let .customChatContents(customChatContents) = self.presentationInterfaceState.subject {\n"
-                "                    if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts, !(customChatContents is AorusWallChatContents) { // AorusGram: Wall reaction menu\n"
+                "                    if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts, !customChatContents.aorusIsWall { // AorusGram: Wall reaction menu\n"
                 "                        allowedReactions = nil\n"
                 "                    }\n"
                 "                }\n"
@@ -15672,7 +15739,7 @@ def patch_wall_tab(tg: Path) -> None:
             first = "                        if !canSendReactionsToChat(self.presentationInterfaceState) {\n"
             first_new = (
                 "                        let aorusWallAllowsContextReaction: Bool\n"
-                "                        if case let .customChatContents(contents) = self.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                        if case let .customChatContents(contents) = self.presentationInterfaceState.subject, contents.aorusIsWall {\n"
                 "                            aorusWallAllowsContextReaction = true\n"
                 "                        } else {\n"
                 "                            aorusWallAllowsContextReaction = false\n"
@@ -15682,7 +15749,7 @@ def patch_wall_tab(tg: Path) -> None:
             second = "                        if removedReaction == nil && !canSendReactionsToChat(self.presentationInterfaceState) {\n"
             second_new = (
                 "                        let aorusWallAllowsSelectedReaction: Bool\n"
-                "                        if case let .customChatContents(contents) = self.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                        if case let .customChatContents(contents) = self.presentationInterfaceState.subject, contents.aorusIsWall {\n"
                 "                            aorusWallAllowsSelectedReaction = true\n"
                 "                        } else {\n"
                 "                            aorusWallAllowsSelectedReaction = false\n"
@@ -15706,7 +15773,7 @@ def patch_wall_tab(tg: Path) -> None:
             )
             new = (
                 "        var historyNodeRotated = true\n"
-                "        if case let .customChatContents(contents) = subject, contents is AorusWallChatContents { // AorusGram: Wall top-to-bottom history\n"
+                "        if case let .customChatContents(contents) = subject, contents.aorusIsWall { // AorusGram: Wall top-to-bottom history\n"
                 "            historyNodeRotated = false\n"
                 "        }\n"
                 "        var isChatPreview = false\n"
@@ -15721,7 +15788,7 @@ def patch_wall_tab(tg: Path) -> None:
             old = "        transition.updateAlpha(node: self.navigateButtons, alpha: showNavigateButtons ? 1.0 : 0.0)\n"
             new = (
                 "        let aorusWallHidesNavigateButtons: Bool\n"
-                "        if case let .customChatContents(contents) = self.chatPresentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "        if case let .customChatContents(contents) = self.chatPresentationInterfaceState.subject, contents.aorusIsWall {\n"
                 "            aorusWallHidesNavigateButtons = true // AorusGram: Wall has no bottom-navigation button\n"
                 "        } else {\n"
                 "            aorusWallHidesNavigateButtons = false\n"
@@ -15752,7 +15819,7 @@ def patch_wall_tab(tg: Path) -> None:
             )
             new_case = (
                 "                case .hashTagSearch:\n"
-                "                    if String(reflecting: type(of: customChatContents)).contains(\"AorusWallChatContents\") {\n"
+                "                    if customChatContents.aorusIsWall {\n"
                 "                        hideIcon = true\n"
                 "                        titleString = interfaceState.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Новых постов нет\" : \"No New Posts\"\n"
                 "                        strings = []\n"
@@ -20273,7 +20340,7 @@ def patch_message_translate_button(tg: Path) -> None:
         "            needsShareButton = false\n"
         "        }\n"
         "        let aorusIsWallSubject: Bool\n"
-        "        if case let .customChatContents(contents) = item.associatedData.subject, contents is AorusWallChatContents {\n"
+        "        if case let .customChatContents(contents) = item.associatedData.subject, contents.aorusIsWall {\n"
         "            aorusIsWallSubject = true\n"
         "        } else {\n"
         "            aorusIsWallSubject = false\n"
@@ -20324,7 +20391,7 @@ def patch_wall_post_actions(tg: Path) -> None:
     new_flags = (
         "        let aorusVoiceTranscribed = aorusHasVoiceMedia && UserDefaults.standard.object(forKey: aorusMsgKey) != nil\n"
         "        let aorusIsWallPost: Bool\n"
-        "        if case let .customChatContents(contents) = item.associatedData.subject, contents is AorusWallChatContents {\n"
+        "        if case let .customChatContents(contents) = item.associatedData.subject, contents.aorusIsWall {\n"
         "            aorusIsWallPost = true\n"
         "        } else {\n"
         "            aorusIsWallPost = false\n"

@@ -39,6 +39,7 @@ private let aorusFilledHouseTabImage: UIImage? = {
 
 public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     public let title = AorusL10n.current.wallTitle
+    public let aorusIsWall = true
 
     private final class Impl {
         let queue: Queue

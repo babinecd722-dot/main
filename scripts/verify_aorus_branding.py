@@ -1091,6 +1091,17 @@ def main() -> None:
     if "customChatContents as? AorusWallChatContents" not in wall_title_text or "content: .text(aorusWall.title)" not in wall_title_text:
         err.append("Wall: native centered chat title is not connected to AorusWallChatContents")
 
+    wall_account_context = tg / "submodules" / "AccountContext" / "Sources" / "ChatController.swift"
+    wall_account_context_text = wall_account_context.read_text(encoding="utf-8") if wall_account_context.is_file() else ""
+    for marker in ("var aorusIsWall: Bool { get }", "public extension ChatCustomContentsProtocol"):
+        if marker not in wall_account_context_text:
+            err.append(f"Wall: shared custom-content marker is missing {marker}")
+
+    wall_contents = tg / "submodules" / "TelegramUI" / "Sources" / "AorusWall.swift"
+    wall_contents_text = wall_contents.read_text(encoding="utf-8") if wall_contents.is_file() else ""
+    if "public let aorusIsWall = true" not in wall_contents_text:
+        err.append("Wall: AorusWallChatContents does not expose the shared Wall marker")
+
     wall_node = tg / "submodules" / "TelegramUI" / "Sources" / "ChatControllerNode.swift"
     wall_node_text = wall_node.read_text(encoding="utf-8") if wall_node.is_file() else ""
     if "AorusGram: Wall top-to-bottom history" not in wall_node_text:
@@ -1103,6 +1114,13 @@ def main() -> None:
     for marker in ("aorusWallAllowsQuickReaction", "aorusWallAllowsMenuReaction"):
         if marker not in wall_controller_text:
             err.append(f"Wall: recommended-channel reaction route is missing {marker}")
+
+    wall_bubble = tg / "submodules" / "TelegramUI" / "Components" / "Chat" / "ChatMessageBubbleItemNode" / "Sources" / "ChatMessageBubbleItemNode.swift"
+    wall_bubble_text = wall_bubble.read_text(encoding="utf-8") if wall_bubble.is_file() else ""
+    if "contents is AorusWallChatContents" in wall_bubble_text:
+        err.append("Wall: bubble component illegally depends on TelegramUI's concrete AorusWallChatContents type")
+    if "contents.aorusIsWall" not in wall_bubble_text:
+        err.append("Wall: bubble component does not use the shared Wall marker")
 
     wall_context_menu = tg / "submodules" / "TelegramUI" / "Sources" / "Chat" / "ChatControllerOpenMessageContextMenu.swift"
     wall_context_menu_text = wall_context_menu.read_text(encoding="utf-8") if wall_context_menu.is_file() else ""
