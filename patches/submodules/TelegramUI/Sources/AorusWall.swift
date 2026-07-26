@@ -216,7 +216,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
     private let impl: QueueLocalObject<Impl>
     private var latestBadge: Int = 0
-    private var badgeTimer: Timer?
+    private var badgeTimer: Foundation.Timer?
     private var navigationSearchingDisposable: Disposable?
     private var observers: [NSObjectProtocol] = []
 
@@ -253,7 +253,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self?.applicationDidBecomeActive()
         })
 
-        let badgeTimer = Timer(timeInterval: 20.0, repeats: true) { [weak self] _ in
+        let badgeTimer = Foundation.Timer(timeInterval: 20.0, repeats: true) { [weak self] _ in
             self?.recountBadge()
         }
         self.badgeTimer = badgeTimer
