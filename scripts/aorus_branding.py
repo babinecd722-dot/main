@@ -20377,6 +20377,63 @@ def patch_message_translate_button(tg: Path) -> None:
     print("MsgTranslateBtn: injected per-message translate/transcribe button")
 
 
+def patch_wall_fullscreen_media(tg: Path) -> None:
+    """Present Wall media over the whole window so the tab bar is not left on top.
+
+    OpenChatMessage deliberately presents media from CHANNEL posts "in current" on compact
+    layouts instead of over the root window. In a normal chat that is invisible, because the
+    chat was pushed and the tab bar is already hidden. The Wall, however, is the root
+    controller of a tab and consists entirely of channel posts — so the gallery opened inside
+    the tab and the tab bar stayed drawn over the video.
+
+    Rather than touch that upstream heuristic (it exists for split-screen iPad behaviour), we
+    upgrade the presentation target to the root window for the Wall only, at the single point
+    where ChatController fulfils the request. Everything else — files, documents, any other
+    chat — keeps stock behaviour. Idempotent.
+    """
+    path = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+    if not path.is_file():
+        print("WallMedia: ChatController.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: the Wall is a tab root" in t:
+        print("WallMedia: already patched")
+        return
+
+    anchor = (
+        "                present: { [weak self] c, a, i in\n"
+        "                    guard let self else {\n"
+        "                        return\n"
+        "                    }\n"
+        "                    \n"
+        "                    if case .current = i {\n"
+    )
+    replacement = (
+        "                present: { [weak self] c, a, i in\n"
+        "                    guard let self else {\n"
+        "                        return\n"
+        "                    }\n"
+        "                    \n"
+        "                    // AorusGram: the Wall is a tab root controller, so presenting media\n"
+        "                    // \"in current\" leaves the tab bar drawn over the gallery. Channel posts\n"
+        "                    // take that path by default and the Wall is made entirely of them, so\n"
+        "                    // route its media to the root window instead.\n"
+        "                    var i = i\n"
+        "                    if case .current = i, case let .customChatContents(aorusContents) = self.subject,\n"
+        "                       aorusContents is AorusWallChatContents {\n"
+        "                        i = .window(.root)\n"
+        "                    }\n"
+        "                    \n"
+        "                    if case .current = i {\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("WallMedia: Wall media now presents over the root window (tab bar hides)")
+    else:
+        print("WallMedia: WARNING — openChatMessageParams present anchor not found")
+
+
 def patch_wall_post_actions(tg: Path) -> None:
     """Give Wall posts a stable native action stack: translate, share, navigate."""
     path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
@@ -21902,6 +21959,7 @@ def main() -> None:
     patch_share_button_translate(tg)
     patch_message_translate_button(tg)
     patch_wall_post_actions(tg)
+    patch_wall_fullscreen_media(tg)
     patch_quick_replies_ampersand(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
