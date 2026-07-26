@@ -87,6 +87,13 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         // prefetch keeps the buffer full while the tab is open.
         private var prefetchTimer: SwiftSignalKit.Timer?
         private var isPrefetching = false
+
+        // The Wall serves a hand-assembled snapshot rather than a live history view, so
+        // anything that mutates a message afterwards — a reaction being applied, an edit, a
+        // view counter — was invisible until the next rebuild. Watching the posts currently
+        // on screen keeps their contents live without disturbing the composition of the feed.
+        private var messageUpdatesDisposable: Disposable?
+        private var observedMessageIds = Set<MessageId>()
         /// Below this many unseen posts we consider the feed to be running dry.
         private static let prefetchThreshold = 12
         /// Also re-ask Telegram for recommendations periodically, not only when the
@@ -114,6 +121,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.recommendedChannelsDisposable?.dispose()
             self.recommendedPreloadDisposable.dispose()
             self.prefetchTimer?.invalidate()
+            self.messageUpdatesDisposable?.dispose()
         }
 
         private func updateRecommendationsIfNeeded() {
@@ -125,7 +133,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             let isStale = enabled
                 && self.lastRecommendationRefresh > 0.0
                 && (now - self.lastRecommendationRefresh) >= Impl.recommendationRefreshInterval
-            guard enabled != self.recommendationsEnabled || isStale else {
+            let settingChanged = enabled != self.recommendationsEnabled
+            guard settingChanged || isStale else {
                 return
             }
             self.lastRecommendationRefresh = enabled ? now : 0.0
@@ -134,8 +143,15 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.recommendationRequestDisposable = nil
             self.recommendedChannelsDisposable?.dispose()
             self.recommendedChannelsDisposable = nil
-            self.recommendedPreloadDisposable.set(nil)
-            self.recommendedPeerIds = []
+
+            // Only wipe the known set when the user actually flipped the switch. On the
+            // periodic re-check we keep it, so the callback below can compare against it and
+            // stay silent when Telegram returns the same channels — otherwise every refresh
+            // would look like a change and rebuild the feed under the reader.
+            if settingChanged {
+                self.recommendedPreloadDisposable.set(nil)
+                self.recommendedPeerIds = []
+            }
 
             guard enabled else {
                 return
@@ -343,9 +359,78 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.historyViewStream.putNext((view, updateType))
             self.searchingPromise.set(false)
             self.publishCurrentBadge()
+            self.observeMessageUpdates()
         }
 
-        func reload(updateType: EngineViewUpdateType) {
+        /// Watch the posts currently in the feed so reactions, edits and counters appear the
+        /// moment they land in the database. Works the same for subscribed and recommended
+        /// channels — it keys off the message ids on screen, not off membership.
+        private func observeMessageUpdates() {
+            let ids = Set(self.currentMessageIds)
+            guard ids != self.observedMessageIds else {
+                return
+            }
+            self.observedMessageIds = ids
+            self.messageUpdatesDisposable?.dispose()
+            self.messageUpdatesDisposable = nil
+            guard !ids.isEmpty else {
+                return
+            }
+            let key: PostboxViewKey = .messages(ids)
+            self.messageUpdatesDisposable = (self.context.account.postbox.combinedView(keys: [key])
+            |> deliverOn(self.queue)).start(next: { [weak self] views in
+                guard let self, let view = views.views[key] as? MessagesView else {
+                    return
+                }
+                self.applyMessageUpdates(view.messages)
+            })
+        }
+
+        /// Republish the feed with refreshed message contents, keeping its composition intact
+        /// (posts must not appear or disappear here — only their contents change).
+        private func applyMessageUpdates(_ updated: [MessageId: Message]) {
+            var didChange = false
+            for (id, message) in updated {
+                guard let existing = self.currentMessages[id] else {
+                    continue
+                }
+                if existing.stableVersion != message.stableVersion {
+                    self.currentMessages[id] = message
+                    didChange = true
+                }
+            }
+            guard didChange else {
+                return
+            }
+            let entries = self.currentMessageIds.compactMap { id -> EngineRawMessageHistoryEntry? in
+                guard let message = self.currentMessages[id] else {
+                    return nil
+                }
+                return EngineRawMessageHistoryEntry(
+                    message: message,
+                    isRead: false,
+                    location: nil,
+                    monthLocation: nil,
+                    attributes: EngineRawMutableMessageHistoryEntryAttributes(authorIsContact: false)
+                )
+            }
+            let view = EngineRawMessageHistoryView(
+                tag: nil,
+                namespaces: .just(Set([Namespaces.Message.Cloud])),
+                entries: entries,
+                holeEarlier: false,
+                holeLater: false,
+                isLoading: false
+            )
+            self.mergedHistoryView = view
+            self.historyViewStream.putNext((view, .Generic))
+        }
+
+        /// `dropSeen` decides whether posts the reader already finished disappear.
+        /// Only the explicit Refresh button passes true: everything else (leaving the tab,
+        /// returning to the app, recommendation updates, background top-ups) keeps them on
+        /// screen, so posts never vanish out from under the reader in real time.
+        func reload(updateType: EngineViewUpdateType, dropSeen: Bool = false) {
             self.updateRecommendationsIfNeeded()
             self.loadDisposable?.dispose()
             self.loadMoreDisposable?.dispose()
@@ -357,7 +442,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 guard let self else {
                     return
                 }
-                self.applyMessages(messages, updateType: updateType, preserveCurrent: false)
+                self.applyMessages(messages, updateType: updateType, preserveCurrent: !dropSeen)
                 self.loadDisposable?.dispose()
                 self.loadDisposable = nil
             })
@@ -495,7 +580,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         }
 
         func refresh() {
-            self.reload(updateType: .Generic)
+            // The Refresh button is the single point where finished posts are cleared out.
+            self.reload(updateType: .Generic, dropSeen: true)
         }
 
         func applicationDidBecomeActive() {
