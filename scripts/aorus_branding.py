@@ -20377,6 +20377,51 @@ def patch_message_translate_button(tg: Path) -> None:
     print("MsgTranslateBtn: injected per-message translate/transcribe button")
 
 
+def patch_wall_keep_settings_button(tg: Path) -> None:
+    """Stop the chat state machine from wiping the Wall's settings gear.
+
+    updateChatPresentationInterfaceState recomputes the chat's own right bar buttons and
+    calls setRightBarButtonItems whenever they differ from what is currently installed. For
+    the Wall that set is empty, so every state update (loading finished, scrolling, input
+    changes…) removed the gear we installed — which is why it kept vanishing and only came
+    back after an action that re-ran our navigation binding.
+
+    Skip that assignment for the Wall: it has no chat-owned right buttons to install, so
+    there is nothing to lose by leaving ours in place. Idempotent.
+    """
+    path = tg / "submodules/TelegramUI/Sources/Chat/UpdateChatPresentationInterfaceState.swift"
+    if not path.is_file():
+        print("WallGear: UpdateChatPresentationInterfaceState.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: never strip the Wall's settings gear" in t:
+        print("WallGear: already patched")
+        return
+
+    anchor = (
+        "    if rightBarButtonsUpdated {\n"
+        "        selfController.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
+        "    }\n"
+    )
+    replacement = (
+        "    // AorusGram: never strip the Wall's settings gear. The Wall has no chat-owned\n"
+        "    // right buttons, so this assignment could only ever remove ours.\n"
+        "    var aorusIsWall = false\n"
+        "    if case let .customChatContents(aorusContents) = selfController.subject, aorusContents is AorusWallChatContents {\n"
+        "        aorusIsWall = true\n"
+        "    }\n"
+        "    if rightBarButtonsUpdated && !aorusIsWall {\n"
+        "        selfController.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
+        "    }\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("WallGear: settings gear is no longer wiped by chat state updates")
+    else:
+        print("WallGear: WARNING — setRightBarButtonItems anchor not found")
+
+
 def patch_wall_fullscreen_media(tg: Path) -> None:
     """Present Wall media over the whole window so the tab bar is not left on top.
 
@@ -21960,6 +22005,7 @@ def main() -> None:
     patch_message_translate_button(tg)
     patch_wall_post_actions(tg)
     patch_wall_fullscreen_media(tg)
+    patch_wall_keep_settings_button(tg)
     patch_quick_replies_ampersand(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)

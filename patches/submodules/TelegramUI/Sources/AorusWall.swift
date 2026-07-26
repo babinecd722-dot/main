@@ -195,7 +195,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             })
         }
 
-        private func collectMessages() -> Signal<[Message], NoError> {
+        /// Collect a page of posts. `before` makes it a real pagination anchor: only posts
+        /// strictly older than it are returned, so loading more extends the feed downwards
+        /// instead of handing back the same top-200 every time (which both looked like
+        /// "the feed ended" and, when merged, re-inserted posts mid-list under the reader).
+        private func collectMessages(before: MessageIndex? = nil) -> Signal<[Message], NoError> {
             let accountId = self.accountId
             let recommendedPeerIds = self.recommendationsEnabled ? self.recommendedPeerIds : []
             return self.context.account.postbox.transaction { transaction -> [Message] in
@@ -225,19 +229,27 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     ))
                 }
 
+                // Deliberately NOT capped per channel: pages are cut by message index, so
+                // dropping a busy channel's middle posts here would strand them — the next
+                // page starts below the anchor and would skip straight past them. Chronological
+                // interleaving is what keeps the feed varied, and nothing is ever lost.
                 var subscribedMessages: [Message] = []
                 var uniqueIds = Set<MessageId>()
                 for peerId in Set(peerIds) {
                     guard let readState = transaction.getCombinedPeerReadState(peerId) else {
                         continue
                     }
-                    let scanLimit = min(max(Int(readState.count), 0), 200)
+                    // When paginating we must look deeper than the first screenful, otherwise
+                    // the anchor filter would discard everything we scanned.
+                    let scanCeiling = before == nil ? 200 : 800
+                    let scanLimit = min(max(Int(readState.count), 0), scanCeiling)
                     guard scanLimit > 0 else {
                         continue
                     }
                     transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: scanLimit) { message in
                         if !readState.isIncomingMessageIndexRead(message.index)
                             && !AorusWallSettingsStore.isSeen(message.id, in: seen)
+                            && (before == nil || message.index < before!)
                             && uniqueIds.insert(message.id).inserted {
                             subscribedMessages.append(message)
                         }
@@ -249,7 +261,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
                 var recommendedBuckets: [[Message]] = []
                 if !recommendedPeerIds.isEmpty {
-                    let minimumTimestamp = Int32(Date().timeIntervalSince1970) - 30 * 24 * 60 * 60
+                    // Reach further back when paginating: unread posts are finite, so once the
+                    // subscribed ones run out the recommended pool is what keeps the feed going
+                    // instead of hitting a dead end.
+                    let recommendedWindowDays: Int32 = before == nil ? 30 : 120
+                    let minimumTimestamp = Int32(Date().timeIntervalSince1970) - recommendedWindowDays * 24 * 60 * 60
                     for peerId in recommendedPeerIds {
                         guard !excluded.contains(peerId.toInt64()),
                               let channel = transaction.getPeer(peerId) as? TelegramChannel,
@@ -257,9 +273,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             continue
                         }
                         var bucket: [Message] = []
-                        transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: 40) { message in
+                        transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: before == nil ? 40 : 160) { message in
                             if message.timestamp >= minimumTimestamp
                                 && !AorusWallSettingsStore.isSeen(message.id, in: seen)
+                                && (before == nil || message.index < before!)
                                 && !uniqueIds.contains(message.id) {
                                 bucket.append(message)
                             }
@@ -267,7 +284,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                         }
                         bucket.sort(by: { $0.index > $1.index })
                         if !bucket.isEmpty {
-                            recommendedBuckets.append(Array(bucket.prefix(24)))
+                            recommendedBuckets.append(Array(bucket.prefix(before == nil ? 24 : 80)))
                         }
                     }
                 }
@@ -279,7 +296,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
 
                 var recommendedMessages: [Message] = []
-                let recommendedLimit = min(60, max(20, 200 - subscribedMessages.count))
+                // On a pagination page the subscribed pool is usually exhausted, so let the
+                // recommended pool fill the page rather than capping it at a third of it.
+                let recommendedCeiling = before == nil ? 60 : 200
+                let recommendedLimit = min(recommendedCeiling, max(20, 200 - subscribedMessages.count))
                 var depth = 0
                 while recommendedMessages.count < recommendedLimit {
                     var addedAtDepth = false
@@ -470,7 +490,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.lastLoadMoreMarkedCount = self.markedInCurrentView.count
             self.isPrefetching = true
             let previousIds = Set(self.currentMessageIds)
-            self.loadMoreDisposable = (self.collectMessages()
+            // Anchor at the oldest post already on screen: the next page continues below it,
+            // so nothing is inserted among the posts the reader is currently looking at.
+            let anchor = self.currentMessages.values.map(\.index).min()
+            self.loadMoreDisposable = (self.collectMessages(before: anchor)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
