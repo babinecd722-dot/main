@@ -15674,6 +15674,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
         prop_anchor,
         prop_anchor
         + "    private var aorusSettingsObserver: NSObjectProtocol?\n"
+        + "    private var aorusWallVisibilityObserver: NSObjectProtocol?\n"
         + "    private var aorusLastHideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
         + "    private var aorusLastHideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
         + "    private var aorusLastWallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n",
@@ -15704,13 +15705,22 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "            }\n"
         "            let hideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
         "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
-        "            let wallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n"
-        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || wallEnabled != strongSelf.aorusLastWallEnabled {\n"
+        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts {\n"
         "                strongSelf.aorusLastHideCalls = hideCalls\n"
         "                strongSelf.aorusLastHideContacts = hideContacts\n"
-        "                strongSelf.aorusLastWallEnabled = wallEnabled\n"
         "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
         "            }\n"
+        "        }\n"
+        "        self.aorusWallVisibilityObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram_wall_visibility_changed\"), object: nil, queue: OperationQueue.main) { [weak self] notification in\n"
+        "            guard let strongSelf = self else {\n"
+        "                return\n"
+        "            }\n"
+        "            let wallEnabled = (notification.object as? NSNumber)?.boolValue ?? ((UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true)\n"
+        "            guard wallEnabled != strongSelf.aorusLastWallEnabled else {\n"
+        "                return\n"
+        "            }\n"
+        "            strongSelf.aorusLastWallEnabled = wallEnabled\n"
+        "            strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
         "        }\n"
     )
     t = t.replace(init_anchor, init_anchor + observer, 1)
@@ -15723,6 +15733,9 @@ def patch_settings_live_refresh(tg: Path) -> None:
             deinit_anchor
             + "        if let aorusSettingsObserver = self.aorusSettingsObserver { // AorusGram\n"
             + "            NotificationCenter.default.removeObserver(aorusSettingsObserver)\n"
+            + "        }\n"
+            + "        if let aorusWallVisibilityObserver = self.aorusWallVisibilityObserver { // AorusGram\n"
+            + "            NotificationCenter.default.removeObserver(aorusWallVisibilityObserver)\n"
             + "        }\n",
             1,
         )
@@ -15731,7 +15744,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
         return
 
     f.write_text(t, encoding="utf-8")
-    print("SettingsLiveRefresh: observer wired (tabs + AMOLED live refresh)")
+    print("SettingsLiveRefresh: observers wired (tabs + Wall + AMOLED live refresh)")
 
 
 def patch_aorus_controller_keys(tg: Path) -> None:

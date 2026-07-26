@@ -1239,7 +1239,11 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
             }
             if keyPath == \AorusState.wallEnabled {
-                NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
+                let effectiveWallEnabled = (UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") as? Bool) ?? s.wallEnabled
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("aorusgram_wall_visibility_changed"),
+                    object: NSNumber(value: effectiveWallEnabled)
+                )
             }
             // AMOLED re-runs the presentation pipeline via aorusAmoledTrigger, which listens
             // for this notification. Posting it here makes every visible controller — including
