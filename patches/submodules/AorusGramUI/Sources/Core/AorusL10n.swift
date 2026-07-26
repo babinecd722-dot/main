@@ -101,6 +101,8 @@ public struct AorusL10n {
     public var wallRefresh: String { t("Обновить", "Refresh") }
     public var wallFilling: String { t("Стена заполняется", "Building Wall") }
     public var wallEmpty: String { t("Новых постов нет", "No New Posts") }
+    public var wallShowRecommended: String { t("Показывать рекомендованные каналы", "Show Recommended Channels") }
+    public var wallShowRecommendedInfo: String { t("Когда непрочитанных постов мало, стена дополняется свежими публикациями из каналов, рекомендованных Telegram.", "When unread posts run low, Wall adds fresh posts from channels recommended by Telegram.") }
     public var wallExcludedChannelsHeader: String { t("ИСКЛЮЧЁННЫЕ КАНАЛЫ", "EXCLUDED CHANNELS") }
     public var wallExcludeChannel: String { t("Исключить канал", "Exclude Channel") }
     public var wallExcludedChannelsInfo: String { t("Посты из этих каналов не появляются в стене. Смахните канал влево, чтобы вернуть его.", "Posts from these channels do not appear on the Wall. Swipe a channel left to restore it.") }

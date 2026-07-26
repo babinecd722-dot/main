@@ -15398,6 +15398,7 @@ def patch_wall_tab(tg: Path) -> None:
     content_data = tg / "submodules/TelegramUI/Sources/ChatControllerContentData.swift"
     chat_controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
     context_menu = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerOpenMessageContextMenu.swift"
+    empty_node = tg / "submodules/TelegramUI/Components/Chat/ChatEmptyNode/Sources/ChatEmptyNode.swift"
 
     if not root.is_file():
         print("Wall: TelegramRootController.swift not found, skip")
@@ -15516,7 +15517,7 @@ def patch_wall_tab(tg: Path) -> None:
                 print("Wall: WARNING — reaction anchor not found")
 
         t = chat_controller.read_text(encoding="utf-8")
-        if "aorusWall.setVisible(true)" not in t:
+        if "aorusWall.setVisible(true, visibleMessages:" not in t:
             old = (
                 "    override public func viewDidAppear(_ animated: Bool) {\n"
                 "        super.viewDidAppear(animated)\n"
@@ -15528,9 +15529,31 @@ def patch_wall_tab(tg: Path) -> None:
                 "        super.viewDidAppear(animated)\n"
                 "        \n"
                 "        if case let .customChatContents(contents) = self.subject, let aorusWall = contents as? AorusWallChatContents {\n"
-                "            aorusWall.setVisible(true)\n"
+                "            aorusWall.setVisible(true, visibleMessages: { [weak self] in\n"
+                "                guard let self else {\n"
+                "                    return Set()\n"
+                "                }\n"
+                "                var result = Set<MessageId>()\n"
+                "                let viewportHeight = max(1.0, self.chatDisplayNode.historyNode.bounds.height)\n"
+                "                self.chatDisplayNode.historyNode.forEachVisibleItemNode { itemNode in\n"
+                "                    guard let itemNode = itemNode as? ChatMessageItemView,\n"
+                "                          let item = itemNode.item,\n"
+                "                          case let .visible(fraction, _) = itemNode.visibility else {\n"
+                "                        return\n"
+                "                    }\n"
+                "                    let itemHeight = max(1.0, itemNode.bounds.height)\n"
+                "                    let requiredFraction = max(0.2, min(0.65, viewportHeight * 0.55 / itemHeight))\n"
+                "                    guard fraction >= requiredFraction else {\n"
+                "                        return\n"
+                "                    }\n"
+                "                    for (message, _) in item.content {\n"
+                "                        result.insert(message.id)\n"
+                "                    }\n"
+                "                }\n"
+                "                return result\n"
+                "            })\n"
                 "        }\n"
-                "        \n"
+                "\n"
                 "        self.didAppear = true\n"
             )
             if old in t:
@@ -15553,7 +15576,7 @@ def patch_wall_tab(tg: Path) -> None:
                 "        if case let .customChatContents(contents) = self.subject, let aorusWall = contents as? AorusWallChatContents {\n"
                 "            aorusWall.setVisible(false)\n"
                 "        }\n"
-                "        \n"
+                "\n"
             )
             if old in t:
                 chat_controller.write_text(t.replace(old, new, 1), encoding="utf-8")
@@ -15583,6 +15606,45 @@ def patch_wall_tab(tg: Path) -> None:
                 print("Wall: native reaction menu enabled")
             else:
                 print("Wall: WARNING — reaction menu anchor not found")
+
+    if empty_node.is_file():
+        t = empty_node.read_text(encoding="utf-8")
+        if "AorusGram: Wall empty state" not in t:
+            old_icon = '            var iconName = "Chat/Empty Chat/Cloud"\n'
+            new_icon = (
+                '            var iconName = "Chat/Empty Chat/Cloud"\n'
+                '            var hideIcon = false // AorusGram: Wall empty state\n'
+            )
+            old_case = (
+                "                case .hashTagSearch:\n"
+                "                    titleString = \"\"\n"
+                "                    strings = []\n"
+            )
+            new_case = (
+                "                case .hashTagSearch:\n"
+                "                    if String(reflecting: type(of: customChatContents)).contains(\"AorusWallChatContents\") {\n"
+                "                        hideIcon = true\n"
+                "                        titleString = interfaceState.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Новых постов нет\" : \"No New Posts\"\n"
+                "                        strings = []\n"
+                "                    } else {\n"
+                "                        titleString = \"\"\n"
+                "                        strings = []\n"
+                "                    }\n"
+            )
+            old_image = (
+                "            self.iconNode.image = generateTintedImage(image: UIImage(bundleImageName: iconName), color: serviceColor.primaryText)\n"
+            )
+            new_image = (
+                "            self.iconNode.image = hideIcon ? nil : generateTintedImage(image: UIImage(bundleImageName: iconName), color: serviceColor.primaryText)\n"
+            )
+            if old_icon in t and old_case in t and old_image in t:
+                t = t.replace(old_icon, new_icon, 1)
+                t = t.replace(old_case, new_case, 1)
+                t = t.replace(old_image, new_image, 1)
+                empty_node.write_text(t, encoding="utf-8")
+                print("Wall: native empty state integrated")
+            else:
+                print("Wall: WARNING — empty state anchors not found")
 
 
 def patch_settings_live_refresh(tg: Path) -> None:

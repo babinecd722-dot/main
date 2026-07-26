@@ -14,7 +14,7 @@ public enum AorusWallSettingsStore {
     public static let didChange = Notification.Name("aorusgram.wallSettingsChanged")
 
     private static let lock = NSLock()
-    private static let seenLimit = 3000
+    private static let seenLimit = 12000
 
     private static func key(_ name: String, accountId: Int64) -> String {
         return "aorusgram_wall_\(name)_\(accountId)"
@@ -22,6 +22,16 @@ public enum AorusWallSettingsStore {
 
     public static func showArchived(accountId: Int64) -> Bool {
         return UserDefaults.standard.bool(forKey: key("show_archived", accountId: accountId))
+    }
+
+    public static func showRecommended(accountId: Int64) -> Bool {
+        let valueKey = key("show_recommended", accountId: accountId)
+        return (UserDefaults.standard.object(forKey: valueKey) as? Bool) ?? true
+    }
+
+    public static func setShowRecommended(_ value: Bool, accountId: Int64) {
+        UserDefaults.standard.set(value, forKey: key("show_recommended", accountId: accountId))
+        NotificationCenter.default.post(name: didChange, object: nil)
     }
 
     public static func setShowArchived(_ value: Bool, accountId: Int64) {
@@ -64,19 +74,6 @@ public enum AorusWallSettingsStore {
         return Set(UserDefaults.standard.stringArray(forKey: key("seen", accountId: accountId)) ?? [])
     }
 
-    public static func seenMessageWatermarks(accountId: Int64) -> [Int64: Int32] {
-        lock.lock()
-        defer { lock.unlock() }
-        let values = UserDefaults.standard.dictionary(forKey: key("watermarks", accountId: accountId)) ?? [:]
-        var result: [Int64: Int32] = [:]
-        for (peerId, value) in values {
-            if let peerId = Int64(peerId), let number = value as? NSNumber {
-                result[peerId] = number.int32Value
-            }
-        }
-        return result
-    }
-
     public static func markSeen(_ ids: [MessageId], accountId: Int64) {
         guard !ids.isEmpty else {
             return
@@ -84,31 +81,20 @@ public enum AorusWallSettingsStore {
         lock.lock()
         var ordered = UserDefaults.standard.stringArray(forKey: key("seen", accountId: accountId)) ?? []
         var values = Set(ordered)
-        var watermarks = UserDefaults.standard.dictionary(forKey: key("watermarks", accountId: accountId)) ?? [:]
         for id in ids {
             let value = messageKey(id)
             if values.insert(value).inserted {
                 ordered.append(value)
-            }
-            let peerId = id.peerId.toInt64()
-            let peerKey = String(peerId)
-            let previous = (watermarks[peerKey] as? NSNumber)?.int32Value ?? Int32.min
-            if id.id > previous {
-                watermarks[peerKey] = NSNumber(value: id.id)
             }
         }
         if ordered.count > seenLimit {
             ordered.removeFirst(ordered.count - seenLimit)
         }
         UserDefaults.standard.set(ordered, forKey: key("seen", accountId: accountId))
-        UserDefaults.standard.set(watermarks, forKey: key("watermarks", accountId: accountId))
         lock.unlock()
     }
 
-    public static func isSeen(_ id: MessageId, in keys: Set<String>, watermarks: [Int64: Int32]) -> Bool {
-        if let watermark = watermarks[id.peerId.toInt64()], id.id <= watermark {
-            return true
-        }
+    public static func isSeen(_ id: MessageId, in keys: Set<String>) -> Bool {
         return keys.contains(messageKey(id))
     }
 }
@@ -117,6 +103,7 @@ private final class WallSettingsArguments {
     let context: AccountContext
     let addChannel: () -> Void
     let removeChannel: (EnginePeer.Id) -> Void
+    let setShowRecommended: (Bool) -> Void
     let setShowArchived: (Bool) -> Void
     let setPeerIdWithRevealedOptions: (EnginePeer.Id?, EnginePeer.Id?) -> Void
 
@@ -124,23 +111,28 @@ private final class WallSettingsArguments {
         context: AccountContext,
         addChannel: @escaping () -> Void,
         removeChannel: @escaping (EnginePeer.Id) -> Void,
+        setShowRecommended: @escaping (Bool) -> Void,
         setShowArchived: @escaping (Bool) -> Void,
         setPeerIdWithRevealedOptions: @escaping (EnginePeer.Id?, EnginePeer.Id?) -> Void
     ) {
         self.context = context
         self.addChannel = addChannel
         self.removeChannel = removeChannel
+        self.setShowRecommended = setShowRecommended
         self.setShowArchived = setShowArchived
         self.setPeerIdWithRevealedOptions = setPeerIdWithRevealedOptions
     }
 }
 
 private enum WallSettingsSection: Int32 {
+    case recommendations
     case channels
     case archive
 }
 
 private enum WallSettingsEntryId: Hashable {
+    case recommendations
+    case recommendationsInfo
     case channelsHeader
     case addChannel
     case peer(EnginePeer.Id)
@@ -150,6 +142,8 @@ private enum WallSettingsEntryId: Hashable {
 }
 
 private enum WallSettingsEntry: ItemListNodeEntry {
+    case recommendations(PresentationTheme, String, Bool)
+    case recommendationsInfo(PresentationTheme, String)
     case channelsHeader(PresentationTheme, String)
     case addChannel(PresentationTheme, String)
     case peer(Int32, PresentationTheme, EnginePeer, Bool)
@@ -159,6 +153,8 @@ private enum WallSettingsEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
+        case .recommendations, .recommendationsInfo:
+            return WallSettingsSection.recommendations.rawValue
         case .channelsHeader, .addChannel, .peer, .channelsInfo:
             return WallSettingsSection.channels.rawValue
         case .archive, .archiveInfo:
@@ -168,6 +164,10 @@ private enum WallSettingsEntry: ItemListNodeEntry {
 
     var stableId: WallSettingsEntryId {
         switch self {
+        case .recommendations:
+            return .recommendations
+        case .recommendationsInfo:
+            return .recommendationsInfo
         case .channelsHeader:
             return .channelsHeader
         case .addChannel:
@@ -185,14 +185,18 @@ private enum WallSettingsEntry: ItemListNodeEntry {
 
     private var sortIndex: Int32 {
         switch self {
-        case .channelsHeader:
+        case .recommendations:
             return 0
-        case .addChannel:
+        case .recommendationsInfo:
             return 1
+        case .channelsHeader:
+            return 100
+        case .addChannel:
+            return 101
         case let .peer(index, _, _, _):
-            return 10 + index
+            return 110 + index
         case .channelsInfo:
-            return 1000
+            return 1100
         case .archive:
             return 2000
         case .archiveInfo:
@@ -206,6 +210,10 @@ private enum WallSettingsEntry: ItemListNodeEntry {
 
     static func == (lhs: WallSettingsEntry, rhs: WallSettingsEntry) -> Bool {
         switch lhs {
+        case let .recommendations(lt, ls, lv):
+            if case let .recommendations(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .recommendationsInfo(lt, ls):
+            if case let .recommendationsInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .channelsHeader(lt, ls):
             if case let .channelsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .addChannel(lt, ls):
@@ -225,6 +233,17 @@ private enum WallSettingsEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! WallSettingsArguments
         switch self {
+        case let .recommendations(_, title, value):
+            return ItemListSwitchItem(
+                presentationData: presentationData,
+                title: title,
+                value: value,
+                sectionId: section,
+                style: .blocks,
+                updated: arguments.setShowRecommended
+            )
+        case let .recommendationsInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .channelsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .addChannel(theme, title):
@@ -271,6 +290,7 @@ private enum WallSettingsEntry: ItemListNodeEntry {
 }
 
 private struct WallSettingsState: Equatable {
+    var showRecommended: Bool
     var showArchived: Bool
     var revealedPeerId: EnginePeer.Id?
 }
@@ -280,12 +300,14 @@ public func aorusWallSettingsController(context: AccountContext) -> ViewControll
     let l10n = AorusL10n.current
     let statePromise = ValuePromise(
         WallSettingsState(
+            showRecommended: AorusWallSettingsStore.showRecommended(accountId: accountId),
             showArchived: AorusWallSettingsStore.showArchived(accountId: accountId),
             revealedPeerId: nil
         ),
         ignoreRepeated: true
     )
     let stateValue = Atomic(value: WallSettingsState(
+        showRecommended: AorusWallSettingsStore.showRecommended(accountId: accountId),
         showArchived: AorusWallSettingsStore.showArchived(accountId: accountId),
         revealedPeerId: nil
     ))
@@ -323,6 +345,14 @@ public func aorusWallSettingsController(context: AccountContext) -> ViewControll
             updateState { state in
                 var state = state
                 state.revealedPeerId = nil
+                return state
+            }
+        },
+        setShowRecommended: { value in
+            AorusWallSettingsStore.setShowRecommended(value, accountId: accountId)
+            updateState { state in
+                var state = state
+                state.showRecommended = value
                 return state
             }
         },
@@ -368,6 +398,8 @@ public func aorusWallSettingsController(context: AccountContext) -> ViewControll
     |> deliverOnMainQueue
     |> map { presentationData, state, peers -> (ItemListControllerState, (ItemListNodeState, Any)) in
         var entries: [WallSettingsEntry] = [
+            .recommendations(presentationData.theme, l10n.wallShowRecommended, state.showRecommended),
+            .recommendationsInfo(presentationData.theme, l10n.wallShowRecommendedInfo),
             .channelsHeader(presentationData.theme, l10n.wallExcludedChannelsHeader),
             .addChannel(presentationData.theme, l10n.wallExcludeChannel)
         ]
