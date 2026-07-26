@@ -1067,16 +1067,19 @@ def main() -> None:
     for marker in (
         "title: AorusL10n.current.wallRefresh",
         'image: UIImage(systemName: "gearshape")',
-        "private let aorusFilledHouseTabImage: UIImage?",
+        "private func aorusFilledHouseTabImage(color: UIColor)",
         'UIImage(systemName: "house.fill", withConfiguration: configuration)',
         "context.cgContext.setBlendMode(.clear)",
-        "controller.tabBarItem.image = tabImage",
-        "controller.tabBarItem.selectedImage = tabImage",
+        "controller.tabBarItem.image = aorusFilledHouseTabImage(",
+        "controller.tabBarItem.selectedImage = aorusFilledHouseTabImage(",
+        # The tab bar draws plain images with `tintColor: nil` (only Lottie-backed stock tabs
+        # get themed), so the house must be rendered in the theme colour and refreshed when
+        # the theme changes — otherwise it stays the inherited tint (white) forever.
+        "tabBarTheme.iconColor",
+        "tabBarTheme.selectedIconColor",
     ):
         if marker not in wall_text:
             err.append(f"Wall: stable native header/tab integration is missing {marker}")
-    if "aorusWallTabIcon" in wall_text or "tabIconDisposable" in wall_text:
-        err.append("Wall: custom bitmap tab icon renderer must not replace Telegram tinting")
     for marker in (
         "recommendedChannels(peerId: nil)",
         "for peerId in peerIds",
