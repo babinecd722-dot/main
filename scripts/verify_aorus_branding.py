@@ -214,9 +214,23 @@ def main() -> None:
             "aorusDeviceStableId",
             "Add Custom Device",
             "ItemListCheckboxItem",
+            "aorusAddCustomDeviceController",
+            "AorusSpoofPlatform.allCases",
+            "deleteCustom",
+            'UIImage(systemName: "trash.fill")',
         ):
             if marker not in spoof_text:
                 err.append(f"DeviceSpoof: screen invariant is missing {marker}")
+        if "UIAlertController" in spoof_text:
+            err.append("DeviceSpoof: custom device editor regressed to an alert")
+        if 'title: "\\(device.model) · \\(device.systemVersion)"' in spoof_text:
+            err.append("DeviceSpoof: device rows must not append the OS version")
+
+    aorus_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
+    if aorus_controller.is_file():
+        aorus_controller_text = aorus_controller.read_text(encoding="utf-8")
+        if "navigationController.topViewController as? ViewController" not in aorus_controller_text:
+            err.append("DeviceSpoof: restart notice is not anchored to the visible controller")
 
     formatting_toolbar = (
         tg

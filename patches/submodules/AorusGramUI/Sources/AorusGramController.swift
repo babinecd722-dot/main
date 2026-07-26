@@ -1312,7 +1312,13 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                         updated.spoofedDeviceName = model
                         return updated
                     }
-                    aorusPresentRestartNotice(context: context, controller: weakController)
+                    let visibleController =
+                        navigationController.topViewController as? ViewController
+                        ?? weakController
+                    aorusPresentRestartNotice(
+                        context: context,
+                        controller: visibleController
+                    )
                 }
             )
             navigationController.pushViewController(deviceController)
