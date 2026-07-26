@@ -1151,6 +1151,8 @@ def main() -> None:
     app_context_text = app_context.read_text(encoding="utf-8") if app_context.is_file() else ""
     if "aorusgram_wall_visibility_changed" not in app_context_text:
         err.append("Wall: live tab visibility observer is missing")
+    if "private var aorusLastWallEnabled" not in app_context_text:
+        err.append("Wall: live tab visibility state property is missing")
     if "guard wallEnabled != strongSelf.aorusLastWallEnabled" in app_context_text:
         err.append("Wall: stale cached visibility guard can ignore disabling the tab")
 

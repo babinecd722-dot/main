@@ -15893,6 +15893,18 @@ def patch_settings_live_refresh(tg: Path) -> None:
                 1,
             )
             changed = True
+        if "private var aorusLastWallEnabled" not in t:
+            prop_anchor = "    private var aorusWallVisibilityObserver: NSObjectProtocol?\n"
+            if prop_anchor not in t:
+                print("SettingsLiveRefresh: WARNING — cached Wall state property anchor not found")
+                return
+            t = t.replace(
+                prop_anchor,
+                prop_anchor
+                + "    private var aorusLastWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n",
+                1,
+            )
+            changed = True
         if 'Notification.Name("aorusgram_wall_visibility_changed")' not in t:
             init_anchor = "        self.rootController.setForceInCallStatusBar"
             if init_anchor not in t:
