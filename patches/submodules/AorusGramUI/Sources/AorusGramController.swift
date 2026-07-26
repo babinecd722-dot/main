@@ -274,6 +274,7 @@ private enum AorusSection: Int32 {
     case quickButtons
     case videoMessages
     case calls
+    case wall
     case misc
 }
 
@@ -321,6 +322,7 @@ private struct AorusState: Equatable {
     var profileReportButton: Bool
     var hideCallsTab: Bool
     var hideContactsTab: Bool
+    var wallEnabled: Bool
     var siriShortcuts: Bool
     var appBadge: String
     var squareAvatars: Bool
@@ -346,6 +348,7 @@ private final class AorusArguments {
     let openDeviceSpoof: () -> Void
     let openMasks: () -> Void
     let openVoiceTwin: () -> Void
+    let openWallSettings: () -> Void
     let setRAMCleanInterval: (Int) -> Void
     let setCacheInterval: (Int) -> Void
     let openProxyDiagnostics: () -> Void // AORUS-DIAG
@@ -363,6 +366,7 @@ private final class AorusArguments {
          openDeviceSpoof: @escaping () -> Void,
          openMasks: @escaping () -> Void,
          openVoiceTwin: @escaping () -> Void,
+         openWallSettings: @escaping () -> Void,
          setRAMCleanInterval: @escaping (Int) -> Void,
          setCacheInterval: @escaping (Int) -> Void,
          openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
@@ -379,6 +383,7 @@ private final class AorusArguments {
         self.openDeviceSpoof = openDeviceSpoof
         self.openMasks = openMasks
         self.openVoiceTwin = openVoiceTwin
+        self.openWallSettings = openWallSettings
         self.setRAMCleanInterval = setRAMCleanInterval
         self.setCacheInterval = setCacheInterval
         self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
@@ -408,6 +413,9 @@ private enum AorusEntry: ItemListNodeEntry {
     case callsHeader(PresentationTheme, String)
     case masks(PresentationTheme, String)
     case voiceTwin(PresentationTheme, String)
+    case wallHeader(PresentationTheme, String)
+    case wallEnabled(PresentationTheme, String, Bool)
+    case wallSettings(PresentationTheme, String)
 
     case perfHeader(PresentationTheme, String)
     case downloadAccel(PresentationTheme, String, Bool)
@@ -483,6 +491,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.ai.rawValue
         case .callsHeader, .masks, .voiceTwin:
             return AorusSection.calls.rawValue
+        case .wallHeader, .wallEnabled, .wallSettings:
+            return AorusSection.wall.rawValue
         case .perfHeader, .downloadAccel, .maxMediaQuality, .antiSpam, .antiSpamManage, .performanceStats, .performanceUptime, .performanceRAM,
              .performanceCPU, .performanceFPS, .performanceBattery, .performanceNetwork,
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
@@ -569,20 +579,23 @@ private enum AorusEntry: ItemListNodeEntry {
         case .callsHeader:          return 72
         case .masks:                return 73
         case .voiceTwin:            return 74
-        case .deviceSpoofHeader:    return 75
-        case .deviceSpoof:          return 76
-        case .bypassHeader:         return 77
-        case .bypassSavePaid:       return 78
-        case .bypassSaveViewOnce:   return 79
-        case .bypassStoryDownload:  return 80
-        case .antiSpoofHeader:      return 81
-        case .antiSpoofDeleted:     return 82
-        case .antiSpoofOnline:      return 83
-        case .accountBackupHeader:  return 86
-        case .accountBackup:        return 87
-        case .misc:                 return 88
-        case .aorusCodeHeader:      return 91
-        case .aorusCodeEnabled:     return 92
+        case .wallHeader:           return 75
+        case .wallEnabled:          return 76
+        case .wallSettings:         return 77
+        case .deviceSpoofHeader:    return 78
+        case .deviceSpoof:          return 79
+        case .bypassHeader:         return 80
+        case .bypassSavePaid:       return 81
+        case .bypassSaveViewOnce:   return 82
+        case .bypassStoryDownload:  return 83
+        case .antiSpoofHeader:      return 84
+        case .antiSpoofDeleted:     return 85
+        case .antiSpoofOnline:      return 86
+        case .accountBackupHeader:  return 89
+        case .accountBackup:        return 90
+        case .misc:                 return 91
+        case .aorusCodeHeader:      return 94
+        case .aorusCodeEnabled:     return 95
         case .subscription:         return 100
         case .officialChannel:      return 101
         case .proxyDiagnostics:     return 111 // AORUS-DIAG
@@ -626,6 +639,12 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .masks(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .voiceTwin(lt, ls):
             if case let .voiceTwin(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .wallHeader(lt, ls):
+            if case let .wallHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .wallEnabled(lt, ls, lv):
+            if case let .wallEnabled(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .wallSettings(lt, ls):
+            if case let .wallSettings(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .perfHeader(lt, ls):
             if case let .perfHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .downloadAccel(lt, ls, lv):
@@ -783,6 +802,12 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMasks)
         case let .voiceTwin(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openVoiceTwin)
+        case let .wallHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .wallEnabled(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.wallEnabled, $0) })
+        case let .wallSettings(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openWallSettings)
         case let .perfHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .downloadAccel(_, title, value):
@@ -970,6 +995,10 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .masks(theme, l10n.videoMasks),
         .voiceTwin(theme, l10n.voiceTwin),
 
+        .wallHeader(theme, l10n.wallHeader),
+        .wallEnabled(theme, l10n.wallEnabled, state.wallEnabled),
+        .wallSettings(theme, l10n.wallSettings),
+
         .deviceSpoofHeader(theme, l10n.deviceSpoofHeader),
         .deviceSpoof(theme, l10n.deviceSpoof, state.spoofedDeviceName ?? l10n.deviceSpoofOff),
 
@@ -1116,6 +1145,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         profileReportButton: mgr.profileReportButton,
         hideCallsTab:       mgr.hideCallsTab,
         hideContactsTab:    mgr.hideContactsTab,
+        wallEnabled:        mgr.wallEnabled,
         siriShortcuts:      mgr.siriShortcuts,
         appBadge:           UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram",
         squareAvatars:      mgr.squareAvatars,
@@ -1186,6 +1216,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             mgr.profileReportButton = s.profileReportButton
             mgr.hideCallsTab        = s.hideCallsTab
             mgr.hideContactsTab     = s.hideContactsTab
+            mgr.wallEnabled         = s.wallEnabled
             mgr.siriShortcuts       = s.siriShortcuts
             mgr.squareAvatars       = s.squareAvatars
             spoof.antiSpoofDeleted  = s.antiSpoofDeleted
@@ -1205,6 +1236,9 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             // this notification makes the chat list re-lay-out and apply the change live —
             // no restart needed.
             if keyPath == \AorusState.showStories {
+                NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
+            }
+            if keyPath == \AorusState.wallEnabled {
                 NotificationCenter.default.post(name: NSNotification.Name("aorusgram_settings_changed"), object: nil)
             }
             // AMOLED re-runs the presentation pipeline via aorusAmoledTrigger, which listens
@@ -1336,6 +1370,13 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
                 return
             }
             navigationController.pushViewController(voiceTwinController(context: context))
+        },
+        openWallSettings: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            navigationController.pushViewController(aorusWallSettingsController(context: context))
         },
         setRAMCleanInterval: { seconds in
             AorusGramManager.shared.ramCleanInterval = seconds

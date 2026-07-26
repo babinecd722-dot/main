@@ -94,6 +94,18 @@ public struct AorusL10n {
     public var videoMessagesHeader: String { t("ВИДЕОСООБЩЕНИЯ", "VIDEO MESSAGES") }
     public var videoMessagesRearCamera: String { t("Запись сразу с задней камеры", "Start Recording With Rear Camera") }
     public var callsHeader: String { t("ЗВОНКИ", "CALLS") }
+    public var wallHeader: String { t("СТЕНА", "WALL") }
+    public var wallEnabled: String { t("Включить стену", "Enable Wall") }
+    public var wallSettings: String { t("Настройки стены", "Wall Settings") }
+    public var wallTitle: String { t("Стена", "Wall") }
+    public var wallRefresh: String { t("Обновить", "Refresh") }
+    public var wallFilling: String { t("Стена заполняется", "Building Wall") }
+    public var wallEmpty: String { t("Новых постов нет", "No New Posts") }
+    public var wallExcludedChannelsHeader: String { t("ИСКЛЮЧЁННЫЕ КАНАЛЫ", "EXCLUDED CHANNELS") }
+    public var wallExcludeChannel: String { t("Исключить канал", "Exclude Channel") }
+    public var wallExcludedChannelsInfo: String { t("Посты из этих каналов не появляются в стене. Смахните канал влево, чтобы вернуть его.", "Posts from these channels do not appear on the Wall. Swipe a channel left to restore it.") }
+    public var wallShowArchived: String { t("Показывать посты из архивированных каналов", "Show Posts From Archived Channels") }
+    public var wallShowArchivedInfo: String { t("Если выключено, стена собирает непрочитанные посты только из основного списка чатов.", "When disabled, Wall collects unread posts only from the main chat list.") }
     public var autoReply: String { t("Автоответчик", "Auto-Reply") }
     public var downloadAccel: String { t("Ускоритель загрузок", "Download Accelerator") }
     public var maxMediaQuality: String { t("Макс качество медиа", "Max Media Quality") }

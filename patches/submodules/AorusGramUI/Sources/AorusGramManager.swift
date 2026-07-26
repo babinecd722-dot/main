@@ -43,6 +43,7 @@ public final class AorusGramManager {
     public var profileReportButton: Bool = false { didSet { save() } }
     public var hideCallsTab: Bool      = false { didSet { save() } }
     public var hideContactsTab: Bool   = false { didSet { save() } }
+    public var wallEnabled: Bool       = true  { didSet { save() } }
     public var voiceTranscription: Bool = false { didSet { save() } }
     public var chatSummary: Bool       = false { didSet { save() } }
     public var translator: Bool        = false { didSet { save() } }
@@ -127,6 +128,7 @@ public final class AorusGramManager {
         ud.set(effective(profileReportButton), forKey: "aorusgram_profile_report_button")
         ud.set(effective(hideCallsTab),        forKey: "aorusgram_hide_calls_tab")
         ud.set(effective(hideContactsTab),     forKey: "aorusgram_hide_contacts_tab")
+        ud.set(effective(wallEnabled),         forKey: "aorusgram_wall_enabled")
         ud.set(effective(streaks),             forKey: "aorusgram_feature_streaks")
         ud.set(effective(siriShortcuts),       forKey: "aorusgram_feature_siri_shortcuts")
         ud.set(effective(squareAvatars),       forKey: "aorusgram_square_avatars")
@@ -160,6 +162,7 @@ public final class AorusGramManager {
         profileReportButton = d["profileReportButton"] as? Bool ?? false
         hideCallsTab        = d["hideCallsTab"]        as? Bool ?? false
         hideContactsTab     = d["hideContactsTab"]     as? Bool ?? false
+        wallEnabled         = d["wallEnabled"]         as? Bool ?? true
         voiceTranscription  = d["voiceTranscription"]  as? Bool ?? false
         chatSummary         = d["chatSummary"]         as? Bool ?? false
         translator          = d["translator"]          as? Bool ?? false
@@ -217,6 +220,7 @@ public final class AorusGramManager {
             "profileReportButton": profileReportButton,
             "hideCallsTab":        hideCallsTab,
             "hideContactsTab":     hideContactsTab,
+            "wallEnabled":         wallEnabled,
             "voiceTranscription":  voiceTranscription,
             "chatSummary":         chatSummary,
             "translator":          translator,

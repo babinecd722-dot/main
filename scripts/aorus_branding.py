@@ -15392,6 +15392,199 @@ def patch_hide_tabs(tg: Path) -> None:
         print(f"HideTabs: WARNING — matched {n}/{len(edits)} anchors")
 
 
+def patch_wall_tab(tg: Path) -> None:
+    """Add the native AorusGram Wall tab and wire its chat lifecycle."""
+    root = tg / "submodules/TelegramUI/Sources/TelegramRootController.swift"
+    content_data = tg / "submodules/TelegramUI/Sources/ChatControllerContentData.swift"
+    chat_controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+    context_menu = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerOpenMessageContextMenu.swift"
+
+    if not root.is_file():
+        print("Wall: TelegramRootController.swift not found, skip")
+        return
+
+    t = root.read_text(encoding="utf-8")
+    if "AorusGram: Wall tab" not in t:
+        edits = [
+            (
+                "    public var accountSettingsController: PeerInfoScreen?\n",
+                "    public var accountSettingsController: PeerInfoScreen?\n"
+                "    public var aorusWallController: ViewController? // AorusGram: Wall tab\n",
+            ),
+            (
+                "        controllers.append(accountSettingsController)\n"
+                "                \n"
+                "        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : (controllers.count - 2))\n",
+                "        controllers.append(accountSettingsController)\n"
+                "        let aorusWallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n"
+                "        let aorusWallController: ViewController? = aorusWallEnabled ? makeAorusWallController(context: self.context) : nil\n"
+                "        if let aorusWallController {\n"
+                "            controllers.append(aorusWallController)\n"
+                "        }\n"
+                "                \n"
+                "        let selectedIndex: Int\n"
+                "        if restoreSettignsController != nil {\n"
+                "            selectedIndex = controllers.firstIndex(where: { $0 === accountSettingsController }) ?? 0\n"
+                "        } else {\n"
+                "            selectedIndex = controllers.firstIndex(where: { $0 === chatListController }) ?? 0\n"
+                "        }\n"
+                "        tabBarController.setControllers(controllers, selectedIndex: selectedIndex)\n",
+            ),
+            (
+                "        self.accountSettingsController = accountSettingsController\n"
+                "        self.rootTabController = tabBarController\n",
+                "        self.accountSettingsController = accountSettingsController\n"
+                "        self.aorusWallController = aorusWallController\n"
+                "        self.rootTabController = tabBarController\n",
+            ),
+            (
+                "        controllers.append(self.accountSettingsController!)\n"
+                "        \n"
+                "        rootTabController.setControllers(controllers, selectedIndex: nil)\n",
+                "        controllers.append(self.accountSettingsController!)\n"
+                "        let aorusWallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n"
+                "        if aorusWallEnabled {\n"
+                "            if self.aorusWallController == nil {\n"
+                "                self.aorusWallController = makeAorusWallController(context: self.context)\n"
+                "            }\n"
+                "            if let aorusWallController = self.aorusWallController {\n"
+                "                controllers.append(aorusWallController)\n"
+                "            }\n"
+                "        } else {\n"
+                "            self.aorusWallController = nil\n"
+                "        }\n"
+                "        \n"
+                "        rootTabController.setControllers(controllers, selectedIndex: nil)\n",
+            ),
+        ]
+        matched = 0
+        for old, new in edits:
+            if old in t:
+                t = t.replace(old, new, 1)
+                matched += 1
+        if matched != len(edits):
+            print(f"Wall: WARNING — root anchors matched {matched}/{len(edits)}")
+            return
+        root.write_text(t, encoding="utf-8")
+        print("Wall: root tab integrated")
+    else:
+        print("Wall: root tab already patched")
+
+    if content_data.is_file():
+        t = content_data.read_text(encoding="utf-8")
+        if "AorusWallChatContents" not in t:
+            old = (
+                "                        if let aorusUserMessages = customChatContents as? AorusUserMessagesChatContents {\n"
+                "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusUserMessages.peerName))], subtitle: nil, isEnabled: false)\n"
+                "                        }\n"
+            )
+            new = (
+                "                        if let aorusUserMessages = customChatContents as? AorusUserMessagesChatContents {\n"
+                "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusUserMessages.peerName))], subtitle: nil, isEnabled: false)\n"
+                "                        } else if let aorusWall = customChatContents as? AorusWallChatContents {\n"
+                "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusWall.title))], subtitle: nil, isEnabled: false)\n"
+                "                        }\n"
+            )
+            if old in t:
+                content_data.write_text(t.replace(old, new, 1), encoding="utf-8")
+                print("Wall: native chat title integrated")
+            else:
+                print("Wall: WARNING — title anchor not found")
+
+    if chat_controller.is_file():
+        t = chat_controller.read_text(encoding="utf-8")
+        if "AorusGram: Wall reactions" not in t:
+            old = (
+                "            if case let .customChatContents(customChatContents) = strongSelf.presentationInterfaceState.subject {\n"
+                "                if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts {\n"
+                "                    return\n"
+                "                }\n"
+                "            }\n"
+            )
+            new = (
+                "            if case let .customChatContents(customChatContents) = strongSelf.presentationInterfaceState.subject {\n"
+                "                if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts, !(customChatContents is AorusWallChatContents) { // AorusGram: Wall reactions\n"
+                "                    return\n"
+                "                }\n"
+                "            }\n"
+            )
+            if old in t:
+                t = t.replace(old, new, 1)
+                chat_controller.write_text(t, encoding="utf-8")
+                print("Wall: native reactions enabled")
+            else:
+                print("Wall: WARNING — reaction anchor not found")
+
+        t = chat_controller.read_text(encoding="utf-8")
+        if "aorusWall.setVisible(true)" not in t:
+            old = (
+                "    override public func viewDidAppear(_ animated: Bool) {\n"
+                "        super.viewDidAppear(animated)\n"
+                "        \n"
+                "        self.didAppear = true\n"
+            )
+            new = (
+                "    override public func viewDidAppear(_ animated: Bool) {\n"
+                "        super.viewDidAppear(animated)\n"
+                "        \n"
+                "        if case let .customChatContents(contents) = self.subject, let aorusWall = contents as? AorusWallChatContents {\n"
+                "            aorusWall.setVisible(true)\n"
+                "        }\n"
+                "        \n"
+                "        self.didAppear = true\n"
+            )
+            if old in t:
+                chat_controller.write_text(t.replace(old, new, 1), encoding="utf-8")
+                print("Wall: visible posts lifecycle integrated")
+            else:
+                print("Wall: WARNING — viewDidAppear anchor not found")
+
+        t = chat_controller.read_text(encoding="utf-8")
+        if "aorusWall.setVisible(false)" not in t:
+            old = (
+                "    override public func viewWillDisappear(_ animated: Bool) {\n"
+                "        super.viewWillDisappear(animated)\n"
+                "        \n"
+            )
+            new = (
+                "    override public func viewWillDisappear(_ animated: Bool) {\n"
+                "        super.viewWillDisappear(animated)\n"
+                "        \n"
+                "        if case let .customChatContents(contents) = self.subject, let aorusWall = contents as? AorusWallChatContents {\n"
+                "            aorusWall.setVisible(false)\n"
+                "        }\n"
+                "        \n"
+            )
+            if old in t:
+                chat_controller.write_text(t.replace(old, new, 1), encoding="utf-8")
+                print("Wall: hidden lifecycle integrated")
+            else:
+                print("Wall: WARNING — viewWillDisappear anchor not found")
+
+    if context_menu.is_file():
+        t = context_menu.read_text(encoding="utf-8")
+        if "AorusGram: Wall reaction menu" not in t:
+            old = (
+                "                if allowedReactions != nil, case let .customChatContents(customChatContents) = self.presentationInterfaceState.subject {\n"
+                "                    if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts {\n"
+                "                        allowedReactions = nil\n"
+                "                    }\n"
+                "                }\n"
+            )
+            new = (
+                "                if allowedReactions != nil, case let .customChatContents(customChatContents) = self.presentationInterfaceState.subject {\n"
+                "                    if case let .hashTagSearch(publicPosts) = customChatContents.kind, publicPosts, !(customChatContents is AorusWallChatContents) { // AorusGram: Wall reaction menu\n"
+                "                        allowedReactions = nil\n"
+                "                    }\n"
+                "                }\n"
+            )
+            if old in t:
+                context_menu.write_text(t.replace(old, new, 1), encoding="utf-8")
+                print("Wall: native reaction menu enabled")
+            else:
+                print("Wall: WARNING — reaction menu anchor not found")
+
+
 def patch_settings_live_refresh(tg: Path) -> None:
     """Apply tab-visibility + AMOLED changes live, without an app restart.
 
@@ -15420,7 +15613,8 @@ def patch_settings_live_refresh(tg: Path) -> None:
         prop_anchor
         + "    private var aorusSettingsObserver: NSObjectProtocol?\n"
         + "    private var aorusLastHideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
-        + "    private var aorusLastHideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n",
+        + "    private var aorusLastHideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
+        + "    private var aorusLastWallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n",
         1,
     )
 
@@ -15448,9 +15642,11 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "            }\n"
         "            let hideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
         "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
-        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts {\n"
+        "            let wallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n"
+        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || wallEnabled != strongSelf.aorusLastWallEnabled {\n"
         "                strongSelf.aorusLastHideCalls = hideCalls\n"
         "                strongSelf.aorusLastHideContacts = hideContacts\n"
+        "                strongSelf.aorusLastWallEnabled = wallEnabled\n"
         "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
         "            }\n"
         "        }\n"
@@ -21194,6 +21390,7 @@ def main() -> None:
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
+    patch_wall_tab(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)
