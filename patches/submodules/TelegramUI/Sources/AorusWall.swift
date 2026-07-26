@@ -7,10 +7,26 @@ import AccountContext
 import Display
 import AorusGramUI
 
-private let aorusFilledHouseTabImage: UIImage? = {
+// The tab bar renders a plain image with `tintColor: nil` (only Lottie-backed stock tabs get
+// themed), so a template image would fall back to the inherited tint and always look white.
+// Bake the colour in instead and hand back an `.alwaysOriginal` image, regenerating it
+// whenever the theme changes.
+private var aorusHouseTabImageCache: [UInt32: UIImage] = [:]
+
+private func aorusFilledHouseTabImage(color: UIColor) -> UIImage? {
+    var red: CGFloat = 0.0, green: CGFloat = 0.0, blue: CGFloat = 0.0, alpha: CGFloat = 0.0
+    color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+    let key = (UInt32(max(0.0, min(1.0, red)) * 255.0) << 24)
+        | (UInt32(max(0.0, min(1.0, green)) * 255.0) << 16)
+        | (UInt32(max(0.0, min(1.0, blue)) * 255.0) << 8)
+        | UInt32(max(0.0, min(1.0, alpha)) * 255.0)
+    if let cached = aorusHouseTabImageCache[key] {
+        return cached
+    }
+
     let configuration = UIImage.SymbolConfiguration(pointSize: 25.0, weight: .medium)
     guard let symbol = UIImage(systemName: "house.fill", withConfiguration: configuration)?
-        .withTintColor(.black, renderingMode: .alwaysOriginal) else {
+        .withTintColor(color, renderingMode: .alwaysOriginal) else {
         return nil
     }
 
@@ -32,10 +48,12 @@ private let aorusFilledHouseTabImage: UIImage? = {
             height: symbol.size.height - doorwayY
         ))
     }
-    return image
-        .withRenderingMode(.alwaysTemplate)
+    let result = image
+        .withRenderingMode(.alwaysOriginal)
         .withAlignmentRectInsets(symbol.alignmentRectInsets)
-}()
+    aorusHouseTabImageCache[key] = result
+    return result
+}
 
 public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     public let title = AorusL10n.current.wallTitle
@@ -64,6 +82,18 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private var isVisible = false
         private var lastLoadMoreMarkedCount = 0
 
+        // Background top-up. The Wall used to only fetch more once the user had marked posts
+        // as seen, so a fast reader could scroll straight into an empty feed. A low-frequency
+        // prefetch keeps the buffer full while the tab is open.
+        private var prefetchTimer: SwiftSignalKit.Timer?
+        private var isPrefetching = false
+        /// Below this many unseen posts we consider the feed to be running dry.
+        private static let prefetchThreshold = 12
+        /// Also re-ask Telegram for recommendations periodically, not only when the
+        /// setting is toggled.
+        private var lastRecommendationRefresh: Double = 0.0
+        private static let recommendationRefreshInterval: Double = 15 * 60
+
         let historyViewStream = ValuePipe<(EngineRawMessageHistoryView, EngineViewUpdateType)>()
         let searchingPromise = ValuePromise<Bool>(true, ignoreRepeated: true)
         var badgeUpdated: (Int) -> Void = { _ in }
@@ -83,13 +113,22 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.recommendationRequestDisposable?.dispose()
             self.recommendedChannelsDisposable?.dispose()
             self.recommendedPreloadDisposable.dispose()
+            self.prefetchTimer?.invalidate()
         }
 
         private func updateRecommendationsIfNeeded() {
             let enabled = AorusWallSettingsStore.showRecommended(accountId: self.accountId)
-            guard enabled != self.recommendationsEnabled else {
+            let now = ProcessInfo.processInfo.systemUptime
+            // Re-run not only when the setting flips, but also periodically: Telegram's
+            // recommendation set changes over time, and without this the Wall kept serving
+            // whatever was fetched at launch.
+            let isStale = enabled
+                && self.lastRecommendationRefresh > 0.0
+                && (now - self.lastRecommendationRefresh) >= Impl.recommendationRefreshInterval
+            guard enabled != self.recommendationsEnabled || isStale else {
                 return
             }
+            self.lastRecommendationRefresh = enabled ? now : 0.0
             self.recommendationsEnabled = enabled
             self.recommendationRequestDisposable?.dispose()
             self.recommendationRequestDisposable = nil
@@ -325,18 +364,33 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         }
 
         func loadMore() {
-            guard self.loadDisposable == nil,
-                  self.loadMoreDisposable == nil,
-                  self.markedInCurrentView.count > self.lastLoadMoreMarkedCount else {
+            // Reaching the end of the feed is itself a reason to fetch — gating this on
+            // "has the user marked something new as seen" made the Wall run empty for anyone
+            // scrolling faster than the view-tracking timer.
+            self.topUp(force: true)
+        }
+
+        /// Fetch more posts into the feed. `force` bypasses the "is the buffer low" check,
+        /// used when the user has actually hit the bottom.
+        private func topUp(force: Bool) {
+            guard self.loadDisposable == nil, self.loadMoreDisposable == nil, !self.isPrefetching else {
                 return
             }
+            if !force {
+                let unseen = self.currentMessageIds.filter { !self.markedInCurrentView.contains($0) }.count
+                guard unseen <= Impl.prefetchThreshold else {
+                    return
+                }
+            }
             self.lastLoadMoreMarkedCount = self.markedInCurrentView.count
+            self.isPrefetching = true
             let previousIds = Set(self.currentMessageIds)
             self.loadMoreDisposable = (self.collectMessages()
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
                 }
+                self.isPrefetching = false
                 if messages.contains(where: { !previousIds.contains($0.id) }) {
                     self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
                 }
@@ -345,16 +399,39 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             })
         }
 
+        private func startPrefetchTimer() {
+            guard self.prefetchTimer == nil else {
+                return
+            }
+            let timer = SwiftSignalKit.Timer(timeout: 20.0, repeat: true, completion: { [weak self] in
+                guard let self, self.isVisible else {
+                    return
+                }
+                self.updateRecommendationsIfNeeded()
+                self.topUp(force: false)
+            }, queue: self.queue)
+            self.prefetchTimer = timer
+            timer.start()
+        }
+
+        private func stopPrefetchTimer() {
+            self.prefetchTimer?.invalidate()
+            self.prefetchTimer = nil
+        }
+
         private func requiredViewingDuration(for message: Message) -> Double {
             let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let tokenCount = text.split(whereSeparator: { $0.isWhitespace }).count
             let characterWordEstimate = Int(ceil(Double(text.count) / 6.0))
             let effectiveWords = max(tokenCount, characterWordEstimate)
-            var duration = 0.8 + Double(effectiveWords) / 3.7
+            // ~220 words/min reading speed, plus a fixed cost for orienting on the post.
+            // The floors matter more than the slope: they are what stops a post that merely
+            // swept past during a fast scroll from counting as read.
+            var duration = 1.0 + Double(effectiveWords) / 3.7
             if !message.media.isEmpty {
-                duration = max(duration + 0.8, 2.2)
+                duration = max(duration + 0.9, 2.8)
             } else {
-                duration = max(duration, 1.25)
+                duration = max(duration, 1.8)
             }
             return min(duration, 30.0)
         }
@@ -364,6 +441,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.isVisible = value
             self.lastVisibilityTimestamp = nil
             self.previousVisibleMessageIds.removeAll()
+            if value {
+                self.startPrefetchTimer()
+                // Top up right away too, so opening the Wall on a nearly-empty feed does not
+                // wait a full timer period.
+                self.topUp(force: false)
+            } else {
+                self.stopPrefetchTimer()
+            }
             if !value && wasVisible && !self.markedInCurrentView.isEmpty {
                 self.reload(updateType: .Generic)
             } else {
@@ -599,13 +684,22 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         |> deliverOnMainQueue).start(next: { [weak self, weak controller] value in
             guard let self, let controller else { return }
             let (searching, presentationData) = value
+
+            // Both buttons must stay put. Previously the settings gear was *replaced* by a
+            // spinner while loading — and since the Wall starts out loading, entering it
+            // showed no gear at all until a refresh finished. Keep the gear permanently and
+            // convey loading through the refresh button instead.
+            if controller.navigationItem.leftBarButtonItem == nil {
+                controller.navigationItem.leftBarButtonItem = UIBarButtonItem(
+                    title: AorusL10n.current.wallRefresh,
+                    style: .plain,
+                    target: self,
+                    action: #selector(AorusWallChatContents.refreshWall)
+                )
+            }
             controller.navigationItem.leftBarButtonItem?.isEnabled = !searching
-            if searching {
-                let indicator = UIActivityIndicatorView(style: .medium)
-                indicator.color = presentationData.theme.rootController.navigationBar.accentTextColor
-                indicator.startAnimating()
-                controller.navigationItem.rightBarButtonItem = UIBarButtonItem(customView: indicator)
-            } else {
+
+            if controller.navigationItem.rightBarButtonItem?.image == nil {
                 controller.navigationItem.rightBarButtonItem = UIBarButtonItem(
                     image: UIImage(systemName: "gearshape")?.withRenderingMode(.alwaysTemplate),
                     style: .plain,
@@ -613,6 +707,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     action: #selector(AorusWallChatContents.openWallSettings)
                 )
             }
+
+            // The tab bar draws plain images untinted, so recolour the house on theme changes.
+            let tabBarTheme = presentationData.theme.rootController.tabBar
+            controller.tabBarItem.image = aorusFilledHouseTabImage(color: tabBarTheme.iconColor)
+            controller.tabBarItem.selectedImage = aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor)
         })
     }
 
@@ -652,6 +751,14 @@ public func makeAorusWallController(context: AccountContext) -> ViewController {
         target: contents,
         action: #selector(AorusWallChatContents.refreshWall)
     )
+    // Seed the gear immediately so it is present on the very first frame; bindNavigation
+    // keeps it in place afterwards.
+    controller.navigationItem.rightBarButtonItem = UIBarButtonItem(
+        image: UIImage(systemName: "gearshape")?.withRenderingMode(.alwaysTemplate),
+        style: .plain,
+        target: contents,
+        action: #selector(AorusWallChatContents.openWallSettings)
+    )
     contents.bindNavigation(controller: controller, context: context)
 
     contents.openSettings = { [weak controller] in
@@ -665,8 +772,8 @@ public func makeAorusWallController(context: AccountContext) -> ViewController {
     }
 
     controller.tabBarItem.title = AorusL10n.current.wallTitle
-    let tabImage = aorusFilledHouseTabImage
-    controller.tabBarItem.image = tabImage
-    controller.tabBarItem.selectedImage = tabImage
+    let tabBarTheme = context.sharedContext.currentPresentationData.with { $0 }.theme.rootController.tabBar
+    controller.tabBarItem.image = aorusFilledHouseTabImage(color: tabBarTheme.iconColor)
+    controller.tabBarItem.selectedImage = aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor)
     return controller
 }
