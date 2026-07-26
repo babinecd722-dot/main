@@ -119,6 +119,16 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         // on screen keeps their contents live without disturbing the composition of the feed.
         private var messageUpdatesDisposable: Disposable?
         private var observedMessageIds = Set<MessageId>()
+
+        // Running dry is answered by widening the set of SOURCES, never the time window:
+        // Telegram exposes "similar channels" per channel, so every channel already in the
+        // feed is a seed for more. That keeps posts recent while making the feed effectively
+        // bottomless.
+        private var expansionDisposable: Disposable?
+        private let expansionPreloadDisposable = DisposableSet()
+        private var expansionSeedCursor = 0
+        private var expandedSeeds = Set<PeerId>()
+        private static let maxRecommendedSources = 128
         /// Below this many unseen posts we consider the feed to be running dry.
         private static let prefetchThreshold = 12
         /// Also re-ask Telegram for recommendations periodically, not only when the
@@ -147,6 +157,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.recommendedPreloadDisposable.dispose()
             self.prefetchTimer?.invalidate()
             self.messageUpdatesDisposable?.dispose()
+            self.expansionDisposable?.dispose()
+            self.expansionPreloadDisposable.dispose()
         }
 
         private func updateRecommendationsIfNeeded() {
@@ -176,6 +188,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             if settingChanged {
                 self.recommendedPreloadDisposable.set(nil)
                 self.recommendedPeerIds = []
+                // Expansion state belongs to the previous session of the feature.
+                self.expansionDisposable?.dispose()
+                self.expansionDisposable = nil
+                self.expansionPreloadDisposable.dispose()
+                self.expandedSeeds.removeAll()
+                self.expansionSeedCursor = 0
             }
 
             guard enabled else {
@@ -224,7 +242,74 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// strictly older than it are returned, so loading more extends the feed downwards
         /// instead of handing back the same top-200 every time (which both looked like
         /// "the feed ended" and, when merged, re-inserted posts mid-list under the reader).
-        private func collectMessages(before: MessageIndex? = nil, windowDays: Int32 = 30) -> Signal<[Message], NoError> {
+        /// Pull in more recommended CHANNELS, using channels already in the feed as seeds.
+        /// Called when a page comes back with nothing new — the alternative (reaching further
+        /// back in time) would just make the feed stale.
+        private func expandRecommendationSources() {
+            guard self.recommendationsEnabled,
+                  self.expansionDisposable == nil,
+                  self.recommendedPeerIds.count < Impl.maxRecommendedSources else {
+                return
+            }
+
+            // Seeds are the channels the reader is actually being shown, so the new sources
+            // stay related to their interests rather than being arbitrary.
+            let seeds = Array(Set(self.currentMessageIds.map(\.peerId))).sorted()
+            let candidates = seeds.filter { !self.expandedSeeds.contains($0) }
+            guard !candidates.isEmpty else {
+                return
+            }
+            let seed = candidates[self.expansionSeedCursor % candidates.count]
+            self.expansionSeedCursor += 1
+            self.expandedSeeds.insert(seed)
+
+            // Kick the fetch, then wait for the cache to actually hold something. These are
+            // kept separate on purpose: the request completes with no value, so chaining it
+            // onto the value signal would not type-check.
+            let _ = self.context.engine.peers.requestRecommendedChannels(peerId: seed).startStandalone()
+            self.expansionDisposable = (
+                self.context.engine.peers.recommendedChannels(peerId: seed)
+                |> filter { ($0?.channels.isEmpty == false) }
+                |> take(1)
+                |> deliverOn(self.queue)
+            ).start(next: { [weak self] recommendedChannels in
+                guard let self else {
+                    return
+                }
+                self.expansionDisposable = nil
+                let known = Set(self.recommendedPeerIds)
+                let additions = (recommendedChannels?.channels.map(\.peer.id) ?? [])
+                    .filter { !known.contains($0) }
+                    .prefix(max(0, Impl.maxRecommendedSources - self.recommendedPeerIds.count))
+                guard !additions.isEmpty else {
+                    return
+                }
+                self.recommendedPeerIds.append(contentsOf: additions)
+                for peerId in additions {
+                    self.expansionPreloadDisposable.add(self.context.account.viewTracker.polledChannel(peerId: peerId).start())
+                    self.expansionPreloadDisposable.add(self.context.account.addAdditionalPreloadHistoryPeerId(peerId: peerId))
+                }
+                // Their history has to arrive before it can be collected, so re-check shortly.
+                self.queue.after(2.0) { [weak self] in
+                    guard let self, self.recommendationsEnabled else {
+                        return
+                    }
+                    self.topUp(force: true)
+                }
+            })
+
+            // If this seed simply has no similar channels the signal above never fires, so
+            // release the slot and let the next empty page try a different seed.
+            self.queue.after(8.0) { [weak self] in
+                guard let self, self.expansionDisposable != nil else {
+                    return
+                }
+                self.expansionDisposable?.dispose()
+                self.expansionDisposable = nil
+            }
+        }
+
+        private func collectMessages(before: MessageIndex? = nil) -> Signal<[Message], NoError> {
             let accountId = self.accountId
             let recommendedPeerIds = self.recommendationsEnabled ? self.recommendedPeerIds : []
             return self.context.account.postbox.transaction { transaction -> [Message] in
@@ -287,12 +372,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 var recommendedBuckets: [[Message]] = []
                 if !recommendedPeerIds.isEmpty {
                     // Recommendations stay recent on purpose — a wall of month-old posts is not
-                    // worth reading. Depth comes from ranking within this window, not from
-                    // widening it. The window only grows as a last resort, once a page comes
-                    // back empty (see topUp), so old posts surface only when there is genuinely
-                    // nothing fresh left rather than diluting the feed from the start.
+                    // worth reading. When the feed runs dry we widen the set of CHANNELS
+                    // (see expandRecommendationSources), never this window.
                     let now = Int32(Date().timeIntervalSince1970)
-                    let minimumTimestamp = now - windowDays * 24 * 60 * 60
+                    let minimumTimestamp = now - 30 * 24 * 60 * 60
                     for peerId in recommendedPeerIds {
                         guard !excluded.contains(peerId.toInt64()),
                               let channel = transaction.getPeer(peerId) as? TelegramChannel,
@@ -525,40 +608,21 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // Anchor at the oldest post already on screen: the next page continues below it,
             // so nothing is inserted among the posts the reader is currently looking at.
             let anchor = self.currentMessages.values.map(\.index).min()
-            self.fetchPage(before: anchor, windowDays: 30, previousIds: previousIds)
-        }
-
-        /// Fetch one page. If it comes back with nothing new, widen the recommendation window
-        /// and try again — so the feed only reaches into older posts once there is genuinely
-        /// nothing fresh left, instead of diluting the normal case with stale content.
-        private func fetchPage(before: MessageIndex?, windowDays: Int32, previousIds: Set<MessageId>) {
-            self.loadMoreDisposable = (self.collectMessages(before: before, windowDays: windowDays)
+            self.loadMoreDisposable = (self.collectMessages(before: anchor)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
                 }
+                self.isPrefetching = false
+                if messages.contains(where: { !previousIds.contains($0.id) }) {
+                    self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
+                } else {
+                    // Nothing left at this depth: pull in more SOURCES rather than older
+                    // posts. Widening the time window would only make the feed stale.
+                    self.expandRecommendationSources()
+                }
                 self.loadMoreDisposable?.dispose()
                 self.loadMoreDisposable = nil
-
-                if messages.contains(where: { !previousIds.contains($0.id) }) {
-                    self.isPrefetching = false
-                    self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
-                    return
-                }
-
-                // Nothing new at this depth. Escalate the window a step at a time; give up
-                // once a year back still yields nothing, which means the feed really is done.
-                let nextWindow: Int32
-                switch windowDays {
-                case 30: nextWindow = 90
-                case 90: nextWindow = 365
-                default: nextWindow = 0
-                }
-                guard nextWindow > 0, self.recommendationsEnabled else {
-                    self.isPrefetching = false
-                    return
-                }
-                self.fetchPage(before: before, windowDays: nextWindow, previousIds: previousIds)
             })
         }
 
