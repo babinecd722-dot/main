@@ -55,6 +55,31 @@ private func aorusFilledHouseTabImage(color: UIColor) -> UIImage? {
     return result
 }
 
+/// Ranks a recommended post: engagement, damped by age.
+///
+/// • Reactions weigh far more than views — a view is passive, a reaction is a decision.
+/// • The logarithm keeps a million-view channel from crowding out everything smaller;
+///   what matters is the order of magnitude, not the raw number.
+/// • Freshness decays on a ~3-day half-life, so a great post from last week can still beat
+///   a mediocre one from today, but not by much. This is what keeps the feed "top AND
+///   current" rather than either an all-time hall of fame or a plain reverse-chronological
+///   dump.
+private func aorusWallPostScore(_ message: Message, now: Int32) -> Double {
+    var views = 0.0
+    var reactions = 0.0
+    for attribute in message.attributes {
+        if let attribute = attribute as? ViewCountMessageAttribute {
+            views = Double(max(0, attribute.count))
+        } else if let attribute = attribute as? ReactionsMessageAttribute {
+            reactions = attribute.reactions.reduce(0.0) { $0 + Double(max(0, $1.count)) }
+        }
+    }
+    let engagement = views + reactions * 25.0
+    let ageDays = max(0.0, Double(now - message.timestamp) / 86400.0)
+    let freshness = pow(0.5, ageDays / 3.0)
+    return log(1.0 + engagement) * (0.35 + 0.65 * freshness)
+}
+
 public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     public let title = AorusL10n.current.wallTitle
     public let aorusIsWall = true
@@ -261,11 +286,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
                 var recommendedBuckets: [[Message]] = []
                 if !recommendedPeerIds.isEmpty {
-                    // Reach further back when paginating: unread posts are finite, so once the
-                    // subscribed ones run out the recommended pool is what keeps the feed going
-                    // instead of hitting a dead end.
-                    let recommendedWindowDays: Int32 = before == nil ? 30 : 120
-                    let minimumTimestamp = Int32(Date().timeIntervalSince1970) - recommendedWindowDays * 24 * 60 * 60
+                    // Recommendations stay recent on purpose — a wall of month-old posts is not
+                    // worth reading. Depth comes from ranking within this window, not from
+                    // widening it.
+                    let now = Int32(Date().timeIntervalSince1970)
+                    let minimumTimestamp = now - 30 * 24 * 60 * 60
                     for peerId in recommendedPeerIds {
                         guard !excluded.contains(peerId.toInt64()),
                               let channel = transaction.getPeer(peerId) as? TelegramChannel,
@@ -273,7 +298,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             continue
                         }
                         var bucket: [Message] = []
-                        transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: before == nil ? 40 : 160) { message in
+                        // Scan a wider slice than we keep, so the ranking below has a real pool
+                        // to choose the best from instead of just re-ordering the latest few.
+                        transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: before == nil ? 80 : 200) { message in
                             if message.timestamp >= minimumTimestamp
                                 && !AorusWallSettingsStore.isSeen(message.id, in: seen)
                                 && (before == nil || message.index < before!)
@@ -282,9 +309,15 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             }
                             return true
                         }
-                        bucket.sort(by: { $0.index > $1.index })
+                        // Rank by engagement decayed by age, so each channel contributes its
+                        // best recent posts rather than simply its latest ones.
+                        bucket.sort(by: {
+                            let left = aorusWallPostScore($0, now: now)
+                            let right = aorusWallPostScore($1, now: now)
+                            return left == right ? $0.index > $1.index : left > right
+                        })
                         if !bucket.isEmpty {
-                            recommendedBuckets.append(Array(bucket.prefix(before == nil ? 24 : 80)))
+                            recommendedBuckets.append(Array(bucket.prefix(24)))
                         }
                     }
                 }
@@ -296,10 +329,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
 
                 var recommendedMessages: [Message] = []
-                // On a pagination page the subscribed pool is usually exhausted, so let the
-                // recommended pool fill the page rather than capping it at a third of it.
-                let recommendedCeiling = before == nil ? 60 : 200
-                let recommendedLimit = min(recommendedCeiling, max(20, 200 - subscribedMessages.count))
+                let recommendedLimit = min(60, max(20, 200 - subscribedMessages.count))
                 var depth = 0
                 while recommendedMessages.count < recommendedLimit {
                     var addedAtDepth = false
