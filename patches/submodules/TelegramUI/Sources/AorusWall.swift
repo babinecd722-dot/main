@@ -224,7 +224,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// strictly older than it are returned, so loading more extends the feed downwards
         /// instead of handing back the same top-200 every time (which both looked like
         /// "the feed ended" and, when merged, re-inserted posts mid-list under the reader).
-        private func collectMessages(before: MessageIndex? = nil) -> Signal<[Message], NoError> {
+        private func collectMessages(before: MessageIndex? = nil, windowDays: Int32 = 30) -> Signal<[Message], NoError> {
             let accountId = self.accountId
             let recommendedPeerIds = self.recommendationsEnabled ? self.recommendedPeerIds : []
             return self.context.account.postbox.transaction { transaction -> [Message] in
@@ -288,9 +288,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 if !recommendedPeerIds.isEmpty {
                     // Recommendations stay recent on purpose — a wall of month-old posts is not
                     // worth reading. Depth comes from ranking within this window, not from
-                    // widening it.
+                    // widening it. The window only grows as a last resort, once a page comes
+                    // back empty (see topUp), so old posts surface only when there is genuinely
+                    // nothing fresh left rather than diluting the feed from the start.
                     let now = Int32(Date().timeIntervalSince1970)
-                    let minimumTimestamp = now - 30 * 24 * 60 * 60
+                    let minimumTimestamp = now - windowDays * 24 * 60 * 60
                     for peerId in recommendedPeerIds {
                         guard !excluded.contains(peerId.toInt64()),
                               let channel = transaction.getPeer(peerId) as? TelegramChannel,
@@ -523,17 +525,40 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // Anchor at the oldest post already on screen: the next page continues below it,
             // so nothing is inserted among the posts the reader is currently looking at.
             let anchor = self.currentMessages.values.map(\.index).min()
-            self.loadMoreDisposable = (self.collectMessages(before: anchor)
+            self.fetchPage(before: anchor, windowDays: 30, previousIds: previousIds)
+        }
+
+        /// Fetch one page. If it comes back with nothing new, widen the recommendation window
+        /// and try again — so the feed only reaches into older posts once there is genuinely
+        /// nothing fresh left, instead of diluting the normal case with stale content.
+        private func fetchPage(before: MessageIndex?, windowDays: Int32, previousIds: Set<MessageId>) {
+            self.loadMoreDisposable = (self.collectMessages(before: before, windowDays: windowDays)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
                 }
-                self.isPrefetching = false
-                if messages.contains(where: { !previousIds.contains($0.id) }) {
-                    self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
-                }
                 self.loadMoreDisposable?.dispose()
                 self.loadMoreDisposable = nil
+
+                if messages.contains(where: { !previousIds.contains($0.id) }) {
+                    self.isPrefetching = false
+                    self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
+                    return
+                }
+
+                // Nothing new at this depth. Escalate the window a step at a time; give up
+                // once a year back still yields nothing, which means the feed really is done.
+                let nextWindow: Int32
+                switch windowDays {
+                case 30: nextWindow = 90
+                case 90: nextWindow = 365
+                default: nextWindow = 0
+                }
+                guard nextWindow > 0, self.recommendationsEnabled else {
+                    self.isPrefetching = false
+                    return
+                }
+                self.fetchPage(before: before, windowDays: nextWindow, previousIds: previousIds)
             })
         }
 
