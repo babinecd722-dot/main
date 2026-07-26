@@ -15397,6 +15397,7 @@ def patch_wall_tab(tg: Path) -> None:
     root = tg / "submodules/TelegramUI/Sources/TelegramRootController.swift"
     content_data = tg / "submodules/TelegramUI/Sources/ChatControllerContentData.swift"
     chat_controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+    chat_controller_node = tg / "submodules/TelegramUI/Sources/ChatControllerNode.swift"
     context_menu = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerOpenMessageContextMenu.swift"
     empty_node = tg / "submodules/TelegramUI/Components/Chat/ChatEmptyNode/Sources/ChatEmptyNode.swift"
 
@@ -15417,7 +15418,7 @@ def patch_wall_tab(tg: Path) -> None:
                 "                \n"
                 "        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : (controllers.count - 2))\n",
                 "        controllers.append(accountSettingsController)\n"
-                "        let aorusWallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n"
+                "        let aorusWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
                 "        let aorusWallController: ViewController? = aorusWallEnabled ? makeAorusWallController(context: self.context) : nil\n"
                 "        if let aorusWallController {\n"
                 "            controllers.append(aorusWallController)\n"
@@ -15443,7 +15444,7 @@ def patch_wall_tab(tg: Path) -> None:
                 "        \n"
                 "        rootTabController.setControllers(controllers, selectedIndex: nil)\n",
                 "        controllers.append(self.accountSettingsController!)\n"
-                "        let aorusWallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n"
+                "        let aorusWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
                 "        if aorusWallEnabled {\n"
                 "            if self.aorusWallController == nil {\n"
                 "                self.aorusWallController = makeAorusWallController(context: self.context)\n"
@@ -15469,28 +15470,53 @@ def patch_wall_tab(tg: Path) -> None:
         root.write_text(t, encoding="utf-8")
         print("Wall: root tab integrated")
     else:
-        print("Wall: root tab already patched")
+        old_default = '(UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") as? Bool) ?? true'
+        new_default = 'UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") == nil ? true : UserDefaults.standard.bool(forKey: "aorusgram_wall_enabled")'
+        if old_default in t:
+            t = t.replace(old_default, new_default)
+            root.write_text(t, encoding="utf-8")
+            print("Wall: repaired cached root visibility defaults")
+        else:
+            print("Wall: root tab already patched")
 
     if content_data.is_file():
         t = content_data.read_text(encoding="utf-8")
         if "AorusWallChatContents" not in t:
-            old = (
+            old_legacy = (
                 "                        if let aorusUserMessages = customChatContents as? AorusUserMessagesChatContents {\n"
                 "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusUserMessages.peerName))], subtitle: nil, isEnabled: false)\n"
                 "                        }\n"
             )
-            new = (
+            new_legacy = (
                 "                        if let aorusUserMessages = customChatContents as? AorusUserMessagesChatContents {\n"
                 "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusUserMessages.peerName))], subtitle: nil, isEnabled: false)\n"
                 "                        } else if let aorusWall = customChatContents as? AorusWallChatContents {\n"
                 "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusWall.title))], subtitle: nil, isEnabled: false)\n"
                 "                        }\n"
             )
-            if old in t:
-                content_data.write_text(t.replace(old, new, 1), encoding="utf-8")
+            if old_legacy in t:
+                content_data.write_text(t.replace(old_legacy, new_legacy, 1), encoding="utf-8")
                 print("Wall: native chat title integrated")
             else:
-                print("Wall: WARNING — title anchor not found")
+                current_anchor = (
+                    "                if case let .customChatContents(customChatContents) = initialSubject {\n"
+                    "                    switch customChatContents.kind {\n"
+                    "                    case .hashTagSearch:\n"
+                    "                        break\n"
+                )
+                current_patched = (
+                    "                if case let .customChatContents(customChatContents) = initialSubject {\n"
+                    "                    switch customChatContents.kind {\n"
+                    "                    case .hashTagSearch:\n"
+                    "                        if let aorusWall = customChatContents as? AorusWallChatContents {\n"
+                    "                            self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text(aorusWall.title))], subtitle: nil, isEnabled: false)\n"
+                    "                        }\n"
+                )
+                if current_anchor in t:
+                    content_data.write_text(t.replace(current_anchor, current_patched, 1), encoding="utf-8")
+                    print("Wall: native chat title integrated")
+                else:
+                    print("Wall: WARNING — title anchor not found")
 
     if chat_controller.is_file():
         t = chat_controller.read_text(encoding="utf-8")
@@ -15584,6 +15610,40 @@ def patch_wall_tab(tg: Path) -> None:
             else:
                 print("Wall: WARNING — viewWillDisappear anchor not found")
 
+        t = chat_controller.read_text(encoding="utf-8")
+        if "aorusWallAllowsQuickReaction" not in t:
+            old = "                        if !canSendReactionsToChat(strongSelf.presentationInterfaceState) {\n"
+            new = (
+                "                        let aorusWallAllowsQuickReaction: Bool\n"
+                "                        if case let .customChatContents(contents) = strongSelf.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                            aorusWallAllowsQuickReaction = true\n"
+                "                        } else {\n"
+                "                            aorusWallAllowsQuickReaction = false\n"
+                "                        }\n"
+                "                        if !aorusWallAllowsQuickReaction && !canSendReactionsToChat(strongSelf.presentationInterfaceState) {\n"
+            )
+            if old in t:
+                t = t.replace(old, new, 1)
+            else:
+                print("Wall: WARNING — first reaction permission anchor not found")
+
+            old = "                            if !canSendReactionsToChat(strongSelf.presentationInterfaceState) {\n"
+            new = (
+                "                            let aorusWallAllowsMenuReaction: Bool\n"
+                "                            if case let .customChatContents(contents) = strongSelf.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                                aorusWallAllowsMenuReaction = true\n"
+                "                            } else {\n"
+                "                                aorusWallAllowsMenuReaction = false\n"
+                "                            }\n"
+                "                            if !aorusWallAllowsMenuReaction && !canSendReactionsToChat(strongSelf.presentationInterfaceState) {\n"
+            )
+            if old in t:
+                t = t.replace(old, new, 1)
+            else:
+                print("Wall: WARNING — second reaction permission anchor not found")
+            chat_controller.write_text(t, encoding="utf-8")
+            print("Wall: reaction permission uses each post channel")
+
     if context_menu.is_file():
         t = context_menu.read_text(encoding="utf-8")
         if "AorusGram: Wall reaction menu" not in t:
@@ -15606,6 +15666,76 @@ def patch_wall_tab(tg: Path) -> None:
                 print("Wall: native reaction menu enabled")
             else:
                 print("Wall: WARNING — reaction menu anchor not found")
+
+        t = context_menu.read_text(encoding="utf-8")
+        if "aorusWallAllowsContextReaction" not in t:
+            first = "                        if !canSendReactionsToChat(self.presentationInterfaceState) {\n"
+            first_new = (
+                "                        let aorusWallAllowsContextReaction: Bool\n"
+                "                        if case let .customChatContents(contents) = self.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                            aorusWallAllowsContextReaction = true\n"
+                "                        } else {\n"
+                "                            aorusWallAllowsContextReaction = false\n"
+                "                        }\n"
+                "                        if !aorusWallAllowsContextReaction && !canSendReactionsToChat(self.presentationInterfaceState) {\n"
+            )
+            second = "                        if removedReaction == nil && !canSendReactionsToChat(self.presentationInterfaceState) {\n"
+            second_new = (
+                "                        let aorusWallAllowsSelectedReaction: Bool\n"
+                "                        if case let .customChatContents(contents) = self.presentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "                            aorusWallAllowsSelectedReaction = true\n"
+                "                        } else {\n"
+                "                            aorusWallAllowsSelectedReaction = false\n"
+                "                        }\n"
+                "                        if removedReaction == nil && !aorusWallAllowsSelectedReaction && !canSendReactionsToChat(self.presentationInterfaceState) {\n"
+            )
+            if first in t and second in t:
+                t = t.replace(first, first_new, 1)
+                t = t.replace(second, second_new, 1)
+                context_menu.write_text(t, encoding="utf-8")
+                print("Wall: context reactions enabled for recommended posts")
+            else:
+                print("Wall: WARNING — context reaction permission anchors not found")
+
+    if chat_controller_node.is_file():
+        t = chat_controller_node.read_text(encoding="utf-8")
+        if "AorusGram: Wall top-to-bottom history" not in t:
+            old = (
+                "        var historyNodeRotated = true\n"
+                "        var isChatPreview = false\n"
+            )
+            new = (
+                "        var historyNodeRotated = true\n"
+                "        if case let .customChatContents(contents) = subject, contents is AorusWallChatContents { // AorusGram: Wall top-to-bottom history\n"
+                "            historyNodeRotated = false\n"
+                "        }\n"
+                "        var isChatPreview = false\n"
+            )
+            if old in t:
+                t = t.replace(old, new, 1)
+                print("Wall: history direction changed to top-to-bottom")
+            else:
+                print("Wall: WARNING — history direction anchor not found")
+
+        if "AorusGram: Wall has no bottom-navigation button" not in t:
+            old = "        transition.updateAlpha(node: self.navigateButtons, alpha: showNavigateButtons ? 1.0 : 0.0)\n"
+            new = (
+                "        let aorusWallHidesNavigateButtons: Bool\n"
+                "        if case let .customChatContents(contents) = self.chatPresentationInterfaceState.subject, contents is AorusWallChatContents {\n"
+                "            aorusWallHidesNavigateButtons = true // AorusGram: Wall has no bottom-navigation button\n"
+                "        } else {\n"
+                "            aorusWallHidesNavigateButtons = false\n"
+                "        }\n"
+                "        self.navigateButtons.isUserInteractionEnabled = !aorusWallHidesNavigateButtons\n"
+                "        transition.updateAlpha(node: self.navigateButtons, alpha: (!aorusWallHidesNavigateButtons && showNavigateButtons) ? 1.0 : 0.0)\n"
+            )
+            if old in t:
+                t = t.replace(old, new, 1)
+                print("Wall: bottom-navigation button hidden")
+            else:
+                print("Wall: WARNING — navigate button anchor not found")
+
+        chat_controller_node.write_text(t, encoding="utf-8")
 
     if empty_node.is_file():
         t = empty_node.read_text(encoding="utf-8")
@@ -15662,7 +15792,85 @@ def patch_settings_live_refresh(tg: Path) -> None:
         return
     t = f.read_text(encoding="utf-8")
     if "AorusGram: live-apply" in t:
-        print("SettingsLiveRefresh: already patched")
+        changed = False
+        old_default = '(UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") as? Bool) ?? true'
+        new_default = 'UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") == nil ? true : UserDefaults.standard.bool(forKey: "aorusgram_wall_enabled")'
+        if old_default in t:
+            t = t.replace(old_default, new_default)
+            changed = True
+        old_observer = (
+            "            let wallEnabled = (notification.object as? NSNumber)?.boolValue ?? (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\"))\n"
+            "            guard wallEnabled != strongSelf.aorusLastWallEnabled else {\n"
+            "                return\n"
+            "            }\n"
+            "            strongSelf.aorusLastWallEnabled = wallEnabled\n"
+        )
+        new_observer = (
+            "            if let value = notification.object as? NSNumber {\n"
+            "                UserDefaults.standard.set(value.boolValue, forKey: \"aorusgram_wall_enabled\")\n"
+            "            }\n"
+            "            let wallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
+            "            strongSelf.aorusLastWallEnabled = wallEnabled\n"
+        )
+        if old_observer in t:
+            t = t.replace(old_observer, new_observer, 1)
+            changed = True
+        if "private var aorusWallVisibilityObserver: NSObjectProtocol?" not in t:
+            prop_anchor = "    private var aorusSettingsObserver: NSObjectProtocol?\n"
+            if prop_anchor not in t:
+                print("SettingsLiveRefresh: WARNING — cached Wall observer property anchor not found")
+                return
+            t = t.replace(
+                prop_anchor,
+                prop_anchor + "    private var aorusWallVisibilityObserver: NSObjectProtocol?\n",
+                1,
+            )
+            changed = True
+        if 'Notification.Name("aorusgram_wall_visibility_changed")' not in t:
+            init_anchor = "        self.rootController.setForceInCallStatusBar"
+            if init_anchor not in t:
+                print("SettingsLiveRefresh: WARNING — cached Wall observer init anchor not found")
+                return
+            wall_observer = (
+                "        self.aorusWallVisibilityObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram_wall_visibility_changed\"), object: nil, queue: OperationQueue.main) { [weak self] notification in\n"
+                "            guard let strongSelf = self else {\n"
+                "                return\n"
+                "            }\n"
+                "            if let value = notification.object as? NSNumber {\n"
+                "                UserDefaults.standard.set(value.boolValue, forKey: \"aorusgram_wall_enabled\")\n"
+                "                strongSelf.aorusLastWallEnabled = value.boolValue\n"
+                "            } else {\n"
+                "                strongSelf.aorusLastWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
+                "            }\n"
+                "            strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "        }\n"
+                "\n"
+            )
+            t = t.replace(init_anchor, wall_observer + init_anchor, 1)
+            changed = True
+        if "NotificationCenter.default.removeObserver(aorusWallVisibilityObserver)" not in t:
+            deinit_anchor = (
+                "        if let aorusSettingsObserver = self.aorusSettingsObserver { // AorusGram\n"
+                "            NotificationCenter.default.removeObserver(aorusSettingsObserver)\n"
+                "        }\n"
+            )
+            if deinit_anchor not in t:
+                print("SettingsLiveRefresh: WARNING — cached Wall observer deinit anchor not found")
+                return
+            t = t.replace(
+                deinit_anchor,
+                deinit_anchor
+                + "        if let aorusWallVisibilityObserver = self.aorusWallVisibilityObserver { // AorusGram\n"
+                + "            NotificationCenter.default.removeObserver(aorusWallVisibilityObserver)\n"
+                + "        }\n",
+                1,
+            )
+            changed = True
+        if changed:
+            f.write_text(t, encoding="utf-8")
+            print("SettingsLiveRefresh: repaired cached Wall live visibility")
+        else:
+            print("SettingsLiveRefresh: already patched")
         return
 
     # 1) Stored properties (observer token + cached flag values).
@@ -15677,7 +15885,7 @@ def patch_settings_live_refresh(tg: Path) -> None:
         + "    private var aorusWallVisibilityObserver: NSObjectProtocol?\n"
         + "    private var aorusLastHideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
         + "    private var aorusLastHideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
-        + "    private var aorusLastWallEnabled = (UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true\n",
+        + "    private var aorusLastWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n",
         1,
     )
 
@@ -15715,10 +15923,10 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "            guard let strongSelf = self else {\n"
         "                return\n"
         "            }\n"
-        "            let wallEnabled = (notification.object as? NSNumber)?.boolValue ?? ((UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") as? Bool) ?? true)\n"
-        "            guard wallEnabled != strongSelf.aorusLastWallEnabled else {\n"
-        "                return\n"
+        "            if let value = notification.object as? NSNumber {\n"
+        "                UserDefaults.standard.set(value.boolValue, forKey: \"aorusgram_wall_enabled\")\n"
         "            }\n"
+        "            let wallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n"
         "            strongSelf.aorusLastWallEnabled = wallEnabled\n"
         "            strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
         "        }\n"
@@ -19568,10 +19776,26 @@ def patch_share_button_translate(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     if "aorusIsTranslate" in t:
-        print("ShareBtnTranslate: already patched")
+        changed = False
+        if "aorusForceShare" not in t:
+            old = "aorusIsTranslate: Bool = false, aorusIsTranscribe: Bool = false) -> CGSize {"
+            new = "aorusIsTranslate: Bool = false, aorusIsTranscribe: Bool = false, aorusForceShare: Bool = false) -> CGSize {"
+            if old in t:
+                t = t.replace(old, new, 1)
+                changed = True
+            old = "} else if case let .customChatContents(contents) = subject, case .hashTagSearch = contents.kind {"
+            new = "} else if case let .customChatContents(contents) = subject, case .hashTagSearch = contents.kind, !aorusForceShare {"
+            if old in t:
+                t = t.replace(old, new, 1)
+                changed = True
+        if changed:
+            path.write_text(t, encoding="utf-8")
+            print("ShareBtnTranslate: added forced native share mode")
+        else:
+            print("ShareBtnTranslate: already patched")
         return
     sig_old = "disableComments: Bool = false, isSummarize: Bool = false) -> CGSize {"
-    sig_new = "disableComments: Bool = false, isSummarize: Bool = false, aorusIsTranslate: Bool = false, aorusIsTranscribe: Bool = false) -> CGSize {"
+    sig_new = "disableComments: Bool = false, isSummarize: Bool = false, aorusIsTranslate: Bool = false, aorusIsTranscribe: Bool = false, aorusForceShare: Bool = false) -> CGSize {"
     icon_old = "            if isSummarize {\n"
     icon_new = (
         "            if aorusIsTranslate {\n"
@@ -19583,8 +19807,13 @@ def patch_share_button_translate(tg: Path) -> None:
     if sig_old in t and icon_old in t:
         t = t.replace(sig_old, sig_new, 1)
         t = t.replace(icon_old, icon_new, 1)
+        t = t.replace(
+            "} else if case let .customChatContents(contents) = subject, case .hashTagSearch = contents.kind {",
+            "} else if case let .customChatContents(contents) = subject, case .hashTagSearch = contents.kind, !aorusForceShare {",
+            1,
+        )
         path.write_text(t, encoding="utf-8")
-        print("ShareBtnTranslate: added aorusIsTranslate mode")
+        print("ShareBtnTranslate: added translate/transcribe/forced-share modes")
     else:
         print("ShareBtnTranslate: WARNING anchors not found (upstream drift)")
 
@@ -19877,8 +20106,8 @@ def patch_message_translate_button(tg: Path) -> None:
 
     # 7) absolute rect — both aorus buttons
     sub("        if let summarizeButtonNode = self.summarizeButtonNode {\n            var summarizeButtonNodeFrame = summarizeButtonNode.frame\n            summarizeButtonNodeFrame.origin.x += rect.minX\n            summarizeButtonNodeFrame.origin.y += rect.minY\n            \n            summarizeButtonNode.updateAbsoluteRect(summarizeButtonNodeFrame, within: containerSize)\n        }\n",
-        "        if let aorusTranslateButtonNode = self.aorusTranslateButtonNode {\n            var aorusTranslateButtonNodeFrame = aorusTranslateButtonNode.frame\n            aorusTranslateButtonNodeFrame.origin.x += rect.minX\n            aorusTranslateButtonNodeFrame.origin.y += rect.minY\n            \n            aorusTranslateButtonNode.updateAbsoluteRect(aorusTranslateButtonNodeFrame, within: containerSize)\n        }\n"
-        "        if let aorusTranslate2ButtonNode = self.aorusTranslate2ButtonNode {\n            var aorusTranslate2ButtonNodeFrame = aorusTranslate2ButtonNode.frame\n            aorusTranslate2ButtonNodeFrame.origin.x += rect.minX\n            aorusTranslate2ButtonNodeFrame.origin.y += rect.minY\n            \n            aorusTranslate2ButtonNode.updateAbsoluteRect(aorusTranslate2ButtonNodeFrame, within: containerSize)\n        }\n"
+        "        if let aorusTranslateButtonNode = self.aorusTranslateButtonNode {\n            var aorusTranslateButtonNodeFrame = aorusTranslateButtonNode.frame\n            aorusTranslateButtonNodeFrame.origin.x += rect.minX\n            aorusTranslateButtonNodeFrame.origin.y += rect.minY\n\n            aorusTranslateButtonNode.updateAbsoluteRect(aorusTranslateButtonNodeFrame, within: containerSize)\n        }\n"
+        "        if let aorusTranslate2ButtonNode = self.aorusTranslate2ButtonNode {\n            var aorusTranslate2ButtonNodeFrame = aorusTranslate2ButtonNode.frame\n            aorusTranslate2ButtonNodeFrame.origin.x += rect.minX\n            aorusTranslate2ButtonNodeFrame.origin.y += rect.minY\n\n            aorusTranslate2ButtonNode.updateAbsoluteRect(aorusTranslate2ButtonNodeFrame, within: containerSize)\n        }\n"
         "        if let summarizeButtonNode = self.summarizeButtonNode {\n            var summarizeButtonNodeFrame = summarizeButtonNode.frame\n            summarizeButtonNodeFrame.origin.x += rect.minX\n            summarizeButtonNodeFrame.origin.y += rect.minY\n            \n            summarizeButtonNode.updateAbsoluteRect(summarizeButtonNodeFrame, within: containerSize)\n        }\n",
         "absoluteRect")
 
@@ -20043,13 +20272,193 @@ def patch_message_translate_button(tg: Path) -> None:
         "        if let subject = item.associatedData.subject, case .messageOptions = subject {\n"
         "            needsShareButton = false\n"
         "        }\n"
-        "        if needsShareButton, let aorusShareOn = UserDefaults.standard.object(forKey: \"aorusgram_share_button\") as? Bool, !aorusShareOn {\n"
+        "        let aorusIsWallSubject: Bool\n"
+        "        if case let .customChatContents(contents) = item.associatedData.subject, contents is AorusWallChatContents {\n"
+        "            aorusIsWallSubject = true\n"
+        "        } else {\n"
+        "            aorusIsWallSubject = false\n"
+        "        }\n"
+        "        if needsShareButton, !aorusIsWallSubject, let aorusShareOn = UserDefaults.standard.object(forKey: \"aorusgram_share_button\") as? Bool, !aorusShareOn {\n"
         "            needsShareButton = false\n"
         "        }\n",
         "share-button-gate")
 
     path.write_text(t, encoding="utf-8")
     print("MsgTranslateBtn: injected per-message translate/transcribe button")
+
+
+def patch_wall_post_actions(tg: Path) -> None:
+    """Give Wall posts a stable native action stack: translate, share, navigate."""
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
+    if not path.is_file():
+        print("WallActions: ChatMessageBubbleItemNode.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusWallShareButtonNode" in t:
+        print("WallActions: already patched")
+        return
+
+    required = [
+        "    private var aorusTranslate2ButtonNode: ChatMessageShareButton?\n",
+        "        let aorusNeedsTranslateButton = incoming && ",
+        "        if needsShareButton {\n",
+        "    @objc private func shareButtonPressed() {\n",
+    ]
+    missing = [anchor.strip() for anchor in required if anchor not in t]
+    if missing:
+        print(f"WallActions: WARNING — missing anchors: {missing}")
+        return
+
+    t = t.replace(
+        "    private var aorusTranslate2ButtonNode: ChatMessageShareButton?\n",
+        "    private var aorusTranslate2ButtonNode: ChatMessageShareButton?\n"
+        "    private var aorusWallShareButtonNode: ChatMessageShareButton?\n",
+        1,
+    )
+
+    old_flags = (
+        "        let aorusVoiceTranscribed = aorusHasVoiceMedia && UserDefaults.standard.object(forKey: aorusMsgKey) != nil\n"
+        "        let aorusNeedsTranslateButton = incoming && ((UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") && !aorusHasVoiceMedia && !item.message.text.isEmpty) || (UserDefaults.standard.bool(forKey: \"aorusgram_feature_voice_transcription\") && aorusHasVoiceMedia))\n"
+        "        let aorusNeedsSubTranslate = incoming && aorusVoiceTranscribed && UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\")\n"
+    )
+    new_flags = (
+        "        let aorusVoiceTranscribed = aorusHasVoiceMedia && UserDefaults.standard.object(forKey: aorusMsgKey) != nil\n"
+        "        let aorusIsWallPost: Bool\n"
+        "        if case let .customChatContents(contents) = item.associatedData.subject, contents is AorusWallChatContents {\n"
+        "            aorusIsWallPost = true\n"
+        "        } else {\n"
+        "            aorusIsWallPost = false\n"
+        "        }\n"
+        "        let aorusNeedsTranslateButton = incoming && (((UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\") || aorusIsWallPost) && !aorusHasVoiceMedia && !item.message.text.isEmpty) || (UserDefaults.standard.bool(forKey: \"aorusgram_feature_voice_transcription\") && aorusHasVoiceMedia))\n"
+        "        let aorusNeedsSubTranslate = incoming && aorusVoiceTranscribed && UserDefaults.standard.bool(forKey: \"aorusgram_feature_translator\")\n"
+    )
+    if old_flags not in t:
+        print("WallActions: WARNING — translate flags anchor not found")
+        return
+    t = t.replace(old_flags, new_flags, 1)
+
+    share_instantiation = (
+        "        if aorusIsWallPost {\n"
+        "            if strongSelf.aorusWallShareButtonNode == nil {\n"
+        "                let aorusWallShareButtonNode = ChatMessageShareButton()\n"
+        "                strongSelf.aorusWallShareButtonNode = aorusWallShareButtonNode\n"
+        "                strongSelf.insertSubnode(aorusWallShareButtonNode, belowSubnode: strongSelf.messageAccessibilityArea)\n"
+        "                aorusWallShareButtonNode.pressed = { [weak strongSelf] in\n"
+        "                    strongSelf?.aorusWallShareButtonPressed()\n"
+        "                }\n"
+        "                aorusWallShareButtonNode.longPressAction = { [weak strongSelf] node, gesture in\n"
+        "                    strongSelf?.openQuickShare(node: node, gesture: gesture)\n"
+        "                }\n"
+        "            }\n"
+        "        } else if let aorusWallShareButtonNode = strongSelf.aorusWallShareButtonNode {\n"
+        "            strongSelf.aorusWallShareButtonNode = nil\n"
+        "            aorusWallShareButtonNode.removeFromSupernode()\n"
+        "        }\n"
+        "\n"
+    )
+    t = t.replace("        if needsShareButton {\n", share_instantiation + "        if needsShareButton {\n", 1)
+
+    wall_frame = (
+        "            if let aorusWallShareButtonNode = strongSelf.aorusWallShareButtonNode {\n"
+        "                let buttonSize = aorusWallShareButtonNode.update(presentationData: item.presentationData, controllerInteraction: item.controllerInteraction, chatLocation: item.chatLocation, subject: item.associatedData.subject, message: EngineMessage(item.message), accountPeerId: item.context.account.peerId, disableComments: disablesComments, aorusForceShare: true)\n"
+        "                var buttonFrame = CGRect(origin: CGPoint(x: !incoming ? backgroundFrame.minX - buttonSize.width - 8.0 : backgroundFrame.maxX + 8.0, y: backgroundFrame.maxY - buttonSize.width - 1.0), size: buttonSize)\n"
+        "                buttonFrame.origin.y -= (buttonSize.height + 6.0)\n"
+        "                if let shareButtonOffset = shareButtonOffset {\n"
+        "                    if incoming {\n"
+        "                        buttonFrame.origin.x = shareButtonOffset.x\n"
+        "                    }\n"
+        "                    buttonFrame.origin.y = buttonFrame.origin.y + shareButtonOffset.y - (buttonSize.height - 30.0)\n"
+        "                } else if !disablesComments {\n"
+        "                    buttonFrame.origin.y = buttonFrame.origin.y - (buttonSize.height - 30.0)\n"
+        "                }\n"
+        "                if isSidePanelOpen {\n"
+        "                    buttonFrame.origin.x -= buttonFrame.width * 0.5\n"
+        "                    buttonFrame.origin.y += buttonFrame.height * 0.5\n"
+        "                }\n"
+        "                animation.animator.updatePosition(layer: aorusWallShareButtonNode.layer, position: buttonFrame.center, completion: nil)\n"
+        "                animation.animator.updateBounds(layer: aorusWallShareButtonNode.layer, bounds: CGRect(origin: CGPoint(), size: buttonFrame.size), completion: nil)\n"
+        "                animation.animator.updateAlpha(layer: aorusWallShareButtonNode.layer, alpha: (isCurrentlyPlayingMedia || isSidePanelOpen) ? 0.0 : 1.0, completion: nil)\n"
+        "                animation.animator.updateScale(layer: aorusWallShareButtonNode.layer, scale: (isCurrentlyPlayingMedia || isSidePanelOpen) ? 0.001 : 1.0, completion: nil)\n"
+        "            }\n"
+    )
+    summarize_frame_anchor = "            if let summarizeButtonNode = strongSelf.summarizeButtonNode {\n"
+    frame_count = t.count(summarize_frame_anchor)
+    if frame_count != 2:
+        print(f"WallActions: WARNING — expected 2 layout paths, found {frame_count}")
+        return
+    t = t.replace(summarize_frame_anchor, wall_frame + summarize_frame_anchor)
+
+    translate_slot = (
+        "                if needsShareButton {\n"
+        "                    buttonFrame.origin.y -= (buttonSize.height + 6.0)\n"
+        "                }\n"
+    )
+    shifted_slot = (
+        translate_slot
+        + "                if aorusIsWallPost {\n"
+        + "                    buttonFrame.origin.y -= (buttonSize.height + 6.0)\n"
+        + "                }\n"
+    )
+    slot_count = t.count(translate_slot)
+    if slot_count < 4:
+        print(f"WallActions: WARNING — expected translate layout slots, found {slot_count}")
+        return
+    t = t.replace(translate_slot, shifted_slot, 4)
+
+    recognizer_anchor = (
+        "                if let aorusTranslateButtonNode = strongSelf.aorusTranslateButtonNode, aorusTranslateButtonNode.frame.contains(point) {\n"
+    )
+    t = t.replace(
+        recognizer_anchor,
+        "                if let aorusWallShareButtonNode = strongSelf.aorusWallShareButtonNode, aorusWallShareButtonNode.frame.contains(point) {\n"
+        "                    return .fail\n"
+        "                }\n"
+        + recognizer_anchor,
+        1,
+    )
+
+    hit_test_anchor = (
+        "        if let aorusTranslateButtonNode = self.aorusTranslateButtonNode, aorusTranslateButtonNode.frame.contains(point) {\n"
+    )
+    t = t.replace(
+        hit_test_anchor,
+        "        if let aorusWallShareButtonNode = self.aorusWallShareButtonNode, aorusWallShareButtonNode.frame.contains(point) {\n"
+        "            return aorusWallShareButtonNode.view.hitTest(self.view.convert(point, to: aorusWallShareButtonNode.view), with: event)\n"
+        "        }\n"
+        + hit_test_anchor,
+        1,
+    )
+
+    absolute_anchor = "        if let aorusTranslateButtonNode = self.aorusTranslateButtonNode {\n"
+    t = t.replace(
+        absolute_anchor,
+        "        if let aorusWallShareButtonNode = self.aorusWallShareButtonNode {\n"
+        "            var aorusWallShareButtonNodeFrame = aorusWallShareButtonNode.frame\n"
+        "            aorusWallShareButtonNodeFrame.origin.x += rect.minX\n"
+        "            aorusWallShareButtonNodeFrame.origin.y += rect.minY\n"
+        "            aorusWallShareButtonNode.updateAbsoluteRect(aorusWallShareButtonNodeFrame, within: containerSize)\n"
+        "        }\n"
+        + absolute_anchor,
+        1,
+    )
+
+    share_method = (
+        "    @objc private func aorusWallShareButtonPressed() {\n"
+        "        guard let item = self.item else {\n"
+        "            return\n"
+        "        }\n"
+        "        item.controllerInteraction.openMessageShareMenu(item.message.id)\n"
+        "    }\n"
+        "\n"
+    )
+    t = t.replace(
+        "    @objc private func shareButtonPressed() {\n",
+        share_method + "    @objc private func shareButtonPressed() {\n",
+        1,
+    )
+
+    path.write_text(t, encoding="utf-8")
+    print("WallActions: native translate/share/navigate stack integrated")
 
 
 def patch_quick_replies_ampersand(tg: Path) -> None:
@@ -21402,6 +21811,7 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_share_button_translate(tg)
     patch_message_translate_button(tg)
+    patch_wall_post_actions(tg)
     patch_quick_replies_ampersand(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)

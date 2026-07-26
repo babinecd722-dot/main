@@ -81,14 +81,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 guard let self else {
                     return
                 }
-                let peerIds = recommendedChannels?.channels.map(\.peer.id) ?? []
+                let peerIds = Array((recommendedChannels?.channels.map(\.peer.id) ?? []).prefix(32))
                 guard peerIds != self.recommendedPeerIds else {
                     return
                 }
                 self.recommendedPeerIds = peerIds
 
                 let preloadDisposable = DisposableSet()
-                for peerId in peerIds.prefix(16) {
+                for peerId in peerIds {
                     preloadDisposable.add(self.context.account.viewTracker.polledChannel(peerId: peerId).start())
                     preloadDisposable.add(self.context.account.addAdditionalPreloadHistoryPeerId(peerId: peerId))
                 }
@@ -450,7 +450,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     private var visibilityTimer: Foundation.Timer?
     private var visibleMessagesProvider: (() -> Set<MessageId>)?
     private var navigationSearchingDisposable: Disposable?
-    private var tabIconDisposable: Disposable?
     private var observers: [NSObjectProtocol] = []
 
     public init(context: AccountContext) {
@@ -497,7 +496,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         self.badgeTimer?.invalidate()
         self.visibilityTimer?.invalidate()
         self.navigationSearchingDisposable?.dispose()
-        self.tabIconDisposable?.dispose()
         for observer in self.observers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -568,45 +566,22 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             context.sharedContext.presentationData
         )
         |> deliverOnMainQueue).start(next: { [weak self, weak controller] value in
-            guard let self, let controller else {
-                return
-            }
+            guard let self, let controller else { return }
             let (searching, presentationData) = value
-            let accentColor = presentationData.theme.rootController.navigationBar.accentTextColor
             controller.navigationItem.leftBarButtonItem?.isEnabled = !searching
-            let container = UIView(frame: CGRect(origin: .zero, size: CGSize(width: 30.0, height: 30.0)))
             if searching {
                 let indicator = UIActivityIndicatorView(style: .medium)
-                indicator.color = accentColor
-                indicator.center = CGPoint(x: container.bounds.midX, y: container.bounds.midY)
+                indicator.color = presentationData.theme.rootController.navigationBar.accentTextColor
                 indicator.startAnimating()
-                container.addSubview(indicator)
+                controller.navigationItem.rightBarButtonItem = UIBarButtonItem(customView: indicator)
             } else {
-                let button = UIButton(type: .system)
-                button.frame = container.bounds
-                button.tintColor = accentColor
-                button.setImage(UIImage(systemName: "gearshape")?.withRenderingMode(.alwaysTemplate), for: .normal)
-                button.addTarget(self, action: #selector(AorusWallChatContents.openWallSettings), for: .touchUpInside)
-                container.addSubview(button)
+                controller.navigationItem.rightBarButtonItem = UIBarButtonItem(
+                    image: UIImage(systemName: "gearshape")?.withRenderingMode(.alwaysTemplate),
+                    style: .plain,
+                    target: self,
+                    action: #selector(AorusWallChatContents.openWallSettings)
+                )
             }
-            controller.navigationItem.rightBarButtonItem = UIBarButtonItem(customView: container)
-        })
-    }
-
-    public func bindTabIcon(controller: ViewController, context: AccountContext) {
-        self.tabIconDisposable?.dispose()
-        self.tabIconDisposable = (
-            context.sharedContext.presentationData
-            |> deliverOnMainQueue
-        ).start(next: { [weak controller] presentationData in
-            controller?.tabBarItem.image = aorusWallTabIcon(
-                name: "house",
-                color: presentationData.theme.rootController.tabBar.textColor
-            )
-            controller?.tabBarItem.selectedImage = aorusWallTabIcon(
-                name: "house.fill",
-                color: presentationData.theme.rootController.tabBar.selectedTextColor
-            )
         })
     }
 
@@ -647,7 +622,6 @@ public func makeAorusWallController(context: AccountContext) -> ViewController {
         action: #selector(AorusWallChatContents.refreshWall)
     )
     contents.bindNavigation(controller: controller, context: context)
-    contents.bindTabIcon(controller: controller, context: context)
 
     contents.openSettings = { [weak controller] in
         guard let navigationController = controller?.navigationController as? NavigationController else {
@@ -660,22 +634,7 @@ public func makeAorusWallController(context: AccountContext) -> ViewController {
     }
 
     controller.tabBarItem.title = AorusL10n.current.wallTitle
+    controller.tabBarItem.image = UIImage(systemName: "house")?.withRenderingMode(.alwaysTemplate)
+    controller.tabBarItem.selectedImage = UIImage(systemName: "house.fill")?.withRenderingMode(.alwaysTemplate)
     return controller
-}
-
-private func aorusWallTabIcon(name: String, color: UIColor) -> UIImage? {
-    let size = CGSize(width: 30.0, height: 30.0)
-    let configuration = UIImage.SymbolConfiguration(pointSize: 21.0, weight: .medium)
-    guard let symbol = UIImage(systemName: name, withConfiguration: configuration)?
-        .withTintColor(color, renderingMode: .alwaysOriginal) else {
-        return nil
-    }
-    let renderer = UIGraphicsImageRenderer(size: size)
-    return renderer.image { _ in
-        let symbolSize = symbol.size
-        symbol.draw(at: CGPoint(
-            x: floor((size.width - symbolSize.width) * 0.5),
-            y: floor((size.height - symbolSize.height) * 0.5)
-        ))
-    }.withRenderingMode(.alwaysOriginal)
 }

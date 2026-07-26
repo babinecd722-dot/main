@@ -1062,6 +1062,77 @@ def main() -> None:
         if marker not in clipboard_text:
             err.append(f"ClipboardHistory: protected bounded storage is missing {marker}")
 
+    wall = tg / "submodules" / "TelegramUI" / "Sources" / "AorusWall.swift"
+    wall_text = wall.read_text(encoding="utf-8") if wall.is_file() else ""
+    for marker in (
+        "title: AorusL10n.current.wallRefresh",
+        'image: UIImage(systemName: "gearshape")',
+        'UIImage(systemName: "house")?.withRenderingMode(.alwaysTemplate)',
+        'UIImage(systemName: "house.fill")?.withRenderingMode(.alwaysTemplate)',
+    ):
+        if marker not in wall_text:
+            err.append(f"Wall: stable native header/tab integration is missing {marker}")
+    if "aorusWallTabIcon" in wall_text or "tabIconDisposable" in wall_text:
+        err.append("Wall: custom bitmap tab icon renderer must not replace Telegram tinting")
+    for marker in (
+        "recommendedChannels(peerId: nil)",
+        "for peerId in peerIds",
+        "addAdditionalPreloadHistoryPeerId(peerId: peerId)",
+        "messages.sort(by: { $0.index < $1.index })",
+    ):
+        if marker not in wall_text:
+            err.append(f"Wall: recommendation/top-to-bottom pipeline is missing {marker}")
+
+    wall_title = tg / "submodules" / "TelegramUI" / "Sources" / "ChatControllerContentData.swift"
+    wall_title_text = wall_title.read_text(encoding="utf-8") if wall_title.is_file() else ""
+    if "customChatContents as? AorusWallChatContents" not in wall_title_text or "content: .text(aorusWall.title)" not in wall_title_text:
+        err.append("Wall: native centered chat title is not connected to AorusWallChatContents")
+
+    wall_node = tg / "submodules" / "TelegramUI" / "Sources" / "ChatControllerNode.swift"
+    wall_node_text = wall_node.read_text(encoding="utf-8") if wall_node.is_file() else ""
+    if "AorusGram: Wall top-to-bottom history" not in wall_node_text:
+        err.append("Wall: history is not configured for top-to-bottom reading")
+    if "AorusGram: Wall has no bottom-navigation button" not in wall_node_text:
+        err.append("Wall: native scroll-to-bottom controls are still visible")
+
+    wall_controller = tg / "submodules" / "TelegramUI" / "Sources" / "ChatController.swift"
+    wall_controller_text = wall_controller.read_text(encoding="utf-8") if wall_controller.is_file() else ""
+    for marker in ("aorusWallAllowsQuickReaction", "aorusWallAllowsMenuReaction"):
+        if marker not in wall_controller_text:
+            err.append(f"Wall: recommended-channel reaction route is missing {marker}")
+
+    wall_context_menu = tg / "submodules" / "TelegramUI" / "Sources" / "Chat" / "ChatControllerOpenMessageContextMenu.swift"
+    wall_context_menu_text = wall_context_menu.read_text(encoding="utf-8") if wall_context_menu.is_file() else ""
+    for marker in ("aorusWallAllowsContextReaction", "aorusWallAllowsSelectedReaction"):
+        if marker not in wall_context_menu_text:
+            err.append(f"Wall: recommended-channel context reaction route is missing {marker}")
+
+    wall_bubble = (
+        tg
+        / "submodules"
+        / "TelegramUI"
+        / "Components"
+        / "Chat"
+        / "ChatMessageBubbleItemNode"
+        / "Sources"
+        / "ChatMessageBubbleItemNode.swift"
+    )
+    wall_bubble_text = wall_bubble.read_text(encoding="utf-8") if wall_bubble.is_file() else ""
+    for marker in (
+        "aorusWallShareButtonNode",
+        "aorusWallShareButtonPressed",
+        "aorusForceShare: true",
+    ):
+        if marker not in wall_bubble_text:
+            err.append(f"Wall: translate/share/navigate stack is missing {marker}")
+
+    app_context = tg / "submodules" / "TelegramUI" / "Sources" / "ApplicationContext.swift"
+    app_context_text = app_context.read_text(encoding="utf-8") if app_context.is_file() else ""
+    if "aorusgram_wall_visibility_changed" not in app_context_text:
+        err.append("Wall: live tab visibility observer is missing")
+    if "guard wallEnabled != strongSelf.aorusLastWallEnabled" in app_context_text:
+        err.append("Wall: stale cached visibility guard can ignore disabling the tab")
+
     subscription_config = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionConfig.swift"
     if not subscription_config.is_file():
         err.append("SubscriptionConfig.swift is missing")
