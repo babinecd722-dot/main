@@ -136,6 +136,27 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private var sourceGeneration: [PeerId: Int] = [:]
         /// Below this many unseen posts we consider the feed to be running dry.
         private static let prefetchThreshold = 12
+
+        /// Every post that has been placed into the feed since the last Refresh, including ones
+        /// already trimmed out of it.
+        ///
+        /// Pagination is by IDENTITY, not by a time anchor. It used to page with
+        /// `before: <oldest post on screen>`, which is fatal for a recommendation feed: as the
+        /// reader scrolls, that anchor walks backwards in time, while recommendations are
+        /// deliberately restricted to the last 30 days. Once the anchor passed 30 days, the
+        /// condition `message.index < before` could never again be true for a recommended post,
+        /// so recommendations were permanently excluded — and every channel added by source
+        /// expansion was excluded the instant it was added, because its posts are recent.
+        /// The feed then had a hard, unrecoverable end.
+        private var placedIds = Set<MessageId>()
+
+        /// How many recommended channels one page may scan, and where the rotating part of
+        /// that window currently starts. With up to 512 sources, scanning every one of them on
+        /// every page meant six figures of message reads per top-up — and top-ups are frequent.
+        /// Nothing is lost by splitting the work: pages exclude by id, so a channel skipped now
+        /// is simply collected on a later page.
+        private static let recommendedScanBatch = 64
+        private var recommendedScanCursor = 0
         /// Also re-ask Telegram for recommendations periodically, not only when the
         /// setting is toggled.
         private var lastRecommendationRefresh: Double = 0.0
@@ -247,10 +268,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             })
         }
 
-        /// Collect a page of posts. `before` makes it a real pagination anchor: only posts
-        /// strictly older than it are returned, so loading more extends the feed downwards
-        /// instead of handing back the same top-200 every time (which both looked like
-        /// "the feed ended" and, when merged, re-inserted posts mid-list under the reader).
         /// Pull in more recommended CHANNELS, using channels already in the feed as seeds.
         /// Called when a page comes back with nothing new — the alternative (reaching further
         /// back in time) would just make the feed stale.
@@ -338,12 +355,17 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.queue.after(60.0) { [weak preload] in
                     preload?.dispose()
                 }
-                // Their history has to arrive before it can be collected, so re-check shortly.
-                self.queue.after(2.0) { [weak self] in
-                    guard let self, self.recommendationsEnabled else {
-                        return
+                // Their history has to arrive over the network before it can be collected, so
+                // re-check twice: once quickly, and once late enough that a slow connection
+                // still gets its posts into the feed rather than being written off as a dead
+                // seed.
+                for delay in [2.0, 8.0] {
+                    self.queue.after(delay) { [weak self] in
+                        guard let self, self.recommendationsEnabled else {
+                            return
+                        }
+                        self.topUp(force: true)
                     }
-                    self.topUp(force: true)
                 }
             })
 
@@ -371,9 +393,39 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             }
         }
 
-        private func collectMessages(before: MessageIndex? = nil) -> Signal<[Message], NoError> {
+        /// The recommended channels the next page will scan.
+        ///
+        /// `recommendedPeerIds` is in discovery order, so its head holds the closest sources
+        /// (Telegram's direct recommendations) and its tail the similar-of-similar chain. The
+        /// head is therefore always scanned — that is what keeps close sources ranked above
+        /// distant ones — while the tail is covered by a rotating window, so every source is
+        /// reached within a few pages instead of all of them being scanned every time.
+        private func nextRecommendedScanWindow() -> [PeerId] {
+            let all = self.recommendedPeerIds
+            guard all.count > Impl.recommendedScanBatch else {
+                return all
+            }
+            let headCount = Impl.recommendedScanBatch / 2
+            let head = Array(all.prefix(headCount))
+            let tail = Array(all.dropFirst(headCount))
+            guard !tail.isEmpty else {
+                return head
+            }
+            let windowCount = Impl.recommendedScanBatch - headCount
+            let start = self.recommendedScanCursor % tail.count
+            let rotated = Array(tail[start...]) + Array(tail[..<start])
+            self.recommendedScanCursor = (start + windowCount) % tail.count
+            return head + Array(rotated.prefix(windowCount))
+        }
+
+        /// Collect the next page of posts. `placed` is everything already handed to the feed —
+        /// pagination works by excluding those, so a channel that joins the feed later still
+        /// contributes its recent posts instead of being filtered out by a time anchor.
+        /// `deepScan` widens how far back each channel is scanned, used once the shallow pass
+        /// has nothing left to give.
+        private func collectMessages(excluding placed: Set<MessageId>, deepScan: Bool) -> Signal<[Message], NoError> {
             let accountId = self.accountId
-            let recommendedPeerIds = self.recommendationsEnabled ? self.recommendedPeerIds : []
+            let recommendedPeerIds = self.recommendationsEnabled ? self.nextRecommendedScanWindow() : []
             let sourceGeneration = self.sourceGeneration
             return self.context.account.postbox.transaction { transaction -> [Message] in
                 let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: accountId)
@@ -402,10 +454,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     ))
                 }
 
-                // Deliberately NOT capped per channel: pages are cut by message index, so
-                // dropping a busy channel's middle posts here would strand them — the next
-                // page starts below the anchor and would skip straight past them. Chronological
-                // interleaving is what keeps the feed varied, and nothing is ever lost.
+                // Deliberately NOT capped per channel: chronological interleaving is what keeps
+                // the feed varied, and anything cut here simply comes back on the next page,
+                // since pages exclude by id rather than by position.
                 var subscribedMessages: [Message] = []
                 var uniqueIds = Set<MessageId>()
                 for peerId in Set(peerIds) {
@@ -413,8 +464,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                         continue
                     }
                     // When paginating we must look deeper than the first screenful, otherwise
-                    // the anchor filter would discard everything we scanned.
-                    let scanCeiling = before == nil ? 200 : 800
+                    // everything scanned would already have been placed.
+                    let scanCeiling = deepScan ? 800 : 200
                     let scanLimit = min(max(Int(readState.count), 0), scanCeiling)
                     guard scanLimit > 0 else {
                         continue
@@ -422,7 +473,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: scanLimit) { message in
                         if !readState.isIncomingMessageIndexRead(message.index)
                             && !AorusWallSettingsStore.isSeen(message.id, in: seen)
-                            && (before == nil || message.index < before!)
+                            && !placed.contains(message.id)
                             && uniqueIds.insert(message.id).inserted {
                             subscribedMessages.append(message)
                         }
@@ -448,10 +499,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                         var bucket: [Message] = []
                         // Scan a wider slice than we keep, so the ranking below has a real pool
                         // to choose the best from instead of just re-ordering the latest few.
-                        transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: before == nil ? 80 : 200) { message in
+                        transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: deepScan ? 200 : 80) { message in
                             if message.timestamp >= minimumTimestamp
                                 && !AorusWallSettingsStore.isSeen(message.id, in: seen)
-                                && (before == nil || message.index < before!)
+                                && !placed.contains(message.id)
                                 && !uniqueIds.contains(message.id) {
                                 bucket.append(message)
                             }
@@ -521,51 +572,63 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         }
 
         private func applyMessages(_ messages: [Message], updateType: EngineViewUpdateType, preserveCurrent: Bool) {
+            // Everything this page delivered counts as placed, whether or not it survives the
+            // overflow trim below: pagination excludes by id, and a post that was trimmed for
+            // being already read must not be collected all over again.
+            self.placedIds.formUnion(messages.map(\.id))
+
             var messages = messages
             if preserveCurrent {
-                // Feed order is the order posts ARRIVED, and new ones are appended to the end.
+                // Where a new page goes is decided by the list geometry, not by taste:
                 //
-                // This used to merge everything and re-sort the whole feed by timestamp, which
-                // scattered freshly loaded posts across the list — including ABOVE where the
-                // reader had already scrolled. Reaching the bottom then found nothing new (the
-                // feed looked finished) and posts appeared twice as the list reshuffled
-                // underneath. Keeping the established order fixes both: what is on screen never
-                // moves, and everything fetched lands where the reader is heading.
+                //   entry index i  ->  list node index (count - 1 - i)
+                //
+                // and the Wall runs unrotated (`historyNodeRotated = false` in
+                // ChatControllerNode), so node index 0 is the TOP of the screen. Entry 0 is
+                // therefore the BOTTOM of the feed — the frontier the reader scrolls towards —
+                // and the last entry is the top, which they have already passed.
+                //
+                // So a new page belongs at the FRONT of the array. Appending it to the end put
+                // it above the reader instead, which is why posts kept turning up "выше", and
+                // it also froze entry 0. ChatHistoryListNode only calls loadMore() when
+                // `.Navigation(index: .message(firstEntry.index))` differs from the current
+                // location, and firstEntry is entry 0 — so a frozen entry 0 means loadMore()
+                // is never called a second time. Prepending changes entry 0 on every page and
+                // keeps that trigger alive.
                 var incoming: [MessageId: Message] = [:]
                 for message in messages {
                     incoming[message.id] = message
                 }
-                var ordered: [Message] = []
-                ordered.reserveCapacity(self.currentMessageIds.count + messages.count)
+                var existing: [Message] = []
+                existing.reserveCapacity(self.currentMessageIds.count)
                 for id in self.currentMessageIds {
-                    // Prefer the fresh copy (reactions, edits) but keep the existing position.
+                    // Prefer the fresh copy (reactions, edits) but keep the existing position:
+                    // nothing already on screen may move.
                     if let message = incoming[id] ?? self.currentMessages[id] {
-                        ordered.append(message)
+                        existing.append(message)
                     }
                 }
                 let existingIds = Set(self.currentMessageIds)
-                let additions = messages
-                    .filter { !existingIds.contains($0.id) }
-                    .sorted(by: { $0.index < $1.index })
-                messages = ordered + additions
+                var additions = messages.filter { !existingIds.contains($0.id) }
+                // Ascending, so reading downwards the newest post of the page comes first.
+                additions.sort(by: { $0.index < $1.index })
+                messages = additions + existing
 
                 if messages.count > 600 {
-                    // Trim from the FRONT: those are the oldest already-read posts the reader
-                    // has scrolled past. Trimming from the back would delete what was just
-                    // fetched, which is exactly what the reader is about to look at.
+                    // Trim from the BACK: that end holds the newest posts, at the top of the
+                    // screen, behind the reader. Only posts they actually finished are dropped,
+                    // and the front — what they are about to reach — is never touched.
                     var overflow = messages.count - 600
-                    var index = 0
-                    while index < messages.count && overflow > 0 {
+                    var index = messages.count - 1
+                    while index >= 0 && overflow > 0 {
                         if self.markedInCurrentView.contains(messages[index].id) {
                             messages.remove(at: index)
                             overflow -= 1
-                        } else {
-                            index += 1
                         }
+                        index -= 1
                     }
                 }
             }
-
             let entries = messages.map {
                 EngineRawMessageHistoryEntry(
                     message: $0,
@@ -669,7 +732,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.loadMoreDisposable = nil
             self.lastLoadMoreMarkedCount = 0
             self.searchingPromise.set(true)
-            self.loadDisposable = (self.collectMessages()
+            if dropSeen {
+                // The feed is being rebuilt from nothing, so the record of what has already
+                // been placed goes with it.
+                self.placedIds.removeAll()
+            }
+            self.loadDisposable = (self.collectMessages(excluding: dropSeen ? Set<MessageId>() : self.placedIds, deepScan: false)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
@@ -708,10 +776,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.lastLoadMoreMarkedCount = self.markedInCurrentView.count
             self.isPrefetching = true
             let previousIds = Set(self.currentMessageIds)
-            // Anchor at the oldest post already on screen: the next page continues below it,
-            // so nothing is inserted among the posts the reader is currently looking at.
-            let anchor = self.currentMessages.values.map(\.index).min()
-            self.loadMoreDisposable = (self.collectMessages(before: anchor)
+            self.loadMoreDisposable = (self.collectMessages(excluding: self.placedIds, deepScan: true)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
@@ -725,11 +790,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     // stale).
                     //
                     // This must NOT be limited to the forced path. loadMore() only fires when
-                    // the scroll position changes, so once the reader is parked at the end it
-                    // never fires again — leaving the feed permanently stuck. The background
-                    // top-up is the only thing still running at that point, and it already
-                    // gates itself on the backlog being nearly empty, so expanding from here
-                    // still cannot happen speculatively while there is plenty left to read.
+                    // the oldest entry changes, so once a page brings back nothing the reader
+                    // has no way to ask again — the background top-up is the only thing still
+                    // running. It already gates itself on the backlog being nearly empty, so
+                    // expanding from here still cannot happen speculatively while there is
+                    // plenty left to read.
                     self.expandRecommendationSources()
                 }
                 self.loadMoreDisposable?.dispose()
@@ -849,7 +914,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
         func recountBadge() {
             self.badgeDisposable?.dispose()
-            self.badgeDisposable = (self.collectMessages()
+            self.badgeDisposable = (self.collectMessages(excluding: Set<MessageId>(), deepScan: false)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 self?.publishBadge(messages.count)
                 self?.badgeDisposable?.dispose()
