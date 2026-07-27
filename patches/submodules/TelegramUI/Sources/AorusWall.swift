@@ -128,7 +128,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private let expansionPreloadDisposable = DisposableSet()
         private var expansionSeedCursor = 0
         private var expandedSeeds = Set<PeerId>()
-        private static let maxRecommendedSources = 128
+        private static let maxRecommendedSources = 512
+        /// How far a source is from the reader: 1 = Telegram's direct recommendations,
+        /// 2 = similar-to-those, 3 = similar-to-similar, and so on. Subscribed channels are
+        /// not in here at all — they are collected separately and always rank first.
+        private var sourceGeneration: [PeerId: Int] = [:]
         /// Below this many unseen posts we consider the feed to be running dry.
         private static let prefetchThreshold = 12
         /// Also re-ask Telegram for recommendations periodically, not only when the
@@ -194,6 +198,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.expansionPreloadDisposable.dispose()
                 self.expandedSeeds.removeAll()
                 self.expansionSeedCursor = 0
+                self.sourceGeneration.removeAll()
             }
 
             guard enabled else {
@@ -215,6 +220,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 self.recommendedPeerIds = peerIds
+                // Telegram's own recommendations are the closest sources there are.
+                for peerId in peerIds {
+                    self.sourceGeneration[peerId] = 1
+                }
 
                 let preloadDisposable = DisposableSet()
                 for peerId in peerIds {
@@ -252,14 +261,25 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 return
             }
 
-            // Seeds are the channels the reader is actually being shown, so the new sources
-            // stay related to their interests rather than being arbitrary.
-            let seeds = Array(Set(self.currentMessageIds.map(\.peerId))).sorted()
-            let candidates = seeds.filter { !self.expandedSeeds.contains($0) }
+            // Seed pool = channels on screen plus every source discovered so far. Once the
+            // on-screen ones are used up, the discovered channels become seeds themselves —
+            // similar-of-similar, indefinitely, so the feed has no natural end.
+            var seedPool = Set(self.currentMessageIds.map(\.peerId))
+            seedPool.formUnion(self.recommendedPeerIds)
+            // Prefer the closest sources first, so expansion drifts away from the reader's
+            // interests as slowly as possible.
+            let candidates = seedPool
+                .subtracting(self.expandedSeeds)
+                .sorted(by: { lhs, rhs in
+                    let left = self.sourceGeneration[lhs] ?? 0
+                    let right = self.sourceGeneration[rhs] ?? 0
+                    return left == right ? lhs < rhs : left < right
+                })
             guard !candidates.isEmpty else {
                 return
             }
             let seed = candidates[self.expansionSeedCursor % candidates.count]
+            let seedGeneration = self.sourceGeneration[seed] ?? 0
             self.expansionSeedCursor += 1
             self.expandedSeeds.insert(seed)
 
@@ -286,6 +306,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 self.recommendedPeerIds.append(contentsOf: additions)
                 for peerId in additions {
+                    self.sourceGeneration[peerId] = seedGeneration + 1
                     self.expansionPreloadDisposable.add(self.context.account.viewTracker.polledChannel(peerId: peerId).start())
                     self.expansionPreloadDisposable.add(self.context.account.addAdditionalPreloadHistoryPeerId(peerId: peerId))
                 }
@@ -312,6 +333,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private func collectMessages(before: MessageIndex? = nil) -> Signal<[Message], NoError> {
             let accountId = self.accountId
             let recommendedPeerIds = self.recommendationsEnabled ? self.recommendedPeerIds : []
+            let sourceGeneration = self.sourceGeneration
             return self.context.account.postbox.transaction { transaction -> [Message] in
                 let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: accountId)
                 let seen = AorusWallSettingsStore.seenMessageKeys(accountId: accountId)
@@ -369,7 +391,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
                 subscribedMessages.sort(by: { $0.index < $1.index })
 
-                var recommendedBuckets: [[Message]] = []
+                var recommendedBuckets: [(generation: Int, messages: [Message])] = []
                 if !recommendedPeerIds.isEmpty {
                     // Recommendations stay recent on purpose — a wall of month-old posts is not
                     // worth reading. When the feed runs dry we widen the set of CHANNELS
@@ -402,7 +424,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                             return left == right ? $0.index > $1.index : left > right
                         })
                         if !bucket.isEmpty {
-                            recommendedBuckets.append(Array(bucket.prefix(24)))
+                            recommendedBuckets.append((
+                                generation: sourceGeneration[peerId] ?? 1,
+                                messages: Array(bucket.prefix(24))
+                            ))
                         }
                     }
                 }
@@ -413,28 +438,36 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     subscribedMessages.removeFirst(subscribedMessages.count - 200)
                 }
 
+                // Closer sources first: Telegram's direct recommendations outrank
+                // similar-of-similar, so newly surfaced nearby channels always take
+                // precedence over whatever the expansion chain drifted to. Within one
+                // generation the round-robin keeps channels interleaved.
+                recommendedBuckets.sort(by: { $0.generation < $1.generation })
                 var recommendedMessages: [Message] = []
                 let recommendedLimit = min(60, max(20, 200 - subscribedMessages.count))
-                var depth = 0
-                while recommendedMessages.count < recommendedLimit {
-                    var addedAtDepth = false
-                    for bucket in recommendedBuckets {
-                        guard depth < bucket.count else {
-                            continue
-                        }
-                        let message = bucket[depth]
-                        if uniqueIds.insert(message.id).inserted {
-                            recommendedMessages.append(message)
-                            addedAtDepth = true
-                            if recommendedMessages.count == recommendedLimit {
-                                break
+                var remainingBuckets = recommendedBuckets
+                while recommendedMessages.count < recommendedLimit && !remainingBuckets.isEmpty {
+                    let currentGeneration = remainingBuckets[0].generation
+                    var depth = 0
+                    var addedAtDepth = true
+                    while recommendedMessages.count < recommendedLimit && addedAtDepth {
+                        addedAtDepth = false
+                        for bucket in remainingBuckets where bucket.generation == currentGeneration {
+                            guard depth < bucket.messages.count else {
+                                continue
+                            }
+                            let message = bucket.messages[depth]
+                            if uniqueIds.insert(message.id).inserted {
+                                recommendedMessages.append(message)
+                                addedAtDepth = true
+                                if recommendedMessages.count == recommendedLimit {
+                                    break
+                                }
                             }
                         }
+                        depth += 1
                     }
-                    if !addedAtDepth {
-                        break
-                    }
-                    depth += 1
+                    remainingBuckets.removeAll(where: { $0.generation == currentGeneration })
                 }
 
                 var messages = subscribedMessages + recommendedMessages
@@ -616,9 +649,13 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.isPrefetching = false
                 if messages.contains(where: { !previousIds.contains($0.id) }) {
                     self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
-                } else {
-                    // Nothing left at this depth: pull in more SOURCES rather than older
-                    // posts. Widening the time window would only make the feed stale.
+                } else if force {
+                    // Nothing left, and the reader has actually reached the end (force): pull
+                    // in more SOURCES rather than older posts — widening the time window would
+                    // only make the feed stale. Deliberately NOT done for background top-ups:
+                    // discovering channels is a network cost that should only be paid when the
+                    // reader has genuinely run out, not speculatively while they still have a
+                    // backlog.
                     self.expandRecommendationSources()
                 }
                 self.loadMoreDisposable?.dispose()
