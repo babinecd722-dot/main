@@ -20378,6 +20378,65 @@ def patch_message_translate_button(tg: Path) -> None:
     print("MsgTranslateBtn: injected per-message translate/transcribe button")
 
 
+def patch_wall_allow_reactions(tg: Path) -> None:
+    """Let reactions work on Wall posts, at the source of the permission check.
+
+    The Wall reuses `.hashTagSearch` as its ChatCustomContentsKind, and canSendReactionsToChat
+    hard-returns false for that kind (public search results are not reactable). Every reaction
+    path funnels through that one function, so instead of bypassing it at each call site — the
+    two that were patched left three others behind, including the handler that runs when a
+    reaction is actually tapped — we answer correctly at the source.
+
+    The Wall shows real channel posts, so reactions are legitimate there; whether a specific
+    reaction is permitted is still decided per message by peerMessageAllowedReactions, which
+    reads the post's own channel. Idempotent.
+    """
+    path = tg / "submodules/ChatPresentationInterfaceState/Sources/ChatPresentationInterfaceState.swift"
+    if not path.is_file():
+        print("WallReactions: ChatPresentationInterfaceState.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: the Wall reuses hashTagSearch" in t:
+        print("WallReactions: already patched")
+        return
+
+    # The same customChatContents/hashTagSearch shape appears in canSendMessagesToChat just
+    # above, so the anchor is rooted at this function's signature — patching the wrong one
+    # would have allowed SENDING MESSAGES into the Wall.
+    anchor = (
+        "public func canSendReactionsToChat(_ state: ChatPresentationInterfaceState) -> Bool {\n"
+        "    if let peer = state.renderedPeer?.peer {\n"
+        "        let canBypassRestrictions = canBypassRestrictions(chatPresentationInterfaceState: state)\n"
+        "        return canSendReactionsToPeer(EnginePeer(peer), ignoreDefault: canBypassRestrictions)\n"
+        "    } else if case .customChatContents = state.chatLocation {\n"
+        "        if case let .customChatContents(contents) = state.subject {\n"
+        "            if case .hashTagSearch = contents.kind {\n"
+        "                return false\n"
+    )
+    replacement = (
+        "public func canSendReactionsToChat(_ state: ChatPresentationInterfaceState) -> Bool {\n"
+        "    if let peer = state.renderedPeer?.peer {\n"
+        "        let canBypassRestrictions = canBypassRestrictions(chatPresentationInterfaceState: state)\n"
+        "        return canSendReactionsToPeer(EnginePeer(peer), ignoreDefault: canBypassRestrictions)\n"
+        "    } else if case .customChatContents = state.chatLocation {\n"
+        "        if case let .customChatContents(contents) = state.subject {\n"
+        "            if case .hashTagSearch = contents.kind {\n"
+        "                // AorusGram: the Wall reuses hashTagSearch as its kind, but it shows real\n"
+        "                // channel posts — reactions belong there. What is actually allowed is\n"
+        "                // still decided per message against the post's own channel.\n"
+        "                if contents.aorusIsWall {\n"
+        "                    return true\n"
+        "                }\n"
+        "                return false\n"
+    )
+    if anchor in t:
+        t = t.replace(anchor, replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("WallReactions: reactions permitted on Wall posts at the permission source")
+    else:
+        print("WallReactions: WARNING — canSendReactionsToChat anchor not found")
+
+
 def patch_wall_keep_settings_button(tg: Path) -> None:
     """Stop the chat state machine from wiping the Wall's settings gear.
 
@@ -22007,6 +22066,7 @@ def main() -> None:
     patch_wall_post_actions(tg)
     patch_wall_fullscreen_media(tg)
     patch_wall_keep_settings_button(tg)
+    patch_wall_allow_reactions(tg)
     patch_quick_replies_ampersand(tg)
     patch_incoming_message_hook(tg)
     patch_auto_reply_send_hook(tg)
