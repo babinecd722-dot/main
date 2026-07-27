@@ -81,7 +81,9 @@ private func aorusWallPostScore(_ message: Message, now: Int32) -> Double {
 }
 
 public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
-    public let title = AorusL10n.current.wallTitle
+    // Computed, not stored: the language can change while the app is running and a stored
+    // copy would keep the title in the old language until the next launch.
+    public var title: String { AorusL10n.current.wallTitle }
     public let aorusIsWall = true
 
     private final class Impl {
@@ -504,21 +506,44 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private func applyMessages(_ messages: [Message], updateType: EngineViewUpdateType, preserveCurrent: Bool) {
             var messages = messages
             if preserveCurrent {
-                var messageById = self.currentMessages
+                // Feed order is the order posts ARRIVED, and new ones are appended to the end.
+                //
+                // This used to merge everything and re-sort the whole feed by timestamp, which
+                // scattered freshly loaded posts across the list — including ABOVE where the
+                // reader had already scrolled. Reaching the bottom then found nothing new (the
+                // feed looked finished) and posts appeared twice as the list reshuffled
+                // underneath. Keeping the established order fixes both: what is on screen never
+                // moves, and everything fetched lands where the reader is heading.
+                var incoming: [MessageId: Message] = [:]
                 for message in messages {
-                    messageById[message.id] = message
+                    incoming[message.id] = message
                 }
-                messages = Array(messageById.values)
-                messages.sort(by: { $0.index < $1.index })
+                var ordered: [Message] = []
+                ordered.reserveCapacity(self.currentMessageIds.count + messages.count)
+                for id in self.currentMessageIds {
+                    // Prefer the fresh copy (reactions, edits) but keep the existing position.
+                    if let message = incoming[id] ?? self.currentMessages[id] {
+                        ordered.append(message)
+                    }
+                }
+                let existingIds = Set(self.currentMessageIds)
+                let additions = messages
+                    .filter { !existingIds.contains($0.id) }
+                    .sorted(by: { $0.index < $1.index })
+                messages = ordered + additions
 
                 if messages.count > 600 {
+                    // Trim from the FRONT: those are the oldest already-read posts the reader
+                    // has scrolled past. Trimming from the back would delete what was just
+                    // fetched, which is exactly what the reader is about to look at.
                     var overflow = messages.count - 600
-                    var index = messages.count
-                    while index > 0 && overflow > 0 {
-                        index -= 1
+                    var index = 0
+                    while index < messages.count && overflow > 0 {
                         if self.markedInCurrentView.contains(messages[index].id) {
                             messages.remove(at: index)
                             overflow -= 1
+                        } else {
+                            index += 1
                         }
                     }
                 }
@@ -994,6 +1019,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     action: #selector(AorusWallChatContents.openWallSettings)
                 )
             }
+
+            // Language can change at runtime, so refresh the titles here rather than leaving
+            // whatever was resolved when the tab was built.
+            let aorusL10n = AorusL10n(presentationData.strings.baseLanguageCode)
+            controller.tabBarItem.title = aorusL10n.wallTitle
+            controller.navigationItem.leftBarButtonItem?.title = aorusL10n.wallRefresh
 
             // The tab bar draws plain images untinted, so recolour the house on theme changes.
             let tabBarTheme = presentationData.theme.rootController.tabBar
