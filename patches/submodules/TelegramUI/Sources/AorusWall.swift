@@ -317,6 +317,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     .filter { !known.contains($0) }
                     .prefix(max(0, Impl.maxRecommendedSources - self.recommendedPeerIds.count))
                 guard !additions.isEmpty else {
+                    // This seed only suggested channels we already have. Move on to the next
+                    // one rather than waiting for the background timer — the reader is sitting
+                    // at the end of the feed right now.
+                    self.scheduleExpansionRetry()
                     return
                 }
                 self.recommendedPeerIds.append(contentsOf: additions)
@@ -344,13 +348,26 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             })
 
             // If this seed simply has no similar channels the signal above never fires, so
-            // release the slot and let the next empty page try a different seed.
+            // release the slot and try a different seed.
             self.queue.after(8.0) { [weak self] in
                 guard let self, self.expansionDisposable != nil else {
                     return
                 }
                 self.expansionDisposable?.dispose()
                 self.expansionDisposable = nil
+                self.scheduleExpansionRetry()
+            }
+        }
+
+        /// Try the next seed after an expansion produced no new channels. Each attempt consumes
+        /// one seed (it is recorded in `expandedSeeds` before the request), so the chain always
+        /// terminates once the seed pool is exhausted — it cannot spin.
+        private func scheduleExpansionRetry() {
+            self.queue.after(3.0) { [weak self] in
+                guard let self, self.recommendationsEnabled, self.isVisible else {
+                    return
+                }
+                self.topUp(force: true)
             }
         }
 
@@ -645,7 +662,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// Only the explicit Refresh button passes true: everything else (leaving the tab,
         /// returning to the app, recommendation updates, background top-ups) keeps them on
         /// screen, so posts never vanish out from under the reader in real time.
-        func reload(updateType: EngineViewUpdateType, dropSeen: Bool = false) {
+        func reload(updateType: EngineViewUpdateType, dropSeen: Bool = false, expandIfEmpty: Bool = false) {
             self.updateRecommendationsIfNeeded()
             self.loadDisposable?.dispose()
             self.loadMoreDisposable?.dispose()
@@ -658,6 +675,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 self.applyMessages(messages, updateType: updateType, preserveCurrent: !dropSeen)
+                if expandIfEmpty && messages.isEmpty {
+                    // Refresh came back with nothing at all: every source is read out. Pull in
+                    // more channels instead of leaving the reader on an empty screen — pressing
+                    // Refresh again would otherwise keep returning the same empty page.
+                    self.expandRecommendationSources()
+                }
                 self.loadDisposable?.dispose()
                 self.loadDisposable = nil
             })
@@ -696,13 +719,17 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.isPrefetching = false
                 if messages.contains(where: { !previousIds.contains($0.id) }) {
                     self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
-                } else if force {
-                    // Nothing left, and the reader has actually reached the end (force): pull
-                    // in more SOURCES rather than older posts — widening the time window would
-                    // only make the feed stale. Deliberately NOT done for background top-ups:
-                    // discovering channels is a network cost that should only be paid when the
-                    // reader has genuinely run out, not speculatively while they still have a
-                    // backlog.
+                } else {
+                    // A page came back with nothing new: the current sources are exhausted, so
+                    // pull in more SOURCES (widening the time window would only make the feed
+                    // stale).
+                    //
+                    // This must NOT be limited to the forced path. loadMore() only fires when
+                    // the scroll position changes, so once the reader is parked at the end it
+                    // never fires again — leaving the feed permanently stuck. The background
+                    // top-up is the only thing still running at that point, and it already
+                    // gates itself on the backlog being nearly empty, so expanding from here
+                    // still cannot happen speculatively while there is plenty left to read.
                     self.expandRecommendationSources()
                 }
                 self.loadMoreDisposable?.dispose()
@@ -807,7 +834,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
         func refresh() {
             // The Refresh button is the single point where finished posts are cleared out.
-            self.reload(updateType: .Generic, dropSeen: true)
+            self.reload(updateType: .Generic, dropSeen: true, expandIfEmpty: true)
         }
 
         func applicationDidBecomeActive() {
