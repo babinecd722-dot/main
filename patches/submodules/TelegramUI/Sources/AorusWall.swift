@@ -126,7 +126,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         // bottomless.
         private var expansionDisposable: Disposable?
         private let expansionPreloadDisposable = DisposableSet()
-        private var expansionSeedCursor = 0
         private var expandedSeeds = Set<PeerId>()
         private static let maxRecommendedSources = 512
         /// How far a source is from the reader: 1 = Telegram's direct recommendations,
@@ -197,7 +196,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.expansionDisposable = nil
                 self.expansionPreloadDisposable.dispose()
                 self.expandedSeeds.removeAll()
-                self.expansionSeedCursor = 0
                 self.sourceGeneration.removeAll()
             }
 
@@ -255,10 +253,24 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// Called when a page comes back with nothing new — the alternative (reaching further
         /// back in time) would just make the feed stale.
         private func expandRecommendationSources() {
-            guard self.recommendationsEnabled,
-                  self.expansionDisposable == nil,
-                  self.recommendedPeerIds.count < Impl.maxRecommendedSources else {
+            guard self.recommendationsEnabled, self.expansionDisposable == nil else {
                 return
+            }
+
+            // At the cap, evict the most DISTANT sources instead of stopping. They are the
+            // least relevant, and dropping them frees room for the chain to keep going — so
+            // the feed never reaches a hard stop. Evicted channels stay in `expandedSeeds`,
+            // so they are not re-discovered in a loop.
+            if self.recommendedPeerIds.count >= Impl.maxRecommendedSources {
+                let evictionCount = max(1, Impl.maxRecommendedSources / 8)
+                let byDistance = self.recommendedPeerIds.sorted(by: {
+                    (self.sourceGeneration[$0] ?? 1) > (self.sourceGeneration[$1] ?? 1)
+                })
+                let evicted = Set(byDistance.prefix(evictionCount))
+                self.recommendedPeerIds.removeAll(where: { evicted.contains($0) })
+                for peerId in evicted {
+                    self.sourceGeneration.removeValue(forKey: peerId)
+                }
             }
 
             // Seed pool = channels on screen plus every source discovered so far. Once the
@@ -278,9 +290,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             guard !candidates.isEmpty else {
                 return
             }
-            let seed = candidates[self.expansionSeedCursor % candidates.count]
+            // Always take the closest unused seed. Used seeds are already excluded above, so
+            // a rotating cursor would only defeat the ordering by jumping to a distant one.
+            let seed = candidates[0]
             let seedGeneration = self.sourceGeneration[seed] ?? 0
-            self.expansionSeedCursor += 1
             self.expandedSeeds.insert(seed)
 
             // Kick the fetch, then wait for the cache to actually hold something. These are
@@ -305,10 +318,19 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 self.recommendedPeerIds.append(contentsOf: additions)
+                // Preloading is only needed to pull a channel's recent history INTO the local
+                // database; once it lands the posts stay there and are collected from disk.
+                // Holding these subscriptions forever would leave hundreds of channels being
+                // polled in the background, so they are released shortly after.
+                let preload = DisposableSet()
                 for peerId in additions {
                     self.sourceGeneration[peerId] = seedGeneration + 1
-                    self.expansionPreloadDisposable.add(self.context.account.viewTracker.polledChannel(peerId: peerId).start())
-                    self.expansionPreloadDisposable.add(self.context.account.addAdditionalPreloadHistoryPeerId(peerId: peerId))
+                    preload.add(self.context.account.viewTracker.polledChannel(peerId: peerId).start())
+                    preload.add(self.context.account.addAdditionalPreloadHistoryPeerId(peerId: peerId))
+                }
+                self.expansionPreloadDisposable.add(preload)
+                self.queue.after(60.0) { [weak preload] in
+                    preload?.dispose()
                 }
                 // Their history has to arrive before it can be collected, so re-check shortly.
                 self.queue.after(2.0) { [weak self] in
