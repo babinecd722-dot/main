@@ -297,7 +297,6 @@ private struct WallSettingsState: Equatable {
 
 public func aorusWallSettingsController(context: AccountContext) -> ViewController {
     let accountId = context.account.id.int64
-    let l10n = AorusL10n.current
     let statePromise = ValuePromise(
         WallSettingsState(
             showRecommended: AorusWallSettingsStore.showRecommended(accountId: accountId),
@@ -397,6 +396,9 @@ public func aorusWallSettingsController(context: AccountContext) -> ViewControll
     let signal = combineLatest(context.sharedContext.presentationData, statePromise.get(), peersSignal)
     |> deliverOnMainQueue
     |> map { presentationData, state, peers -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        // Resolved per emission from the presentation data, not captured once: otherwise
+        // switching language leaves this screen in the old one until it is recreated.
+        let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
         var entries: [WallSettingsEntry] = [
             .recommendations(presentationData.theme, l10n.wallShowRecommended, state.showRecommended),
             .recommendationsInfo(presentationData.theme, l10n.wallShowRecommendedInfo),
