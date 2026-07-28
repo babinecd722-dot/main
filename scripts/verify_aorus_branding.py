@@ -1089,8 +1089,14 @@ def main() -> None:
         "self.expansionPreloadDisposable = DisposableSet()",
         "self?.expansionPreloadDisposable.remove(preload)",
         "discoveredRecommendationPeerIds",
+        "private static let subscribedScanBatch = 24",
+        "private static let recommendedScanBatch = 24",
+        "private static let maxExpansionAdditions = 8",
+        "private static let minimumHealthySourceCount = 8",
+        "private static let badgeScanBudget = 512",
+        "currentSourceCounts",
         "var candidatesByRank:",
-        "appendTier((candidatesByRank[0] ?? []) + (candidatesByRank[1] ?? []))",
+        "appendTier(prioritySources)",
         "messages.sort(by: { $0.index < $1.index })",
     ):
         if marker not in wall_text:
@@ -1098,6 +1104,7 @@ def main() -> None:
     for forbidden in (
         "transaction.scanTopMessages(",
         "private let expansionPreloadDisposable = DisposableSet()",
+        "for peerId in Set(peerIds) {",
         "page.sort(by: { $0.index > $1.index })",
     ):
         if forbidden in wall_text:

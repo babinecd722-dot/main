@@ -149,11 +149,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
         /// Page shape. The per-channel quotas live in collectPage; these bound the work.
         private static let pageLimit = 50
-        private static let candidatesPerChannel = 24
+        private static let candidatesPerChannel = 10
         private static let maxFeedLength = 2000
         private static let hardMaxFeedLength = 3000
-        private static let fetchBatchPerChannel = 64
-        private static let maxFetchPerChannel = 256
+        private static let fetchBatchPerChannel = 24
+        private static let maxFetchPerChannel = 48
 
         /// How far below the frontier a page may reach, in seconds. It starts narrow so the
         /// top of the feed is current, and widens when a page comes back empty so the feed
@@ -171,7 +171,13 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// every page meant six figures of message reads per top-up — and top-ups are frequent.
         /// Nothing is lost by splitting the work: pages exclude by id, so a channel skipped now
         /// is simply collected on a later page.
-        private static let recommendedScanBatch = 64
+        private static let subscribedScanBatch = 24
+        private static let recommendedScanBatch = 24
+        private static let maxExpansionAdditions = 8
+        private static let minimumHealthySourceCount = 8
+        private static let badgeScanBudget = 512
+        private static let badgeScanPerChannel = 16
+        private var subscribedScanCursor = 0
         private var recommendedScanCursor = 0
         /// Also re-ask Telegram for recommendations periodically, not only when the
         /// setting is toggled.
@@ -385,7 +391,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.expansionDisposable = nil
                 let additions = (recommendedChannels?.channels.map(\.peer.id) ?? [])
                     .filter { !self.discoveredRecommendationPeerIds.contains($0) }
-                    .prefix(max(0, Impl.maxRecommendedSources - self.recommendedPeerIds.count))
+                    .prefix(min(
+                        Impl.maxExpansionAdditions,
+                        max(0, Impl.maxRecommendedSources - self.recommendedPeerIds.count)
+                    ))
                 guard !additions.isEmpty else {
                     // This seed only suggested channels we already have. Move on to the next
                     // one rather than waiting for the background timer — the reader is sitting
@@ -496,6 +505,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             let recommendedPeerIds = self.recommendationsEnabled ? self.nextRecommendedScanWindow() : []
             let sourceGeneration = self.sourceGeneration
             let placed = self.placedIds
+            let subscribedScanCursor = self.subscribedScanCursor
+            self.subscribedScanCursor = self.subscribedScanCursor &+ Impl.subscribedScanBatch
+            var currentSourceCounts: [PeerId: Int] = [:]
+            for id in self.currentMessageIds {
+                currentSourceCounts[id.peerId, default: 0] += 1
+            }
             return self.context.account.postbox.transaction { transaction -> [Message] in
                 let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: accountId)
                 let seen = AorusWallSettingsStore.seenMessageKeys(accountId: accountId)
@@ -598,7 +613,21 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     }
                 }
 
-                for peerId in Set(peerIds) {
+                // A large account can have hundreds of unread channels. Scanning all of them on
+                // every eight-second top-up was the main source of heat: each pass performed
+                // thousands of Postbox reads even when the reader was standing still. Rotate a
+                // bounded window instead; pages de-duplicate by id, so every channel is still
+                // reached without repeating the same work continuously.
+                let subscribedPeerIds = Array(Set(peerIds)).sorted()
+                let subscribedWindow: [PeerId]
+                if subscribedPeerIds.count > Impl.subscribedScanBatch {
+                    let start = subscribedScanCursor % subscribedPeerIds.count
+                    let rotated = Array(subscribedPeerIds[start...]) + Array(subscribedPeerIds[..<start])
+                    subscribedWindow = Array(rotated.prefix(Impl.subscribedScanBatch))
+                } else {
+                    subscribedWindow = subscribedPeerIds
+                }
+                for peerId in subscribedWindow {
                     guard let readState = transaction.getCombinedPeerReadState(peerId) else {
                         continue
                     }
@@ -619,40 +648,74 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 // similar channels, then similar-of-similar generation by generation. Sorting
                 // only by timestamp before truncating (the previous implementation) allowed
                 // newer distant sources to evict every subscribed post from a page.
-                var candidatesByRank: [Int: [(message: Message, score: Double)]] = [:]
-                for (_, bucket) in buckets {
-                    let quota: Int
-                    switch bucket.rank {
-                    case 0: quota = 6
-                    case 1: quota = 4
-                    default: quota = 2
-                    }
+                var candidatesByRank: [Int: [PeerId: [(message: Message, score: Double)]]] = [:]
+                for (peerId, bucket) in buckets {
+                    // One post per channel in a page is intentional. With 24 subscribed and 24
+                    // recommended sources in each rotating scan there is enough breadth to fill
+                    // the page, while no busy channel can appear as a solid block. Older posts
+                    // from the same channel remain eligible on later pages.
+                    let quota = 1
                     let best = bucket.messages
                         .sorted(by: { $0.score == $1.score ? $0.message.index > $1.message.index : $0.score > $1.score })
                         .prefix(quota)
-                    candidatesByRank[bucket.rank, default: []].append(contentsOf: best)
+                    var sources = candidatesByRank[bucket.rank] ?? [:]
+                    sources[peerId] = Array(best)
+                    candidatesByRank[bucket.rank] = sources
                 }
 
                 var page: [Message] = []
 
-                func appendTier(_ candidates: [(message: Message, score: Double)]) {
+                // Interleave channels one post at a time. Sorting a flat candidate array let one
+                // prolific source win every page; its quota reset on the next page, producing a
+                // feed made almost entirely from that channel. Existing feed counts put sources
+                // the reader has seen least first, while the score still orders posts within a
+                // channel. If only one source is available it contributes its small quota and the
+                // next recommendation generation gets room instead of cloning that source down
+                // the entire Wall.
+                func appendTier(_ sources: [PeerId: [(message: Message, score: Double)]]) {
                     guard page.count < Impl.pageLimit else {
                         return
                     }
-                    let remaining = Impl.pageLimit - page.count
-                    let ordered = candidates.sorted(by: {
-                        $0.score == $1.score
-                            ? $0.message.index > $1.message.index
-                            : $0.score > $1.score
+                    let orderedSources = sources.map { (peerId: $0.key, messages: $0.value) }.sorted(by: {
+                        let leftCount = currentSourceCounts[$0.peerId, default: 0]
+                        let rightCount = currentSourceCounts[$1.peerId, default: 0]
+                        if leftCount != rightCount {
+                            return leftCount < rightCount
+                        }
+                        let leftScore = $0.messages.first?.score ?? 0.0
+                        let rightScore = $1.messages.first?.score ?? 0.0
+                        return leftScore == rightScore ? $0.peerId < $1.peerId : leftScore > rightScore
                     })
-                    page.append(contentsOf: ordered.prefix(remaining).map(\.message))
+                    var offsets: [PeerId: Int] = [:]
+                    while page.count < Impl.pageLimit {
+                        var appended = false
+                        for source in orderedSources {
+                            guard page.count < Impl.pageLimit else {
+                                break
+                            }
+                            let offset = offsets[source.peerId, default: 0]
+                            guard offset < source.messages.count else {
+                                continue
+                            }
+                            page.append(source.messages[offset].message)
+                            offsets[source.peerId] = offset + 1
+                            appended = true
+                        }
+                        if !appended {
+                            break
+                        }
+                    }
                 }
 
                 // Rank 0 and 1 are the user's priority set and compete by post quality. More
                 // distant generations are considered only if that set leaves room.
-                appendTier((candidatesByRank[0] ?? []) + (candidatesByRank[1] ?? []))
+                var prioritySources = candidatesByRank[1] ?? [:]
+                for (peerId, messages) in candidatesByRank[0] ?? [:] {
+                    prioritySources[peerId] = messages
+                }
+                appendTier(prioritySources)
                 for rank in candidatesByRank.keys.filter({ $0 >= 2 }).sorted() {
-                    appendTier(candidatesByRank[rank] ?? [])
+                    appendTier(candidatesByRank[rank] ?? [:])
                 }
 
                 // The priority decision is complete. Hand the selected entries to Telegram in
@@ -845,6 +908,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.isPrefetching = false
             self.lastLoadMoreMarkedCount = 0
             self.placedIds.removeAll()
+            self.subscribedScanCursor = 0
+            self.recommendedScanCursor = 0
             self.windowSpan = Impl.initialWindowSpan
             self.searchingPromise.set(true)
             self.loadDisposable = (self.collectPage(frontier: nil, span: self.windowSpan)
@@ -853,6 +918,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 self.applyMessages(messages, updateType: updateType, preserveCurrent: false)
+                if self.recommendationsEnabled
+                    && Set(messages.map(\.id.peerId)).count < Impl.minimumHealthySourceCount {
+                    self.expandRecommendationSources()
+                }
                 if expandIfEmpty && messages.isEmpty {
                     // Nothing left anywhere: bring in more channels rather than leaving the
                     // reader on an empty screen.
@@ -923,6 +992,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     // outright — `if case .Generic(.FillHole) = type { applyHole(); return }` —
                     // so the page would be collected and never rendered.
                     self.applyMessages(messages, updateType: .Generic, preserveCurrent: true)
+                    if self.recommendationsEnabled
+                        && Set(messages.map(\.id.peerId)).count < Impl.minimumHealthySourceCount {
+                        self.expandRecommendationSources()
+                    }
                     return
                 }
                 // Nothing in this window. Reach further back before giving up: a wider window
@@ -1083,30 +1156,38 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
 
                 var count = 0
-                for peerId in Set(peerIds) {
+                var remainingScanBudget = Impl.badgeScanBudget
+                for peerId in Set(peerIds).sorted() {
                     guard let readState = transaction.getCombinedPeerReadState(peerId) else {
                         continue
                     }
-                    let scanLimit = min(max(Int(readState.count), 0), 200)
-                    guard scanLimit > 0 else {
+                    let unreadCount = max(Int(readState.count), 0)
+                    guard unreadCount > 0 else {
                         continue
                     }
-                    let messages = transaction.aorusWallMessages(
-                        peerId: peerId,
-                        namespace: Namespaces.Message.Cloud,
-                        before: MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud),
-                        limit: scanLimit
-                    )
-                    for message in messages {
-                        if !readState.isIncomingMessageIndexRead(message.index)
-                            && !AorusWallSettingsStore.isSeen(message.id, in: seen) {
-                            count += 1
+                    let scanLimit = min(unreadCount, min(Impl.badgeScanPerChannel, remainingScanBudget))
+                    if scanLimit > 0 {
+                        let messages = transaction.aorusWallMessages(
+                            peerId: peerId,
+                            namespace: Namespaces.Message.Cloud,
+                            before: MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud),
+                            limit: scanLimit
+                        )
+                        for message in messages {
+                            if !readState.isIncomingMessageIndexRead(message.index)
+                                && !AorusWallSettingsStore.isSeen(message.id, in: seen) {
+                                count += 1
+                            }
                         }
-                        if count >= 999 {
-                            break
-                        }
+                        remainingScanBudget -= scanLimit
                     }
+                    // Counting every unread row in every channel made foregrounding the app read
+                    // well over one hundred thousand messages on large accounts. Rows outside the
+                    // bounded exact window are already known unread by Postbox, so use that count
+                    // as the badge estimate instead of materializing each Message object.
+                    count += max(0, unreadCount - scanLimit)
                     if count >= 999 {
+                        count = 999
                         break
                     }
                 }
