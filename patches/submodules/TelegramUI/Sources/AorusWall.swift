@@ -57,10 +57,10 @@ private func aorusFilledHouseTabImage(color: UIColor) -> UIImage? {
 
 /// Ranks a recommended post: engagement, damped by age.
 ///
-/// • Reactions weigh far more than views — a view is passive, a reaction is a decision.
-/// • The logarithm keeps a million-view channel from crowding out everything smaller;
+/// Reactions weigh far more than views — a view is passive, a reaction is a decision.
+/// The logarithm keeps a million-view channel from crowding out everything smaller;
 ///   what matters is the order of magnitude, not the raw number.
-/// • Freshness decays on a ~3-day half-life, so a great post from last week can still beat
+/// Freshness decays on a ~3-day half-life, so a great post from last week can still beat
 ///   a mediocre one from today, but not by much. This is what keeps the feed "top AND
 ///   current" rather than either an all-time hall of fame or a plain reverse-chronological
 ///   dump.

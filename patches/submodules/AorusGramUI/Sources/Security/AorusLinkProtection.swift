@@ -88,7 +88,8 @@ public enum AorusLinkProtection {
             ? (isRu ? "Опасная ссылка заблокирована" : "Dangerous Link Blocked")
             : (isRu ? "Подозрительная ссылка" : "Suspicious Link")
         let riskText = report.risks.prefix(6).map { risk in
-            return "• " + (isRu ? risk.ru : risk.en)
+            let text = isRu ? risk.ru : risk.en
+            return text.prefix(1).uppercased() + text.dropFirst()
         }.joined(separator: "\n")
         let message = report.normalizedURL + "\n\n" + riskText
 

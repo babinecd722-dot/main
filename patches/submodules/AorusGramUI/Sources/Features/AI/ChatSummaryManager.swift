@@ -84,7 +84,7 @@ final class ChatSummaryManager {
 
         let lines = topIndices.map { idx -> String in
             let s = sentences[idx]
-            return "• \(s.sender): \(s.text)"
+            return "\(s.sender): \(s.text)"
         }
 
         return lines.joined(separator: "\n")

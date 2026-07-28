@@ -3561,18 +3561,24 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: anti-spoof presence override"
+    # Earlier builds separated the status from the marker with a bullet. A cached tree is
+    # already patched, so the injection below never runs again there — normalise in place.
+    if " • AORUS" in t:
+        t = t.replace(" • AORUS", " - AORUS")
+        path.write_text(t, encoding="utf-8")
+        print("ChatTitleAntiSpoof: normalised presence separator")
     if sentinel in t:
         import re as _re
         upgraded = _re.sub(
             r"^([ \t]*)let isRu = \(UserDefaults\.standard\.string\(forKey: \"aorusgram_lang\"\) == \"ru\"\)\n"
-            r"^\1if ago < 120 \{ return isRu \? \"в сети • AORUS\" : \"online • AORUS\" \}\n"
+            r"^\1if ago < 120 \{ return isRu \? \"в сети - AORUS\" : \"online - AORUS\" \}\n"
             r"^\1if ago < 3600 \{\n"
             r"^\1    let minutes = max\(1, Int\(ago / 60\)\)\n"
-            r"^\1    return isRu \? \"был\(а\) \\\(minutes\) мин назад • AORUS\" : \"last seen \\\(minutes\) min ago • AORUS\"\n"
+            r"^\1    return isRu \? \"был\(а\) \\\(minutes\) мин назад - AORUS\" : \"last seen \\\(minutes\) min ago - AORUS\"\n"
             r"^\1\}\n",
             lambda m: (
-                f"{m.group(1)}if ago < 60 {{ return \"в сети • AORUS\" }}\n"
-                f"{m.group(1)}if ago < 3600 {{ return \"был(а) \\(Int(ago / 60)) мин назад • AORUS\" }}\n"
+                f"{m.group(1)}if ago < 60 {{ return \"в сети - AORUS\" }}\n"
+                f"{m.group(1)}if ago < 3600 {{ return \"был(а) \\(Int(ago / 60)) мин назад - AORUS\" }}\n"
             ),
             t,
             flags=_re.MULTILINE,
@@ -3619,8 +3625,8 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
         + indent + "    let aorusTs = UserDefaults.standard.double(forKey: \"aorusgram_peer_last_seen_\\(peer.id.toInt64())\")\n"
         + indent + "    guard aorusTs > 0 else { return string }\n"
         + indent + "    let ago = Date().timeIntervalSince1970 - aorusTs\n"
-        + indent + "    if ago < 60 { return \"в сети • AORUS\" }\n"
-        + indent + "    if ago < 3600 { return \"был(а) \\(Int(ago / 60)) мин назад • AORUS\" }\n"
+        + indent + "    if ago < 60 { return \"в сети - AORUS\" }\n"
+        + indent + "    if ago < 3600 { return \"был(а) \\(Int(ago / 60)) мин назад - AORUS\" }\n"
         + indent + "    return string\n"
         + indent + "}()"
     )
@@ -3799,8 +3805,8 @@ def patch_app_delegate_activate_deeplink(tg: Path) -> None:
     """Intercept the key-activation deep link (tg:// or aorusgram:// , host "activate").
 
     Two entry points are patched so it works everywhere:
-      • AppDelegate.openUrlWhenReady  — links opened from outside / at cold launch.
-      • openExternalUrlImpl (OpenUrl.swift) — links TAPPED inside a chat (the common
+      AppDelegate.openUrlWhenReady  — links opened from outside / at cold launch.
+      openExternalUrlImpl (OpenUrl.swift) — links TAPPED inside a chat (the common
         case: the bot sends a tg://activate?key=… markdown link).
     Both extract `key` and post `aorusgram.activateKeyDeepLink`; LicenseGate shows the
     confirmation screen. We accept tg:// too because the Telegram Bot API allows tg://
@@ -5899,24 +5905,24 @@ def patch_call_proxy_tcp_media(tg: Path) -> None:
     proxy is configured, tgcalls' NativeNetworkingImpl disables UDP (a SOCKS5 proxy
     cannot carry UDP) — so the media leg MUST go over a TCP reflector. But two upstream
     gaps break that leg:
-      • For protocol versions != "12.0.0" the server's TCP reflector is diverted to a
+      For protocol versions != "12.0.0" the server's TCP reflector is diverted to a
         signalling-only connection (`continue connectionsLoop`) and dropped from the
         media set, so there is no TCP reflector to connect to.
-      • enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, OFF by
+      enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, OFF by
         default, so tgcalls would refuse TCP even if a TCP reflector were present.
     (The remaining gap — tgcalls v2 never actually tunnelling the reflector TCP socket
     through the proxy — is fixed natively in patch_tgcalls_proxy_socks5.)
 
     Fix here is PURELY ADDITIVE and only affects calls with a SOCKS5 proxy configured
     (voipProxyServer != nil):
-      • inject Telegram's TCP reflector gateway (91.108.9.38:595, exactly as stock does
+      inject Telegram's TCP reflector gateway (91.108.9.38:595, exactly as stock does
         for protocol version 12.0.0) so a TCP media path always EXISTS — otherwise, for
         non-12.0.0 calls, the server often sends UDP-only reflectors and the tunnel has
         nothing to carry;
-      • keep TCP reflectors as ADDITIONAL media connections instead of diverting them to
+      keep TCP reflectors as ADDITIONAL media connections instead of diverting them to
         signalling-only (the UDP reflectors and P2P candidates stay in the set — nothing
         is removed, filtered, or forced; signalling still rides the proxied MTProto link);
-      • allow TCP so tgcalls may use those reflectors.
+      allow TCP so tgcalls may use those reflectors.
     A call that works directly still gathers its UDP/P2P candidates and connects on them
     exactly as before — the proxied TCP reflector is just an extra ICE candidate that only
     wins when the direct paths are blocked. Calls with no proxy configured are
@@ -11580,9 +11586,9 @@ import SwiftSignalKit
 // "Y" for Cyrillic "У" inside Russian text.
 //
 // Safety:
-//  • Every swap stays inside the BMP and is one UTF-16 unit, so message entity offsets
+//  Every swap stays inside the BMP and is one UTF-16 unit, so message entity offsets
 //    (bold/links/mentions) are preserved exactly.
-//  • Entity ranges (mentions, urls, code, emails, commands, …) and link/@-like tokens are
+//  Entity ranges (mentions, urls, code, emails, commands, …) and link/@-like tokens are
 //    protected and never altered, so functional text keeps working.
 
 public enum AorusAntiSearchStore {
@@ -15390,6 +15396,171 @@ def patch_hide_tabs(tg: Path) -> None:
         print(f"HideTabs: gated Contacts/Calls appends ({n} sites)")
     else:
         print(f"HideTabs: WARNING — matched {n}/{len(edits)} anchors")
+
+
+def patch_action_confirmation(tg: Path) -> None:
+    """Confirmation prompts in front of calls and of sending a just-recorded message.
+
+    Both are single-tap, irreversible and easy to trigger by accident. Rather than sprinkling
+    checks over the many UI entry points, each is gated at its one choke point: AccountContextImpl
+    owns every call the app can place, and ChatControllerImpl owns both ways a recorded voice or
+    video message reaches the wire. Each method keeps its name and gains a private
+    aorusPerform... twin holding the original body, so nothing downstream changes.
+    """
+    acc = tg / "submodules/TelegramUI/Sources/AccountContext.swift"
+    if acc.is_file():
+        t = acc.read_text(encoding="utf-8")
+        if "aorusPerformRequestCall" in t:
+            print("ActionConfirm: AccountContext already patched")
+        else:
+            if "import AorusGramUI\n" not in t:
+                t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+
+            edits = [
+                (
+                    "    public func requestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {\n",
+                    "    public func requestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {\n"
+                    "        aorusConfirmCall(self, isVideo: isVideo, parentController: nil) { [weak self] in // AorusGram: Action confirmation\n"
+                    "            self?.aorusPerformRequestCall(peerId: peerId, isVideo: isVideo, completion: completion)\n"
+                    "        }\n"
+                    "    }\n"
+                    "\n"
+                    "    private func aorusPerformRequestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {\n",
+                ),
+                (
+                    "    public func joinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n",
+                    "    public func joinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n"
+                    "        aorusConfirmGroupCall(self, parentController: nil) { [weak self] in // AorusGram: Action confirmation\n"
+                    "            self?.aorusPerformJoinGroupCall(peerId: peerId, invite: invite, requestJoinAsPeerId: requestJoinAsPeerId, activeCall: activeCall)\n"
+                    "        }\n"
+                    "    }\n"
+                    "\n"
+                    "    private func aorusPerformJoinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {\n",
+                ),
+                (
+                    "    public func joinConferenceCall(call: JoinCallLinkInformation, isVideo: Bool, unmuteByDefault: Bool) {\n",
+                    "    public func joinConferenceCall(call: JoinCallLinkInformation, isVideo: Bool, unmuteByDefault: Bool) {\n"
+                    "        aorusConfirmGroupCall(self, parentController: nil) { [weak self] in // AorusGram: Action confirmation\n"
+                    "            self?.aorusPerformJoinConferenceCall(call: call, isVideo: isVideo, unmuteByDefault: unmuteByDefault)\n"
+                    "        }\n"
+                    "    }\n"
+                    "\n"
+                    "    private func aorusPerformJoinConferenceCall(call: JoinCallLinkInformation, isVideo: Bool, unmuteByDefault: Bool) {\n",
+                ),
+            ]
+            applied = 0
+            for old, new in edits:
+                if t.count(old) == 1:
+                    t = t.replace(old, new, 1)
+                    applied += 1
+            if applied == len(edits):
+                acc.write_text(t, encoding="utf-8")
+                print("ActionConfirm: call entry points gated")
+            else:
+                print(f"ActionConfirm: WARNING matched {applied}/{len(edits)} call anchors — not written")
+    else:
+        print("ActionConfirm: AccountContext.swift not found — skip")
+
+    rec = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerMediaRecording.swift"
+    if not rec.is_file():
+        print("ActionConfirm: ChatControllerMediaRecording.swift not found — skip")
+        return
+    t = rec.read_text(encoding="utf-8")
+    if "aorusPerformSendMediaRecording" in t:
+        print("ActionConfirm: recording paths already patched")
+        return
+    if "import AorusGramUI\n" not in t:
+        t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
+
+    dismiss_old = "    func dismissMediaRecorder(_ action: ChatFinishMediaRecordingAction) {\n"
+    dismiss_new = (
+        "    func dismissMediaRecorder(_ action: ChatFinishMediaRecordingAction) {\n"
+        "        // AorusGram: Action confirmation. This is the release-to-send path, the one that\n"
+        "        // fires the moment a finger lifts. Park the recording in the preview panel first,\n"
+        "        // so declining leaves it intact to send deliberately or discard, and accepting\n"
+        "        // sends it through exactly the route the preview's own send button uses.\n"
+        "        var aorusIsSendAction = false\n"
+        "        if case .send = action {\n"
+        "            aorusIsSendAction = true\n"
+        "        }\n"
+        "        if aorusIsSendAction, aorusActionConfirmationIsEnabled() {\n"
+        "            let aorusIsVideo = self.videoRecorderValue != nil\n"
+        "            self.aorusPerformDismissMediaRecorder(.preview)\n"
+        "            aorusConfirmRecordedMessage(self.context, isVideo: aorusIsVideo, parentController: self) { [weak self] in\n"
+        "                self?.aorusSendRecordedMessageWhenReady()\n"
+        "            }\n"
+        "            return\n"
+        "        }\n"
+        "        self.aorusPerformDismissMediaRecorder(action)\n"
+        "    }\n"
+        "\n"
+        "    // Moving to .preview stops the recorder and stores the draft through a signal, so the\n"
+        "    // draft is not there yet when the prompt appears. Confirming therefore waits for it\n"
+        "    // rather than sending into a nil draft, which would silently drop the recording.\n"
+        "    func aorusSendRecordedMessageWhenReady(_ attempt: Int = 0) {\n"
+        "        if self.presentationInterfaceState.interfaceState.mediaDraftState != nil {\n"
+        "            self.aorusPerformSendMediaRecording()\n"
+        "            return\n"
+        "        }\n"
+        "        guard attempt < 20 else {\n"
+        "            return\n"
+        "        }\n"
+        "        Queue.mainQueue().after(0.1) { [weak self] in\n"
+        "            self?.aorusSendRecordedMessageWhenReady(attempt + 1)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    func aorusPerformDismissMediaRecorder(_ action: ChatFinishMediaRecordingAction) {\n"
+    )
+
+    send_old = (
+        "    func sendMediaRecording(\n"
+        "        silentPosting: Bool? = nil,\n"
+        "        scheduleTime: Int32? = nil,\n"
+        "        repeatPeriod: Int32? = nil,\n"
+        "        viewOnce: Bool = false,\n"
+        "        messageEffect: ChatSendMessageEffect? = nil,\n"
+        "        postpone: Bool = false\n"
+        "    ) {\n"
+    )
+    send_new = (
+        "    func sendMediaRecording(\n"
+        "        silentPosting: Bool? = nil,\n"
+        "        scheduleTime: Int32? = nil,\n"
+        "        repeatPeriod: Int32? = nil,\n"
+        "        viewOnce: Bool = false,\n"
+        "        messageEffect: ChatSendMessageEffect? = nil,\n"
+        "        postpone: Bool = false\n"
+        "    ) {\n"
+        "        var aorusIsVideo = false // AorusGram: Action confirmation\n"
+        "        if case .some(.video) = self.presentationInterfaceState.interfaceState.mediaDraftState {\n"
+        "            aorusIsVideo = true\n"
+        "        }\n"
+        "        aorusConfirmRecordedMessage(self.context, isVideo: aorusIsVideo, parentController: self) { [weak self] in\n"
+        "            self?.aorusPerformSendMediaRecording(silentPosting: silentPosting, scheduleTime: scheduleTime, repeatPeriod: repeatPeriod, viewOnce: viewOnce, messageEffect: messageEffect, postpone: postpone)\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    func aorusPerformSendMediaRecording(\n"
+        "        silentPosting: Bool? = nil,\n"
+        "        scheduleTime: Int32? = nil,\n"
+        "        repeatPeriod: Int32? = nil,\n"
+        "        viewOnce: Bool = false,\n"
+        "        messageEffect: ChatSendMessageEffect? = nil,\n"
+        "        postpone: Bool = false\n"
+        "    ) {\n"
+    )
+
+    if t.count(dismiss_old) == 1 and t.count(send_old) == 1:
+        t = t.replace(dismiss_old, dismiss_new, 1)
+        t = t.replace(send_old, send_new, 1)
+        rec.write_text(t, encoding="utf-8")
+        print("ActionConfirm: recorded voice/video send gated")
+    else:
+        print(
+            "ActionConfirm: WARNING recording anchors not unique "
+            f"(dismiss={t.count(dismiss_old)}, send={t.count(send_old)}) — not written"
+        )
 
 
 def patch_wall_postbox_paging(tg: Path) -> None:
@@ -19992,9 +20163,9 @@ def patch_message_translate_button(tg: Path) -> None:
     A floating circle appears on incoming (others') messages: bottom-right for chats,
     stacked ABOVE the native share button on channel posts. Two modes, mutually exclusive
     per message:
-      • text message + translator on   → 文A glyph; tap = Google Translate (GTranslate)
+      text message + translator on   → 文A glyph; tap = Google Translate (GTranslate)
         appended under the original with a "🗨 GTranslate" header.
-      • voice message + transcription on → waveform glyph; tap = on-device Speech-to-text,
+      voice message + transcription on → waveform glyph; tap = on-device Speech-to-text,
         the recognized text is written under the voice bubble.
     Second tap restores the original in both modes. Nothing on own messages.
     """
@@ -22140,6 +22311,7 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_share_button_translate(tg)
     patch_message_translate_button(tg)
+    patch_action_confirmation(tg)
     patch_wall_postbox_paging(tg)
     patch_wall_post_actions(tg)
     patch_wall_fullscreen_media(tg)

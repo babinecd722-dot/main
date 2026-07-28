@@ -1121,6 +1121,52 @@ def main() -> None:
         if marker not in wall_text:
             err.append(f"Wall: channel exclusions are not enforced across sources — missing {marker}")
 
+    # Action confirmation: the prompt must sit at the single choke point for each action, and
+    # the original bodies must survive under their aorusPerform... names.
+    action_confirm = tg / "submodules" / "AorusGramUI" / "Sources" / "Security" / "AorusActionConfirmation.swift"
+    action_confirm_text = action_confirm.read_text(encoding="utf-8") if action_confirm.is_file() else ""
+    for marker in (
+        "public enum AorusActionConfirmation",
+        "aorusgram_action_confirmation",
+        "public func aorusConfirmCall(",
+        "public func aorusConfirmGroupCall(",
+        "public func aorusConfirmRecordedMessage(",
+    ):
+        if marker not in action_confirm_text:
+            err.append(f"ActionConfirm: confirmation module is missing {marker}")
+    if "as? Bool) ?? true" not in action_confirm_text:
+        err.append("ActionConfirm: the feature must default to on")
+
+    action_context = tg / "submodules" / "TelegramUI" / "Sources" / "AccountContext.swift"
+    action_context_text = action_context.read_text(encoding="utf-8") if action_context.is_file() else ""
+    for marker in (
+        "private func aorusPerformRequestCall(",
+        "private func aorusPerformJoinGroupCall(",
+        "private func aorusPerformJoinConferenceCall(",
+    ):
+        if marker not in action_context_text:
+            err.append(f"ActionConfirm: call entry point is not gated — missing {marker}")
+
+    action_recording = (
+        tg / "submodules" / "TelegramUI" / "Sources" / "Chat" / "ChatControllerMediaRecording.swift"
+    )
+    action_recording_text = (
+        action_recording.read_text(encoding="utf-8") if action_recording.is_file() else ""
+    )
+    for marker in (
+        "func aorusPerformDismissMediaRecorder(",
+        "func aorusPerformSendMediaRecording(",
+        "func aorusSendRecordedMessageWhenReady(",
+    ):
+        if marker not in action_recording_text:
+            err.append(f"ActionConfirm: recorded-message send is not gated — missing {marker}")
+
+    misc = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
+    misc_text = misc.read_text(encoding="utf-8") if misc.is_file() else ""
+    for marker in ("case actionConfirmation(", "AorusActionConfirmation.isEnabled = value"):
+        if marker not in misc_text:
+            err.append(f"ActionConfirm: the Security toggle is missing {marker}")
+
     wall_settings = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusWallSettingsController.swift"
     wall_settings_text = wall_settings.read_text(encoding="utf-8") if wall_settings.is_file() else ""
     for marker in (

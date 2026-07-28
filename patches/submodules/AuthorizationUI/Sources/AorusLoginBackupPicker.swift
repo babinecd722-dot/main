@@ -454,6 +454,8 @@ final class AorusLoginBackupPickerController: UIViewController {
         let parts = name.split(separator: " ").prefix(2)
         let letters = parts.compactMap { $0.first.map { String($0) } }
         let joined = letters.joined().uppercased()
-        return joined.isEmpty ? "•" : joined
+        // No letters to work with: leave the avatar plain, the way Telegram draws a peer
+        // with no name, rather than stamping a placeholder glyph on it.
+        return joined
     }
 }

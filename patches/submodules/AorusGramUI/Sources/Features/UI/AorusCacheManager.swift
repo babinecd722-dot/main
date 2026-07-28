@@ -5,8 +5,8 @@ import UIKit
 //
 // Periodic cache auto-cleaning. Replaces the former RAM overlay / RAM auto-clean.
 // When enabled, on the user-selected interval (in hours) it wipes:
-//   • the deleted-messages SQLite cache (DeletedMessagesCache)
-//   • URL / media response caches
+//   the deleted-messages SQLite cache (DeletedMessagesCache)
+//   URL / media response caches
 // Toggled from Settings → Performance → "Auto-Clean Cache" (off by default).
 
 public final class AorusCacheManager {

@@ -47,6 +47,7 @@ private struct MiscState: Equatable {
     var linkProtectionRedirects: Bool
     var linkProtectionBlockFiles: Bool
     var chatLockEnabled: Bool
+    var actionConfirmation: Bool
 }
 
 private final class MiscArguments {
@@ -74,8 +75,9 @@ private final class MiscArguments {
     let setLinkProtectionRedirects: (Bool) -> Void
     let setLinkProtectionBlockFiles: (Bool) -> Void
     let openChatLock: () -> Void
+    let setActionConfirmation: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setChatSummary: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -100,6 +102,7 @@ private final class MiscArguments {
         self.setLinkProtectionRedirects = setLinkProtectionRedirects
         self.setLinkProtectionBlockFiles = setLinkProtectionBlockFiles
         self.openChatLock = openChatLock
+        self.setActionConfirmation = setActionConfirmation
     }
 }
 
@@ -140,6 +143,8 @@ private enum MiscEntry: ItemListNodeEntry {
     case linkProtectionRedirects(PresentationTheme, String, Bool)
     case linkProtectionBlockFiles(PresentationTheme, String, Bool)
     case linkProtectionInfo(PresentationTheme, String)
+    case actionConfirmation(PresentationTheme, String, Bool)
+    case actionConfirmationInfo(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -165,7 +170,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return MiscSection.animatedWallpapersS.rawValue
         case .animatedBanner:
             return MiscSection.animatedBannerS.rawValue
-        case .securityHeader, .linkProtection, .linkProtectionRedirects, .linkProtectionBlockFiles, .linkProtectionInfo, .chatLock:
+        case .securityHeader, .linkProtection, .linkProtectionRedirects, .linkProtectionBlockFiles, .linkProtectionInfo, .chatLock,
+             .actionConfirmation, .actionConfirmationInfo:
             return MiscSection.security.rawValue
         }
     }
@@ -208,6 +214,8 @@ private enum MiscEntry: ItemListNodeEntry {
         case .linkProtectionBlockFiles: return 53
         case .linkProtectionInfo: return 54
         case .chatLock:         return 55
+        case .actionConfirmation: return 56
+        case .actionConfirmationInfo: return 57
         }
     }
 
@@ -289,6 +297,10 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .linkProtectionBlockFiles(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .linkProtectionInfo(lt, ls):
             if case let .linkProtectionInfo(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .actionConfirmation(lt, ls, lv):
+            if case let .actionConfirmation(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .actionConfirmationInfo(lt, ls):
+            if case let .actionConfirmationInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -408,6 +420,10 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setLinkProtectionBlockFiles($0) })
         case let .linkProtectionInfo(_, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .actionConfirmation(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setActionConfirmation($0) })
+        case let .actionConfirmationInfo(_, text):
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
     }
 }
@@ -483,6 +499,10 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.linkProtectionInfo(theme, isRu
         ? "Предупреждает о подмене доменов, Punycode, сокращателях, редиректах, опасных схемах и файлах до открытия ссылки."
         : "Warns about spoofed domains, Punycode, shorteners, redirects, dangerous schemes and files before opening a link."))
+    entries.append(.actionConfirmation(theme, isRu ? "Подтверждение действий" : "Action Confirmation", state.actionConfirmation))
+    entries.append(.actionConfirmationInfo(theme, isRu
+        ? "Спрашивает подтверждение перед звонком и перед отправкой записанного голосового или видеосообщения."
+        : "Asks for confirmation before placing a call and before sending a recorded voice or video message."))
 
     return entries
 }
@@ -510,7 +530,8 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         linkProtection: AorusLinkProtection.isEnabled,
         linkProtectionRedirects: AorusLinkProtection.checksRedirects,
         linkProtectionBlockFiles: AorusLinkProtection.blocksDangerousFiles,
-        chatLockEnabled: AorusChatLock.isEnabled(accountId: accountId)
+        chatLockEnabled: AorusChatLock.isEnabled(accountId: accountId),
+        actionConfirmation: AorusActionConfirmation.isEnabled
     )
     let statePromise = ValuePromise(initialState, ignoreRepeated: true)
     let stateValue = Atomic(value: initialState)
@@ -777,6 +798,14 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 }
             } else {
                 present()
+            }
+        },
+        setActionConfirmation: { value in
+            AorusActionConfirmation.isEnabled = value
+            updateState { current in
+                var next = current
+                next.actionConfirmation = value
+                return next
             }
         }
     )

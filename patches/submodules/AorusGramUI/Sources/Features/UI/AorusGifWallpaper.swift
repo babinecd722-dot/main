@@ -6,13 +6,13 @@ import ImageIO
 // MARK: - AorusGram animated GIF chat wallpaper
 //
 // User flow:
-//   • The wallpaper grid screen ("Обои для чатов") shows a native blue button
+//   The wallpaper grid screen ("Обои для чатов") shows a native blue button
 //     "Выбрать GIF" right under "Выбрать из галереи".
-//   • Tapping it opens a GIF-only picker (a grid of the device's animated images).
-//   • Picking a GIF converts it once to a looping H.264 MP4 (smooth, low-power —
+//   Tapping it opens a GIF-only picker (a grid of the device's animated images).
+//   Picking a GIF converts it once to a looping H.264 MP4 (smooth, low-power —
 //     never the laggy animated-UIImage path) and activates it as the global chat
 //     wallpaper. The state survives app restarts.
-//   • Choosing any other wallpaper (stock or a gallery photo) clears the GIF.
+//   Choosing any other wallpaper (stock or a gallery photo) clears the GIF.
 //
 // This file owns the picker, the GIF→MP4 conversion and the persisted store.
 // The actual playback layer lives self-contained inside WallpaperBackgroundNode

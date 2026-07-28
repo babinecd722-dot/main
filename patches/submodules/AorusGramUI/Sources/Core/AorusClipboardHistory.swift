@@ -12,10 +12,10 @@ import TelegramPresentationData
 // you have recently copied.
 //
 // Capture strategy (privacy-aware):
-//   • In-app copies (e.g. Telegram's own "Copy") are captured live via
+//   In-app copies (e.g. Telegram's own "Copy") are captured live via
 //     UIPasteboard.changedNotification. These are our own process's writes, so reading them
 //     raises no system "pasted from …" banner.
-//   • External copies (from other apps) are pulled in only on an explicit user action —
+//   External copies (from other apps) are pulled in only on an explicit user action —
 //     opening the clipboard panel — so we never surface a surprise paste banner on every
 //     foreground.
 public final class AorusClipboardHistory {
