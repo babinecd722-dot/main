@@ -105,6 +105,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private var recommendedChannelsDisposable: Disposable?
         private let recommendedPreloadDisposable = MetaDisposable()
         private var recommendedPeerIds: [PeerId] = []
+        /// The last set Telegram returned for `recommendedChannels(peerId: nil)`, kept apart
+        /// from `recommendedPeerIds` so the "did it actually change" check is not defeated by
+        /// the sources expansion adds.
+        private var globalRecommendedPeerIds: [PeerId] = []
         private var recommendationsEnabled = false
         private var isVisible = false
         private var lastLoadMoreMarkedCount = 0
@@ -214,6 +218,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             if settingChanged {
                 self.recommendedPreloadDisposable.set(nil)
                 self.recommendedPeerIds = []
+                self.globalRecommendedPeerIds = []
                 // Expansion state belongs to the previous session of the feature.
                 self.expansionDisposable?.dispose()
                 self.expansionDisposable = nil
@@ -237,10 +242,23 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 let peerIds = Array((recommendedChannels?.channels.map(\.peer.id) ?? []).prefix(32))
-                guard peerIds != self.recommendedPeerIds else {
+                // Compare against the previous GLOBAL list, not against the whole source set.
+                // `recommendedPeerIds` also holds everything source expansion discovered, so it
+                // never equalled these 32 ids once a single expansion had happened — every
+                // emission of this signal looked like a change.
+                guard peerIds != self.globalRecommendedPeerIds else {
                     return
                 }
-                self.recommendedPeerIds = peerIds
+                self.globalRecommendedPeerIds = peerIds
+                // Merge, never replace. Assigning `peerIds` here wiped every channel found by
+                // expansion and dropped the feed back to the same 32 global recommendations —
+                // which is exactly why the same channels kept coming round.
+                var mergedPeerIds = peerIds
+                let global = Set(peerIds)
+                for peerId in self.recommendedPeerIds where !global.contains(peerId) {
+                    mergedPeerIds.append(peerId)
+                }
+                self.recommendedPeerIds = mergedPeerIds
                 // Telegram's own recommendations are the closest sources there are.
                 for peerId in peerIds {
                     self.sourceGeneration[peerId] = 1
@@ -252,20 +270,33 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     preloadDisposable.add(self.context.account.addAdditionalPreloadHistoryPeerId(peerId: peerId))
                 }
                 self.recommendedPreloadDisposable.set(preloadDisposable)
-                self.reload(updateType: .Generic)
-                self.queue.after(1.5) { [weak self] in
-                    guard let self, self.recommendationsEnabled else {
-                        return
+                // Rebuilding the feed is only right when there is nothing to disturb. Once the
+                // reader has a feed, new sources are added to the frontier instead, so a
+                // recommendation refresh can never reshuffle the list under them. The repeats
+                // give the preloaded histories time to arrive over the network.
+                self.applyNewRecommendationSources()
+                for delay in [1.5, 4.0] {
+                    self.queue.after(delay) { [weak self] in
+                        self?.applyNewRecommendationSources()
                     }
-                    self.reload(updateType: .Generic)
-                }
-                self.queue.after(4.0) { [weak self] in
-                    guard let self, self.recommendationsEnabled else {
-                        return
-                    }
-                    self.reload(updateType: .Generic)
                 }
             })
+        }
+
+        /// Bring freshly recommended channels into the feed.
+        ///
+        /// Rebuilding is only right when there is nothing to disturb. Once the reader has a
+        /// feed, new sources are added to the frontier instead, so a recommendation refresh can
+        /// never reshuffle the list under them.
+        private func applyNewRecommendationSources() {
+            guard self.recommendationsEnabled else {
+                return
+            }
+            if self.currentMessageIds.isEmpty {
+                self.reload(updateType: .Generic)
+            } else {
+                self.topUp(force: true)
+            }
         }
 
         /// Pull in more recommended CHANNELS, using channels already in the feed as seeds.
@@ -783,7 +814,26 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 self.isPrefetching = false
                 if messages.contains(where: { !previousIds.contains($0.id) }) {
-                    self.applyMessages(messages, updateType: .FillHole, preserveCurrent: true)
+                    // MUST NOT be .FillHole. ChatHistoryListNode throws such an update away
+                    // outright:
+                    //
+                    //     case let .HistoryView(view, type, ...):
+                    //         if case .Generic(.FillHole) = type {
+                    //             applyHole()
+                    //             return
+                    //         }
+                    //
+                    // The view never becomes a transition; instead applyHole() re-points the
+                    // history location at the currently visible anchor and bumps its id, which
+                    // re-subscribes to our stream — and a ValuePipe replays nothing, so the
+                    // list keeps rendering the OLD entries. Every page fetched by loading more
+                    // was therefore invisible, the list's own `filteredEntries` never changed,
+                    // and since loadMore() only fires when entry 0 differs, it was never asked
+                    // again either. That is why the feed stopped dead, why the same channels
+                    // came round and round, and why the occasional .Generic reload — the only
+                    // update that did get applied — rebuilt the list and threw the reader back
+                    // to the top.
+                    self.applyMessages(messages, updateType: .Generic, preserveCurrent: true)
                 } else {
                     // A page came back with nothing new: the current sources are exhausted, so
                     // pull in more SOURCES (widening the time window would only make the feed
