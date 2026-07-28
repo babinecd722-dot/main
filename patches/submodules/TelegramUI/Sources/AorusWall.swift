@@ -6,6 +6,7 @@ import TelegramCore
 import AccountContext
 import Display
 import AorusGramUI
+import UndoUI
 
 private let aorusWallExcludePeerRequested = Notification.Name("aorusgram.wallExcludePeerRequested")
 
@@ -1303,6 +1304,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     private var visibilityTimer: Foundation.Timer?
     private var visibleMessagesProvider: (() -> (live: Set<MessageId>, readable: Set<MessageId>))?
     private var navigationSearchingDisposable: Disposable?
+    private weak var navigationController: ViewController?
     private var observers: [NSObjectProtocol] = []
 
     public init(context: AccountContext) {
@@ -1334,13 +1336,42 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             forName: aorusWallExcludePeerRequested,
             object: nil,
             queue: .main
-        ) { notification in
+        ) { [weak self] notification in
+            guard let self else {
+                return
+            }
             guard let accountId = (notification.userInfo?["accountId"] as? NSNumber)?.int64Value,
                   accountId == context.account.id.int64,
                   let peerId = (notification.userInfo?["peerId"] as? NSNumber)?.int64Value else {
                 return
             }
             AorusWallSettingsStore.addExcludedPeer(peerId, accountId: accountId)
+
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let isRussian = presentationData.strings.baseLanguageCode.lowercased().hasPrefix("ru")
+            let peerTitle = (notification.userInfo?["peerTitle"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let text: String
+            if peerTitle.isEmpty {
+                text = isRussian
+                    ? "Канал добавлен в исключения"
+                    : "Channel added to exclusions"
+            } else {
+                text = isRussian
+                    ? "Канал «\(peerTitle)» добавлен в исключения"
+                    : "Channel “\(peerTitle)” added to exclusions"
+            }
+            self.navigationController?.present(
+                UndoOverlayController(
+                    presentationData: presentationData,
+                    content: .succeed(text: text, timeout: nil, customUndoText: nil),
+                    elevatedLayout: false,
+                    position: .bottom,
+                    animateInAsReplacement: true,
+                    action: { _ in false }
+                ),
+                in: .current
+            )
         })
         self.observers.append(NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
@@ -1431,6 +1462,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     }
 
     public func bindNavigation(controller: ViewController, context: AccountContext) {
+        self.navigationController = controller
         self.navigationSearchingDisposable?.dispose()
         self.navigationSearchingDisposable = (combineLatest(
             self.searching,

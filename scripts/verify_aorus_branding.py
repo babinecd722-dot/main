@@ -1245,9 +1245,20 @@ def main() -> None:
         "aorusWallExcludeSwipe",
         ".aorusWallExclude",
         "aorusgram.wallExcludePeerRequested",
+        '"peerTitle": item.message.peers[item.message.id.peerId].map { EnginePeer($0).compactDisplayTitle }',
     ):
         if marker not in wall_bubble_text:
             err.append(f"Wall: swipe-to-exclude route is missing {marker}")
+
+    for marker in (
+        "import UndoUI",
+        "private weak var navigationController: ViewController?",
+        "Канал «\\(peerTitle)» добавлен в исключения",
+        "Channel “\\(peerTitle)” added to exclusions",
+        "content: .succeed(text: text, timeout: nil, customUndoText: nil)",
+    ):
+        if marker not in wall_contents_text:
+            err.append(f"Wall: exclusion toast is missing {marker}")
 
     wall_swipe_node = (
         tg

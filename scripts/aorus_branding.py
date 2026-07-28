@@ -20846,7 +20846,8 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
             "                                object: nil,\n"
             "                                userInfo: [\n"
             "                                    \"accountId\": NSNumber(value: item.context.account.id.int64),\n"
-            "                                    \"peerId\": NSNumber(value: item.message.id.peerId.toInt64())\n"
+            "                                    \"peerId\": NSNumber(value: item.message.id.peerId.toInt64()),\n"
+            "                                    \"peerTitle\": item.message.peers[item.message.id.peerId].map { EnginePeer($0).compactDisplayTitle } ?? \"\"\n"
             "                                ]\n"
             "                            )\n"
             "                        } else if let currentSwipeAction = currentSwipeAction {\n"
@@ -20880,6 +20881,34 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
             print(f"WallExcludeSwipe: WARNING — bubble anchors missing {missing}")
     else:
         print("WallExcludeSwipe: bubble already patched")
+
+    # Persistent Telegram source caches may already contain the original Wall exclusion
+    # gesture. Enrich that exact notification with the peer title so AorusWall can show a
+    # localized native success toast after the exclusion is stored.
+    t = bubble_node.read_text(encoding="utf-8")
+    old_exclusion_payload = (
+        "                                    \"accountId\": NSNumber(value: item.context.account.id.int64),\n"
+        "                                    \"peerId\": NSNumber(value: item.message.id.peerId.toInt64())\n"
+        "                                ]\n"
+        "                            )\n"
+    )
+    new_exclusion_payload = (
+        "                                    \"accountId\": NSNumber(value: item.context.account.id.int64),\n"
+        "                                    \"peerId\": NSNumber(value: item.message.id.peerId.toInt64()),\n"
+        "                                    \"peerTitle\": item.message.peers[item.message.id.peerId].map { EnginePeer($0).compactDisplayTitle } ?? \"\"\n"
+        "                                ]\n"
+        "                            )\n"
+    )
+    if (
+        "aorusgram.wallExcludePeerRequested" in t
+        and "\"peerTitle\":" not in t
+        and old_exclusion_payload in t
+    ):
+        bubble_node.write_text(
+            t.replace(old_exclusion_payload, new_exclusion_payload, 1),
+            encoding="utf-8",
+        )
+        print("WallExcludeSwipe: migrated cached gesture with exclusion toast title")
 
 
 def patch_wall_allow_reactions(tg: Path) -> None:
