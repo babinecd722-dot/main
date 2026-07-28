@@ -20750,7 +20750,7 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
             "        if case .aorusWallExclude = action {\n"
             "            let configuration = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)\n"
             "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
-            "                .withTintColor(.white, renderingMode: .alwaysOriginal)\n"
+            "                .withTintColor(.systemRed, renderingMode: .alwaysOriginal)\n"
             "        }\n"
             "        \n"
             "        self.maskNode = ASDisplayNode()\n"
@@ -20766,15 +20766,10 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
     else:
         print("WallExcludeSwipe: swipe icon already patched")
 
-    # Give the Wall-only action a complete native destructive appearance. Merely tinting the
-    # symbol red is not enough on a dark wallpaper: the inherited bubble background keeps the
-    # action almost invisible. Use a solid system-red circle with a white crossed-circle icon,
-    # while preserving Telegram's original background path for every other swipe action.
+    # Keep Telegram's original swipe background and change only the exclusion symbol to red.
+    # Also undo the short-lived red-background variant in persistent CI source caches.
     t = swipe_node.read_text(encoding="utf-8")
-    style_anchor = (
-        "        self.backgroundNode = NavigationBackgroundNode(color: fillColor, enableBlur: enableBlur)\n"
-    )
-    style_replacement = (
+    destructive_style = (
         "        let aorusWallExcludeStyle: Bool\n"
         "        if case .aorusWallExclude = action {\n"
         "            aorusWallExcludeStyle = true\n"
@@ -20786,8 +20781,11 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
         "            enableBlur: aorusWallExcludeStyle ? false : enableBlur\n"
         "        )\n"
     )
-    if "let aorusWallExcludeStyle: Bool" not in t and style_anchor in t:
-        t = t.replace(style_anchor, style_replacement, 1)
+    original_style = (
+        "        self.backgroundNode = NavigationBackgroundNode(color: fillColor, enableBlur: enableBlur)\n"
+    )
+    if destructive_style in t:
+        t = t.replace(destructive_style, original_style, 1)
 
     old_exclusion_tint_foreground = (
         "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
@@ -20797,22 +20795,23 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
         "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
         "                .withTintColor(.systemRed, renderingMode: .alwaysOriginal)\n"
     )
-    new_exclusion_tint = (
+    old_exclusion_tint_white = (
         "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
         "                .withTintColor(.white, renderingMode: .alwaysOriginal)\n"
     )
+    new_exclusion_tint = old_exclusion_tint_red
     if old_exclusion_tint_foreground in t:
         t = t.replace(old_exclusion_tint_foreground, new_exclusion_tint, 1)
-    if old_exclusion_tint_red in t:
-        t = t.replace(old_exclusion_tint_red, new_exclusion_tint, 1)
+    if old_exclusion_tint_white in t:
+        t = t.replace(old_exclusion_tint_white, new_exclusion_tint, 1)
 
-    wallpaper_anchor = "        if backgroundNode?.hasExtraBubbleBackground() == true {\n"
-    wallpaper_replacement = "        if !aorusWallExcludeStyle, backgroundNode?.hasExtraBubbleBackground() == true {\n"
-    if wallpaper_replacement not in t and wallpaper_anchor in t:
-        t = t.replace(wallpaper_anchor, wallpaper_replacement, 1)
+    wallpaper_override = "        if !aorusWallExcludeStyle, backgroundNode?.hasExtraBubbleBackground() == true {\n"
+    original_wallpaper = "        if backgroundNode?.hasExtraBubbleBackground() == true {\n"
+    if wallpaper_override in t:
+        t = t.replace(wallpaper_override, original_wallpaper, 1)
 
     swipe_node.write_text(t, encoding="utf-8")
-    print("WallExcludeSwipe: destructive red background and white icon ensured")
+    print("WallExcludeSwipe: original background and red exclusion icon ensured")
 
     t = bubble_node.read_text(encoding="utf-8")
     if "aorusWallExcludeSwipe" not in t:

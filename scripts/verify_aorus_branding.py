@@ -1275,13 +1275,20 @@ def main() -> None:
     for marker in (
         "case aorusWallExclude",
         'UIImage(systemName: "nosign"',
+        ".withTintColor(.systemRed, renderingMode: .alwaysOriginal)",
+        "self.backgroundNode = NavigationBackgroundNode(color: fillColor, enableBlur: enableBlur)",
+        "if backgroundNode?.hasExtraBubbleBackground() == true",
+    ):
+        if marker not in wall_swipe_text:
+            err.append(f"Wall: crossed-circle exclusion swipe icon is missing {marker}")
+    for forbidden in (
         "let aorusWallExcludeStyle: Bool",
         "color: aorusWallExcludeStyle ? .systemRed : fillColor",
         ".withTintColor(.white, renderingMode: .alwaysOriginal)",
         "if !aorusWallExcludeStyle, backgroundNode?.hasExtraBubbleBackground() == true",
     ):
-        if marker not in wall_swipe_text:
-            err.append(f"Wall: crossed-circle exclusion swipe icon is missing {marker}")
+        if forbidden in wall_swipe_text:
+            err.append(f"Wall: exclusion swipe must retain Telegram's original background — found {forbidden}")
 
     wall_context_menu = tg / "submodules" / "TelegramUI" / "Sources" / "Chat" / "ChatControllerOpenMessageContextMenu.swift"
     wall_context_menu_text = wall_context_menu.read_text(encoding="utf-8") if wall_context_menu.is_file() else ""
