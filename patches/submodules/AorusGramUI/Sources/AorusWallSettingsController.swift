@@ -16,6 +16,15 @@ public enum AorusWallSettingsStore {
     private static let lock = NSLock()
     private static let seenLimit = 12000
 
+    // Both of these used to be read straight out of UserDefaults on every call. The Wall calls
+    // them inside its page collection and its badge recount, so reading the seen list meant
+    // pulling up to 12 000 strings out of UserDefaults and rebuilding a Set every few seconds,
+    // and testing membership allocated one more string per scanned message. Held in memory and
+    // updated in place instead; UserDefaults is still the source of truth across launches.
+    private static var seenCache: [Int64: (ordered: [String], ids: Set<MessageId>)] = [:]
+    private static var excludedCache: [Int64: Set<Int64>] = [:]
+    private static var seenFlushScheduled = Set<Int64>()
+
     private static func key(_ name: String, accountId: Int64) -> String {
         return "aorusgram_wall_\(name)_\(accountId)"
     }
@@ -42,8 +51,13 @@ public enum AorusWallSettingsStore {
     public static func excludedPeerIds(accountId: Int64) -> Set<Int64> {
         lock.lock()
         defer { lock.unlock() }
+        if let cached = excludedCache[accountId] {
+            return cached
+        }
         let values = UserDefaults.standard.array(forKey: key("excluded", accountId: accountId)) as? [NSNumber] ?? []
-        return Set(values.map(\.int64Value))
+        let result = Set(values.map(\.int64Value))
+        excludedCache[accountId] = result
+        return result
     }
 
     public static func addExcludedPeer(_ peerId: Int64, accountId: Int64) {
@@ -51,6 +65,7 @@ public enum AorusWallSettingsStore {
         var values = Set((UserDefaults.standard.array(forKey: key("excluded", accountId: accountId)) as? [NSNumber] ?? []).map(\.int64Value))
         values.insert(peerId)
         UserDefaults.standard.set(values.sorted().map { NSNumber(value: $0) }, forKey: key("excluded", accountId: accountId))
+        excludedCache[accountId] = values
         lock.unlock()
         NotificationCenter.default.post(name: didChange, object: nil)
     }
@@ -60,6 +75,7 @@ public enum AorusWallSettingsStore {
         var values = Set((UserDefaults.standard.array(forKey: key("excluded", accountId: accountId)) as? [NSNumber] ?? []).map(\.int64Value))
         values.remove(peerId)
         UserDefaults.standard.set(values.sorted().map { NSNumber(value: $0) }, forKey: key("excluded", accountId: accountId))
+        excludedCache[accountId] = values
         lock.unlock()
         NotificationCenter.default.post(name: didChange, object: nil)
     }
@@ -68,10 +84,40 @@ public enum AorusWallSettingsStore {
         return "\(id.peerId.toInt64()):\(id.namespace):\(id.id)"
     }
 
-    public static func seenMessageKeys(accountId: Int64) -> Set<String> {
+    private static func parseMessageKey(_ value: String) -> MessageId? {
+        let parts = value.split(separator: ":")
+        guard parts.count == 3,
+              let peerId = Int64(parts[0]),
+              let namespace = Int32(parts[1]),
+              let id = Int32(parts[2]) else {
+            return nil
+        }
+        return MessageId(peerId: PeerId(peerId), namespace: namespace, id: id)
+    }
+
+    /// The caller must hold `lock`. `ordered` is the persisted form and keeps insertion order
+    /// so the oldest entries can be dropped; `ids` is what lookups actually use.
+    private static func loadSeenLocked(accountId: Int64) -> (ordered: [String], ids: Set<MessageId>) {
+        if let cached = seenCache[accountId] {
+            return cached
+        }
+        let ordered = UserDefaults.standard.stringArray(forKey: key("seen", accountId: accountId)) ?? []
+        var ids = Set<MessageId>()
+        ids.reserveCapacity(ordered.count)
+        for value in ordered {
+            if let id = parseMessageKey(value) {
+                ids.insert(id)
+            }
+        }
+        let entry = (ordered: ordered, ids: ids)
+        seenCache[accountId] = entry
+        return entry
+    }
+
+    public static func seenMessageIds(accountId: Int64) -> Set<MessageId> {
         lock.lock()
         defer { lock.unlock() }
-        return Set(UserDefaults.standard.stringArray(forKey: key("seen", accountId: accountId)) ?? [])
+        return loadSeenLocked(accountId: accountId).ids
     }
 
     public static func markSeen(_ ids: [MessageId], accountId: Int64) {
@@ -79,23 +125,52 @@ public enum AorusWallSettingsStore {
             return
         }
         lock.lock()
-        var ordered = UserDefaults.standard.stringArray(forKey: key("seen", accountId: accountId)) ?? []
-        var values = Set(ordered)
+        var entry = loadSeenLocked(accountId: accountId)
+        var didAdd = false
         for id in ids {
-            let value = messageKey(id)
-            if values.insert(value).inserted {
-                ordered.append(value)
+            if entry.ids.insert(id).inserted {
+                entry.ordered.append(messageKey(id))
+                didAdd = true
             }
         }
-        if ordered.count > seenLimit {
-            ordered.removeFirst(ordered.count - seenLimit)
+        if didAdd {
+            let overflow = entry.ordered.count - seenLimit
+            if overflow > 0 {
+                for value in entry.ordered.prefix(overflow) {
+                    if let id = parseMessageKey(value) {
+                        entry.ids.remove(id)
+                    }
+                }
+                entry.ordered.removeFirst(overflow)
+            }
+            seenCache[accountId] = entry
+            scheduleSeenFlushLocked(accountId: accountId)
         }
-        UserDefaults.standard.set(ordered, forKey: key("seen", accountId: accountId))
         lock.unlock()
     }
 
-    public static func isSeen(_ id: MessageId, in keys: Set<String>) -> Bool {
-        return keys.contains(messageKey(id))
+    /// Persist the seen list at most once every few seconds. Posts are marked as read while the
+    /// reader scrolls, and writing here means serialising the whole list — up to 12 000 strings
+    /// — into UserDefaults each time. The in-memory set is updated immediately, so filtering is
+    /// never stale; only the write to disk is batched. The caller must hold `lock`.
+    private static func scheduleSeenFlushLocked(accountId: Int64) {
+        guard !seenFlushScheduled.contains(accountId) else {
+            return
+        }
+        seenFlushScheduled.insert(accountId)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3.0) {
+            lock.lock()
+            seenFlushScheduled.remove(accountId)
+            let ordered = seenCache[accountId]?.ordered
+            lock.unlock()
+            if let ordered {
+                UserDefaults.standard.set(ordered, forKey: key("seen", accountId: accountId))
+            }
+        }
+    }
+
+    public static func isSeen(_ id: MessageId, in ids: Set<MessageId>) -> Bool {
+        return ids.contains(id)
     }
 }
 

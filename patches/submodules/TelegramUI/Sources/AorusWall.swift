@@ -142,6 +142,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// 2 = similar-to-those, 3 = similar-to-similar, and so on. Subscribed channels are
         /// not in here at all — they are collected separately and always rank first.
         private var sourceGeneration: [PeerId: Int] = [:]
+        /// Channels the reader has excluded. Held here as well as in the settings store so
+        /// that source selection — which runs outside the Postbox transaction — can honour it
+        /// without touching UserDefaults on every decision.
+        private var excludedPeerIds = Set<Int64>()
+
         /// Below this many unseen posts still ahead of the reader the feed counts as running
         /// dry and fetches another page; below the second, it also widens its sources.
         private static let prefetchThreshold = 40
@@ -192,6 +197,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.queue = queue
             self.context = context
             self.accountId = context.account.id.int64
+            // Before anything asks for a source: the exclusion list gates which channels may
+            // be recommended, preloaded or used as a seed at all.
+            self.applyExclusions()
             self.updateRecommendationsIfNeeded()
             self.reload(updateType: .Initial)
         }
@@ -261,7 +269,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 guard let self else {
                     return
                 }
-                let peerIds = Array((recommendedChannels?.channels.map(\.peer.id) ?? []).prefix(32))
+                let peerIds = Array((recommendedChannels?.channels.map(\.peer.id) ?? [])
+                    .filter { !self.isExcluded($0) }
+                    .prefix(32))
                 // Compare against the previous GLOBAL list, not against the whole source set.
                 // `recommendedPeerIds` also holds everything source expansion discovered, so it
                 // never equalled these 32 ids once a single expansion had happened — every
@@ -325,6 +335,33 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             }
         }
 
+        /// Take the exclusion list out of every part of the Wall at once.
+        ///
+        /// Filtering excluded channels only when a page is assembled is not enough. An excluded
+        /// channel still occupied a slot in the 512-source window and in the rotating scan
+        /// window, was still preloaded and polled over the network, and — most visibly — was
+        /// still used as a SEED, so its similar channels kept being pulled into the feed. The
+        /// reader excluded a channel and got more of the same. It is now removed from source
+        /// selection entirely; it stays in `discoveredRecommendationPeerIds` so expansion
+        /// cannot rediscover it through some other seed.
+        func applyExclusions() {
+            let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: self.accountId)
+            self.excludedPeerIds = excluded
+            guard !excluded.isEmpty else {
+                return
+            }
+            self.recommendedPeerIds.removeAll(where: { excluded.contains($0.toInt64()) })
+            self.globalRecommendedPeerIds.removeAll(where: { excluded.contains($0.toInt64()) })
+            for peerId in Array(self.sourceGeneration.keys) where excluded.contains(peerId.toInt64()) {
+                self.sourceGeneration.removeValue(forKey: peerId)
+            }
+            self.expandedSeeds = self.expandedSeeds.filter { !excluded.contains($0.toInt64()) }
+        }
+
+        private func isExcluded(_ peerId: PeerId) -> Bool {
+            return self.excludedPeerIds.contains(peerId.toInt64())
+        }
+
         /// Pull in more recommended CHANNELS, using channels already in the feed as seeds.
         /// Called when a page comes back with nothing new — the alternative (reaching further
         /// back in time) would just make the feed stale.
@@ -354,6 +391,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // similar-of-similar, indefinitely, so the feed has no natural end.
             var seedPool = Set(self.currentMessageIds.map(\.peerId))
             seedPool.formUnion(self.recommendedPeerIds)
+            // An excluded channel must not father recommendations either.
+            seedPool = seedPool.filter { !self.isExcluded($0) }
             // Prefer the closest sources first, so expansion drifts away from the reader's
             // interests as slowly as possible.
             let candidates = seedPool
@@ -390,7 +429,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 self.expansionDisposable = nil
                 let additions = (recommendedChannels?.channels.map(\.peer.id) ?? [])
-                    .filter { !self.discoveredRecommendationPeerIds.contains($0) }
+                    .filter { !self.discoveredRecommendationPeerIds.contains($0) && !self.isExcluded($0) }
                     .prefix(min(
                         Impl.maxExpansionAdditions,
                         max(0, Impl.maxRecommendedSources - self.recommendedPeerIds.count)
@@ -513,7 +552,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             }
             return self.context.account.postbox.transaction { transaction -> [Message] in
                 let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: accountId)
-                let seen = AorusWallSettingsStore.seenMessageKeys(accountId: accountId)
+                let seen = AorusWallSettingsStore.seenMessageIds(accountId: accountId)
                 let includeArchived = AorusWallSettingsStore.showArchived(accountId: accountId)
 
                 let channelFilter: (Peer) -> Bool = { peer in
@@ -650,11 +689,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 // newer distant sources to evict every subscribed post from a page.
                 var candidatesByRank: [Int: [PeerId: [(message: Message, score: Double)]]] = [:]
                 for (peerId, bucket) in buckets {
-                    // One post per channel in a page is intentional. With 24 subscribed and 24
-                    // recommended sources in each rotating scan there is enough breadth to fill
-                    // the page, while no busy channel can appear as a solid block. Older posts
-                    // from the same channel remain eligible on later pages.
-                    let quota = 1
+                    // One post per channel whenever there is breadth to fill the page: with 24
+                    // subscribed and 24 recommended sources in each rotating scan, no busy
+                    // channel can appear as a solid block, and its older posts stay eligible on
+                    // later pages. When few sources are available — recommendations switched
+                    // off, or a small account — a hard quota of one would return a five-post
+                    // page and make the reader wait through a fetch every screenful, so the
+                    // quota opens up exactly as far as the shortage requires.
+                    let quota = max(1, min(6, Impl.pageLimit / max(1, buckets.count)))
                     let best = bucket.messages
                         .sorted(by: { $0.score == $1.score ? $0.message.index > $1.message.index : $0.score > $1.score })
                         .prefix(quota)
@@ -1130,7 +1172,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.badgeDisposable?.dispose()
             self.badgeDisposable = (self.context.account.postbox.transaction { transaction -> Int in
                 let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: accountId)
-                let seen = AorusWallSettingsStore.seenMessageKeys(accountId: accountId)
+                let seen = AorusWallSettingsStore.seenMessageIds(accountId: accountId)
                 let includeArchived = AorusWallSettingsStore.showArchived(accountId: accountId)
 
                 let channelFilter: (Peer) -> Bool = { peer in
@@ -1283,7 +1325,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self?.applicationDidBecomeActive()
         })
 
-        let badgeTimer = Foundation.Timer(timeInterval: 20.0, repeats: true) { [weak self] _ in
+        // A minute is soon enough for a counter. At twenty seconds this ran a Postbox
+        // transaction three times a minute for the whole time the app was open, and the badge
+        // is refreshed anyway whenever the feed itself changes.
+        let badgeTimer = Foundation.Timer(timeInterval: 60.0, repeats: true) { [weak self] _ in
             self?.recountBadge()
         }
         self.badgeTimer = badgeTimer
@@ -1403,8 +1448,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         })
     }
 
+    /// Settings changed. Re-read the exclusion list first — it decides which channels may act
+    /// as sources at all — and only then rebuild the feed.
     private func reload() {
         self.impl.with { impl in
+            impl.applyExclusions()
             impl.reload(updateType: .Generic)
         }
     }

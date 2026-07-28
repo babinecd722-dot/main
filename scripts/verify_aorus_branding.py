@@ -1110,6 +1110,30 @@ def main() -> None:
         if forbidden in wall_text:
             err.append(f"Wall: obsolete pagination/ranking path is still present {forbidden}")
 
+    # An excluded channel must be gone from every stage, not merely filtered out of a page:
+    # it may not be recommended, preloaded, or used as a seed for similar channels.
+    for marker in (
+        "func applyExclusions()",
+        "seedPool = seedPool.filter { !self.isExcluded($0) }",
+        "!self.discoveredRecommendationPeerIds.contains($0) && !self.isExcluded($0)",
+        "impl.applyExclusions()",
+    ):
+        if marker not in wall_text:
+            err.append(f"Wall: channel exclusions are not enforced across sources — missing {marker}")
+
+    wall_settings = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusWallSettingsController.swift"
+    wall_settings_text = wall_settings.read_text(encoding="utf-8") if wall_settings.is_file() else ""
+    for marker in (
+        "private static var seenCache:",
+        "private static var excludedCache:",
+        "func seenMessageIds(accountId: Int64) -> Set<MessageId>",
+        "scheduleSeenFlushLocked(accountId: accountId)",
+    ):
+        if marker not in wall_settings_text:
+            err.append(f"Wall: settings store caching is missing {marker}")
+    if "return Set(UserDefaults.standard.stringArray(" in wall_settings_text:
+        err.append("Wall: seen lookups are reading UserDefaults on every call again")
+
     postbox = tg / "submodules" / "Postbox" / "Sources" / "Postbox.swift"
     postbox_text = postbox.read_text(encoding="utf-8") if postbox.is_file() else ""
     for marker in (
