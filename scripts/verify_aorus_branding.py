@@ -1084,10 +1084,36 @@ def main() -> None:
         "recommendedChannels(peerId: nil)",
         "for peerId in peerIds",
         "addAdditionalPreloadHistoryPeerId(peerId: peerId)",
+        "transaction.aorusWallMessages(",
+        "private var expansionPreloadDisposable = DisposableSet()",
+        "self.expansionPreloadDisposable = DisposableSet()",
+        "self?.expansionPreloadDisposable.remove(preload)",
+        "discoveredRecommendationPeerIds",
+        "var candidatesByRank:",
+        "appendTier((candidatesByRank[0] ?? []) + (candidatesByRank[1] ?? []))",
         "messages.sort(by: { $0.index < $1.index })",
     ):
         if marker not in wall_text:
             err.append(f"Wall: recommendation/top-to-bottom pipeline is missing {marker}")
+    for forbidden in (
+        "transaction.scanTopMessages(",
+        "private let expansionPreloadDisposable = DisposableSet()",
+        "page.sort(by: { $0.index > $1.index })",
+    ):
+        if forbidden in wall_text:
+            err.append(f"Wall: obsolete pagination/ranking path is still present {forbidden}")
+
+    postbox = tg / "submodules" / "Postbox" / "Sources" / "Postbox.swift"
+    postbox_text = postbox.read_text(encoding="utf-8") if postbox.is_file() else ""
+    for marker in (
+        "public func aorusWallMessages(",
+        "from: before",
+        "to: MessageIndex.lowerBound(peerId: peerId, namespace: namespace)",
+    ):
+        if marker not in postbox_text:
+            err.append(f"Wall: cursor-based Postbox pagination is missing {marker}")
+    if postbox_text.count("public func aorusWallMessages(") != 1:
+        err.append("Wall: cursor-based Postbox pagination must be injected exactly once")
 
     wall_title = tg / "submodules" / "TelegramUI" / "Sources" / "ChatControllerContentData.swift"
     wall_title_text = wall_title.read_text(encoding="utf-8") if wall_title.is_file() else ""

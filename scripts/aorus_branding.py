@@ -15392,6 +15392,62 @@ def patch_hide_tabs(tg: Path) -> None:
         print(f"HideTabs: WARNING — matched {n}/{len(edits)} anchors")
 
 
+def patch_wall_postbox_paging(tg: Path) -> None:
+    """Expose a bounded, cursor-based message fetch for the Wall.
+
+    Postbox.scanTopMessages always starts at the newest row and its callback only stops the
+    current 10-row batch. It therefore cannot implement deep pagination and performs the same
+    large scan on every Wall page. This small Transaction API keeps the table private while
+    letting the Wall start exactly at its current frontier.
+    """
+    path = tg / "submodules/Postbox/Sources/Postbox.swift"
+    if not path.is_file():
+        print("WallPaging: Postbox.swift not found — skip")
+        return
+
+    t = path.read_text(encoding="utf-8")
+    if "public func aorusWallMessages(" in t:
+        print("WallPaging: cursor API already patched")
+        return
+
+    anchor = (
+        "    public func scanTopMessages(peerId: PeerId, namespace: MessageId.Namespace, limit: Int, _ f: (Message) -> Bool) {\n"
+        "        assert(!self.disposed)\n"
+        "        self.postbox?.scanTopMessages(peerId: peerId, namespace: namespace, limit: limit, f)\n"
+        "    }\n"
+    )
+    replacement = (
+        "    // AorusGram: bounded cursor fetch for the Wall. Unlike scanTopMessages this starts\n"
+        "    // at the reader's frontier and can continue through arbitrarily old local history.\n"
+        "    public func aorusWallMessages(peerId: PeerId, namespace: MessageId.Namespace, before: MessageIndex, limit: Int) -> [Message] {\n"
+        "        assert(!self.disposed)\n"
+        "        guard limit > 0, before.id.peerId == peerId, before.id.namespace == namespace, let postbox = self.postbox else {\n"
+        "            return []\n"
+        "        }\n"
+        "        return postbox.messageHistoryTable.fetch(\n"
+        "            peerId: peerId,\n"
+        "            namespace: namespace,\n"
+        "            tag: nil,\n"
+        "            customTag: nil,\n"
+        "            threadId: nil,\n"
+        "            from: before,\n"
+        "            includeFrom: false,\n"
+        "            to: MessageIndex.lowerBound(peerId: peerId, namespace: namespace),\n"
+        "            ignoreMessagesInTimestampRange: nil,\n"
+        "            ignoreMessageIds: Set(),\n"
+        "            limit: limit\n"
+        "        ).map(postbox.renderIntermediateMessage(_:))\n"
+        "    }\n"
+        "\n"
+        + anchor
+    )
+    if anchor in t:
+        path.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
+        print("WallPaging: added bounded cursor API to Postbox.Transaction")
+    else:
+        print("WallPaging: WARNING — scanTopMessages anchor not found")
+
+
 def patch_wall_tab(tg: Path) -> None:
     """Add the native AorusGram Wall tab and wire its chat lifecycle."""
     account_context = tg / "submodules/AccountContext/Sources/ChatController.swift"
@@ -22084,6 +22140,7 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_share_button_translate(tg)
     patch_message_translate_button(tg)
+    patch_wall_postbox_paging(tg)
     patch_wall_post_actions(tg)
     patch_wall_fullscreen_media(tg)
     patch_wall_keep_settings_button(tg)

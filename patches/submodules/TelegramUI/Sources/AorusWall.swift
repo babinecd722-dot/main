@@ -131,8 +131,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         // feed is a seed for more. That keeps posts recent while making the feed effectively
         // bottomless.
         private var expansionDisposable: Disposable?
-        private let expansionPreloadDisposable = DisposableSet()
+        private var expansionPreloadDisposable = DisposableSet()
         private var expandedSeeds = Set<PeerId>()
+        /// Every recommendation source seen during the current settings session. This is kept
+        /// separately from the active 512-source window so evicted channels cannot be discovered
+        /// again through another seed and consume the window in a loop.
+        private var discoveredRecommendationPeerIds = Set<PeerId>()
         private static let maxRecommendedSources = 512
         /// How far a source is from the reader: 1 = Telegram's direct recommendations,
         /// 2 = similar-to-those, 3 = similar-to-similar, and so on. Subscribed channels are
@@ -146,8 +150,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// Page shape. The per-channel quotas live in collectPage; these bound the work.
         private static let pageLimit = 50
         private static let candidatesPerChannel = 24
-        private static let maxScanPerChannel = 800
         private static let maxFeedLength = 2000
+        private static let hardMaxFeedLength = 3000
+        private static let fetchBatchPerChannel = 64
+        private static let maxFetchPerChannel = 256
 
         /// How far below the frontier a page may reach, in seconds. It starts narrow so the
         /// top of the feed is current, and widens when a page comes back empty so the feed
@@ -229,7 +235,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.expansionDisposable?.dispose()
                 self.expansionDisposable = nil
                 self.expansionPreloadDisposable.dispose()
+                self.expansionPreloadDisposable = DisposableSet()
                 self.expandedSeeds.removeAll()
+                self.discoveredRecommendationPeerIds.removeAll()
                 self.sourceGeneration.removeAll()
             }
 
@@ -261,10 +269,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 // which is exactly why the same channels kept coming round.
                 var mergedPeerIds = peerIds
                 let global = Set(peerIds)
-                for peerId in self.recommendedPeerIds where !global.contains(peerId) {
+                for peerId in self.recommendedPeerIds where
+                    !global.contains(peerId) && mergedPeerIds.count < Impl.maxRecommendedSources {
                     mergedPeerIds.append(peerId)
                 }
                 self.recommendedPeerIds = mergedPeerIds
+                self.discoveredRecommendationPeerIds.formUnion(peerIds)
                 // Telegram's own recommendations are the closest sources there are.
                 for peerId in peerIds {
                     self.sourceGeneration[peerId] = 1
@@ -353,7 +363,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // Always take the closest unused seed. Used seeds are already excluded above, so
             // a rotating cursor would only defeat the ordering by jumping to a distant one.
             let seed = candidates[0]
-            let seedGeneration = self.sourceGeneration[seed] ?? 0
+            // A subscribed channel is rank 0 in the feed, but channels similar to it are not
+            // direct Telegram recommendations. Start expansion at rank 2 for both subscribed
+            // seeds and direct recommendation seeds.
+            let seedGeneration = max(1, self.sourceGeneration[seed] ?? 1)
             self.expandedSeeds.insert(seed)
 
             // Kick the fetch, then wait for the cache to actually hold something. These are
@@ -370,9 +383,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 self.expansionDisposable = nil
-                let known = Set(self.recommendedPeerIds)
                 let additions = (recommendedChannels?.channels.map(\.peer.id) ?? [])
-                    .filter { !known.contains($0) }
+                    .filter { !self.discoveredRecommendationPeerIds.contains($0) }
                     .prefix(max(0, Impl.maxRecommendedSources - self.recommendedPeerIds.count))
                 guard !additions.isEmpty else {
                     // This seed only suggested channels we already have. Move on to the next
@@ -382,6 +394,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     return
                 }
                 self.recommendedPeerIds.append(contentsOf: additions)
+                self.discoveredRecommendationPeerIds.formUnion(additions)
                 // Preloading is only needed to pull a channel's recent history INTO the local
                 // database; once it lands the posts stay there and are collected from disk.
                 // Holding these subscriptions forever would leave hundreds of channels being
@@ -393,8 +406,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     preload.add(self.context.account.addAdditionalPreloadHistoryPeerId(peerId: peerId))
                 }
                 self.expansionPreloadDisposable.add(preload)
-                self.queue.after(60.0) { [weak preload] in
-                    preload?.dispose()
+                self.queue.after(60.0) { [weak self, weak preload] in
+                    guard let preload else {
+                        return
+                    }
+                    self?.expansionPreloadDisposable.remove(preload)
+                    preload.dispose()
                 }
                 // Their history has to arrive over the network before it can be collected, so
                 // re-check twice: once quickly, and once late enough that a slow connection
@@ -519,27 +536,62 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
                 func gather(peerId: PeerId, rank: Int, readState: CombinedPeerReadState?) {
                     var collected: [(message: Message, score: Double)] = []
-                    transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: Impl.maxScanPerChannel) { message in
-                        if message.timestamp < floor {
-                            // Below this page's window. Everything further down is older still,
-                            // so stop instead of walking the channel's whole history — this is
-                            // what keeps a page cheap no matter how many sources there are.
-                            return false
+                    var fromIndex = MessageIndex.upperBound(
+                        peerId: peerId,
+                        timestamp: ceiling,
+                        namespace: Namespaces.Message.Cloud
+                    )
+                    var fetchedCount = 0
+                    var reachedFloor = false
+
+                    // Fetch from this page's frontier, not from the top of the channel. The old
+                    // scanTopMessages path restarted at the newest post on every page, scanned
+                    // all 800 rows even after its callback returned false, and could never reach
+                    // history older than those 800 rows.
+                    while collected.count < Impl.candidatesPerChannel
+                        && fetchedCount < Impl.maxFetchPerChannel
+                        && !reachedFloor {
+                        let batch = transaction.aorusWallMessages(
+                            peerId: peerId,
+                            namespace: Namespaces.Message.Cloud,
+                            before: fromIndex,
+                            limit: min(
+                                Impl.fetchBatchPerChannel,
+                                Impl.maxFetchPerChannel - fetchedCount
+                            )
+                        )
+                        guard !batch.isEmpty else {
+                            break
                         }
-                        if let frontier, !(message.index < frontier) {
-                            return true
+                        fetchedCount += batch.count
+
+                        for message in batch {
+                            if message.timestamp < floor {
+                                reachedFloor = true
+                                break
+                            }
+                            if let frontier, !(message.index < frontier) {
+                                continue
+                            }
+                            if let readState, readState.isIncomingMessageIndexRead(message.index) {
+                                continue
+                            }
+                            if AorusWallSettingsStore.isSeen(message.id, in: seen) || placed.contains(message.id) {
+                                continue
+                            }
+                            guard uniqueIds.insert(message.id).inserted else {
+                                continue
+                            }
+                            collected.append((message, aorusWallPostScore(message, now: now)))
+                            if collected.count >= Impl.candidatesPerChannel {
+                                break
+                            }
                         }
-                        if let readState, readState.isIncomingMessageIndexRead(message.index) {
-                            return true
+
+                        guard let last = batch.last, last.index < fromIndex else {
+                            break
                         }
-                        if AorusWallSettingsStore.isSeen(message.id, in: seen) || placed.contains(message.id) {
-                            return true
-                        }
-                        guard uniqueIds.insert(message.id).inserted else {
-                            return true
-                        }
-                        collected.append((message, aorusWallPostScore(message, now: now)))
-                        return collected.count < Impl.candidatesPerChannel
+                        fromIndex = last.index
                     }
                     if !collected.isEmpty {
                         buckets[peerId] = (rank, collected)
@@ -562,11 +614,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     gather(peerId: peerId, rank: max(1, sourceGeneration[peerId] ?? 1), readState: nil)
                 }
 
-                // Each channel contributes only its best few, and closer sources contribute
-                // more than distant ones. This quota is what stops the feed from being the
-                // same seven channels over and over, and it is what keeps subscribed and
-                // directly recommended channels ranked above the similar-of-similar chain.
-                var page: [Message] = []
+                // Each channel contributes only its best few. Selection then happens by source
+                // tier: subscribed + Telegram's direct recommendations first, followed by
+                // similar channels, then similar-of-similar generation by generation. Sorting
+                // only by timestamp before truncating (the previous implementation) allowed
+                // newer distant sources to evict every subscribed post from a page.
+                var candidatesByRank: [Int: [(message: Message, score: Double)]] = [:]
                 for (_, bucket) in buckets {
                     let quota: Int
                     switch bucket.rank {
@@ -577,16 +630,33 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     let best = bucket.messages
                         .sorted(by: { $0.score == $1.score ? $0.message.index > $1.message.index : $0.score > $1.score })
                         .prefix(quota)
-                    page.append(contentsOf: best.map(\.message))
+                    candidatesByRank[bucket.rank, default: []].append(contentsOf: best)
                 }
 
-                // Keep the newest of what survived, so the page continues right where the
-                // reader is rather than skipping across weeks, then hand it back in the index
-                // order the list requires.
-                page.sort(by: { $0.index > $1.index })
-                if page.count > Impl.pageLimit {
-                    page.removeLast(page.count - Impl.pageLimit)
+                var page: [Message] = []
+
+                func appendTier(_ candidates: [(message: Message, score: Double)]) {
+                    guard page.count < Impl.pageLimit else {
+                        return
+                    }
+                    let remaining = Impl.pageLimit - page.count
+                    let ordered = candidates.sorted(by: {
+                        $0.score == $1.score
+                            ? $0.message.index > $1.message.index
+                            : $0.score > $1.score
+                    })
+                    page.append(contentsOf: ordered.prefix(remaining).map(\.message))
                 }
+
+                // Rank 0 and 1 are the user's priority set and compete by post quality. More
+                // distant generations are considered only if that set leaves room.
+                appendTier((candidatesByRank[0] ?? []) + (candidatesByRank[1] ?? []))
+                for rank in candidatesByRank.keys.filter({ $0 >= 2 }).sorted() {
+                    appendTier(candidatesByRank[rank] ?? [])
+                }
+
+                // The priority decision is complete. Hand the selected entries to Telegram in
+                // the strict MessageIndex order required by mergeListsStableWithUpdates.
                 page.sort(by: { $0.index < $1.index })
                 return page
             }
@@ -630,12 +700,44 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 messages.sort(by: { $0.index < $1.index })
             }
 
-            if messages.count > Impl.maxFeedLength && !self.isVisible {
-                // Bound memory, but only while the Wall is not on screen. Dropping entries from
-                // the newest end means deleting rows above the viewport, and a deletion above
-                // the viewport is exactly the kind of thing that shifts the list under a
-                // reader — so it is never done while they are looking at it.
-                messages.removeLast(messages.count - Impl.maxFeedLength)
+            if messages.count > Impl.maxFeedLength {
+                if self.isVisible, let frontier = self.readerFrontier {
+                    var removeIds = Set<MessageId>()
+                    var excess = messages.count - Impl.maxFeedLength
+
+                    // First prune only posts that are fully read, above the viewport and no
+                    // longer visible. Stable ids let Telegram preserve the current anchor.
+                    for message in messages.reversed() where excess > 0 {
+                        guard message.index > frontier,
+                              !self.previousVisibleMessageIds.contains(message.id),
+                              self.markedInCurrentView.contains(message.id) else {
+                            continue
+                        }
+                        removeIds.insert(message.id)
+                        excess -= 1
+                    }
+
+                    // A reader can fling faster than the seen timer. Keep a generous emergency
+                    // margin, but never let one uninterrupted session grow without bound.
+                    if messages.count - removeIds.count > Impl.hardMaxFeedLength {
+                        var hardExcess = messages.count - removeIds.count - Impl.hardMaxFeedLength
+                        for message in messages.reversed() where hardExcess > 0 {
+                            guard message.index > frontier,
+                                  !self.previousVisibleMessageIds.contains(message.id),
+                                  !removeIds.contains(message.id) else {
+                                continue
+                            }
+                            removeIds.insert(message.id)
+                            hardExcess -= 1
+                        }
+                    }
+                    if !removeIds.isEmpty {
+                        messages.removeAll(where: { removeIds.contains($0.id) })
+                    }
+                } else {
+                    // Off-screen there is no viewport anchor to preserve.
+                    messages.removeLast(messages.count - Impl.maxFeedLength)
+                }
             }
 
             let entries = messages.map {
@@ -989,12 +1091,20 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     guard scanLimit > 0 else {
                         continue
                     }
-                    transaction.scanTopMessages(peerId: peerId, namespace: Namespaces.Message.Cloud, limit: scanLimit) { message in
+                    let messages = transaction.aorusWallMessages(
+                        peerId: peerId,
+                        namespace: Namespaces.Message.Cloud,
+                        before: MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud),
+                        limit: scanLimit
+                    )
+                    for message in messages {
                         if !readState.isIncomingMessageIndexRead(message.index)
                             && !AorusWallSettingsStore.isSeen(message.id, in: seen) {
                             count += 1
                         }
-                        return count < 999
+                        if count >= 999 {
+                            break
+                        }
                     }
                     if count >= 999 {
                         break
