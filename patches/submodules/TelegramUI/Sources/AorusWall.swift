@@ -138,8 +138,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// 2 = similar-to-those, 3 = similar-to-similar, and so on. Subscribed channels are
         /// not in here at all — they are collected separately and always rank first.
         private var sourceGeneration: [PeerId: Int] = [:]
-        /// Below this many unseen posts we consider the feed to be running dry.
-        private static let prefetchThreshold = 12
+        /// Below this many unseen posts still ahead of the reader the feed counts as running
+        /// dry and fetches another page; below the second, it also widens its sources.
+        private static let prefetchThreshold = 40
+        private static let expansionThreshold = 20
 
         /// Page shape. The per-channel quotas live in collectPage; these bound the work.
         private static let pageLimit = 50
@@ -628,9 +630,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 messages.sort(by: { $0.index < $1.index })
             }
 
-            if messages.count > Impl.maxFeedLength {
-                // The newest end is the top of the feed, thousands of posts behind a reader who
-                // has come this far. Nothing near the viewport is touched.
+            if messages.count > Impl.maxFeedLength && !self.isVisible {
+                // Bound memory, but only while the Wall is not on screen. Dropping entries from
+                // the newest end means deleting rows above the viewport, and a deletion above
+                // the viewport is exactly the kind of thing that shifts the list under a
+                // reader — so it is never done while they are looking at it.
                 messages.removeLast(messages.count - Impl.maxFeedLength)
             }
 
@@ -764,21 +768,44 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.topUp(force: true)
         }
 
+        /// How many posts are still waiting BELOW the reader — the only number that says
+        /// whether the feed is about to run out under them. Counting the whole feed instead
+        /// (as this used to) counts everything they have already scrolled past, so the buffer
+        /// always looked full and nothing was ever fetched until they hit the very bottom.
+        private var remainingBelowReader: Int {
+            guard let frontier = self.readerFrontier else {
+                return 0
+            }
+            var count = 0
+            for (id, message) in self.currentMessages {
+                if message.index < frontier && !self.markedInCurrentView.contains(id) {
+                    count += 1
+                }
+            }
+            return count
+        }
+
         /// Extend the feed downwards, below everything the reader can see.
         ///
-        /// `force` bypasses the "is the buffer low" check and is used when the reader has
-        /// actually reached the bottom.
+        /// `force` bypasses the buffer check and is used when the reader has actually reached
+        /// the bottom.
         private func topUp(force: Bool) {
             guard self.loadDisposable == nil, self.loadMoreDisposable == nil, !self.isPrefetching else {
                 return
             }
             if !force {
-                let unseen = self.currentMessageIds.filter { !self.markedInCurrentView.contains($0) }.count
-                guard unseen <= Impl.prefetchThreshold else {
+                guard self.remainingBelowReader <= Impl.prefetchThreshold else {
                     return
                 }
             }
-            self.lastLoadMoreMarkedCount = self.markedInCurrentView.count
+            // Widen the SOURCES while the reader still has road ahead of them. Waiting for an
+            // empty page — which is what this used to do — is far too late: by then the reader
+            // is deep in time, and a channel discovered at that point only has recent posts,
+            // all of them NEWER than where they are, so not one of them can be shown. Adding
+            // sources early is what actually keeps the feed going.
+            if self.remainingBelowReader <= Impl.expansionThreshold {
+                self.expandRecommendationSources()
+            }
             self.isPrefetching = true
             let span = self.windowSpan
             self.loadMoreDisposable = (self.collectPage(frontier: self.readerFrontier, span: span)
@@ -814,7 +841,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             guard self.prefetchTimer == nil else {
                 return
             }
-            let timer = SwiftSignalKit.Timer(timeout: 20.0, repeat: true, completion: { [weak self] in
+            let timer = SwiftSignalKit.Timer(timeout: 8.0, repeat: true, completion: { [weak self] in
                 guard let self, self.isVisible else {
                     return
                 }
