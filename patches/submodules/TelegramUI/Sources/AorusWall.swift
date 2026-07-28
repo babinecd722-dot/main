@@ -7,6 +7,8 @@ import AccountContext
 import Display
 import AorusGramUI
 
+private let aorusWallExcludePeerRequested = Notification.Name("aorusgram.wallExcludePeerRequested")
+
 // The tab bar renders a plain image with `tintColor: nil` (only Lottie-backed stock tabs get
 // themed), so a template image would fall back to the inherited tint and always look white.
 // Bake the colour in instead and hand back an `.alwaysOriginal` image, regenerating it
@@ -906,7 +908,16 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 guard let existing = self.currentMessages[id] else {
                     continue
                 }
-                if existing.stableVersion != message.stableVersion {
+                let existingReactions = existing.effectiveReactions(
+                    isTags: existing.areReactionsTags(accountPeerId: self.context.account.peerId)
+                )
+                let updatedReactions = message.effectiveReactions(
+                    isTags: message.areReactionsTags(accountPeerId: self.context.account.peerId)
+                )
+                // Telegram writes PendingReactionsMessageAttribute before the request reaches
+                // the server. Compare that effective state explicitly: stableVersion alone
+                // can miss the optimistic update, leaving the tap invisible until Refresh.
+                if existing.stableVersion != message.stableVersion || existingReactions != updatedReactions {
                     self.currentMessages[id] = message
                     didChange = true
                 }
@@ -1110,22 +1121,24 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.publishCurrentBadge()
         }
 
-        func updateVisibleMessageIds(_ ids: Set<MessageId>, timestamp: Double) {
+        func updateVisibleMessageIds(_ readableIds: Set<MessageId>, liveIds: Set<MessageId>, timestamp: Double) {
             guard self.isVisible else {
                 self.lastVisibilityTimestamp = nil
                 self.previousVisibleMessageIds.removeAll()
                 return
             }
+            // Every on-screen post is live, including a partially visible one whose reaction
+            // row can already be tapped. Read tracking remains stricter and uses readableIds.
+            self.observeVisibleMessages(liveIds)
             guard let previousTimestamp = self.lastVisibilityTimestamp else {
                 self.lastVisibilityTimestamp = timestamp
-                self.previousVisibleMessageIds = ids
+                self.previousVisibleMessageIds = readableIds
                 return
             }
             self.lastVisibilityTimestamp = timestamp
             let elapsed = min(max(timestamp - previousTimestamp, 0.0), 0.4)
-            let continuouslyVisibleIds = ids.intersection(self.previousVisibleMessageIds)
-            self.previousVisibleMessageIds = ids
-            self.observeVisibleMessages(ids)
+            let continuouslyVisibleIds = readableIds.intersection(self.previousVisibleMessageIds)
+            self.previousVisibleMessageIds = readableIds
             guard elapsed > 0.0 else {
                 return
             }
@@ -1288,7 +1301,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     private var latestBadge: Int = 0
     private var badgeTimer: Foundation.Timer?
     private var visibilityTimer: Foundation.Timer?
-    private var visibleMessagesProvider: (() -> Set<MessageId>)?
+    private var visibleMessagesProvider: (() -> (live: Set<MessageId>, readable: Set<MessageId>))?
     private var navigationSearchingDisposable: Disposable?
     private var observers: [NSObjectProtocol] = []
 
@@ -1316,6 +1329,18 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             queue: .main
         ) { [weak self] _ in
             self?.reload()
+        })
+        self.observers.append(NotificationCenter.default.addObserver(
+            forName: aorusWallExcludePeerRequested,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let accountId = (notification.userInfo?["accountId"] as? NSNumber)?.int64Value,
+                  accountId == context.account.id.int64,
+                  let peerId = (notification.userInfo?["peerId"] as? NSNumber)?.int64Value else {
+                return
+            }
+            AorusWallSettingsStore.addExcludedPeer(peerId, accountId: accountId)
         })
         self.observers.append(NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
@@ -1368,7 +1393,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     public func hashtagSearchUpdate(query: String) {
     }
 
-    public func setVisible(_ value: Bool, visibleMessages: (() -> Set<MessageId>)? = nil) {
+    public func setVisible(
+        _ value: Bool,
+        visibleMessages: (() -> (live: Set<MessageId>, readable: Set<MessageId>))? = nil
+    ) {
         self.visibilityTimer?.invalidate()
         self.visibilityTimer = nil
         self.visibleMessagesProvider = value ? visibleMessages : nil
@@ -1380,7 +1408,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 let ids = visibleMessagesProvider()
                 let timestamp = ProcessInfo.processInfo.systemUptime
                 self.impl.with { impl in
-                    impl.updateVisibleMessageIds(ids, timestamp: timestamp)
+                    impl.updateVisibleMessageIds(ids.readable, liveIds: ids.live, timestamp: timestamp)
                 }
             }
             self.visibilityTimer = timer

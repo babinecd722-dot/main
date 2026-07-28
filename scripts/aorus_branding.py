@@ -15872,9 +15872,10 @@ def patch_wall_tab(tg: Path) -> None:
                 "        if case let .customChatContents(contents) = self.subject, let aorusWall = contents as? AorusWallChatContents {\n"
                 "            aorusWall.setVisible(true, visibleMessages: { [weak self] in\n"
                 "                guard let self else {\n"
-                "                    return Set()\n"
+                "                    return (live: Set(), readable: Set())\n"
                 "                }\n"
-                "                var result = Set<MessageId>()\n"
+                "                var liveResult = Set<MessageId>()\n"
+                "                var readableResult = Set<MessageId>()\n"
                 "                let viewportHeight = max(1.0, self.chatDisplayNode.historyNode.bounds.height)\n"
                 "                self.chatDisplayNode.historyNode.forEachVisibleItemNode { itemNode in\n"
                 "                    guard let itemNode = itemNode as? ChatMessageItemView,\n"
@@ -15882,16 +15883,19 @@ def patch_wall_tab(tg: Path) -> None:
                 "                          case let .visible(fraction, _) = itemNode.visibility else {\n"
                 "                        return\n"
                 "                    }\n"
+                "                    for (message, _) in item.content {\n"
+                "                        liveResult.insert(message.id)\n"
+                "                    }\n"
                 "                    let itemHeight = max(1.0, itemNode.bounds.height)\n"
                 "                    let requiredFraction = max(0.2, min(0.65, viewportHeight * 0.55 / itemHeight))\n"
                 "                    guard fraction >= requiredFraction else {\n"
                 "                        return\n"
                 "                    }\n"
                 "                    for (message, _) in item.content {\n"
-                "                        result.insert(message.id)\n"
+                "                        readableResult.insert(message.id)\n"
                 "                    }\n"
                 "                }\n"
-                "                return result\n"
+                "                return (live: liveResult, readable: readableResult)\n"
                 "            })\n"
                 "            // AorusGram: pull-to-refresh for the Wall — fires when the list is\n"
                 "            // overscrolled past its leading edge and released. Free to use here:\n"
@@ -15914,6 +15918,71 @@ def patch_wall_tab(tg: Path) -> None:
                 print("Wall: visible posts lifecycle integrated")
             else:
                 print("Wall: WARNING — viewDidAppear anchor not found")
+
+        # CI restores an already-branded Telegram checkout from cache. Migrate the old
+        # single-set visibility provider too: readable posts keep the strict dwell threshold,
+        # while every actually visible post is observed for reactions and counters.
+        t = chat_controller.read_text(encoding="utf-8")
+        if "aorusWall.setVisible(true, visibleMessages:" in t and "var liveResult = Set<MessageId>()" not in t:
+            old_provider = (
+                "            aorusWall.setVisible(true, visibleMessages: { [weak self] in\n"
+                "                guard let self else {\n"
+                "                    return Set()\n"
+                "                }\n"
+                "                var result = Set<MessageId>()\n"
+                "                let viewportHeight = max(1.0, self.chatDisplayNode.historyNode.bounds.height)\n"
+                "                self.chatDisplayNode.historyNode.forEachVisibleItemNode { itemNode in\n"
+                "                    guard let itemNode = itemNode as? ChatMessageItemView,\n"
+                "                          let item = itemNode.item,\n"
+                "                          case let .visible(fraction, _) = itemNode.visibility else {\n"
+                "                        return\n"
+                "                    }\n"
+                "                    let itemHeight = max(1.0, itemNode.bounds.height)\n"
+                "                    let requiredFraction = max(0.2, min(0.65, viewportHeight * 0.55 / itemHeight))\n"
+                "                    guard fraction >= requiredFraction else {\n"
+                "                        return\n"
+                "                    }\n"
+                "                    for (message, _) in item.content {\n"
+                "                        result.insert(message.id)\n"
+                "                    }\n"
+                "                }\n"
+                "                return result\n"
+                "            })\n"
+            )
+            new_provider = (
+                "            aorusWall.setVisible(true, visibleMessages: { [weak self] in\n"
+                "                guard let self else {\n"
+                "                    return (live: Set(), readable: Set())\n"
+                "                }\n"
+                "                var liveResult = Set<MessageId>()\n"
+                "                var readableResult = Set<MessageId>()\n"
+                "                let viewportHeight = max(1.0, self.chatDisplayNode.historyNode.bounds.height)\n"
+                "                self.chatDisplayNode.historyNode.forEachVisibleItemNode { itemNode in\n"
+                "                    guard let itemNode = itemNode as? ChatMessageItemView,\n"
+                "                          let item = itemNode.item,\n"
+                "                          case let .visible(fraction, _) = itemNode.visibility else {\n"
+                "                        return\n"
+                "                    }\n"
+                "                    for (message, _) in item.content {\n"
+                "                        liveResult.insert(message.id)\n"
+                "                    }\n"
+                "                    let itemHeight = max(1.0, itemNode.bounds.height)\n"
+                "                    let requiredFraction = max(0.2, min(0.65, viewportHeight * 0.55 / itemHeight))\n"
+                "                    guard fraction >= requiredFraction else {\n"
+                "                        return\n"
+                "                    }\n"
+                "                    for (message, _) in item.content {\n"
+                "                        readableResult.insert(message.id)\n"
+                "                    }\n"
+                "                }\n"
+                "                return (live: liveResult, readable: readableResult)\n"
+                "            })\n"
+            )
+            if old_provider in t:
+                chat_controller.write_text(t.replace(old_provider, new_provider, 1), encoding="utf-8")
+                print("Wall: migrated cached live/read visibility tracking")
+            else:
+                print("Wall: WARNING — cached visibility provider anchor not found")
 
         t = chat_controller.read_text(encoding="utf-8")
         if "aorusWall.setVisible(false)" not in t:
@@ -20626,6 +20695,176 @@ def patch_message_translate_button(tg: Path) -> None:
     print("MsgTranslateBtn: injected per-message translate/transcribe button")
 
 
+def patch_wall_exclusion_swipe(tg: Path) -> None:
+    """Turn the Wall's message swipe into a native channel-exclusion action.
+
+    Ordinary chats keep Telegram's reply swipe unchanged. The bubble component cannot import
+    AorusGramUI without creating a dependency cycle, so it emits a narrowly-scoped notification;
+    AorusWallChatContents owns the settings mutation and live feed rebuild.
+    """
+    swipe_node = (
+        tg
+        / "submodules"
+        / "TelegramUI"
+        / "Components"
+        / "Chat"
+        / "ChatMessageSwipeToReplyNode"
+        / "Sources"
+        / "ChatMessageSwipeToReplyNode.swift"
+    )
+    bubble_node = (
+        tg
+        / "submodules"
+        / "TelegramUI"
+        / "Components"
+        / "Chat"
+        / "ChatMessageBubbleItemNode"
+        / "Sources"
+        / "ChatMessageBubbleItemNode.swift"
+    )
+    if not swipe_node.is_file() or not bubble_node.is_file():
+        print("WallExcludeSwipe: required chat components not found — skip")
+        return
+
+    t = swipe_node.read_text(encoding="utf-8")
+    if "case aorusWallExclude" not in t:
+        enum_anchor = (
+            "        case reply\n"
+            "        case like\n"
+            "        case unlike\n"
+        )
+        enum_replacement = enum_anchor + "        case aorusWallExclude\n"
+        switch_anchor = "            case .like, .unlike:\n"
+        switch_replacement = (
+            "            case .aorusWallExclude:\n"
+            "                break\n"
+            "            case .like, .unlike:\n"
+        )
+        image_anchor = (
+            "        })\n"
+            "        \n"
+            "        self.maskNode = ASDisplayNode()\n"
+        )
+        image_replacement = (
+            "        })\n"
+            "        if case .aorusWallExclude = action {\n"
+            "            let configuration = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)\n"
+            "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
+            "                .withTintColor(foregroundColor, renderingMode: .alwaysOriginal)\n"
+            "        }\n"
+            "        \n"
+            "        self.maskNode = ASDisplayNode()\n"
+        )
+        if enum_anchor in t and switch_anchor in t and image_anchor in t:
+            t = t.replace(enum_anchor, enum_replacement, 1)
+            t = t.replace(switch_anchor, switch_replacement, 1)
+            t = t.replace(image_anchor, image_replacement, 1)
+            swipe_node.write_text(t, encoding="utf-8")
+            print("WallExcludeSwipe: native crossed-circle swipe icon added")
+        else:
+            print("WallExcludeSwipe: WARNING — swipe icon anchors not found")
+    else:
+        print("WallExcludeSwipe: swipe icon already patched")
+
+    t = bubble_node.read_text(encoding="utf-8")
+    if "aorusWallExcludeSwipe" not in t:
+        property_anchor = "    private var currentSwipeAction: ChatControllerInteractionSwipeAction?\n"
+        property_replacement = (
+            property_anchor
+            + "    private var aorusWallExcludeSwipe = false\n"
+        )
+        begin_anchor = (
+            "            if let strongSelf = self, let item = strongSelf.item {\n"
+            "                if strongSelf.selectionNode != nil {\n"
+        )
+        begin_replacement = (
+            "            if let strongSelf = self, let item = strongSelf.item {\n"
+            "                strongSelf.aorusWallExcludeSwipe = false\n"
+            "                if strongSelf.selectionNode != nil {\n"
+        )
+        wall_anchor = (
+            "                if case let .replyThread(replyThreadMessage) = item.chatLocation, replyThreadMessage.isChannelPost, replyThreadMessage.peerId != item.content.firstMessage.id.peerId {\n"
+            "                    return false\n"
+            "                }\n"
+            "                \n"
+            "                let action = item.controllerInteraction.canSetupReply(item.message)\n"
+        )
+        wall_replacement = (
+            "                if case let .replyThread(replyThreadMessage) = item.chatLocation, replyThreadMessage.isChannelPost, replyThreadMessage.peerId != item.content.firstMessage.id.peerId {\n"
+            "                    return false\n"
+            "                }\n"
+            "                \n"
+            "                if case let .customChatContents(contents) = item.associatedData.subject, contents.aorusIsWall {\n"
+            "                    strongSelf.aorusWallExcludeSwipe = true\n"
+            "                    strongSelf.currentSwipeAction = nil\n"
+            "                    return true\n"
+            "                }\n"
+            "                \n"
+            "                let action = item.controllerInteraction.canSetupReply(item.message)\n"
+        )
+        node_anchor = (
+            "                    let swipeToReplyNode = ChatMessageSwipeToReplyNode(fillColor: selectDateFillStaticColor(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper), enableBlur: item.controllerInteraction.enableFullTranslucency && dateFillNeedsBlur(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper), foregroundColor: bubbleVariableColor(variableColor: item.presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: item.presentationData.theme.wallpaper), backgroundNode: item.controllerInteraction.presentationContext.backgroundNode, action: ChatMessageSwipeToReplyNode.Action(self.currentSwipeAction))\n"
+        )
+        node_replacement = (
+            "                    let swipeAction: ChatMessageSwipeToReplyNode.Action = self.aorusWallExcludeSwipe ? .aorusWallExclude : ChatMessageSwipeToReplyNode.Action(self.currentSwipeAction)\n"
+            "                    let swipeToReplyNode = ChatMessageSwipeToReplyNode(fillColor: selectDateFillStaticColor(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper), enableBlur: item.controllerInteraction.enableFullTranslucency && dateFillNeedsBlur(theme: item.presentationData.theme.theme, wallpaper: item.presentationData.theme.wallpaper), foregroundColor: bubbleVariableColor(variableColor: item.presentationData.theme.theme.chat.message.shareButtonForegroundColor, wallpaper: item.presentationData.theme.wallpaper), backgroundNode: item.controllerInteraction.presentationContext.backgroundNode, action: swipeAction)\n"
+        )
+        action_anchor = (
+            "                    if let item = self.item {\n"
+            "                        if let currentSwipeAction = currentSwipeAction {\n"
+            "                            switch currentSwipeAction {\n"
+            "                            case .none:\n"
+            "                                break\n"
+            "                            case .reply:\n"
+            "                                item.controllerInteraction.setupReply(item.message.id)\n"
+            "                            }\n"
+            "                        }\n"
+            "                    }\n"
+        )
+        action_replacement = (
+            "                    if let item = self.item {\n"
+            "                        if self.aorusWallExcludeSwipe {\n"
+            "                            NotificationCenter.default.post(\n"
+            "                                name: Notification.Name(\"aorusgram.wallExcludePeerRequested\"),\n"
+            "                                object: nil,\n"
+            "                                userInfo: [\n"
+            "                                    \"accountId\": NSNumber(value: item.context.account.id.int64),\n"
+            "                                    \"peerId\": NSNumber(value: item.message.id.peerId.toInt64())\n"
+            "                                ]\n"
+            "                            )\n"
+            "                        } else if let currentSwipeAction = currentSwipeAction {\n"
+            "                            switch currentSwipeAction {\n"
+            "                            case .none:\n"
+            "                                break\n"
+            "                            case .reply:\n"
+            "                                item.controllerInteraction.setupReply(item.message.id)\n"
+            "                            }\n"
+            "                        }\n"
+            "                    }\n"
+            "                    self.aorusWallExcludeSwipe = false\n"
+        )
+        anchors = (
+            property_anchor,
+            begin_anchor,
+            wall_anchor,
+            node_anchor,
+            action_anchor,
+        )
+        if all(anchor in t for anchor in anchors):
+            t = t.replace(property_anchor, property_replacement, 1)
+            t = t.replace(begin_anchor, begin_replacement, 1)
+            t = t.replace(wall_anchor, wall_replacement, 1)
+            t = t.replace(node_anchor, node_replacement, 1)
+            t = t.replace(action_anchor, action_replacement, 1)
+            bubble_node.write_text(t, encoding="utf-8")
+            print("WallExcludeSwipe: Wall-only exclusion gesture integrated")
+        else:
+            missing = [index for index, anchor in enumerate(anchors, start=1) if anchor not in t]
+            print(f"WallExcludeSwipe: WARNING — bubble anchors missing {missing}")
+    else:
+        print("WallExcludeSwipe: bubble already patched")
+
+
 def patch_wall_allow_reactions(tg: Path) -> None:
     """Let reactions work on Wall posts, at the source of the permission check.
 
@@ -22381,6 +22620,7 @@ def main() -> None:
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
     patch_wall_tab(tg)
+    patch_wall_exclusion_swipe(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

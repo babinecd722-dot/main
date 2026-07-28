@@ -1207,6 +1207,13 @@ def main() -> None:
     wall_contents_text = wall_contents.read_text(encoding="utf-8") if wall_contents.is_file() else ""
     if "public let aorusIsWall = true" not in wall_contents_text:
         err.append("Wall: AorusWallChatContents does not expose the shared Wall marker")
+    for marker in (
+        "existingReactions != updatedReactions",
+        "aorusgram.wallExcludePeerRequested",
+        "AorusWallSettingsStore.addExcludedPeer(peerId, accountId: accountId)",
+    ):
+        if marker not in wall_contents_text:
+            err.append(f"Wall: live reaction/exclusion pipeline is missing {marker}")
 
     wall_node = tg / "submodules" / "TelegramUI" / "Sources" / "ChatControllerNode.swift"
     wall_node_text = wall_node.read_text(encoding="utf-8") if wall_node.is_file() else ""
@@ -1220,6 +1227,13 @@ def main() -> None:
     for marker in ("aorusWallAllowsQuickReaction", "aorusWallAllowsMenuReaction"):
         if marker not in wall_controller_text:
             err.append(f"Wall: recommended-channel reaction route is missing {marker}")
+    for marker in (
+        "var liveResult = Set<MessageId>()",
+        "var readableResult = Set<MessageId>()",
+        "return (live: liveResult, readable: readableResult)",
+    ):
+        if marker not in wall_controller_text:
+            err.append(f"Wall: live reactions are still coupled to read tracking — missing {marker}")
 
     wall_bubble = tg / "submodules" / "TelegramUI" / "Components" / "Chat" / "ChatMessageBubbleItemNode" / "Sources" / "ChatMessageBubbleItemNode.swift"
     wall_bubble_text = wall_bubble.read_text(encoding="utf-8") if wall_bubble.is_file() else ""
@@ -1227,6 +1241,28 @@ def main() -> None:
         err.append("Wall: bubble component illegally depends on TelegramUI's concrete AorusWallChatContents type")
     if "contents.aorusIsWall" not in wall_bubble_text:
         err.append("Wall: bubble component does not use the shared Wall marker")
+    for marker in (
+        "aorusWallExcludeSwipe",
+        ".aorusWallExclude",
+        "aorusgram.wallExcludePeerRequested",
+    ):
+        if marker not in wall_bubble_text:
+            err.append(f"Wall: swipe-to-exclude route is missing {marker}")
+
+    wall_swipe_node = (
+        tg
+        / "submodules"
+        / "TelegramUI"
+        / "Components"
+        / "Chat"
+        / "ChatMessageSwipeToReplyNode"
+        / "Sources"
+        / "ChatMessageSwipeToReplyNode.swift"
+    )
+    wall_swipe_text = wall_swipe_node.read_text(encoding="utf-8") if wall_swipe_node.is_file() else ""
+    for marker in ("case aorusWallExclude", 'UIImage(systemName: "nosign"'):
+        if marker not in wall_swipe_text:
+            err.append(f"Wall: crossed-circle exclusion swipe icon is missing {marker}")
 
     wall_context_menu = tg / "submodules" / "TelegramUI" / "Sources" / "Chat" / "ChatControllerOpenMessageContextMenu.swift"
     wall_context_menu_text = wall_context_menu.read_text(encoding="utf-8") if wall_context_menu.is_file() else ""
