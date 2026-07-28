@@ -20750,7 +20750,7 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
             "        if case .aorusWallExclude = action {\n"
             "            let configuration = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)\n"
             "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
-            "                .withTintColor(foregroundColor, renderingMode: .alwaysOriginal)\n"
+            "                .withTintColor(.systemRed, renderingMode: .alwaysOriginal)\n"
             "        }\n"
             "        \n"
             "        self.maskNode = ASDisplayNode()\n"
@@ -20765,6 +20765,23 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
             print("WallExcludeSwipe: WARNING — swipe icon anchors not found")
     else:
         print("WallExcludeSwipe: swipe icon already patched")
+
+    # Persistent CI caches can already contain the first Wall exclusion icon, which inherited
+    # the message bubble foreground and became nearly black on AorusGram's dark background.
+    # Migrate that exact icon to the native destructive colour without touching reply/reaction
+    # swipe actions.
+    t = swipe_node.read_text(encoding="utf-8")
+    old_exclusion_tint = (
+        "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
+        "                .withTintColor(foregroundColor, renderingMode: .alwaysOriginal)\n"
+    )
+    new_exclusion_tint = (
+        "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
+        "                .withTintColor(.systemRed, renderingMode: .alwaysOriginal)\n"
+    )
+    if old_exclusion_tint in t:
+        swipe_node.write_text(t.replace(old_exclusion_tint, new_exclusion_tint, 1), encoding="utf-8")
+        print("WallExcludeSwipe: migrated cached exclusion icon to system red")
 
     t = bubble_node.read_text(encoding="utf-8")
     if "aorusWallExcludeSwipe" not in t:

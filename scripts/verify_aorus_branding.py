@@ -1260,7 +1260,11 @@ def main() -> None:
         / "ChatMessageSwipeToReplyNode.swift"
     )
     wall_swipe_text = wall_swipe_node.read_text(encoding="utf-8") if wall_swipe_node.is_file() else ""
-    for marker in ("case aorusWallExclude", 'UIImage(systemName: "nosign"'):
+    for marker in (
+        "case aorusWallExclude",
+        'UIImage(systemName: "nosign"',
+        ".withTintColor(.systemRed, renderingMode: .alwaysOriginal)",
+    ):
         if marker not in wall_swipe_text:
             err.append(f"Wall: crossed-circle exclusion swipe icon is missing {marker}")
 
