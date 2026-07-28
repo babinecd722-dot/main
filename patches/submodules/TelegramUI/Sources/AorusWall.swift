@@ -1365,7 +1365,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 UndoOverlayController(
                     presentationData: presentationData,
                     content: .succeed(text: text, timeout: nil, customUndoText: nil),
-                    elevatedLayout: false,
+                    elevatedLayout: true,
                     position: .bottom,
                     animateInAsReplacement: true,
                     action: { _ in false }

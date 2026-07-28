@@ -1256,6 +1256,7 @@ def main() -> None:
         "Канал «\\(peerTitle)» добавлен в исключения",
         "Channel “\\(peerTitle)” added to exclusions",
         "content: .succeed(text: text, timeout: nil, customUndoText: nil)",
+        "elevatedLayout: true",
     ):
         if marker not in wall_contents_text:
             err.append(f"Wall: exclusion toast is missing {marker}")
@@ -1274,7 +1275,10 @@ def main() -> None:
     for marker in (
         "case aorusWallExclude",
         'UIImage(systemName: "nosign"',
-        ".withTintColor(.systemRed, renderingMode: .alwaysOriginal)",
+        "let aorusWallExcludeStyle: Bool",
+        "color: aorusWallExcludeStyle ? .systemRed : fillColor",
+        ".withTintColor(.white, renderingMode: .alwaysOriginal)",
+        "if !aorusWallExcludeStyle, backgroundNode?.hasExtraBubbleBackground() == true",
     ):
         if marker not in wall_swipe_text:
             err.append(f"Wall: crossed-circle exclusion swipe icon is missing {marker}")
