@@ -2386,6 +2386,7 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
     sentinel = "// AorusGram: edit locally v2"
     anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {"
     guard_marker = "let aorusEditIsSticker = aorusEditMsg.media.contains"
+    cached_guard_marker = "!messages[0].media.contains(where: { media in"
     unused_body_line = "            let aorusEditBody = aorusEditMsg.text\n"
     if unused_body_line in t:
         t = t.replace(unused_body_line, "")
@@ -2397,25 +2398,23 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
         if block_end == -1:
             raise RuntimeError("EditLocally: cached context-menu block has no delete anchor")
         cached_block = t[block_start:block_end]
-        if guard_marker in cached_block:
+        if guard_marker in cached_block or cached_guard_marker in cached_block:
             print("EditLocally: context menu already injected")
         else:
-            key_line = (
-                "            let aorusEditKey = \"aorusgram_local_edit_"
-                "\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\"\n"
+            feature_gate = (
+                "        if UserDefaults.standard.bool(forKey: "
+                "\"aorusgram_feature_edit_locally\") {\n"
             )
-            guard_block = (
-                "            let aorusEditIsSticker = aorusEditMsg.media.contains(where: { media in\n"
+            guarded_feature_gate = (
+                "        if UserDefaults.standard.bool(forKey: "
+                "\"aorusgram_feature_edit_locally\") && !messages[0].media.contains(where: { media in\n"
                 "                guard let file = media as? TelegramMediaFile else { return false }\n"
                 "                return file.isSticker || file.isAnimatedSticker || file.isVideoSticker\n"
-                "            })\n"
-                "            if !aorusEditIsSticker {\n"
+                "            }) {\n"
             )
-            tail = "            }\n        }\n\n"
-            if key_line not in cached_block or not cached_block.endswith(tail):
-                raise RuntimeError("EditLocally: unknown cached v2 context-menu layout")
-            cached_block = cached_block.replace(key_line, key_line + guard_block, 1)
-            cached_block = cached_block[: -len(tail)] + "            }\n" + tail
+            if feature_gate not in cached_block:
+                raise RuntimeError("EditLocally: cached v2 feature gate not found")
+            cached_block = cached_block.replace(feature_gate, guarded_feature_gate, 1)
             t = t[:block_start] + cached_block + t[block_end:]
             path.write_text(t, encoding="utf-8")
             print("EditLocally: migrated cached context menu with sticker guard")
