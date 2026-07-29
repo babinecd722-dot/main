@@ -802,6 +802,44 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             return result ?? self.currentMessages.values.map(\.index).min()
         }
 
+        /// Remove only byte-for-byte identical, non-empty post texts copied across channels.
+        ///
+        /// No trimming, case folding or punctuation normalization is intentional: even one
+        /// different character makes two posts distinct. Captionless media is also left alone.
+        /// When several channels publish the same text, the Wall's existing engagement/freshness
+        /// score picks the most relevant copy while the original feed order remains unchanged.
+        private func removingExactCrossChannelTextDuplicates(_ messages: [Message]) -> [Message] {
+            var groups: [Data: [Message]] = [:]
+            for message in messages where !message.text.isEmpty {
+                groups[Data(message.text.utf8), default: []].append(message)
+            }
+
+            let now = Int32(Date().timeIntervalSince1970)
+            var duplicateIds = Set<MessageId>()
+            for group in groups.values {
+                guard group.count > 1, Set(group.map { $0.id.peerId }).count > 1 else {
+                    continue
+                }
+                var winner = group[0]
+                var winnerScore = aorusWallPostScore(winner, now: now)
+                for candidate in group.dropFirst() {
+                    let candidateScore = aorusWallPostScore(candidate, now: now)
+                    if candidateScore > winnerScore
+                        || (candidateScore == winnerScore && candidate.timestamp > winner.timestamp) {
+                        winner = candidate
+                        winnerScore = candidateScore
+                    }
+                }
+                for message in group where message.id != winner.id {
+                    duplicateIds.insert(message.id)
+                }
+            }
+            guard !duplicateIds.isEmpty else {
+                return messages
+            }
+            return messages.filter { !duplicateIds.contains($0.id) }
+        }
+
         private func applyMessages(_ messages: [Message], updateType: EngineViewUpdateType, preserveCurrent: Bool) {
             // Everything this page delivered counts as placed, so pagination never offers it
             // again even if it is trimmed later.
@@ -824,6 +862,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             } else {
                 messages.sort(by: { $0.index < $1.index })
             }
+
+            messages = self.removingExactCrossChannelTextDuplicates(messages)
 
             if messages.count > Impl.maxFeedLength {
                 if self.isVisible, let frontier = self.readerFrontier {
@@ -932,10 +972,22 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 let updatedReactions = message.effectiveReactions(
                     isTags: message.areReactionsTags(accountPeerId: self.context.account.peerId)
                 )
+                let existingPoll = existing.media.first(where: { $0 is TelegramMediaPoll })
+                let updatedPoll = message.media.first(where: { $0 is TelegramMediaPoll })
+                let pollDidChange: Bool
+                if let existingPoll, let updatedPoll {
+                    pollDidChange = !existingPoll.isEqual(to: updatedPoll)
+                } else {
+                    pollDidChange = (existingPoll == nil) != (updatedPoll == nil)
+                }
                 // Telegram writes PendingReactionsMessageAttribute before the request reaches
                 // the server. Compare that effective state explicitly: stableVersion alone
                 // can miss the optimistic update, leaving the tap invisible until Refresh.
-                if existing.stableVersion != message.stableVersion || existingReactions != updatedReactions {
+                // Poll votes update TelegramMediaPoll in Postbox without necessarily bumping
+                // the message stableVersion, so compare the native media object as well.
+                if existing.stableVersion != message.stableVersion
+                    || existingReactions != updatedReactions
+                    || pollDidChange {
                     self.currentMessages[id] = message
                     didChange = true
                 }

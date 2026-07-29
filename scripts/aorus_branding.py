@@ -2384,18 +2384,45 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
         return
     t = path.read_text(encoding="utf-8")
     sentinel = "// AorusGram: edit locally v2"
+    anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {"
+    guard_marker = "let aorusEditIsSticker = aorusEditMsg.media.contains"
     unused_body_line = "            let aorusEditBody = aorusEditMsg.text\n"
     if unused_body_line in t:
         t = t.replace(unused_body_line, "")
         path.write_text(t, encoding="utf-8")
         print("EditLocally: removed unused legacy aorusEditBody")
     if sentinel in t:
-        print("EditLocally: context menu already injected")
+        block_start = t.index(sentinel)
+        block_end = t.find(anchor, block_start)
+        if block_end == -1:
+            raise RuntimeError("EditLocally: cached context-menu block has no delete anchor")
+        cached_block = t[block_start:block_end]
+        if guard_marker in cached_block:
+            print("EditLocally: context menu already injected")
+        else:
+            key_line = (
+                "            let aorusEditKey = \"aorusgram_local_edit_"
+                "\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\"\n"
+            )
+            guard_block = (
+                "            let aorusEditIsSticker = aorusEditMsg.media.contains(where: { media in\n"
+                "                guard let file = media as? TelegramMediaFile else { return false }\n"
+                "                return file.isSticker || file.isAnimatedSticker || file.isVideoSticker\n"
+                "            })\n"
+                "            if !aorusEditIsSticker {\n"
+            )
+            tail = "            }\n        }\n\n"
+            if key_line not in cached_block or not cached_block.endswith(tail):
+                raise RuntimeError("EditLocally: unknown cached v2 context-menu layout")
+            cached_block = cached_block.replace(key_line, key_line + guard_block, 1)
+            cached_block = cached_block[: -len(tail)] + "            }\n" + tail
+            t = t[:block_start] + cached_block + t[block_end:]
+            path.write_text(t, encoding="utf-8")
+            print("EditLocally: migrated cached context menu with sticker guard")
     else:
         if "// AorusGram: edit locally v1" in t:
             print("WARNING: EditLocally legacy v1 already present in cached tree; cache bump required for native composer menu")
         else:
-            anchor = "        if !isReplyThreadHead, (!data.messageActions.options.intersection([.deleteLocally, .deleteGlobally]).isEmpty || clearCacheAsDelete) {"
             if anchor not in t:
                 print("EditLocally: delete-block anchor not found — skipped")
             else:
@@ -2407,31 +2434,37 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                     "            let aorusEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
                     "            let aorusEditRu = aorusEditLang.hasPrefix(\"ru\")\n"
                     "            let aorusEditKey = \"aorusgram_local_edit_\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\"\n"
-                    "            let aorusEditOrig = UserDefaults.standard.string(forKey: aorusEditKey)\n"
-                    "            if let aorusEditOrig = aorusEditOrig {\n"
-                    "                actions.append(.action(ContextMenuActionItem(text: aorusEditRu ? \"Оригинал\" : \"Original\", icon: { theme in\n"
-                    "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
-                    "                }, action: { [weak context] action in\n"
-                    "                    action.dismissWithResult(.default)\n"
-                    "                    guard let context = context else { return }\n"
-                    "                    let _ = context.account.postbox.transaction { transaction -> Void in\n"
-                    "                        transaction.updateMessage(aorusEditMid, update: { current in\n"
-                    "                            let storeForwardInfo = current.forwardInfo.flatMap(StoreMessageForwardInfo.init)\n"
-                    "                            let aorusAttrs = current.attributes.filter { !($0 is TextEntitiesMessageAttribute) && !($0 is RichTextMessageAttribute) }\n"
-                    "                            return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: storeForwardInfo, authorId: current.author?.id, text: aorusEditOrig, attributes: aorusAttrs, media: current.media))\n"
+                    "            let aorusEditIsSticker = aorusEditMsg.media.contains(where: { media in\n"
+                    "                guard let file = media as? TelegramMediaFile else { return false }\n"
+                    "                return file.isSticker || file.isAnimatedSticker || file.isVideoSticker\n"
+                    "            })\n"
+                    "            if !aorusEditIsSticker {\n"
+                    "                let aorusEditOrig = UserDefaults.standard.string(forKey: aorusEditKey)\n"
+                    "                if let aorusEditOrig = aorusEditOrig {\n"
+                    "                    actions.append(.action(ContextMenuActionItem(text: aorusEditRu ? \"Оригинал\" : \"Original\", icon: { theme in\n"
+                    "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
+                    "                    }, action: { [weak context] action in\n"
+                    "                        action.dismissWithResult(.default)\n"
+                    "                        guard let context = context else { return }\n"
+                    "                        let _ = context.account.postbox.transaction { transaction -> Void in\n"
+                    "                            transaction.updateMessage(aorusEditMid, update: { current in\n"
+                    "                                let storeForwardInfo = current.forwardInfo.flatMap(StoreMessageForwardInfo.init)\n"
+                    "                                let aorusAttrs = current.attributes.filter { !($0 is TextEntitiesMessageAttribute) && !($0 is RichTextMessageAttribute) }\n"
+                    "                                return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: storeForwardInfo, authorId: current.author?.id, text: aorusEditOrig, attributes: aorusAttrs, media: current.media))\n"
+                    "                            })\n"
+                    "                        }.start()\n"
+                    "                        UserDefaults.standard.removeObject(forKey: aorusEditKey)\n"
+                    "                    })))\n"
+                    "                } else {\n"
+                    "                    actions.append(.action(ContextMenuActionItem(text: aorusEditRu ? \"Изменить локально\" : \"Edit Locally\", icon: { theme in\n"
+                    "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
+                    "                    }, action: { action, f in\n"
+                    "                        UserDefaults.standard.set(\"\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\", forKey: \"aorusgram_local_edit_active_message\")\n"
+                    "                        interfaceInteraction.setupEditMessage(aorusEditMid, { transition in\n"
+                    "                            f(.custom(transition))\n"
                     "                        })\n"
-                    "                    }.start()\n"
-                    "                    UserDefaults.standard.removeObject(forKey: aorusEditKey)\n"
-                    "                })))\n"
-                    "            } else {\n"
-                    "                actions.append(.action(ContextMenuActionItem(text: aorusEditRu ? \"Изменить локально\" : \"Edit Locally\", icon: { theme in\n"
-                    "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
-                    "                }, action: { action, f in\n"
-                    "                    UserDefaults.standard.set(\"\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\", forKey: \"aorusgram_local_edit_active_message\")\n"
-                    "                    interfaceInteraction.setupEditMessage(aorusEditMid, { transition in\n"
-                    "                        f(.custom(transition))\n"
-                    "                    })\n"
-                    "                })))\n"
+                    "                    })))\n"
+                    "                }\n"
                     "            }\n"
                     "        }\n"
                     "\n"

@@ -1098,6 +1098,13 @@ def main() -> None:
         "var candidatesByRank:",
         "appendTier(prioritySources)",
         "messages.sort(by: { $0.index < $1.index })",
+        "removingExactCrossChannelTextDuplicates",
+        "groups[Data(message.text.utf8), default: []]",
+        "Set(group.map { $0.id.peerId }).count > 1",
+        "messages = self.removingExactCrossChannelTextDuplicates(messages)",
+        "let pollDidChange: Bool",
+        "pollDidChange = !existingPoll.isEqual(to: updatedPoll)",
+        "|| pollDidChange",
     ):
         if marker not in wall_text:
             err.append(f"Wall: recommendation/top-to-bottom pipeline is missing {marker}")
@@ -1138,6 +1145,16 @@ def main() -> None:
             err.append(f"ActionConfirm: confirmation module is missing {marker}")
     if "as? Bool) ?? true" not in action_confirm_text:
         err.append("ActionConfirm: the feature must default to on")
+
+    branding_script = Path(__file__).with_name("aorus_branding.py")
+    branding_text = branding_script.read_text(encoding="utf-8") if branding_script.is_file() else ""
+    for marker in (
+        "let aorusEditIsSticker = aorusEditMsg.media.contains",
+        "file.isSticker || file.isAnimatedSticker || file.isVideoSticker",
+        "if !aorusEditIsSticker",
+    ):
+        if marker not in branding_text:
+            err.append(f"EditLocally: sticker context-menu guard is missing {marker}")
 
     action_context = tg / "submodules" / "TelegramUI" / "Sources" / "AccountContext.swift"
     action_context_text = action_context.read_text(encoding="utf-8") if action_context.is_file() else ""
