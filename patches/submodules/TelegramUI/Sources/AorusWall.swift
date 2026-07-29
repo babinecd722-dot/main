@@ -1365,12 +1365,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 UndoOverlayController(
                     presentationData: presentationData,
                     content: .succeed(text: text, timeout: nil, customUndoText: nil),
-                    elevatedLayout: true,
+                    elevatedLayout: false,
                     position: .bottom,
                     animateInAsReplacement: true,
                     action: { _ in false }
                 ),
-                in: .current
+                in: .window(.root)
             )
         })
         self.observers.append(NotificationCenter.default.addObserver(

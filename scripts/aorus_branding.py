@@ -20748,9 +20748,16 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
         image_replacement = (
             "        })\n"
             "        if case .aorusWallExclude = action {\n"
-            "            let configuration = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)\n"
-            "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
-            "                .withTintColor(.systemRed, renderingMode: .alwaysOriginal)\n"
+            "            self.foregroundNode.image = generateImage(size, rotatedContext: { size, context in\n"
+            "                context.clear(CGRect(origin: CGPoint(), size: size))\n"
+            "                context.setStrokeColor(UIColor.systemRed.cgColor)\n"
+            "                context.setLineWidth(2.4)\n"
+            "                context.setLineCap(.round)\n"
+            "                context.strokeEllipse(in: CGRect(x: 6.5, y: 6.5, width: 20.0, height: 20.0))\n"
+            "                context.move(to: CGPoint(x: 9.5, y: 9.5))\n"
+            "                context.addLine(to: CGPoint(x: 23.5, y: 23.5))\n"
+            "                context.strokePath()\n"
+            "            })\n"
             "        }\n"
             "        \n"
             "        self.maskNode = ASDisplayNode()\n"
@@ -20788,20 +20795,44 @@ def patch_wall_exclusion_swipe(tg: Path) -> None:
         t = t.replace(destructive_style, original_style, 1)
 
     old_exclusion_tint_foreground = (
+        "        if case .aorusWallExclude = action {\n"
+        "            let configuration = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)\n"
         "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
         "                .withTintColor(foregroundColor, renderingMode: .alwaysOriginal)\n"
+        "        }\n"
     )
     old_exclusion_tint_red = (
+        "        if case .aorusWallExclude = action {\n"
+        "            let configuration = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)\n"
         "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
         "                .withTintColor(.systemRed, renderingMode: .alwaysOriginal)\n"
+        "        }\n"
     )
     old_exclusion_tint_white = (
+        "        if case .aorusWallExclude = action {\n"
+        "            let configuration = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .semibold)\n"
         "            self.foregroundNode.image = UIImage(systemName: \"nosign\", withConfiguration: configuration)?\n"
         "                .withTintColor(.white, renderingMode: .alwaysOriginal)\n"
+        "        }\n"
     )
-    new_exclusion_tint = old_exclusion_tint_red
+    new_exclusion_tint = (
+        "        if case .aorusWallExclude = action {\n"
+        "            self.foregroundNode.image = generateImage(size, rotatedContext: { size, context in\n"
+        "                context.clear(CGRect(origin: CGPoint(), size: size))\n"
+        "                context.setStrokeColor(UIColor.systemRed.cgColor)\n"
+        "                context.setLineWidth(2.4)\n"
+        "                context.setLineCap(.round)\n"
+        "                context.strokeEllipse(in: CGRect(x: 6.5, y: 6.5, width: 20.0, height: 20.0))\n"
+        "                context.move(to: CGPoint(x: 9.5, y: 9.5))\n"
+        "                context.addLine(to: CGPoint(x: 23.5, y: 23.5))\n"
+        "                context.strokePath()\n"
+        "            })\n"
+        "        }\n"
+    )
     if old_exclusion_tint_foreground in t:
         t = t.replace(old_exclusion_tint_foreground, new_exclusion_tint, 1)
+    if old_exclusion_tint_red in t:
+        t = t.replace(old_exclusion_tint_red, new_exclusion_tint, 1)
     if old_exclusion_tint_white in t:
         t = t.replace(old_exclusion_tint_white, new_exclusion_tint, 1)
 

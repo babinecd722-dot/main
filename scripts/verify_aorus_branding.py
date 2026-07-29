@@ -1256,7 +1256,8 @@ def main() -> None:
         "Канал «\\(peerTitle)» добавлен в исключения",
         "Channel “\\(peerTitle)” added to exclusions",
         "content: .succeed(text: text, timeout: nil, customUndoText: nil)",
-        "elevatedLayout: true",
+        "elevatedLayout: false",
+        "in: .window(.root)",
     ):
         if marker not in wall_contents_text:
             err.append(f"Wall: exclusion toast is missing {marker}")
@@ -1274,8 +1275,9 @@ def main() -> None:
     wall_swipe_text = wall_swipe_node.read_text(encoding="utf-8") if wall_swipe_node.is_file() else ""
     for marker in (
         "case aorusWallExclude",
-        'UIImage(systemName: "nosign"',
-        ".withTintColor(.systemRed, renderingMode: .alwaysOriginal)",
+        "context.setStrokeColor(UIColor.systemRed.cgColor)",
+        "context.strokeEllipse(in:",
+        "context.addLine(to:",
         "self.backgroundNode = NavigationBackgroundNode(color: fillColor, enableBlur: enableBlur)",
         "if backgroundNode?.hasExtraBubbleBackground() == true",
     ):
@@ -1284,6 +1286,7 @@ def main() -> None:
     for forbidden in (
         "let aorusWallExcludeStyle: Bool",
         "color: aorusWallExcludeStyle ? .systemRed : fillColor",
+        'UIImage(systemName: "nosign"',
         ".withTintColor(.white, renderingMode: .alwaysOriginal)",
         "if !aorusWallExcludeStyle, backgroundNode?.hasExtraBubbleBackground() == true",
     ):
