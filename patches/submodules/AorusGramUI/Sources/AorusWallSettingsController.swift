@@ -40,12 +40,12 @@ public enum AorusWallSettingsStore {
 
     public static func setShowRecommended(_ value: Bool, accountId: Int64) {
         UserDefaults.standard.set(value, forKey: key("show_recommended", accountId: accountId))
-        NotificationCenter.default.post(name: didChange, object: nil)
+        NotificationCenter.default.post(name: didChange, object: NSNumber(value: accountId))
     }
 
     public static func setShowArchived(_ value: Bool, accountId: Int64) {
         UserDefaults.standard.set(value, forKey: key("show_archived", accountId: accountId))
-        NotificationCenter.default.post(name: didChange, object: nil)
+        NotificationCenter.default.post(name: didChange, object: NSNumber(value: accountId))
     }
 
     public static func excludedPeerIds(accountId: Int64) -> Set<Int64> {
@@ -67,7 +67,7 @@ public enum AorusWallSettingsStore {
         UserDefaults.standard.set(values.sorted().map { NSNumber(value: $0) }, forKey: key("excluded", accountId: accountId))
         excludedCache[accountId] = values
         lock.unlock()
-        NotificationCenter.default.post(name: didChange, object: nil)
+        NotificationCenter.default.post(name: didChange, object: NSNumber(value: accountId))
     }
 
     public static func removeExcludedPeer(_ peerId: Int64, accountId: Int64) {
@@ -77,7 +77,7 @@ public enum AorusWallSettingsStore {
         UserDefaults.standard.set(values.sorted().map { NSNumber(value: $0) }, forKey: key("excluded", accountId: accountId))
         excludedCache[accountId] = values
         lock.unlock()
-        NotificationCenter.default.post(name: didChange, object: nil)
+        NotificationCenter.default.post(name: didChange, object: NSNumber(value: accountId))
     }
 
     private static func messageKey(_ id: MessageId) -> String {

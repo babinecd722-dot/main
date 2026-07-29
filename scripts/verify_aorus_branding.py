@@ -1101,7 +1101,14 @@ def main() -> None:
         "removingExactCrossChannelTextDuplicates",
         "groups[Data(message.text.utf8), default: []]",
         "Set(group.map { $0.id.peerId }).count > 1",
-        "messages = self.removingExactCrossChannelTextDuplicates(messages)",
+        "messages = self.removingExactCrossChannelTextDuplicates(",
+        "preserving: preserveCurrent ? Set(self.currentMessageIds) : []",
+        "return self.observedMessageIds.union(self.previousVisibleMessageIds)",
+        "!self.viewportMessageIds.contains(message.id)",
+        "let requestedFrontier = self.readerFrontier",
+        "appendableMessages.removeAll(where: { !($0.index < appendFrontier) })",
+        "func settingsDidChange()",
+        "self.updateRecommendationsIfNeeded(forceRefresh: true)",
         "let pollDidChange: Bool",
         "pollDidChange = !existingPoll.isEqual(to: updatedPoll)",
         "|| pollDidChange",
@@ -1125,10 +1132,17 @@ def main() -> None:
         "!self.discoveredRecommendationPeerIds.contains($0) && !self.isExcluded($0)",
         "let filtered = current.filter { !excluded.contains($0.id.peerId.toInt64()) }",
         "self.applyMessages(filtered, updateType: .Generic, preserveCurrent: false)",
-        "impl.applyExclusions()",
+        "self.applyExclusions()",
     ):
         if marker not in wall_text:
             err.append(f"Wall: channel exclusions are not enforced across sources — missing {marker}")
+    if "self?.reload()" in wall_text:
+        err.append("Wall: settings observer still rebuilds the feed and can teleport the viewport")
+
+    wall_settings = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusWallSettingsController.swift"
+    wall_settings_text = wall_settings.read_text(encoding="utf-8") if wall_settings.is_file() else ""
+    if wall_settings_text.count("object: NSNumber(value: accountId)") < 4:
+        err.append("Wall: settings notifications are not scoped to their account")
 
     # Action confirmation: the prompt must sit at the single choke point for each action, and
     # the original bodies must survive under their aorusPerform... names.

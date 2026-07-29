@@ -220,7 +220,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.expansionPreloadDisposable.dispose()
         }
 
-        private func updateRecommendationsIfNeeded() {
+        private func updateRecommendationsIfNeeded(forceRefresh: Bool = false) {
             let enabled = AorusWallSettingsStore.showRecommended(accountId: self.accountId)
             let now = ProcessInfo.processInfo.systemUptime
             // Re-run not only when the setting flips, but also periodically: Telegram's
@@ -230,7 +230,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 && self.lastRecommendationRefresh > 0.0
                 && (now - self.lastRecommendationRefresh) >= Impl.recommendationRefreshInterval
             let settingChanged = enabled != self.recommendationsEnabled
-            guard settingChanged || isStale else {
+            guard settingChanged || isStale || (forceRefresh && enabled) else {
                 return
             }
             self.lastRecommendationRefresh = enabled ? now : 0.0
@@ -350,9 +350,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         func applyExclusions() {
             let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: self.accountId)
             self.excludedPeerIds = excluded
-            guard !excluded.isEmpty else {
-                return
-            }
             self.recommendedPeerIds.removeAll(where: { excluded.contains($0.toInt64()) })
             self.globalRecommendedPeerIds.removeAll(where: { excluded.contains($0.toInt64()) })
             for peerId in Array(self.sourceGeneration.keys) where excluded.contains(peerId.toInt64()) {
@@ -360,11 +357,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             }
             self.expandedSeeds = self.expandedSeeds.filter { !excluded.contains($0.toInt64()) }
 
-            // The settings notification also starts a background rebuild, but waiting for its
-            // Postbox query leaves every already-rendered post from the excluded channel on
-            // screen. Publish the filtered snapshot first. `applyMessages` keeps Telegram's
-            // stable message ids and clears the removed rows from visibility/reaction tracking,
-            // so the native list animates them out without changing the order of anything else.
+            // Publish the filtered snapshot immediately. Settings changes deliberately never
+            // rebuild the feed: stable message ids let the native list animate these rows out
+            // while every unrelated post keeps its position.
             let current = self.currentMessageIds.compactMap { self.currentMessages[$0] }
             let filtered = current.filter { !excluded.contains($0.id.peerId.toInt64()) }
             if filtered.count != current.count {
@@ -787,11 +782,17 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             }
         }
 
-        /// The oldest post the reader can currently see. New pages go strictly below it, so
-        /// they land under the viewport and nothing on screen ever moves.
+        private var viewportMessageIds: Set<MessageId> {
+            return self.observedMessageIds.union(self.previousVisibleMessageIds)
+        }
+
+        /// The oldest post intersecting the viewport. `observedMessageIds` includes partially
+        /// visible rows while `previousVisibleMessageIds` is the stricter read-tracking set.
+        /// Using both prevents a background page from being inserted between a fully visible
+        /// post and the partial row directly below it.
         private var readerFrontier: MessageIndex? {
             var result: MessageIndex?
-            for id in self.previousVisibleMessageIds {
+            for id in self.viewportMessageIds {
                 guard let message = self.currentMessages[id] else {
                     continue
                 }
@@ -808,7 +809,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// different character makes two posts distinct. Captionless media is also left alone.
         /// When several channels publish the same text, the Wall's existing engagement/freshness
         /// score picks the most relevant copy while the original feed order remains unchanged.
-        private func removingExactCrossChannelTextDuplicates(_ messages: [Message]) -> [Message] {
+        private func removingExactCrossChannelTextDuplicates(
+            _ messages: [Message],
+            preserving preferredIds: Set<MessageId>
+        ) -> [Message] {
             var groups: [Data: [Message]] = [:]
             for message in messages where !message.text.isEmpty {
                 groups[Data(message.text.utf8), default: []].append(message)
@@ -820,9 +824,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 guard group.count > 1, Set(group.map { $0.id.peerId }).count > 1 else {
                     continue
                 }
-                var winner = group[0]
+                // A background page must never replace a post that is already part of the
+                // reader's stable feed. Exact duplicates are still removed, but the existing
+                // copy stays until an explicit Refresh is allowed to rerank from scratch.
+                let preferred = group.filter { preferredIds.contains($0.id) }
+                let candidates = preferred.isEmpty ? group : preferred
+                var winner = candidates[0]
                 var winnerScore = aorusWallPostScore(winner, now: now)
-                for candidate in group.dropFirst() {
+                for candidate in candidates.dropFirst() {
                     let candidateScore = aorusWallPostScore(candidate, now: now)
                     if candidateScore > winnerScore
                         || (candidateScore == winnerScore && candidate.timestamp > winner.timestamp) {
@@ -863,7 +872,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 messages.sort(by: { $0.index < $1.index })
             }
 
-            messages = self.removingExactCrossChannelTextDuplicates(messages)
+            messages = self.removingExactCrossChannelTextDuplicates(
+                messages,
+                preserving: preserveCurrent ? Set(self.currentMessageIds) : []
+            )
 
             if messages.count > Impl.maxFeedLength {
                 if self.isVisible, let frontier = self.readerFrontier {
@@ -874,7 +886,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     // longer visible. Stable ids let Telegram preserve the current anchor.
                     for message in messages.reversed() where excess > 0 {
                         guard message.index > frontier,
-                              !self.previousVisibleMessageIds.contains(message.id),
+                              !self.viewportMessageIds.contains(message.id),
                               self.markedInCurrentView.contains(message.id) else {
                             continue
                         }
@@ -888,7 +900,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                         var hardExcess = messages.count - removeIds.count - Impl.hardMaxFeedLength
                         for message in messages.reversed() where hardExcess > 0 {
                             guard message.index > frontier,
-                                  !self.previousVisibleMessageIds.contains(message.id),
+                                  !self.viewportMessageIds.contains(message.id),
                                   !removeIds.contains(message.id) else {
                                 continue
                             }
@@ -1100,9 +1112,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             if self.remainingBelowReader <= Impl.expansionThreshold {
                 self.expandRecommendationSources()
             }
+            guard let requestedFrontier = self.readerFrontier else {
+                return
+            }
             self.isPrefetching = true
             let span = self.windowSpan
-            self.loadMoreDisposable = (self.collectPage(frontier: self.readerFrontier, span: span)
+            self.loadMoreDisposable = (self.collectPage(frontier: requestedFrontier, span: span)
             |> deliverOn(self.queue)).start(next: { [weak self] messages in
                 guard let self else {
                     return
@@ -1110,15 +1125,35 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.isPrefetching = false
                 self.loadMoreDisposable?.dispose()
                 self.loadMoreDisposable = nil
-                if !messages.isEmpty {
+                var appendableMessages = messages
+                if let appendFrontier = self.readerFrontier {
+                    // The reader may have scrolled while Postbox assembled this page. Recheck
+                    // against the CURRENT viewport before publishing, otherwise a valid result
+                    // for the old position can materialize directly under their finger.
+                    appendableMessages.removeAll(where: { !($0.index < appendFrontier) })
+                }
+                if appendableMessages.count != messages.count {
+                    let appendableIds = Set(appendableMessages.map(\.id))
+                    self.placedIds.formUnion(
+                        messages.lazy.map(\.id).filter { !appendableIds.contains($0) }
+                    )
+                }
+                if !appendableMessages.isEmpty {
                     // MUST NOT be .FillHole. ChatHistoryListNode discards such an update
                     // outright — `if case .Generic(.FillHole) = type { applyHole(); return }` —
                     // so the page would be collected and never rendered.
-                    self.applyMessages(messages, updateType: .Generic, preserveCurrent: true)
+                    self.applyMessages(appendableMessages, updateType: .Generic, preserveCurrent: true)
                     if self.recommendationsEnabled
-                        && Set(messages.map(\.id.peerId)).count < Impl.minimumHealthySourceCount {
+                        && Set(appendableMessages.map(\.id.peerId)).count < Impl.minimumHealthySourceCount {
                         self.expandRecommendationSources()
                     }
+                    return
+                }
+                if !messages.isEmpty {
+                    // The whole page fell behind the reader while it was loading. Those ids are
+                    // intentionally retired for this session above; ask again from the current
+                    // frontier instead of inserting them above or inside the viewport.
+                    self.topUp(force: true)
                     return
                 }
                 // Nothing in this window. Reach further back before giving up: a wider window
@@ -1235,6 +1270,20 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         func refresh() {
             // The Refresh button is the single point where finished posts are cleared out.
             self.reload(updateType: .Generic, expandIfEmpty: true)
+        }
+
+        /// Apply settings without rebuilding the current snapshot. Exclusions animate out
+        /// immediately; newly enabled sources are collected below the live viewport. The
+        /// explicit Refresh button remains the sole operation allowed to rerank the top.
+        func settingsDidChange() {
+            self.applyExclusions()
+            self.updateRecommendationsIfNeeded(forceRefresh: true)
+            if self.currentMessageIds.isEmpty {
+                self.reload(updateType: .Generic, expandIfEmpty: true)
+            } else {
+                self.topUp(force: true)
+            }
+            self.recountBadge()
         }
 
         func applicationDidBecomeActive() {
@@ -1398,8 +1447,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             forName: AorusWallSettingsStore.didChange,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
-            self?.reload()
+        ) { [weak self] notification in
+            if let changedAccountId = notification.object as? NSNumber,
+               changedAccountId.int64Value != context.account.id.int64 {
+                return
+            }
+            self?.settingsDidChange()
         })
         self.observers.append(NotificationCenter.default.addObserver(
             forName: aorusWallExcludePeerRequested,
@@ -1577,12 +1630,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         })
     }
 
-    /// Settings changed. Re-read the exclusion list first — it decides which channels may act
-    /// as sources at all — and only then rebuild the feed.
-    private func reload() {
+    private func settingsDidChange() {
         self.impl.with { impl in
-            impl.applyExclusions()
-            impl.reload(updateType: .Generic)
+            impl.settingsDidChange()
         }
     }
 
