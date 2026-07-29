@@ -359,6 +359,23 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 self.sourceGeneration.removeValue(forKey: peerId)
             }
             self.expandedSeeds = self.expandedSeeds.filter { !excluded.contains($0.toInt64()) }
+
+            // The settings notification also starts a background rebuild, but waiting for its
+            // Postbox query leaves every already-rendered post from the excluded channel on
+            // screen. Publish the filtered snapshot first. `applyMessages` keeps Telegram's
+            // stable message ids and clears the removed rows from visibility/reaction tracking,
+            // so the native list animates them out without changing the order of anything else.
+            let current = self.currentMessageIds.compactMap { self.currentMessages[$0] }
+            let filtered = current.filter { !excluded.contains($0.id.peerId.toInt64()) }
+            if filtered.count != current.count {
+                self.applyMessages(filtered, updateType: .Generic, preserveCurrent: false)
+                self.previousVisibleMessageIds = self.previousVisibleMessageIds.filter {
+                    !excluded.contains($0.peerId.toInt64())
+                }
+                self.observeVisibleMessages(
+                    self.observedMessageIds.filter { !excluded.contains($0.peerId.toInt64()) }
+                )
+            }
         }
 
         private func isExcluded(_ peerId: PeerId) -> Bool {
