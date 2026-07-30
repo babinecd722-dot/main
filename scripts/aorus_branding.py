@@ -15583,6 +15583,243 @@ def patch_hide_tabs(tg: Path) -> None:
         print(f"HideTabs: WARNING — matched {n}/{len(edits)} anchors")
 
 
+def patch_tab_bar_visibility_controls(tg: Path) -> None:
+    """Hide Search / tab titles live while preserving Telegram's native tab bar.
+
+    Search is removed at the composition boundary, before width calculation. Tab
+    titles are hidden inside TabBarComponent, where the component also reduces its
+    real height and vertically centres icons. TabBarController's temporary insets
+    use the same adjustment, preventing a one-frame content jump during rebuilds.
+    """
+    component_file = (
+        tg
+        / "submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift"
+    )
+    node_file = tg / "submodules/TabBarUI/Sources/TabBarContollerNode.swift"
+    controller_file = tg / "submodules/TabBarUI/Sources/TabBarController.swift"
+    if not component_file.is_file() or not node_file.is_file() or not controller_file.is_file():
+        print("TabBarVisibility: required tab-bar sources not found, skip")
+        return
+
+    component = component_file.read_text(encoding="utf-8")
+    if "AorusGram: hide tab titles" not in component:
+        original = component
+        replacements = [
+            (
+                "    public let search: Search?\n"
+                "    public let selectedId: AnyHashable?\n",
+                "    public let search: Search?\n"
+                "    public let hideTitles: Bool // AorusGram: hide tab titles\n"
+                "    public let selectedId: AnyHashable?\n",
+            ),
+            (
+                "        items: [Item],\n"
+                "        search: Search?,\n"
+                "        selectedId: AnyHashable?,\n",
+                "        items: [Item],\n"
+                "        search: Search?,\n"
+                "        hideTitles: Bool = false,\n"
+                "        selectedId: AnyHashable?,\n",
+            ),
+            (
+                "        self.items = items\n"
+                "        self.search = search\n"
+                "        self.selectedId = selectedId\n",
+                "        self.items = items\n"
+                "        self.search = search\n"
+                "        self.hideTitles = hideTitles\n"
+                "        self.selectedId = selectedId\n",
+            ),
+            (
+                "        if lhs.search != rhs.search {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.selectedId != rhs.selectedId {\n",
+                "        if lhs.search != rhs.search {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.hideTitles != rhs.hideTitles {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.selectedId != rhs.selectedId {\n",
+            ),
+            (
+                "            let barHeight: CGFloat = 56.0 + innerInset * 2.0\n",
+                "            let itemHeight: CGFloat = component.hideTitles ? 48.0 : 56.0\n"
+                "            let barHeight: CGFloat = itemHeight + innerInset * 2.0\n",
+            ),
+            (
+                "                    containerSize: CGSize(width: 200.0, height: 56.0)\n",
+                "                    containerSize: CGSize(width: 200.0, height: itemHeight)\n",
+            ),
+            (
+                "            let itemHeight: CGFloat = 56.0\n"
+                "            let contentWidth: CGFloat = innerInset * 2.0 + totalItemsWidth\n",
+                "            let contentWidth: CGFloat = innerInset * 2.0 + totalItemsWidth\n",
+            ),
+            (
+                "    let isCompact: Bool\n"
+                "    let isSelected: Bool\n",
+                "    let isCompact: Bool\n"
+                "    let hideTitle: Bool\n"
+                "    let isSelected: Bool\n",
+            ),
+            (
+                "    init(item: TabBarComponent.Item, theme: PresentationTheme, isCompact: Bool, isSelected: Bool, tintSelectedItem: Bool, isUnconstrained: Bool) {\n"
+                "        self.item = item\n"
+                "        self.theme = theme\n"
+                "        self.isCompact = isCompact\n"
+                "        self.isSelected = isSelected\n",
+                "    init(item: TabBarComponent.Item, theme: PresentationTheme, isCompact: Bool, hideTitle: Bool, isSelected: Bool, tintSelectedItem: Bool, isUnconstrained: Bool) {\n"
+                "        self.item = item\n"
+                "        self.theme = theme\n"
+                "        self.isCompact = isCompact\n"
+                "        self.hideTitle = hideTitle\n"
+                "        self.isSelected = isSelected\n",
+            ),
+            (
+                "        if lhs.isCompact != rhs.isCompact {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.isSelected != rhs.isSelected {\n",
+                "        if lhs.isCompact != rhs.isCompact {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.hideTitle != rhs.hideTitle {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.isSelected != rhs.isSelected {\n",
+            ),
+            (
+                "                alphaTransition.setAlpha(view: titleView, alpha: component.isCompact ? 0.0 : 1.0)\n",
+                "                alphaTransition.setAlpha(view: titleView, alpha: (component.isCompact || component.hideTitle) ? 0.0 : 1.0)\n",
+            ),
+            (
+                "                return CGSize(width: titleSize.width + 10.0 * 2.0, height: availableSize.height)\n",
+                "                return CGSize(width: component.hideTitle ? 48.0 : titleSize.width + 10.0 * 2.0, height: availableSize.height)\n",
+            ),
+        ]
+        for old, new in replacements:
+            if old not in component:
+                print(f"TabBarVisibility: WARNING — component anchor missing: {old.splitlines()[0]!r}")
+                component = original
+                break
+            component = component.replace(old, new, 1)
+
+        if component != original:
+            compact_anchors = (
+                "                        isCompact: false,\n"
+                "                        isSelected: false,\n",
+                "                        isCompact: component.search?.isActive == true,\n"
+                "                        isSelected: false,\n",
+                "                        isCompact: component.search?.isActive == true,\n"
+                "                        isSelected: true,\n",
+            )
+            for old in compact_anchors:
+                if old not in component:
+                    print("TabBarVisibility: WARNING — ItemComponent construction anchor missing")
+                    component = original
+                    break
+                component = component.replace(
+                    old,
+                    old.replace(
+                        "                        isSelected:",
+                        "                        hideTitle: component.hideTitles,\n"
+                        "                        isSelected:",
+                    ),
+                    1,
+                )
+
+        if component != original:
+            icon_replacements = [
+                (
+                    "y: -4.0), size: iconSize).offsetBy(dx: tabBarItem.animationOffset.x",
+                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : -4.0), size: iconSize).offsetBy(dx: tabBarItem.animationOffset.x",
+                ),
+                (
+                    "y: 3.0), size: iconSize)\n",
+                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : 3.0), size: iconSize)\n",
+                ),
+                (
+                    "y: -4.0), size: iconSize).offsetBy(dx: offset.x",
+                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : -4.0), size: iconSize).offsetBy(dx: offset.x",
+                ),
+                (
+                    "y: 8.0), size: iconSize)\n",
+                    "y: component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5) : 8.0), size: iconSize)\n",
+                ),
+            ]
+            for old, new in icon_replacements:
+                if old not in component:
+                    print(f"TabBarVisibility: WARNING — icon anchor missing: {old!r}")
+                    component = original
+                    break
+                component = component.replace(old, new, 1)
+
+        if component != original:
+            component_file.write_text(component, encoding="utf-8")
+            print("TabBarVisibility: native title hiding and compact height injected")
+    else:
+        print("TabBarVisibility: TabBarComponent already patched")
+
+    node = node_file.read_text(encoding="utf-8")
+    if "AorusGram: hide search button" not in node:
+        original = node
+        old = "                search: self.currentController?.tabBarSearchState.flatMap { tabBarSearchState in\n"
+        new = (
+            "                search: UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\") ? nil : self.currentController?.tabBarSearchState.flatMap { tabBarSearchState in // AorusGram: hide search button\n"
+        )
+        hide_titles_anchor = "                selectedId: selectedId,\n"
+        if old in node and hide_titles_anchor in node:
+            node = node.replace(old, new, 1)
+            node = node.replace(
+                hide_titles_anchor,
+                "                hideTitles: UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\"),\n"
+                + hide_titles_anchor,
+                1,
+            )
+            node_file.write_text(node, encoding="utf-8")
+            print("TabBarVisibility: search composition and title mode wired")
+        else:
+            print("TabBarVisibility: WARNING — TabBarContollerNode anchors missing")
+            node = original
+    else:
+        print("TabBarVisibility: TabBarContollerNode already patched")
+
+    controller = controller_file.read_text(encoding="utf-8")
+    if "AorusGram: compact tab titles" not in controller:
+        original = controller
+        anchor = (
+            "                    let bottomInset: CGFloat = validLayout.insets(options: options).bottom\n"
+            "                    if !validLayout.safeInsets.left.isZero {\n"
+            "                        tabBarHeight = 34.0 + bottomInset\n"
+            "                    } else {\n"
+            "                        tabBarHeight = 49.0 + bottomInset\n"
+            "                    }\n"
+        )
+        replacement = (
+            "                    let bottomInset: CGFloat = validLayout.insets(options: options).bottom\n"
+            "                    let aorusTabTitleAdjustment: CGFloat = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\") ? 8.0 : 0.0 // AorusGram: compact tab titles\n"
+            "                    if !validLayout.safeInsets.left.isZero {\n"
+            "                        tabBarHeight = 34.0 - aorusTabTitleAdjustment + bottomInset\n"
+            "                    } else {\n"
+            "                        tabBarHeight = 49.0 - aorusTabTitleAdjustment + bottomInset\n"
+            "                    }\n"
+        )
+        anchor2 = anchor.replace("validLayout", "updatedLayout").replace("                    ", "            ")
+        replacement2 = replacement.replace("validLayout", "updatedLayout").replace("                    ", "            ")
+        if anchor in controller and anchor2 in controller:
+            controller = controller.replace(anchor, replacement, 1)
+            controller = controller.replace(anchor2, replacement2, 1)
+            controller_file.write_text(controller, encoding="utf-8")
+            print("TabBarVisibility: temporary controller insets aligned")
+        else:
+            print("TabBarVisibility: WARNING — TabBarController inset anchors missing")
+            controller = original
+    else:
+        print("TabBarVisibility: TabBarController already patched")
+
+
 def patch_action_confirmation(tg: Path) -> None:
     """Confirmation prompts in front of calls and of sending a just-recorded message.
 
@@ -16374,6 +16611,49 @@ def patch_settings_live_refresh(tg: Path) -> None:
     t = f.read_text(encoding="utf-8")
     if "AorusGram: live-apply" in t:
         changed = False
+        if "private var aorusLastHideSearch" not in t:
+            prop_anchor = (
+                "    private var aorusLastHideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
+            )
+            if prop_anchor not in t:
+                print("SettingsLiveRefresh: WARNING — cached tab-layout property anchor not found")
+                return
+            t = t.replace(
+                prop_anchor,
+                prop_anchor
+                + "    private var aorusLastHideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
+                + "    private var aorusLastHideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n",
+                1,
+            )
+            changed = True
+        if "let hideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")" not in t:
+            old_tabs = (
+                "            let hideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
+                "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
+                "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts {\n"
+                "                strongSelf.aorusLastHideCalls = hideCalls\n"
+                "                strongSelf.aorusLastHideContacts = hideContacts\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "            }\n"
+            )
+            new_tabs = (
+                "            let hideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
+                "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
+                "            let hideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
+                "            let hideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
+                "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || hideSearch != strongSelf.aorusLastHideSearch || hideTabTitles != strongSelf.aorusLastHideTabTitles {\n"
+                "                strongSelf.aorusLastHideCalls = hideCalls\n"
+                "                strongSelf.aorusLastHideContacts = hideContacts\n"
+                "                strongSelf.aorusLastHideSearch = hideSearch\n"
+                "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "            }\n"
+            )
+            if old_tabs not in t:
+                print("SettingsLiveRefresh: WARNING — cached tab-layout observer anchor not found")
+                return
+            t = t.replace(old_tabs, new_tabs, 1)
+            changed = True
         old_default = '(UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") as? Bool) ?? true'
         new_default = 'UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") == nil ? true : UserDefaults.standard.bool(forKey: "aorusgram_wall_enabled")'
         if old_default in t:
@@ -16478,6 +16758,8 @@ def patch_settings_live_refresh(tg: Path) -> None:
         + "    private var aorusWallVisibilityObserver: NSObjectProtocol?\n"
         + "    private var aorusLastHideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
         + "    private var aorusLastHideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
+        + "    private var aorusLastHideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
+        + "    private var aorusLastHideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
         + "    private var aorusLastWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n",
         1,
     )
@@ -16506,9 +16788,13 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "            }\n"
         "            let hideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
         "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
-        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts {\n"
+        "            let hideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
+        "            let hideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
+        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || hideSearch != strongSelf.aorusLastHideSearch || hideTabTitles != strongSelf.aorusLastHideTabTitles {\n"
         "                strongSelf.aorusLastHideCalls = hideCalls\n"
         "                strongSelf.aorusLastHideContacts = hideContacts\n"
+        "                strongSelf.aorusLastHideSearch = hideSearch\n"
+        "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
         "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
         "            }\n"
         "        }\n"
@@ -22912,6 +23198,7 @@ def main() -> None:
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
     patch_hide_tabs(tg)
+    patch_tab_bar_visibility_controls(tg)
     patch_wall_tab(tg)
     patch_wall_exclusion_swipe(tg)
     patch_settings_live_refresh(tg)

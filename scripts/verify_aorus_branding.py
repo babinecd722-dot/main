@@ -1407,6 +1407,68 @@ def main() -> None:
     if "guard wallEnabled != strongSelf.aorusLastWallEnabled" in app_context_text:
         err.append("Wall: stale cached visibility guard can ignore disabling the tab")
 
+    # AorusGram tab controls must change the native component's composition and
+    # measured height, then trigger the existing root-controller rebuild live.
+    aorus_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
+    aorus_controller_text = aorus_controller.read_text(encoding="utf-8") if aorus_controller.is_file() else ""
+    for marker in (
+        "case tabs",
+        ".tabsHeader(theme, l10n.tabsHeader)",
+        ".hideContactsTab(theme, l10n.hideContactsTab",
+        ".hideCallsTab(theme, l10n.hideCallsTab",
+        ".hideSearchButton(theme, l10n.hideSearchButton",
+        ".hideTabTitles(theme, l10n.hideTabTitles",
+    ):
+        if marker not in aorus_controller_text:
+            err.append(f"TabBarVisibility: settings section is missing {marker}")
+
+    aorus_manager = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramManager.swift"
+    aorus_manager_text = aorus_manager.read_text(encoding="utf-8") if aorus_manager.is_file() else ""
+    for marker in (
+        'forKey: "aorusgram_hide_search_button"',
+        'forKey: "aorusgram_hide_tab_titles"',
+        '"hideSearchButton":',
+        '"hideTabTitles":',
+    ):
+        if marker not in aorus_manager_text:
+            err.append(f"TabBarVisibility: persisted setting is missing {marker}")
+
+    tab_component = (
+        tg / "submodules" / "TelegramUI" / "Components" / "TabBarComponent"
+        / "Sources" / "TabBarComponent.swift"
+    )
+    tab_component_text = tab_component.read_text(encoding="utf-8") if tab_component.is_file() else ""
+    for marker in (
+        "public let hideTitles: Bool",
+        "component.hideTitles ? 48.0 : 56.0",
+        "component.isCompact || component.hideTitle",
+        "component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5)",
+    ):
+        if marker not in tab_component_text:
+            err.append(f"TabBarVisibility: native compact layout is missing {marker}")
+
+    tab_node = tg / "submodules" / "TabBarUI" / "Sources" / "TabBarContollerNode.swift"
+    tab_node_text = tab_node.read_text(encoding="utf-8") if tab_node.is_file() else ""
+    for marker in (
+        'aorusgram_hide_search_button") ? nil',
+        'hideTitles: UserDefaults.standard.bool(forKey: "aorusgram_hide_tab_titles")',
+    ):
+        if marker not in tab_node_text:
+            err.append(f"TabBarVisibility: tab composition is missing {marker}")
+
+    tab_controller = tg / "submodules" / "TabBarUI" / "Sources" / "TabBarController.swift"
+    tab_controller_text = tab_controller.read_text(encoding="utf-8") if tab_controller.is_file() else ""
+    if tab_controller_text.count("AorusGram: compact tab titles") != 2:
+        err.append("TabBarVisibility: temporary controller insets are not aligned at both sites")
+    for marker in (
+        "private var aorusLastHideSearch",
+        "private var aorusLastHideTabTitles",
+        "hideSearch != strongSelf.aorusLastHideSearch",
+        "hideTabTitles != strongSelf.aorusLastHideTabTitles",
+    ):
+        if marker not in app_context_text:
+            err.append(f"TabBarVisibility: live refresh is missing {marker}")
+
     subscription_config = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionConfig.swift"
     if not subscription_config.is_file():
         err.append("SubscriptionConfig.swift is missing")

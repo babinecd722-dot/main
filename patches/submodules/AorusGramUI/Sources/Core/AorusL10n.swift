@@ -172,6 +172,9 @@ public struct AorusL10n {
     public var appBadgeOff: String { t("Отключен", "Disabled") }
     public var hideCallsTab: String { t("Вкладка «Звонки»", "Calls Tab") }
     public var hideContactsTab: String { t("Вкладка «Контакты»", "Contacts Tab") }
+    public var tabsHeader: String { t("ВКЛАДКИ", "TABS") }
+    public var hideSearchButton: String { t("Кнопка поиска", "Search Button") }
+    public var hideTabTitles: String { t("Имена вкладок", "Tab Names") }
     public var antiSpoofDeleted: String { t("Анти-спуф удалёнок", "Anti-Spoof Deletions") }
     public var antiSpoofOnline: String { t("Анти-спуф онлайна", "Anti-Spoof Online") }
     public var accountBackup: String { t("Бэкап аккаунтов", "Account Backup") }
