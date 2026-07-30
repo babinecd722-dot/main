@@ -45,7 +45,6 @@ public final class AorusGramManager {
     public var hideContactsTab: Bool   = false { didSet { save() } }
     public var wallEnabled: Bool       = true  { didSet { save() } }
     public var voiceTranscription: Bool = false { didSet { save() } }
-    public var chatSummary: Bool       = false { didSet { save() } }
     public var translator: Bool        = false { didSet { save() } }
     // Native share button on posts — decoupled from the translator; on by default (stock).
     public var shareButton: Bool       = true  { didSet { save() } }
@@ -118,7 +117,6 @@ public final class AorusGramManager {
         ud.set(effective(translator),          forKey: "aorusgram_feature_translator")
         ud.set(effective(shareButton),         forKey: "aorusgram_share_button")
         ud.set(effective(videoMessagesRearCamera), forKey: "aorusgram_video_messages_rear_camera")
-        ud.set(effective(chatSummary),         forKey: "aorusgram_feature_chat_summary")
         ud.set(effective(autoReply),           forKey: "aorusgram_feature_auto_reply")
         ud.set(effective(maxMediaQuality),     forKey: "aorusgram_feature_max_media_quality")
         ud.set(effective(antiSpamEnabled),     forKey: "aorusgram_feature_anti_spam")
@@ -164,7 +162,6 @@ public final class AorusGramManager {
         hideContactsTab     = d["hideContactsTab"]     as? Bool ?? false
         wallEnabled         = d["wallEnabled"]         as? Bool ?? true
         voiceTranscription  = d["voiceTranscription"]  as? Bool ?? false
-        chatSummary         = d["chatSummary"]         as? Bool ?? false
         translator          = d["translator"]          as? Bool ?? false
         shareButton         = d["shareButton"]         as? Bool ?? true
         videoMessagesRearCamera = d["videoMessagesRearCamera"] as? Bool ?? true
@@ -222,7 +219,6 @@ public final class AorusGramManager {
             "hideContactsTab":     hideContactsTab,
             "wallEnabled":         wallEnabled,
             "voiceTranscription":  voiceTranscription,
-            "chatSummary":         chatSummary,
             "translator":          translator,
             "shareButton":         shareButton,
             "videoMessagesRearCamera": videoMessagesRearCamera,

@@ -5078,7 +5078,43 @@ def patch_chat_lock(tg: Path) -> None:
         print("ChatLock: ChatListItem.swift not found — skip")
         ok = False
 
-    # --- 3d. Keep protected chats out of message search ------------------------------------
+    # --- 3d. Hide drafts in protected rows without touching stored draft data ---------------
+    #     ChatListItem renders draftState/mediaDraftContentType in a separate branch after
+    #     the normal last-message preview. Clearing only these local presentation variables
+    #     prevents a draft from bypassing the hidden-message text while leaving Postbox intact,
+    #     so unlocking the chat restores the native draft immediately.
+    if item.is_file():
+        t = item.read_text(encoding="utf-8")
+        draft_marker = "AorusGram: Chat Protection — hide drafts while locked"
+        if draft_marker in t:
+            print("ChatLock: protected draft presentation already patched")
+        else:
+            draft_anchor = (
+                "                    draftState = draftStateValue\n"
+                "                    mediaDraftContentType = peerData.mediaDraftContentType\n"
+            )
+            draft_inject = (
+                "                    // AorusGram: Chat Protection — hide drafts while locked.\n"
+                "                    // This only changes row presentation; the Postbox draft remains stored\n"
+                "                    // and reappears natively as soon as the chat is unlocked.\n"
+                "                    let aorusHideProtectedDraft: Bool\n"
+                "                    if let aorusDraftPeer = peerValue.peer {\n"
+                "                        aorusHideProtectedDraft = aorusChatLockRequiresAuth(item.context.account.id.int64, aorusDraftPeer.id.toInt64())\n"
+                "                    } else {\n"
+                "                        aorusHideProtectedDraft = false\n"
+                "                    }\n"
+                "                    draftState = aorusHideProtectedDraft ? nil : draftStateValue\n"
+                "                    mediaDraftContentType = aorusHideProtectedDraft ? nil : peerData.mediaDraftContentType\n"
+            )
+            if t.count(draft_anchor) == 1:
+                t = t.replace(draft_anchor, draft_inject, 1)
+                item.write_text(t, encoding="utf-8")
+                print("ChatLock: hid text/media drafts in locked chat rows")
+            else:
+                print(f"ChatLock: WARNING draft presentation anchor count={t.count(draft_anchor)} (expected 1)")
+                ok = False
+
+    # --- 3e. Keep protected chats out of message search ------------------------------------
     #     Global/local search would otherwise hand back the very message text the lock is
     #     meant to hide. Filtering at the single point where the pane returns its entries
     #     covers local, remote and public-post results at once. Matching on `stableId`
@@ -5495,6 +5531,123 @@ def patch_profile_report_button(tg: Path) -> None:
         print(f"Profile report button: injected Report item into user More menu ({applied}x)")
     else:
         print("WARNING: PeerInfoScreenPerformButtonAction user Block anchor not found — profile Report item NOT added")
+
+
+def patch_unlimited_recent_stickers(tg: Path) -> None:
+    """Keep the complete local recent-sticker history instead of Telegram's 20-item tail.
+
+    Telegram inserts recent stickers through four independent paths. All four must stop
+    trimming, and the server reconciliation must merge its short cloud list with the local
+    tail instead of replacing it. GIFs and every other ordered list retain stock limits.
+    """
+    insertion_files = (
+        (
+            tg / "submodules/TelegramCore/Sources/State/SynchronizeRecentlyUsedMediaOperations.swift",
+            1,
+        ),
+        (
+            tg / "submodules/TelegramCore/Sources/State/ApplyUpdateMessage.swift",
+            2,
+        ),
+        (
+            tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift",
+            1,
+        ),
+    )
+    marker = "// AorusGram: unlimited recent stickers — preserve the complete local history."
+    for path, expected_count in insertion_files:
+        if not path.is_file():
+            print(f"Unlimited recent stickers: {path.name} not found")
+            continue
+        t = path.read_text(encoding="utf-8")
+        old = "removeTailIfCountExceeds: 20"
+        relevant_old = [
+            line for line in t.splitlines()
+            if "CloudRecentStickers" in line and old in line
+        ]
+        relevant_new = [
+            line for line in t.splitlines()
+            if "CloudRecentStickers" in line and "removeTailIfCountExceeds: nil" in line
+        ]
+        if len(relevant_old) == expected_count:
+            for line in relevant_old:
+                t = t.replace(line, line.replace(old, "removeTailIfCountExceeds: nil"), 1)
+        elif len(relevant_old) == 0 and len(relevant_new) == expected_count:
+            print(f"Unlimited recent stickers: {path.name} insertion limits already patched")
+        else:
+            print(
+                f"WARNING: {path.name} recent-sticker limiter count "
+                f"old={len(relevant_old)} new={len(relevant_new)}, expected={expected_count}"
+            )
+        if marker not in t:
+            import_anchor = "import Foundation\n"
+            if import_anchor in t:
+                t = t.replace(import_anchor, import_anchor + "\n" + marker + "\n", 1)
+            else:
+                t = marker + "\n" + t
+        path.write_text(t, encoding="utf-8")
+
+    managed = tg / "submodules/TelegramCore/Sources/State/ManagedRecentStickers.swift"
+    if not managed.is_file():
+        print("Unlimited recent stickers: ManagedRecentStickers.swift not found")
+        return
+    t = managed.read_text(encoding="utf-8")
+    hash_marker = "AorusGram: hash only Telegram's cloud window"
+    if hash_marker not in t:
+        hash_anchor = (
+            "        var itemIds = transaction.getOrderedListItemIds(collectionId: collectionId).compactMap(extractItemId)\n"
+            "        if reverseHashOrder {\n"
+        )
+        hash_inject = (
+            "        var itemIds = transaction.getOrderedListItemIds(collectionId: collectionId).compactMap(extractItemId)\n"
+            "        // AorusGram: hash only Telegram's cloud window. The remaining entries are\n"
+            "        // local history and must not force a needless full fetch on every sync.\n"
+            "        if collectionId == Namespaces.OrderedItemList.CloudRecentStickers {\n"
+            "            itemIds = Array(itemIds.prefix(20))\n"
+            "        }\n"
+            "        if reverseHashOrder {\n"
+        )
+        if t.count(hash_anchor) == 1:
+            t = t.replace(hash_anchor, hash_inject, 1)
+        else:
+            print(f"WARNING: ManagedRecentStickers hash anchor count={t.count(hash_anchor)} (expected 1)")
+
+    merge_marker = "AorusGram: unlimited recent stickers — retain the local tail"
+    if merge_marker in t:
+        managed.write_text(t, encoding="utf-8")
+        print("Unlimited recent stickers: cloud merge already patched")
+        return
+    merge_anchor = (
+        "                    return postbox.transaction { transaction -> Void in\n"
+        "                        transaction.replaceOrderedItemListItems(collectionId: collectionId, items: items)\n"
+        "                    }\n"
+    )
+    merge_inject = (
+        "                    return postbox.transaction { transaction -> Void in\n"
+        "                        // AorusGram: unlimited recent stickers — retain the local tail\n"
+        "                        // when Telegram returns its shorter cloud list. Remote order stays\n"
+        "                        // authoritative at the front; only unique local history is appended.\n"
+        "                        if collectionId == Namespaces.OrderedItemList.CloudRecentStickers {\n"
+        "                            var mergedIds = Set(items.compactMap { extractItemId($0.id) })\n"
+        "                            for localItem in transaction.getOrderedListItems(collectionId: collectionId) {\n"
+        "                                if let localId = extractItemId(localItem.id) {\n"
+        "                                    if mergedIds.insert(localId).inserted {\n"
+        "                                        items.append(localItem)\n"
+        "                                    }\n"
+        "                                } else {\n"
+        "                                    items.append(localItem)\n"
+        "                                }\n"
+        "                            }\n"
+        "                        }\n"
+        "                        transaction.replaceOrderedItemListItems(collectionId: collectionId, items: items)\n"
+        "                    }\n"
+    )
+    if t.count(merge_anchor) == 1:
+        t = t.replace(merge_anchor, merge_inject, 1)
+        managed.write_text(t, encoding="utf-8")
+        print("Unlimited recent stickers: removed local cap and preserved cloud-sync tail")
+    else:
+        print(f"WARNING: ManagedRecentStickers merge anchor count={t.count(merge_anchor)} (expected 1)")
 
 
 def patch_unlimited_pinned_chats(tg: Path) -> None:
@@ -22743,6 +22896,7 @@ def main() -> None:
     patch_formatting_panel(tg)
     patch_voice_to_text(tg)
     patch_disable_copy_protection(tg)
+    patch_unlimited_recent_stickers(tg)
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_media_caption_rich_edit(tg)

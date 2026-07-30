@@ -289,7 +289,6 @@ private struct AorusState: Equatable {
     var antiScreenshot: Bool
     var callRecording: Bool
     var voiceTranscription: Bool
-    var chatSummary: Bool
     var translator: Bool
     var shareButton: Bool
     var videoMessagesRearCamera: Bool
@@ -406,7 +405,6 @@ private enum AorusEntry: ItemListNodeEntry {
 
     case aiHeader(PresentationTheme, String)
     case voiceTranscription(PresentationTheme, String, Bool)
-    case chatSummary(PresentationTheme, String, Bool)
     case translator(PresentationTheme, String, Bool)
     case autoReply(PresentationTheme, String, Bool)
 
@@ -487,7 +485,7 @@ private enum AorusEntry: ItemListNodeEntry {
         switch self {
         case .privacyHeader, .ghostMode, .saveDeletedMessages, .saveEditedMessages, .clearDeletedCache, .antiScreenshot, .callRecording:
             return AorusSection.privacy.rawValue
-        case .aiHeader, .chatSummary, .autoReply:
+        case .aiHeader, .autoReply:
             return AorusSection.ai.rawValue
         case .callsHeader, .masks, .voiceTwin:
             return AorusSection.calls.rawValue
@@ -533,7 +531,6 @@ private enum AorusEntry: ItemListNodeEntry {
         case .antiScreenshot:       return 7
         case .callRecording:        return 8
         case .aiHeader:             return 10
-        case .chatSummary:          return 13
         case .autoReply:            return 16
         case .perfHeader:           return 20
         case .downloadAccel:        return 21
@@ -627,8 +624,6 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .aiHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .voiceTranscription(lt, ls, lv):
             if case let .voiceTranscription(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
-        case let .chatSummary(lt, ls, lv):
-            if case let .chatSummary(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .translator(lt, ls, lv):
             if case let .translator(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .autoReply(lt, ls, lv):
@@ -784,8 +779,6 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .voiceTranscription(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.voiceTranscription, $0) })
-        case let .chatSummary(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.chatSummary, $0) })
         case let .translator(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.translator, $0) })
         case let .shareButton(_, title, value):
@@ -1112,7 +1105,6 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         antiScreenshot:     mgr.antiScreenshot,
         callRecording:      mgr.callRecording,
         voiceTranscription: mgr.voiceTranscription,
-        chatSummary:        mgr.chatSummary,
         translator:         mgr.translator,
         shareButton:        mgr.shareButton,
         videoMessagesRearCamera: mgr.videoMessagesRearCamera,
@@ -1184,7 +1176,6 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             mgr.antiScreenshot      = s.antiScreenshot
             mgr.callRecording       = s.callRecording
             mgr.voiceTranscription  = s.voiceTranscription
-            mgr.chatSummary         = s.chatSummary
             mgr.translator          = s.translator
             mgr.shareButton         = s.shareButton
             mgr.videoMessagesRearCamera = s.videoMessagesRearCamera

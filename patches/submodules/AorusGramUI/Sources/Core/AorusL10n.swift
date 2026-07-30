@@ -85,7 +85,6 @@ public struct AorusL10n {
     public var antiScreenshot: String { t("Скрытие экрана при записи", "Hide Screen While Recording") }
     public var callRecording: String { t("Запись звонков", "Call Recording") }
     public var voiceTranscription: String { t("Расшифровка голосовых", "Voice to Text") }
-    public var chatSummary: String { t("Сводка чата", "Chat Summary") }
     public var translator: String { t("Переводчик", "Translator") }
     public var shareButton: String { t("Кнопка «Поделиться»", "Share Button") }
     public var quickTranslateButton: String { t("Кнопка быстрого перевода", "Quick Translate Button") }

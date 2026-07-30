@@ -20,7 +20,6 @@ public enum AorusGramConfig {
         case mediaManager       = "media_manager"
         case translator         = "translator"
         case voiceTranscription = "voice_transcription"
-        case chatSummary        = "chat_summary"
         case antiScreenshot     = "anti_screenshot"
         case secretPin          = "secret_pin"
         case smartFolders       = "smart_folders"

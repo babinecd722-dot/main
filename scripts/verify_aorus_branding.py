@@ -1051,6 +1051,53 @@ def main() -> None:
     if "aorusChatLockRequiresAuth(self.context.account.id.int64, aorusMessageId.peerId.toInt64())" in chat_search_text:
         err.append("ChatProtection: search filter dereferences optional self")
 
+    chat_list_item = tg / "submodules" / "ChatListUI" / "Sources" / "Node" / "ChatListItem.swift"
+    chat_list_item_text = chat_list_item.read_text(encoding="utf-8") if chat_list_item.is_file() else ""
+    for marker in (
+        "AorusGram: Chat Protection — hide drafts while locked",
+        "draftState = aorusHideProtectedDraft ? nil : draftStateValue",
+        "mediaDraftContentType = aorusHideProtectedDraft ? nil : peerData.mediaDraftContentType",
+    ):
+        if marker not in chat_list_item_text:
+            err.append(f"ChatProtection: locked chat rows can still leak drafts — missing {marker}")
+
+    # The retired Chat Summary must not leave a switch, state flag, localization, feature
+    # identifier, or compiled manager behind in the copied AorusGram module.
+    aorusgram_root = tg / "submodules" / "AorusGramUI" / "Sources"
+    retired_summary_tokens = ("chatSummary", "chat_summary", "Chat Summary", "Сводка чата")
+    if aorusgram_root.is_dir():
+        for swift_path in aorusgram_root.rglob("*.swift"):
+            swift_text = swift_path.read_text(encoding="utf-8")
+            for token in retired_summary_tokens:
+                if token in swift_text:
+                    err.append(f"ChatSummary: retired feature token remains in {swift_path.name}: {token}")
+    if (aorusgram_root / "Features" / "AI" / "ChatSummaryManager.swift").exists():
+        err.append("ChatSummary: retired manager is still compiled")
+
+    recent_sticker_paths = (
+        tg / "submodules" / "TelegramCore" / "Sources" / "State" / "SynchronizeRecentlyUsedMediaOperations.swift",
+        tg / "submodules" / "TelegramCore" / "Sources" / "State" / "ApplyUpdateMessage.swift",
+        tg / "submodules" / "TelegramCore" / "Sources" / "State" / "AccountStateManagementUtils.swift",
+    )
+    for recent_path in recent_sticker_paths:
+        recent_text = recent_path.read_text(encoding="utf-8") if recent_path.is_file() else ""
+        if "AorusGram: unlimited recent stickers" not in recent_text:
+            err.append(f"RecentStickers: unlimited-history marker missing from {recent_path.name}")
+        for line in recent_text.splitlines():
+            if "CloudRecentStickers" in line and "removeTailIfCountExceeds: 20" in line:
+                err.append(f"RecentStickers: stock 20-item limit remains in {recent_path.name}")
+    managed_recent = tg / "submodules" / "TelegramCore" / "Sources" / "State" / "ManagedRecentStickers.swift"
+    managed_recent_text = managed_recent.read_text(encoding="utf-8") if managed_recent.is_file() else ""
+    for marker in (
+        "AorusGram: hash only Telegram's cloud window",
+        "itemIds = Array(itemIds.prefix(20))",
+        "AorusGram: unlimited recent stickers — retain the local tail",
+        "transaction.getOrderedListItems(collectionId: collectionId)",
+        "mergedIds.insert(localId).inserted",
+    ):
+        if marker not in managed_recent_text:
+            err.append(f"RecentStickers: cloud synchronization can truncate local history — missing {marker}")
+
     clipboard_history = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusClipboardHistory.swift"
     clipboard_text = clipboard_history.read_text(encoding="utf-8") if clipboard_history.is_file() else ""
     for marker in (
