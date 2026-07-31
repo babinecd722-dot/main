@@ -23226,6 +23226,150 @@ def patch_voice_to_text(tg: Path) -> None:
         print("VoiceToText: layout geometry applied (" + ", ".join(repairs) + ")")
 
 
+def patch_device_microphone(tg: Path) -> None:
+    """Prefer the iPhone microphone for active recording and call sessions while
+    leaving Telegram in control of the output route."""
+    path = tg / "submodules/TelegramAudio/Sources/ManagedAudioSession.swift"
+    if not path.is_file():
+        raise RuntimeError("DeviceMicrophone: ManagedAudioSession.swift not found")
+
+    t = path.read_text(encoding="utf-8")
+    marker = "// AorusGram: built-in device microphone preference"
+    if marker in t:
+        print("DeviceMicrophone: ManagedAudioSession already patched")
+        return
+
+    state_anchor = (
+        "    private var currentTypeAndOutputMode: (ManagedAudioSessionType, AudioSessionOutputMode)?\n"
+        "    private var deactivateTimer: SwiftSignalKit.Timer?\n"
+    )
+    state_replacement = state_anchor + '''
+    // AorusGram: built-in device microphone preference
+    private var aorusDeviceMicrophoneWasEnabled = UserDefaults.standard.bool(forKey: "aorusgram_device_microphone")
+
+    private func aorusApplyDeviceMicrophone(for type: ManagedAudioSessionType) {
+        guard UserDefaults.standard.bool(forKey: "aorusgram_device_microphone") else {
+            return
+        }
+        switch type {
+        case .record, .voiceCall, .videoCall:
+            break
+        default:
+            return
+        }
+
+        let session = AVAudioSession.sharedInstance()
+        guard let builtInMicrophone = session.availableInputs?.first(where: { $0.portType == .builtInMic }) else {
+            managedAudioSessionLog("DeviceMicrophone: built-in microphone is unavailable")
+            return
+        }
+        guard session.preferredInput?.uid != builtInMicrophone.uid else {
+            return
+        }
+        do {
+            try session.setPreferredInput(builtInMicrophone)
+            managedAudioSessionLog("DeviceMicrophone: preferred input set to built-in microphone")
+        } catch let error {
+            managedAudioSessionLog("DeviceMicrophone: setPreferredInput error \\(error)")
+        }
+    }
+
+    private func aorusApplyDeviceMicrophoneForCurrentSession() {
+        if let (type, _) = self.currentTypeAndOutputMode {
+            self.aorusApplyDeviceMicrophone(for: type)
+        }
+    }
+
+    private func aorusRefreshDeviceMicrophonePreference() {
+        let isEnabled = UserDefaults.standard.bool(forKey: "aorusgram_device_microphone")
+        guard isEnabled != self.aorusDeviceMicrophoneWasEnabled else {
+            return
+        }
+        self.aorusDeviceMicrophoneWasEnabled = isEnabled
+
+        if isEnabled {
+            self.aorusApplyDeviceMicrophoneForCurrentSession()
+        } else {
+            do {
+                try AVAudioSession.sharedInstance().setPreferredInput(nil)
+                if let (type, outputMode) = self.currentTypeAndOutputMode {
+                    try self.setupOutputMode(outputMode, type: type)
+                }
+                managedAudioSessionLog("DeviceMicrophone: restored Telegram input routing")
+            } catch let error {
+                managedAudioSessionLog("DeviceMicrophone: restore input error \\(error)")
+            }
+        }
+        self.updateCurrentAudioRouteInfo()
+    }
+'''
+    if state_anchor not in t:
+        raise RuntimeError("DeviceMicrophone: state anchor not found")
+    t = t.replace(state_anchor, state_replacement, 1)
+
+    route_anchor = '''        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: AVAudioSession.sharedInstance(), queue: nil, using: { [weak self] _ in
+            queue.async {
+                self?.updateCurrentAudioRouteInfo()
+            }
+        })
+'''
+    route_replacement = '''        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: AVAudioSession.sharedInstance(), queue: nil, using: { [weak self] _ in
+            queue.async {
+                self?.aorusApplyDeviceMicrophoneForCurrentSession()
+                self?.updateCurrentAudioRouteInfo()
+            }
+        })
+
+        NotificationCenter.default.addObserver(forName: Notification.Name("aorusgram_settings_changed"), object: nil, queue: nil, using: { [weak self] _ in
+            queue.async {
+                self?.aorusRefreshDeviceMicrophonePreference()
+            }
+        })
+'''
+    if route_anchor not in t:
+        raise RuntimeError("DeviceMicrophone: route observer anchor not found")
+    t = t.replace(route_anchor, route_replacement, 1)
+
+    voice_output_anchor = (
+        '        } catch let e {\n'
+        '            managedAudioSessionLog("applyVoiceChatOutputModeInCurrentAudioSession error: \\(e)")\n'
+        '        }\n'
+        '    }\n'
+        '    \n'
+        '    private func setupOutputMode'
+    )
+    voice_output_replacement = (
+        '        } catch let e {\n'
+        '            managedAudioSessionLog("applyVoiceChatOutputModeInCurrentAudioSession error: \\(e)")\n'
+        '        }\n'
+        '        self.aorusApplyDeviceMicrophoneForCurrentSession()\n'
+        '    }\n'
+        '    \n'
+        '    private func setupOutputMode'
+    )
+    if voice_output_anchor not in t:
+        raise RuntimeError("DeviceMicrophone: voice-chat output anchor not found")
+    t = t.replace(voice_output_anchor, voice_output_replacement, 1)
+
+    activate_anchor = (
+        '                try self.setupOutputMode(outputMode, type: type)\n'
+        '                \n'
+        '                managedAudioSessionLog("\\(CFAbsoluteTimeGetCurrent()) AudioSession setupOutputMode: \\((CFAbsoluteTimeGetCurrent() - startTime) * 1000.0) ms")'
+    )
+    activate_replacement = (
+        '                try self.setupOutputMode(outputMode, type: type)\n'
+        '                self.aorusApplyDeviceMicrophone(for: type)\n'
+        '                \n'
+        '                managedAudioSessionLog("\\(CFAbsoluteTimeGetCurrent()) AudioSession setupOutputMode: \\((CFAbsoluteTimeGetCurrent() - startTime) * 1000.0) ms")'
+    )
+    if activate_anchor not in t:
+        raise RuntimeError("DeviceMicrophone: activation anchor not found")
+    t = t.replace(activate_anchor, activate_replacement, 1)
+
+    path.write_text(t, encoding="utf-8")
+    print("DeviceMicrophone: patched central Telegram audio routing")
+
+
 def patch_disable_copy_protection(tg: Path) -> None:
     """Client-side: ignore channel/group content-protection so protected messages
     can still be forwarded / copied / saved. Both the per-message and per-peer
@@ -23380,6 +23524,7 @@ def main() -> None:
     patch_message_timestamp_seconds(tg)
     patch_max_media_quality(tg)
     patch_video_message_rear_camera(tg)
+    patch_device_microphone(tg)
     patch_deleted_messages_interception(tg)
     patch_deleted_message_quote_reply(tg)
     patch_anti_spoof_delete_preflight(tg)

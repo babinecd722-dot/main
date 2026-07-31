@@ -92,6 +92,8 @@ public struct AorusL10n {
     public var quickShareButton: String { t("Кнопка быстро поделиться", "Quick Share Button") }
     public var videoMessagesHeader: String { t("ВИДЕОСООБЩЕНИЯ", "VIDEO MESSAGES") }
     public var videoMessagesRearCamera: String { t("Запись сразу с задней камеры", "Start Recording With Rear Camera") }
+    public var voiceMessagesHeader: String { t("ГОЛОСОВЫЕ СООБЩЕНИЯ", "VOICE MESSAGES") }
+    public var deviceMicrophone: String { t("Микрофон устройства", "Device Microphone") }
     public var callsHeader: String { t("ЗВОНКИ", "CALLS") }
     public var wallHeader: String { t("СТЕНА", "WALL") }
     public var wallEnabled: String { t("Включить стену", "Enable Wall") }

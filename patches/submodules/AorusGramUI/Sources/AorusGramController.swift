@@ -273,6 +273,7 @@ private enum AorusSection: Int32 {
     case channel
     case editLocal
     case quickButtons
+    case voiceMessages
     case videoMessages
     case calls
     case wall
@@ -293,6 +294,7 @@ private struct AorusState: Equatable {
     var translator: Bool
     var shareButton: Bool
     var videoMessagesRearCamera: Bool
+    var deviceMicrophone: Bool
     var autoReply: Bool
     var downloadAccel: Bool
     var maxMediaQuality: Bool
@@ -460,6 +462,8 @@ private enum AorusEntry: ItemListNodeEntry {
     case shareButton(PresentationTheme, String, Bool)
     case videoMessagesHeader(PresentationTheme, String)
     case videoMessagesRearCamera(PresentationTheme, String, Bool)
+    case voiceMessagesHeader(PresentationTheme, String)
+    case deviceMicrophone(PresentationTheme, String, Bool)
     case messagesDoubleCopy(PresentationTheme, String, Bool)
     case messagesTripleDelete(PresentationTheme, String, Bool)
     case editLocalEnabled(PresentationTheme, String, Bool)
@@ -515,6 +519,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.quickButtons.rawValue
         case .videoMessagesHeader, .videoMessagesRearCamera:
             return AorusSection.videoMessages.rawValue
+        case .voiceMessagesHeader, .deviceMicrophone:
+            return AorusSection.voiceMessages.rawValue
         case .deviceSpoofHeader, .deviceSpoof:
             return AorusSection.deviceSpoof.rawValue
         case .bypassHeader, .bypassSavePaid, .bypassSaveViewOnce, .bypassStoryDownload:
@@ -586,23 +592,25 @@ private enum AorusEntry: ItemListNodeEntry {
         case .translator:           return 73
         case .voiceTranscription:   return 74
         case .shareButton:          return 75
-        case .videoMessagesHeader:  return 76
-        case .videoMessagesRearCamera: return 77
-        case .callsHeader:          return 78
-        case .masks:                return 79
-        case .voiceTwin:            return 80
-        case .wallHeader:           return 81
-        case .wallEnabled:          return 82
-        case .wallSettings:         return 83
-        case .deviceSpoofHeader:    return 84
-        case .deviceSpoof:          return 85
-        case .bypassHeader:         return 86
-        case .bypassSavePaid:       return 87
-        case .bypassSaveViewOnce:   return 88
-        case .bypassStoryDownload:  return 89
-        case .antiSpoofHeader:      return 90
-        case .antiSpoofDeleted:     return 91
-        case .antiSpoofOnline:      return 92
+        case .voiceMessagesHeader:  return 76
+        case .deviceMicrophone:     return 77
+        case .videoMessagesHeader:  return 78
+        case .videoMessagesRearCamera: return 79
+        case .callsHeader:          return 80
+        case .masks:                return 81
+        case .voiceTwin:            return 82
+        case .wallHeader:           return 83
+        case .wallEnabled:          return 84
+        case .wallSettings:         return 85
+        case .deviceSpoofHeader:    return 86
+        case .deviceSpoof:          return 87
+        case .bypassHeader:         return 88
+        case .bypassSavePaid:       return 89
+        case .bypassSaveViewOnce:   return 90
+        case .bypassStoryDownload:  return 91
+        case .antiSpoofHeader:      return 92
+        case .antiSpoofDeleted:     return 93
+        case .antiSpoofOnline:      return 94
         case .accountBackupHeader:  return 95
         case .accountBackup:        return 96
         case .misc:                 return 97
@@ -731,6 +739,10 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .videoMessagesHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .videoMessagesRearCamera(lt, ls, lv):
             if case let .videoMessagesRearCamera(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .voiceMessagesHeader(lt, ls):
+            if case let .voiceMessagesHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .deviceMicrophone(lt, ls, lv):
+            if case let .deviceMicrophone(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .messagesDoubleCopy(lt, ls, lv):
             if case let .messagesDoubleCopy(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .messagesTripleDelete(lt, ls, lv):
@@ -810,6 +822,10 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .videoMessagesRearCamera(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.videoMessagesRearCamera, $0) })
+        case let .voiceMessagesHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .deviceMicrophone(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.deviceMicrophone, $0) })
         case let .autoReply(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.autoReply, $0) })
         case let .callsHeader(_, text):
@@ -893,7 +909,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case let .hideSearchButton(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideSearchButton, !$0) })
         case let .hideTabTitles(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideTabTitles, $0) })
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideTabTitles, !$0) })
         case let .compactTabBar(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.compactTabBar, $0) })
         case let .editLocalHeader(_, text):
@@ -1002,7 +1018,8 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .hideCallsTab(theme, l10n.hideCallsTab, !state.hideCallsTab),
         // Search switch reflects PRESENCE: on = button shown (stored hide flag inverted).
         .hideSearchButton(theme, l10n.hideSearchButton, !state.hideSearchButton),
-        .hideTabTitles(theme, l10n.hideTabTitles, state.hideTabTitles),
+        // Names switch reflects PRESENCE: on = names shown (stored hide flag inverted).
+        .hideTabTitles(theme, l10n.hideTabTitles, !state.hideTabTitles),
         .compactTabBar(theme, l10n.compactTabBar, state.compactTabBar),
 
         .editLocalHeader(theme, l10n.messagesHeader),
@@ -1016,6 +1033,9 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .translator(theme, l10n.quickTranslateButton, state.translator),
         .voiceTranscription(theme, l10n.quickTranscribeButton, state.voiceTranscription),
         .shareButton(theme, l10n.quickShareButton, state.shareButton),
+
+        .voiceMessagesHeader(theme, l10n.voiceMessagesHeader),
+        .deviceMicrophone(theme, l10n.deviceMicrophone, state.deviceMicrophone),
 
         .videoMessagesHeader(theme, l10n.videoMessagesHeader),
         .videoMessagesRearCamera(theme, l10n.videoMessagesRearCamera, state.videoMessagesRearCamera),
@@ -1145,6 +1165,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         translator:         mgr.translator,
         shareButton:        mgr.shareButton,
         videoMessagesRearCamera: mgr.videoMessagesRearCamera,
+        deviceMicrophone:   mgr.deviceMicrophone,
         autoReply:          mgr.autoReply,
         downloadAccel:      mgr.downloadAccel,
         maxMediaQuality:    mgr.maxMediaQuality,
@@ -1219,6 +1240,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             mgr.translator          = s.translator
             mgr.shareButton         = s.shareButton
             mgr.videoMessagesRearCamera = s.videoMessagesRearCamera
+            mgr.deviceMicrophone    = s.deviceMicrophone
             mgr.autoReply           = s.autoReply
             mgr.downloadAccel       = s.downloadAccel
             mgr.maxMediaQuality     = s.maxMediaQuality

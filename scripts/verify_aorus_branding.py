@@ -1217,6 +1217,44 @@ def main() -> None:
         if marker not in branding_text:
             err.append(f"EditLocally: sticker context-menu guard is missing {marker}")
 
+    audio_session = tg / "submodules" / "TelegramAudio" / "Sources" / "ManagedAudioSession.swift"
+    audio_session_text = audio_session.read_text(encoding="utf-8") if audio_session.is_file() else ""
+    for marker in (
+        "// AorusGram: built-in device microphone preference",
+        "aorusApplyDeviceMicrophone(for type: ManagedAudioSessionType)",
+        'UserDefaults.standard.bool(forKey: "aorusgram_device_microphone")',
+        "self.aorusApplyDeviceMicrophone(for: type)",
+        "DeviceMicrophone: restored Telegram input routing",
+    ):
+        if marker not in audio_session_text:
+            err.append(f"DeviceMicrophone: central audio route patch is missing {marker}")
+
+    aorus_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusGramController.swift"
+    aorus_controller_text = aorus_controller.read_text(encoding="utf-8") if aorus_controller.is_file() else ""
+    for marker in (
+        ".hideTabTitles(theme, l10n.hideTabTitles, !state.hideTabTitles)",
+        "args.set(\\.hideTabTitles, !$0)",
+        ".voiceMessagesHeader(theme, l10n.voiceMessagesHeader)",
+        ".deviceMicrophone(theme, l10n.deviceMicrophone, state.deviceMicrophone)",
+    ):
+        if marker not in aorus_controller_text:
+            err.append(f"AorusSettings: tab-name/device-microphone UI is missing {marker}")
+
+    for relative_path in (
+        "submodules/AorusGramUI/Sources/UI/Messaging/AorusVoiceToText.swift",
+        "submodules/AorusGramUI/Sources/UI/Settings/VoiceTranscriberView.swift",
+    ):
+        recorder = tg / relative_path
+        recorder_text = recorder.read_text(encoding="utf-8") if recorder.is_file() else ""
+        for marker in (
+            'UserDefaults.standard.bool(forKey: "aorusgram_device_microphone")',
+            ".portType == .builtInMic",
+            "session.setPreferredInput(builtInMicrophone)",
+            "session.setPreferredInput(nil)",
+        ):
+            if marker not in recorder_text:
+                err.append(f"DeviceMicrophone: custom recorder {relative_path} is missing {marker}")
+
     action_context = tg / "submodules" / "TelegramUI" / "Sources" / "AccountContext.swift"
     action_context_text = action_context.read_text(encoding="utf-8") if action_context.is_file() else ""
     for marker in (

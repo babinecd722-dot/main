@@ -277,6 +277,13 @@ public final class AorusVoiceSession {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
+            if UserDefaults.standard.bool(forKey: "aorusgram_device_microphone") {
+                if let builtInMicrophone = session.availableInputs?.first(where: { $0.portType == .builtInMic }) {
+                    try session.setPreferredInput(builtInMicrophone)
+                }
+            } else {
+                try session.setPreferredInput(nil)
+            }
         } catch {
             self.overlay?.showMessage(self.isRu ? "Не удалось включить микрофон" : "Could not start microphone")
             return

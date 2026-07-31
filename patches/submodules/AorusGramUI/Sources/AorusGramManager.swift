@@ -52,6 +52,7 @@ public final class AorusGramManager {
     // Native share button on posts — decoupled from the translator; on by default (stock).
     public var shareButton: Bool       = true  { didSet { save() } }
     public var videoMessagesRearCamera: Bool = true { didSet { save() } }
+    public var deviceMicrophone: Bool = false { didSet { save() } }
     public var antiScreenshot: Bool    = false { didSet { save() } }
     public var callRecording: Bool     = false { didSet { save() } }
     public var streaks: Bool           = false { didSet { save() } }
@@ -120,6 +121,7 @@ public final class AorusGramManager {
         ud.set(effective(translator),          forKey: "aorusgram_feature_translator")
         ud.set(effective(shareButton),         forKey: "aorusgram_share_button")
         ud.set(effective(videoMessagesRearCamera), forKey: "aorusgram_video_messages_rear_camera")
+        ud.set(effective(deviceMicrophone),  forKey: "aorusgram_device_microphone")
         ud.set(effective(autoReply),           forKey: "aorusgram_feature_auto_reply")
         ud.set(effective(maxMediaQuality),     forKey: "aorusgram_feature_max_media_quality")
         ud.set(effective(antiSpamEnabled),     forKey: "aorusgram_feature_anti_spam")
@@ -174,6 +176,7 @@ public final class AorusGramManager {
         translator          = d["translator"]          as? Bool ?? false
         shareButton         = d["shareButton"]         as? Bool ?? true
         videoMessagesRearCamera = d["videoMessagesRearCamera"] as? Bool ?? true
+        deviceMicrophone    = d["deviceMicrophone"]    as? Bool ?? false
         antiScreenshot      = d["antiScreenshot"]      as? Bool ?? false
         callRecording       = d["callRecording"]       as? Bool ?? false
         streaks             = d["streaks"]             as? Bool ?? false
@@ -234,6 +237,7 @@ public final class AorusGramManager {
             "translator":          translator,
             "shareButton":         shareButton,
             "videoMessagesRearCamera": videoMessagesRearCamera,
+            "deviceMicrophone":    deviceMicrophone,
             "antiScreenshot":      antiScreenshot,
             "callRecording":       callRecording,
             "streaks":             streaks,
