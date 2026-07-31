@@ -976,7 +976,7 @@ def main() -> None:
     if "aorusWriteBoundedCallLog" not in call_context_text:
         err.append("CallProxyUDP: exported native call diagnostics are not size-bounded")
     for marker in (
-        "AorusGram call diagnostics schema: 2",
+        "AorusGram call diagnostics schema: 3",
         "aorusAppendCallDiagnostic",
         "provision.status:",
         "initialNetworkType:",
@@ -987,6 +987,9 @@ def main() -> None:
     ):
         if marker not in call_context_text:
             err.append(f"CallProxyUDP: detailed call lifecycle diagnostics are missing {marker}")
+    for unavailable_api in ("seekToEnd()", "write(contentsOf:", "try handle.close()"):
+        if unavailable_api in call_context_text:
+            err.append(f"CallProxyUDP: iOS 13.4-only FileHandle API is present {unavailable_api}")
 
     call_proxy = tg / "submodules" / "TelegramCallsUI" / "Sources" / "AorusCallProxy.swift"
     call_proxy_text = call_proxy.read_text(encoding="utf-8") if call_proxy.is_file() else ""
