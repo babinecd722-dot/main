@@ -8565,6 +8565,118 @@ def patch_local_premium(tg: Path) -> None:
     else:
         print("Premium: AccountContext.swift not found — skipped")
 
+    # AccountContext caches the current premium flag, user limits and audio
+    # transcription state in long-lived subscriptions. Recreate those native
+    # subscriptions when the local master switch changes so the setting applies
+    # immediately without inventing parallel state or requiring a restart.
+    if acc_ctx.is_file():
+        t = acc_ctx.read_text(encoding="utf-8")
+        live_marker = "private var aorusLocalPremiumObserver: NSObjectProtocol?"
+        if live_marker in t:
+            print("Premium: AccountContext live refresh already patched")
+        else:
+            property_anchor = (
+                "    private var audioTranscriptionTrialDisposable: Disposable?\n"
+                "    public private(set) var audioTranscriptionTrial: AudioTranscription.TrialState\n"
+            )
+            observer_anchor = (
+                "        self.audioTranscriptionTrialDisposable = (self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: account.peerId))\n"
+                "        |> mapToSignal { peer -> Signal<AudioTranscription.TrialState, NoError> in\n"
+                "            let isPremium = peer?.isPremium ?? false\n"
+                "            if isPremium {\n"
+                "                return .single(AudioTranscription.TrialState(cooldownUntilTime: nil, remainingCount: 1))\n"
+                "            } else {\n"
+                "                return self.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.AudioTranscriptionTrial())\n"
+                "            }\n"
+                "        }\n"
+                "        |> deliverOnMainQueue).startStrict(next: { [weak self] audioTranscriptionTrial in\n"
+                "            guard let self = self else {\n"
+                "                return\n"
+                "            }\n"
+                "            self.audioTranscriptionTrial = audioTranscriptionTrial\n"
+                "        })\n"
+            )
+            method_anchor = (
+                "    deinit {\n"
+                "        self.limitsConfigurationDisposable?.dispose()\n"
+            )
+            deinit_anchor = (
+                "        self.userLimitsConfigurationDisposable?.dispose()\n"
+                "        self.peerNameColorsConfigurationDisposable?.dispose()\n"
+            )
+
+            if (
+                property_anchor not in t
+                or observer_anchor not in t
+                or method_anchor not in t
+                or deinit_anchor not in t
+            ):
+                print("Premium: WARNING AccountContext live-refresh anchors not found")
+            else:
+                t = t.replace(
+                    property_anchor,
+                    property_anchor
+                    + "    private var aorusLocalPremiumObserver: NSObjectProtocol?\n",
+                    1,
+                )
+                t = t.replace(
+                    observer_anchor,
+                    observer_anchor
+                    + "        self.aorusLocalPremiumObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram_local_premium_changed\"), object: nil, queue: OperationQueue.main) { [weak self] _ in\n"
+                    + "            self?.aorusRefreshLocalPremiumState()\n"
+                    + "        }\n",
+                    1,
+                )
+                live_method = (
+                    "    // AorusGram: rebuild Telegram's own premium-dependent subscriptions.\n"
+                    "    private func aorusRefreshLocalPremiumState() {\n"
+                    "        self.userLimitsConfigurationDisposable?.dispose()\n"
+                    "        self.userLimitsConfigurationDisposable = (self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: self.account.peerId))\n"
+                    "        |> mapToSignal { peer -> Signal<(Bool, EngineConfiguration.UserLimits), NoError> in\n"
+                    "            let isPremium = peer?.isPremium ?? false\n"
+                    "            return self.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.UserLimits(isPremium: isPremium))\n"
+                    "            |> map { userLimits in\n"
+                    "                return (isPremium, userLimits)\n"
+                    "            }\n"
+                    "        }\n"
+                    "        |> deliverOnMainQueue).startStrict(next: { [weak self] isPremium, userLimits in\n"
+                    "            guard let self else {\n"
+                    "                return\n"
+                    "            }\n"
+                    "            self.isPremium = isPremium\n"
+                    "            self.userLimits = userLimits\n"
+                    "        })\n"
+                    "\n"
+                    "        self.audioTranscriptionTrialDisposable?.dispose()\n"
+                    "        self.audioTranscriptionTrialDisposable = (self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: self.account.peerId))\n"
+                    "        |> mapToSignal { peer -> Signal<AudioTranscription.TrialState, NoError> in\n"
+                    "            let isPremium = peer?.isPremium ?? false\n"
+                    "            if isPremium {\n"
+                    "                return .single(AudioTranscription.TrialState(cooldownUntilTime: nil, remainingCount: 1))\n"
+                    "            } else {\n"
+                    "                return self.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.AudioTranscriptionTrial())\n"
+                    "            }\n"
+                    "        }\n"
+                    "        |> deliverOnMainQueue).startStrict(next: { [weak self] audioTranscriptionTrial in\n"
+                    "            self?.audioTranscriptionTrial = audioTranscriptionTrial\n"
+                    "        })\n"
+                    "    }\n"
+                    "\n"
+                )
+                t = t.replace(method_anchor, live_method + method_anchor, 1)
+                t = t.replace(
+                    deinit_anchor,
+                    "        self.userLimitsConfigurationDisposable?.dispose()\n"
+                    + "        self.audioTranscriptionTrialDisposable?.dispose()\n"
+                    + "        if let aorusLocalPremiumObserver = self.aorusLocalPremiumObserver {\n"
+                    + "            NotificationCenter.default.removeObserver(aorusLocalPremiumObserver)\n"
+                    + "        }\n"
+                    + "        self.peerNameColorsConfigurationDisposable?.dispose()\n",
+                    1,
+                )
+                acc_ctx.write_text(t, encoding="utf-8")
+                print("Premium: AccountContext live refresh wired")
+
     # 4) Persist the emoji status set when wearing a fake gift (and drop the local
     #    override when a real/empty status is set instead), so the worn gift survives
     #    restarts. Hooks the two engine entry points that set the own emoji status.
@@ -15762,6 +15874,92 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
     else:
         print("TabBarVisibility: TabBarComponent already patched")
 
+    # Compact mode is intentionally independent from title visibility. It keeps
+    # Telegram's native item rendering and touch targets, but sizes the glass
+    # panel to the intrinsic width of the visible tabs instead of stretching it
+    # across all available space. This migration also upgrades cached CI trees
+    # that already contain the earlier title-hiding patch.
+    component = component_file.read_text(encoding="utf-8")
+    if "AorusGram: compact tab panel" not in component:
+        original = component
+        compact_replacements = [
+            (
+                "    public let hideTitles: Bool // AorusGram: hide tab titles\n"
+                "    public let selectedId: AnyHashable?\n",
+                "    public let hideTitles: Bool // AorusGram: hide tab titles\n"
+                "    public let compactPanel: Bool // AorusGram: compact tab panel\n"
+                "    public let selectedId: AnyHashable?\n",
+            ),
+            (
+                "        hideTitles: Bool = false,\n"
+                "        selectedId: AnyHashable?,\n",
+                "        hideTitles: Bool = false,\n"
+                "        compactPanel: Bool = false,\n"
+                "        selectedId: AnyHashable?,\n",
+            ),
+            (
+                "        self.hideTitles = hideTitles\n"
+                "        self.selectedId = selectedId\n",
+                "        self.hideTitles = hideTitles\n"
+                "        self.compactPanel = compactPanel\n"
+                "        self.selectedId = selectedId\n",
+            ),
+            (
+                "        if lhs.hideTitles != rhs.hideTitles {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.selectedId != rhs.selectedId {\n",
+                "        if lhs.hideTitles != rhs.hideTitles {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.compactPanel != rhs.compactPanel {\n"
+                "            return false\n"
+                "        }\n"
+                "        if lhs.selectedId != rhs.selectedId {\n",
+            ),
+            (
+                "            let equalWidth = floorToScreenPixels(availableItemsWidth / CGFloat(component.items.count))\n",
+                "            let minimumItemsWidth = 48.0 * CGFloat(component.items.count)\n"
+                "            let layoutItemsWidth = component.compactPanel ? min(availableItemsWidth, max(minimumItemsWidth, unboundItemWidthSum)) : availableItemsWidth\n"
+                "            let equalWidth = floorToScreenPixels(layoutItemsWidth / CGFloat(component.items.count))\n",
+            ),
+            (
+                "                let itemWeightNorm: CGFloat = availableItemsWidth / unboundItemWidthSum\n",
+                "                let itemWeightNorm: CGFloat = layoutItemsWidth / unboundItemWidthSum\n",
+            ),
+            (
+                "                return CGSize(width: component.hideTitle ? 48.0 : titleSize.width + 10.0 * 2.0, height: availableSize.height)\n",
+                "                return CGSize(width: component.hideTitle ? 48.0 : max(48.0, titleSize.width + 10.0 * 2.0), height: availableSize.height)\n",
+            ),
+        ]
+        for old, new in compact_replacements:
+            if old not in component:
+                print(f"TabBarVisibility: WARNING — compact component anchor missing: {old.splitlines()[0]!r}")
+                component = original
+                break
+            component = component.replace(old, new, 1)
+        if component != original:
+            component_file.write_text(component, encoding="utf-8")
+            print("TabBarVisibility: compact native panel sizing injected")
+    else:
+        print("TabBarVisibility: compact panel already patched")
+
+    # The stock inactive-search frame is based on the full available width because
+    # the stock tabs always fill it. In compact mode the component returns a smaller
+    # width, so anchor Search to that actual width or it ends up outside the panel.
+    component = component_file.read_text(encoding="utf-8")
+    compact_search_anchor = (
+        "                    searchFrame = CGRect(origin: CGPoint(x: availableSize.width - searchSize.width, y: 0.0), size: searchSize)\n"
+    )
+    if "AorusGram: compact tab panel" in component and compact_search_anchor in component:
+        component = component.replace(
+            compact_search_anchor,
+            "                    searchFrame = CGRect(origin: CGPoint(x: size.width - searchSize.width, y: 0.0), size: searchSize) // AorusGram: compact search position\n",
+            1,
+        )
+        component_file.write_text(component, encoding="utf-8")
+        print("TabBarVisibility: compact search position aligned")
+
     node = node_file.read_text(encoding="utf-8")
     if "AorusGram: hide search button" not in node:
         original = node
@@ -15785,6 +15983,25 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
             node = original
     else:
         print("TabBarVisibility: TabBarContollerNode already patched")
+
+    node = node_file.read_text(encoding="utf-8")
+    if "compactPanel: UserDefaults.standard.bool" not in node:
+        anchor = (
+            "                hideTitles: UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\"),\n"
+        )
+        if anchor in node:
+            node = node.replace(
+                anchor,
+                anchor
+                + "                compactPanel: UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\"),\n",
+                1,
+            )
+            node_file.write_text(node, encoding="utf-8")
+            print("TabBarVisibility: compact panel setting wired")
+        else:
+            print("TabBarVisibility: WARNING — compact panel node anchor missing")
+    else:
+        print("TabBarVisibility: compact panel setting already wired")
 
     controller = controller_file.read_text(encoding="utf-8")
     if "AorusGram: compact tab titles" not in controller:
@@ -16654,6 +16871,57 @@ def patch_settings_live_refresh(tg: Path) -> None:
                 return
             t = t.replace(old_tabs, new_tabs, 1)
             changed = True
+        if "private var aorusLastCompactTabBar" not in t:
+            prop_anchor = (
+                "    private var aorusLastHideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
+            )
+            if prop_anchor not in t:
+                print("SettingsLiveRefresh: WARNING — compact tab property anchor not found")
+                return
+            t = t.replace(
+                prop_anchor,
+                prop_anchor
+                + "    private var aorusLastCompactTabBar = UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\")\n"
+                + "    private var aorusLastLocalPremium = UserDefaults.standard.object(forKey: \"aorusgram_local_premium\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_local_premium\")\n",
+                1,
+            )
+            changed = True
+        if "let compactTabBar = UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\")" not in t:
+            old_tabs = (
+                "            let hideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
+                "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
+                "            let hideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
+                "            let hideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
+                "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || hideSearch != strongSelf.aorusLastHideSearch || hideTabTitles != strongSelf.aorusLastHideTabTitles {\n"
+                "                strongSelf.aorusLastHideCalls = hideCalls\n"
+                "                strongSelf.aorusLastHideContacts = hideContacts\n"
+                "                strongSelf.aorusLastHideSearch = hideSearch\n"
+                "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "            }\n"
+            )
+            new_tabs = (
+                "            let hideCalls = UserDefaults.standard.bool(forKey: \"aorusgram_hide_calls_tab\")\n"
+                "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
+                "            let hideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
+                "            let hideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
+                "            let compactTabBar = UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\")\n"
+                "            let localPremium = UserDefaults.standard.object(forKey: \"aorusgram_local_premium\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_local_premium\")\n"
+                "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || hideSearch != strongSelf.aorusLastHideSearch || hideTabTitles != strongSelf.aorusLastHideTabTitles || compactTabBar != strongSelf.aorusLastCompactTabBar || localPremium != strongSelf.aorusLastLocalPremium {\n"
+                "                strongSelf.aorusLastHideCalls = hideCalls\n"
+                "                strongSelf.aorusLastHideContacts = hideContacts\n"
+                "                strongSelf.aorusLastHideSearch = hideSearch\n"
+                "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
+                "                strongSelf.aorusLastCompactTabBar = compactTabBar\n"
+                "                strongSelf.aorusLastLocalPremium = localPremium\n"
+                "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
+                "            }\n"
+            )
+            if old_tabs not in t:
+                print("SettingsLiveRefresh: WARNING — compact tab observer anchor not found")
+                return
+            t = t.replace(old_tabs, new_tabs, 1)
+            changed = True
         old_default = '(UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") as? Bool) ?? true'
         new_default = 'UserDefaults.standard.object(forKey: "aorusgram_wall_enabled") == nil ? true : UserDefaults.standard.bool(forKey: "aorusgram_wall_enabled")'
         if old_default in t:
@@ -16760,6 +17028,8 @@ def patch_settings_live_refresh(tg: Path) -> None:
         + "    private var aorusLastHideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
         + "    private var aorusLastHideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
         + "    private var aorusLastHideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
+        + "    private var aorusLastCompactTabBar = UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\")\n"
+        + "    private var aorusLastLocalPremium = UserDefaults.standard.object(forKey: \"aorusgram_local_premium\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_local_premium\")\n"
         + "    private var aorusLastWallEnabled = UserDefaults.standard.object(forKey: \"aorusgram_wall_enabled\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_wall_enabled\")\n",
         1,
     )
@@ -16790,11 +17060,15 @@ def patch_settings_live_refresh(tg: Path) -> None:
         "            let hideContacts = UserDefaults.standard.bool(forKey: \"aorusgram_hide_contacts_tab\")\n"
         "            let hideSearch = UserDefaults.standard.bool(forKey: \"aorusgram_hide_search_button\")\n"
         "            let hideTabTitles = UserDefaults.standard.bool(forKey: \"aorusgram_hide_tab_titles\")\n"
-        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || hideSearch != strongSelf.aorusLastHideSearch || hideTabTitles != strongSelf.aorusLastHideTabTitles {\n"
+        "            let compactTabBar = UserDefaults.standard.bool(forKey: \"aorusgram_compact_tab_bar\")\n"
+        "            let localPremium = UserDefaults.standard.object(forKey: \"aorusgram_local_premium\") == nil ? true : UserDefaults.standard.bool(forKey: \"aorusgram_local_premium\")\n"
+        "            if hideCalls != strongSelf.aorusLastHideCalls || hideContacts != strongSelf.aorusLastHideContacts || hideSearch != strongSelf.aorusLastHideSearch || hideTabTitles != strongSelf.aorusLastHideTabTitles || compactTabBar != strongSelf.aorusLastCompactTabBar || localPremium != strongSelf.aorusLastLocalPremium {\n"
         "                strongSelf.aorusLastHideCalls = hideCalls\n"
         "                strongSelf.aorusLastHideContacts = hideContacts\n"
         "                strongSelf.aorusLastHideSearch = hideSearch\n"
         "                strongSelf.aorusLastHideTabTitles = hideTabTitles\n"
+        "                strongSelf.aorusLastCompactTabBar = compactTabBar\n"
+        "                strongSelf.aorusLastLocalPremium = localPremium\n"
         "                strongSelf.rootController.updateRootControllers(showCallsTab: strongSelf.showCallsTab)\n"
         "            }\n"
         "        }\n"

@@ -45,6 +45,7 @@ public final class AorusGramManager {
     public var hideContactsTab: Bool   = false { didSet { save() } }
     public var hideSearchButton: Bool  = false { didSet { save() } }
     public var hideTabTitles: Bool     = false { didSet { save() } }
+    public var compactTabBar: Bool     = false { didSet { save() } }
     public var wallEnabled: Bool       = true  { didSet { save() } }
     public var voiceTranscription: Bool = false { didSet { save() } }
     public var translator: Bool        = false { didSet { save() } }
@@ -130,6 +131,7 @@ public final class AorusGramManager {
         ud.set(effective(hideContactsTab),     forKey: "aorusgram_hide_contacts_tab")
         ud.set(effective(hideSearchButton),    forKey: "aorusgram_hide_search_button")
         ud.set(effective(hideTabTitles),       forKey: "aorusgram_hide_tab_titles")
+        ud.set(effective(compactTabBar),        forKey: "aorusgram_compact_tab_bar")
         ud.set(effective(wallEnabled),         forKey: "aorusgram_wall_enabled")
         ud.set(effective(streaks),             forKey: "aorusgram_feature_streaks")
         ud.set(effective(siriShortcuts),       forKey: "aorusgram_feature_siri_shortcuts")
@@ -166,6 +168,7 @@ public final class AorusGramManager {
         hideContactsTab     = d["hideContactsTab"]     as? Bool ?? false
         hideSearchButton    = d["hideSearchButton"]    as? Bool ?? false
         hideTabTitles       = d["hideTabTitles"]       as? Bool ?? false
+        compactTabBar       = d["compactTabBar"]       as? Bool ?? false
         wallEnabled         = d["wallEnabled"]         as? Bool ?? true
         voiceTranscription  = d["voiceTranscription"]  as? Bool ?? false
         translator          = d["translator"]          as? Bool ?? false
@@ -225,6 +228,7 @@ public final class AorusGramManager {
             "hideContactsTab":     hideContactsTab,
             "hideSearchButton":    hideSearchButton,
             "hideTabTitles":       hideTabTitles,
+            "compactTabBar":       compactTabBar,
             "wallEnabled":         wallEnabled,
             "voiceTranscription":  voiceTranscription,
             "translator":          translator,

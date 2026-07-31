@@ -8,6 +8,7 @@ import Foundation
 // previous always-on behaviour. The toggle in the "Прочее" screen flips it.
 public enum AorusLocalPremium {
     public static let key = "aorusgram_local_premium"
+    public static let changedNotification = Notification.Name("aorusgram_local_premium_changed")
 
     public static var isEnabled: Bool {
         let defaults = UserDefaults.standard
@@ -18,6 +19,16 @@ public enum AorusLocalPremium {
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(value, forKey: key)
+        let defaults = UserDefaults.standard
+        guard isEnabled != value else {
+            return
+        }
+        defaults.set(value, forKey: key)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+        // AccountContext refreshes its cached premium state first. Rebuild visible
+        // controllers on the next run-loop turn so they read the refreshed value.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Notification.Name("aorusgram_settings_changed"), object: nil)
+        }
     }
 }

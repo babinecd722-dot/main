@@ -1418,6 +1418,8 @@ def main() -> None:
         ".hideCallsTab(theme, l10n.hideCallsTab",
         ".hideSearchButton(theme, l10n.hideSearchButton",
         ".hideTabTitles(theme, l10n.hideTabTitles",
+        ".compactTabBar(theme, l10n.compactTabBar",
+        "updated: { args.set(\\.hideSearchButton, !$0) }",
     ):
         if marker not in aorus_controller_text:
             err.append(f"TabBarVisibility: settings section is missing {marker}")
@@ -1427,8 +1429,10 @@ def main() -> None:
     for marker in (
         'forKey: "aorusgram_hide_search_button"',
         'forKey: "aorusgram_hide_tab_titles"',
+        'forKey: "aorusgram_compact_tab_bar"',
         '"hideSearchButton":',
         '"hideTabTitles":',
+        '"compactTabBar":',
     ):
         if marker not in aorus_manager_text:
             err.append(f"TabBarVisibility: persisted setting is missing {marker}")
@@ -1443,6 +1447,10 @@ def main() -> None:
         "component.hideTitles ? 48.0 : 56.0",
         "component.isCompact || component.hideTitle",
         "component.hideTitle ? floor((availableSize.height - iconSize.height) * 0.5)",
+        "public let compactPanel: Bool",
+        "component.compactPanel ? min(availableItemsWidth",
+        "let itemWeightNorm: CGFloat = layoutItemsWidth / unboundItemWidthSum",
+        "CGPoint(x: size.width - searchSize.width",
     ):
         if marker not in tab_component_text:
             err.append(f"TabBarVisibility: native compact layout is missing {marker}")
@@ -1452,6 +1460,7 @@ def main() -> None:
     for marker in (
         'aorusgram_hide_search_button") ? nil',
         'hideTitles: UserDefaults.standard.bool(forKey: "aorusgram_hide_tab_titles")',
+        'compactPanel: UserDefaults.standard.bool(forKey: "aorusgram_compact_tab_bar")',
     ):
         if marker not in tab_node_text:
             err.append(f"TabBarVisibility: tab composition is missing {marker}")
@@ -1463,11 +1472,35 @@ def main() -> None:
     for marker in (
         "private var aorusLastHideSearch",
         "private var aorusLastHideTabTitles",
+        "private var aorusLastCompactTabBar",
         "hideSearch != strongSelf.aorusLastHideSearch",
         "hideTabTitles != strongSelf.aorusLastHideTabTitles",
+        "compactTabBar != strongSelf.aorusLastCompactTabBar",
     ):
         if marker not in app_context_text:
             err.append(f"TabBarVisibility: live refresh is missing {marker}")
+
+    account_context = tg / "submodules" / "TelegramUI" / "Sources" / "AccountContext.swift"
+    account_context_text = account_context.read_text(encoding="utf-8") if account_context.is_file() else ""
+    for marker in (
+        "private var aorusLocalPremiumObserver: NSObjectProtocol?",
+        'Notification.Name("aorusgram_local_premium_changed")',
+        "private func aorusRefreshLocalPremiumState()",
+        "self.userLimitsConfigurationDisposable?.dispose()",
+        "self.audioTranscriptionTrialDisposable?.dispose()",
+    ):
+        if marker not in account_context_text:
+            err.append(f"LocalPremium: live AccountContext refresh is missing {marker}")
+
+    local_premium = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusLocalPremium.swift"
+    local_premium_text = local_premium.read_text(encoding="utf-8") if local_premium.is_file() else ""
+    for marker in (
+        'Notification.Name("aorusgram_local_premium_changed")',
+        "NotificationCenter.default.post(name: changedNotification",
+        'Notification.Name("aorusgram_settings_changed")',
+    ):
+        if marker not in local_premium_text:
+            err.append(f"LocalPremium: live setting notification is missing {marker}")
 
     subscription_config = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionConfig.swift"
     if not subscription_config.is_file():

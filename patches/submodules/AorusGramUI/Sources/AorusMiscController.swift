@@ -423,8 +423,8 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.premiumHeader(theme, isRu ? "ПРЕМИУМ" : "PREMIUM"))
     entries.append(.localPremium(theme, isRu ? "Локальный премиум" : "Local Premium", state.localPremium))
     entries.append(.premiumInfo(theme, isRu
-        ? "Включает Telegram Premium локально на этом устройстве — функции работают только у вас. Изменение полностью применяется после перезапуска приложения."
-        : "Enables Telegram Premium locally on this device — the features work only for you. The change fully applies after restarting the app."))
+        ? "Включает Telegram Premium локально на этом устройстве — функции работают только у вас."
+        : "Enables Telegram Premium locally on this device — the features work only for you."))
 
     entries.append(.fakeGifts(theme, isRu ? "Фейковые подарки" : "Fake Gifts"))
 
@@ -569,9 +569,6 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 next.localPremium = value
                 return next
             }
-            // The premium flag is read at launch / account registration, so the
-            // change only fully applies after a restart — offer a native prompt.
-            aorusPresentRestartNotice(context: context, controller: weakController)
         },
         openFakeGifts: {
             guard let controller = weakController,

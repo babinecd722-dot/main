@@ -324,6 +324,7 @@ private struct AorusState: Equatable {
     var hideContactsTab: Bool
     var hideSearchButton: Bool
     var hideTabTitles: Bool
+    var compactTabBar: Bool
     var wallEnabled: Bool
     var siriShortcuts: Bool
     var appBadge: String
@@ -453,6 +454,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case tabsHeader(PresentationTheme, String)
     case hideSearchButton(PresentationTheme, String, Bool)
     case hideTabTitles(PresentationTheme, String, Bool)
+    case compactTabBar(PresentationTheme, String, Bool)
 
     case editLocalHeader(PresentationTheme, String)
     case shareButton(PresentationTheme, String, Bool)
@@ -505,7 +507,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.performance.rawValue
         case .uiHeader, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .showStories:
             return AorusSection.ui.rawValue
-        case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles:
+        case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar:
             return AorusSection.tabs.rawValue
         case .editLocalHeader, .messagesDoubleCopy, .messagesTripleDelete, .editLocalEnabled, .userMessagesEnabled, .messageSeconds:
             return AorusSection.editLocal.rawValue
@@ -574,41 +576,42 @@ private enum AorusEntry: ItemListNodeEntry {
         case .tabsHeader:           return 61
         case .hideSearchButton:     return 64
         case .hideTabTitles:        return 65
-        case .editLocalHeader:      return 66
-        case .messagesDoubleCopy:   return 67
-        case .messagesTripleDelete: return 68
-        case .editLocalEnabled:     return 69
-        case .userMessagesEnabled:  return 70
-        case .messageSeconds:       return 71
-        case .translator:           return 72
-        case .voiceTranscription:   return 73
-        case .shareButton:          return 74
-        case .videoMessagesHeader:  return 75
-        case .videoMessagesRearCamera: return 76
-        case .callsHeader:          return 77
-        case .masks:                return 78
-        case .voiceTwin:            return 79
-        case .wallHeader:           return 80
-        case .wallEnabled:          return 81
-        case .wallSettings:         return 82
-        case .deviceSpoofHeader:    return 83
-        case .deviceSpoof:          return 84
-        case .bypassHeader:         return 85
-        case .bypassSavePaid:       return 86
-        case .bypassSaveViewOnce:   return 87
-        case .bypassStoryDownload:  return 88
-        case .antiSpoofHeader:      return 89
-        case .antiSpoofDeleted:     return 90
-        case .antiSpoofOnline:      return 91
-        case .accountBackupHeader:  return 94
-        case .accountBackup:        return 95
-        case .misc:                 return 96
-        case .aorusCodeHeader:      return 99
-        case .aorusCodeEnabled:     return 100
-        case .subscription:         return 105
-        case .officialChannel:      return 106
-        case .proxyDiagnostics:     return 116 // AORUS-DIAG
-        case .callLogs:             return 117
+        case .compactTabBar:        return 66
+        case .editLocalHeader:      return 67
+        case .messagesDoubleCopy:   return 68
+        case .messagesTripleDelete: return 69
+        case .editLocalEnabled:     return 70
+        case .userMessagesEnabled:  return 71
+        case .messageSeconds:       return 72
+        case .translator:           return 73
+        case .voiceTranscription:   return 74
+        case .shareButton:          return 75
+        case .videoMessagesHeader:  return 76
+        case .videoMessagesRearCamera: return 77
+        case .callsHeader:          return 78
+        case .masks:                return 79
+        case .voiceTwin:            return 80
+        case .wallHeader:           return 81
+        case .wallEnabled:          return 82
+        case .wallSettings:         return 83
+        case .deviceSpoofHeader:    return 84
+        case .deviceSpoof:          return 85
+        case .bypassHeader:         return 86
+        case .bypassSavePaid:       return 87
+        case .bypassSaveViewOnce:   return 88
+        case .bypassStoryDownload:  return 89
+        case .antiSpoofHeader:      return 90
+        case .antiSpoofDeleted:     return 91
+        case .antiSpoofOnline:      return 92
+        case .accountBackupHeader:  return 95
+        case .accountBackup:        return 96
+        case .misc:                 return 97
+        case .aorusCodeHeader:      return 100
+        case .aorusCodeEnabled:     return 101
+        case .subscription:         return 106
+        case .officialChannel:      return 107
+        case .proxyDiagnostics:     return 117 // AORUS-DIAG
+        case .callLogs:             return 118
         }
     }
 
@@ -718,6 +721,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .hideSearchButton(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .hideTabTitles(lt, ls, lv):
             if case let .hideTabTitles(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .compactTabBar(lt, ls, lv):
+            if case let .compactTabBar(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .editLocalHeader(lt, ls):
             if case let .editLocalHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .shareButton(lt, ls, lv):
@@ -886,9 +891,11 @@ private enum AorusEntry: ItemListNodeEntry {
         case let .tabsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .hideSearchButton(_, title, value):
-            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideSearchButton, $0) })
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideSearchButton, !$0) })
         case let .hideTabTitles(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.hideTabTitles, $0) })
+        case let .compactTabBar(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.compactTabBar, $0) })
         case let .editLocalHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .messagesDoubleCopy(_, title, value):
@@ -993,9 +1000,10 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         // These two switches reflect tab PRESENCE: on = tab shown.
         .hideContactsTab(theme, l10n.hideContactsTab, !state.hideContactsTab),
         .hideCallsTab(theme, l10n.hideCallsTab, !state.hideCallsTab),
-        // These switches follow their labels directly: on = element hidden.
-        .hideSearchButton(theme, l10n.hideSearchButton, state.hideSearchButton),
+        // Search switch reflects PRESENCE: on = button shown (stored hide flag inverted).
+        .hideSearchButton(theme, l10n.hideSearchButton, !state.hideSearchButton),
         .hideTabTitles(theme, l10n.hideTabTitles, state.hideTabTitles),
+        .compactTabBar(theme, l10n.compactTabBar, state.compactTabBar),
 
         .editLocalHeader(theme, l10n.messagesHeader),
         .messagesDoubleCopy(theme, l10n.doubleTapCopy, state.doubleTapCopy),
@@ -1168,6 +1176,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         hideContactsTab:    mgr.hideContactsTab,
         hideSearchButton:    mgr.hideSearchButton,
         hideTabTitles:       mgr.hideTabTitles,
+        compactTabBar:       mgr.compactTabBar,
         wallEnabled:        mgr.wallEnabled,
         siriShortcuts:      mgr.siriShortcuts,
         appBadge:           UserDefaults.standard.string(forKey: "aorusgram_app_badge") ?? "aorusgram",
@@ -1240,6 +1249,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             mgr.hideContactsTab     = s.hideContactsTab
             mgr.hideSearchButton    = s.hideSearchButton
             mgr.hideTabTitles       = s.hideTabTitles
+            mgr.compactTabBar       = s.compactTabBar
             mgr.wallEnabled         = s.wallEnabled
             mgr.siriShortcuts       = s.siriShortcuts
             mgr.squareAvatars       = s.squareAvatars
