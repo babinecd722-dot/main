@@ -1414,7 +1414,11 @@ def main() -> None:
         "Канал «\\(peerTitle)» добавлен в исключения",
         "Channel “\\(peerTitle)” added to exclusions",
         "content: .succeed(text: text, timeout: nil, customUndoText: nil)",
-        "elevatedLayout: false",
+        # The toast is presented in .window(.root), whose insets are the safe area only — the
+        # tab bar belongs to the tab controller, not the window. elevatedLayout must therefore
+        # be true so the 49pt tab-bar height is added exactly once; with false the toast sits
+        # underneath the tab bar, and with .current as the container it would be counted twice.
+        "elevatedLayout: true",
         "in: .window(.root)",
     ):
         if marker not in wall_contents_text:

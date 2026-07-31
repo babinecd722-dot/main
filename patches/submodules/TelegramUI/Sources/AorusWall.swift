@@ -819,6 +819,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             }
 
             let now = Int32(Date().timeIntervalSince1970)
+            let onScreen = self.viewportMessageIds
             var duplicateIds = Set<MessageId>()
             for group in groups.values {
                 guard group.count > 1, Set(group.map { $0.id.peerId }).count > 1 else {
@@ -840,6 +841,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     }
                 }
                 for message in group where message.id != winner.id {
+                    // Never take a row away from under the reader. Two posts with identical text
+                    // can both already be on screen; dropping one of them here would delete a
+                    // visible row mid-scroll. Off-screen copies are still collapsed.
+                    guard !onScreen.contains(message.id) else {
+                        continue
+                    }
                     duplicateIds.insert(message.id)
                 }
             }
@@ -1487,7 +1494,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 UndoOverlayController(
                     presentationData: presentationData,
                     content: .succeed(text: text, timeout: nil, customUndoText: nil),
-                    elevatedLayout: false,
+                    // Presented in .window(.root), whose insets are the safe area only — the tab
+                    // bar is a child of the tab controller, not a window inset. elevatedLayout
+                    // adds exactly the 49pt tab-bar height, so the toast lands just above it.
+                    // With false it sat underneath the tab bar; with .current as the container
+                    // it would double-count, because that layout already includes the tab bar.
+                    elevatedLayout: true,
                     position: .bottom,
                     animateInAsReplacement: true,
                     action: { _ in false }

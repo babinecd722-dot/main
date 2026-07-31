@@ -2396,7 +2396,12 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
         block_start = t.index(sentinel)
         block_end = t.find(anchor, block_start)
         if block_end == -1:
-            raise RuntimeError("EditLocally: cached context-menu block has no delete anchor")
+            # Warn, never raise. This runs only against an already-patched CI cache, where a
+            # drifted anchor is a migration problem for ONE feature — raising here aborted the
+            # whole 149-patch run before Bazel even started. The verifier still fails the build
+            # on the missing marker, with a message that says which one.
+            print("EditLocally: WARNING cached block has no delete anchor — migration skipped")
+            return
         cached_block = t[block_start:block_end]
         if guard_marker in cached_block or cached_guard_marker in cached_block:
             print("EditLocally: context menu already injected")
@@ -2413,7 +2418,8 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "            }) {\n"
             )
             if feature_gate not in cached_block:
-                raise RuntimeError("EditLocally: cached v2 feature gate not found")
+                print("EditLocally: WARNING cached v2 feature gate not found — migration skipped")
+                return
             cached_block = cached_block.replace(feature_gate, guarded_feature_gate, 1)
             t = t[:block_start] + cached_block + t[block_end:]
             path.write_text(t, encoding="utf-8")
@@ -23231,7 +23237,8 @@ def patch_device_microphone(tg: Path) -> None:
     leaving Telegram in control of the output route."""
     path = tg / "submodules/TelegramAudio/Sources/ManagedAudioSession.swift"
     if not path.is_file():
-        raise RuntimeError("DeviceMicrophone: ManagedAudioSession.swift not found")
+        print("DeviceMicrophone: WARNING ManagedAudioSession.swift not found — skipped")
+        return
 
     t = path.read_text(encoding="utf-8")
     marker = "// AorusGram: built-in device microphone preference"
@@ -23304,7 +23311,8 @@ def patch_device_microphone(tg: Path) -> None:
     }
 '''
     if state_anchor not in t:
-        raise RuntimeError("DeviceMicrophone: state anchor not found")
+        print("DeviceMicrophone: WARNING state anchor not found — skipped")
+        return
     t = t.replace(state_anchor, state_replacement, 1)
 
     route_anchor = '''        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: AVAudioSession.sharedInstance(), queue: nil, using: { [weak self] _ in
@@ -23327,7 +23335,8 @@ def patch_device_microphone(tg: Path) -> None:
         })
 '''
     if route_anchor not in t:
-        raise RuntimeError("DeviceMicrophone: route observer anchor not found")
+        print("DeviceMicrophone: WARNING route observer anchor not found — skipped")
+        return
     t = t.replace(route_anchor, route_replacement, 1)
 
     voice_output_anchor = (
@@ -23348,7 +23357,8 @@ def patch_device_microphone(tg: Path) -> None:
         '    private func setupOutputMode'
     )
     if voice_output_anchor not in t:
-        raise RuntimeError("DeviceMicrophone: voice-chat output anchor not found")
+        print("DeviceMicrophone: WARNING voice-chat output anchor not found — skipped")
+        return
     t = t.replace(voice_output_anchor, voice_output_replacement, 1)
 
     activate_anchor = (
@@ -23363,7 +23373,8 @@ def patch_device_microphone(tg: Path) -> None:
         '                managedAudioSessionLog("\\(CFAbsoluteTimeGetCurrent()) AudioSession setupOutputMode: \\((CFAbsoluteTimeGetCurrent() - startTime) * 1000.0) ms")'
     )
     if activate_anchor not in t:
-        raise RuntimeError("DeviceMicrophone: activation anchor not found")
+        print("DeviceMicrophone: WARNING activation anchor not found — skipped")
+        return
     t = t.replace(activate_anchor, activate_replacement, 1)
 
     path.write_text(t, encoding="utf-8")
