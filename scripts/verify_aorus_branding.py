@@ -975,6 +975,40 @@ def main() -> None:
         err.append("CallProxyUDP: obsolete forced TCP media patch is still present")
     if "aorusWriteBoundedCallLog" not in call_context_text:
         err.append("CallProxyUDP: exported native call diagnostics are not size-bounded")
+    for marker in (
+        "aorusAppendCallDiagnostic",
+        "provision.status:",
+        "initialNetworkType:",
+        "connection[\\(index)]",
+        "audioSessionActive:",
+        "networkType:",
+        "AorusGram call stop diagnostics",
+    ):
+        if marker not in call_context_text:
+            err.append(f"CallProxyUDP: detailed call lifecycle diagnostics are missing {marker}")
+
+    call_proxy = tg / "submodules" / "TelegramCallsUI" / "Sources" / "AorusCallProxy.swift"
+    call_proxy_text = call_proxy.read_text(encoding="utf-8") if call_proxy.is_file() else ""
+    for marker in (
+        "aorusgram_call_proxy_diagnostics",
+        'status: "missing_blob"',
+        'status: "decrypt_failed"',
+        'status: "expired"',
+        'status: "ready"',
+    ):
+        if marker not in call_proxy_text:
+            err.append(f"CallProxyUDP: provisioning diagnostics are missing {marker}")
+
+    call_log_export = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusCallLogsExport.swift"
+    call_log_export_text = call_log_export.read_text(encoding="utf-8") if call_log_export.is_file() else ""
+    for marker in (
+        "static func clear(_ files: [URL])",
+        "if completed {",
+        "AorusCallLogStorage.clear(exportedSourceFiles)",
+        "proxy provisioning status:",
+    ):
+        if marker not in call_log_export_text:
+            err.append(f"CallLogsExport: post-export cleanup invariant is missing {marker}")
 
     presentation_call_manager = (
         tg / "submodules" / "TelegramCallsUI" / "Sources" / "PresentationCallManager.swift"
@@ -1016,6 +1050,12 @@ def main() -> None:
         "class AorusSocks5UdpProxySocket final",
         "SOCKS5 UDP ASSOCIATE",
         "proxy().type == rtc::ProxyType::PROXY_SOCKS5",
+        "first UDP payload sent",
+        "first UDP payload received",
+        "pre-handshake queue",
+        "unexpectedRelayPackets",
+        "malformedPackets",
+        "LogSummary",
     ):
         if marker not in reflector_text:
             err.append(f"CallProxyUDP: reflector transport is missing {marker}")

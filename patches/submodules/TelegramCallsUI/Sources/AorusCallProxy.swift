@@ -2,6 +2,28 @@ import Foundation
 import CryptoKit
 import TelegramCore
 
+private let aorusCallProxyDiagnosticKey = "aorusgram_call_proxy_diagnostics"
+
+private func aorusRecordCallProxyDiagnostic(
+    store: UserDefaults,
+    status: String,
+    host: String = "",
+    port: Int32 = 0,
+    udp: String = "unknown",
+    authentication: Bool = false,
+    expiresAt: TimeInterval = 0.0
+) {
+    store.set([
+        "status": status,
+        "checkedAt": Date().timeIntervalSince1970,
+        "host": host,
+        "port": Int(port),
+        "udp": udp,
+        "authentication": authentication,
+        "expiresAt": expiresAt,
+    ], forKey: aorusCallProxyDiagnosticKey)
+}
+
 // AorusGram: SOCKS5 call proxy for voice/video calls.
 //
 // AorusProxyManager fetches a `callProxy` (SOCKS5) from /getProxy and seals it with
@@ -15,9 +37,15 @@ import TelegramCore
 // user's own proxy settings (if any). The suite name, blob key and pepper bytes MUST
 // stay byte-identical to ProxyVault in AorusProxyManager.swift.
 public func aorusCallProxyServerSettings() -> ProxyServerSettings? {
-    guard let store = UserDefaults(suiteName: "ng.session.store"),
-          let blob = store.string(forKey: "c9a3f1e7-2b48-4d6a-9e15-7c0d8b3f6a21"),
-          let box = Data(base64Encoded: blob) else {
+    guard let store = UserDefaults(suiteName: "ng.session.store") else {
+        return nil
+    }
+    guard let blob = store.string(forKey: "c9a3f1e7-2b48-4d6a-9e15-7c0d8b3f6a21") else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "missing_blob")
+        return nil
+    }
+    guard let box = Data(base64Encoded: blob) else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "invalid_base64")
         return nil
     }
 
@@ -26,22 +54,42 @@ public func aorusCallProxyServerSettings() -> ProxyServerSettings? {
     let s2: [UInt8] = [0x7d, 0xe1, 0x4c, 0x60, 0xaa, 0x05, 0xf3, 0x29, 0x8b, 0xd4, 0x17, 0x52]
     let key = SymmetricKey(data: Data(SHA256.hash(data: Data(s0 + s1 + s2))))
 
-    guard let sealed = try? AES.GCM.SealedBox(combined: box),
-          let plain = try? AES.GCM.open(sealed, using: key),
-          let payload = String(data: plain, encoding: .utf8) else {
+    guard let sealed = try? AES.GCM.SealedBox(combined: box) else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "invalid_sealed_box")
+        return nil
+    }
+    guard let plain = try? AES.GCM.open(sealed, using: key) else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "decrypt_failed")
+        return nil
+    }
+    guard let payload = String(data: plain, encoding: .utf8) else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "invalid_utf8")
         return nil
     }
 
     // payload = "server\nport\nusername\npassword\nudp\nexpiresAt"
     let parts = payload.components(separatedBy: "\n")
-    guard parts.count >= 6,
-          !parts[0].isEmpty,
-          let port = Int32(parts[1]), port > 0,
-          let expiresAt = TimeInterval(parts[5]),
-          Date().timeIntervalSince1970 < expiresAt else {
+    guard parts.count >= 6 else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "invalid_field_count")
+        return nil
+    }
+    let host = parts[0]
+    let udp = parts[4]
+    let authentication = !parts[2].isEmpty || !parts[3].isEmpty
+    guard !host.isEmpty, let port = Int32(parts[1]), port > 0 else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "invalid_endpoint", host: host, udp: udp, authentication: authentication)
+        return nil
+    }
+    guard let expiresAt = TimeInterval(parts[5]) else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "invalid_expiry", host: host, port: port, udp: udp, authentication: authentication)
+        return nil
+    }
+    guard Date().timeIntervalSince1970 < expiresAt else {
+        aorusRecordCallProxyDiagnostic(store: store, status: "expired", host: host, port: port, udp: udp, authentication: authentication, expiresAt: expiresAt)
         return nil
     }
     let username = parts[2].isEmpty ? nil : parts[2]
     let password = parts[3].isEmpty ? nil : parts[3]
-    return ProxyServerSettings(host: parts[0], port: port, connection: .socks5(username: username, password: password))
+    aorusRecordCallProxyDiagnostic(store: store, status: "ready", host: host, port: port, udp: udp, authentication: authentication, expiresAt: expiresAt)
+    return ProxyServerSettings(host: host, port: port, connection: .socks5(username: username, password: password))
 }

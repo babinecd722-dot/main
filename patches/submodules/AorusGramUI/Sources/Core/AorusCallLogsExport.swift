@@ -30,6 +30,13 @@ private enum AorusCallLogStorage {
             return nil
         }
     }
+
+    static func clear(_ files: [URL]) {
+        let fm = FileManager.default
+        for file in files {
+            try? fm.removeItem(at: file)
+        }
+    }
 }
 
 // Explicitly exports a bounded, protected diagnostic bundle. Logs are not exposed through
@@ -99,9 +106,20 @@ public func aorusPresentCallLogsShare(context: AccountContext, controller: ViewC
             try append("app version: \(version)\n")
         }
         try append("device: \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)\n")
+        try append("included files: \(selected.count)/\(candidates.count)\n")
+        try append("included bytes: \(totalBytes)\n")
         let callBlob = UserDefaults(suiteName: "ng.session.store")?
             .string(forKey: "c9a3f1e7-2b48-4d6a-9e15-7c0d8b3f6a21")
         try append("socks5 call proxy provisioned: \(callBlob != nil)\n")
+        if let diagnostic = UserDefaults(suiteName: "ng.session.store")?
+            .dictionary(forKey: "aorusgram_call_proxy_diagnostics") {
+            try append("proxy provisioning status: \(diagnostic["status"] ?? "unknown")\n")
+            try append("proxy checked at: \(diagnostic["checkedAt"] ?? "unknown")\n")
+            try append("proxy endpoint: \(diagnostic["host"] ?? "unknown"):\(diagnostic["port"] ?? "unknown")\n")
+            try append("proxy udp advertised: \(diagnostic["udp"] ?? "unknown")\n")
+            try append("proxy authentication configured: \(diagnostic["authentication"] ?? "unknown")\n")
+            try append("proxy expires at: \(diagnostic["expiresAt"] ?? "unknown")\n")
+        }
         try append(String(repeating: "=", count: 60) + "\n\n")
 
         for (url, _) in selected.reversed() {
@@ -124,7 +142,11 @@ public func aorusPresentCallLogsShare(context: AccountContext, controller: ViewC
     }
 
     let activity = UIActivityViewController(activityItems: [output], applicationActivities: nil)
-    activity.completionWithItemsHandler = { _, _, _, _ in
+    let exportedSourceFiles = selected.map(\.0)
+    activity.completionWithItemsHandler = { _, completed, _, _ in
+        if completed {
+            AorusCallLogStorage.clear(exportedSourceFiles)
+        }
         try? FileManager.default.removeItem(at: output)
     }
     if let popover = activity.popoverPresentationController {

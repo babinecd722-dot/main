@@ -84,6 +84,29 @@ private func aorusWriteBoundedCallLog(_ text: String, to url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
 }
+
+private let aorusCallDiagnosticLock = NSLock()
+
+private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
+    guard let url, let data = "[\(Date())] \(text)\n".data(using: .utf8) else {
+        return
+    }
+    aorusCallDiagnosticLock.lock()
+    defer { aorusCallDiagnosticLock.unlock() }
+    guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+          let currentSize = attributes[.size] as? NSNumber,
+          currentSize.intValue + data.count <= 2 * 1_024 * 1_024,
+          let handle = try? FileHandle(forWritingTo: url) else {
+        return
+    }
+    do {
+        try handle.seekToEnd()
+        try handle.write(contentsOf: data)
+        try handle.close()
+    } catch {
+        try? handle.close()
+    }
+}
 '''
     if helper_anchor not in text:
         print("CallProxyUDP: WARNING helper anchor not found")
@@ -106,11 +129,21 @@ private func aorusWriteBoundedCallLog(_ text: String, to url: URL) {
     stop_anchor = "            context.nativeStop { debugLog, bytesSentWifi, bytesReceivedWifi, bytesSentMobile, bytesReceivedMobile in\n"
     stop_replacement = (
         stop_anchor
-        + "                if let debugLog, let dir = aorusCallLogDirectory() {\n"
-        + "                    let url = dir.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-full.log\")\n"
-        + "                    aorusWriteBoundedCallLog(debugLog, to: url)\n"
-        + "                    aorusRotateCallLogs()\n"
+        + "                if let dir = aorusCallLogDirectory() {\n"
+        + "                    var stopReport = \"AorusGram call stop diagnostics\\n\"\n"
+        + "                    stopReport += \"date: \\(Date())\\n\"\n"
+        + "                    stopReport += \"callId: \\(callId.id)\\n\"\n"
+        + "                    stopReport += \"nativeDebugLog: \\(debugLog != nil)\\n\"\n"
+        + "                    stopReport += \"wifi: sent=\\(bytesSentWifi) received=\\(bytesReceivedWifi)\\n\"\n"
+        + "                    stopReport += \"mobile: sent=\\(bytesSentMobile) received=\\(bytesReceivedMobile)\\n\"\n"
+        + "                    let stopUrl = dir.appendingPathComponent(\"call-\\(callId.id)-\\(Int(Date().timeIntervalSince1970))-stop.txt\")\n"
+        + "                    aorusWriteBoundedCallLog(stopReport, to: stopUrl)\n"
         + "                }\n"
+        + "                if let debugLog, let dir = aorusCallLogDirectory() {\n"
+        + "                    let url = dir.appendingPathComponent(\"call-\\(callId.id)-\\(Int(Date().timeIntervalSince1970))-full.log\")\n"
+        + "                    aorusWriteBoundedCallLog(debugLog, to: url)\n"
+        + "                }\n"
+        + "                aorusRotateCallLogs()\n"
     )
     if stop_anchor not in text:
         print("CallProxyUDP: WARNING nativeStop anchor not found")
@@ -119,25 +152,96 @@ private func aorusWriteBoundedCallLog(_ text: String, to url: URL) {
 
     context_anchor = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
     context_replacement = (
-        "                if let dir = aorusCallLogDirectory() {\n"
+        "                let aorusCallDiagnosticURL: URL? = {\n"
+        "                    guard let dir = aorusCallLogDirectory() else { return nil }\n"
         "                    var report = \"AorusGram call setup diagnostics\\n\"\n"
         "                    report += \"date: \\(Date())\\n\"\n"
+        "                    report += \"callId: \\(callId.id)\\n\"\n"
+        "                    report += \"app: \\(Bundle.main.object(forInfoDictionaryKey: \"CFBundleShortVersionString\") as? String ?? \"unknown\") (\\(Bundle.main.object(forInfoDictionaryKey: \"CFBundleVersion\") as? String ?? \"unknown\"))\\n\"\n"
+        "                    report += \"system: \\(ProcessInfo.processInfo.operatingSystemVersionString)\\n\"\n"
         "                    report += \"version: \\(version)\\n\"\n"
         "                    report += \"isOutgoing: \\(isOutgoing)\\n\"\n"
-        "                    report += \"socks5Proxy: \\(voipProxyServer != nil)\\n\"\n"
+        "                    report += \"initialNetworkType: \\(String(describing: initialNetworkType))\\n\"\n"
+        "                    report += \"dataSaving: \\(String(describing: dataSaving))\\n\"\n"
+        "                    report += \"videoRequested: \\(video != nil)\\n\"\n"
+        "                    report += \"socks5ProxyActive: \\(voipProxyServer != nil)\\n\"\n"
+        "                    if let proxyServer {\n"
+        "                        switch proxyServer.connection {\n"
+        "                        case let .socks5(username, password):\n"
+        "                            report += \"selectedProxy: socks5 \\(proxyServer.host):\\(proxyServer.port), username=\\(username != nil), password=\\(password != nil)\\n\"\n"
+        "                        case .mtp:\n"
+        "                            report += \"selectedProxy: mtproto (not usable for call media)\\n\"\n"
+        "                        }\n"
+        "                    } else {\n"
+        "                        report += \"selectedProxy: nil\\n\"\n"
+        "                    }\n"
+        "                    if let provision = UserDefaults(suiteName: \"ng.session.store\")?.dictionary(forKey: \"aorusgram_call_proxy_diagnostics\") {\n"
+        "                        report += \"provision.status: \\(provision[\"status\"] ?? \"unknown\")\\n\"\n"
+        "                        report += \"provision.checkedAt: \\(provision[\"checkedAt\"] ?? \"unknown\")\\n\"\n"
+        "                        report += \"provision.endpoint: \\(provision[\"host\"] ?? \"unknown\"):\\(provision[\"port\"] ?? \"unknown\")\\n\"\n"
+        "                        report += \"provision.udp: \\(provision[\"udp\"] ?? \"unknown\")\\n\"\n"
+        "                        report += \"provision.expiresAt: \\(provision[\"expiresAt\"] ?? \"unknown\")\\n\"\n"
+        "                    }\n"
         "                    report += \"connections: total=\\(filteredConnections.count) udp=\\(filteredConnections.filter { !$0.hasTcp }.count) tcp=\\(filteredConnections.filter { $0.hasTcp }.count)\\n\"\n"
+        "                    for (index, connection) in filteredConnections.enumerated() {\n"
+        "                        report += \"connection[\\(index)]: reflectorId=\\(connection.reflectorId), endpoint=\\(connection.ip):\\(connection.port), tcp=\\(connection.hasTcp), turn=\\(connection.hasTurn), stun=\\(connection.hasStun)\\n\"\n"
+        "                    }\n"
         "                    report += \"allowP2P: \\(allowP2P)\\n\"\n"
-        "                    let url = dir.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-setup.txt\")\n"
-        "                    try? report.write(to: url, atomically: true, encoding: .utf8)\n"
+        "                    report += \"enableTCP: \\(enableTCP)\\n\"\n"
+        "                    report += \"enableStunMarking: \\(enableStunMarking)\\n\"\n"
+        "                    let url = dir.appendingPathComponent(\"call-\\(callId.id)-\\(Int(Date().timeIntervalSince1970))-setup.txt\")\n"
+        "                    guard (try? report.write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }\n"
         "                    try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)\n"
         "                    aorusRotateCallLogs()\n"
-        "                }\n"
+        "                    return url\n"
+        "                }()\n"
         + context_anchor
     )
     if context_anchor not in text:
         print("CallProxyUDP: WARNING context anchor not found")
         return
     text = text.replace(context_anchor, context_replacement, 1)
+
+    state_anchor = "                        let mappedState = OngoingCallContextState.State(state)\n"
+    state_replacement = (
+        state_anchor
+        + "                        aorusAppendCallDiagnostic(\"state: call=\\(String(describing: state)), video=\\(String(describing: videoState)), remoteVideo=\\(String(describing: remoteVideoState)), remoteAudio=\\(String(describing: remoteAudioState)), remoteBattery=\\(String(describing: remoteBatteryLevel))\", to: aorusCallDiagnosticURL)\n"
+    )
+    if state_anchor not in text:
+        print("CallProxyUDP: WARNING state diagnostics anchor not found")
+        return
+    text = text.replace(state_anchor, state_replacement, 1)
+
+    signal_anchor = "                context.signalBarsChanged = { signalBars in\n"
+    signal_replacement = (
+        signal_anchor
+        + "                    aorusAppendCallDiagnostic(\"signalBars: \\(signalBars)\", to: aorusCallDiagnosticURL)\n"
+    )
+    if signal_anchor not in text:
+        print("CallProxyUDP: WARNING signal diagnostics anchor not found")
+        return
+    text = text.replace(signal_anchor, signal_replacement, 1)
+
+    audio_anchor = "                        strongSelf.withContext { context in\n                            context.nativeSetIsAudioSessionActive(isActive: isActive)\n"
+    audio_replacement = (
+        "                        aorusAppendCallDiagnostic(\"audioSessionActive: \\(isActive)\", to: aorusCallDiagnosticURL)\n"
+        + audio_anchor
+    )
+    if audio_anchor not in text:
+        print("CallProxyUDP: WARNING audio diagnostics anchor not found")
+        return
+    text = text.replace(audio_anchor, audio_replacement, 1)
+
+    network_anchor = "                |> deliverOn(queue)).start(next: { networkType in\n                    self?.withContext { context in\n"
+    network_replacement = (
+        "                |> deliverOn(queue)).start(next: { networkType in\n"
+        "                    aorusAppendCallDiagnostic(\"networkType: \\(String(describing: networkType))\", to: aorusCallDiagnosticURL)\n"
+        "                    self?.withContext { context in\n"
+    )
+    if network_anchor not in text:
+        print("CallProxyUDP: WARNING network diagnostics anchor not found")
+        return
+    text = text.replace(network_anchor, network_replacement, 1)
 
     path.write_text(text, encoding="utf-8")
     print("CallProxyUDP: protected bounded diagnostics applied")
@@ -159,6 +263,9 @@ public:
           proxy_(proxyInfo.address),
           username_(proxyInfo.username),
           password_(proxyInfo.password) {
+        RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: transport created proxy="
+                         << proxy_.hostname() << ":" << proxy_.port()
+                         << " auth=" << (!username_.empty());
         udp_->RegisterReceivedPacketCallback(
             [this](rtc::AsyncPacketSocket*, const rtc::ReceivedPacket& packet) {
                 OnUdpPacket(packet);
@@ -181,6 +288,7 @@ public:
     }
 
     ~AorusSocks5UdpProxySocket() override {
+        LogSummary("destructor");
         if (udp_) {
             udp_->DeregisterReceivedPacketCallback();
             udp_->SignalReadyToSend.disconnect(this);
@@ -220,17 +328,34 @@ public:
         if (handshakeState_ == HandshakeState::Failed ||
             handshakeState_ == HandshakeState::Closed) {
             SetError(error_ == 0 ? ENOTCONN : error_);
+            ++sendFailures_;
+            if (!loggedUnavailableSend_) {
+                loggedUnavailableSend_ = true;
+                RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: send rejected in state="
+                                  << HandshakeStateName() << " error=" << GetError();
+            }
             return -1;
         }
         defaultDestination_ = address;
         if (handshakeState_ != HandshakeState::Ready) {
             if (size > kMaxQueuedBytes || queuedBytes_ + size > kMaxQueuedBytes) {
                 SetError(ENOBUFS);
+                ++sendFailures_;
+                if (!loggedQueueOverflow_) {
+                    loggedQueueOverflow_ = true;
+                    RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: pre-handshake queue byte limit reached"
+                                      << " payloadBytes=" << size << " queuedBytes=" << queuedBytes_;
+                }
                 return -1;
             }
             if (pending_.size() >= kMaxQueuedPackets) {
                 queuedBytes_ -= pending_.front().data.size();
                 pending_.pop_front();
+                ++droppedPackets_;
+                if (!loggedQueueOverflow_) {
+                    loggedQueueOverflow_ = true;
+                    RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: pre-handshake queue packet limit reached";
+                }
             }
             PendingPacket packet;
             const uint8_t* bytes = static_cast<const uint8_t*>(data);
@@ -245,6 +370,7 @@ public:
     }
 
     int Close() override {
+        LogSummary("close");
         handshakeState_ = HandshakeState::Closed;
         pending_.clear();
         queuedBytes_ = 0;
@@ -305,6 +431,7 @@ private:
     static constexpr size_t kMaxQueuedBytes = 256 * 1024;
 
     void OnControlConnect(rtc::Socket*) {
+        RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: TCP control connected";
         rtc::ByteBufferWriter request;
         request.WriteUInt8(5);
         if (username_.empty()) {
@@ -378,9 +505,13 @@ private:
                 const uint8_t method = controlInput_[1];
                 ConsumeControl(2);
                 if (version != 5 || method == 0xff) {
+                    RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: method negotiation rejected version="
+                                      << static_cast<int>(version) << " method=" << static_cast<int>(method);
                     Fail(EPROTO, "SOCKS5 rejected authentication methods");
                     return;
                 }
+                RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: authentication method="
+                                 << static_cast<int>(method);
                 if (method == 0) {
                     SendAssociate();
                 } else if (method == 2 && !username_.empty()) {
@@ -397,10 +528,15 @@ private:
                     Fail(EACCES, "SOCKS5 username/password authentication failed");
                     return;
                 }
+                RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: username/password authentication accepted";
                 SendAssociate();
             } else if (handshakeState_ == HandshakeState::Associate) {
                 if (controlInput_.size() < 4) { return; }
                 if (controlInput_[0] != 5 || controlInput_[1] != 0 || controlInput_[2] != 0) {
+                    RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: UDP ASSOCIATE reply version="
+                                      << static_cast<int>(controlInput_[0]) << " code="
+                                      << static_cast<int>(controlInput_[1]) << " reserved="
+                                      << static_cast<int>(controlInput_[2]);
                     Fail(EPROTO, "SOCKS5 UDP ASSOCIATE was rejected");
                     return;
                 }
@@ -424,7 +560,10 @@ private:
                 }
                 relay_ = relay;
                 handshakeState_ = HandshakeState::Ready;
-                RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP relay established";
+                RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: relay established endpoint="
+                                 << relay_.hostname() << ":" << relay_.port()
+                                 << " queuedPackets=" << pending_.size()
+                                 << " queuedBytes=" << queuedBytes_;
                 SignalAddressReady(this, GetLocalAddress());
                 FlushPending();
                 SignalReadyToSend(this);
@@ -457,6 +596,7 @@ private:
     }
 
     void SendAssociate() {
+        RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: requesting UDP ASSOCIATE";
         rtc::ByteBufferWriter request;
         request.WriteUInt8(5);
         request.WriteUInt8(3);
@@ -543,6 +683,8 @@ private:
         const rtc::PacketOptions& options) {
         if (size > 65507 - 262) {
             SetError(EMSGSIZE);
+            ++sendFailures_;
+            RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: payload exceeds UDP limit bytes=" << size;
             return -1;
         }
         rtc::ByteBufferWriter packet;
@@ -550,11 +692,27 @@ private:
         packet.WriteUInt8(0);
         if (!WriteAddress(packet, address)) {
             SetError(EDESTADDRREQ);
+            ++sendFailures_;
+            RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: destination address cannot be encoded";
             return -1;
         }
         packet.WriteBytes(static_cast<const uint8_t*>(data), size);
         const int sent = udp_->SendTo(packet.Data(), packet.Length(), relay_, options);
-        return sent < 0 ? -1 : static_cast<int>(size);
+        if (sent < 0) {
+            ++sendFailures_;
+            RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: relay send failed error="
+                              << udp_->GetError() << " payloadBytes=" << size
+                              << " destination=" << address.hostname() << ":" << address.port();
+            return -1;
+        }
+        ++packetsSent_;
+        bytesSent_ += size;
+        if (!loggedFirstSend_) {
+            loggedFirstSend_ = true;
+            RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: first UDP payload sent bytes="
+                             << size << " destination=" << address.hostname() << ":" << address.port();
+        }
+        return static_cast<int>(size);
     }
 
     void FlushPending() {
@@ -567,31 +725,60 @@ private:
     }
 
     void OnUdpPacket(const rtc::ReceivedPacket& packet) {
-        if (handshakeState_ != HandshakeState::Ready || packet.payload().size() < 4) {
+        if (handshakeState_ != HandshakeState::Ready) {
+            ++droppedPackets_;
+            ++droppedBeforeReady_;
+            return;
+        }
+        if (packet.payload().size() < 4) {
+            ++droppedPackets_;
+            ++malformedPackets_;
             return;
         }
         if (relay_.IsUnresolvedIP()) {
             if (observedRelay_.IsNil()) {
                 observedRelay_ = packet.source_address();
             } else if (packet.source_address() != observedRelay_) {
+                ++droppedPackets_;
+                ++unexpectedRelayPackets_;
                 return;
             }
         } else if (packet.source_address() != relay_) {
+            ++droppedPackets_;
+            ++unexpectedRelayPackets_;
             return;
         }
         const uint8_t* data = packet.payload().data();
         if (data[0] != 0 || data[1] != 0 || data[2] != 0) {
+            ++droppedPackets_;
+            ++malformedPackets_;
             return;
         }
         rtc::SocketAddress source;
         const int consumed = ParseAddress(data, packet.payload().size(), 3, &source);
-        if (consumed <= 0) { return; }
+        if (consumed <= 0) {
+            ++droppedPackets_;
+            ++malformedPackets_;
+            return;
+        }
         const size_t header = 3 + static_cast<size_t>(consumed);
-        if (header > packet.payload().size()) { return; }
+        if (header > packet.payload().size()) {
+            ++droppedPackets_;
+            ++malformedPackets_;
+            return;
+        }
+        const size_t payloadBytes = packet.payload().size() - header;
+        ++packetsReceived_;
+        bytesReceived_ += payloadBytes;
+        if (!loggedFirstReceive_) {
+            loggedFirstReceive_ = true;
+            RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: first UDP payload received bytes="
+                             << payloadBytes << " source=" << source.hostname() << ":" << source.port();
+        }
         NotifyPacketReceived(
             this,
             reinterpret_cast<const char*>(data + header),
-            packet.payload().size() - header,
+            payloadBytes,
             source,
             rtc::TimeMicros());
     }
@@ -610,6 +797,39 @@ private:
         controlInput_.erase(controlInput_.begin(), controlInput_.begin() + count);
     }
 
+    const char* HandshakeStateName() const {
+        switch (handshakeState_) {
+            case HandshakeState::Connecting: return "connecting";
+            case HandshakeState::Hello: return "hello";
+            case HandshakeState::Auth: return "auth";
+            case HandshakeState::Associate: return "associate";
+            case HandshakeState::Ready: return "ready";
+            case HandshakeState::Failed: return "failed";
+            case HandshakeState::Closed: return "closed";
+        }
+        return "unknown";
+    }
+
+    void LogSummary(const char* reason) {
+        if (summaryLogged_) {
+            return;
+        }
+        summaryLogged_ = true;
+        RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: summary reason=" << reason
+                         << " state=" << HandshakeStateName()
+                         << " sentPackets=" << packetsSent_
+                         << " sentBytes=" << bytesSent_
+                         << " receivedPackets=" << packetsReceived_
+                         << " receivedBytes=" << bytesReceived_
+                         << " sendFailures=" << sendFailures_
+                         << " droppedPackets=" << droppedPackets_
+                         << " droppedBeforeReady=" << droppedBeforeReady_
+                         << " unexpectedRelayPackets=" << unexpectedRelayPackets_
+                         << " malformedPackets=" << malformedPackets_
+                         << " queuedPackets=" << pending_.size()
+                         << " queuedBytes=" << queuedBytes_;
+    }
+
     void Fail(int error, const char* reason) {
         if (handshakeState_ == HandshakeState::Failed ||
             handshakeState_ == HandshakeState::Closed) {
@@ -617,9 +837,10 @@ private:
         }
         error_ = error == 0 ? EIO : error;
         handshakeState_ = HandshakeState::Failed;
+        RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: " << reason << " error=" << error_;
+        LogSummary(reason);
         pending_.clear();
         queuedBytes_ = 0;
-        RTC_LOG(LS_ERROR) << "AorusGram SOCKS5 UDP: " << reason << " error=" << error_;
         if (control_) {
             control_->Close();
         }
@@ -644,6 +865,20 @@ private:
     size_t controlOutputOffset_ = 0;
     std::deque<PendingPacket> pending_;
     size_t queuedBytes_ = 0;
+    uint64_t packetsSent_ = 0;
+    uint64_t bytesSent_ = 0;
+    uint64_t packetsReceived_ = 0;
+    uint64_t bytesReceived_ = 0;
+    uint64_t sendFailures_ = 0;
+    uint64_t droppedPackets_ = 0;
+    uint64_t droppedBeforeReady_ = 0;
+    uint64_t unexpectedRelayPackets_ = 0;
+    uint64_t malformedPackets_ = 0;
+    bool loggedFirstSend_ = false;
+    bool loggedFirstReceive_ = false;
+    bool loggedQueueOverflow_ = false;
+    bool loggedUnavailableSend_ = false;
+    bool summaryLogged_ = false;
 };
 """
 
