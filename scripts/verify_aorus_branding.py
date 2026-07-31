@@ -976,6 +976,7 @@ def main() -> None:
     if "aorusWriteBoundedCallLog" not in call_context_text:
         err.append("CallProxyUDP: exported native call diagnostics are not size-bounded")
     for marker in (
+        "AorusGram call diagnostics schema: 2",
         "aorusAppendCallDiagnostic",
         "provision.status:",
         "initialNetworkType:",
@@ -1047,6 +1048,7 @@ def main() -> None:
     )
     reflector_text = reflector_port.read_text(encoding="utf-8") if reflector_port.is_file() else ""
     for marker in (
+        "AorusGram SOCKS5 UDP diagnostics schema: 2",
         "class AorusSocks5UdpProxySocket final",
         "SOCKS5 UDP ASSOCIATE",
         "proxy().type == rtc::ProxyType::PROXY_SOCKS5",

@@ -10,13 +10,11 @@ def patch_call_proxy_udp_media(tg: Path) -> None:
         print("CallProxyUDP: OngoingCallContext.swift not found — skip")
         return
     text = path.read_text(encoding="utf-8")
-    if "AorusGram: protected bounded call diagnostics" in text:
-        print("CallProxyUDP: diagnostics already patched")
-        return
 
     helper_anchor = "import TgVoipWebrtc\n"
     helper = r'''
 
+// AorusGram call diagnostics schema: 2
 // AorusGram: protected bounded call diagnostics. Logs are available only through the
 // explicit export action in Settings; the app's whole Documents directory stays private.
 private func aorusCallLogDirectory() -> URL? {
@@ -108,10 +106,24 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
     }
 }
 '''
-    if helper_anchor not in text:
-        print("CallProxyUDP: WARNING helper anchor not found")
+    schema_marker = "AorusGram call diagnostics schema: 2"
+    legacy_marker = "AorusGram: protected bounded call diagnostics"
+    was_legacy = legacy_marker in text and schema_marker not in text
+    if schema_marker in text:
+        print("CallProxyUDP: diagnostics already patched")
         return
-    text = text.replace(helper_anchor, helper_anchor + helper, 1)
+    if was_legacy:
+        helper_start = text.find("\n\n// AorusGram: protected bounded call diagnostics")
+        helper_end = text.find("\n#if os(iOS)\n", helper_start)
+        if helper_start < 0 or helper_end < 0:
+            print("CallProxyUDP: WARNING legacy helper boundaries not found")
+            return
+        text = text[:helper_start] + helper + text[helper_end:]
+    else:
+        if helper_anchor not in text:
+            print("CallProxyUDP: WARNING helper anchor not found")
+            return
+        text = text.replace(helper_anchor, helper_anchor + helper, 1)
 
     logpath_anchor = '        self.logPath = logName.isEmpty ? "" : callLogsPath(account: self.account) + "/" + logName + ".log"\n'
     logpath_replacement = (
@@ -121,15 +133,15 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
         "            return dir.appendingPathComponent(\"native-\\(callId.id)-\\(Int(Date().timeIntervalSince1970)).log\").path\n"
         "        }()\n"
     )
-    if logpath_anchor not in text:
+    if logpath_anchor in text:
+        text = text.replace(logpath_anchor, logpath_replacement, 1)
+    elif "return dir.appendingPathComponent(\"native-\\(callId.id)-" not in text:
         print("CallProxyUDP: WARNING logPath anchor not found")
         return
-    text = text.replace(logpath_anchor, logpath_replacement, 1)
 
     stop_anchor = "            context.nativeStop { debugLog, bytesSentWifi, bytesReceivedWifi, bytesSentMobile, bytesReceivedMobile in\n"
-    stop_replacement = (
-        stop_anchor
-        + "                if let dir = aorusCallLogDirectory() {\n"
+    stop_body = (
+        "                if let dir = aorusCallLogDirectory() {\n"
         + "                    var stopReport = \"AorusGram call stop diagnostics\\n\"\n"
         + "                    stopReport += \"date: \\(Date())\\n\"\n"
         + "                    stopReport += \"callId: \\(callId.id)\\n\"\n"
@@ -145,13 +157,17 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
         + "                }\n"
         + "                aorusRotateCallLogs()\n"
     )
-    if stop_anchor not in text:
+    stop_start = text.find(stop_anchor)
+    stop_end_anchor = "                let delta = NetworkUsageStatsConnectionsEntry(\n"
+    stop_end = text.find(stop_end_anchor, stop_start + len(stop_anchor))
+    if stop_start < 0 or stop_end < 0:
         print("CallProxyUDP: WARNING nativeStop anchor not found")
         return
-    text = text.replace(stop_anchor, stop_replacement, 1)
+    stop_body_start = stop_start + len(stop_anchor)
+    text = text[:stop_body_start] + stop_body + text[stop_end:]
 
     context_anchor = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
-    context_replacement = (
+    context_prelude = (
         "                let aorusCallDiagnosticURL: URL? = {\n"
         "                    guard let dir = aorusCallLogDirectory() else { return nil }\n"
         "                    var report = \"AorusGram call setup diagnostics\\n\"\n"
@@ -195,12 +211,26 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
         "                    aorusRotateCallLogs()\n"
         "                    return url\n"
         "                }()\n"
-        + context_anchor
     )
-    if context_anchor not in text:
+    context_position = text.find(context_anchor)
+    if context_position < 0:
         print("CallProxyUDP: WARNING context anchor not found")
         return
-    text = text.replace(context_anchor, context_replacement, 1)
+    legacy_context_start = text.rfind(
+        "                if let dir = aorusCallLogDirectory() {\n                    var report = \"AorusGram call setup diagnostics\\n\"",
+        0,
+        context_position,
+    )
+    current_context_start = text.rfind(
+        "                let aorusCallDiagnosticURL: URL? = {\n",
+        0,
+        context_position,
+    )
+    existing_context_start = max(legacy_context_start, current_context_start)
+    if existing_context_start >= 0:
+        text = text[:existing_context_start] + context_prelude + text[context_position:]
+    else:
+        text = text[:context_position] + context_prelude + text[context_position:]
 
     state_anchor = "                        let mappedState = OngoingCallContextState.State(state)\n"
     state_replacement = (
@@ -210,7 +240,8 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
     if state_anchor not in text:
         print("CallProxyUDP: WARNING state diagnostics anchor not found")
         return
-    text = text.replace(state_anchor, state_replacement, 1)
+    if "aorusAppendCallDiagnostic(\"state:" not in text:
+        text = text.replace(state_anchor, state_replacement, 1)
 
     signal_anchor = "                context.signalBarsChanged = { signalBars in\n"
     signal_replacement = (
@@ -220,7 +251,8 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
     if signal_anchor not in text:
         print("CallProxyUDP: WARNING signal diagnostics anchor not found")
         return
-    text = text.replace(signal_anchor, signal_replacement, 1)
+    if "aorusAppendCallDiagnostic(\"signalBars:" not in text:
+        text = text.replace(signal_anchor, signal_replacement, 1)
 
     audio_anchor = "                        strongSelf.withContext { context in\n                            context.nativeSetIsAudioSessionActive(isActive: isActive)\n"
     audio_replacement = (
@@ -230,7 +262,8 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
     if audio_anchor not in text:
         print("CallProxyUDP: WARNING audio diagnostics anchor not found")
         return
-    text = text.replace(audio_anchor, audio_replacement, 1)
+    if "aorusAppendCallDiagnostic(\"audioSessionActive:" not in text:
+        text = text.replace(audio_anchor, audio_replacement, 1)
 
     network_anchor = "                |> deliverOn(queue)).start(next: { networkType in\n                    self?.withContext { context in\n"
     network_replacement = (
@@ -241,13 +274,18 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
     if network_anchor not in text:
         print("CallProxyUDP: WARNING network diagnostics anchor not found")
         return
-    text = text.replace(network_anchor, network_replacement, 1)
+    if "aorusAppendCallDiagnostic(\"networkType:" not in text:
+        text = text.replace(network_anchor, network_replacement, 1)
 
     path.write_text(text, encoding="utf-8")
-    print("CallProxyUDP: protected bounded diagnostics applied")
+    if was_legacy:
+        print("CallProxyUDP: legacy diagnostics migrated to schema 2")
+    else:
+        print("CallProxyUDP: protected bounded diagnostics applied")
 
 
-SOCKS5_UDP_CLIENT_CLASS = r"""// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.
+SOCKS5_UDP_CLIENT_CLASS = r"""// AorusGram SOCKS5 UDP diagnostics schema: 2
+// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.
 // TCP is retained only as the authenticated control channel. Reflector packets remain UDP.
 class AorusSocks5UdpProxySocket final : public rtc::AsyncPacketSocket {
 public:
@@ -892,7 +930,21 @@ def patch_tgcalls_reflector_socks5_udp(tg: Path) -> None:
         return
 
     text = reflector.read_text(encoding="utf-8")
-    if "class AorusSocks5UdpProxySocket final" not in text:
+    socket_class_marker = "class AorusSocks5UdpProxySocket final"
+    socket_schema_marker = "AorusGram SOCKS5 UDP diagnostics schema: 2"
+    class_anchor = "rtc::AsyncPacketSocket *CreateClientRawTcpSocket(\n"
+    if socket_class_marker in text and socket_schema_marker not in text:
+        class_start = text.find("// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.")
+        if class_start < 0:
+            class_start = text.find(socket_class_marker)
+        class_end = text.find(class_anchor, class_start)
+        if class_start < 0 or class_end < 0:
+            print("tgcalls SOCKS5 UDP: legacy class boundaries not found")
+            return
+        text = text[:class_start] + SOCKS5_UDP_CLIENT_CLASS + "\n" + text[class_end:]
+        reflector.write_text(text, encoding="utf-8")
+        print("tgcalls SOCKS5 UDP: legacy reflector migrated to schema 2")
+    elif socket_class_marker not in text:
         text = text.replace(
             "#include <vector>\n",
             "#include <vector>\n#include <algorithm>\n#include <cerrno>\n#include <cstring>\n#include <deque>\n",
@@ -903,7 +955,6 @@ def patch_tgcalls_reflector_socks5_udp(tg: Path) -> None:
             '#include "rtc_base/byte_buffer.h"\n#include "rtc_base/crypt_string.h"\n#include "RawTcpSocket.h"\n',
             1,
         )
-        class_anchor = "rtc::AsyncPacketSocket *CreateClientRawTcpSocket(\n"
         if class_anchor not in text:
             print("tgcalls SOCKS5 UDP: class anchor not found")
             return
