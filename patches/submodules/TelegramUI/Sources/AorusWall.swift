@@ -97,6 +97,15 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private(set) var mergedHistoryView: EngineRawMessageHistoryView?
         private var currentMessageIds: [MessageId] = []
         private var currentMessages: [MessageId: Message] = [:]
+        /// The published entry array and where each post sits in it.
+        ///
+        /// A live update touches a handful of posts, but rebuilding the array from
+        /// `currentMessageIds` cost one entry construction and one dictionary lookup for every
+        /// post in the feed — thousands of them — each time a view counter ticked. Composition
+        /// only ever changes in applyMessages, so the array is built there and patched in place
+        /// afterwards.
+        private var currentEntries: [EngineRawMessageHistoryEntry] = []
+        private var currentEntryPositions: [MessageId: Int] = [:]
         private var visibleDurations: [MessageId: Double] = [:]
         private var markedInCurrentView = Set<MessageId>()
         private var lastVisibilityTimestamp: Double?
@@ -800,7 +809,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     result = message.index
                 }
             }
-            return result ?? self.currentMessages.values.map(\.index).min()
+            // `values.map(\.index).min()` materialised an array of every index in the feed —
+            // up to 3000 of them — to compute a single minimum. This walks the same values
+            // without allocating.
+            return result ?? self.currentMessages.values.min(by: { $0.index < $1.index })?.index
         }
 
         /// Remove only byte-for-byte identical, non-empty post texts copied across channels.
@@ -943,6 +955,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             )
             self.currentMessageIds = messages.map(\.id)
             self.currentMessages = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
+            self.currentEntries = entries
+            self.currentEntryPositions = Dictionary(
+                uniqueKeysWithValues: messages.enumerated().map { ($0.element.id, $0.offset) }
+            )
             self.visibleDurations = self.visibleDurations.filter { self.currentMessages[$0.key] != nil }
             self.markedInCurrentView = self.markedInCurrentView.intersection(self.currentMessages.keys)
             self.mergedHistoryView = view
@@ -1008,28 +1024,25 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     || existingReactions != updatedReactions
                     || pollDidChange {
                     self.currentMessages[id] = message
+                    if let position = self.currentEntryPositions[id], position < self.currentEntries.count {
+                        self.currentEntries[position] = EngineRawMessageHistoryEntry(
+                            message: message,
+                            isRead: false,
+                            location: nil,
+                            monthLocation: nil,
+                            attributes: EngineRawMutableMessageHistoryEntryAttributes(authorIsContact: false)
+                        )
+                    }
                     didChange = true
                 }
             }
             guard didChange else {
                 return
             }
-            let entries = self.currentMessageIds.compactMap { id -> EngineRawMessageHistoryEntry? in
-                guard let message = self.currentMessages[id] else {
-                    return nil
-                }
-                return EngineRawMessageHistoryEntry(
-                    message: message,
-                    isRead: false,
-                    location: nil,
-                    monthLocation: nil,
-                    attributes: EngineRawMutableMessageHistoryEntryAttributes(authorIsContact: false)
-                )
-            }
             let view = EngineRawMessageHistoryView(
                 tag: nil,
                 namespaces: .just(Set([Namespaces.Message.Cloud])),
-                entries: entries,
+                entries: self.currentEntries,
                 holeEarlier: false,
                 holeLater: false,
                 isLoading: false
@@ -1086,7 +1099,13 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// (as this used to) counts everything they have already scrolled past, so the buffer
         /// always looked full and nothing was ever fetched until they hit the very bottom.
         private var remainingBelowReader: Int {
-            guard let frontier = self.readerFrontier else {
+            return self.remainingBelow(self.readerFrontier)
+        }
+
+        /// Backlog still ahead of the reader. Takes the frontier as a parameter so a caller
+        /// that needs both does not walk the feed twice to derive it.
+        private func remainingBelow(_ frontier: MessageIndex?) -> Int {
+            guard let frontier else {
                 return 0
             }
             var count = 0
@@ -1106,8 +1125,13 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             guard self.loadDisposable == nil, self.loadMoreDisposable == nil, !self.isPrefetching else {
                 return
             }
+            // One frontier, one backlog count. Both of these walk the whole feed, and the two
+            // gates below used to derive them independently — three full passes per top-up,
+            // every eight seconds.
+            let frontier = self.readerFrontier
+            let remaining = self.remainingBelow(frontier)
             if !force {
-                guard self.remainingBelowReader <= Impl.prefetchThreshold else {
+                guard remaining <= Impl.prefetchThreshold else {
                     return
                 }
             }
@@ -1116,10 +1140,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // is deep in time, and a channel discovered at that point only has recent posts,
             // all of them NEWER than where they are, so not one of them can be shown. Adding
             // sources early is what actually keeps the feed going.
-            if self.remainingBelowReader <= Impl.expansionThreshold {
+            if remaining <= Impl.expansionThreshold {
                 self.expandRecommendationSources()
             }
-            guard let requestedFrontier = self.readerFrontier else {
+            guard let requestedFrontier = frontier else {
                 return
             }
             self.isPrefetching = true
