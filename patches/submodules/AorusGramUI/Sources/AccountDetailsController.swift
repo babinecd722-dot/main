@@ -272,7 +272,16 @@ private func aorusEstimateRegistration(userId: Int64) -> Date? {
     ]
     guard userId > 0, let first = anchors.first, let last = anchors.last else { return nil }
     if userId <= first.0 { return Date(timeIntervalSince1970: first.1) }
-    if userId >= last.0 { return Date(timeIntervalSince1970: last.1) }
+    if userId >= last.0 {
+        // New ids must not all collapse onto the final measured month. Continue the most
+        // recent measured growth rate, but never report a date in the future when Telegram
+        // allocates an id from a sparse range.
+        let previous = anchors[anchors.count - 2]
+        let idSpan = max(last.0 - previous.0, 1)
+        let secondsPerId = (last.1 - previous.1) / Double(idSpan)
+        let projected = last.1 + Double(userId - last.0) * secondsPerId
+        return Date(timeIntervalSince1970: min(projected, Date().timeIntervalSince1970))
+    }
     for i in 1 ..< anchors.count {
         let (id0, t0) = anchors[i - 1]
         let (id1, t1) = anchors[i]
@@ -354,7 +363,7 @@ private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcI
     switch kind {
     case .user:
         sectionTitle = ru ? "АККАУНТ" : "ACCOUNT"; idLabel = ru ? "ID аккаунта" : "Account ID"; ageLabel = ru ? "Возраст аккаунта" : "Account Age"
-        dateLabel = ru ? "Дата (примерно)" : "Date (approx.)"; isExact = false
+        dateLabel = ru ? "Месяц регистрации" : "Registration Month"; isExact = false
     case .channel:
         sectionTitle = ru ? "КАНАЛ" : "CHANNEL"; idLabel = ru ? "ID канала" : "Channel ID"; ageLabel = ru ? "Возраст канала" : "Channel Age"
         dateLabel = ru ? "Дата создания" : "Creation Date"; isExact = true
@@ -388,13 +397,7 @@ private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcI
         let df = DateFormatter()
         df.locale = Locale(identifier: ru ? "ru_RU" : "en_US")
         df.dateFormat = isExact ? "d MMMM yyyy" : "LLLL yyyy"
-        let resolvedDateLabel: String
-        if isOfficialRegistrationMonth {
-            resolvedDateLabel = ru ? "Месяц регистрации" : "Registration Month"
-        } else {
-            resolvedDateLabel = dateLabel
-        }
-        entries.append(.regDateRow(theme, resolvedDateLabel, df.string(from: date)))
+        entries.append(.regDateRow(theme, dateLabel, df.string(from: date)))
         entries.append(.ageRow(theme, ageLabel, aorusAccountAge(from: date, ru)))
     } else {
         entries.append(.regDateRow(theme, dateLabel, ru ? "Неизвестно" : "Unknown"))
@@ -408,8 +411,8 @@ private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcI
         footer = ru ? "Месяц регистрации получен напрямую из данных Telegram."
                     : "The registration month is taken directly from Telegram's data."
     } else {
-        footer = ru ? "Telegram не предоставил месяц регистрации для этого профиля, поэтому дата приблизительно вычислена по ID."
-                    : "Telegram did not provide a registration month for this profile, so the date is estimated from its ID."
+        footer = ru ? "Дата рассчитана по ID аккаунта; возможна погрешность в несколько месяцев."
+                    : "The date is estimated from the account ID and may differ by several months."
     }
     entries.append(.footer(theme, footer))
 
@@ -486,11 +489,18 @@ private enum AorusPeerNoteStore {
             notes[key] = trimmed
         }
         cachedNotes = notes
-        if let url = storageURL(), let data = try? JSONEncoder().encode(notes) {
-            do {
-                try data.write(to: url, options: .atomic)
+        if let data = try? JSONEncoder().encode(notes) {
+            var persistedToFile = false
+            if let url = storageURL() {
+                do {
+                    try data.write(to: url, options: .atomic)
+                    persistedToFile = true
+                } catch {
+                }
+            }
+            if persistedToFile {
                 UserDefaults.standard.removeObject(forKey: fallbackKey)
-            } catch {
+            } else {
                 UserDefaults.standard.set(data, forKey: fallbackKey)
             }
         }
@@ -561,9 +571,10 @@ private func aorusNoteEditorController(context: AccountContext, initialValue: St
     let valuePromise = ValuePromise<String>(initialValue, ignoreRepeated: true)
     let value = Atomic(value: initialValue)
     let arguments = NoteEditorArguments(update: { updated in
-        valuePromise.set(value.swap(String(updated.prefix(4096))))
+        let normalized = String(updated.prefix(4096))
+        valuePromise.set(value.modify { _ in normalized })
     })
-    var saveImpl: ((String) -> Void)?
+    var saveImpl: (() -> Void)?
 
     let signal = combineLatest(context.sharedContext.presentationData, valuePromise.get())
     |> deliverOnMainQueue
@@ -573,7 +584,7 @@ private func aorusNoteEditorController(context: AccountContext, initialValue: St
             content: .text(ru ? "Сохранить" : "Save"),
             style: .bold,
             enabled: true,
-            action: { saveImpl?(currentValue) }
+            action: { saveImpl?() }
         )
         let entries: [NoteEditorEntry] = [
             .input(presentationData.theme, currentValue, ru ? "Введите заметку" : "Enter a note")
@@ -596,7 +607,8 @@ private func aorusNoteEditorController(context: AccountContext, initialValue: St
     }
 
     let controller = ItemListController(context: context, state: signal)
-    saveImpl = { [weak controller] updated in
+    saveImpl = { [weak controller] in
+        let updated = value.with { $0 }
         saved(updated)
         controller?.view.endEditing(true)
         let _ = (controller?.navigationController as? NavigationController)?.popViewController(animated: true)

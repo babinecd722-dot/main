@@ -1248,9 +1248,19 @@ def main() -> None:
         "private func aorusNoteEditorController(",
         "peerKey: Int64",
         "registrationDate: String?",
+        "valuePromise.set(value.modify { _ in normalized })",
+        "let secondsPerId = (last.1 - previous.1) / Double(idSpan)",
+        "var persistedToFile = false",
     ):
         if marker not in account_details_text:
             err.append(f"AccountDetails: official registration date / peer notes are missing {marker}")
+    for forbidden in (
+        "valuePromise.set(value.swap(",
+        "Telegram не предоставил месяц регистрации",
+        "Telegram did not provide a registration month",
+    ):
+        if forbidden in account_details_text:
+            err.append(f"AccountDetails: stale note/date fallback remains {forbidden}")
 
     peer_info_items = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoProfileItems.swift"
     peer_info_items_text = peer_info_items.read_text(encoding="utf-8") if peer_info_items.is_file() else ""
