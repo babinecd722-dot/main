@@ -1185,7 +1185,6 @@ def main() -> None:
         "private static let recommendedScanBatch = 24",
         "private static let maxExpansionAdditions = 8",
         "private static let minimumHealthySourceCount = 8",
-        "private static let badgeScanBudget = 512",
         "currentSourceCounts",
         "var candidatesByRank:",
         "appendTier(prioritySources)",
