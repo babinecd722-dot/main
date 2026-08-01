@@ -1051,12 +1051,15 @@ def main() -> None:
     )
     reflector_text = reflector_port.read_text(encoding="utf-8") if reflector_port.is_file() else ""
     for marker in (
-        "AorusGram SOCKS5 UDP diagnostics schema: 2",
+        "AorusGram SOCKS5 UDP diagnostics schema: 3",
         "class AorusSocks5UdpProxySocket final",
         "SOCKS5 UDP ASSOCIATE",
         "proxy().type == rtc::ProxyType::PROXY_SOCKS5",
         "first UDP payload sent",
         "first UDP payload received",
+        "rejected relay datagram source=",
+        "malformed relay datagram reason=",
+        "controlPeer=",
         "pre-handshake queue",
         "unexpectedRelayPackets",
         "malformedPackets",

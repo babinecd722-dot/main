@@ -283,7 +283,7 @@ private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
         print("CallProxyUDP: protected bounded diagnostics applied")
 
 
-SOCKS5_UDP_CLIENT_CLASS = r"""// AorusGram SOCKS5 UDP diagnostics schema: 2
+SOCKS5_UDP_CLIENT_CLASS = r"""// AorusGram SOCKS5 UDP diagnostics schema: 3
 // AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.
 // TCP is retained only as the authenticated control channel. Reflector packets remain UDP.
 class AorusSocks5UdpProxySocket final : public rtc::AsyncPacketSocket {
@@ -291,11 +291,11 @@ public:
     AorusSocks5UdpProxySocket(
         rtc::AsyncPacketSocket* udpSocket,
         rtc::SocketFactory* socketFactory,
-        const rtc::SocketAddress& localAddress,
+        const rtc::SocketAddress& /*localAddress*/,
         const rtc::ProxyInfo& proxyInfo)
         : udp_(udpSocket),
           control_(socketFactory->CreateSocket(
-              proxyInfo.address.family() == AF_INET6 ? AF_INET6 : localAddress.family(),
+              proxyInfo.address.family() == AF_INET6 ? AF_INET6 : AF_INET,
               SOCK_STREAM)),
           proxy_(proxyInfo.address),
           username_(proxyInfo.username),
@@ -467,6 +467,13 @@ private:
     static constexpr size_t kMaxQueuedPackets = 32;
     static constexpr size_t kMaxQueuedBytes = 256 * 1024;
 
+    static std::string AddressText(const rtc::SocketAddress& address) {
+        if (!address.ipaddr().IsNil()) {
+            return address.ipaddr().ToString();
+        }
+        return address.hostname();
+    }
+
     void OnControlConnect(rtc::Socket*) {
         RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: TCP control connected";
         rtc::ByteBufferWriter request;
@@ -592,13 +599,16 @@ private:
                 }
                 if (relay.IsAnyIP()) {
                     const uint16_t relayPort = relay.port();
-                    relay = proxy_;
+                    const rtc::SocketAddress controlPeer = control_->GetRemoteAddress();
+                    relay = controlPeer.ipaddr().IsNil() ? proxy_ : controlPeer;
                     relay.SetPort(relayPort);
                 }
                 relay_ = relay;
                 handshakeState_ = HandshakeState::Ready;
                 RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: relay established endpoint="
-                                 << relay_.hostname() << ":" << relay_.port()
+                                 << AddressText(relay_) << ":" << relay_.port()
+                                 << " controlPeer=" << AddressText(control_->GetRemoteAddress())
+                                 << ":" << control_->GetRemoteAddress().port()
                                  << " queuedPackets=" << pending_.size()
                                  << " queuedBytes=" << queuedBytes_;
                 SignalAddressReady(this, GetLocalAddress());
@@ -770,25 +780,29 @@ private:
         if (packet.payload().size() < 4) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "short SOCKS5 UDP header");
             return;
         }
-        if (relay_.IsUnresolvedIP()) {
-            if (observedRelay_.IsNil()) {
-                observedRelay_ = packet.source_address();
-            } else if (packet.source_address() != observedRelay_) {
-                ++droppedPackets_;
-                ++unexpectedRelayPackets_;
-                return;
-            }
-        } else if (packet.source_address() != relay_) {
+        if (!IsAcceptedRelaySource(packet.source_address())) {
             ++droppedPackets_;
             ++unexpectedRelayPackets_;
+            if (!loggedUnexpectedRelay_) {
+                loggedUnexpectedRelay_ = true;
+                const rtc::SocketAddress controlPeer = control_->GetRemoteAddress();
+                RTC_LOG(LS_WARNING) << "AorusGram SOCKS5 UDP: rejected relay datagram source="
+                                    << AddressText(packet.source_address()) << ":"
+                                    << packet.source_address().port()
+                                    << " expected=" << AddressText(relay_) << ":" << relay_.port()
+                                    << " controlPeer=" << AddressText(controlPeer) << ":"
+                                    << controlPeer.port();
+            }
             return;
         }
         const uint8_t* data = packet.payload().data();
         if (data[0] != 0 || data[1] != 0 || data[2] != 0) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "invalid RSV or FRAG field");
             return;
         }
         rtc::SocketAddress source;
@@ -796,12 +810,14 @@ private:
         if (consumed <= 0) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "invalid SOCKS5 source address");
             return;
         }
         const size_t header = 3 + static_cast<size_t>(consumed);
         if (header > packet.payload().size()) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "SOCKS5 header exceeds datagram");
             return;
         }
         const size_t payloadBytes = packet.payload().size() - header;
@@ -818,6 +834,49 @@ private:
             payloadBytes,
             source,
             rtc::TimeMicros());
+    }
+
+    bool IsAcceptedRelaySource(const rtc::SocketAddress& source) {
+        if (source == relay_) {
+            return true;
+        }
+
+        const rtc::SocketAddress controlPeer = control_->GetRemoteAddress();
+        if (!source.ipaddr().IsNil()) {
+            // RFC 1928 relays behind NAT may answer from another UDP port or expose
+            // an internal BND.ADDR. Accept the resolved relay IP and the actual
+            // authenticated SOCKS control peer, while still rejecting other hosts.
+            if (!relay_.ipaddr().IsNil() && source.ipaddr() == relay_.ipaddr()) {
+                return true;
+            }
+            if (!controlPeer.ipaddr().IsNil() && source.ipaddr() == controlPeer.ipaddr()) {
+                return true;
+            }
+        }
+
+        if (relay_.IsUnresolvedIP()) {
+            if (observedRelay_.IsNil()) {
+                if (!controlPeer.ipaddr().IsNil() && source.ipaddr() != controlPeer.ipaddr()) {
+                    return false;
+                }
+                observedRelay_ = source;
+                return true;
+            }
+            return source == observedRelay_ ||
+                (!source.ipaddr().IsNil() && source.ipaddr() == observedRelay_.ipaddr());
+        }
+        return false;
+    }
+
+    void LogMalformedPacket(const rtc::ReceivedPacket& packet, const char* reason) {
+        if (loggedMalformedPacket_) {
+            return;
+        }
+        loggedMalformedPacket_ = true;
+        RTC_LOG(LS_WARNING) << "AorusGram SOCKS5 UDP: malformed relay datagram reason="
+                            << reason << " bytes=" << packet.payload().size()
+                            << " source=" << AddressText(packet.source_address()) << ":"
+                            << packet.source_address().port();
     }
 
     void OnUdpReady(rtc::AsyncPacketSocket*) {
@@ -915,6 +974,8 @@ private:
     bool loggedFirstReceive_ = false;
     bool loggedQueueOverflow_ = false;
     bool loggedUnavailableSend_ = false;
+    bool loggedUnexpectedRelay_ = false;
+    bool loggedMalformedPacket_ = false;
     bool summaryLogged_ = false;
 };
 """
@@ -930,10 +991,12 @@ def patch_tgcalls_reflector_socks5_udp(tg: Path) -> None:
 
     text = reflector.read_text(encoding="utf-8")
     socket_class_marker = "class AorusSocks5UdpProxySocket final"
-    socket_schema_marker = "AorusGram SOCKS5 UDP diagnostics schema: 2"
+    socket_schema_marker = "AorusGram SOCKS5 UDP diagnostics schema: 3"
     class_anchor = "rtc::AsyncPacketSocket *CreateClientRawTcpSocket(\n"
     if socket_class_marker in text and socket_schema_marker not in text:
-        class_start = text.find("// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.")
+        class_start = text.find("// AorusGram SOCKS5 UDP diagnostics schema:")
+        if class_start < 0:
+            class_start = text.find("// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.")
         if class_start < 0:
             class_start = text.find(socket_class_marker)
         class_end = text.find(class_anchor, class_start)
@@ -942,7 +1005,7 @@ def patch_tgcalls_reflector_socks5_udp(tg: Path) -> None:
             return
         text = text[:class_start] + SOCKS5_UDP_CLIENT_CLASS + "\n" + text[class_end:]
         reflector.write_text(text, encoding="utf-8")
-        print("tgcalls SOCKS5 UDP: legacy reflector migrated to schema 2")
+        print("tgcalls SOCKS5 UDP: legacy reflector migrated to schema 3")
     elif socket_class_marker not in text:
         text = text.replace(
             "#include <vector>\n",
