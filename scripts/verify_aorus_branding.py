@@ -1230,6 +1230,42 @@ def main() -> None:
             err.append(f"Wall: channel exclusions are not enforced across sources — missing {marker}")
     if "self?.reload()" in wall_text:
         err.append("Wall: settings observer still rebuilds the feed and can teleport the viewport")
+    if "transaction.scanTopMessages(" in wall_text or "badgeScanBudget" in wall_text:
+        err.append("Wall: badge must use the rendered Wall snapshot, not a global Postbox scan")
+    if "badgeTimer" in wall_text:
+        err.append("Wall: redundant periodic badge timer is still present")
+    for marker in (
+        "private func publishCurrentBadge()",
+        "self.currentMessageIds.count - self.markedInCurrentView.count",
+    ):
+        if marker not in wall_text:
+            err.append(f"Wall: single-source badge publication is missing {marker}")
+
+    account_details = tg / "submodules" / "AorusGramUI" / "Sources" / "AccountDetailsController.swift"
+    account_details_text = account_details.read_text(encoding="utf-8") if account_details.is_file() else ""
+    for marker in (
+        'value.split(separator: ".")',
+        "private enum AorusPeerNoteStore",
+        "private func aorusNoteEditorController(",
+        "peerKey: Int64",
+        "registrationDate: String?",
+    ):
+        if marker not in account_details_text:
+            err.append(f"AccountDetails: official registration date / peer notes are missing {marker}")
+
+    peer_info_items = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoProfileItems.swift"
+    peer_info_items_text = peer_info_items.read_text(encoding="utf-8") if peer_info_items.is_file() else ""
+    if peer_info_items_text.count("// AorusGram: account details v2") != 3:
+        err.append("AccountDetails: expected one current injection for user, channel and group")
+    for marker in (
+        "let aorusPeerKey =",
+        "let aorusRegistrationDate: String? =",
+        "peerStatusSettings?.registrationDate",
+        "peerKey: aorusPeerKey",
+        "registrationDate: aorusRegistrationDate",
+    ):
+        if marker not in peer_info_items_text:
+            err.append(f"AccountDetails: PeerInfo integration is missing {marker}")
 
     wall_settings = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusWallSettingsController.swift"
     wall_settings_text = wall_settings.read_text(encoding="utf-8") if wall_settings.is_file() else ""
@@ -1336,7 +1372,8 @@ def main() -> None:
         "private static var seenCache:",
         "private static var excludedCache:",
         "func seenMessageIds(accountId: Int64) -> Set<MessageId>",
-        "scheduleSeenFlushLocked(accountId: accountId)",
+        "appendSeenJournalLocked(newValues, accountId: accountId)",
+        "writeSeenSnapshotLocked(entry, accountId: accountId)",
     ):
         if marker not in wall_settings_text:
             err.append(f"Wall: settings store caching is missing {marker}")

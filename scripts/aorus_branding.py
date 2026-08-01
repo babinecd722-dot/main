@@ -4261,16 +4261,50 @@ def patch_peer_info_account_details(tg: Path) -> None:
     Patches PeerInfoProfileItems.swift (the `infoItems` builder) to append a
     PeerInfoScreenDisclosureItem in the user, channel and legacy-group blocks.
     Tapping it pushes accountDetailsController (AorusGramUI) which shows the id,
-    the data-center, and a creation date: estimated from the numeric id for
-    users, and the exact Telegram-provided creationDate for channels / groups.
+    the data-center and the Telegram-provided registration month for users (with
+    numeric-id interpolation only as a fallback). Channels and groups use their
+    exact Telegram-provided creationDate.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoProfileItems.swift"
     if not path.is_file():
         print("PeerInfoAccountDetails: PeerInfoProfileItems.swift not found, skip")
         return
     t = path.read_text(encoding="utf-8")
-    if "AorusGram: account details" in t:
-        print("PeerInfoAccountDetails: already injected")
+    current_sentinel = "// AorusGram: account details v2"
+    # Source caches can contain the older block. Leaving it in place after the controller
+    # signature changes produces a late Swift compile failure, so remove only the generated
+    # `do` block by balancing its braces, then inject the current version below.
+    legacy_sentinel = '// AorusGram: account details ("Подробнее") row'
+    removed_legacy = 0
+    while legacy_sentinel in t:
+        marker_pos = t.find(legacy_sentinel)
+        line_start = t.rfind("\n", 0, marker_pos) + 1
+        do_pos = t.find("do {", marker_pos)
+        if do_pos == -1:
+            break
+        open_brace = t.find("{", do_pos)
+        depth = 0
+        block_end = -1
+        for index in range(open_brace, len(t)):
+            if t[index] == "{":
+                depth += 1
+            elif t[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    block_end = index + 1
+                    break
+        if block_end == -1:
+            raise RuntimeError("PeerInfoAccountDetails: unterminated legacy injection")
+        if block_end < len(t) and t[block_end] == "\n":
+            block_end += 1
+        t = t[:line_start] + t[block_end:]
+        removed_legacy += 1
+    if removed_legacy:
+        print(f"PeerInfoAccountDetails: removed {removed_legacy} legacy injection(s)")
+    if current_sentinel in t:
+        if removed_legacy:
+            path.write_text(t, encoding="utf-8")
+        print("PeerInfoAccountDetails: current injection already present")
         return
 
     # import AorusGramUI (so accountDetailsController / AorusDetailKind are visible)
@@ -4281,12 +4315,13 @@ def patch_peer_info_account_details(tg: Path) -> None:
             return
         t = t.replace(needle, needle + "import AorusGramUI\n", 1)
 
-    def disclosure(peer_var: str, kind_expr: str, creation_expr: str, item_id: int) -> str:
+    def disclosure(peer_var: str, kind_expr: str, creation_expr: str, registration_expr: str, item_id: int) -> str:
         return (
             "\n"
-            "        // AorusGram: account details (\"Подробнее\") row\n"
+            "        // AorusGram: account details v2\n"
             "        do {\n"
             "            let aorusEntityId = " + peer_var + ".id.id._internalGetInt64Value()\n"
+            "            let aorusPeerKey = " + peer_var + ".id.toInt64()\n"
             "            var aorusDcId: Int = 0\n"
             "            for aorusRep in " + peer_var + ".photo {\n"
             "                if let aorusRes = aorusRep.resource as? CloudPeerPhotoSizeMediaResource {\n"
@@ -4297,12 +4332,13 @@ def patch_peer_info_account_details(tg: Path) -> None:
             "            let aorusTitle = EnginePeer(" + peer_var + ").compactDisplayTitle\n"
             "            let aorusKind: AorusDetailKind = " + kind_expr + "\n"
             "            let aorusCreation: Int32 = " + creation_expr + "\n"
+            "            let aorusRegistrationDate: String? = " + registration_expr + "\n"
             "            items[currentPeerInfoSection]!.append(PeerInfoScreenDisclosureItem(id: " + str(item_id) + ", text: AorusL10n.current.accountDetails, action: {\n"
             "                guard let aorusParent = interaction.getController(),\n"
             "                      let aorusNav = aorusParent.navigationController as? NavigationController else {\n"
             "                    return\n"
             "                }\n"
-            "                aorusNav.pushViewController(accountDetailsController(context: context, entityId: aorusEntityId, dcId: aorusDcId, title: aorusTitle, kind: aorusKind, creationDate: aorusCreation))\n"
+            "                aorusNav.pushViewController(accountDetailsController(context: context, entityId: aorusEntityId, peerKey: aorusPeerKey, dcId: aorusDcId, title: aorusTitle, kind: aorusKind, creationDate: aorusCreation, registrationDate: aorusRegistrationDate))\n"
             "            }))\n"
             "        }\n"
         )
@@ -4312,20 +4348,20 @@ def patch_peer_info_account_details(tg: Path) -> None:
     # User block — inject after the item-id constants.
     user_anchor = "        let ItemVerification = 9004\n"
     if user_anchor in t:
-        t = t.replace(user_anchor, user_anchor + disclosure("user", ".user", "0", 770077), 1)
+        t = t.replace(user_anchor, user_anchor + disclosure("user", ".user", "0", "(data.cachedData as? CachedUserData)?.peerStatusSettings?.registrationDate", 770077), 1)
         applied.append("user")
 
     # Channel / supergroup block — inject after the item-id constants.
     chan_anchor = "        let ItemPeerPersonalChannel = 11\n"
     if chan_anchor in t:
         chan_kind = "{ if case .broadcast = channel.info { return .channel } else { return .group } }()"
-        t = t.replace(chan_anchor, chan_anchor + disclosure("channel", chan_kind, "channel.creationDate", 770078), 1)
+        t = t.replace(chan_anchor, chan_anchor + disclosure("channel", chan_kind, "channel.creationDate", "nil", 770078), 1)
         applied.append("channel")
 
     # Legacy group block — inject right after the block opens.
     grp_anchor = "    } else if case let .legacyGroup(group) = data.peer {\n"
     if grp_anchor in t:
-        t = t.replace(grp_anchor, grp_anchor + disclosure("group", ".group", "group.creationDate", 770079), 1)
+        t = t.replace(grp_anchor, grp_anchor + disclosure("group", ".group", "group.creationDate", "nil", 770079), 1)
         applied.append("group")
 
     if not applied:

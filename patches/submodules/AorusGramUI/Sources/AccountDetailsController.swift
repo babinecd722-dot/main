@@ -20,7 +20,7 @@ public enum AorusDetailKind {
 private enum DetailSection: Int32 {
     case account
     case registration
-    case footer
+    case note
 }
 
 // MARK: - Entries
@@ -35,15 +35,17 @@ private enum AccountDetailEntry: ItemListNodeEntry {
     case ageRow(PresentationTheme, String, String)
 
     case footer(PresentationTheme, String)
+    case noteHeader(PresentationTheme, String)
+    case noteRow(PresentationTheme, String, String)
 
     var section: ItemListSectionId {
         switch self {
         case .accountHeader, .idRow, .dcRow:
             return DetailSection.account.rawValue
-        case .regHeader, .regDateRow, .ageRow:
+        case .regHeader, .regDateRow, .ageRow, .footer:
             return DetailSection.registration.rawValue
-        case .footer:
-            return DetailSection.footer.rawValue
+        case .noteHeader, .noteRow:
+            return DetailSection.note.rawValue
         }
     }
 
@@ -56,6 +58,8 @@ private enum AccountDetailEntry: ItemListNodeEntry {
         case .regDateRow:    return 4
         case .ageRow:        return 5
         case .footer:        return 6
+        case .noteHeader:    return 7
+        case .noteRow:       return 8
         }
     }
 
@@ -79,6 +83,10 @@ private enum AccountDetailEntry: ItemListNodeEntry {
             if case let .ageRow(rt, rk, rv) = rhs { return lt === rt && lk == rk && lv == rv }
         case let .footer(lt, ls):
             if case let .footer(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .noteHeader(lt, ls):
+            if case let .noteHeader(rt, rs) = rhs { return lt === rt && ls == rs }
+        case let .noteRow(lt, lk, lv):
+            if case let .noteRow(rt, rk, rv) = rhs { return lt === rt && lk == rk && lv == rv }
         }
         return false
     }
@@ -99,7 +107,24 @@ private enum AccountDetailEntry: ItemListNodeEntry {
         case let .ageRow(_, title, value):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .footer(_, text):
-            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+            return ItemListTextItem(
+                presentationData: presentationData,
+                text: .plain(text),
+                sectionId: section,
+                additionalInsets: UIEdgeInsets(top: -2.0, left: 0.0, bottom: -2.0, right: 0.0)
+            )
+        case let .noteHeader(_, text):
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
+        case let .noteRow(_, title, value):
+            return ItemListDisclosureItem(
+                presentationData: presentationData,
+                title: title,
+                label: value,
+                labelStyle: value.isEmpty ? .text : .detailText,
+                sectionId: section,
+                style: .blocks,
+                action: { args.editNote() }
+            )
         }
     }
 }
@@ -285,8 +310,40 @@ private func aorusAccountAge(from date: Date, _ ru: Bool) -> String {
 
 // MARK: - Entries builder
 
+private func aorusOfficialRegistrationDate(_ value: String?) -> Date? {
+    guard let value, !value.isEmpty else {
+        return nil
+    }
+    let dotComponents = value.split(separator: ".")
+    if dotComponents.count == 2,
+       let month = Int(dotComponents[0]),
+       let year = Int(dotComponents[1]),
+       (1 ... 12).contains(month),
+       (2013 ... 2100).contains(year) {
+        var components = DateComponents()
+        components.calendar = Calendar(identifier: .gregorian)
+        components.timeZone = TimeZone(secondsFromGMT: 0)
+        components.year = year
+        components.month = month
+        components.day = 1
+        return components.date
+    }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    for format in ["yyyy-MM", "yyyy-MM-dd"] {
+        formatter.dateFormat = format
+        if let date = formatter.date(from: value) {
+            return date
+        }
+    }
+    return nil
+}
+
 private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcId: Int,
-                                  kind: AorusDetailKind, creationDate: Int32, ru: Bool) -> [AccountDetailEntry] {
+                                  kind: AorusDetailKind, creationDate: Int32,
+                                  registrationDate: String?, note: String, ru: Bool) -> [AccountDetailEntry] {
     var entries: [AccountDetailEntry] = []
 
     let sectionTitle: String
@@ -310,13 +367,20 @@ private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcI
     entries.append(.idRow(theme, idLabel, "\(entityId)"))
     entries.append(.dcRow(theme, ru ? "Дата-центр" : "Data Center", dcId > 0 ? aorusDataCenterName(dcId, ru) : (ru ? "Неизвестно" : "Unknown")))
 
-    // Users: estimated from the numeric id. Channels / groups: the exact
-    // creationDate provided directly by Telegram.
+    // Telegram now supplies an official registration month for eligible user profiles.
+    // Numeric-id interpolation remains an offline fallback for profiles where that field is
+    // intentionally absent. Channels and groups keep their exact Telegram creation timestamp.
     let date: Date?
+    let isOfficialRegistrationMonth: Bool
     if isExact {
         date = creationDate > 0 ? Date(timeIntervalSince1970: Double(creationDate)) : nil
+        isOfficialRegistrationMonth = false
+    } else if let officialDate = aorusOfficialRegistrationDate(registrationDate) {
+        date = officialDate
+        isOfficialRegistrationMonth = true
     } else {
         date = aorusEstimateRegistration(userId: entityId)
+        isOfficialRegistrationMonth = false
     }
 
     entries.append(.regHeader(theme, isExact ? (ru ? "СОЗДАНИЕ" : "CREATION") : (ru ? "РЕГИСТРАЦИЯ" : "REGISTRATION")))
@@ -324,32 +388,237 @@ private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcI
         let df = DateFormatter()
         df.locale = Locale(identifier: ru ? "ru_RU" : "en_US")
         df.dateFormat = isExact ? "d MMMM yyyy" : "LLLL yyyy"
-        entries.append(.regDateRow(theme, dateLabel, df.string(from: date)))
+        let resolvedDateLabel: String
+        if isOfficialRegistrationMonth {
+            resolvedDateLabel = ru ? "Месяц регистрации" : "Registration Month"
+        } else {
+            resolvedDateLabel = dateLabel
+        }
+        entries.append(.regDateRow(theme, resolvedDateLabel, df.string(from: date)))
         entries.append(.ageRow(theme, ageLabel, aorusAccountAge(from: date, ru)))
     } else {
         entries.append(.regDateRow(theme, dateLabel, ru ? "Неизвестно" : "Unknown"))
     }
 
-    entries.append(.footer(theme, isExact
-        ? (ru ? "Дата создания получена напрямую из данных Telegram."
-              : "The creation date is taken directly from Telegram's data.")
-        : (ru ? "Дата регистрации не предоставляется Telegram API и вычисляется приблизительно по ID аккаунта. Возможна погрешность в несколько месяцев."
-              : "The registration date is not provided by the Telegram API and is estimated from the account ID. It may be off by a few months.")))
+    let footer: String
+    if isExact {
+        footer = ru ? "Дата создания получена напрямую из данных Telegram."
+                    : "The creation date is taken directly from Telegram's data."
+    } else if isOfficialRegistrationMonth {
+        footer = ru ? "Месяц регистрации получен напрямую из данных Telegram."
+                    : "The registration month is taken directly from Telegram's data."
+    } else {
+        footer = ru ? "Telegram не предоставил месяц регистрации для этого профиля, поэтому дата приблизительно вычислена по ID."
+                    : "Telegram did not provide a registration month for this profile, so the date is estimated from its ID."
+    }
+    entries.append(.footer(theme, footer))
+
+    entries.append(.noteHeader(theme, ru ? "ЗАМЕТКА" : "NOTE"))
+    entries.append(.noteRow(
+        theme,
+        note.isEmpty ? (ru ? "Добавить заметку" : "Add Note") : (ru ? "Изменить заметку" : "Edit Note"),
+        note
+    ))
 
     return entries
 }
 
 // MARK: - Public factory
 
-private final class AccountDetailArguments {
-    let copyId: () -> Void
-    init(copyId: @escaping () -> Void) {
-        self.copyId = copyId
+private enum AorusPeerNoteStore {
+    private static let lock = NSLock()
+    private static var cachedNotes: [String: String]?
+    private static let fallbackKey = "aorusgram_peer_notes_fallback"
+
+    private static func storageURL() -> URL? {
+        guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let directory = base.appendingPathComponent("AorusPeerNotes", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var mutableDirectory = directory
+            try? mutableDirectory.setResourceValues(values)
+            return directory.appendingPathComponent("notes.json")
+        } catch {
+            return nil
+        }
+    }
+
+    private static func noteKey(accountId: Int64, peerKey: Int64) -> String {
+        return "\(accountId):\(peerKey)"
+    }
+
+    private static func loadLocked() -> [String: String] {
+        if let cachedNotes {
+            return cachedNotes
+        }
+        let notes: [String: String]
+        if let fallbackData = UserDefaults.standard.data(forKey: fallbackKey),
+           let fallback = try? JSONDecoder().decode([String: String].self, from: fallbackData) {
+            notes = fallback
+        } else if let url = storageURL(), let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
+            notes = decoded
+        } else {
+            notes = [:]
+        }
+        cachedNotes = notes
+        return notes
+    }
+
+    static func note(accountId: Int64, peerKey: Int64) -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return loadLocked()[noteKey(accountId: accountId, peerKey: peerKey)] ?? ""
+    }
+
+    static func setNote(_ value: String, accountId: Int64, peerKey: Int64) {
+        let trimmed = String(value.prefix(4096)).trimmingCharacters(in: .whitespacesAndNewlines)
+        lock.lock()
+        var notes = loadLocked()
+        let key = noteKey(accountId: accountId, peerKey: peerKey)
+        if trimmed.isEmpty {
+            notes.removeValue(forKey: key)
+        } else {
+            notes[key] = trimmed
+        }
+        cachedNotes = notes
+        if let url = storageURL(), let data = try? JSONEncoder().encode(notes) {
+            do {
+                try data.write(to: url, options: .atomic)
+                UserDefaults.standard.removeObject(forKey: fallbackKey)
+            } catch {
+                UserDefaults.standard.set(data, forKey: fallbackKey)
+            }
+        }
+        lock.unlock()
     }
 }
 
-public func accountDetailsController(context: AccountContext, entityId: Int64, dcId: Int, title: String, kind: AorusDetailKind, creationDate: Int32) -> ViewController {
+private enum NoteEditorSection: Int32 {
+    case note
+}
+
+private enum NoteEditorEntry: ItemListNodeEntry {
+    case input(PresentationTheme, String, String)
+
+    var section: ItemListSectionId {
+        return NoteEditorSection.note.rawValue
+    }
+
+    var stableId: Int32 {
+        return 0
+    }
+
+    static func < (lhs: NoteEditorEntry, rhs: NoteEditorEntry) -> Bool {
+        return lhs.stableId < rhs.stableId
+    }
+
+    static func == (lhs: NoteEditorEntry, rhs: NoteEditorEntry) -> Bool {
+        switch lhs {
+        case let .input(lt, lv, lp):
+            if case let .input(rt, rv, rp) = rhs {
+                return lt === rt && lv == rv && lp == rp
+            }
+        }
+        return false
+    }
+
+    func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
+        let arguments = arguments as! NoteEditorArguments
+        switch self {
+        case let .input(_, value, placeholder):
+            return ItemListMultilineInputItem(
+                presentationData: presentationData,
+                systemStyle: .glass,
+                text: value,
+                placeholder: placeholder,
+                maxLength: ItemListMultilineInputItemTextLimit(value: 4096, display: true),
+                sectionId: section,
+                style: .blocks,
+                capitalization: true,
+                autocorrection: true,
+                returnKeyType: .default,
+                minimalHeight: 140.0,
+                textUpdated: arguments.update
+            )
+        }
+    }
+}
+
+private final class NoteEditorArguments {
+    let update: (String) -> Void
+
+    init(update: @escaping (String) -> Void) {
+        self.update = update
+    }
+}
+
+private func aorusNoteEditorController(context: AccountContext, initialValue: String, saved: @escaping (String) -> Void) -> ViewController {
+    let valuePromise = ValuePromise<String>(initialValue, ignoreRepeated: true)
+    let value = Atomic(value: initialValue)
+    let arguments = NoteEditorArguments(update: { updated in
+        valuePromise.set(value.swap(String(updated.prefix(4096))))
+    })
+    var saveImpl: ((String) -> Void)?
+
+    let signal = combineLatest(context.sharedContext.presentationData, valuePromise.get())
+    |> deliverOnMainQueue
+    |> map { presentationData, currentValue -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let ru = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
+        let rightButton = ItemListNavigationButton(
+            content: .text(ru ? "Сохранить" : "Save"),
+            style: .bold,
+            enabled: true,
+            action: { saveImpl?(currentValue) }
+        )
+        let entries: [NoteEditorEntry] = [
+            .input(presentationData.theme, currentValue, ru ? "Введите заметку" : "Enter a note")
+        ]
+        return (
+            ItemListControllerState(
+                presentationData: ItemListPresentationData(presentationData),
+                title: .text(ru ? "Заметка" : "Note"),
+                leftNavigationButton: nil,
+                rightNavigationButton: rightButton,
+                backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
+            ),
+            (ItemListNodeState(
+                presentationData: ItemListPresentationData(presentationData),
+                entries: entries,
+                style: .blocks,
+                animateChanges: false
+            ), arguments)
+        )
+    }
+
+    let controller = ItemListController(context: context, state: signal)
+    saveImpl = { [weak controller] updated in
+        saved(updated)
+        controller?.view.endEditing(true)
+        let _ = (controller?.navigationController as? NavigationController)?.popViewController(animated: true)
+    }
+    return controller
+}
+
+private final class AccountDetailArguments {
+    let copyId: () -> Void
+    let editNote: () -> Void
+
+    init(copyId: @escaping () -> Void, editNote: @escaping () -> Void) {
+        self.copyId = copyId
+        self.editNote = editNote
+    }
+}
+
+public func accountDetailsController(context: AccountContext, entityId: Int64, peerKey: Int64, dcId: Int, title: String, kind: AorusDetailKind, creationDate: Int32, registrationDate: String?) -> ViewController {
     weak var weakController: ItemListController?
+    let accountId = context.account.id.int64
+    let initialNote = AorusPeerNoteStore.note(accountId: accountId, peerKey: peerKey)
+    let notePromise = ValuePromise<String>(initialNote, ignoreRepeated: true)
 
     let arguments = AccountDetailArguments(copyId: {
         UIPasteboard.general.string = "\(entityId)"
@@ -363,13 +632,23 @@ public func accountDetailsController(context: AccountContext, entityId: Int64, d
             actions: [TextAlertAction(type: .defaultAction, title: "OK", action: {})]
         )
         controller.present(alert, in: .window(.root))
+    }, editNote: {
+        guard let controller = weakController,
+              let navigationController = controller.navigationController as? NavigationController else {
+            return
+        }
+        let currentNote = AorusPeerNoteStore.note(accountId: accountId, peerKey: peerKey)
+        navigationController.pushViewController(aorusNoteEditorController(context: context, initialValue: currentNote, saved: { updated in
+            AorusPeerNoteStore.setNote(updated, accountId: accountId, peerKey: peerKey)
+            notePromise.set(AorusPeerNoteStore.note(accountId: accountId, peerKey: peerKey))
+        }))
     })
 
-    let signal: Signal<(ItemListControllerState, (ItemListNodeState, Any)), NoError> = context.sharedContext.presentationData
+    let signal: Signal<(ItemListControllerState, (ItemListNodeState, Any)), NoError> = combineLatest(context.sharedContext.presentationData, notePromise.get())
         |> deliverOnMainQueue
-        |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        |> map { presentationData, note -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let ru = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
-            let entries = accountDetailEntries(theme: presentationData.theme, entityId: entityId, dcId: dcId, kind: kind, creationDate: creationDate, ru: ru)
+            let entries = accountDetailEntries(theme: presentationData.theme, entityId: entityId, dcId: dcId, kind: kind, creationDate: creationDate, registrationDate: registrationDate, note: note, ru: ru)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(title.isEmpty ? (ru ? "Подробнее" : "Details") : title),
