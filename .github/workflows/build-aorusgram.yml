@@ -162,8 +162,11 @@ jobs:
       - name: Normalize non-8-bit PNGs to 8-bit (silence libpng warnings)
         run: |
           cd telegram-ios
-          python3 -m pip install --quiet --disable-pip-version-check "Pillow==$PILLOW_VERSION"
-          python3 << 'PYEOF'
+          PNG_VENV="$RUNNER_TEMP/aorus-png-venv"
+          rm -rf "$PNG_VENV"
+          python3 -m venv "$PNG_VENV"
+          "$PNG_VENV/bin/python" -m pip install --quiet --disable-pip-version-check "Pillow==$PILLOW_VERSION"
+          "$PNG_VENV/bin/python" << 'PYEOF'
           import os
           from PIL import Image
           names = {
