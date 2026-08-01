@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: telegram-ios
-          key: tg-ios-src-v279-release-12.8-png8-alpha
+          key: tg-ios-src-v280-release-12.8-png8-alpha
 
       - name: Clone Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -64,6 +64,30 @@ jobs:
             git clone --depth=1 https://github.com/TelegramMessenger/rlottie.git submodules/rlottie/rlottie
           fi
           echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
+
+      - name: Verify current MTProxy Fake-TLS fingerprint
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          path = Path("telegram-ios/submodules/MtProtoKit/Sources/MTTcpConnection.m")
+          if not path.is_file():
+              raise SystemExit("MTTcpConnection.m is missing")
+          text = path.read_text(encoding="utf-8")
+          # Telegram's 2026-04-07 Safari ClientHello update removes the obsolete,
+          # DPI-visible JA3/JA4 signature. Fail at the start of CI if the pinned
+          # Telegram branch/cache ever regresses to the old generator.
+          required = (
+              "generate_ml_kem_public_key",
+              "HelloGenerationCommandMlKemKey",
+              "HelloGenerationCommandBeginChoice",
+              "MTCreateSafariClientHello",
+          )
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit("MTProxy Fake-TLS fingerprint regression: " + ", ".join(missing))
+          print("MTProxy Fake-TLS fingerprint: current Safari/ML-KEM generator verified")
+          PY
 
       - name: Ensure webrtc submodule
         run: |

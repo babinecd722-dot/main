@@ -967,6 +967,31 @@ def main() -> None:
             if marker not in proxy_text:
                 err.append(f"AorusProxyManager: protected transport/cache invariant is missing {marker}")
 
+    mt_tcp_connection = tg / "submodules" / "MtProtoKit" / "Sources" / "MTTcpConnection.m"
+    if not mt_tcp_connection.is_file():
+        err.append("MTProxyAntiDPI: MTTcpConnection.m is missing")
+    else:
+        mt_tcp_text = mt_tcp_connection.read_text(encoding="utf-8")
+        for marker in (
+            "generate_ml_kem_public_key",
+            "HelloGenerationCommandMlKemKey",
+            "HelloGenerationCommandBeginChoice",
+            "MTCreateSafariClientHello",
+        ):
+            if marker not in mt_tcp_text:
+                err.append(f"MTProxyAntiDPI: current Safari ClientHello marker is missing {marker}")
+
+    network_source = tg / "submodules" / "TelegramCore" / "Sources" / "Network" / "Network.swift"
+    if network_source.is_file():
+        network_text = network_source.read_text(encoding="utf-8")
+        for marker in (
+            "aorusSecretHex.count % 2 == 0",
+            "aorusSecret.insert(0xdd, at: 0)",
+            "aorusIsPadded || aorusIsFakeTls",
+        ):
+            if marker not in network_text:
+                err.append(f"MTProxyAntiDPI: strict/padded secret bridge is missing {marker}")
+
     call_context = tg / "submodules" / "TelegramVoip" / "Sources" / "OngoingCallContext.swift"
     call_context_text = call_context.read_text(encoding="utf-8") if call_context.is_file() else ""
     if "AorusGram: additive proxied TCP reflector" in call_context_text:
