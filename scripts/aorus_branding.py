@@ -7994,8 +7994,7 @@ def patch_license_key_provider(tg: Path) -> None:
     t = f.read_text(encoding="utf-8")
     if marker not in t:
         if "/* AORUS-BUILD-KEY-INJECTED */" in t:
-            print("LicenseKey: already injected — skipped")
-            return
+            raise RuntimeError("LicenseKey: refusing a previously injected source tree")
         raise RuntimeError("LicenseKey: injection marker is missing from an untrusted provider")
     key_hex = os.environ.get("LICENSE_HMAC_KEY_HEX", "").strip()
     if not key_hex:
@@ -8025,8 +8024,7 @@ def patch_proxy_key_provider(tg: Path) -> None:
     t = f.read_text(encoding="utf-8")
     if marker not in t:
         if "/* AORUS-BUILD-PROXY-KEY-INJECTED */" in t:
-            print("ProxyKey: already injected — skipped")
-            return
+            raise RuntimeError("ProxyKey: refusing a previously injected source tree")
         raise RuntimeError("ProxyKey: injection marker is missing from an untrusted provider")
     key_hex = os.environ.get("PROXY_HMAC_KEY_HEX", "").strip().lower()
     try:

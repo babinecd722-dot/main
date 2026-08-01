@@ -376,7 +376,7 @@ def main() -> None:
             "lookupCompletions",
             "URLSessionConfiguration.ephemeral",
             "tracks(withMediaType: .audio).isEmpty",
-            "LicenseKeyProvider.licenseHmacKeyBytes()",
+            "LicenseKeyProvider.withLicenseHmacKey",
         ]
         for marker in required_banner_markers:
             if marker not in banner_text:

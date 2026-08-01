@@ -18,8 +18,8 @@ public final class AorusGramBootstrap {
         // without delaying launch; current builds never recreate these directories.
         Self.removeLegacyCallLogs()
 
-        // License-layer hardening (audience is non-jailbroken sideload, so this is
-        // safe). Refuse debugger attach, then hard-stop on a jailbreak/injection.
+        // License-layer hardening. Refuse debugger attach and record a compromised
+        // environment so protected services fail closed without an unexplained crash.
         AorusEnvGuard.denyDebuggerAttach()
         AorusEnvGuard.enforceAtLaunch()
 

@@ -64,8 +64,9 @@ final class LicenseAPIClient {
         guard LicenseKeyProvider.isProvisioned else {
             completion(.failure(.notProvisioned)); return
         }
-        // Independent JB/injection hard-stop on the license path itself.
-        AorusEnvGuard.enforceBeforeRequest()
+        guard AorusEnvGuard.enforceBeforeRequest() else {
+            completion(.failure(.network)); return
+        }
         guard let url = URL(string: SubscriptionConfig.baseURLString + path) else {
             completion(.failure(.network)); return
         }
@@ -87,8 +88,11 @@ final class LicenseAPIClient {
         let bodySha = LicenseCrypto.sha256Hex(bodyData)
 
         let message = ts + "\n" + nonce + "\n" + device + "\n" + kv + "\n" + bodySha
-        let keyBytes = LicenseKeyProvider.licenseHmacKeyBytes()
-        let sign = LicenseCrypto.hmacSHA256Hex(message: Data(message.utf8), keyBytes: keyBytes)
+        guard let sign = LicenseKeyProvider.withLicenseHmacKey({ keyBytes in
+            LicenseCrypto.hmacSHA256Hex(message: Data(message.utf8), keyBytes: keyBytes)
+        }) else {
+            completion(.failure(.notProvisioned)); return
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

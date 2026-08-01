@@ -15,7 +15,7 @@ import Foundation
 //
 // The running count is persisted in UserDefaults under an opaque UUID key so
 // it survives process restarts (a patched app re-launched still accumulates
-// from where it left off).
+// from where it left off). Production code never clears this evidence at launch.
 
 final class AorusTamperAccumulator {
     static let shared = AorusTamperAccumulator()
@@ -53,10 +53,4 @@ final class AorusTamperAccumulator {
         return _count >= threshold
     }
 
-    // Called by AorusGramBootstrap on every clean launch so a repacked IPA
-    // can't accumulate across installs; only within a single session.
-    func resetForCleanLaunch() {
-        lock.lock(); _count = 0; reactionScheduled = false; lock.unlock()
-        UserDefaults.standard.removeObject(forKey: udKey)
-    }
 }

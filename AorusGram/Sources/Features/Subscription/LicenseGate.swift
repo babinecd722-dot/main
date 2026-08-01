@@ -48,12 +48,17 @@ final class LicenseGate {
     // Entry point — called once from AorusGramBootstrap.setup().
     func start() {
         guard !started else { return }
+        started = true
         guard LicenseKeyProvider.isProvisioned else {
             setFeatureAccess(active: false)
+            DispatchQueue.main.async { [weak self] in self?.showConnection() }
             return
         }
-        AorusEnvGuard.enforceAtGate()                            // independent JB hard-stop
-        started = true
+        guard AorusEnvGuard.enforceAtGate() else {
+            setFeatureAccess(active: false)
+            DispatchQueue.main.async { [weak self] in self?.showConnection() }
+            return
+        }
         LicenseStore.shared.load()
         if telegramUserId == nil { telegramUserId = LicenseStore.shared.telegramUserId }
         let initialStatus = LicenseStore.shared.effectiveOfflineStatus()
@@ -360,9 +365,16 @@ final class LicenseGate {
         lockSweepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             let ud = UserDefaults.standard
             guard ud.bool(forKey: "aorusgram_license_locked") else { return }
+            var backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) ?? [:]
+            var changed = false
             for (key, _) in self.aorusBooleanFlags(in: ud) {
+                if backup[key] == nil {
+                    backup[key] = ud.bool(forKey: key)
+                    changed = true
+                }
                 ud.set(false, forKey: key)
             }
+            if changed { ud.set(backup, forKey: LicenseGate.lockBackupKey) }
         }
     }
 

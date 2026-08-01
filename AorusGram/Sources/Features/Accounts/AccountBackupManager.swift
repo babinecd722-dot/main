@@ -44,6 +44,10 @@ public final class AccountBackupManager {
     private let keychainChunkPrefix = "archive_chunk_"
     private let keychainChunkSize  = 200 * 1024   // 200 KB per Keychain item — safely small.
     private let maxCompactBackupFileSize: UInt64 = 2 * 1024 * 1024
+    private let maxEncryptedEntrySize: UInt64 = 4 * 1024 * 1024
+    private let maxEncryptedArchiveSize: UInt64 = 256 * 1024 * 1024
+    private let maxArchiveEntryCount = 50_000
+    private let maxEncryptedPathSize: UInt32 = 64 * 1024
 
     // Per-account display data, captured at backup time, so the Sessions list and
     // the login-by-backup picker can show a real username / Telegram ID / avatar
@@ -210,6 +214,9 @@ public final class AccountBackupManager {
         var files: [(abs: String, rel: String)] = []
         collectBackupFiles(into: &files)
         guard !files.isEmpty else { return .failure(localized("Нет данных аккаунтов для бэкапа", "No account data available for backup")) }
+        guard files.count <= maxArchiveEntryCount else {
+            return .failure(localized("Бэкап слишком большой", "Backup is too large"))
+        }
 
         let key = loadKey() ?? SymmetricKey(size: .bits256)
 
@@ -222,6 +229,7 @@ public final class AccountBackupManager {
         }
 
         handle.write(Data(magic))
+        var encryptedBytes = UInt64(magic.count)
         for file in files {
             guard let content = fm.contents(atPath: file.abs),
                   let encPath = (try? AES.GCM.seal(Data(file.rel.utf8), using: key))?.combined,
@@ -230,6 +238,18 @@ public final class AccountBackupManager {
                 try? fm.removeItem(at: tmpURL)
                 return .failure(localized("Ошибка шифрования данных", "Data encryption failed"))
             }
+            let (nextEncryptedBytes, overflow) = encryptedBytes.addingReportingOverflow(
+                UInt64(4 + 8) + UInt64(encPath.count) + UInt64(encBody.count)
+            )
+            guard encPath.count <= Int(maxEncryptedPathSize),
+                  encBody.count <= Int(maxEncryptedEntrySize),
+                  !overflow,
+                  nextEncryptedBytes <= maxEncryptedArchiveSize - UInt64(MemoryLayout<UInt32>.size) else {
+                handle.closeFile()
+                try? fm.removeItem(at: tmpURL)
+                return .failure(localized("Бэкап слишком большой", "Backup is too large"))
+            }
+            encryptedBytes = nextEncryptedBytes
             handle.write(uint32LE(UInt32(encPath.count)))
             handle.write(encPath)
             handle.write(uint64LE(UInt64(encBody.count)))
@@ -403,17 +423,35 @@ public final class AccountBackupManager {
         }
 
         do {
+            var reachedEndMarker = false
+            var entryCount = 0
+            var encryptedBytes: UInt64 = UInt64(magic.count)
             while true {
                 let pathLenData = handle.readData(ofLength: 4)
-                guard pathLenData.count == 4 else { break }
+                guard pathLenData.count == 4 else { throw BackupError.truncated }
                 let encPathLen = readUInt32LE(pathLenData)
-                if encPathLen == 0 { break } // end marker
+                if encPathLen == 0 {
+                    reachedEndMarker = true
+                    break
+                }
+                guard encPathLen <= maxEncryptedPathSize else { throw BackupError.corrupt }
+                entryCount += 1
+                guard entryCount <= maxArchiveEntryCount else { throw BackupError.corrupt }
 
                 let encPath = handle.readData(ofLength: Int(encPathLen))
                 guard encPath.count == Int(encPathLen) else { throw BackupError.truncated }
                 let bodyLenData = handle.readData(ofLength: 8)
                 guard bodyLenData.count == 8 else { throw BackupError.truncated }
                 let encBodyLen = readUInt64LE(bodyLenData)
+                guard encBodyLen <= maxEncryptedEntrySize,
+                      encBodyLen <= UInt64(Int.max) else { throw BackupError.corrupt }
+                let (nextEncryptedBytes, overflow) = encryptedBytes.addingReportingOverflow(
+                    UInt64(4 + 8) + UInt64(encPathLen) + encBodyLen
+                )
+                guard !overflow, nextEncryptedBytes <= maxEncryptedArchiveSize else {
+                    throw BackupError.corrupt
+                }
+                encryptedBytes = nextEncryptedBytes
                 let encBody = handle.readData(ofLength: Int(encBodyLen))
                 guard encBody.count == Int(encBodyLen) else { throw BackupError.truncated }
 
@@ -436,6 +474,9 @@ public final class AccountBackupManager {
                 try fm.createDirectory(at: dest.deletingLastPathComponent(),
                                        withIntermediateDirectories: true)
                 try body.write(to: dest)
+            }
+            guard reachedEndMarker, handle.readData(ofLength: 1).isEmpty else {
+                throw BackupError.corrupt
             }
         } catch {
             handle.closeFile()
@@ -710,7 +751,7 @@ public final class AccountBackupManager {
         SecItemDelete(base as CFDictionary)
         var add = base
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
@@ -725,7 +766,20 @@ public final class AccountBackupManager {
         var result: AnyObject?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data else { return nil }
+        hardenKeychainAccessibility(account)
         return data
+    }
+
+    private func hardenKeychainAccessibility(_ account: String) {
+        let query: [String: Any] = [
+            kSecClass as String:       kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+        ]
+        let values: [String: Any] = [
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        _ = SecItemUpdate(query as CFDictionary, values as CFDictionary)
     }
 
     private func keychainDelete(_ account: String) {
@@ -753,6 +807,11 @@ public final class AccountBackupManager {
             let chunk = handle.readData(ofLength: keychainChunkSize)
             if chunk.isEmpty { break }
             total += Int64(chunk.count)
+            guard total <= Int64(maxEncryptedArchiveSize),
+                  index <= Int(maxEncryptedArchiveSize) / keychainChunkSize else {
+                deleteKeychainArchive()
+                return false
+            }
             guard keychainSet(keychainChunkPrefix + String(index), chunk) else {
                 deleteKeychainArchive()
                 return false
@@ -771,14 +830,24 @@ public final class AccountBackupManager {
     private func materializeArchiveFromKeychainIfNeeded() {
         let fm = FileManager.default
         guard !fm.fileExists(atPath: archiveURL.path) else { return }
-        guard let meta = keychainMeta(), meta.chunkCount > 0 else { return }
+        guard let meta = keychainMeta(),
+              meta.chunkCount > 0,
+              meta.chunkCount <= Int(maxEncryptedArchiveSize) / keychainChunkSize + 1,
+              meta.sizeBytes > 0,
+              UInt64(meta.sizeBytes) <= maxEncryptedArchiveSize else { return }
         guard fm.createFile(atPath: archiveURL.path, contents: nil),
               let handle = try? FileHandle(forWritingTo: archiveURL) else { return }
         var ok = true
+        var written: Int64 = 0
         for i in 0 ..< meta.chunkCount {
-            guard let chunk = keychainGet(keychainChunkPrefix + String(i)) else { ok = false; break }
+            guard let chunk = keychainGet(keychainChunkPrefix + String(i)),
+                  !chunk.isEmpty,
+                  chunk.count <= keychainChunkSize else { ok = false; break }
+            written += Int64(chunk.count)
+            guard written <= meta.sizeBytes else { ok = false; break }
             handle.write(chunk)
         }
+        if written != meta.sizeBytes { ok = false }
         try? handle.close()
         if !ok {
             try? fm.removeItem(at: archiveURL)
@@ -786,14 +855,16 @@ public final class AccountBackupManager {
     }
 
     private func deleteKeychainArchive() {
-        let count = keychainMeta()?.chunkCount ?? 0
+        let maxChunks = Int(maxEncryptedArchiveSize) / keychainChunkSize + 1
+        let count = min(max(keychainMeta()?.chunkCount ?? 0, 0), maxChunks)
         // Remove the recorded chunks, plus a generous overscan in case a previous
         // (larger) backup left extra items behind.
         for i in 0 ..< max(count, 0) {
             keychainDelete(keychainChunkPrefix + String(i))
         }
         var extra = count
-        while keychainGet(keychainChunkPrefix + String(extra)) != nil {
+        while extra < maxChunks,
+              keychainGet(keychainChunkPrefix + String(extra)) != nil {
             keychainDelete(keychainChunkPrefix + String(extra))
             extra += 1
         }
@@ -812,7 +883,7 @@ public final class AccountBackupManager {
         SecItemDelete(base as CFDictionary)
         var add = base
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 
@@ -827,6 +898,7 @@ public final class AccountBackupManager {
         var result: AnyObject?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data, data.count == 32 else { return nil }
+        hardenKeychainAccessibility(keychainKeyName)
         return SymmetricKey(data: data)
     }
 

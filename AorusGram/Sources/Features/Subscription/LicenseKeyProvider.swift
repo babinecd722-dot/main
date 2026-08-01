@@ -20,11 +20,22 @@ enum LicenseKeyProvider {
 
     static var isProvisioned: Bool { !obfuscated.isEmpty }
 
-    // De-obfuscate the raw key bytes. The caller must not retain or log them.
-    static func licenseHmacKeyBytes() -> Data {
-        guard !obfuscated.isEmpty else { return Data() }
-        return Data(obfuscated.enumerated().map { index, byte in
+    // Scope decoded key material to one signing operation and wipe the mutable
+    // source buffer immediately afterwards.
+    static func withLicenseHmacKey<Result>(_ body: (Data) -> Result) -> Result? {
+        guard !obfuscated.isEmpty else { return nil }
+        var bytes = obfuscated.enumerated().map { index, byte in
             byte ^ pad[index % pad.count]
-        })
+        }
+        var data = Data(bytes)
+        defer {
+            _ = data.withUnsafeMutableBytes { raw in
+                raw.initializeMemory(as: UInt8.self, repeating: 0)
+            }
+            _ = bytes.withUnsafeMutableBytes { raw in
+                raw.initializeMemory(as: UInt8.self, repeating: 0)
+            }
+        }
+        return body(data)
     }
 }
