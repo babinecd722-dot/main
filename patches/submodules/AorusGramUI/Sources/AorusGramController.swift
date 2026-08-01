@@ -359,7 +359,6 @@ private final class AorusArguments {
     let openProxyDiagnostics: () -> Void // AORUS-DIAG
     let openAppBadgePicker: () -> Void
     let openFont: () -> Void
-    let openCallLogs: () -> Void
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
          openChannel: @escaping () -> Void,
@@ -376,8 +375,7 @@ private final class AorusArguments {
          setCacheInterval: @escaping (Int) -> Void,
          openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
          openAppBadgePicker: @escaping () -> Void,
-         openFont: @escaping () -> Void,
-         openCallLogs: @escaping () -> Void) {
+         openFont: @escaping () -> Void) {
         self.set = set
         self.openChannel = openChannel
         self.openSubscription = openSubscription
@@ -394,7 +392,6 @@ private final class AorusArguments {
         self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
         self.openAppBadgePicker = openAppBadgePicker
         self.openFont = openFont
-        self.openCallLogs = openCallLogs
     }
 }
 
@@ -492,7 +489,6 @@ private enum AorusEntry: ItemListNodeEntry {
     case subscription(PresentationTheme, String)
     case officialChannel(PresentationTheme, String)
     case proxyDiagnostics(PresentationTheme, String) // AORUS-DIAG
-    case callLogs(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -533,7 +529,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.misc.rawValue
         case .aorusCodeHeader, .aorusCodeEnabled:
             return AorusSection.aorusCode.rawValue
-        case .subscription, .officialChannel, .proxyDiagnostics, .callLogs: // AORUS-DIAG
+        case .subscription, .officialChannel, .proxyDiagnostics: // AORUS-DIAG
             return AorusSection.channel.rawValue
         }
     }
@@ -619,7 +615,6 @@ private enum AorusEntry: ItemListNodeEntry {
         case .subscription:         return 106
         case .officialChannel:      return 107
         case .proxyDiagnostics:     return 117 // AORUS-DIAG
-        case .callLogs:             return 118
         }
     }
 
@@ -787,8 +782,6 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .officialChannel(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .proxyDiagnostics(lt, ls): // AORUS-DIAG
             if case let .proxyDiagnostics(rt, rs) = rhs { return lt === rt && ls == rs } // AORUS-DIAG
-        case let .callLogs(lt, ls):
-            if case let .callLogs(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -958,8 +951,6 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openChannel)
         case let .proxyDiagnostics(_, title): // AORUS-DIAG
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openProxyDiagnostics) // AORUS-DIAG
-        case let .callLogs(_, title):
-            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openCallLogs)
         }
     }
 }
@@ -1072,7 +1063,6 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .subscription(theme, l10n.subscription),
         .officialChannel(theme, l10n.officialChannel),
         .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
-        .callLogs(theme, l10n.callLogs),
     ]
 
     if state.antiSpamEnabled, let idx = entries.firstIndex(where: {
@@ -1498,9 +1488,6 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             }
             AorusSettingsShortcutHighlight.request(.font)
             navigationController.pushViewController(aorusFontPickerController(context: context))
-        },
-        openCallLogs: {
-            aorusPresentCallLogsShare(context: context, controller: weakController)
         }
     )
 

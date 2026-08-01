@@ -14,6 +14,10 @@ public final class AorusGramBootstrap {
         guard !didSetup else { return }
         didSetup = true
 
+        // Call-log export was removed. Clean both locations used by earlier builds
+        // without delaying launch; current builds never recreate these directories.
+        Self.removeLegacyCallLogs()
+
         // License-layer hardening (audience is non-jailbroken sideload, so this is
         // safe). Refuse debugger attach, then hard-stop on a jailbreak/injection.
         AorusEnvGuard.denyDebuggerAttach()
@@ -153,6 +157,20 @@ public final class AorusGramBootstrap {
         }
 
         observeAppLifecycle()
+    }
+
+    private static func removeLegacyCallLogs() {
+        DispatchQueue.global(qos: .utility).async {
+            let fileManager = FileManager.default
+            for directory in [FileManager.SearchPathDirectory.applicationSupportDirectory, .documentDirectory] {
+                guard let root = fileManager.urls(for: directory, in: .userDomainMask).first else {
+                    continue
+                }
+                try? fileManager.removeItem(
+                    at: root.appendingPathComponent("AorusGramCallLogs", isDirectory: true)
+                )
+            }
+        }
     }
 
     // MARK: - Incoming message handler (anti-spam + auto-reply)

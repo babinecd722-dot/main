@@ -969,27 +969,16 @@ def main() -> None:
 
     call_context = tg / "submodules" / "TelegramVoip" / "Sources" / "OngoingCallContext.swift"
     call_context_text = call_context.read_text(encoding="utf-8") if call_context.is_file() else ""
-    if "AorusGram: protected bounded call diagnostics" not in call_context_text:
-        err.append("CallProxyUDP: protected bounded call diagnostics are missing")
     if "AorusGram: additive proxied TCP reflector" in call_context_text:
         err.append("CallProxyUDP: obsolete forced TCP media patch is still present")
-    if "aorusWriteBoundedCallLog" not in call_context_text:
-        err.append("CallProxyUDP: exported native call diagnostics are not size-bounded")
-    for marker in (
-        "AorusGram call diagnostics schema: 3",
+    for legacy_marker in (
+        "AorusGramCallLogs",
+        "AorusGram call diagnostics schema:",
+        "aorusWriteBoundedCallLog",
         "aorusAppendCallDiagnostic",
-        "provision.status:",
-        "initialNetworkType:",
-        "connection[\\(index)]",
-        "audioSessionActive:",
-        "networkType:",
-        "AorusGram call stop diagnostics",
     ):
-        if marker not in call_context_text:
-            err.append(f"CallProxyUDP: detailed call lifecycle diagnostics are missing {marker}")
-    for unavailable_api in ("seekToEnd()", "write(contentsOf:", "try handle.close()"):
-        if unavailable_api in call_context_text:
-            err.append(f"CallProxyUDP: iOS 13.4-only FileHandle API is present {unavailable_api}")
+        if legacy_marker in call_context_text:
+            err.append(f"CallProxyUDP: removed call-log code is still present {legacy_marker}")
 
     call_proxy = tg / "submodules" / "TelegramCallsUI" / "Sources" / "AorusCallProxy.swift"
     call_proxy_text = call_proxy.read_text(encoding="utf-8") if call_proxy.is_file() else ""
@@ -1004,15 +993,8 @@ def main() -> None:
             err.append(f"CallProxyUDP: provisioning diagnostics are missing {marker}")
 
     call_log_export = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusCallLogsExport.swift"
-    call_log_export_text = call_log_export.read_text(encoding="utf-8") if call_log_export.is_file() else ""
-    for marker in (
-        "static func clear(_ files: [URL])",
-        "if completed {",
-        "AorusCallLogStorage.clear(exportedSourceFiles)",
-        "proxy provisioning status:",
-    ):
-        if marker not in call_log_export_text:
-            err.append(f"CallLogsExport: post-export cleanup invariant is missing {marker}")
+    if call_log_export.exists():
+        err.append("CallLogsExport: removed exporter source is still present")
 
     presentation_call_manager = (
         tg / "submodules" / "TelegramCallsUI" / "Sources" / "PresentationCallManager.swift"

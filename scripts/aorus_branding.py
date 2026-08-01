@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 from aorus_call_proxy_udp import (
-    patch_call_proxy_udp_media,
     patch_tgcalls_reflector_socks5_udp,
 )
 
@@ -4683,8 +4682,8 @@ def patch_info_plist_face_id(tg: Path) -> None:
 def patch_info_plist_file_sharing(tg: Path) -> None:
     """Keep the app container private.
 
-    Call diagnostics are exported explicitly from Settings. Exposing all of Documents through
-    Files.app also exposes unrelated account and feature data and is unnecessary.
+    Exposing all of Documents through Files.app also exposes unrelated account and feature data
+    and is unnecessary.
     """
     for name in ("Info.plist", "InfoBazel.plist"):
         path = tg / "Telegram/Telegram-iOS" / name
@@ -6116,191 +6115,6 @@ def patch_call_proxy(tg: Path) -> None:
         print("WARNING: PresentationCallManager useForCalls condition not found — call proxy force NOT applied")
 
     path.write_text(t, encoding="utf-8")
-
-
-def patch_call_proxy_tcp_media(tg: Path) -> None:
-    """Give proxied calls a working SOCKS5 media path WITHOUT touching direct calls.
-
-    Root cause (verified from the full native tgcalls log):
-    Telegram call media defaults to UDP straight to the reflectors. When a SOCKS5 call
-    proxy is configured, tgcalls' NativeNetworkingImpl disables UDP (a SOCKS5 proxy
-    cannot carry UDP) — so the media leg MUST go over a TCP reflector. But two upstream
-    gaps break that leg:
-      For protocol versions != "12.0.0" the server's TCP reflector is diverted to a
-        signalling-only connection (`continue connectionsLoop`) and dropped from the
-        media set, so there is no TCP reflector to connect to.
-      enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, OFF by
-        default, so tgcalls would refuse TCP even if a TCP reflector were present.
-    (The remaining gap — tgcalls v2 never actually tunnelling the reflector TCP socket
-    through the proxy — is fixed natively in patch_tgcalls_proxy_socks5.)
-
-    Fix here is PURELY ADDITIVE and only affects calls with a SOCKS5 proxy configured
-    (voipProxyServer != nil):
-      inject Telegram's TCP reflector gateway (91.108.9.38:595, exactly as stock does
-        for protocol version 12.0.0) so a TCP media path always EXISTS — otherwise, for
-        non-12.0.0 calls, the server often sends UDP-only reflectors and the tunnel has
-        nothing to carry;
-      keep TCP reflectors as ADDITIONAL media connections instead of diverting them to
-        signalling-only (the UDP reflectors and P2P candidates stay in the set — nothing
-        is removed, filtered, or forced; signalling still rides the proxied MTProto link);
-      allow TCP so tgcalls may use those reflectors.
-    A call that works directly still gathers its UDP/P2P candidates and connects on them
-    exactly as before — the proxied TCP reflector is just an extra ICE candidate that only
-    wins when the direct paths are blocked. Calls with no proxy configured are
-    byte-for-byte unchanged (still UDP, still fast).
-
-    Also (independent of routing) redirects the native tgcalls debug log to
-    Documents/AorusGramCallLogs for every call, writes a per-call setup report, and
-    dumps the full native log on hang-up, so the "Call logs" row has the real record.
-    """
-    path = tg / "submodules/TelegramVoip/Sources/OngoingCallContext.swift"
-    if not path.is_file():
-        print("CallProxyTCP: OngoingCallContext.swift not found — skip")
-        return
-    t = path.read_text(encoding="utf-8")
-    if "AorusGram: additive proxied TCP reflector" in t:
-        print("CallProxyTCP: already patched")
-        return
-
-    ok = True
-
-    # 0) When a SOCKS5 call proxy is set, inject Telegram's TCP reflector gateway so a TCP
-    #    media path exists (stock only injects it for 12.0.0; non-12.0.0 calls otherwise get
-    #    UDP-only reflectors and the tunnel has nothing to carry). Injected BEFORE the
-    #    reflector-id mapping is built, exactly like the stock 12.0.0 path, so the new
-    #    reflector gets a valid id. Additive: the existing (UDP) reflectors are untouched.
-    anchor0 = (
-        "                if version == \"12.0.0\" {\n"
-        "                    for connection in unfilteredConnections {\n"
-    )
-    repl0 = (
-        "                // AorusGram: additive proxied TCP reflector — inject Telegram's TCP\n"
-        "                // reflector gateway when a SOCKS5 call proxy is set (as stock does for\n"
-        "                // 12.0.0) so the media leg has a TCP path the proxy can carry when direct\n"
-        "                // UDP is blocked. The existing UDP reflectors stay in the set.\n"
-        "                if version == \"12.0.0\" || voipProxyServer != nil {\n"
-        "                    for connection in unfilteredConnections {\n"
-    )
-    if anchor0 in t:
-        t = t.replace(anchor0, repl0, 1)
-    else:
-        print("CallProxyTCP: WARNING tcp-reflector-injection anchor not found")
-        ok = False
-
-    # 1) Keep TCP reflectors as MEDIA connections for proxied calls (like 12.0.0) instead of
-    #    diverting them to a signalling-only connection. Signalling still rides the proxied
-    #    MTProto link. Without a proxy the original `else` branch runs, so direct calls are
-    #    untouched.
-    anchor1 = (
-        "                        if reflector.isTcp {\n"
-        "                            if version == \"12.0.0\" {\n"
-    )
-    repl1 = (
-        "                        if reflector.isTcp {\n"
-        "                            // AorusGram: keep TCP reflectors as media for proxied calls\n"
-        "                            // (like 12.0.0), not signalling-only, so the proxy has a TCP path.\n"
-        "                            if version == \"12.0.0\" || voipProxyServer != nil {\n"
-    )
-    if anchor1 in t:
-        t = t.replace(anchor1, repl1, 1)
-    else:
-        print("CallProxyTCP: WARNING reflector-diversion anchor not found")
-        ok = False
-
-    # 2) Allow TCP whenever a proxy is set (enableVoipTcp is off by default). Purely
-    #    additive: without a proxy the original enableTCP value is used unchanged.
-    anchor2 = "                    allowTCP: enableTCP,\n"
-    repl2 = "                    allowTCP: (voipProxyServer != nil ? true : enableTCP),\n"
-    if anchor2 in t:
-        t = t.replace(anchor2, repl2, 1)
-    else:
-        print("CallProxyTCP: WARNING allowTCP anchor not found")
-        ok = False
-
-    # 3) Per-call setup diagnostic (diagnostics only — NO behaviour change here).
-    anchor3 = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
-    block3 = (
-        "                #if !DEBUG\n"
-        "                // AorusGram: write a call setup diagnostic to Documents/AorusGramCallLogs.\n"
-        "                // Records only what tgcalls was handed — it does not change routing.\n"
-        "                if let aorusDocs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
-        "                    let aorusDir = aorusDocs.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
-        "                    try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
-        "                    var aorusReport = \"AorusGram call setup diagnostics\\n\"\n"
-        "                    aorusReport += \"date: \\(Date())\\n\"\n"
-        "                    aorusReport += \"version: \\(version)\\n\"\n"
-        "                    aorusReport += \"isOutgoing: \\(isOutgoing)\\n\"\n"
-        "                    if let aorusPS = proxyServer {\n"
-        "                        switch aorusPS.connection {\n"
-        "                        case .socks5: aorusReport += \"proxyServer: SOCKS5 \\(aorusPS.host):\\(aorusPS.port)\\n\"\n"
-        "                        case .mtp: aorusReport += \"proxyServer: MTProto \\(aorusPS.host):\\(aorusPS.port) (NOT usable for call media)\\n\"\n"
-        "                        }\n"
-        "                    } else {\n"
-        "                        aorusReport += \"proxyServer: nil\\n\"\n"
-        "                    }\n"
-        "                    aorusReport += \"voipProxyServer: \\(voipProxyServer != nil ? \"set\" : \"nil\")\\n\"\n"
-        "                    let aorusTcpN = filteredConnections.filter { $0.hasTcp }.count\n"
-        "                    aorusReport += \"filteredConnections: total=\\(filteredConnections.count) tcp=\\(aorusTcpN)\\n\"\n"
-        "                    aorusReport += \"allowP2P: \\(allowP2P)\\n\"\n"
-        "                    aorusReport += \"enableTCP(param): \\(enableTCP)\\n\"\n"
-        "                    aorusReport += \"customParameters: \\(customParameters ?? \"nil\")\\n\"\n"
-        "                    aorusReport += \"allowTCP(final): \\(voipProxyServer != nil ? true : enableTCP)\\n\"\n"
-        "                    for aorusC in filteredConnections {\n"
-        "                        aorusReport += \"  conn ip=\\(aorusC.ip) port=\\(aorusC.port) tcp=\\(aorusC.hasTcp) turn=\\(aorusC.hasTurn) stun=\\(aorusC.hasStun) reflectorId=\\(aorusC.reflectorId)\\n\"\n"
-        "                    }\n"
-        "                    try? aorusReport.write(to: aorusDir.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-setup.txt\"), atomically: true, encoding: .utf8)\n"
-        "                }\n"
-        "                #endif\n"
-    )
-    # Also dump the FULL native tgcalls debug log (the definitive record of the media
-    # connection attempts, ICE/reflector/proxy) to Documents when the call ends.
-    stop_anchor = "            context.nativeStop { debugLog, bytesSentWifi, bytesReceivedWifi, bytesSentMobile, bytesReceivedMobile in\n"
-    stop_inject = (
-        stop_anchor
-        + "                #if !DEBUG\n"
-        + "                if let aorusFullLog = debugLog, let aorusDocs2 = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
-        + "                    let aorusDir2 = aorusDocs2.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
-        + "                    try? FileManager.default.createDirectory(at: aorusDir2, withIntermediateDirectories: true)\n"
-        + "                    try? aorusFullLog.write(to: aorusDir2.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-full.log\"), atomically: true, encoding: .utf8)\n"
-        + "                }\n"
-        + "                #endif\n"
-    )
-    if stop_anchor in t:
-        t = t.replace(stop_anchor, stop_inject, 1)
-    else:
-        print("CallProxyTCP: WARNING nativeStop anchor not found — full log dump NOT added")
-
-    # Redirect the native tgcalls log to our Documents folder for EVERY call and force a
-    # filename even when logName is empty. tgcalls writes this log LIVE during the call,
-    # so the FULL native log (ICE / reflector / proxy attempts) is always on disk — no
-    # dependence on nativeStop returning a debugLog string. The "Call logs" row reads it.
-    logpath_anchor = "        self.logPath = logName.isEmpty ? \"\" : callLogsPath(account: self.account) + \"/\" + logName + \".log\"\n"
-    logpath_repl = (
-        "        self.logPath = {\n"
-        "            if let aorusDocs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
-        "                let aorusDir = aorusDocs.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
-        "                try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
-        "                return aorusDir.appendingPathComponent(\"native-\\(callId.id)-\\(Int(Date().timeIntervalSince1970)).log\").path\n"
-        "            }\n"
-        "            return \"\"\n"
-        "        }()\n"
-    )
-    if logpath_anchor in t:
-        t = t.replace(logpath_anchor, logpath_repl, 1)
-    else:
-        print("CallProxyTCP: WARNING logPath anchor not found — native log NOT redirected")
-
-    if anchor3 in t:
-        t = t.replace(anchor3, block3 + anchor3, 1)
-    else:
-        print("CallProxyTCP: WARNING context-init anchor not found")
-        ok = False
-
-    if ok:
-        path.write_text(t, encoding="utf-8")
-        print("CallProxyTCP: additive proxied TCP reflector + allowTCP + diagnostics (direct calls untouched)")
-    else:
-        print("CallProxyTCP: NOT applied (anchor mismatch)")
 
 
 def patch_tgcalls_v2_set_proxy(tg: Path) -> None:
@@ -23644,7 +23458,6 @@ def main() -> None:
     patch_remove_send_logs(tg)
     patch_app_bundle_name(tg)
     patch_call_proxy(tg)
-    patch_call_proxy_udp_media(tg)
     patch_tgcalls_v2_set_proxy(tg)
     patch_tgcalls_reflector_socks5_udp(tg)
     patch_show_stories_toggle(tg)
