@@ -45,10 +45,31 @@ def main() -> int:
         fail(errors, "proxy HMAC material must be scoped to one operation")
     if "/*__AORUS_PROXY_KEY_OBFUSCATED__*/" not in proxy:
         fail(errors, "proxy HMAC injection marker is missing")
+    for marker in (
+        "Self.isValidFakeTLSSecret($0.secret)",
+        "Self.isValidFakeTLSSecret(cfg.secret)",
+        "bytes[0] == 0xee",
+        "let labels = host.split",
+    ):
+        if marker not in proxy:
+            fail(errors, f"proxy manager ee-only invariant is missing {marker}")
 
     branding = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
     if branding.count("refusing a previously injected source tree") < 2:
         fail(errors, "build injection must reject stale source trees")
+    for marker in (
+        "aorusSecret.count > 17, aorusSecret.first == 0xee",
+        "let aorusSniBytes = aorusSecret.dropFirst(17)",
+        "aorusLabels.count >= 2",
+    ):
+        if marker not in branding:
+            fail(errors, f"proxy bridge ee-only invariant is missing {marker}")
+    for forbidden in (
+        "aorusSecret.insert(0xdd, at: 0)",
+        "aorusIsPadded",
+    ):
+        if forbidden in branding:
+            fail(errors, f"legacy dd proxy downgrade remains in branding: {forbidden}")
 
     store = (root / "AorusGram/Sources/Features/Subscription/LicenseStore.swift").read_text(encoding="utf-8")
     offline_block = store[store.find("func effectiveOfflineStatus"):store.find("func needsRecheck")]

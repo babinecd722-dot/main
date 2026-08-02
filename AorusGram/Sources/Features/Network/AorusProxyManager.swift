@@ -302,24 +302,34 @@ public final class AorusProxyManager {
 
             guard let http = response as? HTTPURLResponse, http.statusCode == 200,
                   let data = data,
-                  let resp = try? JSONDecoder().decode(AorusProxyResponse.self, from: data),
-                  !resp.server.isEmpty, resp.port > 0, !resp.secret.isEmpty else {
+                  let resp = try? JSONDecoder().decode(AorusProxyResponse.self, from: data) else {
                 finish(nil)
                 return
             }
 
-            // Publish (or clear) the SOCKS5 call proxy for the calls layer.
-            ProxyVault.publishCall(resp.callProxy, ttl: resp.ttl)
-
             // Build the MTProxy candidate list: the extended `proxies` list when present,
-            // otherwise the single top-level proxy (backward compatible).
+            // otherwise the single top-level proxy. Only Fake-TLS (`ee`) secrets are
+            // accepted; raw and random-padding (`dd`) secrets fail closed.
             var candidates: [AorusProxyCandidate] = []
             if let list = resp.proxies {
-                candidates = list.filter { !$0.server.isEmpty && $0.port > 0 && !$0.secret.isEmpty }
+                candidates = list.filter {
+                    !$0.server.isEmpty && $0.port > 0 && Self.isValidFakeTLSSecret($0.secret)
+                }
             }
-            if candidates.isEmpty {
+            if candidates.isEmpty,
+               !resp.server.isEmpty,
+               resp.port > 0,
+               Self.isValidFakeTLSSecret(resp.secret) {
                 candidates = [AorusProxyCandidate(server: resp.server, port: resp.port, secret: resp.secret, region: nil, priority: 1)]
             }
+            guard !candidates.isEmpty else {
+                finish(nil)
+                return
+            }
+
+            // Publish (or clear) the SOCKS5 call proxy only after the signed response
+            // also contains a valid Fake-TLS MTProxy configuration.
+            ProxyVault.publishCall(resp.callProxy, ttl: resp.ttl)
 
             // Remember the list so the fail-over watchdog can re-select locally.
             self.lock.lock(); self.lastCandidates = candidates; self.lock.unlock()
@@ -706,6 +716,10 @@ public final class AorusProxyManager {
             clearProxyState(postUpdate: true)
             return
         }
+        guard Self.isValidFakeTLSSecret(cfg.secret) else {
+            clearProxyState(postUpdate: true)
+            return
+        }
         lock.lock()
         cached = cfg
         cachedAt = Date()
@@ -770,7 +784,11 @@ public final class AorusProxyManager {
             return
         }
         guard let data = ProxyKeychain.read(),
-              let cfg = try? JSONDecoder().decode(AorusProxyConfig.self, from: data) else { return }
+              let cfg = try? JSONDecoder().decode(AorusProxyConfig.self, from: data),
+              Self.isValidFakeTLSSecret(cfg.secret) else {
+            clearProxyState(postUpdate: false)
+            return
+        }
         cached = cfg
         let stamp = UserDefaults.standard.double(forKey: cacheStampKey)
         cachedAt = stamp > 0 ? Date(timeIntervalSince1970: stamp) : .distantPast
@@ -786,6 +804,47 @@ public final class AorusProxyManager {
         var raw = [UInt8](repeating: 0, count: bytes)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes, &raw)
         return raw.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Accept only Telegram Fake-TLS secrets: ee + 16-byte proxy secret + SNI host.
+    /// This deliberately rejects legacy raw and dd random-padding secrets so the
+    /// control plane cannot accidentally downgrade a release build away from TLS mimicry.
+    private static func isValidFakeTLSSecret(_ hex: String) -> Bool {
+        guard hex.count > 34, hex.count % 2 == 0 else { return false }
+
+        var bytes = [UInt8]()
+        bytes.reserveCapacity(hex.count / 2)
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            guard let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex),
+                  next > index,
+                  let byte = UInt8(hex[index..<next], radix: 16) else {
+                return false
+            }
+            bytes.append(byte)
+            index = next
+        }
+
+        guard bytes.count > 17, bytes[0] == 0xee,
+              let host = String(bytes: bytes.dropFirst(17), encoding: .utf8),
+              !host.isEmpty, host.count <= 253 else {
+            return false
+        }
+
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2 else { return false }
+        return labels.allSatisfy { label in
+            guard !label.isEmpty, label.count <= 63,
+                  label.first != "-", label.last != "-" else {
+                return false
+            }
+            return label.utf8.allSatisfy {
+                ($0 >= 0x30 && $0 <= 0x39) ||
+                ($0 >= 0x41 && $0 <= 0x5a) ||
+                ($0 >= 0x61 && $0 <= 0x7a) ||
+                $0 == 0x2d
+            }
+        }
     }
 
 }

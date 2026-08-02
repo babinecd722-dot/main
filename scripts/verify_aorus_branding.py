@@ -986,11 +986,18 @@ def main() -> None:
         network_text = network_source.read_text(encoding="utf-8")
         for marker in (
             "aorusSecretHex.count % 2 == 0",
-            "aorusSecret.insert(0xdd, at: 0)",
-            "aorusIsPadded || aorusIsFakeTls",
+            "aorusSecret.count > 17, aorusSecret.first == 0xee",
+            "let aorusSniBytes = aorusSecret.dropFirst(17)",
+            "aorusLabels.count >= 2",
         ):
             if marker not in network_text:
-                err.append(f"MTProxyAntiDPI: strict/padded secret bridge is missing {marker}")
+                err.append(f"MTProxyAntiDPI: ee-only Fake-TLS bridge is missing {marker}")
+        for forbidden in (
+            "aorusSecret.insert(0xdd, at: 0)",
+            "aorusIsPadded",
+        ):
+            if forbidden in network_text:
+                err.append(f"MTProxyAntiDPI: legacy dd downgrade path remains {forbidden}")
 
     call_context = tg / "submodules" / "TelegramVoip" / "Sources" / "OngoingCallContext.swift"
     call_context_text = call_context.read_text(encoding="utf-8") if call_context.is_file() else ""
