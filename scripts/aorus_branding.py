@@ -2500,16 +2500,16 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
             )
             submit_injection = (
                 "                " + submit_sentinel + "\n"
-                "                let aorusLocalEditToken = \"\\(editMessage.messageId.peerId.toInt64())_\\(editMessage.messageId.id)\"\n"
+                "                let aorusLocalEditToken: String = \"\\(editMessage.messageId.peerId.toInt64())_\\(editMessage.messageId.id)\"\n"
                 "                if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
                 "                    let aorusOriginalKey = \"aorusgram_local_edit_\\(editMessage.messageId.peerId.toInt64())_\\(editMessage.messageId.id)\"\n"
                 "                    let _ = (strongSelf.context.account.postbox.messageAtId(editMessage.messageId)\n"
                 "                    |> deliverOnMainQueue).startStandalone(next: { [weak self] currentMessage in\n"
                 "                        guard let strongSelf = self, let currentMessage = currentMessage else { return }\n"
-                "                        let aorusText = richTextAttribute == nil ? text.string : \"\"\n"
-                "                        let aorusCurrentEntities = currentMessage.textEntitiesAttribute?.entities ?? []\n"
-                "                        let aorusCurrentEntitiesDescription = String(describing: aorusCurrentEntities)\n"
-                "                        let aorusNewEntitiesDescription = String(describing: entities)\n"
+                "                        let aorusText: String = richText == nil ? text.string : \"\"\n"
+                "                        let aorusCurrentEntities: [MessageTextEntity] = currentMessage.textEntitiesAttribute?.entities ?? []\n"
+                "                        let aorusCurrentEntitiesDescription: String = String(describing: aorusCurrentEntities)\n"
+                "                        let aorusNewEntitiesDescription: String = String(describing: entities)\n"
                 "                        let aorusCurrentRichText = currentMessage.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute\n"
                 "                        let aorusPreviewDidChange: Bool\n"
                 "                        if disableUrlPreview {\n"
@@ -2518,7 +2518,7 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "                            aorusPreviewDidChange = (webpagePreviewAttribute != nil) != (currentMessage.webpagePreviewAttribute != nil)\n"
                 "                        }\n"
                 "                        let aorusDidChange: Bool\n"
-                "                        if richTextAttribute != nil {\n"
+                "                        if richText != nil {\n"
                 "                            aorusDidChange = aorusCurrentRichText == nil || !currentMessage.text.isEmpty\n"
                 "                        } else {\n"
                 "                            aorusDidChange = currentMessage.text != text.string || aorusCurrentEntitiesDescription != aorusNewEntitiesDescription || aorusCurrentRichText != nil || aorusPreviewDidChange\n"
@@ -2526,15 +2526,15 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "                        if aorusDidChange && UserDefaults.standard.string(forKey: aorusOriginalKey) == nil {\n"
                 "                            UserDefaults.standard.set(currentMessage.text, forKey: aorusOriginalKey)\n"
                 "                        }\n"
-                "                        var aorusAttributes = currentMessage.attributes.filter { attribute in\n"
+                "                        var aorusAttributes: [MessageAttribute] = currentMessage.attributes.filter { (attribute: MessageAttribute) -> Bool in\n"
                 "                            if attribute is TextEntitiesMessageAttribute { return false }\n"
                 "                            if attribute is RichTextMessageAttribute { return false }\n"
                 "                            if attribute is WebpagePreviewMessageAttribute { return false }\n"
                 "                            if attribute is InvertMediaMessageAttribute { return false }\n"
                 "                            return true\n"
                 "                        }\n"
-                "                        if let richTextAttribute = richTextAttribute {\n"
-                "                            aorusAttributes.append(richTextAttribute)\n"
+                "                        if let richText = richText {\n"
+                "                            aorusAttributes.append(richText)\n"
                 "                        } else if let entitiesAttribute = entitiesAttribute {\n"
                 "                            aorusAttributes.append(entitiesAttribute)\n"
                 "                        }\n"
@@ -3860,7 +3860,11 @@ def patch_app_delegate_activate_deeplink(tg: Path) -> None:
         i = indent
         return (
             i + "// AorusGram: subscription key activation deep link\n"
-            + i + "if let aorusActURL = " + url_expr + ", (aorusActURL.scheme == \"aorusgram\" || aorusActURL.scheme == \"tg\"), aorusActURL.host == \"activate\" {\n"
+            # `url` is a non-optional URL in AppDelegate but an optional URL(string:) in
+            # OpenUrl. Binding through an explicitly typed URL? works for both: a
+            # non-optional value promotes, an optional one passes through unchanged.
+            + i + "let aorusActURLValue: URL? = " + url_expr + "\n"
+            + i + "if let aorusActURL = aorusActURLValue, (aorusActURL.scheme == \"aorusgram\" || aorusActURL.scheme == \"tg\"), aorusActURL.host == \"activate\" {\n"
             + i + "    if let aorusActComps = URLComponents(url: aorusActURL, resolvingAgainstBaseURL: false),\n"
             + i + "       let aorusActKey = aorusActComps.queryItems?.first(where: { $0.name == \"key\" })?.value,\n"
             + i + "       !aorusActKey.isEmpty {\n"
@@ -6008,7 +6012,7 @@ def patch_fix_media_caption_rich_edit(tg: Path) -> None:
         "                var richTextAttribute: RichTextMessageAttribute?\n"
         "                // AorusGram fix: a media caption must never take the rich-text (Instant-Page)\n"
         "                // edit path — it sends text:\"\" and wipes the caption while keeping the media.\n"
-        "                let aorusEditHasCaptionMedia = message.effectiveMedia.contains(where: { media in\n"
+        "                let aorusEditHasCaptionMedia: Bool = message.effectiveMedia.contains(where: { (media: Media) -> Bool in\n"
         "                    switch media {\n"
         "                    case _ as TelegramMediaImage, _ as TelegramMediaFile, _ as TelegramMediaMap:\n"
         "                        return true\n"
@@ -6028,7 +6032,7 @@ def patch_fix_media_caption_rich_edit(tg: Path) -> None:
         "                let content = editMessage.inputState.content\n"
         "                // AorusGram fix: captions must remain ordinary message text; sending an\n"
         "                // Instant-Page richText attribute would make Telegram send text:\"\".\n"
-        "                let aorusEditHasCaptionMedia = message.effectiveMedia.contains(where: { media in\n"
+        "                let aorusEditHasCaptionMedia: Bool = message.effectiveMedia.contains(where: { (media: Media) -> Bool in\n"
         "                    switch media {\n"
         "                    case _ as TelegramMediaImage, _ as TelegramMediaFile, _ as TelegramMediaMap:\n"
         "                        return true\n"
@@ -14170,8 +14174,29 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
 
     t = update_state.read_text(encoding="utf-8")
     if "// AorusGram: update embedded ghost/avatar capsule" not in t:
-        anchor = "    var buttonsAnimated = transition.isAnimated\n"
+        # 12.9 moved this into `extension ChatControllerImpl { func updateRightNavigationButtons }`,
+        # where the state is the `presentationInterfaceState` parameter and the controller is
+        # `self`. The old anchor carried four leading spaces, which str.replace happily matched
+        # INSIDE the new eight-space indentation — the block landed at the top of the method
+        # referencing `selfController` and `updatedChatPresentationInterfaceState`, neither of
+        # which exists there. Both anchors now start at a newline so they can only match a whole
+        # line, and the modern one is tried first.
+        modern_anchor = (
+            "\n        var buttonsAnimated = transition.isAnimated\n"
+        )
+        modern_injection = (
+            "\n"
+            "        // AorusGram: update embedded ghost/avatar capsule\n"
+            "        if let aorusGhostAvatarNode = self.chatInfoNavigationButton?.buttonItem.customDisplayNode as? AorusGhostAvatarNavigationNode {\n"
+            "            let aorusGhostPeerId = aorusGhostPeerIdForChatInterfaceState(presentationInterfaceState)\n"
+            "            aorusGhostAvatarNode.updateGhost(peerId: aorusGhostPeerId, theme: presentationInterfaceState.theme, action: { [weak self] peerId, buttonNode in\n"
+            "                self?.aorusGhostPeerButtonPressed(peerId: peerId, buttonNode: buttonNode)\n"
+            "            })\n"
+            "        }\n"
+        )
+        anchor = "\n    var buttonsAnimated = transition.isAnimated\n"
         injection = (
+            "\n"
             "    // AorusGram: update embedded ghost/avatar capsule\n"
             "    if let aorusGhostAvatarNode = selfController.chatInfoNavigationButton?.buttonItem.customDisplayNode as? AorusGhostAvatarNavigationNode {\n"
             "        let aorusGhostPeerId = aorusGhostPeerIdForChatInterfaceState(updatedChatPresentationInterfaceState)\n"
@@ -14179,9 +14204,12 @@ func aorusGhostIsActive(peerId: PeerId) -> Bool {
             "            selfController?.aorusGhostPeerButtonPressed(peerId: peerId, buttonNode: buttonNode)\n"
             "        })\n"
             "    }\n"
-            "    \n"
         )
-        if anchor in t:
+        if modern_anchor in t:
+            t = t.replace(modern_anchor, modern_injection + modern_anchor, 1)
+            update_state.write_text(t, encoding="utf-8")
+            print("PerChatGhost: updates embedded ghost/avatar capsule (12.9+)")
+        elif anchor in t:
             t = t.replace(anchor, injection + anchor, 1)
             update_state.write_text(t, encoding="utf-8")
             print("PerChatGhost: updates embedded ghost/avatar capsule")

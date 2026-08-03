@@ -1217,7 +1217,13 @@ def main() -> None:
         "preserving: preserveCurrent ? Set(self.currentMessageIds) : []",
         "return self.observedMessageIds.union(self.previousVisibleMessageIds)",
         "!self.viewportMessageIds.contains(message.id)",
-        "let requestedFrontier = self.readerFrontier",
+        # topUp derives the frontier once and reuses it for both gates and the request —
+        # readerFrontier walks the whole feed, and asking for it three times per top-up was
+        # pure waste. The invariant that matters is that the page is requested at the
+        # reader's frontier, not the expression it was spelled with.
+        "let frontier = self.readerFrontier",
+        "guard let requestedFrontier = frontier else {",
+        "collectPage(frontier: requestedFrontier, span: span)",
         "appendableMessages.removeAll(where: { !($0.index < appendFrontier) })",
         "func settingsDidChange()",
         "self.updateRecommendationsIfNeeded(forceRefresh: true)",
