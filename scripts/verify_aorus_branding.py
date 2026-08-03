@@ -1221,6 +1221,15 @@ def main() -> None:
         # readerFrontier walks the whole feed, and asking for it three times per top-up was
         # pure waste. The invariant that matters is that the page is requested at the
         # reader's frontier, not the expression it was spelled with.
+        # Reactions and poll votes are the reader's own action and must publish at once;
+        # a bare stableVersion bump is a view counter and is batched, because every publish
+        # costs a full-feed diff on the main thread.
+        "let aorusIsUrgent = existingReactions != updatedReactions || pollDidChange",
+        "if didChangeUrgently {",
+        "self.queue.after(Impl.deferredContentPublishDelay)",
+        # Trimming must never reach the rows around the viewport.
+        "!aorusProtectedIds.contains(message.id)",
+        "private static let trimSafetyMargin = 80",
         "let frontier = self.readerFrontier",
         "guard let requestedFrontier = frontier else {",
         "collectPage(frontier: requestedFrontier, span: span)",

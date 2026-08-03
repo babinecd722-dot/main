@@ -106,6 +106,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// afterwards.
         private var currentEntries: [EngineRawMessageHistoryEntry] = []
         private var currentEntryPositions: [MessageId: Int] = [:]
+        /// A batched redraw is already scheduled for content that is not time critical.
+        private var hasDeferredContentPublish = false
+        private static let deferredContentPublishDelay: Double = 0.3
         private var visibleDurations: [MessageId: Double] = [:]
         private var markedInCurrentView = Set<MessageId>()
         private var lastVisibilityTimestamp: Double?
@@ -166,8 +169,14 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// Page shape. The per-channel quotas live in collectPage; these bound the work.
         private static let pageLimit = 50
         private static let candidatesPerChannel = 10
-        private static let maxFeedLength = 2000
-        private static let hardMaxFeedLength = 3000
+        /// How much of the feed is kept in memory. ChatHistoryListNode diffs the published
+        /// entry array with mergeListsStableWithUpdates on the main thread, so this is directly
+        /// the cost of every redraw. 600 is still far more than a reader scrolls back through
+        /// in one session, and everything above it has been read already.
+        private static let maxFeedLength = 600
+        private static let hardMaxFeedLength = 800
+        /// Posts this close above the viewport are never trimmed, whatever the limits say.
+        private static let trimSafetyMargin = 80
         private static let fetchBatchPerChannel = 24
         private static let maxFetchPerChannel = 48
 
@@ -897,10 +906,29 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     var removeIds = Set<MessageId>()
                     var excess = messages.count - Impl.maxFeedLength
 
+                    // Nothing within this many posts of the viewport may be removed. Lowering
+                    // the feed limit makes trimming a routine event during a long scroll rather
+                    // than a rare one, and ListView keeps instantiated nodes for a window around
+                    // the visible rows: deleting inside that window is what shifts content under
+                    // the reader. Far above it, a deletion is only an index change.
+                    var aorusDistanceAboveReader = 0
+                    var aorusProtectedIds = Set<MessageId>()
+                    for message in messages.reversed() {
+                        guard message.index > frontier else {
+                            continue
+                        }
+                        aorusDistanceAboveReader += 1
+                        guard aorusDistanceAboveReader <= Impl.trimSafetyMargin else {
+                            break
+                        }
+                        aorusProtectedIds.insert(message.id)
+                    }
+
                     // First prune only posts that are fully read, above the viewport and no
                     // longer visible. Stable ids let Telegram preserve the current anchor.
                     for message in messages.reversed() where excess > 0 {
                         guard message.index > frontier,
+                              !aorusProtectedIds.contains(message.id),
                               !self.viewportMessageIds.contains(message.id),
                               self.markedInCurrentView.contains(message.id) else {
                             continue
@@ -915,6 +943,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                         var hardExcess = messages.count - removeIds.count - Impl.hardMaxFeedLength
                         for message in messages.reversed() where hardExcess > 0 {
                             guard message.index > frontier,
+                                  !aorusProtectedIds.contains(message.id),
                                   !self.viewportMessageIds.contains(message.id),
                                   !removeIds.contains(message.id) else {
                                 continue
@@ -993,6 +1022,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// (posts must not appear or disappear here — only their contents change).
         private func applyMessageUpdates(_ updated: [MessageId: Message]) {
             var didChange = false
+            var didChangeUrgently = false
             for (id, message) in updated {
                 guard let existing = self.currentMessages[id] else {
                     continue
@@ -1016,9 +1046,12 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 // can miss the optimistic update, leaving the tap invisible until Refresh.
                 // Poll votes update TelegramMediaPoll in Postbox without necessarily bumping
                 // the message stableVersion, so compare the native media object as well.
-                if existing.stableVersion != message.stableVersion
-                    || existingReactions != updatedReactions
-                    || pollDidChange {
+                // A reaction or a poll vote is the reader's own action and must land at once.
+                // A bare stableVersion bump is almost always a view counter ticking on a channel
+                // post; those arrive constantly and each one republished the whole feed, which
+                // ChatHistoryListNode then diffed on the main thread. They are batched instead.
+                let aorusIsUrgent = existingReactions != updatedReactions || pollDidChange
+                if existing.stableVersion != message.stableVersion || aorusIsUrgent {
                     self.currentMessages[id] = message
                     if let position = self.currentEntryPositions[id], position < self.currentEntries.count {
                         self.currentEntries[position] = EngineRawMessageHistoryEntry(
@@ -1030,11 +1063,35 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                         )
                     }
                     didChange = true
+                    if aorusIsUrgent {
+                        didChangeUrgently = true
+                    }
                 }
             }
             guard didChange else {
                 return
             }
+            if didChangeUrgently {
+                self.hasDeferredContentPublish = false
+                self.publishCurrentEntries()
+                return
+            }
+            // Entries are already patched, so a batched publish shows every counter that ticked
+            // in the meantime — nothing is dropped, only the redraws are merged.
+            guard !self.hasDeferredContentPublish else {
+                return
+            }
+            self.hasDeferredContentPublish = true
+            self.queue.after(Impl.deferredContentPublishDelay) { [weak self] in
+                guard let self, self.hasDeferredContentPublish else {
+                    return
+                }
+                self.hasDeferredContentPublish = false
+                self.publishCurrentEntries()
+            }
+        }
+
+        private func publishCurrentEntries() {
             let view = EngineRawMessageHistoryView(
                 tag: nil,
                 namespaces: .just(Set([Namespaces.Message.Cloud])),
