@@ -105,7 +105,10 @@ public final class AccountBackupManager {
     private enum BackupError: Error { case truncated, corrupt }
 
     private func localized(_ ru: String, _ en: String) -> String {
-        let code = (UserDefaults.standard.string(forKey: "aorusgram_lang")
+        // Telegram's own language first — the full code, then the collapsed ru/en value —
+        // and the device language only when Telegram has none yet.
+        let code = (UserDefaults.standard.string(forKey: "aorusgram_lang_code")
+            ?? UserDefaults.standard.string(forKey: "aorusgram_lang")
             ?? Locale.preferredLanguages.first
             ?? Locale.current.identifier).lowercased()
         return code.hasPrefix("ru") ? ru : en

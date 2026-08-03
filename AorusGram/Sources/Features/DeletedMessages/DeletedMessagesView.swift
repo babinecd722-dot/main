@@ -99,13 +99,25 @@ struct DeletedMessagesView: View {
 struct DeletedMessageBubble: View {
     let message: DeletedMessage
 
-    private static let dateFormatter: DateFormatter = {
+    // Dates follow the language selected in Telegram, and re-resolve when it changes.
+    // The device locale is only used before Telegram has a language at all.
+    private static var cachedFormatter: (code: String, formatter: DateFormatter)?
+
+    private static var dateFormatter: DateFormatter {
+        let code = (UserDefaults.standard.string(forKey: "aorusgram_lang_code")
+            ?? UserDefaults.standard.string(forKey: "aorusgram_lang")
+            ?? Locale.preferredLanguages.first
+            ?? Locale.current.identifier).lowercased()
+        if let cached = Self.cachedFormatter, cached.code == code {
+            return cached.formatter
+        }
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
-        f.locale = Locale.current
+        f.locale = Locale(identifier: code)
+        Self.cachedFormatter = (code, f)
         return f
-    }()
+    }
 
     private var statusColor: Color {
         if message.isDeleted { return Color(hex: "#EF5350") }   // red — deleted

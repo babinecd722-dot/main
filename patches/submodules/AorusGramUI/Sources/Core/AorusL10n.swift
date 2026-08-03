@@ -29,15 +29,35 @@ public enum AorusLang: String {
     // UserDefaults key shared with TelegramCore-injected code (postbox markers).
     public static let storageKey = "aorusgram_lang"
 
+    // The full Telegram base-language code, published by AppDelegate's presentationData
+    // observer. `storageKey` above collapses everything to ru/en for the injected call
+    // sites; this one keeps the real code so more languages can be added without
+    // touching them.
+    public static let codeStorageKey = "aorusgram_lang_code"
+
+    // The language selected inside Telegram, or nil before Telegram has one — which only
+    // happens on a fresh install with no account yet.
+    public static var telegramCode: String? {
+        guard let code = UserDefaults.standard.string(forKey: codeStorageKey), !code.isEmpty else {
+            return nil
+        }
+        return code.lowercased()
+    }
+
     // Persist the resolved language so context-free call sites can read it.
     public static func store(_ code: String?) {
         UserDefaults.standard.set(resolve(code).rawValue, forKey: storageKey)
     }
 
     // Best-effort current language for call sites without PresentationData.
-    // Prefers the value persisted by the AppDelegate observer; before that fires
-    // it falls back to the device language (Russian only for a Russian device).
+    //
+    // Order is deliberate: whatever Telegram is set to wins, then the resolved value the
+    // AppDelegate observer persisted, and only if neither exists — a fresh install with no
+    // account — the device language.
     public static var current: AorusLang {
+        if let code = telegramCode {
+            return resolve(code)
+        }
         if let raw = UserDefaults.standard.string(forKey: storageKey), let lang = AorusLang(rawValue: raw) {
             return lang
         }

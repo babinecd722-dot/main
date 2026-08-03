@@ -7,8 +7,27 @@ import Foundation
 // layer is self-contained in the AorusGram core module, so we keep the two variants
 // inline and pick at runtime.
 enum SubL10n {
+    /// The language AorusGram must speak: the one selected inside Telegram.
+    ///
+    /// The device language is a fallback for one situation only — before Telegram has a
+    /// language at all, i.e. a fresh install where the trial screen appears before an
+    /// account exists. Once Telegram knows its language, AppDelegate's presentationData
+    /// observer publishes it under "aorusgram_lang_code" and every screen follows it, so
+    /// changing the language in Telegram changes these screens too.
+    ///
+    /// The AorusGram core module cannot import AorusGramUI, so the shared key is read
+    /// directly — the same idiom AorusPerformanceHUDManager and AccountBackupManager use.
+    static var telegramLanguageCode: String? {
+        guard let code = UserDefaults.standard.string(forKey: "aorusgram_lang_code"),
+              !code.isEmpty else {
+            return nil
+        }
+        return code.lowercased()
+    }
+
     static var isRU: Bool {
-        let lang = (Locale.preferredLanguages.first
+        let lang = (telegramLanguageCode
+                    ?? Locale.preferredLanguages.first
                     ?? Bundle.main.preferredLocalizations.first
                     ?? "en").lowercased()
         return lang.hasPrefix("ru")

@@ -1317,6 +1317,27 @@ def main() -> None:
     if wall_settings_text.count("object: NSNumber(value: accountId)") < 4:
         err.append("Wall: settings notifications are not scoped to their account")
 
+    # Everything AorusGram shows follows the language selected inside Telegram. The device
+    # language may only ever be a fallback for a fresh install that has no account yet, so a
+    # bare Locale lookup with no Telegram key ahead of it is a regression.
+    lang_bridge = tg / "submodules" / "TelegramUI" / "Sources" / "AppDelegate.swift"
+    lang_bridge_text = lang_bridge.read_text(encoding="utf-8") if lang_bridge.is_file() else ""
+    if 'forKey: "aorusgram_lang_code"' not in lang_bridge_text:
+        err.append("Language: the full Telegram language code is no longer published")
+
+    sub_l10n = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionL10n.swift"
+    sub_l10n_text = sub_l10n.read_text(encoding="utf-8") if sub_l10n.is_file() else ""
+    for marker in ('static var telegramLanguageCode: String?', "telegramLanguageCode\n"):
+        if marker.strip() not in sub_l10n_text:
+            err.append("Language: subscription screens no longer follow the Telegram language")
+            break
+
+    aorus_l10n = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift"
+    aorus_l10n_text = aorus_l10n.read_text(encoding="utf-8") if aorus_l10n.is_file() else ""
+    for marker in ('public static var telegramCode: String?', "if let code = telegramCode {"):
+        if marker not in aorus_l10n_text:
+            err.append(f"Language: AorusL10n does not prefer the Telegram language — missing {marker}")
+
     # Action confirmation: the prompt must sit at the single choke point for each action, and
     # the original bodies must survive under their aorusPerform... names.
     action_confirm = tg / "submodules" / "AorusGramUI" / "Sources" / "Security" / "AorusActionConfirmation.swift"
