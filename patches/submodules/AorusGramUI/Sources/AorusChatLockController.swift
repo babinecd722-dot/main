@@ -158,30 +158,24 @@ private struct ChatLockState: Equatable {
     var revealedPeerId: EnginePeer.Id?
 }
 
-private func chatLockEntries(state: ChatLockState, peers: [EnginePeer], presentationData: PresentationData, isRu: Bool) -> [ChatLockEntry] {
+private func chatLockEntries(state: ChatLockState, peers: [EnginePeer], presentationData: PresentationData) -> [ChatLockEntry] {
     let theme = presentationData.theme
     var entries: [ChatLockEntry] = []
 
-    entries.append(.toggle(theme, isRu ? "Защита чатов" : "Chat Protection", state.isEnabled))
-    entries.append(.toggleInfo(theme, isRu
-        ? "Защищённые чаты открываются только после Face ID, Touch ID или код-пароля. Предпросмотр по долгому нажатию для них отключён. После разблокировки код не запрашивается 10 минут."
-        : "Protected chats open only after Face ID, Touch ID or your passcode. Long-press preview is disabled for them. After unlocking, you are not asked again for 10 minutes."))
+    entries.append(.toggle(theme, aorusL("Защита чатов", "Chat Protection"), state.isEnabled))
+    entries.append(.toggleInfo(theme, aorusL("Защищённые чаты открываются только после Face ID, Touch ID или код-пароля. Предпросмотр по долгому нажатию для них отключён. После разблокировки код не запрашивается 10 минут.", "Protected chats open only after Face ID, Touch ID or your passcode. Long-press preview is disabled for them. After unlocking, you are not asked again for 10 minutes.")))
 
-    entries.append(.chatsHeader(theme, isRu ? "ЗАЩИЩЁННЫЕ ЧАТЫ" : "PROTECTED CHATS"))
-    entries.append(.addChats(theme, isRu ? "Добавить чат" : "Add Chat"))
+    entries.append(.chatsHeader(theme, aorusL("ЗАЩИЩЁННЫЕ ЧАТЫ", "PROTECTED CHATS")))
+    entries.append(.addChats(theme, aorusL("Добавить чат", "Add Chat")))
     var index: Int32 = 0
     for peer in peers {
         entries.append(.peer(index, theme, peer, state.revealedPeerId == peer.id))
         index += 1
     }
     if peers.isEmpty {
-        entries.append(.chatsInfo(theme, isRu
-            ? "Пока ничего не защищено. Добавьте личные чаты или группы — каналы защитить нельзя."
-            : "Nothing is protected yet. Add private chats or groups — channels cannot be protected."))
+        entries.append(.chatsInfo(theme, aorusL("Пока ничего не защищено. Добавьте личные чаты или группы — каналы защитить нельзя.", "Nothing is protected yet. Add private chats or groups — channels cannot be protected.")))
     } else {
-        entries.append(.chatsInfo(theme, isRu
-            ? "Смахните чат влево, чтобы убрать защиту."
-            : "Swipe a chat left to remove protection."))
+        entries.append(.chatsInfo(theme, aorusL("Смахните чат влево, чтобы убрать защиту.", "Swipe a chat left to remove protection.")))
     }
 
     return entries
@@ -206,14 +200,9 @@ public func aorusChatLockController(context: AccountContext) -> ViewController {
         context: context,
         setEnabled: { value in
             if value && !AorusChatLock.isBiometryAvailable() {
-                let isRu = AorusLang.resolve(
-                    context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode
-                ) == .ru
                 let alert = UIAlertController(
                     title: nil,
-                    message: isRu
-                        ? "Сначала настройте Face ID, Touch ID или код-пароль устройства."
-                        : "Set up Face ID, Touch ID, or a device passcode first.",
+                    message: aorusL("Сначала настройте Face ID, Touch ID или код-пароль устройства.", "Set up Face ID, Touch ID, or a device passcode first."),
                     preferredStyle: .alert
                 )
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
@@ -290,12 +279,11 @@ public func aorusChatLockController(context: AccountContext) -> ViewController {
     )
     |> deliverOnMainQueue
     |> map { presentationData, state, peers -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
-        let entries = chatLockEntries(state: state, peers: peers, presentationData: presentationData, isRu: isRu)
+        let entries = chatLockEntries(state: state, peers: peers, presentationData: presentationData)
 
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
-            title: .text(isRu ? "Защита чатов" : "Chat Protection"),
+            title: .text(aorusL("Защита чатов", "Chat Protection")),
             leftNavigationButton: nil,
             rightNavigationButton: nil,
             backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

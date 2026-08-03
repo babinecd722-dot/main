@@ -1332,9 +1332,19 @@ def main() -> None:
             "AorusGramUI",
             [
                 aorusgram_ui / "Core" / "AorusL10n.swift",
+                aorusgram_ui / "Core" / "AorusRestartNotice.swift",
                 aorusgram_ui / "AccountBackupController.swift",
                 aorusgram_ui / "AorusSessionBackupView.swift",
                 aorusgram_ui / "AorusSessionBackupHostController.swift",
+                aorusgram_ui / "AorusMiscController.swift",
+                aorusgram_ui / "AorusAntiSpamController.swift",
+                aorusgram_ui / "AorusDeviceSpoofController.swift",
+                aorusgram_ui / "AorusChatLockController.swift",
+                aorusgram_ui / "AorusQuickRepliesController.swift",
+                aorusgram_ui / "AorusFontPickerController.swift",
+                aorusgram_ui / "Security" / "AorusActionConfirmation.swift",
+                aorusgram_ui / "Security" / "AorusLinkProtection.swift",
+                aorusgram_ui / "Features" / "Privacy" / "AorusChatLock.swift",
             ],
             aorusgram_ui / "Core" / "AorusL10nTable.swift",
         ),
@@ -1348,14 +1358,16 @@ def main() -> None:
         # converted inline call sites resolve through the same table.
         english_literals = set()
         for src_path in present:
-            english_literals |= {
-                match.group(2)
-                for match in re.finditer(
-                    r'\b(?:t|aorusL)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
-                    src_path.read_text(encoding="utf-8"),
-                    re.S,
-                )
-            }
+            src_body = src_path.read_text(encoding="utf-8")
+            for pattern in (
+                r'\b(?:t|aorusL)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
+                # AorusLinkProtection carries its risk texts as ru:/en: template pairs and
+                # feeds them to aorusL() at display time.
+                r'\bru:\s*"((?:[^"\\]|\\.)*)"\s*,\s*\n?\s*en:\s*"((?:[^"\\]|\\.)*)"',
+            ):
+                english_literals |= {
+                    match.group(2) for match in re.finditer(pattern, src_body, re.S)
+                }
         for literal in english_literals:
             if "\\(" in literal:
                 err.append(

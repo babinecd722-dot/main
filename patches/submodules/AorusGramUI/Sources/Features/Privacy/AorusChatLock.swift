@@ -280,10 +280,9 @@ public func aorusChatLockHiddenMessageText(_ languageCode: String) -> String {
 public func aorusChatLockAuthenticate(_ accountId: Int64, _ completion: @escaping (Bool) -> Void) {
     // Follows the language selected in Telegram; the device language is only used
     // before Telegram has one at all.
-    let isRu = AorusLang.current == .ru
     AorusChatLock.authenticate(
         accountId: accountId,
-        reason: isRu ? "Разблокируйте, чтобы открыть чат" : "Unlock to open this chat",
+        reason: aorusL("Разблокируйте, чтобы открыть чат", "Unlock to open this chat"),
         completion: completion
     )
 }

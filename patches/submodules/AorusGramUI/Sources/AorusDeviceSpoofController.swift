@@ -229,19 +229,18 @@ private enum AorusDeviceSpoofEntry: ItemListNodeEntry {
 
 private func aorusDeviceSpoofEntries(
     state: AorusDeviceSpoofState,
-    theme: PresentationTheme,
-    isRu: Bool
+    theme: PresentationTheme
 ) -> [AorusDeviceSpoofEntry] {
     var entries: [AorusDeviceSpoofEntry] = [
-        .toggle(theme, isRu ? "Подмена устройства" : "Device Spoof", state.enabled)
+        .toggle(theme, aorusL("Подмена устройства", "Device Spoof"), state.enabled)
     ]
     if state.enabled {
-        entries.append(.header(theme, isRu ? "УСТРОЙСТВО" : "DEVICE"))
+        entries.append(.header(theme, aorusL("УСТРОЙСТВО", "DEVICE")))
         let devices = AorusDeviceSpoofStore.presets + state.customDevices
         for (index, device) in devices.enumerated() {
             entries.append(.device(theme, index, device, state.selectedId == device.id))
         }
-        entries.append(.addCustom(theme, isRu ? "Добавить своё устройство" : "Add Custom Device"))
+        entries.append(.addCustom(theme, aorusL("Добавить своё устройство", "Add Custom Device")))
     }
     return entries
 }
@@ -561,7 +560,7 @@ private enum AorusSpoofPlatform: String, CaseIterable {
     case chromeOS
     case other
 
-    func title(isRu: Bool) -> String {
+    var title: String {
         switch self {
         case .ios:
             return "iOS"
@@ -580,7 +579,7 @@ private enum AorusSpoofPlatform: String, CaseIterable {
         case .chromeOS:
             return "ChromeOS"
         case .other:
-            return isRu ? "Другая платформа" : "Other Platform"
+            return aorusL("Другая платформа", "Other Platform")
         }
     }
 
@@ -589,7 +588,7 @@ private enum AorusSpoofPlatform: String, CaseIterable {
         case .other:
             return version
         default:
-            return "\(self.title(isRu: false)) \(version)"
+            return "\(self.title) \(version)"
         }
     }
 }
@@ -722,23 +721,22 @@ private enum AorusCustomDeviceEntry: ItemListNodeEntry {
 
 private func aorusCustomDeviceEntries(
     state: AorusCustomDeviceState,
-    theme: PresentationTheme,
-    isRu: Bool
+    theme: PresentationTheme
 ) -> [AorusCustomDeviceEntry] {
     return [
         .model(
             theme,
-            isRu ? "Название устройства" : "Device Name",
+            aorusL("Название устройства", "Device Name"),
             state.model
         ),
         .platform(
             theme,
-            isRu ? "Операционная система" : "Operating System",
-            state.platform.title(isRu: isRu)
+            aorusL("Операционная система", "Operating System"),
+            state.platform.title
         ),
         .version(
             theme,
-            isRu ? "Версия операционной системы" : "Operating System Version",
+            aorusL("Версия операционной системы", "Operating System Version"),
             state.version
         )
     ]
@@ -775,12 +773,11 @@ private func aorusAddCustomDeviceController(
                 return
             }
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
-            let current = stateValue.with { $0.platform }
+                let current = stateValue.with { $0.platform }
             let sheet = ActionSheetController(presentationData: presentationData)
             let optionItems: [ActionSheetButtonItem] = AorusSpoofPlatform.allCases.map { platform in
                 return ActionSheetButtonItem(
-                    title: platform.title(isRu: isRu),
+                    title: platform.title,
                     color: .accent,
                     font: platform == current ? .bold : .default,
                     action: { [weak sheet] in
@@ -824,13 +821,12 @@ private func aorusAddCustomDeviceController(
     |> deliverOnMainQueue
     |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
-            title: .text(isRu ? "Своё устройство" : "Custom Device"),
+            title: .text(aorusL("Своё устройство", "Custom Device")),
             leftNavigationButton: nil,
             rightNavigationButton: ItemListNavigationButton(
-                content: .text(isRu ? "Добавить" : "Add"),
+                content: .text(aorusL("Добавить", "Add")),
                 style: .bold,
                 enabled: state.canSave,
                 action: arguments.complete
@@ -843,8 +839,7 @@ private func aorusAddCustomDeviceController(
             presentationData: ItemListPresentationData(presentationData),
             entries: aorusCustomDeviceEntries(
                 state: state,
-                theme: presentationData.theme,
-                isRu: isRu
+                theme: presentationData.theme
             ),
             style: .blocks,
             animateChanges: true
@@ -1008,17 +1003,16 @@ public func aorusDeviceSpoofController(
     |> deliverOnMainQueue
     |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
         let controllerState = ItemListControllerState(
             presentationData: ItemListPresentationData(presentationData),
-            title: .text(isRu ? "Девайс-спуф" : "Device Spoof"),
+            title: .text(aorusL("Девайс-спуф", "Device Spoof")),
             leftNavigationButton: nil,
             rightNavigationButton: nil,
             backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
         )
         let listState = ItemListNodeState(
             presentationData: ItemListPresentationData(presentationData),
-            entries: aorusDeviceSpoofEntries(state: state, theme: presentationData.theme, isRu: isRu),
+            entries: aorusDeviceSpoofEntries(state: state, theme: presentationData.theme),
             style: .blocks,
             animateChanges: true
         )

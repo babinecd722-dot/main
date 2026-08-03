@@ -708,16 +708,13 @@ private final class AorusFontImportDelegate: NSObject, UIDocumentPickerDelegate 
 private var aorusFontImportDelegate: AorusFontImportDelegate?
 
 private func aorusFontEntries(selectedId: String, theme: PresentationTheme, highlightFontBlock: Bool) -> [AorusFontEntry] {
-    let isRu = AorusLang.current == .ru
     var entries: [AorusFontEntry] = []
-    entries.append(.header(theme, isRu ? "ШРИФТ" : "FONT"))
+    entries.append(.header(theme, aorusL("ШРИФТ", "FONT")))
     for choice in AorusFontStore.choices {
         entries.append(.font(theme, choice, choice.id == selectedId, highlightFontBlock))
     }
-    entries.append(.importFont(theme, isRu ? "Импортировать шрифт" : "Import Font"))
-    entries.append(.footer(theme, isRu
-        ? "Поддерживается только .ttf. После выбора шрифта потребуется перезапуск приложения."
-        : "Only .ttf is supported. Restart the app after selecting a font."))
+    entries.append(.importFont(theme, aorusL("Импортировать шрифт", "Import Font")))
+    entries.append(.footer(theme, aorusL("Поддерживается только .ttf. После выбора шрифта потребуется перезапуск приложения.", "Only .ttf is supported. Restart the app after selecting a font.")))
     return entries
 }
 
@@ -752,11 +749,10 @@ public func aorusFontPickerController(context: AccountContext) -> ViewController
         |> deliverOnMainQueue
         |> map { selectedId -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
             let entries = aorusFontEntries(selectedId: selectedId, theme: presentationData.theme, highlightFontBlock: highlightFontBlock)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(isRu ? "Шрифт" : "Font"),
+                title: .text(aorusL("Шрифт", "Font")),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

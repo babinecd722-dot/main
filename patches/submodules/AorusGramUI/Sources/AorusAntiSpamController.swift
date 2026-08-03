@@ -571,49 +571,42 @@ private final class ASRevealTextItemNode: ItemListRevealOptionsItemNode {
 }
 
 private func asEntries(state: ASState, theme: PresentationTheme) -> [ASEntry] {
-    let isRu = AorusLang.current == .ru
     var entries: [ASEntry] = []
 
-    entries.append(.protectionHeader(theme, isRu ? "ЗАЩИТА" : "PROTECTION"))
-    entries.append(.threatProtection(theme, isRu ? "Защита от угроз" : "Threat protection", state.threatProtection))
+    entries.append(.protectionHeader(theme, aorusL("ЗАЩИТА", "PROTECTION")))
+    entries.append(.threatProtection(theme, aorusL("Защита от угроз", "Threat protection"), state.threatProtection))
     // Auto-report sits right under threat protection and only when it is enabled.
     if state.threatProtection {
-        entries.append(.autoReport(theme, isRu ? "Авто-жалоба на угрозы" : "Auto-report threats", state.autoReport))
+        entries.append(.autoReport(theme, aorusL("Авто-жалоба на угрозы", "Auto-report threats"), state.autoReport))
     }
-    entries.append(.spamProtection(theme, isRu ? "Защита от спама" : "Spam protection", state.spamProtection))
-    entries.append(.stopWordsProtection(theme, isRu ? "Стоп-слова" : "Stop words", state.stopWordsProtection))
-    entries.append(.autoBlock(theme, isRu ? "Автоблокировка" : "Auto-block", state.autoBlock))
-    entries.append(.textCleanup(theme, isRu ? "Исправление текста" : "Text clean-up", state.textCleanup))
-    entries.append(.protectionInfo(theme, isRu
-        ? "Угрозы (деанон, докс, OSINT, сват) распознаются даже при обфускации (D0X, DОX). Исправление текста убирает КАПС и ставит заглавную букву в начале."
-        : "Threats (doxxing, OSINT, swatting) are caught even when obfuscated (D0X, DОX). Text clean-up folds ALL CAPS and capitalizes the first letter."))
+    entries.append(.spamProtection(theme, aorusL("Защита от спама", "Spam protection"), state.spamProtection))
+    entries.append(.stopWordsProtection(theme, aorusL("Стоп-слова", "Stop words"), state.stopWordsProtection))
+    entries.append(.autoBlock(theme, aorusL("Автоблокировка", "Auto-block"), state.autoBlock))
+    entries.append(.textCleanup(theme, aorusL("Исправление текста", "Text clean-up"), state.textCleanup))
+    entries.append(.protectionInfo(theme, aorusL("Угрозы (деанон, докс, OSINT, сват) распознаются даже при обфускации (D0X, DОX). Исправление текста убирает КАПС и ставит заглавную букву в начале.", "Threats (doxxing, OSINT, swatting) are caught even when obfuscated (D0X, DОX). Text clean-up folds ALL CAPS and capitalizes the first letter.")))
 
-    entries.append(.blockedHeader(theme, isRu ? "ЗАБЛОКИРОВАННЫЕ" : "BLOCKED"))
+    entries.append(.blockedHeader(theme, aorusL("ЗАБЛОКИРОВАННЫЕ", "BLOCKED")))
     if state.blocked.isEmpty {
-        entries.append(.blockedEmpty(theme, isRu ? "Пока никто не заблокирован." : "No one is blocked yet."))
+        entries.append(.blockedEmpty(theme, aorusL("Пока никто не заблокирован.", "No one is blocked yet.")))
     } else {
         for (i, peer) in state.blocked.enumerated() {
             entries.append(.blockedPeer(theme, Int32(i), peer.id, peer.name))
         }
     }
 
-    entries.append(.keywordsHeader(theme, isRu ? "СТОП-СЛОВА" : "STOP WORDS"))
+    entries.append(.keywordsHeader(theme, aorusL("СТОП-СЛОВА", "STOP WORDS")))
     for (i, word) in state.keywords.enumerated() {
         entries.append(.keyword(theme, Int32(i), word))
     }
-    entries.append(.keywordInput(theme, isRu ? "Добавить слово" : "Add a word", state.newKeyword))
-    entries.append(.keywordsInfo(theme, isRu
-        ? "Сообщения с этими словами скрываются автоматически. Для удаления свайпните строку влево."
-        : "Messages containing these words are hidden automatically. Swipe left to delete."))
+    entries.append(.keywordInput(theme, aorusL("Добавить слово", "Add a word"), state.newKeyword))
+    entries.append(.keywordsInfo(theme, aorusL("Сообщения с этими словами скрываются автоматически. Для удаления свайпните строку влево.", "Messages containing these words are hidden automatically. Swipe left to delete.")))
 
-    entries.append(.exceptionsHeader(theme, isRu ? "ИСКЛЮЧЕНИЯ" : "EXCEPTIONS"))
+    entries.append(.exceptionsHeader(theme, aorusL("ИСКЛЮЧЕНИЯ", "EXCEPTIONS")))
     for (i, peer) in state.allowed.enumerated() {
         entries.append(.exceptionPeer(theme, Int32(i), peer.id, peer.name))
     }
-    entries.append(.addException(theme, isRu ? "Добавить исключение" : "Add exception"))
-    entries.append(.exceptionsInfo(theme, isRu
-        ? "Эти контакты никогда не фильтруются антиспамом. Для удаления свайпните строку влево."
-        : "These contacts are never filtered by anti-spam. Swipe left to remove."))
+    entries.append(.addException(theme, aorusL("Добавить исключение", "Add exception")))
+    entries.append(.exceptionsInfo(theme, aorusL("Эти контакты никогда не фильтруются антиспамом. Для удаления свайпните строку влево.", "These contacts are never filtered by anti-spam. Swipe left to remove.")))
 
     return entries
 }
@@ -769,10 +762,9 @@ public func aorusAntiSpamController(context: AccountContext) -> ViewController {
             let _ = observerHolder
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = asEntries(state: state, theme: presentationData.theme)
-            let isRu = AorusLang.current == .ru
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(isRu ? "Управление антиспамом" : "Anti-spam"),
+                title: .text(aorusL("Управление антиспамом", "Anti-spam")),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

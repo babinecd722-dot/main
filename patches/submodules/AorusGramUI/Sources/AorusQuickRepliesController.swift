@@ -580,16 +580,13 @@ private final class QRRevealTextItemNode: ItemListRevealOptionsItemNode {
 }
 
 private func qrEntries(state: QRState, theme: PresentationTheme) -> [QREntry] {
-    let isRu = AorusLang.current == .ru
     var entries: [QREntry] = []
 
-    entries.append(.info(theme, isRu
-        ? "Вы можете добавить неограниченное количество ответов, используя кнопку ниже. Чтобы воспользоваться быстрым ответом, введите символ «&» в поле ввода сообщения."
-        : "You can add any number of replies with the button below. To use a quick reply, type «&» in the message input field."))
+    entries.append(.info(theme, aorusL("Вы можете добавить неограниченное количество ответов, используя кнопку ниже. Чтобы воспользоваться быстрым ответом, введите символ «&» в поле ввода сообщения.", "You can add any number of replies with the button below. To use a quick reply, type «&» in the message input field.")))
 
-    entries.append(.addButton(theme, isRu ? "Добавить новый" : "Add new"))
+    entries.append(.addButton(theme, aorusL("Добавить новый", "Add new")))
     if state.isAdding {
-        entries.append(.input(theme, isRu ? "Текст ответа" : "Reply text", state.draft))
+        entries.append(.input(theme, aorusL("Текст ответа", "Reply text"), state.draft))
     }
     for reply in state.replies.reversed() {
         entries.append(.reply(theme, reply.id, reply.text))
@@ -667,10 +664,9 @@ public func aorusQuickRepliesController(context: AccountContext) -> ViewControll
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = qrEntries(state: state, theme: presentationData.theme)
-            let isRu = AorusLang.current == .ru
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(isRu ? "Быстрые ответы" : "Quick Replies"),
+                title: .text(aorusL("Быстрые ответы", "Quick Replies")),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

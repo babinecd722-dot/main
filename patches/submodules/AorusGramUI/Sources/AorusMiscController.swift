@@ -417,79 +417,60 @@ private enum MiscEntry: ItemListNodeEntry {
 }
 
 private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEntry] {
-    let isRu = AorusLang.current == .ru
     var entries: [MiscEntry] = []
 
-    entries.append(.premiumHeader(theme, isRu ? "ПРЕМИУМ" : "PREMIUM"))
-    entries.append(.localPremium(theme, isRu ? "Локальный премиум" : "Local Premium", state.localPremium))
-    entries.append(.premiumInfo(theme, isRu
-        ? "Включает Telegram Premium локально на этом устройстве — функции работают только у вас."
-        : "Enables Telegram Premium locally on this device — the features work only for you."))
+    entries.append(.premiumHeader(theme, aorusL("ПРЕМИУМ", "PREMIUM")))
+    entries.append(.localPremium(theme, aorusL("Локальный премиум", "Local Premium"), state.localPremium))
+    entries.append(.premiumInfo(theme, aorusL("Включает Telegram Premium локально на этом устройстве — функции работают только у вас.", "Enables Telegram Premium locally on this device — the features work only for you.")))
 
-    entries.append(.fakeGifts(theme, isRu ? "Фейковые подарки" : "Fake Gifts"))
+    entries.append(.fakeGifts(theme, aorusL("Фейковые подарки", "Fake Gifts")))
 
-    entries.append(.fakeStarsHeader(theme, isRu ? "ЗВЁЗДЫ" : "STARS"))
-    entries.append(.fakeStars(theme, isRu ? "Фейковые звёзды" : "Fake Stars", state.fakeStars))
+    entries.append(.fakeStarsHeader(theme, aorusL("ЗВЁЗДЫ", "STARS")))
+    entries.append(.fakeStars(theme, aorusL("Фейковые звёзды", "Fake Stars"), state.fakeStars))
     // The amount row animates in/out with the toggle (the list uses animateChanges).
     if state.fakeStars {
-        entries.append(.fakeStarsCount(theme, isRu ? "Количество" : "Amount", state.fakeStarsAmount))
+        entries.append(.fakeStarsCount(theme, aorusL("Количество", "Amount"), state.fakeStarsAmount))
     }
-    entries.append(.fakeStarsInfo(theme, isRu
-        ? "Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся."
-        : "Shows the entered Stars balance locally, only for you. No real stars are created or spent."))
+    entries.append(.fakeStarsInfo(theme, aorusL("Показывает указанный баланс звёзд локально, только у вас. Реальные звёзды не создаются и не тратятся.", "Shows the entered Stars balance locally, only for you. No real stars are created or spent.")))
 
     // Voice Twin (Calls) moved to the main AorusGram screen. Auto-Reply stays
     // here as a separate headerless block.
-    entries.append(.autoReply(theme, isRu ? "Быстрые ответы" : "Quick Replies", state.autoReply))
+    entries.append(.autoReply(theme, aorusL("Быстрые ответы", "Quick Replies"), state.autoReply))
 
     // ANTI-SEARCH header intentionally removed — the block stays, just untitled.
-    entries.append(.antiSearch(theme, isRu ? "АнтиПоиск" : "AntiSearch", state.antiSearch))
-    entries.append(.antiSearchInfo(theme, isRu
-        ? "Заменяет только визуально идентичные буквы, чтобы текст выглядел так же, но хуже находился поиском."
-        : "Swaps only visually identical letters so the text looks the same but is harder to match in search."))
-    entries.append(.anonymousStickers(theme, isRu ? "Анонимные стикеры" : "Anonymous Stickers", state.anonymousStickers))
-    entries.append(.anonymousStickersInfo(theme, isRu
-        ? "Отправляет ваши стикеры без ссылки на набор: клиент переупаковывает файл и убирает привязку к стикерпаку."
-        : "Sends your stickers without a sticker-pack link: the client repacks the file and removes pack attribution."))
-    entries.append(.profileLink(theme, isRu ? "Гиперссылка на профиль" : "Profile Link", state.profileLink))
+    entries.append(.antiSearch(theme, aorusL("АнтиПоиск", "AntiSearch"), state.antiSearch))
+    entries.append(.antiSearchInfo(theme, aorusL("Заменяет только визуально идентичные буквы, чтобы текст выглядел так же, но хуже находился поиском.", "Swaps only visually identical letters so the text looks the same but is harder to match in search.")))
+    entries.append(.anonymousStickers(theme, aorusL("Анонимные стикеры", "Anonymous Stickers"), state.anonymousStickers))
+    entries.append(.anonymousStickersInfo(theme, aorusL("Отправляет ваши стикеры без ссылки на набор: клиент переупаковывает файл и убирает привязку к стикерпаку.", "Sends your stickers without a sticker-pack link: the client repacks the file and removes pack attribution.")))
+    entries.append(.profileLink(theme, aorusL("Гиперссылка на профиль", "Profile Link"), state.profileLink))
     if state.profileLink {
-        entries.append(.profileLinkSelf(theme, isRu ? "Мой профиль" : "My Profile", state.profileLinkTargetPeerId == 0 ? (isRu ? "Выбрано" : "Selected") : ""))
-        entries.append(.profileLinkPeer(theme, isRu ? "Чужой профиль" : "Other Profile", state.profileLinkTargetPeerId == 0 ? (isRu ? "Выбрать" : "Choose") : state.profileLinkTargetName))
+        entries.append(.profileLinkSelf(theme, aorusL("Мой профиль", "My Profile"), state.profileLinkTargetPeerId == 0 ? (aorusL("Выбрано", "Selected")) : ""))
+        entries.append(.profileLinkPeer(theme, aorusL("Чужой профиль", "Other Profile"), state.profileLinkTargetPeerId == 0 ? (aorusL("Выбрать", "Choose")) : state.profileLinkTargetName))
     }
-    entries.append(.profileLinkInfo(theme, isRu
-        ? "Делает весь текст ваших исходящих сообщений кликабельным упоминанием выбранного профиля."
-        : "Makes the whole text of your outgoing messages a clickable mention of the selected profile."))
-    entries.append(.phoneSpoof(theme, isRu ? "Подмена номера" : "Phone Spoofing", state.phoneSpoof))
+    entries.append(.profileLinkInfo(theme, aorusL("Делает весь текст ваших исходящих сообщений кликабельным упоминанием выбранного профиля.", "Makes the whole text of your outgoing messages a clickable mention of the selected profile.")))
+    entries.append(.phoneSpoof(theme, aorusL("Подмена номера", "Phone Spoofing"), state.phoneSpoof))
     if state.phoneSpoof {
-        entries.append(.phoneSpoofNumber(theme, isRu ? "Номер" : "Number", state.phoneSpoofNumber))
-        entries.append(.phoneSpoofRandomize(theme, isRu ? "Рандомизировать" : "Randomize"))
+        entries.append(.phoneSpoofNumber(theme, aorusL("Номер", "Number"), state.phoneSpoofNumber))
+        entries.append(.phoneSpoofRandomize(theme, aorusL("Рандомизировать", "Randomize")))
     }
-    entries.append(.phoneSpoofInfo(theme, isRu
-        ? "Когда бот просит номер телефона, клиент отправляет защищённый номер вместо настоящего."
-        : "When a bot asks for your phone number, the client sends a protected number instead of your real one."))
-    entries.append(.mediaMetadata(theme, isRu ? "Метаданные медиа" : "Media Metadata", state.mediaMetadata))
-    entries.append(.mediaMetadataInfo(theme, isRu
-        ? "Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл."
-        : "Adds a Metadata item to photos, videos and GIFs and shows available EXIF, GPS, camera, container and file data."))
-    entries.append(.formattingPanel(theme, isRu ? "Панель форматирования" : "Formatting Panel", state.formattingPanel))
-    entries.append(.animatedWallpapers(theme, isRu ? "Анимированные обои" : "Animated Wallpapers"))
-    entries.append(.animatedBanner(theme, isRu ? "Анимированный баннер" : "Animated Banner"))
+    entries.append(.phoneSpoofInfo(theme, aorusL("Когда бот просит номер телефона, клиент отправляет защищённый номер вместо настоящего.", "When a bot asks for your phone number, the client sends a protected number instead of your real one.")))
+    entries.append(.mediaMetadata(theme, aorusL("Метаданные медиа", "Media Metadata"), state.mediaMetadata))
+    entries.append(.mediaMetadataInfo(theme, aorusL("Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл.", "Adds a Metadata item to photos, videos and GIFs and shows available EXIF, GPS, camera, container and file data.")))
+    entries.append(.formattingPanel(theme, aorusL("Панель форматирования", "Formatting Panel"), state.formattingPanel))
+    entries.append(.animatedWallpapers(theme, aorusL("Анимированные обои", "Animated Wallpapers")))
+    entries.append(.animatedBanner(theme, aorusL("Анимированный баннер", "Animated Banner")))
 
-    entries.append(.securityHeader(theme, isRu ? "БЕЗОПАСНОСТЬ" : "SECURITY"))
-    entries.append(.chatLock(theme, isRu ? "Защита чатов" : "Chat Protection",
-                             state.chatLockEnabled ? (isRu ? "Вкл" : "On") : ""))
-    entries.append(.linkProtection(theme, isRu ? "Защита ссылок" : "Link Protection", state.linkProtection))
+    entries.append(.securityHeader(theme, aorusL("БЕЗОПАСНОСТЬ", "SECURITY")))
+    entries.append(.chatLock(theme, aorusL("Защита чатов", "Chat Protection"),
+                             state.chatLockEnabled ? (aorusL("Вкл", "On")) : ""))
+    entries.append(.linkProtection(theme, aorusL("Защита ссылок", "Link Protection"), state.linkProtection))
     if state.linkProtection {
-        entries.append(.linkProtectionRedirects(theme, isRu ? "Проверять редиректы" : "Check Redirects", state.linkProtectionRedirects))
-        entries.append(.linkProtectionBlockFiles(theme, isRu ? "Блокировать опасные файлы" : "Block Dangerous Files", state.linkProtectionBlockFiles))
+        entries.append(.linkProtectionRedirects(theme, aorusL("Проверять редиректы", "Check Redirects"), state.linkProtectionRedirects))
+        entries.append(.linkProtectionBlockFiles(theme, aorusL("Блокировать опасные файлы", "Block Dangerous Files"), state.linkProtectionBlockFiles))
     }
-    entries.append(.linkProtectionInfo(theme, isRu
-        ? "Предупреждает о подмене доменов, Punycode, сокращателях, редиректах, опасных схемах и файлах до открытия ссылки."
-        : "Warns about spoofed domains, Punycode, shorteners, redirects, dangerous schemes and files before opening a link."))
-    entries.append(.actionConfirmation(theme, isRu ? "Подтверждение действий" : "Action Confirmation", state.actionConfirmation))
-    entries.append(.actionConfirmationInfo(theme, isRu
-        ? "Спрашивает подтверждение перед звонком и перед отправкой записанного голосового или видеосообщения."
-        : "Asks for confirmation before placing a call and before sending a recorded voice or video message."))
+    entries.append(.linkProtectionInfo(theme, aorusL("Предупреждает о подмене доменов, Punycode, сокращателях, редиректах, опасных схемах и файлах до открытия ссылки.", "Warns about spoofed domains, Punycode, shorteners, redirects, dangerous schemes and files before opening a link.")))
+    entries.append(.actionConfirmation(theme, aorusL("Подтверждение действий", "Action Confirmation"), state.actionConfirmation))
+    entries.append(.actionConfirmationInfo(theme, aorusL("Спрашивает подтверждение перед звонком и перед отправкой записанного голосового или видеосообщения.", "Asks for confirmation before placing a call and before sending a recorded voice or video message.")))
 
     return entries
 }
@@ -765,8 +746,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 weakController?.push(aorusChatLockController(context: context))
             }
             if AorusChatLock.settingsRequireAuth(accountId: accountId) {
-                let isRu = AorusLang.resolve(context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode) == .ru
-                AorusChatLock.authenticate(accountId: accountId, reason: isRu ? "Разблокируйте настройки защиты чатов" : "Unlock Chat Protection settings") { success in
+                AorusChatLock.authenticate(accountId: accountId, reason: aorusL("Разблокируйте настройки защиты чатов", "Unlock Chat Protection settings")) { success in
                     if success {
                         present()
                     }
@@ -790,10 +770,9 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = miscEntries(state: state, theme: presentationData.theme)
-            let isRu = AorusLang.current == .ru
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(isRu ? "Прочее" : "Other"),
+                title: .text(aorusL("Прочее", "Other")),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

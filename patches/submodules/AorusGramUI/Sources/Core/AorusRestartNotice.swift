@@ -20,9 +20,8 @@ import UserNotifications
 public func aorusPresentRestartNotice(context: AccountContext, controller: ViewController?) {
     guard let controller = controller else { return }
     let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-    let isRu = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
-    let text = isRu ? "Необходим перезапуск" : "Restart required"
-    let actionText = isRu ? "Перезапустить сейчас" : "Restart now"
+    let text = aorusL("Необходим перезапуск", "Restart required")
+    let actionText = aorusL("Перезапустить сейчас", "Restart now")
     controller.present(
         UndoOverlayController(
             presentationData: presentationData,
@@ -32,7 +31,7 @@ public func aorusPresentRestartNotice(context: AccountContext, controller: ViewC
             animateInAsReplacement: false,
             action: { action in
                 if case .undo = action {
-                    aorusRestartApp(isRu: isRu)
+                    aorusRestartApp()
                 }
                 return true
             }
@@ -45,11 +44,11 @@ public func aorusPresentRestartNotice(context: AccountContext, controller: ViewC
 // in the future and the process is terminated first, so the banner surfaces on the
 // home/lock screen (foreground banners are suppressed by default) where one tap brings
 // the freshly-launched app back.
-private func aorusRestartApp(isRu: Bool) {
+private func aorusRestartApp() {
     let center = UNUserNotificationCenter.current()
     let content = UNMutableNotificationContent()
     content.title = "AorusGram"
-    content.body = isRu ? "Нажмите, чтобы снова открыть AorusGram" : "Tap to reopen AorusGram"
+    content.body = aorusL("Нажмите, чтобы снова открыть AorusGram", "Tap to reopen AorusGram")
     content.sound = .default
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1.0, repeats: false)
     let request = UNNotificationRequest(identifier: "aorusgram_restart_relaunch", content: content, trigger: trigger)

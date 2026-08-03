@@ -7,9 +7,13 @@ public enum AorusLinkProtection {
     private static let blockFilesKey = "aorusgram_link_protection_block_files"
     private static var allowedOnce = Set<String>()
 
+    // ru/en are templates, not finished text. The scheme, TLD, brand or extension is
+    // substituted into %@ after translation, so the English string stays a stable key in
+    // AorusL10nTable instead of differing on every link.
     private struct Risk {
         let ru: String
         let en: String
+        var value: String? = nil
         let blocking: Bool
     }
 
@@ -83,20 +87,20 @@ public enum AorusLinkProtection {
             return
         }
 
-        let isRu = AorusLang.resolve(languageCode) == .ru
         let title = report.shouldBlock
-            ? (isRu ? "Опасная ссылка заблокирована" : "Dangerous Link Blocked")
-            : (isRu ? "Подозрительная ссылка" : "Suspicious Link")
+            ? (aorusL("Опасная ссылка заблокирована", "Dangerous Link Blocked"))
+            : (aorusL("Подозрительная ссылка", "Suspicious Link"))
         let riskText = report.risks.prefix(6).map { risk in
-            let text = isRu ? risk.ru : risk.en
+            let template = aorusL(risk.ru, risk.en)
+            let text = risk.value.map { template.replacingOccurrences(of: "%@", with: $0) } ?? template
             return text.prefix(1).uppercased() + text.dropFirst()
         }.joined(separator: "\n")
         let message = report.normalizedURL + "\n\n" + riskText
 
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
         if !report.shouldBlock {
-            alert.addAction(UIAlertAction(title: isRu ? "Открыть всё равно" : "Open Anyway", style: .destructive, handler: { _ in
+            alert.addAction(UIAlertAction(title: aorusL("Открыть всё равно", "Open Anyway"), style: .destructive, handler: { _ in
                 openAnyway()
             }))
         } else {
@@ -117,8 +121,9 @@ public enum AorusLinkProtection {
 
         if !scheme.isEmpty && riskySchemes.contains(scheme) {
             risks.append(Risk(
-                ru: "опасная схема ссылки: \(scheme)",
-                en: "dangerous URL scheme: \(scheme)",
+                ru: "опасная схема ссылки: %@",
+                en: "dangerous URL scheme: %@",
+                value: scheme,
                 blocking: scheme == "javascript" || scheme == "data" || scheme == "file" || scheme == "itms-services"
             ))
         }
@@ -189,8 +194,9 @@ public enum AorusLinkProtection {
 
         if let tld = host.split(separator: ".").last.map(String.init), suspiciousTLDs.contains(tld) {
             risks.append(Risk(
-                ru: "подозрительная доменная зона: .\(tld)",
-                en: "suspicious domain zone: .\(tld)",
+                ru: "подозрительная доменная зона: .%@",
+                en: "suspicious domain zone: .%@",
+                value: tld,
                 blocking: false
             ))
         }
@@ -202,8 +208,9 @@ public enum AorusLinkProtection {
         let fileExtension = path.split(separator: ".").last.map { String($0).lowercased() } ?? ""
         if dangerousExtensions.contains(fileExtension) {
             risks.append(Risk(
-                ru: "ссылка ведёт на потенциально опасный файл .\(fileExtension)",
-                en: "link points to a potentially dangerous .\(fileExtension) file",
+                ru: "ссылка ведёт на потенциально опасный файл .%@",
+                en: "link points to a potentially dangerous .%@ file",
+                value: fileExtension,
                 blocking: blocksDangerousFiles
             ))
         }
@@ -331,8 +338,9 @@ public enum AorusLinkProtection {
             for brand in brands {
                 if label.contains(brand), !isTrustedBrandHost(host, brand: brand) {
                     return Risk(
-                        ru: "домен похож на известный сервис: \(brand)",
-                        en: "domain looks similar to a known service: \(brand)",
+                        ru: "домен похож на известный сервис: %@",
+                        en: "domain looks similar to a known service: %@",
+                        value: brand,
                         blocking: false
                     )
                 }
@@ -386,7 +394,7 @@ public enum AorusLinkProtection {
         var seen = Set<String>()
         var result: [Risk] = []
         for risk in risks {
-            let key = risk.ru + risk.en
+            let key = risk.ru + risk.en + (risk.value ?? "")
             if seen.insert(key).inserted {
                 result.append(risk)
             }

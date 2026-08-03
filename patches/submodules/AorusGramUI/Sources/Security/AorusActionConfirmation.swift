@@ -32,29 +32,29 @@ public enum AorusActionConfirmation {
         }
     }
 
-    private static func text(for action: Action, isRu: Bool) -> String {
+    private static func text(for action: Action) -> String {
         switch action {
         case .voiceCall:
-            return isRu ? "Начать голосовой звонок?" : "Start a voice call?"
+            return aorusL("Начать голосовой звонок?", "Start a voice call?")
         case .videoCall:
-            return isRu ? "Начать видеозвонок?" : "Start a video call?"
+            return aorusL("Начать видеозвонок?", "Start a video call?")
         case .groupCall:
-            return isRu ? "Присоединиться к групповому звонку?" : "Join the group call?"
+            return aorusL("Присоединиться к групповому звонку?", "Join the group call?")
         case .voiceMessage:
-            return isRu ? "Отправить голосовое сообщение?" : "Send this voice message?"
+            return aorusL("Отправить голосовое сообщение?", "Send this voice message?")
         case .videoMessage:
-            return isRu ? "Отправить видеосообщение?" : "Send this video message?"
+            return aorusL("Отправить видеосообщение?", "Send this video message?")
         }
     }
 
-    private static func confirmTitle(for action: Action, isRu: Bool) -> String {
+    private static func confirmTitle(for action: Action) -> String {
         switch action {
         case .voiceCall, .videoCall:
-            return isRu ? "Позвонить" : "Call"
+            return aorusL("Позвонить", "Call")
         case .groupCall:
-            return isRu ? "Присоединиться" : "Join"
+            return aorusL("Присоединиться", "Join")
         case .voiceMessage, .videoMessage:
-            return isRu ? "Отправить" : "Send"
+            return aorusL("Отправить", "Send")
         }
     }
 
@@ -71,15 +71,13 @@ public enum AorusActionConfirmation {
             return
         }
 
-        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let isRu = presentationData.strings.baseLanguageCode.lowercased().hasPrefix("ru")
         let controller = textAlertController(
             context: context,
-            title: isRu ? "Подтвердите действие" : "Confirm Action",
-            text: self.text(for: action, isRu: isRu),
+            title: aorusL("Подтвердите действие", "Confirm Action"),
+            text: self.text(for: action),
             actions: [
-                TextAlertAction(type: .genericAction, title: isRu ? "Отмена" : "Cancel", action: {}),
-                TextAlertAction(type: .defaultAction, title: self.confirmTitle(for: action, isRu: isRu), action: {
+                TextAlertAction(type: .genericAction, title: aorusL("Отмена", "Cancel"), action: {}),
+                TextAlertAction(type: .defaultAction, title: self.confirmTitle(for: action), action: {
                     confirmed()
                 })
             ]
