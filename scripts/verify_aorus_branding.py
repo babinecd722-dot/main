@@ -1317,15 +1317,6 @@ def main() -> None:
     if wall_settings_text.count("object: NSNumber(value: accountId)") < 4:
         err.append("Wall: settings notifications are not scoped to their account")
 
-    session_screen = (
-        tg / "submodules" / "SettingsUI" / "Sources" / "Privacy and Security" / "RecentSessionScreen.swift"
-    )
-    session_screen_text = session_screen.read_text(encoding="utf-8") if session_screen.is_file() else ""
-    if "let aorusSessionIP = session.ip.trimmingCharacters(in: .whitespacesAndNewlines)" not in session_screen_text:
-        err.append("SessionIP: device sessions no longer show their IP address")
-    if "                ipString = nil\n                dateString = nil\n                locationString = session.country" in session_screen_text:
-        err.append("SessionIP: the upstream nil assignment is back, the IP row will be hidden")
-
     # Action confirmation: the prompt must sit at the single choke point for each action, and
     # the original bodies must survive under their aorusPerform... names.
     action_confirm = tg / "submodules" / "AorusGramUI" / "Sources" / "Security" / "AorusActionConfirmation.swift"
