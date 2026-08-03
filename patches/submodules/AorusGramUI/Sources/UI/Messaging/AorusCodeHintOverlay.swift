@@ -87,7 +87,7 @@ public final class AorusCodeHintOverlay: UIView {
         self.layer.addSublayer(self.ringLayer)
 
         // ── Glass callout above the button ──
-        let lead = russian ? "Зажми скрепку, чтобы открыть " : "Hold the paperclip to open "
+        let lead = aorusL("Зажми скрепку, чтобы открыть ", "Hold the paperclip to open ")
         let attr = NSMutableAttributedString(string: lead, attributes: [
             .foregroundColor: UIColor.white.withAlphaComponent(0.95),
             .font: Font.medium(15.5)

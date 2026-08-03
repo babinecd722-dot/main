@@ -520,7 +520,7 @@ final class ATunnelStatusViewController: UIViewController {
         contentView.addSubview(titleLabel)
 
         // Subtitle
-        subtitleLabel.text = isRu ? "Скоростная безопасная маршрутизация" : "Fast secure routing"
+        subtitleLabel.text = aorusL("Скоростная безопасная маршрутизация", "Fast secure routing")
         subtitleLabel.font = Font.regular(15.0)
         subtitleLabel.textColor = UIColor(white: 0.6, alpha: 1)
         subtitleLabel.textAlignment = .center
@@ -545,7 +545,7 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     private func setupServerSection() {
-        serversSectionLabel.text = isRu ? "СЕРВЕРЫ" : "SERVERS"
+        serversSectionLabel.text = aorusL("СЕРВЕРЫ", "SERVERS")
         serversSectionLabel.font = Font.semibold(12.0)
         serversSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
         serversSectionLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -568,7 +568,7 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     private func setupCallSection() {
-        callsSectionLabel.text = isRu ? "ЗВОНКИ" : "CALLS"
+        callsSectionLabel.text = aorusL("ЗВОНКИ", "CALLS")
         callsSectionLabel.font = Font.semibold(12.0)
         callsSectionLabel.textColor = UIColor(white: 0.45, alpha: 1)
         callsSectionLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -587,7 +587,7 @@ final class ATunnelStatusViewController: UIViewController {
         callPhoneIcon.translatesAutoresizingMaskIntoConstraints = false
         callCard.addSubview(callPhoneIcon)
 
-        callTitleLabel.text = isRu ? "Маршрутизация звонков" : "Call routing"
+        callTitleLabel.text = aorusL("Маршрутизация звонков", "Call routing")
         callTitleLabel.font = Font.medium(15.0)
         callTitleLabel.textColor = .white
         callTitleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -633,7 +633,7 @@ final class ATunnelStatusViewController: UIViewController {
         updatedLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(updatedLabel)
 
-        diagButton.setTitle(isRu ? "Запустить диагностику" : "Run diagnostics", for: .normal)
+        diagButton.setTitle(aorusL("Запустить диагностику", "Run diagnostics"), for: .normal)
         diagButton.titleLabel?.font = Font.semibold(16.0)
         diagButton.setTitleColor(purple, for: .normal)
         diagButton.backgroundColor = purple.withAlphaComponent(0.15)
@@ -696,13 +696,13 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     private func applyUpdatedLabel() {
-        guard let d = diag else { updatedLabel.text = isRu ? "Обновлено: —" : "Updated: —"; return }
+        guard let d = diag else { updatedLabel.text = aorusL("Обновлено: —", "Updated: —"); return }
         let e = Date().timeIntervalSince1970 - d.updatedAt
         let t: String
-        if e < 10       { t = isRu ? "только что" : "just now" }
-        else if e < 60  { t = isRu ? "\(Int(e))с назад" : "\(Int(e))s ago" }
-        else            { t = isRu ? "\(Int(e/60))м назад" : "\(Int(e/60))m ago" }
-        updatedLabel.text = (isRu ? "Обновлено: " : "Updated: ") + t
+        if e < 10       { t = aorusL("только что", "just now") }
+        else if e < 60  { t = aorusL("%@с назад", "%@s ago").replacingOccurrences(of: "%@", with: "\(Int(e))") }
+        else            { t = aorusL("%@м назад", "%@m ago").replacingOccurrences(of: "%@", with: "\(Int(e/60))") }
+        updatedLabel.text = (aorusL("Обновлено: ", "Updated: ")) + t
     }
 
     private func applyDiagButton() {
@@ -749,12 +749,12 @@ final class ATunnelStatusViewController: UIViewController {
         detail.translatesAutoresizingMaskIntoConstraints = false
         if server.available, let lat = server.latencyMs, let jit = server.jitterMs {
             detail.textColor = UIColor(white: 0.55, alpha: 1)
-            let ms  = isRu ? "мс" : "ms"
-            let jw  = isRu ? "джиттер" : "jitter"
+            let ms  = aorusL("мс", "ms")
+            let jw  = aorusL("джиттер", "jitter")
             detail.text = "⚡ \(Int(lat)) \(ms) · \(jw) \(Int(jit)) \(ms)"
         } else {
             detail.textColor = .systemRed
-            detail.text = isRu ? "Сервер недоступен" : "Server unavailable"
+            detail.text = aorusL("Сервер недоступен", "Server unavailable")
         }
 
         [flag, regionLabel, badge, flow, detail].forEach { card.addSubview($0) }
@@ -798,11 +798,11 @@ final class ATunnelStatusViewController: UIViewController {
 
         if server.active {
             dot.backgroundColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
-            label.text = isRu ? "АКТИВЕН" : "ACTIVE"
+            label.text = aorusL("АКТИВЕН", "ACTIVE")
             label.textColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
         } else if !server.available {
             dot.backgroundColor = .systemRed
-            label.text = isRu ? "НЕДОСТУПЕН" : "DOWN"
+            label.text = aorusL("НЕДОСТУПЕН", "DOWN")
             label.textColor = .systemRed
         } else {
             // available but not primary — no badge
@@ -828,13 +828,13 @@ final class ATunnelStatusViewController: UIViewController {
     private func localizedRegion(_ region: String) -> String {
         let r = region.lowercased()
         if r == "de" || r.contains("germ") || r.contains("герм") || r.contains("frankfurt") || r.contains("франкф") {
-            return isRu ? "Германия" : "Germany"
+            return aorusL("Германия", "Germany")
         }
         if r == "fi" || r.contains("finl") || r.contains("финл") || r.contains("helsinki") || r.contains("хелс") {
-            return isRu ? "Финляндия" : "Finland"
+            return aorusL("Финляндия", "Finland")
         }
-        if r == "nl" || r.contains("neth") || r.contains("нидерл") { return isRu ? "Нидерланды" : "Netherlands" }
-        if r == "us" || r.contains("usa")  || r.contains("сша")    { return isRu ? "США" : "USA" }
+        if r == "nl" || r.contains("neth") || r.contains("нидерл") { return aorusL("Нидерланды", "Netherlands") }
+        if r == "us" || r.contains("usa")  || r.contains("сша")    { return aorusL("США", "USA") }
         // Capitalise unknown codes as-is
         return region
     }
@@ -931,14 +931,14 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         handleBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(handleBar)
 
-        titleLabel.text = isRu ? "Диагностика" : "Diagnostics"
+        titleLabel.text = aorusL("Диагностика", "Diagnostics")
         titleLabel.font = Font.bold(20.0)
         titleLabel.textColor = .white
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)
 
-        subtitleLabel.text = isRu ? "Проверка и восстановление ATunnel" : "Checking and restoring ATunnel"
+        subtitleLabel.text = aorusL("Проверка и восстановление ATunnel", "Checking and restoring ATunnel")
         subtitleLabel.font = Font.regular(14.0)
         subtitleLabel.textColor = UIColor(white: 0.55, alpha: 1)
         subtitleLabel.textAlignment = .center
@@ -951,10 +951,10 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         view.addSubview(stepsStack)
 
         let defs: [(String, String)] = [
-            (isRu ? "Анализ текущего состояния" : "Analysing current state",    "magnifyingglass"),
-            (isRu ? "Сканирование серверов"      : "Scanning servers",           "antenna.radiowaves.left.and.right"),
-            (isRu ? "Выбор оптимального маршрута": "Selecting optimal route",    "arrow.triangle.branch"),
-            (isRu ? "Применение настроек"         : "Applying configuration",    "checkmark.shield"),
+            (aorusL("Анализ текущего состояния", "Analysing current state"),    "magnifyingglass"),
+            (aorusL("Сканирование серверов", "Scanning servers"),           "antenna.radiowaves.left.and.right"),
+            (aorusL("Выбор оптимального маршрута", "Selecting optimal route"),    "arrow.triangle.branch"),
+            (aorusL("Применение настроек", "Applying configuration"),    "checkmark.shield"),
         ]
         for d in defs {
             let row = DiagStepRow(title: d.0, sfSymbol: d.1, accentColor: purple)
@@ -981,7 +981,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         resultBody.translatesAutoresizingMaskIntoConstraints = false
         resultCard.addSubview(resultBody)
 
-        closeButton.setTitle(isRu ? "Закрыть" : "Close", for: .normal)
+        closeButton.setTitle(aorusL("Закрыть", "Close"), for: .normal)
         closeButton.titleLabel?.font = Font.semibold(17.0)
         closeButton.setTitleColor(purple, for: .normal)
         closeButton.backgroundColor = purple.withAlphaComponent(0.15)
@@ -1086,23 +1086,23 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         if allDown {
             resultIcon.image = UIImage(systemName: "wifi.slash", withConfiguration: cfg)
             resultIcon.tintColor = .systemRed
-            resultTitle.text = isRu ? "Серверы недоступны" : "Servers unreachable"
-            resultBody.text  = isRu ? "Нет ответа ни от одного сервера. Проверьте интернет." : "No server responded. Check your internet."
+            resultTitle.text = aorusL("Серверы недоступны", "Servers unreachable")
+            resultBody.text  = aorusL("Нет ответа ни от одного сервера. Проверьте интернет.", "No server responded. Check your internet.")
         } else if let n = new, n != prev, let p = prev {
             resultIcon.image = UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: cfg)
             resultIcon.tintColor = UIColor(red: 0.20, green: 0.78, blue: 0.35, alpha: 1)
-            resultTitle.text = isRu ? "Маршрут переключён" : "Route switched"
-            resultBody.text  = "\(p) → \(n)\n" + (isRu ? "Активный сервер обновлён автоматически." : "Active server updated automatically.")
+            resultTitle.text = aorusL("Маршрут переключён", "Route switched")
+            resultBody.text  = "\(p) → \(n)\n" + (aorusL("Активный сервер обновлён автоматически.", "Active server updated automatically."))
         } else if let active = new {
             resultIcon.image = UIImage(systemName: "checkmark.shield.fill", withConfiguration: cfg)
             resultIcon.tintColor = purple
-            resultTitle.text = isRu ? "Соединение в норме" : "Connection is healthy"
-            resultBody.text  = (isRu ? "Активен: " : "Active: ") + active + (isRu ? ". Маршрутизация оптимальна." : ". Routing is optimal.")
+            resultTitle.text = aorusL("Соединение в норме", "Connection is healthy")
+            resultBody.text  = (aorusL("Активен: ", "Active: ")) + active + (aorusL(". Маршрутизация оптимальна.", ". Routing is optimal."))
         } else {
             resultIcon.image = UIImage(systemName: "exclamationmark.triangle.fill", withConfiguration: cfg)
             resultIcon.tintColor = .systemOrange
-            resultTitle.text = isRu ? "Нет данных" : "No data"
-            resultBody.text  = isRu ? "Данные ещё не получены. Подождите немного." : "Data not yet available. Wait a moment."
+            resultTitle.text = aorusL("Нет данных", "No data")
+            resultBody.text  = aorusL("Данные ещё не получены. Подождите немного.", "Data not yet available. Wait a moment.")
         }
         UIView.animate(withDuration: 0.4) { self.resultCard.alpha = 1; self.closeButton.alpha = 1 }
     }

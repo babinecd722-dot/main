@@ -152,22 +152,22 @@ private func manageEntries(state: ManageState, theme: PresentationTheme) -> [Man
     let isRu = AorusLang.current == .ru
     var entries: [ManageEntry] = []
 
-    entries.append(.senderHeader(theme, isRu ? "ОТПРАВИТЕЛЬ" : "SENDER"))
+    entries.append(.senderHeader(theme, aorusL("ОТПРАВИТЕЛЬ", "SENDER")))
     let senderValue = state.senderPeerId == 0
-        ? (isRu ? "Аноним" : "Anonymous")
-        : (state.senderName.isEmpty ? (isRu ? "Пользователь" : "User") : state.senderName)
-    entries.append(.sender(theme, isRu ? "Отправитель" : "Sender", senderValue))
-    entries.append(.makeAnonymous(theme, isRu ? "Сделать анонимным" : "Make anonymous", state.senderPeerId != 0))
+        ? (aorusL("Аноним", "Anonymous"))
+        : (state.senderName.isEmpty ? (aorusL("Пользователь", "User")) : state.senderName)
+    entries.append(.sender(theme, aorusL("Отправитель", "Sender"), senderValue))
+    entries.append(.makeAnonymous(theme, aorusL("Сделать анонимным", "Make anonymous"), state.senderPeerId != 0))
 
-    entries.append(.dateHeader(theme, isRu ? "ДАТА ПОЛУЧЕНИЯ" : "DATE RECEIVED"))
-    entries.append(.date(theme, isRu ? "Дата и время" : "Date & time", state.date, state.displayingDateSelection, state.displayingTimeSelection))
+    entries.append(.dateHeader(theme, aorusL("ДАТА ПОЛУЧЕНИЯ", "DATE RECEIVED")))
+    entries.append(.date(theme, aorusL("Дата и время", "Date & time"), state.date, state.displayingDateSelection, state.displayingTimeSelection))
 
-    entries.append(.commentHeader(theme, isRu ? "ОПИСАНИЕ" : "DESCRIPTION"))
-    entries.append(.comment(theme, isRu ? "Комментарий" : "Comment", state.comment))
+    entries.append(.commentHeader(theme, aorusL("ОПИСАНИЕ", "DESCRIPTION")))
+    entries.append(.comment(theme, aorusL("Комментарий", "Comment"), state.comment))
 
-    entries.append(.visibility(theme, isRu ? "Показывать в профиле" : "Show on profile", state.showInProfile))
+    entries.append(.visibility(theme, aorusL("Показывать в профиле", "Show on profile"), state.showInProfile))
 
-    entries.append(.delete(theme, isRu ? "Удалить подарок" : "Remove gift"))
+    entries.append(.delete(theme, aorusL("Удалить подарок", "Remove gift")))
 
     return entries
 }
@@ -319,7 +319,7 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
             let isRu = AorusLang.current == .ru
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(isRu ? "Подарок" : "Gift"),
+                title: .text(aorusL("Подарок", "Gift")),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

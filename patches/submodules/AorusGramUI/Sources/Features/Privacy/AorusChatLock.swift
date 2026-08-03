@@ -274,7 +274,7 @@ public func aorusChatLockRequiresAuth(_ accountId: Int64, _ peerId: Int64) -> Bo
 }
 
 public func aorusChatLockHiddenMessageText(_ languageCode: String) -> String {
-    return languageCode.lowercased().hasPrefix("ru") ? "Сообщение скрыто" : "Message hidden"
+    return aorusL("Сообщение скрыто", "Message hidden", AorusLang.resolve(languageCode))
 }
 
 public func aorusChatLockAuthenticate(_ accountId: Int64, _ completion: @escaping (Bool) -> Void) {

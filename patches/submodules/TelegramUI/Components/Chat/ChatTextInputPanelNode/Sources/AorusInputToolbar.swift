@@ -2,6 +2,7 @@ import SwiftUI
 import Foundation
 import UIKit
 import AppBundle
+import AorusGramUI
 
 // AorusGram "Formatting Panel" — a formatting toolbar shown above the keyboard in
 // the chat input. The visual (layout, glass button style, icon set and spacing) is
@@ -213,7 +214,7 @@ struct AorusFormattingToolbarView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .accessibility(label: Text(self.isRussian ? "Поменять языки" : "Swap Languages"))
+                .accessibility(label: Text(aorusL("Поменять языки", "Swap Languages")))
 
                 languageButton(kind: .target, code: self.model.targetLanguageCode)
             }
@@ -229,7 +230,7 @@ struct AorusFormattingToolbarView: View {
                     .foregroundColor(Color(self.model.themeAccentColor))
 
                 TextField(
-                    self.isRussian ? "Введите текст для перевода" : "Enter text to translate",
+                    aorusL("Введите текст для перевода", "Enter text to translate"),
                     text: Binding(
                         get: { self.model.sourceText },
                         set: { value in
@@ -248,7 +249,7 @@ struct AorusFormattingToolbarView: View {
                 } else if self.model.translationFailed {
                     Image(systemName: "exclamationmark.circle.fill")
                         .foregroundColor(Color.orange)
-                        .accessibility(label: Text(self.isRussian ? "Не удалось перевести" : "Translation failed"))
+                        .accessibility(label: Text(aorusL("Не удалось перевести", "Translation failed")))
                 }
 
                 if !self.model.sourceText.isEmpty {
@@ -296,7 +297,7 @@ struct AorusFormattingToolbarView: View {
                 .foregroundColor(self.model.isTranslatorExpanded ? Color(self.model.themeAccentColor) : Color.primary)
         }
         .buttonStyle(AorusToolbarButtonStyle())
-        .accessibility(label: Text(self.isRussian ? "Переводчик" : "Translator"))
+        .accessibility(label: Text(aorusL("Переводчик", "Translator")))
     }
 
     @ViewBuilder
@@ -444,10 +445,10 @@ private enum AorusTranslationLanguage {
     static func localizedName(for code: String, interfaceLanguageCode: String) -> String {
         let isRussian = interfaceLanguageCode.lowercased().hasPrefix("ru")
         if code == "auto" {
-            return isRussian ? "Автоматически" : "Automatic"
+            return aorusL("Автоматически", "Automatic")
         }
         if code == "pt-BR" {
-            return isRussian ? "Португальский (Бразилия)" : "Portuguese (Brazil)"
+            return aorusL("Португальский (Бразилия)", "Portuguese (Brazil)")
         }
         let baseCode = code.split(separator: "-").first.map(String.init) ?? code
         if let fallback = self.fallbackNames[code] {
@@ -458,7 +459,7 @@ private enum AorusTranslationLanguage {
         let englishValue = Locale(identifier: "en").localizedString(forLanguageCode: baseCode)
         let value = localizedValue.flatMap { $0.lowercased() == baseCode.lowercased() ? nil : $0 }
             ?? englishValue.flatMap { $0.lowercased() == baseCode.lowercased() ? nil : $0 }
-            ?? (isRussian ? "Неизвестный язык" : "Unknown Language")
+            ?? (aorusL("Неизвестный язык", "Unknown Language"))
         return value.prefix(1).uppercased() + value.dropFirst()
     }
 }
@@ -491,7 +492,7 @@ private struct AorusTranslationLanguagePicker: View {
                 HStack(spacing: 9) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(Color.secondary)
-                    TextField(self.isRussian ? "Поиск языка" : "Search Languages", text: self.$query)
+                    TextField(aorusL("Поиск языка", "Search Languages"), text: self.$query)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                     if !self.query.isEmpty {
@@ -522,9 +523,9 @@ private struct AorusTranslationLanguagePicker: View {
                 .listStyle(PlainListStyle())
             }
             .navigationBarTitle(self.kind == .source
-                ? (self.isRussian ? "Язык оригинала" : "Source Language")
-                : (self.isRussian ? "Язык перевода" : "Translation Language"), displayMode: .inline)
-            .navigationBarItems(trailing: Button(self.isRussian ? "Готово" : "Done") {
+                ? (aorusL("Язык оригинала", "Source Language"))
+                : (aorusL("Язык перевода", "Translation Language")), displayMode: .inline)
+            .navigationBarItems(trailing: Button(aorusL("Готово", "Done")) {
                 self.presentationMode.wrappedValue.dismiss()
             })
         }

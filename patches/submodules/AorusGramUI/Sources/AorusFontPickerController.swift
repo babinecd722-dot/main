@@ -56,7 +56,7 @@ public enum AorusFontStore {
 
     fileprivate static var presets: [AorusFontChoice] {
         return [
-            AorusFontChoice(id: "system", title: AorusLang.current == .ru ? "Системный / Default" : "System / Default", kind: .system),
+            AorusFontChoice(id: "system", title: aorusL("Системный / Default", "System / Default"), kind: .system),
             AorusFontChoice(id: "rounded", title: "SF Rounded", kind: .systemDesign("rounded")),
             AorusFontChoice(id: "serif", title: "New York Serif", kind: .systemDesign("serif")),
             AorusFontChoice(id: "mono", title: "SF Mono", kind: .systemDesign("monospace")),
@@ -571,7 +571,7 @@ private final class AorusFontPreviewItemNode: ItemListRevealOptionsItemNode {
         titleLabel?.textColor = item.theme.list.itemPrimaryTextColor
         titleLabel?.font = AorusFontStore.previewFont(for: item.choice, size: 17.0, weight: .semibold)
 
-        sampleLabel?.text = AorusLang.current == .ru ? "Aa Bb Аа Бб Яя 123" : "Aa Bb Cc 123"
+        sampleLabel?.text = aorusL("Aa Bb Аа Бб Яя 123", "Aa Bb Cc 123")
         sampleLabel?.textColor = item.theme.list.itemSecondaryTextColor
         sampleLabel?.font = AorusFontStore.previewFont(for: item.choice, size: 14.0, weight: .regular)
 

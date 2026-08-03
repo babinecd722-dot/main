@@ -88,6 +88,21 @@ enum SubscriptionL10nTable {
         "Couldn’t activate. Try again later.": "Не вдалося активувати. Спробуйте пізніше.",
         "Ends today": "Завершується сьогодні",
         "less than a day": "менше ніж день",
+        // Voice transcriber screen.
+        "Transcriber": "Транскриптор",
+        "Recognition language": "Мова розпізнавання",
+        "Recording… Speak now": "Запис... Говоріть",
+        "Tap to record": "Натисніть, щоб записати",
+        "Stop": "Зупинити",
+        "Record": "Записати",
+        "Choose an audio file": "Вибрати аудіофайл",
+        "Transcript": "Транскрипція",
+        "Recognizing…": "Розпізнавання...",
+        "Speech recognition is not permitted. Enable it in Settings.": "Немає дозволу на розпізнавання мовлення. Увімкніть у Налаштуваннях.",
+        "Microphone access is not permitted": "Немає дозволу на мікрофон",
+        "Could not start the audio session: %@": "Не вдалося активувати аудіосесію: %@",
+        "No recognizer is available for %@": "Розпізнавач для мови %@ недоступний",
+        "Could not start recording: %@": "Не вдалося запустити запис: %@",
     ]
 
     private static let es: [String: String] = [
@@ -142,6 +157,21 @@ enum SubscriptionL10nTable {
         "Couldn’t activate. Try again later.": "No se pudo activar. Inténtalo más tarde.",
         "Ends today": "Termina hoy",
         "less than a day": "menos de un día",
+        // Voice transcriber screen.
+        "Transcriber": "Transcriptor",
+        "Recognition language": "Idioma de reconocimiento",
+        "Recording… Speak now": "Grabando… Habla",
+        "Tap to record": "Toca para grabar",
+        "Stop": "Detener",
+        "Record": "Grabar",
+        "Choose an audio file": "Elegir un archivo de audio",
+        "Transcript": "Transcripción",
+        "Recognizing…": "Reconociendo…",
+        "Speech recognition is not permitted. Enable it in Settings.": "No hay permiso de reconocimiento de voz. Actívalo en Ajustes.",
+        "Microphone access is not permitted": "No hay permiso de micrófono",
+        "Could not start the audio session: %@": "No se pudo iniciar la sesión de audio: %@",
+        "No recognizer is available for %@": "No hay reconocedor disponible para %@",
+        "Could not start recording: %@": "No se pudo iniciar la grabación: %@",
     ]
 
     private static let pt: [String: String] = [
@@ -196,6 +226,21 @@ enum SubscriptionL10nTable {
         "Couldn’t activate. Try again later.": "Não foi possível ativar. Tente mais tarde.",
         "Ends today": "Termina hoje",
         "less than a day": "menos de um dia",
+        // Voice transcriber screen.
+        "Transcriber": "Transcritor",
+        "Recognition language": "Idioma de reconhecimento",
+        "Recording… Speak now": "Gravando… Fale agora",
+        "Tap to record": "Toque para gravar",
+        "Stop": "Parar",
+        "Record": "Gravar",
+        "Choose an audio file": "Escolher um arquivo de áudio",
+        "Transcript": "Transcrição",
+        "Recognizing…": "Reconhecendo…",
+        "Speech recognition is not permitted. Enable it in Settings.": "Não há permissão de reconhecimento de fala. Ative nos Ajustes.",
+        "Microphone access is not permitted": "Não há permissão de microfone",
+        "Could not start the audio session: %@": "Não foi possível iniciar a sessão de áudio: %@",
+        "No recognizer is available for %@": "Nenhum reconhecedor disponível para %@",
+        "Could not start recording: %@": "Não foi possível iniciar a gravação: %@",
     ]
 
     private static let de: [String: String] = [
@@ -250,6 +295,21 @@ enum SubscriptionL10nTable {
         "Couldn’t activate. Try again later.": "Aktivierung nicht möglich. Versuche es später erneut.",
         "Ends today": "Endet heute",
         "less than a day": "weniger als ein Tag",
+        // Voice transcriber screen.
+        "Transcriber": "Transkriptor",
+        "Recognition language": "Erkennungssprache",
+        "Recording… Speak now": "Aufnahme läuft … Sprich jetzt",
+        "Tap to record": "Zum Aufnehmen tippen",
+        "Stop": "Stopp",
+        "Record": "Aufnehmen",
+        "Choose an audio file": "Audiodatei auswählen",
+        "Transcript": "Transkript",
+        "Recognizing…": "Erkennung läuft …",
+        "Speech recognition is not permitted. Enable it in Settings.": "Keine Berechtigung für Spracherkennung. Aktiviere sie in den Einstellungen.",
+        "Microphone access is not permitted": "Keine Berechtigung für das Mikrofon",
+        "Could not start the audio session: %@": "Die Audiositzung konnte nicht gestartet werden: %@",
+        "No recognizer is available for %@": "Für %@ ist keine Erkennung verfügbar",
+        "Could not start recording: %@": "Die Aufnahme konnte nicht gestartet werden: %@",
     ]
 
     private static let fr: [String: String] = [
@@ -304,6 +364,21 @@ enum SubscriptionL10nTable {
         "Couldn’t activate. Try again later.": "Activation impossible. Réessayez plus tard.",
         "Ends today": "Se termine aujourd’hui",
         "less than a day": "moins d’un jour",
+        // Voice transcriber screen.
+        "Transcriber": "Transcripteur",
+        "Recognition language": "Langue de reconnaissance",
+        "Recording… Speak now": "Enregistrement… Parlez",
+        "Tap to record": "Touchez pour enregistrer",
+        "Stop": "Arrêter",
+        "Record": "Enregistrer",
+        "Choose an audio file": "Choisir un fichier audio",
+        "Transcript": "Transcription",
+        "Recognizing…": "Reconnaissance…",
+        "Speech recognition is not permitted. Enable it in Settings.": "La reconnaissance vocale n’est pas autorisée. Activez-la dans les Réglages.",
+        "Microphone access is not permitted": "Le micro n’est pas autorisé",
+        "Could not start the audio session: %@": "Impossible de démarrer la session audio : %@",
+        "No recognizer is available for %@": "Aucun moteur de reconnaissance disponible pour %@",
+        "Could not start recording: %@": "Impossible de démarrer l’enregistrement : %@",
     ]
 
     private static let tr: [String: String] = [
@@ -358,5 +433,20 @@ enum SubscriptionL10nTable {
         "Couldn’t activate. Try again later.": "Etkinleştirilemedi. Daha sonra tekrar dene.",
         "Ends today": "Bugün sona eriyor",
         "less than a day": "bir günden az",
+        // Voice transcriber screen.
+        "Transcriber": "Deşifre aracı",
+        "Recognition language": "Tanıma dili",
+        "Recording… Speak now": "Kaydediliyor… Konuşun",
+        "Tap to record": "Kaydetmek için dokunun",
+        "Stop": "Durdur",
+        "Record": "Kaydet",
+        "Choose an audio file": "Ses dosyası seç",
+        "Transcript": "Deşifre",
+        "Recognizing…": "Tanınıyor…",
+        "Speech recognition is not permitted. Enable it in Settings.": "Konuşma tanıma izni yok. Ayarlar’dan açın.",
+        "Microphone access is not permitted": "Mikrofon izni yok",
+        "Could not start the audio session: %@": "Ses oturumu başlatılamadı: %@",
+        "No recognizer is available for %@": "%@ için tanıyıcı yok",
+        "Could not start recording: %@": "Kayıt başlatılamadı: %@",
     ]
 }

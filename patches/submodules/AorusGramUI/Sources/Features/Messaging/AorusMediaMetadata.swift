@@ -466,8 +466,11 @@ public enum AorusMediaMetadata {
         return formatter.string(from: date)
     }
 
+    // The isRu argument is what the ~90 call sites below already pass; the language now
+    // comes from aorusL so every one of them gains the other six languages without being
+    // touched. Keeping the parameter avoids rewriting each call for no behavioural gain.
     private static func title(_ ru: String, _ en: String, _ isRu: Bool) -> String {
-        return isRu ? ru : en
+        return aorusL(ru, en)
     }
 }
 
@@ -479,7 +482,7 @@ private final class AorusMediaMetadataViewController: UIViewController, UITableV
     init(isRu: Bool) {
         self.isRu = isRu
         super.init(nibName: nil, bundle: nil)
-        self.title = isRu ? "Метаданные" : "Metadata"
+        self.title = aorusL("Метаданные", "Metadata")
     }
 
     required init?(coder: NSCoder) {
@@ -489,14 +492,14 @@ private final class AorusMediaMetadataViewController: UIViewController, UITableV
     override func viewDidLoad() {
         super.viewDidLoad()
         self.view.backgroundColor = .systemGroupedBackground
-        self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: isRu ? "Готово" : "Done", style: .done, target: self, action: #selector(close))
-        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: isRu ? "Копировать" : "Copy", style: .plain, target: self, action: #selector(copyAll))
+        self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: aorusL("Готово", "Done"), style: .done, target: self, action: #selector(close))
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: aorusL("Копировать", "Copy"), style: .plain, target: self, action: #selector(copyAll))
         self.tableView.dataSource = self
         self.tableView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         self.tableView.frame = self.view.bounds
         self.view.addSubview(self.tableView)
         self.sections = [AorusMetadataSection(title: "", rows: [
-            AorusMetadataRow(title: isRu ? "Статус" : "Status", value: isRu ? "чтение..." : "reading...")
+            AorusMetadataRow(title: aorusL("Статус", "Status"), value: aorusL("чтение...", "reading..."))
         ])]
     }
 
@@ -508,7 +511,7 @@ private final class AorusMediaMetadataViewController: UIViewController, UITableV
     func replaceLocationRows(_ rows: [AorusMetadataRow]) {
         guard let index = self.sections.firstIndex(where: { $0.title == "GPS" }) else { return }
         var section = self.sections[index]
-        let otherRows = section.rows.filter { $0.title != (isRu ? "Координаты" : "Coordinates") && $0.title != (isRu ? "Город" : "City") }
+        let otherRows = section.rows.filter { $0.title != (aorusL("Координаты", "Coordinates")) && $0.title != (aorusL("Город", "City")) }
         section.rows = rows + otherRows
         self.sections[index] = section
         self.tableView.reloadSections(IndexSet(integer: index), with: .automatic)

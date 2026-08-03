@@ -830,8 +830,7 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
         "                    guard let aorusText = aorusReplyText, aorusText.hasSuffix(\"\\u{2063}\\u{2064}\") else { return nil }\n"
         "                    var aorusQuoted = String(aorusText.dropLast(2))\n"
         "                    if aorusQuoted.isEmpty {\n"
-        "                        let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-        "                        aorusQuoted = aorusRu ? \"Медиафайл\" : \"Media\"\n"
+        "                        aorusQuoted = aorusL(\"Медиафайл\", \"Media\")\n"
         "                    }\n"
         "                    let aorusQuote = NSMutableAttributedString(string: aorusQuoted)\n"
         "                    aorusQuote.addAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: true), range: NSRange(location: 0, length: aorusQuote.length))\n"
@@ -1110,9 +1109,21 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                        // AorusGram: rebuild the FULL edit history with proper labels.\n"
                 "                        // Bottom (oldest) = Оригинал:, newer versions above = Изменение #N.\n"
                 "                        // Bold on EVERY label, one BlockQuote around the whole history.\n"
-                "                        let aorusRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\")\n"
-                "                        let aorusOriginalLabel = aorusRu ? \"Оригинал:\" : \"Original:\"\n"
-                "                        let aorusHistPattern = \"\\n(?:Оригинал:|Original:|Изменение #\\\\d+:|Change #\\\\d+:)\\n\"\n"
+                # The labels below are written into the message text and stay there. The
+                # detector has to recognise every language ever written, so both the labels
+                # and the pattern come from the same two dictionaries — a label the pattern
+                # cannot match would make the full history append itself again on every edit.
+                # TelegramCore sits below AorusGramUI and cannot call aorusL(), so the
+                # language is read from the key AppDelegate publishes.
+                "                        let aorusLangRaw = (UserDefaults.standard.string(forKey: \"aorusgram_lang_code\") ?? UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? \"en\").lowercased()\n"
+                "                        let aorusLangBase = String(aorusLangRaw.prefix(while: { $0 != \"-\" && $0 != \"_\" }))\n"
+                "                        let aorusOriginalLabels: [String: String] = [\"en\": \"Original:\", \"ru\": \"Оригинал:\", \"uk\": \"Оригінал:\", \"es\": \"Original:\", \"pt\": \"Original:\", \"de\": \"Original:\", \"fr\": \"Original :\", \"tr\": \"Orijinal:\"]\n"
+                "                        let aorusChangeLabels: [String: String] = [\"en\": \"Change #%@:\", \"ru\": \"Изменение #%@:\", \"uk\": \"Зміна #%@:\", \"es\": \"Cambio n.º %@:\", \"pt\": \"Alteração n.º %@:\", \"de\": \"Änderung #%@:\", \"fr\": \"Modification n° %@ :\", \"tr\": \"Değişiklik #%@:\"]\n"
+                "                        let aorusOriginalLabel = aorusOriginalLabels[aorusLangBase] ?? \"Original:\"\n"
+                "                        let aorusChangeTemplate = aorusChangeLabels[aorusLangBase] ?? \"Change #%@:\"\n"
+                "                        let aorusOriginalAlternatives = aorusOriginalLabels.values.map { NSRegularExpression.escapedPattern(for: $0) }\n"
+                "                        let aorusChangeAlternatives = aorusChangeLabels.values.map { NSRegularExpression.escapedPattern(for: $0).replacingOccurrences(of: \"%@\", with: \"\\\\d+\") }\n"
+                "                        let aorusHistPattern = \"\\n(?:\" + (aorusOriginalAlternatives + aorusChangeAlternatives).joined(separator: \"|\") + \")\\n\"\n"
                 "                        if currentMessage.text.range(of: aorusHistPattern, options: .regularExpression) != nil { return .skip }\n"
                 "                        let aorusPrevFull = prev.text\n"
                 "                        let aorusFlat: String\n"
@@ -1128,7 +1139,7 @@ def patch_deleted_messages_interception(tg: Path) -> None:
                 "                        for attr in currentMessage.attributes { if let te = attr as? TextEntitiesMessageAttribute { aorusEntities.append(contentsOf: te.entities) } }\n"
                 "                        var aorusQuoteStart = -1\n"
                 "                        for (aorusIdx, aorusVer) in aorusVersions.enumerated() {\n"
-                "                            let aorusLabel = (aorusIdx == aorusCount - 1) ? aorusOriginalLabel : (aorusRu ? \"Изменение #\\(aorusCount - aorusIdx):\" : \"Change #\\(aorusCount - aorusIdx):\")\n"
+                "                            let aorusLabel = (aorusIdx == aorusCount - 1) ? aorusOriginalLabel : aorusChangeTemplate.replacingOccurrences(of: \"%@\", with: \"\\(aorusCount - aorusIdx)\")\n"
                 "                            newText += \"\\n\"\n"
                 "                            let aorusLabelLoc = (newText as NSString).length\n"
                 "                            if aorusQuoteStart < 0 { aorusQuoteStart = aorusLabelLoc }\n"
@@ -2257,7 +2268,6 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
         "            let aorusSavedType = UserDefaults.standard.string(forKey: aorusKeyType)\n"
         "            let aorusIsTranslated = aorusSavedType == \"translation\"\n"
         "            let aorusIsTranscribed = aorusSavedType == \"transcription\"\n"
-        "            let aorusUiRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
         "            var aorusVoiceFile: TelegramMediaFile?\n"
         "            for aorusMedia in aorusMsg.media {\n"
         "                if let f = aorusMedia as? TelegramMediaFile, f.isVoice {\n"
@@ -2271,7 +2281,7 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
         "            //    key that is never set, so the menu item is gone without a dead-code warning.\n"
         "            if UserDefaults.standard.bool(forKey: \"aorusgram_translate_menu_removed_never\") {\n"
         "                if aorusIsTranslated, let aorusOrig = aorusSavedText {\n"
-        "                    actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Оригинал\" : \"Original\", icon: { theme in\n"
+        "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Оригинал\", \"Original\"), icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: theme.actionSheet.primaryTextColor)\n"
         "                    }, action: { [weak context] action in\n"
         "                        action.dismissWithResult(.default)\n"
@@ -2287,7 +2297,7 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
         "                        UserDefaults.standard.removeObject(forKey: aorusKeyType)\n"
         "                    })))\n"
         "                } else if !aorusBody.isEmpty && !aorusIsTranscribed {\n"
-        "                    actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Перевод\" : \"Translate\", icon: { theme in\n"
+        "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Перевод\", \"Translate\"), icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: theme.actionSheet.primaryTextColor)\n"
         "                    }, action: { [weak context] action in\n"
         "                        action.dismissWithResult(.default)\n"
@@ -2322,7 +2332,7 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
         "            //    set, so the menu item is gone without a dead-code warning.\n"
         "            if UserDefaults.standard.bool(forKey: \"aorusgram_transcribe_menu_removed_never\"), let aorusVoiceFile = aorusVoiceFile {\n"
         "                if aorusIsTranscribed, let aorusOrig = aorusSavedText {\n"
-        "                    actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Скрыть расшифровку\" : \"Hide Transcription\", icon: { theme in\n"
+        "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Скрыть расшифровку\", \"Hide Transcription\"), icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: theme.actionSheet.primaryTextColor)\n"
         "                    }, action: { [weak context] action in\n"
         "                        action.dismissWithResult(.default)\n"
@@ -2337,7 +2347,7 @@ def patch_chat_context_menu_translate_transcribe(tg: Path) -> None:
         "                        UserDefaults.standard.removeObject(forKey: aorusKeyType)\n"
         "                    })))\n"
         "                } else if !aorusIsTranslated {\n"
-        "                    actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Расшифровка\" : \"Voice to Text\", icon: { theme in\n"
+        "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Расшифровка\", \"Voice to Text\"), icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Translate\"), color: theme.actionSheet.primaryTextColor)\n"
         "                    }, action: { [weak context] action in\n"
         "                        action.dismissWithResult(.default)\n"
@@ -2443,7 +2453,6 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                     "            let aorusEditMsg = messages[0]\n"
                     "            let aorusEditMid = aorusEditMsg.id\n"
                     "            let aorusEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
-                    "            let aorusEditRu = aorusEditLang.hasPrefix(\"ru\")\n"
                     "            let aorusEditKey = \"aorusgram_local_edit_\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\"\n"
                     "            let aorusEditIsSticker = aorusEditMsg.media.contains(where: { media in\n"
                     "                guard let file = media as? TelegramMediaFile else { return false }\n"
@@ -2452,7 +2461,7 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                     "            if !aorusEditIsSticker {\n"
                     "                let aorusEditOrig = UserDefaults.standard.string(forKey: aorusEditKey)\n"
                     "                if let aorusEditOrig = aorusEditOrig {\n"
-                    "                    actions.append(.action(ContextMenuActionItem(text: aorusEditRu ? \"Оригинал\" : \"Original\", icon: { theme in\n"
+                    "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Оригинал\", \"Original\"), icon: { theme in\n"
                     "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
                     "                    }, action: { [weak context] action in\n"
                     "                        action.dismissWithResult(.default)\n"
@@ -2467,7 +2476,7 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                     "                        UserDefaults.standard.removeObject(forKey: aorusEditKey)\n"
                     "                    })))\n"
                     "                } else {\n"
-                    "                    actions.append(.action(ContextMenuActionItem(text: aorusEditRu ? \"Изменить локально\" : \"Edit Locally\", icon: { theme in\n"
+                    "                    actions.append(.action(ContextMenuActionItem(text: aorusL(\"Изменить локально\", \"Edit Locally\"), icon: { theme in\n"
                     "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Edit\"), color: theme.actionSheet.primaryTextColor)\n"
                     "                    }, action: { action, f in\n"
                     "                        UserDefaults.standard.set(\"\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\", forKey: \"aorusgram_local_edit_active_message\")\n"
@@ -2606,7 +2615,7 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "        let aorusLocalEditToken = \"\\(self.messageId.peerId.toInt64())_\\(self.messageId.id)\"\n"
                 "        if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
                 "            let aorusLocalEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
-                "            titleString = aorusLocalEditLang.hasPrefix(\"ru\") ? \"Изменить локально\" : \"Edit Locally\"\n"
+                "            titleString = aorusL(\"Изменить локально\", \"Edit Locally\")\n"
                 "        } else if let message, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
             )
             if title_anchor in title_text:
@@ -2642,7 +2651,7 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "                let aorusLocalEditToken = \"\\(edit.id.peerId.toInt64())_\\(edit.id.id)\"\n"
                 "                if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
                 "                    let aorusLocalEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
-                "                    titleStringValue = aorusLocalEditLang.hasPrefix(\"ru\") ? \"Изменить локально\" : \"Edit Locally\"\n"
+                "                    titleStringValue = aorusL(\"Изменить локально\", \"Edit Locally\")\n"
                 "                } else if let message = self.messages.first, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
             )
             if component_anchor in component_text or component_sentinel in component_text:
@@ -2715,8 +2724,7 @@ def patch_chat_context_menu_media_metadata(tg: Path) -> None:
         "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_media_metadata_enabled\") {\n"
         "            let aorusMetaMsg = messages[0]\n"
         "            if AorusMediaMetadata.hasSupportedMedia(aorusMetaMsg) {\n"
-        "                let aorusMetaRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-        "                actions.append(.action(ContextMenuActionItem(text: aorusMetaRu ? \"Метаданные\" : \"Metadata\", icon: { theme in\n"
+        "                actions.append(.action(ContextMenuActionItem(text: aorusL(\"Метаданные\", \"Metadata\"), icon: { theme in\n"
         "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/ImageEnlarge\"), color: theme.actionSheet.primaryTextColor)\n"
         "                }, action: { [weak context] action in\n"
         "                    action.dismissWithResult(.default)\n"
@@ -2842,8 +2850,7 @@ def patch_chat_context_menu_hide_name_forward(tg: Path) -> None:
     injection = (
         "        " + sentinel + "\n"
         "        if data.messageActions.options.contains(.forward) {\n"
-        "            let aorusFwdRu = UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\"\n"
-        "            actions.append(.action(ContextMenuActionItem(text: aorusFwdRu ? \"Скрыть имя\" : \"Hide Name\", icon: { theme in\n"
+        "            actions.append(.action(ContextMenuActionItem(text: aorusL(\"Скрыть имя\", \"Hide Name\"), icon: { theme in\n"
         "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Forward\"), color: theme.actionSheet.primaryTextColor)\n"
         "            }, action: { action in\n"
         "                UserDefaults.standard.set(true, forKey: \"aorusgram_force_hide_fwd\")\n"
@@ -3410,8 +3417,6 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            guard let app = self?.contextValue else { return }\n"
         "            let now = Date().timeIntervalSince1970\n"
         "            let presentationData = app.context.sharedContext.currentPresentationData.with { $0 }\n"
-        "            let lang = presentationData.strings.baseLanguageCode.lowercased()\n"
-        "            let isRu = lang == \"ru\" || lang.hasPrefix(\"ru-\")\n"
         "            let reason = (note.userInfo?[\"reason\"] as? String) ?? \"\"\n"
         "            let aorusPeerId = (note.userInfo?[\"peerId\"] as? NSNumber)?.int64Value ?? 0\n"
         "            let aorusMsgId = (note.userInfo?[\"msgId\"] as? NSNumber)?.int32Value ?? 0\n"
@@ -3445,27 +3450,27 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "            let iconName: String\n"
         "            let iconColor: UIColor\n"
         "            if isThreat {\n"
-        "                title = isRu ? \"Обнаружена угроза\" : \"Threat detected\"\n"
+        "                title = aorusL(\"Обнаружена угроза\", \"Threat detected\")\n"
         "                if aorusAutoReport {\n"
-        "                    text = isRu ? \"Жалоба отправится автоматически. Нажмите «Отменить», чтобы остановить\" : \"A report will be sent automatically. Tap Cancel to stop\"\n"
+        "                    text = aorusL(\"Жалоба отправится автоматически. Нажмите «Отменить», чтобы остановить\", \"A report will be sent automatically. Tap Cancel to stop\")\n"
         "                } else {\n"
-        "                    text = isRu ? \"Нажмите «Пожаловаться», чтобы отправить жалобу\" : \"Tap Report to send a complaint\"\n"
+        "                    text = aorusL(\"Нажмите «Пожаловаться», чтобы отправить жалобу\", \"Tap Report to send a complaint\")\n"
         "                }\n"
         "                iconName = \"exclamationmark.shield.fill\"\n"
         "                iconColor = UIColor.white\n"
         "            } else if isBlocked {\n"
-        "                title = isRu ? \"Заблокировано\" : \"Blocked\"\n"
-        "                text = isRu ? \"Спам от заблокированного отправителя скрыт\" : \"Spam from a blocked sender was hidden\"\n"
+        "                title = aorusL(\"Заблокировано\", \"Blocked\")\n"
+        "                text = aorusL(\"Спам от заблокированного отправителя скрыт\", \"Spam from a blocked sender was hidden\")\n"
         "                iconName = \"nosign\"\n"
         "                iconColor = UIColor.white\n"
         "            } else if isFlood {\n"
-        "                title = isRu ? \"Флуд скрыт\" : \"Flood hidden\"\n"
-        "                text = isRu ? \"Повторяющийся спам скрыт\" : \"Repeated spam was hidden\"\n"
+        "                title = aorusL(\"Флуд скрыт\", \"Flood hidden\")\n"
+        "                text = aorusL(\"Повторяющийся спам скрыт\", \"Repeated spam was hidden\")\n"
         "                iconName = \"square.stack.3d.up.slash.fill\"\n"
         "                iconColor = UIColor.white\n"
         "            } else {\n"
-        "                title = isRu ? \"Антиспам\" : \"Anti-spam\"\n"
-        "                text = isRu ? \"Спам скрыт\" : \"Spam was hidden\"\n"
+        "                title = aorusL(\"Антиспам\", \"Anti-spam\")\n"
+        "                text = aorusL(\"Спам скрыт\", \"Spam was hidden\")\n"
         "                iconName = \"hand.raised.slash.fill\"\n"
         "                iconColor = UIColor.white\n"
         "            }\n"
@@ -3482,7 +3487,7 @@ def patch_app_delegate_anti_spam_toast(tg: Path) -> None:
         "                    image.draw(in: rect)\n"
         "                }\n"
         "            }()\n"
-        "            let aorusReportText: String? = isThreat ? (aorusAutoReport ? (isRu ? \"Отменить\" : \"Cancel\") : (isRu ? \"Пожаловаться\" : \"Report\")) : nil\n"
+        "            let aorusReportText: String? = isThreat ? (aorusAutoReport ? (aorusL(\"Отменить\", \"Cancel\")) : (aorusL(\"Пожаловаться\", \"Report\"))) : nil\n"
         "            if let controller = app.rootController.viewControllers.last as? ViewController {\n"
         "                controller.present(\n"
         "                    UndoOverlayController(\n"
@@ -5512,7 +5517,7 @@ def patch_conversation_export(tg: Path) -> None:
     # for every chat type (only one branch executes at a time).
     anchor = "                    let clearPeerHistory = ClearPeerHistory(context: strongSelf.context, peer: "
     item = (
-        "                    items.append(.action(ContextMenuActionItem(text: (UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\") ? \"Экспорт чата\" : \"Export Chat\", icon: { theme in\n"
+        "                    items.append(.action(ContextMenuActionItem(text: aorusL(\"Экспорт чата\", \"Export Chat\"), icon: { theme in\n"
         "                        return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Download\"), color: theme.contextMenu.primaryColor)\n"
         "                    }, action: { [weak self] _, f in\n"
         "                        f(.dismissWithoutContent)\n"
@@ -5571,13 +5576,13 @@ def patch_profile_report_button(tg: Path) -> None:
         "                            }\n"
         "                            aorusSheet.setItemGroups([\n"
         "                                ActionSheetItemGroup(items: [\n"
-        "                                    ActionSheetTextItem(title: aorusRu ? \"\\u{041f}\\u{043e}\\u{0436}\\u{0430}\\u{043b}\\u{043e}\\u{0432}\\u{0430}\\u{0442}\\u{044c}\\u{0441}\\u{044f}\" : \"Report\"),\n"
-        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{0421}\\u{043f}\\u{0430}\\u{043c}\" : \"Spam\", action: { aorusDismiss(); aorusDoReport(.spam) }),\n"
-        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041d}\\u{0430}\\u{0441}\\u{0438}\\u{043b}\\u{0438}\\u{0435}\" : \"Violence\", action: { aorusDismiss(); aorusDoReport(.violence) }),\n"
-        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041f}\\u{043e}\\u{0440}\\u{043d}\\u{043e}\\u{0433}\\u{0440}\\u{0430}\\u{0444}\\u{0438}\\u{044f}\" : \"Pornography\", action: { aorusDismiss(); aorusDoReport(.porno) }),\n"
-        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041d}\\u{0430}\\u{0441}\\u{0438}\\u{043b}\\u{0438}\\u{0435} \\u{043d}\\u{0430}\\u{0434} \\u{0434}\\u{0435}\\u{0442}\\u{044c}\\u{043c}\\u{0438}\" : \"Child Abuse\", action: { aorusDismiss(); aorusDoReport(.childAbuse) }),\n"
-        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041d}\\u{0430}\\u{0440}\\u{043a}\\u{043e}\\u{0442}\\u{0438}\\u{043a}\\u{0438}\" : \"Illegal Drugs\", action: { aorusDismiss(); aorusDoReport(.illegalDrugs) }),\n"
-        "                                    ActionSheetButtonItem(title: aorusRu ? \"\\u{041b}\\u{0438}\\u{0447}\\u{043d}\\u{044b}\\u{0435} \\u{0434}\\u{0430}\\u{043d}\\u{043d}\\u{044b}\\u{0435}\" : \"Personal Details\", action: { aorusDismiss(); aorusDoReport(.personalDetails) })\n"
+        "                                    ActionSheetTextItem(title: aorusL(\"\\u{041f}\\u{043e}\\u{0436}\\u{0430}\\u{043b}\\u{043e}\\u{0432}\\u{0430}\\u{0442}\\u{044c}\\u{0441}\\u{044f}\", \"Report\")),\n"
+        "                                    ActionSheetButtonItem(title: aorusL(\"\\u{0421}\\u{043f}\\u{0430}\\u{043c}\", \"Spam\"), action: { aorusDismiss(); aorusDoReport(.spam) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusL(\"\\u{041d}\\u{0430}\\u{0441}\\u{0438}\\u{043b}\\u{0438}\\u{0435}\", \"Violence\"), action: { aorusDismiss(); aorusDoReport(.violence) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusL(\"\\u{041f}\\u{043e}\\u{0440}\\u{043d}\\u{043e}\\u{0433}\\u{0440}\\u{0430}\\u{0444}\\u{0438}\\u{044f}\", \"Pornography\"), action: { aorusDismiss(); aorusDoReport(.porno) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusL(\"\\u{041d}\\u{0430}\\u{0441}\\u{0438}\\u{043b}\\u{0438}\\u{0435} \\u{043d}\\u{0430}\\u{0434} \\u{0434}\\u{0435}\\u{0442}\\u{044c}\\u{043c}\\u{0438}\", \"Child Abuse\"), action: { aorusDismiss(); aorusDoReport(.childAbuse) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusL(\"\\u{041d}\\u{0430}\\u{0440}\\u{043a}\\u{043e}\\u{0442}\\u{0438}\\u{043a}\\u{0438}\", \"Illegal Drugs\"), action: { aorusDismiss(); aorusDoReport(.illegalDrugs) }),\n"
+        "                                    ActionSheetButtonItem(title: aorusL(\"\\u{041b}\\u{0438}\\u{0447}\\u{043d}\\u{044b}\\u{0435} \\u{0434}\\u{0430}\\u{043d}\\u{043d}\\u{044b}\\u{0435}\", \"Personal Details\"), action: { aorusDismiss(); aorusDoReport(.personalDetails) })\n"
         "                                ]),\n"
         "                                ActionSheetItemGroup(items: [ActionSheetButtonItem(title: aorusPD.strings.Common_Cancel, color: .accent, font: .bold, action: { aorusDismiss() })])\n"
         "                            ])\n"
@@ -5920,9 +5925,8 @@ def patch_user_messages_feature(tg: Path) -> None:
         "        var actions: [ContextMenuItem] = []\n"
         "\n"
         "        if case let .customChatContents(aorusContents) = chatPresentationInterfaceState.subject, aorusContents is AorusUserMessagesChatContents, let aorusMsg = messages.first {\n"
-        "            let aorusUiRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
         "            var aorusItems: [ContextMenuItem] = []\n"
-        "            aorusItems.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Перейти к сообщению\" : \"Go to Message\", icon: { theme in\n"
+        "            aorusItems.append(.action(ContextMenuActionItem(text: aorusL(\"Перейти к сообщению\", \"Go to Message\"), icon: { theme in\n"
         "                return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/GoToMessage\"), color: theme.actionSheet.primaryTextColor)\n"
         "            }, action: { c, _ in\n"
         "                c?.dismiss(completion: {\n"
@@ -5956,8 +5960,7 @@ def patch_user_messages_feature(tg: Path) -> None:
         "                aorusIsGroup = true\n"
         "            }\n"
         "            if aorusIsGroup {\n"
-        "                let aorusUiRu = (UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")).hasPrefix(\"ru\")\n"
-        "                actions.append(.action(ContextMenuActionItem(text: aorusUiRu ? \"Сообщения пользователя\" : \"User's Messages\", icon: { theme in\n"
+        "                actions.append(.action(ContextMenuActionItem(text: aorusL(\"Сообщения пользователя\", \"User's Messages\"), icon: { theme in\n"
         "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/GoToMessage\"), color: theme.actionSheet.primaryTextColor)\n"
         "                }, action: { c, _ in\n"
         "                    c?.dismiss(completion: {\n"
@@ -6777,6 +6780,8 @@ def patch_alternate_icons(tg: Path) -> None:
                 t,
             )
         # Remove any previously-injected language flag line (idempotent re-inject below).
+        # aorusL() reads the Telegram language itself, so no per-item flag is injected any
+        # more. The line is still removed below so an older patched tree does not keep it.
         flag_line = (
             '                            let aorusIsRu = item.strings.baseLanguageCode == "ru" '
             '|| item.strings.baseLanguageCode.hasPrefix("ru-")\n'
@@ -6786,11 +6791,10 @@ def patch_alternate_icons(tg: Path) -> None:
 
         if old_default in t and switch_line in t:
             # Inject the RU/EN selector once, right before the switch.
-            t = t.replace(switch_line, flag_line + switch_line, 1)
             # Localized cases: each name follows the in-app Telegram language.
             new_cases = "".join(
                 f'                                case "{n}":\n'
-                f'                                    name = aorusIsRu ? "{ru}" : "{en}"\n'
+                f'                                    name = aorusL("{ru}", "{en}")\n'
                 for n, ru, en, _ in ICONS
             )
             t = t.replace(old_default, new_cases + old_default, 1)
@@ -6998,6 +7002,121 @@ def _add_aorus_build_dep(build_path: Path) -> None:
         print(f"Badges: added AorusBadge dep to {build_path.parent.name} BUILD")
     else:
         print(f"Badges: WARNING {build_path.parent.name} BUILD needle not found")
+
+
+def _add_aorusgramui_build_dep(tg: Path, package: str, label: str) -> bool:
+    """Give a module access to aorusL()/AorusL10nTable (idempotent).
+
+    AorusGramUI owns the single translation table the whole client reads, so any module
+    that shows AorusGram strings needs the dep. AorusGramUI itself depends on none of
+    these packages, so no cycle is possible.
+
+    Returns True when the dep is present afterwards. The caller must not add the import
+    unless it is — an import without the dep does not fail softly, it fails the build.
+    """
+    build_path = tg / package / "BUILD"
+    if not build_path.is_file():
+        print(f"L10n: {package} BUILD not found — skipped")
+        return False
+    bt = build_path.read_text(encoding="utf-8")
+    if "//submodules/AorusGramUI" in bt:
+        return True
+    for needle in (
+        f'        "{label}",\n',
+        '        "//submodules/Display",\n',
+        '        "//submodules/Display:Display",\n',
+    ):
+        if needle in bt:
+            bt = bt.replace(needle, needle + '        "//submodules/AorusGramUI",\n', 1)
+            build_path.write_text(bt, encoding="utf-8")
+            print(f"L10n: added AorusGramUI dep to {package}")
+            return True
+    # Last resort: the first deps list in the file. Every swift_library has one, so this
+    # only misses if the BUILD has no deps at all.
+    match = re.search(r"^(\s*)deps = \[\n", bt, re.M)
+    if match:
+        indent = match.group(1) + "    "
+        bt = (
+            bt[: match.end()]
+            + f'{indent}"//submodules/AorusGramUI",\n'
+            + bt[match.end() :]
+        )
+        build_path.write_text(bt, encoding="utf-8")
+        print(f"L10n: added AorusGramUI dep to {package} (deps anchor)")
+        return True
+    print(f"L10n: WARNING — no dep anchor in {package} BUILD, translations will not build")
+    return False
+
+
+def _ensure_aorusgramui_import(path: Path) -> None:
+    """Make aorusL() visible in a patched Telegram file (idempotent)."""
+    if not path.is_file():
+        return
+    t = path.read_text(encoding="utf-8")
+    if "import AorusGramUI" in t:
+        return
+    marker = "\nimport "
+    index = t.find(marker)
+    if index < 0:
+        print(f"L10n: WARNING — no import block in {path.name}, aorusL will not resolve")
+        return
+    t = t[: index + 1] + "import AorusGramUI\n" + t[index + 1 :]
+    path.write_text(t, encoding="utf-8")
+    print(f"L10n: added import AorusGramUI to {path.name}")
+
+
+def patch_translation_deps(tg: Path) -> None:
+    """Modules outside AorusGramUI that render AorusGram strings.
+
+    Every AorusGram string in the client resolves through one table that lives in
+    AorusGramUI, so the modules the patches inject strings into need both the Bazel dep
+    and the import. AorusGramUI depends on none of these packages, so no cycle is
+    possible. TelegramCore is deliberately absent: it sits below AorusGramUI and its two
+    edit-history labels are resolved locally instead.
+
+    The import is only added when the dep is in place — an import without it is a build
+    failure, while skipping both merely leaves that one screen in English.
+    """
+    # TelegramUI, SettingsUI and WallpaperGridScreen already carry the dep from earlier
+    # patches; the rest are added here.
+    packages = {
+        "submodules/TelegramUI": [
+            "Sources/AppDelegate.swift",
+            "Sources/ChatControllerNode.swift",
+            "Sources/ChatControllerContentData.swift",
+            "Sources/ChatInterfaceStateContextMenus.swift",
+            "Sources/EditAccessoryPanelNode.swift",
+        ],
+        "submodules/SettingsUI": [
+            "Sources/Themes/ThemeSettingsController.swift",
+            "Sources/Themes/ThemeSettingsAppIconItem.swift",
+        ],
+        "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen": [
+            "Sources/PeerInfoScreenPerformButtonAction.swift",
+        ],
+        "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode": [
+            "Sources/PeerInfoGiftsPaneNode.swift",
+        ],
+        "submodules/TelegramUI/Components/Stars/StarsPurchaseScreen": [
+            "Sources/StarsPurchaseScreen.swift",
+        ],
+        "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode": [
+            "Sources/ChatTextInputPanelNode.swift",
+        ],
+        "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode": [
+            "Sources/ChatMessageBubbleItemNode.swift",
+        ],
+        "submodules/TelegramUI/Components/Chat/ChatInputMessageAccessoryPanel": [
+            "Sources/ChatInputMessageAccessoryPanel.swift",
+        ],
+        "submodules/AuthorizationUI": [],
+        "submodules/GalleryUI": ["Sources/SecretMediaPreviewController.swift"],
+    }
+    for package, files in packages.items():
+        if not _add_aorusgramui_build_dep(tg, package, "//submodules/Display"):
+            continue
+        for name in files:
+            _ensure_aorusgramui_import(tg / package / name)
 
 
 def patch_aorus_badges(tg: Path) -> None:
@@ -11109,11 +11228,10 @@ def patch_fake_gifts(tg: Path) -> None:
             "                        let context = self.context\n"
             "                        " + context_transfer_marker + "\n"
             "                        if let reference = gift.reference, AorusFakeGiftsStore.contains(reference: reference) {\n"
-            "                            let aorusIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
-            "                            let aorusPicker = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: context, title: aorusIsRu ? \"" + ru_transfer_title + "\" : \"Transfer Gift\"))\n"
+            "                            let aorusPicker = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: context, title: aorusL(\"" + ru_transfer_title + "\", \"Transfer Gift\")))\n"
             "                            aorusPicker.peerSelected = { [weak aorusPicker] peer, _ in\n"
             "                                guard AorusFakeGiftsStore.transfer(reference: reference, gift: gift.gift, account: context.account, recipientPeerId: peer.id) else { return }\n"
-            "                                let text = aorusIsRu ? \"" + ru_transferred + "\" : \"Gift transferred\"\n"
+            "                                let text = aorusL(\"" + ru_transferred + "\", \"Gift transferred\")\n"
             "                                aorusPicker?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: text, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
             "                                aorusPicker?.dismiss()\n"
             "                            }\n"
@@ -11703,9 +11821,8 @@ def patch_stars_purchase_redirects(tg: Path) -> None:
         end = t.index(products_end, start)
         buttons_block = (
             "            var items: [AnyComponentWithIdentity<Empty>] = []\n"
-            "            let aorusIsRu = strings.baseLanguageCode == \"ru\" || strings.baseLanguageCode.hasPrefix(\"ru\")\n"
-            "            let aorusFragmentTitle = aorusIsRu ? \"Купить в Fragment\" : \"Buy on Fragment\"\n"
-            "            let aorusTelegramTitle = aorusIsRu ? \"Купить в Telegram\" : \"Buy in Telegram\"\n"
+            "            let aorusFragmentTitle = aorusL(\"Купить в Fragment\", \"Buy on Fragment\")\n"
+            "            let aorusTelegramTitle = aorusL(\"Купить в Telegram\", \"Buy in Telegram\")\n"
             "            let aorusOpenFragmentStars: () -> Void = {\n"
             "                guard let controller = controller(), let navigationController = controller.navigationController as? NavigationController else {\n"
             "                    return\n"
@@ -13824,7 +13941,6 @@ def patch_view_once_direct_save_button(tg: Path) -> None:
         '        let dstPath = NSTemporaryDirectory() + "_ag_save_" + UUID().uuidString + "." + dstExt\n'
         "        do { try FileManager.default.copyItem(atPath: path, toPath: dstPath) } catch { return }\n"
         "        let dstURL = URL(fileURLWithPath: dstPath)\n"
-        "        let _agRu = UserDefaults.standard.string(forKey: \"aorusgram_lang\") == \"ru\"\n"
         "        let doSave: () -> Void = { [weak self] in\n"
         "            PHPhotoLibrary.shared().performChanges({\n"
         "                if isVideo {\n"
@@ -13837,9 +13953,7 @@ def patch_view_once_direct_save_button(tg: Path) -> None:
         "                guard success else { return }\n"
         "                DispatchQueue.main.async {\n"
         "                    guard let self = self else { return }\n"
-        "                    let _agText = _agRu\n"
-        '                        ? (isVideo ? "Видео сохранено в галерею" : "Фото сохранено в галерею")\n'
-        '                        : (isVideo ? "Video saved to gallery" : "Photo saved to gallery")\n'
+        '                    let _agText = isVideo ? aorusL("Видео сохранено в галерею", "Video saved to gallery") : aorusL("Фото сохранено в галерею", "Photo saved to gallery")\n'
         "                    self.present(UndoOverlayController(presentationData: self.presentationData, content: .actionSucceeded(title: nil, text: _agText, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
         "                }\n"
         "            }\n"
@@ -16738,7 +16852,7 @@ def patch_wall_tab(tg: Path) -> None:
                 "                case .hashTagSearch:\n"
                 "                    if customChatContents.aorusIsWall {\n"
                 "                        hideIcon = true\n"
-                "                        titleString = interfaceState.strings.baseLanguageCode.lowercased().hasPrefix(\"ru\") ? \"Новых постов нет\" : \"No New Posts\"\n"
+                "                        titleString = aorusL(\"Новых постов нет\", \"No New Posts\")\n"
                 "                        strings = []\n"
                 "                    } else {\n"
                 "                        titleString = \"\"\n"
@@ -19763,7 +19877,7 @@ private enum AorusRuntimeFont {
                 "item-case")
 
             sub("    entries.append(.textSize(presentationData.theme, strings.Appearance_TextSizeSetting, textSizeValue))\n",
-                "    let aorusFontTitle = (strings.baseLanguageCode == \"ru\" || strings.baseLanguageCode.hasPrefix(\"ru\")) ? \"Шрифт\" : \"Font\"\n"
+                "    let aorusFontTitle = aorusL(\"Шрифт\", \"Font\")\n"
                 "    entries.append(.aorusFont(presentationData.theme, aorusFontTitle, AorusFontStore.selectedTitle))\n"
                 "    entries.append(.textSize(presentationData.theme, strings.Appearance_TextSizeSetting, textSizeValue))\n",
                 "entries")
@@ -19872,7 +19986,7 @@ def patch_gif_wallpaper(tg: Path) -> None:
             "        }\n"
             "\n"
             "        let aorusGifRussian = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
-            "        let aorusGifTitle = aorusGifRussian ? \"\\u{0412}\\u{044b}\\u{0431}\\u{0440}\\u{0430}\\u{0442}\\u{044c} GIF\" : \"Choose GIF\"\n"
+            "        let aorusGifTitle = aorusL(\"\\u{0412}\\u{044b}\\u{0431}\\u{0440}\\u{0430}\\u{0442}\\u{044c} GIF\", \"Choose GIF\")\n"
             "        self.gifItem = ItemListPeerActionItem(presentationData: ItemListPresentationData(presentationData), icon: nil, title: aorusGifTitle, alwaysPlain: false, hasSeparator: false, sectionId: 0, height: .generic, color: .accent, editing: false, action: {\n"
             "            AorusGifWallpaperPicker.present(russian: aorusGifRussian)\n"
             "        })\n"
@@ -20986,7 +21100,7 @@ def patch_message_translate_button(tg: Path) -> None:
             ),
             (
                 "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { return }\n",
-                "            let aorusSpeechFailText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Не удалось определить речь\" : \"Could not detect speech\"\n"
+                "            let aorusSpeechFailText = aorusL(\"Не удалось определить речь\", \"Could not detect speech\")\n"
                 "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { self.aorusPresentInlineActionToast(aorusSpeechFailText); return }\n",
             ),
             (
@@ -21003,7 +21117,7 @@ def patch_message_translate_button(tg: Path) -> None:
             ),
             (
                 "        let aorusTarget = Locale.current.languageCode ?? \"en\"\n",
-                "        let aorusTranslateNoopText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Сообщение уже на вашем языке\" : \"Message is already in your language\"\n"
+                "        let aorusTranslateNoopText = aorusL(\"Сообщение уже на вашем языке\", \"Message is already in your language\")\n"
                 "        let aorusTarget = item.presentationData.strings.baseLanguageCode.split(separator: \"-\").first.map(String.init) ?? (Locale.current.languageCode ?? \"en\")\n",
             ),
             (
@@ -21266,7 +21380,7 @@ def patch_message_translate_button(tg: Path) -> None:
         "        if let aorusVoiceFile = aorusVoiceFile {\n"
         "            #if canImport(Speech)\n"
         "            let aorusVoiceOriginal = item.message.text\n"
-        "            let aorusSpeechFailText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Не удалось определить речь\" : \"Could not detect speech\"\n"
+        "            let aorusSpeechFailText = aorusL(\"Не удалось определить речь\", \"Could not detect speech\")\n"
         "            guard let aorusPath = aorusContext.account.postbox.mediaBox.completedResourcePath(aorusVoiceFile.resource, pathExtension: \"ogg\") else { self.aorusPresentInlineActionToast(aorusSpeechFailText); return }\n"
         "            SFSpeechRecognizer.requestAuthorization { status in\n"
         "                guard status == .authorized else { DispatchQueue.main.async { self.aorusPresentInlineActionToast(aorusSpeechFailText) }; return }\n"
@@ -21298,7 +21412,7 @@ def patch_message_translate_button(tg: Path) -> None:
         "        }\n"
         "        let aorusOriginal = item.message.text\n"
         "        guard !aorusOriginal.isEmpty else { return }\n"
-        "        let aorusTranslateNoopText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Сообщение уже на вашем языке\" : \"Message is already in your language\"\n"
+        "        let aorusTranslateNoopText = aorusL(\"Сообщение уже на вашем языке\", \"Message is already in your language\")\n"
         "        let aorusTarget = item.presentationData.strings.baseLanguageCode.split(separator: \"-\").first.map(String.init) ?? (Locale.current.languageCode ?? \"en\")\n"
         "        guard var aorusComp = URLComponents(string: \"https://translate.googleapis.com/translate_a/single\") else { return }\n"
         "        aorusComp.queryItems = [URLQueryItem(name: \"client\", value: \"gtx\"), URLQueryItem(name: \"sl\", value: \"auto\"), URLQueryItem(name: \"tl\", value: aorusTarget), URLQueryItem(name: \"dt\", value: \"t\"), URLQueryItem(name: \"q\", value: aorusOriginal)]\n"
@@ -21338,7 +21452,7 @@ def patch_message_translate_button(tg: Path) -> None:
         "        }\n"
         "        let aorusOriginal = item.message.text\n"
         "        guard !aorusOriginal.isEmpty else { return }\n"
-        "        let aorusTranslateNoopText = item.presentationData.strings.baseLanguageCode.hasPrefix(\"ru\") ? \"Сообщение уже на вашем языке\" : \"Message is already in your language\"\n"
+        "        let aorusTranslateNoopText = aorusL(\"Сообщение уже на вашем языке\", \"Message is already in your language\")\n"
         "        let aorusTarget = item.presentationData.strings.baseLanguageCode.split(separator: \"-\").first.map(String.init) ?? (Locale.current.languageCode ?? \"en\")\n"
         "        guard var aorusComp = URLComponents(string: \"https://translate.googleapis.com/translate_a/single\") else { return }\n"
         "        aorusComp.queryItems = [URLQueryItem(name: \"client\", value: \"gtx\"), URLQueryItem(name: \"sl\", value: \"auto\"), URLQueryItem(name: \"tl\", value: aorusTarget), URLQueryItem(name: \"dt\", value: \"t\"), URLQueryItem(name: \"q\", value: aorusOriginal)]\n"
@@ -22812,14 +22926,13 @@ def patch_formatting_panel(tg: Path) -> None:
         "              let peerId = chatLocation.peerId,\n"
         "              let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
         "        let cover = self.text\n"
-        "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
-        "        let alert = UIAlertController(title: \"AorusCode\", message: isRu ? \"Введите скрытое сообщение\" : \"Enter the hidden message\", preferredStyle: .alert)\n"
+        "        let alert = UIAlertController(title: \"AorusCode\", message: aorusL(\"Введите скрытое сообщение\", \"Enter the hidden message\"), preferredStyle: .alert)\n"
         "        alert.addTextField { textField in\n"
-        "            textField.placeholder = isRu ? \"Скрытое сообщение\" : \"Hidden message\"\n"
+        "            textField.placeholder = aorusL(\"Скрытое сообщение\", \"Hidden message\")\n"
         "            textField.autocapitalizationType = .sentences\n"
         "        }\n"
-        "        alert.addAction(UIAlertAction(title: isRu ? \"Отмена\" : \"Cancel\", style: .cancel, handler: nil))\n"
-        "        alert.addAction(UIAlertAction(title: isRu ? \"Отправить\" : \"Send\", style: .default, handler: { [weak self] _ in\n"
+        "        alert.addAction(UIAlertAction(title: aorusL(\"Отмена\", \"Cancel\"), style: .cancel, handler: nil))\n"
+        "        alert.addAction(UIAlertAction(title: aorusL(\"Отправить\", \"Send\"), style: .default, handler: { [weak self] _ in\n"
         "            guard let self = self else { return }\n"
         "            let secret = alert.textFields?.first?.text ?? \"\"\n"
         "            if secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }\n"
@@ -23596,6 +23709,7 @@ def main() -> None:
     patch_default_auto_night(tg)
     patch_force_dark_base_theme(tg)
     patch_intro_default_dark(tg)
+    patch_translation_deps(tg)
     patch_aorus_badges(tg)
     patch_local_premium(tg)
     patch_fake_gifts(tg)

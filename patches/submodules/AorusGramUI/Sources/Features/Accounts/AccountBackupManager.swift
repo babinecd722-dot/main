@@ -104,14 +104,10 @@ public final class AccountBackupManager {
 
     private enum BackupError: Error { case truncated, corrupt }
 
+    // aorusL already applies the same order — Telegram's language first, the device only
+    // when Telegram has none yet — and adds the six languages the two-way check could not.
     private func localized(_ ru: String, _ en: String) -> String {
-        // Telegram's own language first — the full code, then the collapsed ru/en value —
-        // and the device language only when Telegram has none yet.
-        let code = (UserDefaults.standard.string(forKey: "aorusgram_lang_code")
-            ?? UserDefaults.standard.string(forKey: "aorusgram_lang")
-            ?? Locale.preferredLanguages.first
-            ?? Locale.current.identifier).lowercased()
-        return code.hasPrefix("ru") ? ru : en
+        return aorusL(ru, en)
     }
 
     // MARK: - Root path

@@ -133,12 +133,12 @@ private enum AccountDetailEntry: ItemListNodeEntry {
 
 private func aorusDataCenterName(_ dc: Int, _ ru: Bool) -> String {
     switch dc {
-    case 1: return ru ? "DC1 · Майами, США" : "DC1 · Miami, USA"
-    case 2: return ru ? "DC2 · Амстердам, Нидерланды" : "DC2 · Amsterdam, Netherlands"
-    case 3: return ru ? "DC3 · Майами, США" : "DC3 · Miami, USA"
-    case 4: return ru ? "DC4 · Амстердам, Нидерланды" : "DC4 · Amsterdam, Netherlands"
-    case 5: return ru ? "DC5 · Сингапур" : "DC5 · Singapore"
-    default: return ru ? "Неизвестно" : "Unknown"
+    case 1: return aorusL("DC1 · Майами, США", "DC1 · Miami, USA")
+    case 2: return aorusL("DC2 · Амстердам, Нидерланды", "DC2 · Amsterdam, Netherlands")
+    case 3: return aorusL("DC3 · Майами, США", "DC3 · Miami, USA")
+    case 4: return aorusL("DC4 · Амстердам, Нидерланды", "DC4 · Amsterdam, Netherlands")
+    case 5: return aorusL("DC5 · Сингапур", "DC5 · Singapore")
+    default: return aorusL("Неизвестно", "Unknown")
     }
 }
 
@@ -293,28 +293,17 @@ private func aorusEstimateRegistration(userId: Int64) -> Date? {
     return nil
 }
 
+// "3 года 4 месяца" / "3 years 4 months" / "3 Jahre 4 Monate". The plural form is picked
+// by aorusPlural, which knows the Slavic one/few/many rule and that Turkish does not
+// inflect after a numeral — an "s"-appending helper only ever worked for English.
 private func aorusAccountAge(from date: Date, _ ru: Bool) -> String {
     let comps = Calendar.current.dateComponents([.year, .month], from: date, to: Date())
     let years = comps.year ?? 0
     let months = comps.month ?? 0
-    if ru {
-        func plural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
-            let m10 = n % 10, m100 = n % 100
-            if m10 == 1 && m100 != 11 { return one }
-            if m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) { return few }
-            return many
-        }
-        if years <= 0 {
-            return "\(months) \(plural(months, "месяц", "месяца", "месяцев"))"
-        }
-        return "\(years) \(plural(years, "год", "года", "лет")) \(months) \(plural(months, "месяц", "месяца", "месяцев"))"
-    } else {
-        func unit(_ n: Int, _ u: String) -> String { return "\(n) \(u)\(n == 1 ? "" : "s")" }
-        if years <= 0 {
-            return unit(months, "month")
-        }
-        return "\(unit(years, "year")) \(unit(months, "month"))"
+    if years <= 0 {
+        return aorusPlural(months, .month)
     }
+    return aorusPlural(years, .year) + " " + aorusPlural(months, .month)
 }
 
 // MARK: - Entries builder
@@ -362,19 +351,19 @@ private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcI
     let isExact: Bool
     switch kind {
     case .user:
-        sectionTitle = ru ? "АККАУНТ" : "ACCOUNT"; idLabel = ru ? "ID аккаунта" : "Account ID"; ageLabel = ru ? "Возраст аккаунта" : "Account Age"
-        dateLabel = ru ? "Месяц регистрации" : "Registration Month"; isExact = false
+        sectionTitle = aorusL("АККАУНТ", "ACCOUNT"); idLabel = aorusL("ID аккаунта", "Account ID"); ageLabel = aorusL("Возраст аккаунта", "Account Age")
+        dateLabel = aorusL("Месяц регистрации", "Registration Month"); isExact = false
     case .channel:
-        sectionTitle = ru ? "КАНАЛ" : "CHANNEL"; idLabel = ru ? "ID канала" : "Channel ID"; ageLabel = ru ? "Возраст канала" : "Channel Age"
-        dateLabel = ru ? "Дата создания" : "Creation Date"; isExact = true
+        sectionTitle = aorusL("КАНАЛ", "CHANNEL"); idLabel = aorusL("ID канала", "Channel ID"); ageLabel = aorusL("Возраст канала", "Channel Age")
+        dateLabel = aorusL("Дата создания", "Creation Date"); isExact = true
     case .group:
-        sectionTitle = ru ? "ГРУППА" : "GROUP"; idLabel = ru ? "ID чата" : "Chat ID"; ageLabel = ru ? "Возраст чата" : "Chat Age"
-        dateLabel = ru ? "Дата создания" : "Creation Date"; isExact = true
+        sectionTitle = aorusL("ГРУППА", "GROUP"); idLabel = aorusL("ID чата", "Chat ID"); ageLabel = aorusL("Возраст чата", "Chat Age")
+        dateLabel = aorusL("Дата создания", "Creation Date"); isExact = true
     }
 
     entries.append(.accountHeader(theme, sectionTitle))
     entries.append(.idRow(theme, idLabel, "\(entityId)"))
-    entries.append(.dcRow(theme, ru ? "Дата-центр" : "Data Center", dcId > 0 ? aorusDataCenterName(dcId, ru) : (ru ? "Неизвестно" : "Unknown")))
+    entries.append(.dcRow(theme, aorusL("Дата-центр", "Data Center"), dcId > 0 ? aorusDataCenterName(dcId, ru) : (aorusL("Неизвестно", "Unknown"))))
 
     // Telegram now supplies an official registration month for eligible user profiles.
     // Numeric-id interpolation remains an offline fallback for profiles where that field is
@@ -392,34 +381,31 @@ private func accountDetailEntries(theme: PresentationTheme, entityId: Int64, dcI
         isOfficialRegistrationMonth = false
     }
 
-    entries.append(.regHeader(theme, isExact ? (ru ? "СОЗДАНИЕ" : "CREATION") : (ru ? "РЕГИСТРАЦИЯ" : "REGISTRATION")))
+    entries.append(.regHeader(theme, isExact ? (aorusL("СОЗДАНИЕ", "CREATION")) : (aorusL("РЕГИСТРАЦИЯ", "REGISTRATION"))))
     if let date = date {
         let df = DateFormatter()
-        df.locale = Locale(identifier: ru ? "ru_RU" : "en_US")
+        df.locale = Locale(identifier: AorusLang.current.localeIdentifier)
         df.dateFormat = isExact ? "d MMMM yyyy" : "LLLL yyyy"
         entries.append(.regDateRow(theme, dateLabel, df.string(from: date)))
         entries.append(.ageRow(theme, ageLabel, aorusAccountAge(from: date, ru)))
     } else {
-        entries.append(.regDateRow(theme, dateLabel, ru ? "Неизвестно" : "Unknown"))
+        entries.append(.regDateRow(theme, dateLabel, aorusL("Неизвестно", "Unknown")))
     }
 
     let footer: String
     if isExact {
-        footer = ru ? "Дата создания получена напрямую из данных Telegram."
-                    : "The creation date is taken directly from Telegram's data."
+        footer = aorusL("Дата создания получена напрямую из данных Telegram.", "The creation date is taken directly from Telegram's data.")
     } else if isOfficialRegistrationMonth {
-        footer = ru ? "Месяц регистрации получен напрямую из данных Telegram."
-                    : "The registration month is taken directly from Telegram's data."
+        footer = aorusL("Месяц регистрации получен напрямую из данных Telegram.", "The registration month is taken directly from Telegram's data.")
     } else {
-        footer = ru ? "Дата рассчитана по ID аккаунта; возможна погрешность в несколько месяцев."
-                    : "The date is estimated from the account ID and may differ by several months."
+        footer = aorusL("Дата рассчитана по ID аккаунта; возможна погрешность в несколько месяцев.", "The date is estimated from the account ID and may differ by several months.")
     }
     entries.append(.footer(theme, footer))
 
-    entries.append(.noteHeader(theme, ru ? "ЗАМЕТКА" : "NOTE"))
+    entries.append(.noteHeader(theme, aorusL("ЗАМЕТКА", "NOTE")))
     entries.append(.noteRow(
         theme,
-        note.isEmpty ? (ru ? "Добавить заметку" : "Add Note") : (ru ? "Изменить заметку" : "Edit Note"),
+        note.isEmpty ? (aorusL("Добавить заметку", "Add Note")) : (aorusL("Изменить заметку", "Edit Note")),
         note
     ))
 
@@ -581,18 +567,18 @@ private func aorusNoteEditorController(context: AccountContext, initialValue: St
     |> map { presentationData, currentValue -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let ru = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
         let rightButton = ItemListNavigationButton(
-            content: .text(ru ? "Сохранить" : "Save"),
+            content: .text(aorusL("Сохранить", "Save")),
             style: .bold,
             enabled: true,
             action: { saveImpl?() }
         )
         let entries: [NoteEditorEntry] = [
-            .input(presentationData.theme, currentValue, ru ? "Введите заметку" : "Enter a note")
+            .input(presentationData.theme, currentValue, aorusL("Введите заметку", "Enter a note"))
         ]
         return (
             ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(ru ? "Заметка" : "Note"),
+                title: .text(aorusL("Заметка", "Note")),
                 leftNavigationButton: nil,
                 rightNavigationButton: rightButton,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)
@@ -640,7 +626,7 @@ public func accountDetailsController(context: AccountContext, entityId: Int64, p
         let alert = textAlertController(
             context: context,
             title: nil,
-            text: ru ? "ID скопирован в буфер обмена" : "ID copied to clipboard",
+            text: aorusL("ID скопирован в буфер обмена", "ID copied to clipboard"),
             actions: [TextAlertAction(type: .defaultAction, title: "OK", action: {})]
         )
         controller.present(alert, in: .window(.root))
@@ -663,7 +649,7 @@ public func accountDetailsController(context: AccountContext, entityId: Int64, p
             let entries = accountDetailEntries(theme: presentationData.theme, entityId: entityId, dcId: dcId, kind: kind, creationDate: creationDate, registrationDate: registrationDate, note: note, ru: ru)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(title.isEmpty ? (ru ? "Подробнее" : "Details") : title),
+                title: .text(title.isEmpty ? (aorusL("Подробнее", "Details")) : title),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

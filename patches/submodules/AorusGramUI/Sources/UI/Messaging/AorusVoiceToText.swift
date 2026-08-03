@@ -20,9 +20,14 @@ public enum AorusVoiceToText {
         set { UserDefaults.standard.set(newValue, forKey: onboardedKey) }
     }
 
-    // Best-guess dictation locale from the app language / system.
+    // Dictate in the language AorusGram is showing. Only if the device has no recognizer
+    // for it does this fall back to the system locale and then to English — the previous
+    // version could only ever pick Russian or the system.
     public static func resolveLocaleIdentifier(isRu: Bool) -> String {
-        if isRu { return "ru-RU" }
+        let preferred = AorusLang.current.localeIdentifier.replacingOccurrences(of: "_", with: "-")
+        if SFSpeechRecognizer(locale: Locale(identifier: preferred))?.isAvailable == true {
+            return preferred
+        }
         let system = Locale.current.identifier
         if SFSpeechRecognizer(locale: Locale(identifier: system))?.isAvailable == true {
             return system
@@ -138,7 +143,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
 
         let title = UILabel()
         title.translatesAutoresizingMaskIntoConstraints = false
-        title.text = isRu ? "Голос в текст" : "Voice to Text"
+        title.text = aorusL("Голос в текст", "Voice to Text")
         title.font = UIFont.systemFont(ofSize: 24.0, weight: .bold)
         title.textColor = .white
         title.textAlignment = .center
@@ -147,18 +152,18 @@ public final class AorusVoiceOnboardingController: UIViewController {
         let rows = UIStackView(arrangedSubviews: [
             self.featureRow(
                 symbol: "waveform.badge.mic",
-                title: isRu ? "Живая расшифровка" : "Live transcription",
-                subtitle: isRu ? "Речь превращается в текст на лету" : "Your speech becomes text as you talk"
+                title: aorusL("Живая расшифровка", "Live transcription"),
+                subtitle: aorusL("Речь превращается в текст на лету", "Your speech becomes text as you talk")
             ),
             self.featureRow(
                 symbol: "hand.tap",
-                title: isRu ? "Зажмите и говорите" : "Hold and speak",
-                subtitle: isRu ? "Отпустите — текст появится в поле ввода, смахните вверх — отмена" : "Release to insert into the input, swipe up to cancel"
+                title: aorusL("Зажмите и говорите", "Hold and speak"),
+                subtitle: aorusL("Отпустите — текст появится в поле ввода, смахните вверх — отмена", "Release to insert into the input, swipe up to cancel")
             ),
             self.featureRow(
                 symbol: "lock.shield",
-                title: isRu ? "Приватно" : "Private",
-                subtitle: isRu ? "Распознавание работает прямо на устройстве" : "Recognition runs right on your device"
+                title: aorusL("Приватно", "Private"),
+                subtitle: aorusL("Распознавание работает прямо на устройстве", "Recognition runs right on your device")
             )
         ])
         rows.translatesAutoresizingMaskIntoConstraints = false
@@ -168,7 +173,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
 
         let button = UIButton(type: .system)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.setTitle(isRu ? "Продолжить" : "Continue", for: .normal)
+        button.setTitle(aorusL("Продолжить", "Continue"), for: .normal)
         button.titleLabel?.font = UIFont.systemFont(ofSize: 17.0, weight: .semibold)
         button.setTitleColor(.white, for: .normal)
         button.backgroundColor = self.accent
@@ -255,13 +260,13 @@ public final class AorusVoiceSession {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 guard status == .authorized else {
-                    self.overlay?.showMessage(self.isRu ? "Нет доступа к распознаванию речи" : "No speech recognition access")
+                    self.overlay?.showMessage(aorusL("Нет доступа к распознаванию речи", "No speech recognition access"))
                     return
                 }
                 AVAudioSession.sharedInstance().requestRecordPermission { granted in
                     DispatchQueue.main.async {
                         guard granted else {
-                            self.overlay?.showMessage(self.isRu ? "Нет доступа к микрофону" : "No microphone access")
+                            self.overlay?.showMessage(aorusL("Нет доступа к микрофону", "No microphone access"))
                             return
                         }
                         self.beginAudio()
@@ -285,7 +290,7 @@ public final class AorusVoiceSession {
                 try session.setPreferredInput(nil)
             }
         } catch {
-            self.overlay?.showMessage(self.isRu ? "Не удалось включить микрофон" : "Could not start microphone")
+            self.overlay?.showMessage(aorusL("Не удалось включить микрофон", "Could not start microphone"))
             return
         }
 
@@ -298,7 +303,7 @@ public final class AorusVoiceSession {
         request.taskHint = .dictation
 
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: self.localeIdentifier)), recognizer.isAvailable else {
-            self.overlay?.showMessage(self.isRu ? "Язык распознавания недоступен" : "Recognition language unavailable")
+            self.overlay?.showMessage(aorusL("Язык распознавания недоступен", "Recognition language unavailable"))
             return
         }
         if recognizer.supportsOnDeviceRecognition {
@@ -336,7 +341,7 @@ public final class AorusVoiceSession {
             self.overlay?.setListening()
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         } catch {
-            self.overlay?.showMessage(self.isRu ? "Не удалось запустить запись" : "Could not start recording")
+            self.overlay?.showMessage(aorusL("Не удалось запустить запись", "Could not start recording"))
         }
     }
 
@@ -448,7 +453,7 @@ final class AorusVoiceOverlayView: UIView {
         self.transcriptLabel.numberOfLines = 2
         self.transcriptLabel.lineBreakMode = .byTruncatingHead
         self.transcriptLabel.textAlignment = .left
-        self.transcriptLabel.text = isRu ? "Говорите…" : "Speak…"
+        self.transcriptLabel.text = aorusL("Говорите…", "Speak…")
         content.addSubview(self.transcriptLabel)
 
         self.hintIcon.translatesAutoresizingMaskIntoConstraints = false
@@ -461,7 +466,7 @@ final class AorusVoiceOverlayView: UIView {
         self.hintLabel.font = UIFont.systemFont(ofSize: 12.0, weight: .medium)
         self.hintLabel.textColor = UIColor(white: 1.0, alpha: 0.55)
         self.hintLabel.textAlignment = .left
-        self.hintLabel.text = isRu ? "Отпустите, чтобы вставить" : "Release to insert"
+        self.hintLabel.text = aorusL("Отпустите, чтобы вставить", "Release to insert")
         content.addSubview(self.hintLabel)
 
         NSLayoutConstraint.activate([
@@ -515,12 +520,12 @@ final class AorusVoiceOverlayView: UIView {
     }
 
     func setListening() {
-        self.hintLabel.text = isRu ? "Отпустите, чтобы вставить" : "Release to insert"
+        self.hintLabel.text = aorusL("Отпустите, чтобы вставить", "Release to insert")
     }
 
     func updateTranscript(_ text: String) {
         if text.isEmpty {
-            self.transcriptLabel.text = isRu ? "Говорите…" : "Speak…"
+            self.transcriptLabel.text = aorusL("Говорите…", "Speak…")
             self.transcriptLabel.textColor = UIColor(white: 1.0, alpha: 0.4)
         } else {
             self.transcriptLabel.text = text
@@ -537,7 +542,7 @@ final class AorusVoiceOverlayView: UIView {
         self.transcriptLabel.textColor = UIColor(red: 1.0, green: 0.55, blue: 0.55, alpha: 1.0)
         self.hintIcon.image = UIImage(systemName: "exclamationmark.circle.fill")
         self.hintIcon.tintColor = UIColor(red: 1.0, green: 0.42, blue: 0.42, alpha: 1.0)
-        self.hintLabel.text = isRu ? "Отпустите, чтобы закрыть" : "Release to close"
+        self.hintLabel.text = aorusL("Отпустите, чтобы закрыть", "Release to close")
         self.waveform.push(level: 0.0)
     }
 
@@ -548,8 +553,8 @@ final class AorusVoiceOverlayView: UIView {
         self.hintIcon.image = UIImage(systemName: highlighted ? "xmark.circle.fill" : "checkmark.circle.fill")
         self.hintIcon.tintColor = highlighted ? red : self.accent
         self.hintLabel.text = highlighted
-            ? (isRu ? "Отпустите, чтобы отменить" : "Release to cancel")
-            : (isRu ? "Отпустите, чтобы вставить" : "Release to insert")
+            ? (aorusL("Отпустите, чтобы отменить", "Release to cancel"))
+            : (aorusL("Отпустите, чтобы вставить", "Release to insert"))
         self.hintLabel.textColor = highlighted ? red : UIColor(white: 1.0, alpha: 0.55)
     }
 }

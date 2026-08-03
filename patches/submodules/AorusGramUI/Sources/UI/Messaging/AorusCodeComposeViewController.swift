@@ -97,7 +97,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         view.addSubview(titleLabel)
 
         // Cancel
-        cancelButton.setTitle(isRu ? "Отмена" : "Cancel", for: .normal)
+        cancelButton.setTitle(aorusL("Отмена", "Cancel"), for: .normal)
         cancelButton.titleLabel?.font = .systemFont(ofSize: 17)
         cancelButton.setTitleColor(theme.list.itemAccentColor, for: .normal)
         cancelButton.addTarget(self, action: #selector(onCancel), for: .touchUpInside)
@@ -121,7 +121,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         coverCard.clipsToBounds = true
         contentView.addSubview(coverCard)
 
-        coverHeaderLabel.text = isRu ? "Видимый текст" : "Visible Text"
+        coverHeaderLabel.text = aorusL("Видимый текст", "Visible Text")
         coverHeaderLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         coverHeaderLabel.textColor = theme.list.itemSecondaryTextColor
         coverHeaderLabel.textAlignment = .left
@@ -131,7 +131,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         coverTextView.delegate = self
         contentView.addSubview(coverTextView)
         configurePlaceholder(coverPlaceholder,
-                             text: isRu ? "Что увидят все..." : "What everyone sees...",
+                             text: aorusL("Что увидят все...", "What everyone sees..."),
                              in: coverCard)
 
         // Secret card
@@ -141,7 +141,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         secretCard.clipsToBounds = true
         contentView.addSubview(secretCard)
 
-        secretHeaderLabel.text = isRu ? "Скрытое сообщение" : "Hidden Message"
+        secretHeaderLabel.text = aorusL("Скрытое сообщение", "Hidden Message")
         secretHeaderLabel.font = .systemFont(ofSize: 12, weight: .semibold)
         secretHeaderLabel.textColor = theme.list.itemAccentColor
         contentView.addSubview(secretHeaderLabel)
@@ -150,20 +150,18 @@ public final class AorusCodeComposeViewController: UIViewController {
         secretTextView.delegate = self
         contentView.addSubview(secretTextView)
         configurePlaceholder(secretPlaceholder,
-                             text: isRu ? "Только для AorusGram..." : "AorusGram users only...",
+                             text: aorusL("Только для AorusGram...", "AorusGram users only..."),
                              in: secretCard)
 
         // Hint
-        hintLabel.text = isRu
-            ? "Скрытое сообщение видят только пользователи AorusGram — под спойлером."
-            : "Hidden message is only visible to AorusGram users — under a spoiler."
+        hintLabel.text = aorusL("Скрытое сообщение видят только пользователи AorusGram — под спойлером.", "Hidden message is only visible to AorusGram users — under a spoiler.")
         hintLabel.font = .systemFont(ofSize: 12)
         hintLabel.textColor = theme.list.itemSecondaryTextColor
         hintLabel.numberOfLines = 0
         contentView.addSubview(hintLabel)
 
         // Send button
-        sendButton.setTitle(isRu ? "Отправить" : "Send", for: .normal)
+        sendButton.setTitle(aorusL("Отправить", "Send"), for: .normal)
         sendButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         sendButton.setTitleColor(.white, for: .normal)
         sendButton.setTitleColor(UIColor(white: 1.0, alpha: 0.5), for: .disabled)

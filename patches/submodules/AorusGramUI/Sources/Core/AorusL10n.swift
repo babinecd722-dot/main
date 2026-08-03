@@ -116,6 +116,55 @@ public func aorusL(_ ru: String, _ en: String, _ lang: AorusLang) -> String {
     }
 }
 
+// Counted time units ("3 года", "3 years", "3 Jahre"). These cannot live in the string
+// table: the table is keyed by an English string and a plural form is chosen by the number,
+// not looked up. Russian and Ukrainian take the Slavic one/few/many rule, Turkish never
+// inflects after a numeral, and the rest are one/other.
+public enum AorusPluralUnit {
+    case year
+    case month
+}
+
+public func aorusPlural(_ n: Int, _ unit: AorusPluralUnit, _ lang: AorusLang = AorusLang.current) -> String {
+    let forms: [String]
+    switch (lang, unit) {
+    case (.ru, .year): forms = ["год", "года", "лет"]
+    case (.ru, .month): forms = ["месяц", "месяца", "месяцев"]
+    case (.uk, .year): forms = ["рік", "роки", "років"]
+    case (.uk, .month): forms = ["місяць", "місяці", "місяців"]
+    case (.en, .year): forms = ["year", "years"]
+    case (.en, .month): forms = ["month", "months"]
+    case (.es, .year): forms = ["año", "años"]
+    case (.es, .month): forms = ["mes", "meses"]
+    case (.pt, .year): forms = ["ano", "anos"]
+    case (.pt, .month): forms = ["mês", "meses"]
+    case (.de, .year): forms = ["Jahr", "Jahre"]
+    case (.de, .month): forms = ["Monat", "Monate"]
+    case (.fr, .year): forms = ["an", "ans"]
+    case (.fr, .month): forms = ["mois", "mois"]
+    case (.tr, .year): forms = ["yıl"]
+    case (.tr, .month): forms = ["ay"]
+    }
+
+    let word: String
+    if forms.count == 1 {
+        word = forms[0]
+    } else if forms.count == 2 {
+        word = n == 1 ? forms[0] : forms[1]
+    } else {
+        let mod10 = n % 10
+        let mod100 = n % 100
+        if mod10 == 1 && mod100 != 11 {
+            word = forms[0]
+        } else if mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) {
+            word = forms[1]
+        } else {
+            word = forms[2]
+        }
+    }
+    return "\(n) \(word)"
+}
+
 public struct AorusL10n {
     public let lang: AorusLang
 

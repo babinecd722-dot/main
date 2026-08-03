@@ -25,7 +25,7 @@ private func aorusGiftTitleAndNumber(_ gift: StarGift, isRu: Bool) -> (String, I
         }
         // Older regular gifts do not have a title in Telegram's StarGift model.
         // They also have no user-facing number, so keep the native localized fallback.
-        return (isRu ? "Подарок" : "Gift", nil)
+        return (aorusL("Подарок", "Gift"), nil)
     }
 }
 
@@ -129,17 +129,13 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
     let isRu = AorusLang.current == .ru
     var entries: [FakeGiftsEntry] = []
 
-    entries.append(.enable(theme, isRu ? "Включить фейковые подарки" : "Enable fake gifts", state.enabled))
-    entries.append(.enableInfo(theme, isRu
-        ? "Эти подарки видны только вам, локально. Ничего не отправляется на сервер."
-        : "These gifts are visible only to you, locally. Nothing is sent to the server."))
+    entries.append(.enable(theme, aorusL("Включить фейковые подарки", "Enable fake gifts"), state.enabled))
+    entries.append(.enableInfo(theme, aorusL("Эти подарки видны только вам, локально. Ничего не отправляется на сервер.", "These gifts are visible only to you, locally. Nothing is sent to the server.")))
 
-    entries.append(.listHeader(theme, isRu ? "ДОБАВЛЕННЫЕ ПОДАРКИ" : "ADDED GIFTS"))
+    entries.append(.listHeader(theme, aorusL("ДОБАВЛЕННЫЕ ПОДАРКИ", "ADDED GIFTS")))
     let gifts = AorusFakeGiftsStore.ownProfileGifts()
     if gifts.isEmpty {
-        entries.append(.empty(theme, isRu
-            ? "Нет локальных подарков. Откройте подарок другого пользователя и нажмите «Добавить в профиль»."
-            : "No local gifts. Open another user's gift and tap \"Add to Profile\"."))
+        entries.append(.empty(theme, aorusL("Нет локальных подарков. Откройте подарок другого пользователя и нажмите «Добавить в профиль».", "No local gifts. Open another user's gift and tap \"Add to Profile\".")))
     } else {
         for (i, stored) in gifts.enumerated() {
             let title: String
@@ -149,7 +145,7 @@ private func fakeGiftsEntries(state: FakeGiftsState, theme: PresentationTheme) -
                 title = t
                 label = number.flatMap { "#\($0)" } ?? ""
             } else {
-                title = isRu ? "Подарок" : "Gift"
+                title = aorusL("Подарок", "Gift")
                 label = ""
             }
             entries.append(.gift(theme, Int32(i), stored, title, label))
@@ -216,7 +212,7 @@ public func aorusFakeGiftsController(context: AccountContext) -> ViewController 
             let isRu = AorusLang.current == .ru
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
-                title: .text(isRu ? "Фейковые подарки" : "Fake Gifts"),
+                title: .text(aorusL("Фейковые подарки", "Fake Gifts")),
                 leftNavigationButton: nil,
                 rightNavigationButton: nil,
                 backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back)

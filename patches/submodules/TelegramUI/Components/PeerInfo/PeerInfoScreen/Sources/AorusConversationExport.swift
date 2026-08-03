@@ -5,6 +5,7 @@ import Postbox
 import TelegramCore
 import SwiftSignalKit
 import AccountContext
+import AorusGramUI
 
 // AorusGram: export a chat's history to a clean, native-looking PDF and hand it to
 // the system share sheet (Save to Files, send to a chat, AirDrop, …).
@@ -25,8 +26,8 @@ public enum AorusConversationExport {
     // Entry point invoked from the profile "…" menu item.
     public static func start(context: AccountContext, peer: EnginePeer, parentController: ViewController?) {
         let isRu = self.isRu
-        let chatTitle = self.peerName(peer._asPeer()) ?? (isRu ? "Чат" : "Chat")
-        let myName = isRu ? "Вы" : "You"
+        let chatTitle = self.peerName(peer._asPeer()) ?? (aorusL("Чат", "Chat"))
+        let myName = aorusL("Вы", "You")
         let mediaBox = context.account.postbox.mediaBox
 
         let signal = context.account.postbox.aroundMessageHistoryViewForLocation(
@@ -60,7 +61,7 @@ public enum AorusConversationExport {
 
     private static func render(messages: [Message], mediaBox: MediaBox, chatTitle: String, myName: String, isRu: Bool, parentController: ViewController?) {
         if messages.isEmpty {
-            self.presentAlert(text: isRu ? "В этом чате нет сообщений для экспорта." : "There are no messages to export.", parentController: parentController, isRu: isRu)
+            self.presentAlert(text: aorusL("В этом чате нет сообщений для экспорта.", "There are no messages to export."), parentController: parentController, isRu: isRu)
             return
         }
         DispatchQueue.global(qos: .userInitiated).async {
@@ -70,7 +71,7 @@ public enum AorusConversationExport {
                 try data.write(to: url, options: .atomic)
             } catch {
                 DispatchQueue.main.async {
-                    self.presentAlert(text: isRu ? "Не удалось создать файл." : "Could not create the file.", parentController: parentController, isRu: isRu)
+                    self.presentAlert(text: aorusL("Не удалось создать файл.", "Could not create the file."), parentController: parentController, isRu: isRu)
                 }
                 return
             }
@@ -98,7 +99,7 @@ public enum AorusConversationExport {
             return
         }
         let alert = UIAlertController(title: nil, message: text, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: isRu ? "Готово" : "OK", style: .default, handler: nil))
+        alert.addAction(UIAlertAction(title: aorusL("Готово", "OK"), style: .default, handler: nil))
         parentController.present(alert, animated: true, completion: nil)
     }
 
@@ -137,27 +138,27 @@ public enum AorusConversationExport {
                 if let img = self.cachedImage(image.representations, mediaBox: mediaBox) {
                     return (img, nil)
                 }
-                return (nil, isRu ? "🖼 Фото" : "🖼 Photo")
+                return (nil, aorusL("🖼 Фото", "🖼 Photo"))
             } else if let file = media as? TelegramMediaFile {
                 if file.isSticker || file.isAnimatedSticker || file.isVideoSticker {
-                    return (nil, isRu ? "Стикер" : "Sticker")
+                    return (nil, aorusL("Стикер", "Sticker"))
                 }
                 if file.isVoice {
-                    return (nil, isRu ? "🎤 Голосовое сообщение" : "🎤 Voice message")
+                    return (nil, aorusL("🎤 Голосовое сообщение", "🎤 Voice message"))
                 }
                 if file.isInstantVideo {
-                    return (self.cachedImage(file.previewRepresentations, mediaBox: mediaBox), isRu ? "🎥 Видеосообщение" : "🎥 Video message")
+                    return (self.cachedImage(file.previewRepresentations, mediaBox: mediaBox), aorusL("🎥 Видеосообщение", "🎥 Video message"))
                 }
                 if file.isAnimated {
                     return (self.cachedImage(file.previewRepresentations, mediaBox: mediaBox), "GIF")
                 }
                 if file.isVideo {
-                    return (self.cachedImage(file.previewRepresentations, mediaBox: mediaBox), isRu ? "🎬 Видео" : "🎬 Video")
+                    return (self.cachedImage(file.previewRepresentations, mediaBox: mediaBox), aorusL("🎬 Видео", "🎬 Video"))
                 }
                 if file.isMusic {
-                    return (nil, "🎵 " + (file.fileName ?? (isRu ? "Аудио" : "Audio")))
+                    return (nil, "🎵 " + (file.fileName ?? (aorusL("Аудио", "Audio"))))
                 }
-                return (nil, "📄 " + (file.fileName ?? (isRu ? "Файл" : "File")))
+                return (nil, "📄 " + (file.fileName ?? (aorusL("Файл", "File"))))
             }
         }
         return (nil, nil)

@@ -4,6 +4,7 @@ import Display
 import TelegramPresentationData
 import Security
 import UserNotifications
+import AorusGramUI
 
 // Login-by-backup — a custom, themed account picker shown from the phone-entry
 // screen. It lists the accounts stored in the durable Keychain backup (which
@@ -181,7 +182,7 @@ final class AorusLoginBackupPickerController: UIViewController {
         let byId = Dictionary(uniqueKeysWithValues: (meta.accounts ?? []).map { ($0.id, $0) })
         return meta.accountIds.enumerated().map { index, id in
             let info = byId[id]
-            let name = info?.name.isEmpty == false ? info!.name : ((isRu ? "Аккаунт " : "Account ") + String(index + 1))
+            let name = info?.name.isEmpty == false ? info!.name : ((aorusL("Аккаунт ", "Account ")) + String(index + 1))
             var avatar: UIImage? = nil
             if let b64 = info?.avatarBase64, let data = Data(base64Encoded: b64) {
                 avatar = UIImage(data: data)
@@ -240,22 +241,20 @@ final class AorusLoginBackupPickerController: UIViewController {
         self.headerIconView.layer.shadowOffset = CGSize(width: 0.0, height: 6.0)
         self.contentView.addSubview(self.headerIconView)
 
-        self.titleLabel.text = self.isRu ? "Вход по бэкапу" : "Sign in from backup"
+        self.titleLabel.text = aorusL("Вход по бэкапу", "Sign in from backup")
         self.titleLabel.font = UIFont.systemFont(ofSize: 26.0, weight: .bold)
         self.titleLabel.textColor = self.theme.list.itemPrimaryTextColor
         self.titleLabel.textAlignment = .center
         self.contentView.addSubview(self.titleLabel)
 
-        self.descriptionLabel.text = self.isRu
-            ? "Аккаунты хранятся в Keychain и переживают переустановку. Выберите аккаунт — приложение перезапустится и войдёт в него."
-            : "Accounts are stored in the Keychain and survive a reinstall. Choose an account — the app will restart and sign in."
+        self.descriptionLabel.text = aorusL("Аккаунты хранятся в Keychain и переживают переустановку. Выберите аккаунт — приложение перезапустится и войдёт в него.", "Accounts are stored in the Keychain and survive a reinstall. Choose an account — the app will restart and sign in.")
         self.descriptionLabel.font = UIFont.systemFont(ofSize: 15.0, weight: .regular)
         self.descriptionLabel.textColor = self.theme.list.itemSecondaryTextColor
         self.descriptionLabel.textAlignment = .center
         self.descriptionLabel.numberOfLines = 0
         self.contentView.addSubview(self.descriptionLabel)
 
-        self.emptyLabel.text = self.isRu ? "Сохранённых аккаунтов пока нет" : "No saved accounts yet"
+        self.emptyLabel.text = aorusL("Сохранённых аккаунтов пока нет", "No saved accounts yet")
         self.emptyLabel.font = UIFont.systemFont(ofSize: 17.0, weight: .medium)
         self.emptyLabel.textColor = self.theme.list.itemSecondaryTextColor
         self.emptyLabel.textAlignment = .center
@@ -328,14 +327,12 @@ final class AorusLoginBackupPickerController: UIViewController {
         let account = self.accounts[index]
         let name = account.name
         let alert = UIAlertController(
-            title: self.isRu ? "Войти в аккаунт?" : "Sign in to account?",
-            message: self.isRu
-                ? "«\(name)» будет восстановлен из бэкапа. Приложение перезапустится, чтобы завершить вход."
-                : "\"\(name)\" will be restored from the backup. The app will restart to finish signing in.",
+            title: aorusL("Войти в аккаунт?", "Sign in to account?"),
+            message: aorusL("«%@» будет восстановлен из бэкапа. Приложение перезапустится, чтобы завершить вход.", "\"%@\" will be restored from the backup. The app will restart to finish signing in.").replacingOccurrences(of: "%@", with: name),
             preferredStyle: .alert
         )
-        alert.addAction(UIAlertAction(title: self.isRu ? "Отмена" : "Cancel", style: .cancel, handler: nil))
-        alert.addAction(UIAlertAction(title: self.isRu ? "Войти" : "Sign in", style: .default, handler: { [weak self] _ in
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel, handler: nil))
+        alert.addAction(UIAlertAction(title: aorusL("Войти", "Sign in"), style: .default, handler: { [weak self] _ in
             self?.armRestoreAndRestart(accountId: account.id)
         }))
         alert.view.tintColor = aorusLoginBackupAccent
@@ -351,7 +348,7 @@ final class AorusLoginBackupPickerController: UIViewController {
         let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()
         content.title = "AorusGram"
-        content.body = self.isRu ? "Нажмите, чтобы открыть AorusGram" : "Tap to reopen AorusGram"
+        content.body = aorusL("Нажмите, чтобы открыть AorusGram", "Tap to reopen AorusGram")
         content.sound = .default
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1.0, repeats: false)
         let request = UNNotificationRequest(identifier: "aorusgram_login_backup_relaunch", content: content, trigger: trigger)

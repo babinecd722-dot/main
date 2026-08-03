@@ -1488,13 +1488,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let text: String
             if peerTitle.isEmpty {
-                text = isRussian
-                    ? "Канал добавлен в исключения"
-                    : "Channel added to exclusions"
+                text = aorusL("Канал добавлен в исключения", "Channel added to exclusions")
             } else {
-                text = isRussian
-                    ? "Канал «\(peerTitle)» добавлен в исключения"
-                    : "Channel “\(peerTitle)” added to exclusions"
+                text = aorusL("Канал «%@» добавлен в исключения", "Channel “%@” added to exclusions").replacingOccurrences(of: "%@", with: peerTitle)
             }
             self.navigationController?.present(
                 UndoOverlayController(

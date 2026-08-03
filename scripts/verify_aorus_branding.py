@@ -1320,34 +1320,26 @@ def main() -> None:
     # Translations are keyed by the English string, so a key that no longer matches a literal
     # in the source silently falls back to English and the language looks half-done. Check each
     # table against its source, including the %@ placeholders.
+    # The source list is discovered, not hardcoded: a new screen that calls aorusL() has to
+    # land in the table automatically, otherwise the first time anyone forgets, six languages
+    # quietly fall back to English and nothing complains.
     aorusgram_ui = tg / "submodules" / "AorusGramUI" / "Sources"
-    subscription_dir = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription"
+    aorus_module = tg / "submodules" / "AorusGram" / "Sources"
+    subscription_dir = aorus_module / "Features" / "Subscription"
+    aorusgram_ui_sources = sorted(aorusgram_ui.rglob("*.swift")) if aorusgram_ui.is_dir() else []
+    for swift_file in sorted((tg / "submodules").rglob("*.swift")):
+        if "AorusGramUI" in swift_file.parts:
+            continue
+        if "aorusL(" in swift_file.read_text(encoding="utf-8", errors="replace"):
+            aorusgram_ui_sources.append(swift_file)
+    subscription_sources = [subscription_dir / "SubscriptionL10n.swift"]
+    if aorus_module.is_dir():
+        subscription_sources += [
+            p for p in sorted(aorus_module.rglob("*.swift")) if "SubL10n.t(" in p.read_text(encoding="utf-8", errors="replace")
+        ]
     translation_pairs = (
-        (
-            "subscription",
-            [subscription_dir / "SubscriptionL10n.swift"],
-            subscription_dir / "SubscriptionL10nTable.swift",
-        ),
-        (
-            "AorusGramUI",
-            [
-                aorusgram_ui / "Core" / "AorusL10n.swift",
-                aorusgram_ui / "Core" / "AorusRestartNotice.swift",
-                aorusgram_ui / "AccountBackupController.swift",
-                aorusgram_ui / "AorusSessionBackupView.swift",
-                aorusgram_ui / "AorusSessionBackupHostController.swift",
-                aorusgram_ui / "AorusMiscController.swift",
-                aorusgram_ui / "AorusAntiSpamController.swift",
-                aorusgram_ui / "AorusDeviceSpoofController.swift",
-                aorusgram_ui / "AorusChatLockController.swift",
-                aorusgram_ui / "AorusQuickRepliesController.swift",
-                aorusgram_ui / "AorusFontPickerController.swift",
-                aorusgram_ui / "Security" / "AorusActionConfirmation.swift",
-                aorusgram_ui / "Security" / "AorusLinkProtection.swift",
-                aorusgram_ui / "Features" / "Privacy" / "AorusChatLock.swift",
-            ],
-            aorusgram_ui / "Core" / "AorusL10nTable.swift",
-        ),
+        ("subscription", subscription_sources, subscription_dir / "SubscriptionL10nTable.swift"),
+        ("AorusGramUI", aorusgram_ui_sources, aorusgram_ui / "Core" / "AorusL10nTable.swift"),
     )
     for area, src_paths, tbl_path in translation_pairs:
         present = [p for p in src_paths if p.is_file()]
@@ -1360,7 +1352,10 @@ def main() -> None:
         for src_path in present:
             src_body = src_path.read_text(encoding="utf-8")
             for pattern in (
-                r'\b(?:t|aorusL)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
+                # t(ru, en) on the per-screen helpers, the free aorusL(ru, en), SubL10n.t()
+                # in the AorusGram module, title(ru, en, isRu) in the metadata screen and
+                # localized(ru, en) in the backup manager all resolve through one table.
+                r'\b(?:t|aorusL|title|localized)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
                 # AorusLinkProtection carries its risk texts as ru:/en: template pairs and
                 # feeds them to aorusL() at display time.
                 r'\bru:\s*"((?:[^"\\]|\\.)*)"\s*,\s*\n?\s*en:\s*"((?:[^"\\]|\\.)*)"',
@@ -1390,6 +1385,31 @@ def main() -> None:
                     err.append(
                         f"Language: {name} {area} translation of {key!r} loses its %@ placeholder"
                     )
+
+    # aorusL() lives in AorusGramUI. A file that calls it without the import, or in a package
+    # without the Bazel dep, is a link error 40 minutes into the build — catch it here.
+    for swift_file in sorted((tg / "submodules").rglob("*.swift")):
+        body = swift_file.read_text(encoding="utf-8", errors="replace")
+        # Comments mention the helper by name; only real call sites need the dep.
+        code = "\n".join(line.split("//")[0] for line in body.split("\n"))
+        if "aorusL(" not in code:
+            continue
+        parts = swift_file.parts
+        if "AorusGramUI" in parts:
+            continue
+        if "import AorusGramUI" not in body:
+            err.append(f"Language: {swift_file.name} calls aorusL() without importing AorusGramUI")
+        package = swift_file.parent
+        while package != tg and not (package / "BUILD").is_file():
+            package = package.parent
+        build_file = package / "BUILD"
+        if not build_file.is_file():
+            err.append(f"Language: {swift_file.name} calls aorusL() but its package has no BUILD")
+        elif "//submodules/AorusGramUI" not in build_file.read_text(encoding="utf-8"):
+            err.append(
+                f"Language: {swift_file.name} calls aorusL() but "
+                f"{package.relative_to(tg)} has no AorusGramUI dep"
+            )
 
     # Everything AorusGram shows follows the language selected inside Telegram. The device
     # language may only ever be a fallback for a fresh install that has no account yet, so a

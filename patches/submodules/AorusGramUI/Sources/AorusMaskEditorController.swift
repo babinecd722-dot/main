@@ -50,7 +50,7 @@ enum AorusCustomMaskStore {
     static func records(isRussian: Bool) -> [AorusCustomMaskRecord] {
         var result: [AorusCustomMaskRecord] = []
         if FileManager.default.fileExists(atPath: self.legacyURL.path) {
-            result.append(AorusCustomMaskRecord(id: "legacy", name: isRussian ? "Моя маска" : "My Mask"))
+            result.append(AorusCustomMaskRecord(id: "legacy", name: aorusL("Моя маска", "My Mask")))
         }
         let valid = self.storedRecords().filter { record in
             UUID(uuidString: record.id) != nil && FileManager.default.fileExists(atPath: self.imageURL(for: record).path)
@@ -130,10 +130,10 @@ private enum AorusMaskFontStyle: String, CaseIterable {
 
     func title(isRussian: Bool) -> String {
         switch self {
-        case .system: return isRussian ? "Системный" : "System"
-        case .rounded: return isRussian ? "Скругленный" : "Rounded"
-        case .serif: return isRussian ? "С засечками" : "Serif"
-        case .mono: return isRussian ? "Моноширинный" : "Monospaced"
+        case .system: return aorusL("Системный", "System")
+        case .rounded: return aorusL("Скругленный", "Rounded")
+        case .serif: return aorusL("С засечками", "Serif")
+        case .mono: return aorusL("Моноширинный", "Monospaced")
         case .avenir: return "Avenir Next"
         case .helvetica: return "Helvetica Neue"
         case .georgia: return "Georgia"
@@ -859,10 +859,10 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
         self.onSaved = onSaved
         self.canvas = AorusMaskCanvasView(image: nil)
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
-        self.title = self.isRussian ? "Своя маска" : "Custom Mask"
+        self.title = aorusL("Своя маска", "Custom Mask")
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: self.isRussian ? "Сохранить" : "Save",
+            title: aorusL("Сохранить", "Save"),
             style: .done,
             target: self,
             action: #selector(self.savePressed)
@@ -1037,20 +1037,20 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     }
 
     @objc private func addPressed() {
-        let alert = UIAlertController(title: self.isRussian ? "Добавить" : "Add", message: nil, preferredStyle: .actionSheet)
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Фото" : "Photo", style: .default, handler: { [weak self] _ in
+        let alert = UIAlertController(title: aorusL("Добавить", "Add"), message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: aorusL("Фото", "Photo"), style: .default, handler: { [weak self] _ in
             self?.importPressed()
         }))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Текст" : "Text", style: .default, handler: { [weak self] _ in
+        alert.addAction(UIAlertAction(title: aorusL("Текст", "Text"), style: .default, handler: { [weak self] _ in
             self?.textPressed()
         }))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Выбрать и переместить объект" : "Select and Move Object", style: .default, handler: { [weak self] _ in
+        alert.addAction(UIAlertAction(title: aorusL("Выбрать и переместить объект", "Select and Move Object"), style: .default, handler: { [weak self] _ in
             self?.selectTool(.move)
         }))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Шрифт текста" : "Text Font", style: .default, handler: { [weak self] _ in
+        alert.addAction(UIAlertAction(title: aorusL("Шрифт текста", "Text Font"), style: .default, handler: { [weak self] _ in
             self?.fontPressed()
         }))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
         alert.popoverPresentationController?.sourceView = self.addButton
         alert.popoverPresentationController?.sourceRect = self.addButton.bounds
         self.present(alert, animated: true)
@@ -1066,13 +1066,13 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     }
 
     @objc private func textPressed() {
-        let alert = UIAlertController(title: self.isRussian ? "Добавить текст" : "Add Text", message: nil, preferredStyle: .alert)
+        let alert = UIAlertController(title: aorusL("Добавить текст", "Add Text"), message: nil, preferredStyle: .alert)
         alert.addTextField { field in
-            field.placeholder = self.isRussian ? "Текст" : "Text"
+            field.placeholder = aorusL("Текст", "Text")
             field.clearButtonMode = .whileEditing
         }
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Добавить" : "Add", style: .default, handler: { [weak self, weak alert] _ in
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Добавить", "Add"), style: .default, handler: { [weak self, weak alert] _ in
             guard let self, let value = alert?.textFields?.first?.text else { return }
             self.canvas.addText(value, fontStyle: self.selectedFontStyle, color: self.canvas.brushColor)
             self.selectTool(.move)
@@ -1081,7 +1081,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     }
 
     @objc private func fontPressed() {
-        let alert = UIAlertController(title: self.isRussian ? "Шрифт" : "Font", message: nil, preferredStyle: .actionSheet)
+        let alert = UIAlertController(title: aorusL("Шрифт", "Font"), message: nil, preferredStyle: .actionSheet)
         for style in AorusMaskFontStyle.allCases {
             let title = style == self.selectedFontStyle ? "✓ " + style.title(isRussian: self.isRussian) : style.title(isRussian: self.isRussian)
             alert.addAction(UIAlertAction(title: title, style: .default, handler: { [weak self] _ in
@@ -1091,7 +1091,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
                 UISelectionFeedbackGenerator().selectionChanged()
             }))
         }
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
         alert.popoverPresentationController?.sourceView = self.addButton
         alert.popoverPresentationController?.sourceRect = self.addButton.bounds
         self.present(alert, animated: true)
@@ -1103,12 +1103,12 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             return
         }
         guard self.canvas.hasContent else { return }
-        let alert = UIAlertController(title: self.isRussian ? "Очистить маску?" : "Clear Mask?", message: nil, preferredStyle: .actionSheet)
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Очистить" : "Clear", style: .destructive, handler: { [weak self] _ in
+        let alert = UIAlertController(title: aorusL("Очистить маску?", "Clear Mask?"), message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: aorusL("Очистить", "Clear"), style: .destructive, handler: { [weak self] _ in
             self?.canvas.clear()
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
         }))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
         alert.popoverPresentationController?.sourceView = self.clearButton
         alert.popoverPresentationController?.sourceRect = self.clearButton.bounds
         self.present(alert, animated: true)
@@ -1141,18 +1141,18 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             return
         }
         let alert = UIAlertController(
-            title: self.isRussian ? "Название маски" : "Mask Name",
+            title: aorusL("Название маски", "Mask Name"),
             message: nil,
             preferredStyle: .alert
         )
         alert.addTextField { [weak self] field in
-            field.text = self?.isRussian == true ? "Моя маска" : "My Mask"
+            field.text = aorusL("Моя маска", "My Mask")
             field.clearButtonMode = .whileEditing
             field.autocapitalizationType = .sentences
             field.returnKeyType = .done
         }
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Отмена" : "Cancel", style: .cancel))
-        alert.addAction(UIAlertAction(title: self.isRussian ? "Сохранить" : "Save", style: .default, handler: { [weak self, weak alert] _ in
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Сохранить", "Save"), style: .default, handler: { [weak self, weak alert] _ in
             guard let self else { return }
             self.commitMask(data: data, name: alert?.textFields?.first?.text ?? "")
         }))
@@ -1162,7 +1162,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
     private func commitMask(data: Data, name: String) {
         do {
             let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedName = cleanedName.isEmpty ? (self.isRussian ? "Моя маска" : "My Mask") : cleanedName
+            let resolvedName = cleanedName.isEmpty ? (aorusL("Моя маска", "My Mask")) : cleanedName
             let record = try AorusCustomMaskStore.save(data: data, name: resolvedName)
             self.onSaved(record)
             NotificationCenter.default.post(name: Notification.Name("aorusgram_settings_changed"), object: nil)

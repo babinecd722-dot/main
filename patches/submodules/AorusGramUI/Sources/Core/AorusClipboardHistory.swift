@@ -211,7 +211,7 @@ private final class AorusClipboardListController: UITableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        self.title = isRu ? "Буфер обмена" : "Clipboard"
+        self.title = aorusL("Буфер обмена", "Clipboard")
         self.view.backgroundColor = theme.list.plainBackgroundColor
         self.tableView.backgroundColor = theme.list.plainBackgroundColor
         self.tableView.separatorColor = theme.list.itemPlainSeparatorColor
@@ -220,9 +220,9 @@ private final class AorusClipboardListController: UITableViewController {
         self.tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
 
         self.navigationItem.leftBarButtonItem = UIBarButtonItem(
-            title: isRu ? "Готово" : "Done", style: .done, target: self, action: #selector(dismissSelf))
+            title: aorusL("Готово", "Done"), style: .done, target: self, action: #selector(dismissSelf))
         self.navigationItem.rightBarButtonItem = UIBarButtonItem(
-            title: isRu ? "Очистить" : "Clear", style: .plain, target: self, action: #selector(clearAll))
+            title: aorusL("Очистить", "Clear"), style: .plain, target: self, action: #selector(clearAll))
         self.navigationItem.rightBarButtonItem?.isEnabled = !items.isEmpty
     }
 
@@ -233,16 +233,16 @@ private final class AorusClipboardListController: UITableViewController {
     @objc private func clearAll() {
         let alert = UIAlertController(
             title: nil,
-            message: isRu ? "Очистить всю историю буфера?" : "Clear the entire clipboard history?",
+            message: aorusL("Очистить всю историю буфера?", "Clear the entire clipboard history?"),
             preferredStyle: .actionSheet)
-        alert.addAction(UIAlertAction(title: isRu ? "Очистить" : "Clear", style: .destructive) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: aorusL("Очистить", "Clear"), style: .destructive) { [weak self] _ in
             guard let self = self else { return }
             AorusClipboardHistory.clear()
             self.items = []
             self.tableView.reloadData()
             self.navigationItem.rightBarButtonItem?.isEnabled = false
         })
-        alert.addAction(UIAlertAction(title: isRu ? "Отмена" : "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
         if let pop = alert.popoverPresentationController {
             pop.barButtonItem = self.navigationItem.rightBarButtonItem
         }
@@ -280,7 +280,7 @@ private final class AorusClipboardListController: UITableViewController {
     }
 
     override func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-        let delete = UIContextualAction(style: .destructive, title: isRu ? "Удалить" : "Delete") { [weak self] _, _, done in
+        let delete = UIContextualAction(style: .destructive, title: aorusL("Удалить", "Delete")) { [weak self] _, _, done in
             guard let self = self, indexPath.row < self.items.count else { done(false); return }
             AorusClipboardHistory.remove(at: indexPath.row)
             self.items.remove(at: indexPath.row)
@@ -296,13 +296,13 @@ private final class AorusClipboardListController: UITableViewController {
         let text = items[indexPath.row]
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
             guard let self = self else { return nil }
-            let insert = UIAction(title: self.isRu ? "Вставить" : "Insert", image: UIImage(systemName: "text.cursor")) { _ in
+            let insert = UIAction(title: aorusL("Вставить", "Insert"), image: UIImage(systemName: "text.cursor")) { _ in
                 self.dismiss(animated: true) { self.onInsert(text, false) }
             }
-            let replace = UIAction(title: self.isRu ? "Заменить весь текст" : "Replace All Text", image: UIImage(systemName: "arrow.2.squarepath")) { _ in
+            let replace = UIAction(title: aorusL("Заменить весь текст", "Replace All Text"), image: UIImage(systemName: "arrow.2.squarepath")) { _ in
                 self.dismiss(animated: true) { self.onInsert(text, true) }
             }
-            let copy = UIAction(title: self.isRu ? "Копировать" : "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in
+            let copy = UIAction(title: aorusL("Копировать", "Copy"), image: UIImage(systemName: "doc.on.doc")) { _ in
                 UIPasteboard.general.string = text
                 AorusClipboardHistory.add(text)
             }
@@ -325,10 +325,8 @@ public func aorusPresentClipboardHistory(context: AccountContext, parent: UIView
 
     if items.isEmpty {
         let alert = UIAlertController(
-            title: isRu ? "Буфер обмена" : "Clipboard",
-            message: isRu
-                ? "История буфера пуста. Скопируйте текст — он появится здесь."
-                : "Clipboard history is empty. Copy some text and it will appear here.",
+            title: aorusL("Буфер обмена", "Clipboard"),
+            message: aorusL("История буфера пуста. Скопируйте текст — он появится здесь.", "Clipboard history is empty. Copy some text and it will appear here."),
             preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         parent.present(alert, animated: true)

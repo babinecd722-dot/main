@@ -38,17 +38,45 @@ public enum AorusBadge {
         return nil
     }
 
-    // Toast text shown when the badge is tapped. Follows the in-app Telegram
-    // language via the shared "aorusgram_lang" key (written by AppDelegate);
-    // anything other than Russian → English.
+    // Toast text shown when the badge is tapped. Follows the in-app Telegram language
+    // via the shared "aorusgram_lang_code" key written by AppDelegate.
+    //
+    // These two strings are resolved here rather than through AorusGramUI's shared
+    // helper: AorusBadge is a leaf module that Display-level code links against, and
+    // depending on AorusGramUI to translate two labels would drag the settings UI in behind
+    // it. The lookup key is the same one AppDelegate publishes.
+    private static func localized(_ table: [String: String], _ fallback: String) -> String {
+        let code = (UserDefaults.standard.string(forKey: "aorusgram_lang_code")
+            ?? UserDefaults.standard.string(forKey: "aorusgram_lang")
+            ?? Locale.preferredLanguages.first
+            ?? "en").lowercased()
+        let base = String(code.prefix(while: { $0 != "-" && $0 != "_" }))
+        return table[base] ?? fallback
+    }
+
     public static func toastText(forPeerRawId id: Int64, peerName _: String) -> String? {
         guard let kind = kind(forPeerRawId: id) else { return nil }
-        let isRu = UserDefaults.standard.string(forKey: "aorusgram_lang") == "ru"
         switch kind {
         case .dev:
-            return isRu ? "Разработчик AorusGram" : "AorusGram Developer"
+            return localized([
+                "ru": "Разработчик AorusGram",
+                "uk": "Розробник AorusGram",
+                "es": "Desarrollador de AorusGram",
+                "pt": "Desenvolvedor do AorusGram",
+                "de": "AorusGram-Entwickler",
+                "fr": "Développeur d’AorusGram",
+                "tr": "AorusGram geliştiricisi",
+            ], "AorusGram Developer")
         case .meme:
-            return isRu ? "Гл. Администратор AorusGram" : "AorusGram Head Administrator"
+            return localized([
+                "ru": "Гл. Администратор AorusGram",
+                "uk": "Гол. Адміністратор AorusGram",
+                "es": "Administrador principal de AorusGram",
+                "pt": "Administrador principal do AorusGram",
+                "de": "Hauptadministrator von AorusGram",
+                "fr": "Administrateur principal d’AorusGram",
+                "tr": "AorusGram baş yöneticisi",
+            ], "AorusGram Head Administrator")
         }
     }
 

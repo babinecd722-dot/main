@@ -17,15 +17,22 @@ private let _aorusCacheIntervalPresets = [6, 24, 168, 720]       // hours
 private let _aorusRAMIntervalPresets = [30, 60, 300, 900]        // seconds
 
 // Format an hours value for the slider's trailing label.
+// The number goes in after translation, not before: an interpolated string reaching
+// aorusL() differs on every value and could never match a key in AorusL10nTable.
 private func _aorusCacheIntervalText(_ hours: Int, isRu: Bool) -> String {
-    if hours % 24 == 0 { let d = hours / 24; return isRu ? "\(d) дн" : "\(d) d" }
-    return isRu ? "\(hours) ч" : "\(hours) h"
+    if hours % 24 == 0 {
+        let d = hours / 24
+        return aorusL("%@ дн", "%@ d").replacingOccurrences(of: "%@", with: "\(d)")
+    }
+    return aorusL("%@ ч", "%@ h").replacingOccurrences(of: "%@", with: "\(hours)")
 }
 
 private func _aorusRAMIntervalText(_ seconds: Int, isRu: Bool) -> String {
-    if seconds < 60 { return isRu ? "\(seconds) сек" : "\(seconds) sec" }
+    if seconds < 60 {
+        return aorusL("%@ сек", "%@ sec").replacingOccurrences(of: "%@", with: "\(seconds)")
+    }
     let minutes = seconds / 60
-    return isRu ? "\(minutes) мин" : "\(minutes) min"
+    return aorusL("%@ мин", "%@ min").replacingOccurrences(of: "%@", with: "\(minutes)")
 }
 
 /// A settings row that embeds a discrete UISlider for cleanup intervals.
@@ -1069,7 +1076,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         if case .antiSpam = $0 { return true }; return false
     }) {
         let isRu = AorusLang.current == .ru
-        entries.insert(.antiSpamManage(theme, isRu ? "Управление" : "Manage"), at: idx + 1)
+        entries.insert(.antiSpamManage(theme, aorusL("Управление", "Manage")), at: idx + 1)
     }
 
     if state.performanceStatsEnabled, let idx = entries.firstIndex(where: {
@@ -1330,9 +1337,9 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             let showDone: () -> Void = {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 let alert = UIAlertController(
-                    title: isRu ? "Кэш успешно очищен" : "Cache cleared",
+                    title: aorusL("Кэш успешно очищен", "Cache cleared"),
                     message: nil, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: isRu ? "Готово" : "Done", style: .default))
+                alert.addAction(UIAlertAction(title: aorusL("Готово", "Done"), style: .default))
                 weakController?.present(alert, animated: true)
             }
             let ids: [MessageId] = stored.compactMap { entry in

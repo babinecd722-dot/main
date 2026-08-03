@@ -59,11 +59,11 @@ struct VoiceTranscriberView: View {
                     .padding(16)
                 }
             }
-            .navigationTitle("Транскриптор")
+            .navigationTitle(SubL10n.t("Транскриптор", "Transcriber"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Закрыть") {
+                    Button(SubL10n.t("Закрыть", "Close")) {
                         if isRecording { stopRecording() }
                         dismiss()
                     }
@@ -84,7 +84,7 @@ struct VoiceTranscriberView: View {
     private var languagePickerCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Язык распознавания", systemImage: "globe")
+                Label(SubL10n.t("Язык распознавания", "Recognition language"), systemImage: "globe")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Color(hex: "#5C6BC0"))
                 languageMenu
@@ -125,7 +125,7 @@ struct VoiceTranscriberView: View {
                     .font(.system(size: 56))
                     .foregroundStyle(LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing))
                     .symbolEffect(.pulse, isActive: isRecording)
-                Text(isRecording ? "Запись... Говорите" : "Нажмите чтобы записать")
+                Text(isRecording ? SubL10n.t("Запись... Говорите", "Recording… Speak now") : SubL10n.t("Нажмите чтобы записать", "Tap to record"))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
                 recordButton
@@ -139,7 +139,7 @@ struct VoiceTranscriberView: View {
         return Button {
             if isRecording { stopRecording() } else { startRecording() }
         } label: {
-            Text(isRecording ? "Остановить" : "Записать")
+            Text(isRecording ? SubL10n.t("Остановить", "Stop") : SubL10n.t("Записать", "Record"))
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(.white)
                 .padding(.horizontal, 30)
@@ -149,7 +149,7 @@ struct VoiceTranscriberView: View {
     }
 
     private var filePickerButton: some View {
-        GlassButton(title: "Выбрать аудио файл", icon: "doc.fill", color: Color(hex: "#5C6BC0")) {
+        GlassButton(title: SubL10n.t("Выбрать аудио файл", "Choose an audio file"), icon: "doc.fill", color: Color(hex: "#5C6BC0")) {
             showFilePicker = true
         }
         .disabled(isRecording || isTranscribing)
@@ -159,7 +159,7 @@ struct VoiceTranscriberView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Транскрипция", systemImage: "text.bubble.fill")
+                    Label(SubL10n.t("Транскрипция", "Transcript"), systemImage: "text.bubble.fill")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.green)
                     Spacer()
@@ -185,7 +185,7 @@ struct VoiceTranscriberView: View {
     private var transcribingIndicator: some View {
         HStack {
             ProgressView().scaleEffect(0.8)
-            Text("Распознавание...")
+            Text(SubL10n.t("Распознавание...", "Recognizing…"))
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
         }
@@ -204,14 +204,14 @@ struct VoiceTranscriberView: View {
         SFSpeechRecognizer.requestAuthorization { status in
             DispatchQueue.main.async {
                 guard status == .authorized else {
-                    errorMessage = "Нет разрешения на распознавание речи. Включите в Настройках."
+                    errorMessage = SubL10n.t("Нет разрешения на распознавание речи. Включите в Настройках.", "Speech recognition is not permitted. Enable it in Settings.")
                     showError = true
                     return
                 }
                 AVAudioSession.sharedInstance().requestRecordPermission { granted in
                     DispatchQueue.main.async {
                         guard granted else {
-                            errorMessage = "Нет разрешения на микрофон"
+                            errorMessage = SubL10n.t("Нет разрешения на микрофон", "Microphone access is not permitted")
                             showError = true
                             return
                         }
@@ -235,7 +235,7 @@ struct VoiceTranscriberView: View {
                 try session.setPreferredInput(nil)
             }
         } catch {
-            errorMessage = "Не удалось активировать аудиосессию: \(error.localizedDescription)"
+            errorMessage = SubL10n.t("Не удалось активировать аудиосессию: %@", "Could not start the audio session: %@").replacingOccurrences(of: "%@", with: error.localizedDescription)
             showError = true
             return
         }
@@ -250,7 +250,7 @@ struct VoiceTranscriberView: View {
 
         let locale = Locale(identifier: selectedLocale)
         guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
-            errorMessage = "Распознаватель для языка \(selectedLocale) недоступен"
+            errorMessage = SubL10n.t("Распознаватель для языка %@ недоступен", "No recognizer is available for %@").replacingOccurrences(of: "%@", with: selectedLocale)
             showError = true
             return
         }
@@ -289,7 +289,7 @@ struct VoiceTranscriberView: View {
             showError = false
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         } catch {
-            errorMessage = "Не удалось запустить запись: \(error.localizedDescription)"
+            errorMessage = SubL10n.t("Не удалось запустить запись: %@", "Could not start recording: %@").replacingOccurrences(of: "%@", with: error.localizedDescription)
             showError = true
         }
     }

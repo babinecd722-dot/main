@@ -102,7 +102,7 @@ public final class DeletedMessageBubbleView: UIView {
         nameLabel.isHidden = msg.senderName.isEmpty
 
         if msg.text.isEmpty {
-            textLabel.text = (AorusLang.current == .ru) ? "Медиафайл" : "Media"
+            textLabel.text = aorusL("Медиафайл", "Media")
             textLabel.font = .italicSystemFont(ofSize: 14)
         } else {
             textLabel.text = msg.text

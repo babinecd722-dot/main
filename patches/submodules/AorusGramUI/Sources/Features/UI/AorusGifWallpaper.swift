@@ -260,7 +260,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
     public override func viewDidLoad() {
         super.viewDidLoad()
         self.view.backgroundColor = .systemBackground
-        self.title = russian ? "Выбрать GIF" : "Choose GIF"
+        self.title = aorusL("Выбрать GIF", "Choose GIF")
         self.navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel, target: self, action: #selector(self.cancelTapped))
         self.navigationController?.navigationBar.tintColor = self.accent
@@ -298,7 +298,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
                 case .authorized, .limited:
                     self.loadAssets()
                 default:
-                    self.showEmpty(self.russian ? "Нет доступа к галерее" : "No photo access")
+                    self.showEmpty(aorusL("Нет доступа к галерее", "No photo access"))
                 }
             }
         }
@@ -324,7 +324,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
         let animated = all.objects(at: indexes as IndexSet)
         self.animatedAssets = animated
         if animated.isEmpty {
-            self.showEmpty(self.russian ? "Нет GIF в галерее" : "No GIFs found")
+            self.showEmpty(aorusL("Нет GIF в галерее", "No GIFs found"))
         } else {
             self.emptyLabel?.removeFromSuperview()
             self.emptyLabel = nil
@@ -434,7 +434,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
         self.view.isUserInteractionEnabled = true
         let alert = UIAlertController(
             title: nil,
-            message: self.russian ? "Не удалось обработать GIF" : "Could not process the GIF",
+            message: aorusL("Не удалось обработать GIF", "Could not process the GIF"),
             preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         self.present(alert, animated: true)
