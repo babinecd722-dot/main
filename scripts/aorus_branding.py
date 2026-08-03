@@ -16007,7 +16007,13 @@ def patch_session_ip_address(tg: Path) -> None:
     replacement = (
         "                // AorusGram: show the session IP. The row below already exists and sits\n"
         "                // between Application and Location; upstream only leaves it empty here.\n"
-        "                ipString = session.ip.isEmpty ? nil : session.ip\n"
+        "                //\n"
+        "                // The row is shown unconditionally. Hiding it when the server sends an\n"
+        "                // empty ip made a missing value indistinguishable from a missing patch,\n"
+        "                // and nothing in stock ever reads session.ip, so there was no way to tell\n"
+        "                // the two apart from the outside.\n"
+        "                let aorusSessionIP = session.ip.trimmingCharacters(in: .whitespacesAndNewlines)\n"
+        "                ipString = aorusSessionIP.isEmpty ? \"\\u{2014}\" : aorusSessionIP\n"
         "                dateString = nil\n"
         "                locationString = session.country\n"
     )

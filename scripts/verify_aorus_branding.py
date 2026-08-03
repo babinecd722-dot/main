@@ -1321,7 +1321,7 @@ def main() -> None:
         tg / "submodules" / "SettingsUI" / "Sources" / "Privacy and Security" / "RecentSessionScreen.swift"
     )
     session_screen_text = session_screen.read_text(encoding="utf-8") if session_screen.is_file() else ""
-    if "ipString = session.ip.isEmpty ? nil : session.ip" not in session_screen_text:
+    if "let aorusSessionIP = session.ip.trimmingCharacters(in: .whitespacesAndNewlines)" not in session_screen_text:
         err.append("SessionIP: device sessions no longer show their IP address")
     if "                ipString = nil\n                dateString = nil\n                locationString = session.country" in session_screen_text:
         err.append("SessionIP: the upstream nil assignment is back, the IP row will be hidden")
