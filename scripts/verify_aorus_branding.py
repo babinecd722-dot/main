@@ -126,6 +126,10 @@ def main() -> None:
     )
     if chat_input.is_file():
         chat_text = chat_input.read_text(encoding="utf-8")
+        if "self.textInputNode?.textView" in chat_text:
+            err.append("ChatTextInputPanelNode: removed legacy textInputNode API is still referenced")
+        if "let cover = self.text" not in chat_text:
+            err.append("AorusCode: cover text is not read through the current ChatTextInputPanelNode API")
         if "reserve voice button in initial text-node insets" not in chat_text:
             err.append("VoiceToText: initial text-node insets do not reserve the voice button")
         if "keep liquid-glass composer clear of its outer buttons" not in chat_text:

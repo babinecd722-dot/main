@@ -22773,7 +22773,7 @@ def patch_formatting_panel(tg: Path) -> None:
         "              let chatLocation = self.presentationInterfaceState?.chatLocation,\n"
         "              let peerId = chatLocation.peerId,\n"
         "              let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
-        "        let cover = self.textInputNode?.textView.text ?? \"\"\n"
+        "        let cover = self.text\n"
         "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
         "        let alert = UIAlertController(title: \"AorusCode\", message: isRu ? \"Введите скрытое сообщение\" : \"Enter the hidden message\", preferredStyle: .alert)\n"
         "        alert.addTextField { textField in\n"
