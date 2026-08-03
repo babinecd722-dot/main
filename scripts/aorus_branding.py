@@ -15982,6 +15982,42 @@ def patch_tab_bar_visibility_controls(tg: Path) -> None:
         print("TabBarVisibility: TabBarController already patched")
 
 
+def patch_session_ip_address(tg: Path) -> None:
+    """Show the device's IP on the session detail screen.
+
+    The screen already renders an IP row, and already places it between Application and
+    Location — it is used for connected websites. For a device session upstream simply
+    passes nil, so the row is skipped. Filling it in is the whole change: no new layout,
+    no new strings, and AuthSessions_View_IP is already localized by Telegram.
+    """
+    path = tg / "submodules/SettingsUI/Sources/Privacy and Security/RecentSessionScreen.swift"
+    if not path.is_file():
+        print("SessionIP: RecentSessionScreen.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "AorusGram: show the session IP" in t:
+        print("SessionIP: already patched")
+        return
+
+    anchor = (
+        "                ipString = nil\n"
+        "                dateString = nil\n"
+        "                locationString = session.country\n"
+    )
+    replacement = (
+        "                // AorusGram: show the session IP. The row below already exists and sits\n"
+        "                // between Application and Location; upstream only leaves it empty here.\n"
+        "                ipString = session.ip.isEmpty ? nil : session.ip\n"
+        "                dateString = nil\n"
+        "                locationString = session.country\n"
+    )
+    if t.count(anchor) == 1:
+        path.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
+        print("SessionIP: device sessions now show their IP address")
+    else:
+        print(f"SessionIP: WARNING anchor matched {t.count(anchor)} times — skipped")
+
+
 def patch_action_confirmation(tg: Path) -> None:
     """Confirmation prompts in front of calls and of sending a just-recorded message.
 
@@ -23557,6 +23593,7 @@ def main() -> None:
     patch_chat_context_menu_translate_transcribe(tg)
     patch_share_button_translate(tg)
     patch_message_translate_button(tg)
+    patch_session_ip_address(tg)
     patch_action_confirmation(tg)
     patch_wall_postbox_paging(tg)
     patch_wall_post_actions(tg)
