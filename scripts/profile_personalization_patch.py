@@ -1,4 +1,4 @@
-"""In-place patches for AorusGram profile personalization on Telegram 12.8."""
+"""In-place patches for AorusGram profile personalization on Telegram 12.9.2."""
 
 from pathlib import Path
 

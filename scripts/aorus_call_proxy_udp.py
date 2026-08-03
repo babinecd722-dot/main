@@ -1,264 +1,21 @@
-"""AorusGram call-media patch: SOCKS5 UDP ASSOCIATE plus bounded diagnostics."""
+"""AorusGram call-media patch: SOCKS5 UDP ASSOCIATE transport."""
 
 from pathlib import Path
 
 
-def patch_call_proxy_udp_media(tg: Path) -> None:
-    """Store bounded diagnostics privately without changing call routing."""
-    path = tg / "submodules/TelegramVoip/Sources/OngoingCallContext.swift"
-    if not path.is_file():
-        print("CallProxyUDP: OngoingCallContext.swift not found — skip")
-        return
-    text = path.read_text(encoding="utf-8")
-    if "AorusGram: protected bounded call diagnostics" in text:
-        print("CallProxyUDP: diagnostics already patched")
-        return
-
-    helper_anchor = "import TgVoipWebrtc\n"
-    helper = r'''
-
-// AorusGram: protected bounded call diagnostics. Logs are available only through the
-// explicit export action in Settings; the app's whole Documents directory stays private.
-private func aorusCallLogDirectory() -> URL? {
-    let fm = FileManager.default
-    guard let root = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-        return nil
-    }
-    let dir = root.appendingPathComponent("AorusGramCallLogs", isDirectory: true)
-    do {
-        try fm.createDirectory(
-            at: dir,
-            withIntermediateDirectories: true,
-            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-        )
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutableDir = dir
-        try? mutableDir.setResourceValues(values)
-        return dir
-    } catch {
-        return nil
-    }
-}
-
-private func aorusRotateCallLogs() {
-    guard let dir = aorusCallLogDirectory() else { return }
-    let fm = FileManager.default
-    guard let files = try? fm.contentsOfDirectory(
-        at: dir,
-        includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
-        options: [.skipsHiddenFiles]
-    ) else { return }
-    let sorted = files.compactMap { url -> (URL, URLResourceValues)? in
-        guard let values = try? url.resourceValues(
-            forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
-        ), values.isRegularFile == true else {
-            return nil
-        }
-        return (url, values)
-    }.sorted {
-        ($0.1.contentModificationDate ?? .distantPast) > ($1.1.contentModificationDate ?? .distantPast)
-    }
-    var retainedBytes: Int64 = 0
-    for (index, item) in sorted.enumerated() {
-        retainedBytes += Int64(item.1.fileSize ?? 0)
-        if index >= 17 || retainedBytes > 24 * 1_024 * 1_024 {
-            try? fm.removeItem(at: item.0)
-        }
-    }
-}
-
-private func aorusWriteBoundedCallLog(_ text: String, to url: URL) {
-    let maxBytes = 2 * 1_024 * 1_024
-    var data = Data(text.utf8.prefix(maxBytes))
-    while !data.isEmpty && String(data: data, encoding: .utf8) == nil {
-        data.removeLast()
-    }
-    do {
-        try data.write(to: url, options: .atomic)
-        try FileManager.default.setAttributes(
-            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-            ofItemAtPath: url.path
-        )
-    } catch {
-        try? FileManager.default.removeItem(at: url)
-    }
-}
-
-private let aorusCallDiagnosticLock = NSLock()
-
-private func aorusAppendCallDiagnostic(_ text: String, to url: URL?) {
-    guard let url, let data = "[\(Date())] \(text)\n".data(using: .utf8) else {
-        return
-    }
-    aorusCallDiagnosticLock.lock()
-    defer { aorusCallDiagnosticLock.unlock() }
-    guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-          let currentSize = attributes[.size] as? NSNumber,
-          currentSize.intValue + data.count <= 2 * 1_024 * 1_024,
-          let handle = try? FileHandle(forWritingTo: url) else {
-        return
-    }
-    do {
-        try handle.seekToEnd()
-        try handle.write(contentsOf: data)
-        try handle.close()
-    } catch {
-        try? handle.close()
-    }
-}
-'''
-    if helper_anchor not in text:
-        print("CallProxyUDP: WARNING helper anchor not found")
-        return
-    text = text.replace(helper_anchor, helper_anchor + helper, 1)
-
-    logpath_anchor = '        self.logPath = logName.isEmpty ? "" : callLogsPath(account: self.account) + "/" + logName + ".log"\n'
-    logpath_replacement = (
-        "        self.logPath = {\n"
-        "            aorusRotateCallLogs()\n"
-        "            guard let dir = aorusCallLogDirectory() else { return \"\" }\n"
-        "            return dir.appendingPathComponent(\"native-\\(callId.id)-\\(Int(Date().timeIntervalSince1970)).log\").path\n"
-        "        }()\n"
-    )
-    if logpath_anchor not in text:
-        print("CallProxyUDP: WARNING logPath anchor not found")
-        return
-    text = text.replace(logpath_anchor, logpath_replacement, 1)
-
-    stop_anchor = "            context.nativeStop { debugLog, bytesSentWifi, bytesReceivedWifi, bytesSentMobile, bytesReceivedMobile in\n"
-    stop_replacement = (
-        stop_anchor
-        + "                if let dir = aorusCallLogDirectory() {\n"
-        + "                    var stopReport = \"AorusGram call stop diagnostics\\n\"\n"
-        + "                    stopReport += \"date: \\(Date())\\n\"\n"
-        + "                    stopReport += \"callId: \\(callId.id)\\n\"\n"
-        + "                    stopReport += \"nativeDebugLog: \\(debugLog != nil)\\n\"\n"
-        + "                    stopReport += \"wifi: sent=\\(bytesSentWifi) received=\\(bytesReceivedWifi)\\n\"\n"
-        + "                    stopReport += \"mobile: sent=\\(bytesSentMobile) received=\\(bytesReceivedMobile)\\n\"\n"
-        + "                    let stopUrl = dir.appendingPathComponent(\"call-\\(callId.id)-\\(Int(Date().timeIntervalSince1970))-stop.txt\")\n"
-        + "                    aorusWriteBoundedCallLog(stopReport, to: stopUrl)\n"
-        + "                }\n"
-        + "                if let debugLog, let dir = aorusCallLogDirectory() {\n"
-        + "                    let url = dir.appendingPathComponent(\"call-\\(callId.id)-\\(Int(Date().timeIntervalSince1970))-full.log\")\n"
-        + "                    aorusWriteBoundedCallLog(debugLog, to: url)\n"
-        + "                }\n"
-        + "                aorusRotateCallLogs()\n"
-    )
-    if stop_anchor not in text:
-        print("CallProxyUDP: WARNING nativeStop anchor not found")
-        return
-    text = text.replace(stop_anchor, stop_replacement, 1)
-
-    context_anchor = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
-    context_replacement = (
-        "                let aorusCallDiagnosticURL: URL? = {\n"
-        "                    guard let dir = aorusCallLogDirectory() else { return nil }\n"
-        "                    var report = \"AorusGram call setup diagnostics\\n\"\n"
-        "                    report += \"date: \\(Date())\\n\"\n"
-        "                    report += \"callId: \\(callId.id)\\n\"\n"
-        "                    report += \"app: \\(Bundle.main.object(forInfoDictionaryKey: \"CFBundleShortVersionString\") as? String ?? \"unknown\") (\\(Bundle.main.object(forInfoDictionaryKey: \"CFBundleVersion\") as? String ?? \"unknown\"))\\n\"\n"
-        "                    report += \"system: \\(ProcessInfo.processInfo.operatingSystemVersionString)\\n\"\n"
-        "                    report += \"version: \\(version)\\n\"\n"
-        "                    report += \"isOutgoing: \\(isOutgoing)\\n\"\n"
-        "                    report += \"initialNetworkType: \\(String(describing: initialNetworkType))\\n\"\n"
-        "                    report += \"dataSaving: \\(String(describing: dataSaving))\\n\"\n"
-        "                    report += \"videoRequested: \\(video != nil)\\n\"\n"
-        "                    report += \"socks5ProxyActive: \\(voipProxyServer != nil)\\n\"\n"
-        "                    if let proxyServer {\n"
-        "                        switch proxyServer.connection {\n"
-        "                        case let .socks5(username, password):\n"
-        "                            report += \"selectedProxy: socks5 \\(proxyServer.host):\\(proxyServer.port), username=\\(username != nil), password=\\(password != nil)\\n\"\n"
-        "                        case .mtp:\n"
-        "                            report += \"selectedProxy: mtproto (not usable for call media)\\n\"\n"
-        "                        }\n"
-        "                    } else {\n"
-        "                        report += \"selectedProxy: nil\\n\"\n"
-        "                    }\n"
-        "                    if let provision = UserDefaults(suiteName: \"ng.session.store\")?.dictionary(forKey: \"aorusgram_call_proxy_diagnostics\") {\n"
-        "                        report += \"provision.status: \\(provision[\"status\"] ?? \"unknown\")\\n\"\n"
-        "                        report += \"provision.checkedAt: \\(provision[\"checkedAt\"] ?? \"unknown\")\\n\"\n"
-        "                        report += \"provision.endpoint: \\(provision[\"host\"] ?? \"unknown\"):\\(provision[\"port\"] ?? \"unknown\")\\n\"\n"
-        "                        report += \"provision.udp: \\(provision[\"udp\"] ?? \"unknown\")\\n\"\n"
-        "                        report += \"provision.expiresAt: \\(provision[\"expiresAt\"] ?? \"unknown\")\\n\"\n"
-        "                    }\n"
-        "                    report += \"connections: total=\\(filteredConnections.count) udp=\\(filteredConnections.filter { !$0.hasTcp }.count) tcp=\\(filteredConnections.filter { $0.hasTcp }.count)\\n\"\n"
-        "                    for (index, connection) in filteredConnections.enumerated() {\n"
-        "                        report += \"connection[\\(index)]: reflectorId=\\(connection.reflectorId), endpoint=\\(connection.ip):\\(connection.port), tcp=\\(connection.hasTcp), turn=\\(connection.hasTurn), stun=\\(connection.hasStun)\\n\"\n"
-        "                    }\n"
-        "                    report += \"allowP2P: \\(allowP2P)\\n\"\n"
-        "                    report += \"enableTCP: \\(enableTCP)\\n\"\n"
-        "                    report += \"enableStunMarking: \\(enableStunMarking)\\n\"\n"
-        "                    let url = dir.appendingPathComponent(\"call-\\(callId.id)-\\(Int(Date().timeIntervalSince1970))-setup.txt\")\n"
-        "                    guard (try? report.write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }\n"
-        "                    try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)\n"
-        "                    aorusRotateCallLogs()\n"
-        "                    return url\n"
-        "                }()\n"
-        + context_anchor
-    )
-    if context_anchor not in text:
-        print("CallProxyUDP: WARNING context anchor not found")
-        return
-    text = text.replace(context_anchor, context_replacement, 1)
-
-    state_anchor = "                        let mappedState = OngoingCallContextState.State(state)\n"
-    state_replacement = (
-        state_anchor
-        + "                        aorusAppendCallDiagnostic(\"state: call=\\(String(describing: state)), video=\\(String(describing: videoState)), remoteVideo=\\(String(describing: remoteVideoState)), remoteAudio=\\(String(describing: remoteAudioState)), remoteBattery=\\(String(describing: remoteBatteryLevel))\", to: aorusCallDiagnosticURL)\n"
-    )
-    if state_anchor not in text:
-        print("CallProxyUDP: WARNING state diagnostics anchor not found")
-        return
-    text = text.replace(state_anchor, state_replacement, 1)
-
-    signal_anchor = "                context.signalBarsChanged = { signalBars in\n"
-    signal_replacement = (
-        signal_anchor
-        + "                    aorusAppendCallDiagnostic(\"signalBars: \\(signalBars)\", to: aorusCallDiagnosticURL)\n"
-    )
-    if signal_anchor not in text:
-        print("CallProxyUDP: WARNING signal diagnostics anchor not found")
-        return
-    text = text.replace(signal_anchor, signal_replacement, 1)
-
-    audio_anchor = "                        strongSelf.withContext { context in\n                            context.nativeSetIsAudioSessionActive(isActive: isActive)\n"
-    audio_replacement = (
-        "                        aorusAppendCallDiagnostic(\"audioSessionActive: \\(isActive)\", to: aorusCallDiagnosticURL)\n"
-        + audio_anchor
-    )
-    if audio_anchor not in text:
-        print("CallProxyUDP: WARNING audio diagnostics anchor not found")
-        return
-    text = text.replace(audio_anchor, audio_replacement, 1)
-
-    network_anchor = "                |> deliverOn(queue)).start(next: { networkType in\n                    self?.withContext { context in\n"
-    network_replacement = (
-        "                |> deliverOn(queue)).start(next: { networkType in\n"
-        "                    aorusAppendCallDiagnostic(\"networkType: \\(String(describing: networkType))\", to: aorusCallDiagnosticURL)\n"
-        "                    self?.withContext { context in\n"
-    )
-    if network_anchor not in text:
-        print("CallProxyUDP: WARNING network diagnostics anchor not found")
-        return
-    text = text.replace(network_anchor, network_replacement, 1)
-
-    path.write_text(text, encoding="utf-8")
-    print("CallProxyUDP: protected bounded diagnostics applied")
-
-
-SOCKS5_UDP_CLIENT_CLASS = r"""// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.
+SOCKS5_UDP_CLIENT_CLASS = r"""// AorusGram SOCKS5 UDP diagnostics schema: 3
+// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.
 // TCP is retained only as the authenticated control channel. Reflector packets remain UDP.
 class AorusSocks5UdpProxySocket final : public rtc::AsyncPacketSocket {
 public:
     AorusSocks5UdpProxySocket(
         rtc::AsyncPacketSocket* udpSocket,
         rtc::SocketFactory* socketFactory,
-        const rtc::SocketAddress& localAddress,
+        const rtc::SocketAddress& /*localAddress*/,
         const rtc::ProxyInfo& proxyInfo)
         : udp_(udpSocket),
           control_(socketFactory->CreateSocket(
-              proxyInfo.address.family() == AF_INET6 ? AF_INET6 : localAddress.family(),
+              proxyInfo.address.family() == AF_INET6 ? AF_INET6 : AF_INET,
               SOCK_STREAM)),
           proxy_(proxyInfo.address),
           username_(proxyInfo.username),
@@ -430,6 +187,13 @@ private:
     static constexpr size_t kMaxQueuedPackets = 32;
     static constexpr size_t kMaxQueuedBytes = 256 * 1024;
 
+    static std::string AddressText(const rtc::SocketAddress& address) {
+        if (!address.ipaddr().IsNil()) {
+            return address.ipaddr().ToString();
+        }
+        return address.hostname();
+    }
+
     void OnControlConnect(rtc::Socket*) {
         RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: TCP control connected";
         rtc::ByteBufferWriter request;
@@ -555,13 +319,16 @@ private:
                 }
                 if (relay.IsAnyIP()) {
                     const uint16_t relayPort = relay.port();
-                    relay = proxy_;
+                    const rtc::SocketAddress controlPeer = control_->GetRemoteAddress();
+                    relay = controlPeer.ipaddr().IsNil() ? proxy_ : controlPeer;
                     relay.SetPort(relayPort);
                 }
                 relay_ = relay;
                 handshakeState_ = HandshakeState::Ready;
                 RTC_LOG(LS_INFO) << "AorusGram SOCKS5 UDP: relay established endpoint="
-                                 << relay_.hostname() << ":" << relay_.port()
+                                 << AddressText(relay_) << ":" << relay_.port()
+                                 << " controlPeer=" << AddressText(control_->GetRemoteAddress())
+                                 << ":" << control_->GetRemoteAddress().port()
                                  << " queuedPackets=" << pending_.size()
                                  << " queuedBytes=" << queuedBytes_;
                 SignalAddressReady(this, GetLocalAddress());
@@ -733,25 +500,29 @@ private:
         if (packet.payload().size() < 4) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "short SOCKS5 UDP header");
             return;
         }
-        if (relay_.IsUnresolvedIP()) {
-            if (observedRelay_.IsNil()) {
-                observedRelay_ = packet.source_address();
-            } else if (packet.source_address() != observedRelay_) {
-                ++droppedPackets_;
-                ++unexpectedRelayPackets_;
-                return;
-            }
-        } else if (packet.source_address() != relay_) {
+        if (!IsAcceptedRelaySource(packet.source_address())) {
             ++droppedPackets_;
             ++unexpectedRelayPackets_;
+            if (!loggedUnexpectedRelay_) {
+                loggedUnexpectedRelay_ = true;
+                const rtc::SocketAddress controlPeer = control_->GetRemoteAddress();
+                RTC_LOG(LS_WARNING) << "AorusGram SOCKS5 UDP: rejected relay datagram source="
+                                    << AddressText(packet.source_address()) << ":"
+                                    << packet.source_address().port()
+                                    << " expected=" << AddressText(relay_) << ":" << relay_.port()
+                                    << " controlPeer=" << AddressText(controlPeer) << ":"
+                                    << controlPeer.port();
+            }
             return;
         }
         const uint8_t* data = packet.payload().data();
         if (data[0] != 0 || data[1] != 0 || data[2] != 0) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "invalid RSV or FRAG field");
             return;
         }
         rtc::SocketAddress source;
@@ -759,12 +530,14 @@ private:
         if (consumed <= 0) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "invalid SOCKS5 source address");
             return;
         }
         const size_t header = 3 + static_cast<size_t>(consumed);
         if (header > packet.payload().size()) {
             ++droppedPackets_;
             ++malformedPackets_;
+            LogMalformedPacket(packet, "SOCKS5 header exceeds datagram");
             return;
         }
         const size_t payloadBytes = packet.payload().size() - header;
@@ -781,6 +554,49 @@ private:
             payloadBytes,
             source,
             rtc::TimeMicros());
+    }
+
+    bool IsAcceptedRelaySource(const rtc::SocketAddress& source) {
+        if (source == relay_) {
+            return true;
+        }
+
+        const rtc::SocketAddress controlPeer = control_->GetRemoteAddress();
+        if (!source.ipaddr().IsNil()) {
+            // RFC 1928 relays behind NAT may answer from another UDP port or expose
+            // an internal BND.ADDR. Accept the resolved relay IP and the actual
+            // authenticated SOCKS control peer, while still rejecting other hosts.
+            if (!relay_.ipaddr().IsNil() && source.ipaddr() == relay_.ipaddr()) {
+                return true;
+            }
+            if (!controlPeer.ipaddr().IsNil() && source.ipaddr() == controlPeer.ipaddr()) {
+                return true;
+            }
+        }
+
+        if (relay_.IsUnresolvedIP()) {
+            if (observedRelay_.IsNil()) {
+                if (!controlPeer.ipaddr().IsNil() && source.ipaddr() != controlPeer.ipaddr()) {
+                    return false;
+                }
+                observedRelay_ = source;
+                return true;
+            }
+            return source == observedRelay_ ||
+                (!source.ipaddr().IsNil() && source.ipaddr() == observedRelay_.ipaddr());
+        }
+        return false;
+    }
+
+    void LogMalformedPacket(const rtc::ReceivedPacket& packet, const char* reason) {
+        if (loggedMalformedPacket_) {
+            return;
+        }
+        loggedMalformedPacket_ = true;
+        RTC_LOG(LS_WARNING) << "AorusGram SOCKS5 UDP: malformed relay datagram reason="
+                            << reason << " bytes=" << packet.payload().size()
+                            << " source=" << AddressText(packet.source_address()) << ":"
+                            << packet.source_address().port();
     }
 
     void OnUdpReady(rtc::AsyncPacketSocket*) {
@@ -878,6 +694,8 @@ private:
     bool loggedFirstReceive_ = false;
     bool loggedQueueOverflow_ = false;
     bool loggedUnavailableSend_ = false;
+    bool loggedUnexpectedRelay_ = false;
+    bool loggedMalformedPacket_ = false;
     bool summaryLogged_ = false;
 };
 """
@@ -892,7 +710,23 @@ def patch_tgcalls_reflector_socks5_udp(tg: Path) -> None:
         return
 
     text = reflector.read_text(encoding="utf-8")
-    if "class AorusSocks5UdpProxySocket final" not in text:
+    socket_class_marker = "class AorusSocks5UdpProxySocket final"
+    socket_schema_marker = "AorusGram SOCKS5 UDP diagnostics schema: 3"
+    class_anchor = "rtc::AsyncPacketSocket *CreateClientRawTcpSocket(\n"
+    if socket_class_marker in text and socket_schema_marker not in text:
+        class_start = text.find("// AorusGram SOCKS5 UDP diagnostics schema:")
+        if class_start < 0:
+            class_start = text.find("// AorusGram: RFC 1928 SOCKS5 UDP ASSOCIATE transport.")
+        if class_start < 0:
+            class_start = text.find(socket_class_marker)
+        class_end = text.find(class_anchor, class_start)
+        if class_start < 0 or class_end < 0:
+            print("tgcalls SOCKS5 UDP: legacy class boundaries not found")
+            return
+        text = text[:class_start] + SOCKS5_UDP_CLIENT_CLASS + "\n" + text[class_end:]
+        reflector.write_text(text, encoding="utf-8")
+        print("tgcalls SOCKS5 UDP: legacy reflector migrated to schema 3")
+    elif socket_class_marker not in text:
         text = text.replace(
             "#include <vector>\n",
             "#include <vector>\n#include <algorithm>\n#include <cerrno>\n#include <cstring>\n#include <deque>\n",
@@ -903,7 +737,6 @@ def patch_tgcalls_reflector_socks5_udp(tg: Path) -> None:
             '#include "rtc_base/byte_buffer.h"\n#include "rtc_base/crypt_string.h"\n#include "RawTcpSocket.h"\n',
             1,
         )
-        class_anchor = "rtc::AsyncPacketSocket *CreateClientRawTcpSocket(\n"
         if class_anchor not in text:
             print("tgcalls SOCKS5 UDP: class anchor not found")
             return

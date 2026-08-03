@@ -302,24 +302,34 @@ public final class AorusProxyManager {
 
             guard let http = response as? HTTPURLResponse, http.statusCode == 200,
                   let data = data,
-                  let resp = try? JSONDecoder().decode(AorusProxyResponse.self, from: data),
-                  !resp.server.isEmpty, resp.port > 0, !resp.secret.isEmpty else {
+                  let resp = try? JSONDecoder().decode(AorusProxyResponse.self, from: data) else {
                 finish(nil)
                 return
             }
 
-            // Publish (or clear) the SOCKS5 call proxy for the calls layer.
-            ProxyVault.publishCall(resp.callProxy, ttl: resp.ttl)
-
             // Build the MTProxy candidate list: the extended `proxies` list when present,
-            // otherwise the single top-level proxy (backward compatible).
+            // otherwise the single top-level proxy. Only Fake-TLS (`ee`) secrets are
+            // accepted; raw and random-padding (`dd`) secrets fail closed.
             var candidates: [AorusProxyCandidate] = []
             if let list = resp.proxies {
-                candidates = list.filter { !$0.server.isEmpty && $0.port > 0 && !$0.secret.isEmpty }
+                candidates = list.filter {
+                    !$0.server.isEmpty && $0.port > 0 && Self.isValidFakeTLSSecret($0.secret)
+                }
             }
-            if candidates.isEmpty {
+            if candidates.isEmpty,
+               !resp.server.isEmpty,
+               resp.port > 0,
+               Self.isValidFakeTLSSecret(resp.secret) {
                 candidates = [AorusProxyCandidate(server: resp.server, port: resp.port, secret: resp.secret, region: nil, priority: 1)]
             }
+            guard !candidates.isEmpty else {
+                finish(nil)
+                return
+            }
+
+            // Publish (or clear) the SOCKS5 call proxy only after the signed response
+            // also contains a valid Fake-TLS MTProxy configuration.
+            ProxyVault.publishCall(resp.callProxy, ttl: resp.ttl)
 
             // Remember the list so the fail-over watchdog can re-select locally.
             self.lock.lock(); self.lastCandidates = candidates; self.lock.unlock()
@@ -645,7 +655,9 @@ public final class AorusProxyManager {
 
         // message = ts \n nonce \n device \n kv   (LF separators, no trailing LF)
         let message = "\(ts)\n\(nonce)\n\(device)\n\(kv)"
-        let signature = hmacHex(message: message, keyHex: Obf.reveal(Obf.k))
+        guard let signature = Obf.withRevealedBytes(Obf.k, { keyHexBytes in
+            hmacHex(message: message, keyHexBytes: keyHexBytes)
+        }) else { return nil }
 
         var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         req.httpMethod = "GET"
@@ -664,8 +676,35 @@ public final class AorusProxyManager {
         return DeviceFingerprint.deviceHash()
     }
 
-    private func hmacHex(message: String, keyHex: String) -> String {
-        let key = SymmetricKey(data: Self.hexToData(keyHex))
+    private func hmacHex(message: String, keyHexBytes: [UInt8]) -> String? {
+        guard keyHexBytes.count >= 64, keyHexBytes.count.isMultiple(of: 2) else { return nil }
+        func nibble(_ value: UInt8) -> UInt8? {
+            switch value {
+            case 48 ... 57: return value - 48
+            case 65 ... 70: return value - 55
+            case 97 ... 102: return value - 87
+            default: return nil
+            }
+        }
+        var decoded = [UInt8]()
+        decoded.reserveCapacity(keyHexBytes.count / 2)
+        defer {
+            _ = decoded.withUnsafeMutableBytes { raw in
+                raw.initializeMemory(as: UInt8.self, repeating: 0)
+            }
+        }
+        for index in stride(from: 0, to: keyHexBytes.count, by: 2) {
+            guard let high = nibble(keyHexBytes[index]),
+                  let low = nibble(keyHexBytes[index + 1]) else { return nil }
+            decoded.append((high << 4) | low)
+        }
+        var keyData = Data(decoded)
+        defer {
+            _ = keyData.withUnsafeMutableBytes { raw in
+                raw.initializeMemory(as: UInt8.self, repeating: 0)
+            }
+        }
+        let key = SymmetricKey(data: keyData)
         let mac = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
         return mac.map { String(format: "%02x", $0) }.joined()
     }
@@ -674,6 +713,10 @@ public final class AorusProxyManager {
 
     private func store(_ cfg: AorusProxyConfig) {
         guard licenseAllowsProxy else {
+            clearProxyState(postUpdate: true)
+            return
+        }
+        guard Self.isValidFakeTLSSecret(cfg.secret) else {
             clearProxyState(postUpdate: true)
             return
         }
@@ -741,7 +784,11 @@ public final class AorusProxyManager {
             return
         }
         guard let data = ProxyKeychain.read(),
-              let cfg = try? JSONDecoder().decode(AorusProxyConfig.self, from: data) else { return }
+              let cfg = try? JSONDecoder().decode(AorusProxyConfig.self, from: data),
+              Self.isValidFakeTLSSecret(cfg.secret) else {
+            clearProxyState(postUpdate: false)
+            return
+        }
         cached = cfg
         let stamp = UserDefaults.standard.double(forKey: cacheStampKey)
         cachedAt = stamp > 0 ? Date(timeIntervalSince1970: stamp) : .distantPast
@@ -759,16 +806,47 @@ public final class AorusProxyManager {
         return raw.map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func hexToData(_ hex: String) -> Data {
-        var data = Data(capacity: hex.count / 2)
-        var idx = hex.startIndex
-        while idx < hex.endIndex {
-            let next = hex.index(idx, offsetBy: 2, limitedBy: hex.endIndex) ?? hex.endIndex
-            if let byte = UInt8(hex[idx..<next], radix: 16) { data.append(byte) }
-            idx = next
+    /// Accept only Telegram Fake-TLS secrets: ee + 16-byte proxy secret + SNI host.
+    /// This deliberately rejects legacy raw and dd random-padding secrets so the
+    /// control plane cannot accidentally downgrade a release build away from TLS mimicry.
+    private static func isValidFakeTLSSecret(_ hex: String) -> Bool {
+        guard hex.count > 34, hex.count % 2 == 0 else { return false }
+
+        var bytes = [UInt8]()
+        bytes.reserveCapacity(hex.count / 2)
+        var index = hex.startIndex
+        while index < hex.endIndex {
+            guard let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex),
+                  next > index,
+                  let byte = UInt8(hex[index..<next], radix: 16) else {
+                return false
+            }
+            bytes.append(byte)
+            index = next
         }
-        return data
+
+        guard bytes.count > 17, bytes[0] == 0xee,
+              let host = String(bytes: bytes.dropFirst(17), encoding: .utf8),
+              !host.isEmpty, host.count <= 253 else {
+            return false
+        }
+
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count >= 2 else { return false }
+        return labels.allSatisfy { label in
+            guard !label.isEmpty, label.count <= 63,
+                  label.first != "-", label.last != "-" else {
+                return false
+            }
+            return label.utf8.allSatisfy {
+                ($0 >= 0x30 && $0 <= 0x39) ||
+                ($0 >= 0x41 && $0 <= 0x5a) ||
+                ($0 >= 0x61 && $0 <= 0x7a) ||
+                $0 == 0x2d
+            }
+        }
     }
+
 }
 
 public extension Notification.Name {
@@ -926,6 +1004,21 @@ private enum Obf {
         var out = [UInt8](repeating: 0, count: bytes.count)
         for i in 0..<bytes.count { out[i] = bytes[i] ^ pad[i % pad.count] }
         return String(decoding: out, as: UTF8.self)
+    }
+
+    static func withRevealedBytes<Result>(
+        _ bytes: [UInt8],
+        _ body: ([UInt8]) -> Result
+    ) -> Result? {
+        guard !bytes.isEmpty else { return nil }
+        var out = [UInt8](repeating: 0, count: bytes.count)
+        for i in 0..<bytes.count { out[i] = bytes[i] ^ pad[i % pad.count] }
+        defer {
+            _ = out.withUnsafeMutableBytes { raw in
+                raw.initializeMemory(as: UInt8.self, repeating: 0)
+            }
+        }
+        return body(out)
     }
 
     // SECRET_KEY_v1 (hex), XOR-obfuscated and injected from PROXY_HMAC_KEY_HEX.

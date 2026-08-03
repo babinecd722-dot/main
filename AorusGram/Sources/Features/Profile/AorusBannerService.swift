@@ -362,10 +362,15 @@ public final class AorusBannerService {
         let keyVersion = LicenseKeyProvider.keyVersion
         let bodyHash = LicenseCrypto.sha256Hex(body).lowercased()
         let message = "\(timestamp)\n\(nonce)\n\(device)\n\(keyVersion)\n\(callerId)\n\(bodyHash)"
-        let signature = LicenseCrypto.hmacSHA256Hex(
-            message: Data(message.utf8),
-            keyBytes: LicenseKeyProvider.licenseHmacKeyBytes()
-        ).lowercased()
+        guard let signature = LicenseKeyProvider.withLicenseHmacKey({ keyBytes in
+            LicenseCrypto.hmacSHA256Hex(
+                message: Data(message.utf8),
+                keyBytes: keyBytes
+            ).lowercased()
+        }) else {
+            completion(.failure(.notProvisioned))
+            return
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = method

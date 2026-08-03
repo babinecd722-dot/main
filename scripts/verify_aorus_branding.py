@@ -126,6 +126,10 @@ def main() -> None:
     )
     if chat_input.is_file():
         chat_text = chat_input.read_text(encoding="utf-8")
+        if "self.textInputNode?.textView" in chat_text:
+            err.append("ChatTextInputPanelNode: removed legacy textInputNode API is still referenced")
+        if "let cover = self.text" not in chat_text:
+            err.append("AorusCode: cover text is not read through the current ChatTextInputPanelNode API")
         if "reserve voice button in initial text-node insets" not in chat_text:
             err.append("VoiceToText: initial text-node insets do not reserve the voice button")
         if "keep liquid-glass composer clear of its outer buttons" not in chat_text:
@@ -185,9 +189,9 @@ def main() -> None:
         err.append("MessageSeconds: central timestamp formatter is missing")
     else:
         timestamp_text = timestamp_status.read_text(encoding="utf-8")
-        if timestamp_text.count("aorusgram_feature_message_seconds") != 3:
-            err.append("MessageSeconds: all three central timestamp call sites must use the setting")
-        if timestamp_text.count("withSeconds: UserDefaults.standard.bool") != 3:
+        if timestamp_text.count("aorusgram_feature_message_seconds") != 5:
+            err.append("MessageSeconds: all five central timestamp call sites must use the setting")
+        if timestamp_text.count("withSeconds: UserDefaults.standard.bool") != 5:
             err.append("MessageSeconds: Telegram's locale-aware formatter is not used consistently")
 
     multipart_fetch = tg / "submodules" / "TelegramCore" / "Sources" / "Network" / "MultipartFetch.swift"
@@ -376,7 +380,7 @@ def main() -> None:
             "lookupCompletions",
             "URLSessionConfiguration.ephemeral",
             "tracks(withMediaType: .audio).isEmpty",
-            "LicenseKeyProvider.licenseHmacKeyBytes()",
+            "LicenseKeyProvider.withLicenseHmacKey",
         ]
         for marker in required_banner_markers:
             if marker not in banner_text:
@@ -967,25 +971,50 @@ def main() -> None:
             if marker not in proxy_text:
                 err.append(f"AorusProxyManager: protected transport/cache invariant is missing {marker}")
 
+    mt_tcp_connection = tg / "submodules" / "MtProtoKit" / "Sources" / "MTTcpConnection.m"
+    if not mt_tcp_connection.is_file():
+        err.append("MTProxyAntiDPI: MTTcpConnection.m is missing")
+    else:
+        mt_tcp_text = mt_tcp_connection.read_text(encoding="utf-8")
+        for marker in (
+            "generate_ml_kem_public_key",
+            "HelloGenerationCommandMlKemKey",
+            "HelloGenerationCommandBeginChoice",
+            "MTCreateSafariClientHello",
+        ):
+            if marker not in mt_tcp_text:
+                err.append(f"MTProxyAntiDPI: current Safari ClientHello marker is missing {marker}")
+
+    network_source = tg / "submodules" / "TelegramCore" / "Sources" / "Network" / "Network.swift"
+    if network_source.is_file():
+        network_text = network_source.read_text(encoding="utf-8")
+        for marker in (
+            "aorusSecretHex.count % 2 == 0",
+            "aorusSecret.count > 17, aorusSecret.first == 0xee",
+            "let aorusSniBytes = aorusSecret.dropFirst(17)",
+            "aorusLabels.count >= 2",
+        ):
+            if marker not in network_text:
+                err.append(f"MTProxyAntiDPI: ee-only Fake-TLS bridge is missing {marker}")
+        for forbidden in (
+            "aorusSecret.insert(0xdd, at: 0)",
+            "aorusIsPadded",
+        ):
+            if forbidden in network_text:
+                err.append(f"MTProxyAntiDPI: legacy dd downgrade path remains {forbidden}")
+
     call_context = tg / "submodules" / "TelegramVoip" / "Sources" / "OngoingCallContext.swift"
     call_context_text = call_context.read_text(encoding="utf-8") if call_context.is_file() else ""
-    if "AorusGram: protected bounded call diagnostics" not in call_context_text:
-        err.append("CallProxyUDP: protected bounded call diagnostics are missing")
     if "AorusGram: additive proxied TCP reflector" in call_context_text:
         err.append("CallProxyUDP: obsolete forced TCP media patch is still present")
-    if "aorusWriteBoundedCallLog" not in call_context_text:
-        err.append("CallProxyUDP: exported native call diagnostics are not size-bounded")
-    for marker in (
+    for legacy_marker in (
+        "AorusGramCallLogs",
+        "AorusGram call diagnostics schema:",
+        "aorusWriteBoundedCallLog",
         "aorusAppendCallDiagnostic",
-        "provision.status:",
-        "initialNetworkType:",
-        "connection[\\(index)]",
-        "audioSessionActive:",
-        "networkType:",
-        "AorusGram call stop diagnostics",
     ):
-        if marker not in call_context_text:
-            err.append(f"CallProxyUDP: detailed call lifecycle diagnostics are missing {marker}")
+        if legacy_marker in call_context_text:
+            err.append(f"CallProxyUDP: removed call-log code is still present {legacy_marker}")
 
     call_proxy = tg / "submodules" / "TelegramCallsUI" / "Sources" / "AorusCallProxy.swift"
     call_proxy_text = call_proxy.read_text(encoding="utf-8") if call_proxy.is_file() else ""
@@ -1000,15 +1029,8 @@ def main() -> None:
             err.append(f"CallProxyUDP: provisioning diagnostics are missing {marker}")
 
     call_log_export = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusCallLogsExport.swift"
-    call_log_export_text = call_log_export.read_text(encoding="utf-8") if call_log_export.is_file() else ""
-    for marker in (
-        "static func clear(_ files: [URL])",
-        "if completed {",
-        "AorusCallLogStorage.clear(exportedSourceFiles)",
-        "proxy provisioning status:",
-    ):
-        if marker not in call_log_export_text:
-            err.append(f"CallLogsExport: post-export cleanup invariant is missing {marker}")
+    if call_log_export.exists():
+        err.append("CallLogsExport: removed exporter source is still present")
 
     presentation_call_manager = (
         tg / "submodules" / "TelegramCallsUI" / "Sources" / "PresentationCallManager.swift"
@@ -1047,11 +1069,15 @@ def main() -> None:
     )
     reflector_text = reflector_port.read_text(encoding="utf-8") if reflector_port.is_file() else ""
     for marker in (
+        "AorusGram SOCKS5 UDP diagnostics schema: 3",
         "class AorusSocks5UdpProxySocket final",
         "SOCKS5 UDP ASSOCIATE",
         "proxy().type == rtc::ProxyType::PROXY_SOCKS5",
         "first UDP payload sent",
         "first UDP payload received",
+        "rejected relay datagram source=",
+        "malformed relay datagram reason=",
+        "controlPeer=",
         "pre-handshake queue",
         "unexpectedRelayPackets",
         "malformedPackets",
@@ -1180,7 +1206,6 @@ def main() -> None:
         "private static let recommendedScanBatch = 24",
         "private static let maxExpansionAdditions = 8",
         "private static let minimumHealthySourceCount = 8",
-        "private static let badgeScanBudget = 512",
         "currentSourceCounts",
         "var candidatesByRank:",
         "appendTier(prioritySources)",
@@ -1225,6 +1250,52 @@ def main() -> None:
             err.append(f"Wall: channel exclusions are not enforced across sources — missing {marker}")
     if "self?.reload()" in wall_text:
         err.append("Wall: settings observer still rebuilds the feed and can teleport the viewport")
+    if "transaction.scanTopMessages(" in wall_text or "badgeScanBudget" in wall_text:
+        err.append("Wall: badge must use the rendered Wall snapshot, not a global Postbox scan")
+    if "badgeTimer" in wall_text:
+        err.append("Wall: redundant periodic badge timer is still present")
+    for marker in (
+        "private func publishCurrentBadge()",
+        "self.currentMessageIds.count - self.markedInCurrentView.count",
+    ):
+        if marker not in wall_text:
+            err.append(f"Wall: single-source badge publication is missing {marker}")
+
+    account_details = tg / "submodules" / "AorusGramUI" / "Sources" / "AccountDetailsController.swift"
+    account_details_text = account_details.read_text(encoding="utf-8") if account_details.is_file() else ""
+    for marker in (
+        'value.split(separator: ".")',
+        "private enum AorusPeerNoteStore",
+        "private func aorusNoteEditorController(",
+        "peerKey: Int64",
+        "registrationDate: String?",
+        "valuePromise.set(value.modify { _ in normalized })",
+        "let secondsPerId = (last.1 - previous.1) / Double(idSpan)",
+        "var persistedToFile = false",
+    ):
+        if marker not in account_details_text:
+            err.append(f"AccountDetails: official registration date / peer notes are missing {marker}")
+    for forbidden in (
+        "valuePromise.set(value.swap(",
+        "Telegram не предоставил месяц регистрации",
+        "Telegram did not provide a registration month",
+    ):
+        if forbidden in account_details_text:
+            err.append(f"AccountDetails: stale note/date fallback remains {forbidden}")
+
+    peer_info_items = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoProfileItems.swift"
+    peer_info_items_text = peer_info_items.read_text(encoding="utf-8") if peer_info_items.is_file() else ""
+    if peer_info_items_text.count("// AorusGram: account details v2") != 3:
+        err.append("AccountDetails: expected one current injection for user, channel and group")
+    for marker in (
+        "let aorusPeerKey =",
+        "let aorusRegistrationDate: String? =",
+        "peerStatusSettings?.registrationDate",
+        "peerKey: aorusPeerKey",
+        "registrationDate: aorusRegistrationDate",
+    ):
+        if marker not in peer_info_items_text:
+            err.append(f"AccountDetails: PeerInfo integration is missing {marker}")
 
     wall_settings = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusWallSettingsController.swift"
     wall_settings_text = wall_settings.read_text(encoding="utf-8") if wall_settings.is_file() else ""
@@ -1331,7 +1402,8 @@ def main() -> None:
         "private static var seenCache:",
         "private static var excludedCache:",
         "func seenMessageIds(accountId: Int64) -> Set<MessageId>",
-        "scheduleSeenFlushLocked(accountId: accountId)",
+        "appendSeenJournalLocked(newValues, accountId: accountId)",
+        "writeSeenSnapshotLocked(entry, accountId: accountId)",
     ):
         if marker not in wall_settings_text:
             err.append(f"Wall: settings store caching is missing {marker}")

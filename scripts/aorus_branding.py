@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 from aorus_call_proxy_udp import (
-    patch_call_proxy_udp_media,
     patch_tgcalls_reflector_socks5_udp,
 )
 
@@ -481,6 +480,13 @@ def patch_authorization_network_flood_wait(tg: Path) -> None:
             print("Authorization: automaticFloodWait for auth request")
     if t != orig:
         path.write_text(t, encoding="utf-8")
+    elif (
+        "account.network.request(sendCode, automaticFloodWait: true)" in t
+        and "auth.resendCode" in t
+        and "auth.signIn" in t
+        and "phoneCode: phoneCode, emailVerification: emailVerification), automaticFloodWait: true" in t
+    ):
+        print("Authorization: auth flood-wait handling already enabled upstream")
     else:
         print("Authorization: flood-wait markers not found (upstream drift)")
 
@@ -1369,7 +1375,7 @@ def patch_client_spoof_app_version(tg: Path) -> None:
         tg / "submodules/BuildConfig/Sources/BuildConfig.swift",
         tg / "Telegram/Telegram-iOS/BuildConfig.swift",
     ]
-    official_version = "12.8"
+    official_version = "12.9.2"
 
     for vpath in version_candidates:
         if not vpath.is_file():
@@ -1529,7 +1535,7 @@ def patch_message_timestamp_seconds(tg: Path) -> None:
         raise RuntimeError("MessageSeconds: StringForMessageTimestampStatus.swift not found")
     t = path.read_text(encoding="utf-8")
     key = "aorusgram_feature_message_seconds"
-    expected = 3
+    expected = 5
     if key in t:
         if t.count(key) != expected:
             raise RuntimeError(f"MessageSeconds: expected {expected} patched calls, found {t.count(key)}")
@@ -1539,7 +1545,7 @@ def patch_message_timestamp_seconds(tg: Path) -> None:
         (
             "stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)",
             f"stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat, withSeconds: UserDefaults.standard.bool(forKey: \"{key}\"))",
-            2,
+            4,
         ),
         (
             "stringForMessageTimestamp(timestamp: forwardInfo.date, dateTimeFormat: dateTimeFormat)",
@@ -1555,7 +1561,7 @@ def patch_message_timestamp_seconds(tg: Path) -> None:
     if t.count(key) != expected:
         raise RuntimeError("MessageSeconds: patch count mismatch")
     path.write_text(t, encoding="utf-8")
-    print("MessageSeconds: central Telegram timestamp formatter patched (3 call sites)")
+    print("MessageSeconds: central Telegram timestamp formatter patched (5 call sites)")
 
 
 def patch_max_media_quality(tg: Path) -> None:
@@ -3729,27 +3735,27 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
             print("AntiSpoofDeletePreflight: already injected")
         return
 
-    needle = (
+    declaration = (
         "func _internal_deleteMessagesInteractively(account: Account, messageIds: [MessageId], "
-        "type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {\n"
-        "    return account.postbox.transaction { transaction -> Void in\n"
-        "        deleteMessagesInteractively(transaction: transaction, stateManager: account.stateManager, "
-        "postbox: account.postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true)\n"
-        "    }\n"
-        "}"
+        "type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {"
     )
-    if needle not in t:
+    if declaration not in t:
         print("AntiSpoofDeletePreflight: anchor not found — skipped")
         return
 
-    replacement = (
+    # Keep Telegram's complete implementation intact and put the Aorus preflight in a
+    # wrapper. This matters on 12.9.2: upstream added EphemeralDeleteMessageRequest RPCs
+    # to this function, which an old whole-body replacement would silently discard.
+    original_declaration = declaration.replace(
+        "func _internal_deleteMessagesInteractively", "private func _aorus_original_deleteMessagesInteractively", 1
+    )
+    wrapper = (
         "func _internal_deleteMessagesInteractively(account: Account, messageIds: [MessageId], "
         "type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {\n"
         "    " + sentinel + "\n"
-        "    let normalDelete: Signal<Void, NoError> = account.postbox.transaction { transaction -> Void in\n"
-        "        deleteMessagesInteractively(transaction: transaction, stateManager: account.stateManager, "
-        "postbox: account.postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true)\n"
-        "    }\n"
+        "    let normalDelete = _aorus_original_deleteMessagesInteractively(\n"
+        "        account: account, messageIds: messageIds, type: type, deleteAllInGroup: deleteAllInGroup\n"
+        "    )\n"
         "    guard UserDefaults.standard.bool(forKey: \"aorusgram_antispoof_deleted\"), type == .forEveryone else {\n"
         "        return normalDelete\n"
         "    }\n"
@@ -3783,11 +3789,11 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "        }\n"
         "        return editPreflight |> then(normalDelete)\n"
         "    }\n"
-        "}"
+        "}\n\n"
     )
-    t = t.replace(needle, replacement, 1)
+    t = t.replace(declaration, wrapper + original_declaration, 1)
     path.write_text(t, encoding="utf-8")
-    print("AntiSpoofDeletePreflight: rewrote _internal_deleteMessagesInteractively with edit-before-delete chain")
+    print("AntiSpoofDeletePreflight: wrapped Telegram delete flow with edit-before-delete chain")
 
 
 def patch_app_delegate_publish_account_id(tg: Path) -> None:
@@ -3873,8 +3879,12 @@ def patch_app_delegate_activate_deeplink(tg: Path) -> None:
         if "aorusgram.activateKeyDeepLink" in t:
             print("ActivateDeeplink: AppDelegate already injected")
         else:
-            anchor = "private func openUrlWhenReady(url: URL, external: Bool) {\n"
-            if anchor in t:
+            anchors = (
+                "    private func openUrlWhenReady(accountId: AccountRecordId? = nil, url: URL, external: Bool = false) {\n",
+                "private func openUrlWhenReady(url: URL, external: Bool) {\n",
+            )
+            anchor = next((value for value in anchors if value in t), None)
+            if anchor is not None:
                 t = t.replace(anchor, anchor + activate_block("url", "        "), 1)
                 ad.write_text(t, encoding="utf-8")
                 print("ActivateDeeplink: AppDelegate openUrlWhenReady interceptor injected")
@@ -3991,7 +4001,7 @@ def patch_app_delegate_open_purchase_bot(tg: Path) -> None:
     window — which is the gate's lock window. The result: while the subscription is
     expired only the bot chat is reachable; dismissing it returns to the lock.
 
-    Signatures verified against Telegram-iOS release-12.8 (SharedAccountContext.
+    Signatures verified against Telegram-iOS release-12.9.2 (SharedAccountContext.
     openExternalUrl, OpenURLContext.generic, NavigationController(mode:theme:),
     NavigationControllerTheme(presentationTheme:)).
     """
@@ -4267,16 +4277,50 @@ def patch_peer_info_account_details(tg: Path) -> None:
     Patches PeerInfoProfileItems.swift (the `infoItems` builder) to append a
     PeerInfoScreenDisclosureItem in the user, channel and legacy-group blocks.
     Tapping it pushes accountDetailsController (AorusGramUI) which shows the id,
-    the data-center, and a creation date: estimated from the numeric id for
-    users, and the exact Telegram-provided creationDate for channels / groups.
+    the data-center and the Telegram-provided registration month for users (with
+    numeric-id interpolation only as a fallback). Channels and groups use their
+    exact Telegram-provided creationDate.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoProfileItems.swift"
     if not path.is_file():
         print("PeerInfoAccountDetails: PeerInfoProfileItems.swift not found, skip")
         return
     t = path.read_text(encoding="utf-8")
-    if "AorusGram: account details" in t:
-        print("PeerInfoAccountDetails: already injected")
+    current_sentinel = "// AorusGram: account details v2"
+    # Source caches can contain the older block. Leaving it in place after the controller
+    # signature changes produces a late Swift compile failure, so remove only the generated
+    # `do` block by balancing its braces, then inject the current version below.
+    legacy_sentinel = '// AorusGram: account details ("Подробнее") row'
+    removed_legacy = 0
+    while legacy_sentinel in t:
+        marker_pos = t.find(legacy_sentinel)
+        line_start = t.rfind("\n", 0, marker_pos) + 1
+        do_pos = t.find("do {", marker_pos)
+        if do_pos == -1:
+            break
+        open_brace = t.find("{", do_pos)
+        depth = 0
+        block_end = -1
+        for index in range(open_brace, len(t)):
+            if t[index] == "{":
+                depth += 1
+            elif t[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    block_end = index + 1
+                    break
+        if block_end == -1:
+            raise RuntimeError("PeerInfoAccountDetails: unterminated legacy injection")
+        if block_end < len(t) and t[block_end] == "\n":
+            block_end += 1
+        t = t[:line_start] + t[block_end:]
+        removed_legacy += 1
+    if removed_legacy:
+        print(f"PeerInfoAccountDetails: removed {removed_legacy} legacy injection(s)")
+    if current_sentinel in t:
+        if removed_legacy:
+            path.write_text(t, encoding="utf-8")
+        print("PeerInfoAccountDetails: current injection already present")
         return
 
     # import AorusGramUI (so accountDetailsController / AorusDetailKind are visible)
@@ -4287,12 +4331,13 @@ def patch_peer_info_account_details(tg: Path) -> None:
             return
         t = t.replace(needle, needle + "import AorusGramUI\n", 1)
 
-    def disclosure(peer_var: str, kind_expr: str, creation_expr: str, item_id: int) -> str:
+    def disclosure(peer_var: str, kind_expr: str, creation_expr: str, registration_expr: str, item_id: int) -> str:
         return (
             "\n"
-            "        // AorusGram: account details (\"Подробнее\") row\n"
+            "        // AorusGram: account details v2\n"
             "        do {\n"
             "            let aorusEntityId = " + peer_var + ".id.id._internalGetInt64Value()\n"
+            "            let aorusPeerKey = " + peer_var + ".id.toInt64()\n"
             "            var aorusDcId: Int = 0\n"
             "            for aorusRep in " + peer_var + ".photo {\n"
             "                if let aorusRes = aorusRep.resource as? CloudPeerPhotoSizeMediaResource {\n"
@@ -4303,12 +4348,13 @@ def patch_peer_info_account_details(tg: Path) -> None:
             "            let aorusTitle = EnginePeer(" + peer_var + ").compactDisplayTitle\n"
             "            let aorusKind: AorusDetailKind = " + kind_expr + "\n"
             "            let aorusCreation: Int32 = " + creation_expr + "\n"
+            "            let aorusRegistrationDate: String? = " + registration_expr + "\n"
             "            items[currentPeerInfoSection]!.append(PeerInfoScreenDisclosureItem(id: " + str(item_id) + ", text: AorusL10n.current.accountDetails, action: {\n"
             "                guard let aorusParent = interaction.getController(),\n"
             "                      let aorusNav = aorusParent.navigationController as? NavigationController else {\n"
             "                    return\n"
             "                }\n"
-            "                aorusNav.pushViewController(accountDetailsController(context: context, entityId: aorusEntityId, dcId: aorusDcId, title: aorusTitle, kind: aorusKind, creationDate: aorusCreation))\n"
+            "                aorusNav.pushViewController(accountDetailsController(context: context, entityId: aorusEntityId, peerKey: aorusPeerKey, dcId: aorusDcId, title: aorusTitle, kind: aorusKind, creationDate: aorusCreation, registrationDate: aorusRegistrationDate))\n"
             "            }))\n"
             "        }\n"
         )
@@ -4318,20 +4364,20 @@ def patch_peer_info_account_details(tg: Path) -> None:
     # User block — inject after the item-id constants.
     user_anchor = "        let ItemVerification = 9004\n"
     if user_anchor in t:
-        t = t.replace(user_anchor, user_anchor + disclosure("user", ".user", "0", 770077), 1)
+        t = t.replace(user_anchor, user_anchor + disclosure("user", ".user", "0", "(data.cachedData as? CachedUserData)?.peerStatusSettings?.registrationDate", 770077), 1)
         applied.append("user")
 
     # Channel / supergroup block — inject after the item-id constants.
     chan_anchor = "        let ItemPeerPersonalChannel = 11\n"
     if chan_anchor in t:
         chan_kind = "{ if case .broadcast = channel.info { return .channel } else { return .group } }()"
-        t = t.replace(chan_anchor, chan_anchor + disclosure("channel", chan_kind, "channel.creationDate", 770078), 1)
+        t = t.replace(chan_anchor, chan_anchor + disclosure("channel", chan_kind, "channel.creationDate", "nil", 770078), 1)
         applied.append("channel")
 
     # Legacy group block — inject right after the block opens.
     grp_anchor = "    } else if case let .legacyGroup(group) = data.peer {\n"
     if grp_anchor in t:
-        t = t.replace(grp_anchor, grp_anchor + disclosure("group", ".group", "group.creationDate", 770079), 1)
+        t = t.replace(grp_anchor, grp_anchor + disclosure("group", ".group", "group.creationDate", "nil", 770079), 1)
         applied.append("group")
 
     if not applied:
@@ -4653,8 +4699,8 @@ def patch_info_plist_face_id(tg: Path) -> None:
 def patch_info_plist_file_sharing(tg: Path) -> None:
     """Keep the app container private.
 
-    Call diagnostics are exported explicitly from Settings. Exposing all of Documents through
-    Files.app also exposes unrelated account and feature data and is unnecessary.
+    Exposing all of Documents through Files.app also exposes unrelated account and feature data
+    and is unnecessary.
     """
     for name in ("Info.plist", "InfoBazel.plist"):
         path = tg / "Telegram/Telegram-iOS" / name
@@ -4700,14 +4746,26 @@ _AORUS_PROXY_SNIPPET = (
     "                let aorusParts = aorusStr.components(separatedBy: \"\\n\")\n"
     "                guard aorusParts.count >= 4, !aorusParts[0].isEmpty, let aorusPort = Int(aorusParts[1]), aorusPort > 0, !aorusParts[2].isEmpty, let aorusExpires = TimeInterval(aorusParts[3]), Date().timeIntervalSince1970 < aorusExpires else { return nil }\n"
     "                let aorusHost = aorusParts[0]\n"
-    "                let aorusSecretHex = aorusParts[2]\n"
+    "                let aorusSecretHex = aorusParts[2].lowercased()\n"
+    "                guard !aorusSecretHex.isEmpty, aorusSecretHex.count % 2 == 0 else { return nil }\n"
     "                var aorusSecret = Data(capacity: aorusSecretHex.count / 2)\n"
     "                var aorusIdx = aorusSecretHex.startIndex\n"
     "                while aorusIdx < aorusSecretHex.endIndex {\n"
-    "                    let aorusNext = aorusSecretHex.index(aorusIdx, offsetBy: 2, limitedBy: aorusSecretHex.endIndex) ?? aorusSecretHex.endIndex\n"
-    "                    if let aorusByte = UInt8(aorusSecretHex[aorusIdx..<aorusNext], radix: 16) { aorusSecret.append(aorusByte) }\n"
+    "                    guard let aorusNext = aorusSecretHex.index(aorusIdx, offsetBy: 2, limitedBy: aorusSecretHex.endIndex), aorusNext > aorusIdx, let aorusByte = UInt8(aorusSecretHex[aorusIdx..<aorusNext], radix: 16) else { return nil }\n"
+    "                    aorusSecret.append(aorusByte)\n"
     "                    aorusIdx = aorusNext\n"
     "                }\n"
+    "                // Fail closed: AorusGram accepts only Fake-TLS secrets in the form\n"
+    "                // ee + 16-byte proxy secret + a valid UTF-8 SNI hostname. Raw and\n"
+    "                // dd random-padding secrets must never downgrade the live tunnel.\n"
+    "                guard aorusSecret.count > 17, aorusSecret.first == 0xee else { return nil }\n"
+    "                let aorusSniBytes = aorusSecret.dropFirst(17)\n"
+    "                guard let aorusSni = String(bytes: aorusSniBytes, encoding: .utf8), !aorusSni.isEmpty, aorusSni.count <= 253 else { return nil }\n"
+    "                let aorusLabels = aorusSni.split(separator: \".\", omittingEmptySubsequences: false)\n"
+    "                guard aorusLabels.count >= 2, aorusLabels.allSatisfy({ aorusLabel in\n"
+    "                    guard !aorusLabel.isEmpty, aorusLabel.count <= 63, aorusLabel.first != \"-\", aorusLabel.last != \"-\" else { return false }\n"
+    "                    return aorusLabel.utf8.allSatisfy { ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x41 && $0 <= 0x5a) || ($0 >= 0x61 && $0 <= 0x7a) || $0 == 0x2d }\n"
+    "                }) else { return nil }\n"
     "                return MTSocksProxySettings(ip: aorusHost, port: UInt16(clamping: aorusPort), username: nil, password: nil, secret: aorusSecret)\n"
     "            })()"
 )
@@ -5030,11 +5088,17 @@ def patch_chat_lock(tg: Path) -> None:
             #     message readable in the list defeats the "someone picked up my phone" case.
             #     messageText/entities are already mutable here (stock reassigns messageText
             #     for PSA chats a few lines above), so this is a plain reassignment.
-            text_anchor = (
+            legacy_text_anchor = (
                 "                    contentData = .chat(itemPeer: itemPeer, threadInfo: threadInfo, peer: peer, "
                 "hideAuthor: hideAuthor, messageText: messageText, messageEntities: messageEntities, "
                 "spoilers: spoilers, customEmojiRanges: customEmojiRanges)\n"
             )
+            rich_text_anchor = (
+                "                    contentData = .chat(itemPeer: itemPeer, threadInfo: threadInfo, peer: peer, "
+                "hideAuthor: hideAuthor, messageText: messageText, messageEntities: messageEntities, "
+                "spoilers: spoilers, customEmojiRanges: customEmojiRanges, richTextPreview: richTextPreview)\n"
+            )
+            text_anchor = rich_text_anchor if rich_text_anchor in t else legacy_text_anchor
             text_inject = (
                 "                    // AorusGram: Chat Protection — replace the preview of a protected\n"
                 "                    // chat's last message, and drop its entities/spoilers/emoji so no\n"
@@ -5048,8 +5112,9 @@ def patch_chat_lock(tg: Path) -> None:
                 # empty array would still read as \"has spoilers\" downstream.
                 "                        spoilers = nil\n"
                 "                        customEmojiRanges = nil\n"
-                "                        hideAuthor = true\n"
-                "                    }\n"
+                + ("                        richTextPreview = nil\n" if text_anchor == rich_text_anchor else "")
+                + "                        hideAuthor = true\n"
+                + "                    }\n"
                 + text_anchor
             )
             if text_anchor in t:
@@ -5955,10 +6020,34 @@ def patch_fix_media_caption_rich_edit(tg: Path) -> None:
         "                    richTextAttribute = richMarkdownAttributeIfNeeded(context: strongSelf.context, attributedText: expandedInputStateAttributedString(editMessage.inputState.inputText))\n"
         "                }\n"
     )
+    modern_anchor = (
+        "                let content = editMessage.inputState.content\n"
+        "                let richText: RichTextMessageAttribute? = content.isEntityExpressible() ? nil : RichTextMessageAttribute(instantPage: instantPage(from: content), fullInstantPage: nil)\n"
+    )
+    modern_replacement = (
+        "                let content = editMessage.inputState.content\n"
+        "                // AorusGram fix: captions must remain ordinary message text; sending an\n"
+        "                // Instant-Page richText attribute would make Telegram send text:\"\".\n"
+        "                let aorusEditHasCaptionMedia = message.effectiveMedia.contains(where: { media in\n"
+        "                    switch media {\n"
+        "                    case _ as TelegramMediaImage, _ as TelegramMediaFile, _ as TelegramMediaMap:\n"
+        "                        return true\n"
+        "                    default:\n"
+        "                        return false\n"
+        "                    }\n"
+        "                })\n"
+        "                let richText: RichTextMessageAttribute? = aorusEditHasCaptionMedia || content.isEntityExpressible()\n"
+        "                    ? nil\n"
+        "                    : RichTextMessageAttribute(instantPage: instantPage(from: content), fullInstantPage: nil)\n"
+    )
     if anchor in t:
         t = t.replace(anchor, replacement, 1)
         path.write_text(t, encoding="utf-8")
         print("Media-caption edit fix: patched (rich path skipped for media captions)")
+    elif modern_anchor in t:
+        t = t.replace(modern_anchor, modern_replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("Media-caption edit fix: patched 12.9 rich-content path")
     else:
         print("WARNING: media-caption edit fix anchor not found — NOT applied")
 
@@ -6086,191 +6175,6 @@ def patch_call_proxy(tg: Path) -> None:
         print("WARNING: PresentationCallManager useForCalls condition not found — call proxy force NOT applied")
 
     path.write_text(t, encoding="utf-8")
-
-
-def patch_call_proxy_tcp_media(tg: Path) -> None:
-    """Give proxied calls a working SOCKS5 media path WITHOUT touching direct calls.
-
-    Root cause (verified from the full native tgcalls log):
-    Telegram call media defaults to UDP straight to the reflectors. When a SOCKS5 call
-    proxy is configured, tgcalls' NativeNetworkingImpl disables UDP (a SOCKS5 proxy
-    cannot carry UDP) — so the media leg MUST go over a TCP reflector. But two upstream
-    gaps break that leg:
-      For protocol versions != "12.0.0" the server's TCP reflector is diverted to a
-        signalling-only connection (`continue connectionsLoop`) and dropped from the
-        media set, so there is no TCP reflector to connect to.
-      enableTCP (allowTCP) comes from experimentalSettings.enableVoipTcp, OFF by
-        default, so tgcalls would refuse TCP even if a TCP reflector were present.
-    (The remaining gap — tgcalls v2 never actually tunnelling the reflector TCP socket
-    through the proxy — is fixed natively in patch_tgcalls_proxy_socks5.)
-
-    Fix here is PURELY ADDITIVE and only affects calls with a SOCKS5 proxy configured
-    (voipProxyServer != nil):
-      inject Telegram's TCP reflector gateway (91.108.9.38:595, exactly as stock does
-        for protocol version 12.0.0) so a TCP media path always EXISTS — otherwise, for
-        non-12.0.0 calls, the server often sends UDP-only reflectors and the tunnel has
-        nothing to carry;
-      keep TCP reflectors as ADDITIONAL media connections instead of diverting them to
-        signalling-only (the UDP reflectors and P2P candidates stay in the set — nothing
-        is removed, filtered, or forced; signalling still rides the proxied MTProto link);
-      allow TCP so tgcalls may use those reflectors.
-    A call that works directly still gathers its UDP/P2P candidates and connects on them
-    exactly as before — the proxied TCP reflector is just an extra ICE candidate that only
-    wins when the direct paths are blocked. Calls with no proxy configured are
-    byte-for-byte unchanged (still UDP, still fast).
-
-    Also (independent of routing) redirects the native tgcalls debug log to
-    Documents/AorusGramCallLogs for every call, writes a per-call setup report, and
-    dumps the full native log on hang-up, so the "Call logs" row has the real record.
-    """
-    path = tg / "submodules/TelegramVoip/Sources/OngoingCallContext.swift"
-    if not path.is_file():
-        print("CallProxyTCP: OngoingCallContext.swift not found — skip")
-        return
-    t = path.read_text(encoding="utf-8")
-    if "AorusGram: additive proxied TCP reflector" in t:
-        print("CallProxyTCP: already patched")
-        return
-
-    ok = True
-
-    # 0) When a SOCKS5 call proxy is set, inject Telegram's TCP reflector gateway so a TCP
-    #    media path exists (stock only injects it for 12.0.0; non-12.0.0 calls otherwise get
-    #    UDP-only reflectors and the tunnel has nothing to carry). Injected BEFORE the
-    #    reflector-id mapping is built, exactly like the stock 12.0.0 path, so the new
-    #    reflector gets a valid id. Additive: the existing (UDP) reflectors are untouched.
-    anchor0 = (
-        "                if version == \"12.0.0\" {\n"
-        "                    for connection in unfilteredConnections {\n"
-    )
-    repl0 = (
-        "                // AorusGram: additive proxied TCP reflector — inject Telegram's TCP\n"
-        "                // reflector gateway when a SOCKS5 call proxy is set (as stock does for\n"
-        "                // 12.0.0) so the media leg has a TCP path the proxy can carry when direct\n"
-        "                // UDP is blocked. The existing UDP reflectors stay in the set.\n"
-        "                if version == \"12.0.0\" || voipProxyServer != nil {\n"
-        "                    for connection in unfilteredConnections {\n"
-    )
-    if anchor0 in t:
-        t = t.replace(anchor0, repl0, 1)
-    else:
-        print("CallProxyTCP: WARNING tcp-reflector-injection anchor not found")
-        ok = False
-
-    # 1) Keep TCP reflectors as MEDIA connections for proxied calls (like 12.0.0) instead of
-    #    diverting them to a signalling-only connection. Signalling still rides the proxied
-    #    MTProto link. Without a proxy the original `else` branch runs, so direct calls are
-    #    untouched.
-    anchor1 = (
-        "                        if reflector.isTcp {\n"
-        "                            if version == \"12.0.0\" {\n"
-    )
-    repl1 = (
-        "                        if reflector.isTcp {\n"
-        "                            // AorusGram: keep TCP reflectors as media for proxied calls\n"
-        "                            // (like 12.0.0), not signalling-only, so the proxy has a TCP path.\n"
-        "                            if version == \"12.0.0\" || voipProxyServer != nil {\n"
-    )
-    if anchor1 in t:
-        t = t.replace(anchor1, repl1, 1)
-    else:
-        print("CallProxyTCP: WARNING reflector-diversion anchor not found")
-        ok = False
-
-    # 2) Allow TCP whenever a proxy is set (enableVoipTcp is off by default). Purely
-    #    additive: without a proxy the original enableTCP value is used unchanged.
-    anchor2 = "                    allowTCP: enableTCP,\n"
-    repl2 = "                    allowTCP: (voipProxyServer != nil ? true : enableTCP),\n"
-    if anchor2 in t:
-        t = t.replace(anchor2, repl2, 1)
-    else:
-        print("CallProxyTCP: WARNING allowTCP anchor not found")
-        ok = False
-
-    # 3) Per-call setup diagnostic (diagnostics only — NO behaviour change here).
-    anchor3 = "                let context = OngoingCallThreadLocalContextWebrtc(\n"
-    block3 = (
-        "                #if !DEBUG\n"
-        "                // AorusGram: write a call setup diagnostic to Documents/AorusGramCallLogs.\n"
-        "                // Records only what tgcalls was handed — it does not change routing.\n"
-        "                if let aorusDocs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
-        "                    let aorusDir = aorusDocs.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
-        "                    try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
-        "                    var aorusReport = \"AorusGram call setup diagnostics\\n\"\n"
-        "                    aorusReport += \"date: \\(Date())\\n\"\n"
-        "                    aorusReport += \"version: \\(version)\\n\"\n"
-        "                    aorusReport += \"isOutgoing: \\(isOutgoing)\\n\"\n"
-        "                    if let aorusPS = proxyServer {\n"
-        "                        switch aorusPS.connection {\n"
-        "                        case .socks5: aorusReport += \"proxyServer: SOCKS5 \\(aorusPS.host):\\(aorusPS.port)\\n\"\n"
-        "                        case .mtp: aorusReport += \"proxyServer: MTProto \\(aorusPS.host):\\(aorusPS.port) (NOT usable for call media)\\n\"\n"
-        "                        }\n"
-        "                    } else {\n"
-        "                        aorusReport += \"proxyServer: nil\\n\"\n"
-        "                    }\n"
-        "                    aorusReport += \"voipProxyServer: \\(voipProxyServer != nil ? \"set\" : \"nil\")\\n\"\n"
-        "                    let aorusTcpN = filteredConnections.filter { $0.hasTcp }.count\n"
-        "                    aorusReport += \"filteredConnections: total=\\(filteredConnections.count) tcp=\\(aorusTcpN)\\n\"\n"
-        "                    aorusReport += \"allowP2P: \\(allowP2P)\\n\"\n"
-        "                    aorusReport += \"enableTCP(param): \\(enableTCP)\\n\"\n"
-        "                    aorusReport += \"customParameters: \\(customParameters ?? \"nil\")\\n\"\n"
-        "                    aorusReport += \"allowTCP(final): \\(voipProxyServer != nil ? true : enableTCP)\\n\"\n"
-        "                    for aorusC in filteredConnections {\n"
-        "                        aorusReport += \"  conn ip=\\(aorusC.ip) port=\\(aorusC.port) tcp=\\(aorusC.hasTcp) turn=\\(aorusC.hasTurn) stun=\\(aorusC.hasStun) reflectorId=\\(aorusC.reflectorId)\\n\"\n"
-        "                    }\n"
-        "                    try? aorusReport.write(to: aorusDir.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-setup.txt\"), atomically: true, encoding: .utf8)\n"
-        "                }\n"
-        "                #endif\n"
-    )
-    # Also dump the FULL native tgcalls debug log (the definitive record of the media
-    # connection attempts, ICE/reflector/proxy) to Documents when the call ends.
-    stop_anchor = "            context.nativeStop { debugLog, bytesSentWifi, bytesReceivedWifi, bytesSentMobile, bytesReceivedMobile in\n"
-    stop_inject = (
-        stop_anchor
-        + "                #if !DEBUG\n"
-        + "                if let aorusFullLog = debugLog, let aorusDocs2 = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
-        + "                    let aorusDir2 = aorusDocs2.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
-        + "                    try? FileManager.default.createDirectory(at: aorusDir2, withIntermediateDirectories: true)\n"
-        + "                    try? aorusFullLog.write(to: aorusDir2.appendingPathComponent(\"call-\\(Int(Date().timeIntervalSince1970))-full.log\"), atomically: true, encoding: .utf8)\n"
-        + "                }\n"
-        + "                #endif\n"
-    )
-    if stop_anchor in t:
-        t = t.replace(stop_anchor, stop_inject, 1)
-    else:
-        print("CallProxyTCP: WARNING nativeStop anchor not found — full log dump NOT added")
-
-    # Redirect the native tgcalls log to our Documents folder for EVERY call and force a
-    # filename even when logName is empty. tgcalls writes this log LIVE during the call,
-    # so the FULL native log (ICE / reflector / proxy attempts) is always on disk — no
-    # dependence on nativeStop returning a debugLog string. The "Call logs" row reads it.
-    logpath_anchor = "        self.logPath = logName.isEmpty ? \"\" : callLogsPath(account: self.account) + \"/\" + logName + \".log\"\n"
-    logpath_repl = (
-        "        self.logPath = {\n"
-        "            if let aorusDocs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {\n"
-        "                let aorusDir = aorusDocs.appendingPathComponent(\"AorusGramCallLogs\", isDirectory: true)\n"
-        "                try? FileManager.default.createDirectory(at: aorusDir, withIntermediateDirectories: true)\n"
-        "                return aorusDir.appendingPathComponent(\"native-\\(callId.id)-\\(Int(Date().timeIntervalSince1970)).log\").path\n"
-        "            }\n"
-        "            return \"\"\n"
-        "        }()\n"
-    )
-    if logpath_anchor in t:
-        t = t.replace(logpath_anchor, logpath_repl, 1)
-    else:
-        print("CallProxyTCP: WARNING logPath anchor not found — native log NOT redirected")
-
-    if anchor3 in t:
-        t = t.replace(anchor3, block3 + anchor3, 1)
-    else:
-        print("CallProxyTCP: WARNING context-init anchor not found")
-        ok = False
-
-    if ok:
-        path.write_text(t, encoding="utf-8")
-        print("CallProxyTCP: additive proxied TCP reflector + allowTCP + diagnostics (direct calls untouched)")
-    else:
-        print("CallProxyTCP: NOT applied (anchor mismatch)")
 
 
 def patch_tgcalls_v2_set_proxy(tg: Path) -> None:
@@ -6803,6 +6707,8 @@ def patch_alternate_icons(tg: Path) -> None:
         if t_new != t:
             build.write_text(t_new, encoding="utf-8")
             print("AlternateIcons: updated alternate_icon_folders in BUILD")
+        elif f"alternate_icon_folders = [{new_folders}]" in t:
+            print("AlternateIcons: alternate_icon_folders already updated")
         else:
             print("AlternateIcons: WARNING alternate_icon_folders not found/changed in BUILD")
 
@@ -8142,8 +8048,7 @@ def patch_license_key_provider(tg: Path) -> None:
     t = f.read_text(encoding="utf-8")
     if marker not in t:
         if "/* AORUS-BUILD-KEY-INJECTED */" in t:
-            print("LicenseKey: already injected — skipped")
-            return
+            raise RuntimeError("LicenseKey: refusing a previously injected source tree")
         raise RuntimeError("LicenseKey: injection marker is missing from an untrusted provider")
     key_hex = os.environ.get("LICENSE_HMAC_KEY_HEX", "").strip()
     if not key_hex:
@@ -8173,8 +8078,7 @@ def patch_proxy_key_provider(tg: Path) -> None:
     t = f.read_text(encoding="utf-8")
     if marker not in t:
         if "/* AORUS-BUILD-PROXY-KEY-INJECTED */" in t:
-            print("ProxyKey: already injected — skipped")
-            return
+            raise RuntimeError("ProxyKey: refusing a previously injected source tree")
         raise RuntimeError("ProxyKey: injection marker is missing from an untrusted provider")
     key_hex = os.environ.get("PROXY_HMAC_KEY_HEX", "").strip().lower()
     try:
@@ -13606,15 +13510,22 @@ def patch_view_once_capture(tg: Path) -> None:
             # breaks it, leaving video protected while photos still work. Match the
             # OR-chain robustly on its stable isCopyProtected() prefix and rewrite it
             # to gate the view-once / paid sources.
-            pat = re.compile(r'^([ \t]*)let captureProtected = message\.isCopyProtected\(\).*$', re.MULTILINE)
+            pat = re.compile(r'^([ \t]*)let captureProtected = (?P<expression>[^\n]+)$', re.MULTILINE)
 
             def _cap_repl(m: "re.Match[str]") -> str:
                 ind = m.group(1)
-                return (ind + "let captureProtected = message.isCopyProtected() "
-                        f"|| (message.containsSecretMedia && !UserDefaults.standard.bool(forKey: \"{once}\")) "
+                expression = m.group("expression")
+                required = (
+                    "message.containsSecretMedia",
+                    "message.minAutoremoveOrClearTimeout == viewOnceTimeout",
+                    "message.paidContent != nil",
+                )
+                if not all(term in expression for term in required):
+                    return m.group(0)
+                return (ind + "let captureProtected = "
+                        f"(message.containsSecretMedia && !UserDefaults.standard.bool(forKey: \"{once}\")) "
                         f"|| (message.minAutoremoveOrClearTimeout == viewOnceTimeout && !UserDefaults.standard.bool(forKey: \"{once}\")) "
-                        f"|| (message.paidContent != nil && !UserDefaults.standard.bool(forKey: \"{paid}\")) "
-                        f"|| peerIsCopyProtected  {SENTINEL}")
+                        f"|| (message.paidContent != nil && !UserDefaults.standard.bool(forKey: \"{paid}\"))  {SENTINEL}")
 
             new_t, n = pat.subn(_cap_repl, t)
             if n > 0:
@@ -17343,8 +17254,12 @@ def patch_aorus_code_compose(tg: Path) -> None:
     t = t.replace(method_anchor, handler + hint_helper + method_anchor, 1)
 
     # Trigger the hint from updateLayout, right after the attachment button is framed.
-    hint_anchor = "        transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: self.attachmentButtonBackground.frame)\n"
-    if hint_anchor in t:
+    hint_anchors = (
+        "        transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: self.attachmentButtonBackground.frame)\n",
+        "        transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: CGRect(origin: CGPoint(x: attachmentButtonFrame.minX, y: attachmentButtonFrame.maxY - 40.0), size: CGSize(width: 40.0, height: 40.0)))\n",
+    )
+    hint_anchor = next((value for value in hint_anchors if value in t), None)
+    if hint_anchor is not None:
         t = t.replace(hint_anchor, hint_anchor + "        self.aorusMaybeShowCodeHint()\n", 1)
     else:
         print("AorusCodeCompose: hint trigger anchor not found — hint not wired")
@@ -17522,10 +17437,20 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
         "            let updatedDateText = arguments.dateText\n"
         "            // AorusGram: status icons — 'edited' is shown as a pencil icon below, not text\n"
     )
-    if old_edited not in t:
+    new_upstream_edited = (
+        "            var updatedDateText = arguments.dateText\n"
+        "            if arguments.edited {\n"
+        "                if let useEditedTimestamp = arguments.context.getAppConfigValue(\"message_primary_edited_date\") as? Bool, useEditedTimestamp {\n"
+        "                } else {\n"
+        "                    updatedDateText = \"\\(arguments.presentationData.strings.Conversation_MessageEditedLabel) \\(updatedDateText)\"\n"
+        "                }\n"
+        "            }\n"
+    )
+    edited_anchor = old_edited if old_edited in t else new_upstream_edited
+    if edited_anchor not in t:
         print("StatusIcons: edited-text anchor not found — skip")
         return
-    t = t.replace(old_edited, new_edited, 1)
+    t = t.replace(edited_anchor, new_edited, 1)
 
     # Keep the impression (views) count as a SEPARATE prefix instead of prepending
     # it into updatedDateText. This lets the status icons sit AFTER the count (right
@@ -17820,8 +17745,12 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
             # (a) Strip the invisible deleted-marker before the "has caption?" test so a
             #     media-only message doesn't spawn an empty text bubble (which would push
             #     the time off the photo overlay and hide the trash icon).
-            mt_anchor = "        if !messageText.isEmpty || message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) || isUnsupportedMedia || isStoryWithText {\n"
-            if "AorusGram: strip invisible deleted-marker" not in bi and mt_anchor in bi:
+            mt_anchors = (
+                "        if !messageText.isEmpty || message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) || isUnsupportedMedia || isStoryWithText {\n",
+                "        if !messageText.isEmpty || (message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) && richText == nil) || isUnsupportedMedia || isStoryWithText {\n",
+            )
+            mt_anchor = next((value for value in mt_anchors if value in bi), None)
+            if "AorusGram: strip invisible deleted-marker" not in bi and mt_anchor is not None:
                 bi = bi.replace(
                     mt_anchor,
                     "        // AorusGram: strip invisible deleted-marker so a media-only message keeps its photo overlay status (time + trash) instead of an empty text bubble\n"
@@ -21819,10 +21748,30 @@ def patch_wall_keep_settings_button(tg: Path) -> None:
         "        selfController.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
         "    }\n"
     )
+    modern_anchor = (
+        "        if rightBarButtonsUpdated {\n"
+        "            self.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
+        "        }\n"
+    )
+    modern_replacement = (
+        "        // AorusGram: never strip the Wall's settings gear. The Wall has no chat-owned\n"
+        "        // right buttons, so this assignment could only ever remove ours.\n"
+        "        var aorusIsWall = false\n"
+        "        if case let .customChatContents(aorusContents) = self.subject, aorusContents is AorusWallChatContents {\n"
+        "            aorusIsWall = true\n"
+        "        }\n"
+        "        if rightBarButtonsUpdated && !aorusIsWall {\n"
+        "            self.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
+        "        }\n"
+    )
     if anchor in t:
         t = t.replace(anchor, replacement, 1)
         path.write_text(t, encoding="utf-8")
         print("WallGear: settings gear is no longer wiped by chat state updates")
+    elif modern_anchor in t:
+        t = t.replace(modern_anchor, modern_replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("WallGear: settings gear is no longer wiped by chat state updates (12.9+)")
     else:
         print("WallGear: WARNING — setRightBarButtonItems anchor not found")
 
@@ -22830,7 +22779,7 @@ def patch_formatting_panel(tg: Path) -> None:
         "              let chatLocation = self.presentationInterfaceState?.chatLocation,\n"
         "              let peerId = chatLocation.peerId,\n"
         "              let parentVC = self.interfaceInteraction?.chatController() as? UIViewController else { return }\n"
-        "        let cover = self.textInputNode?.textView.text ?? \"\"\n"
+        "        let cover = self.text\n"
         "        let isRu = (self.presentationInterfaceState?.strings.baseLanguageCode ?? \"\").hasPrefix(\"ru\")\n"
         "        let alert = UIAlertController(title: \"AorusCode\", message: isRu ? \"Введите скрытое сообщение\" : \"Enter the hidden message\", preferredStyle: .alert)\n"
         "        alert.addTextField { textField in\n"
@@ -23016,14 +22965,25 @@ def patch_voice_to_text(tg: Path) -> None:
             "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
             "            refreshChatTextInputTypingAttributes(textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize)\n"
         )
-        if load_sentinel not in source and load_anchor in source:
-            source = source.replace(
-                load_anchor,
-                "        " + load_sentinel + "\n" + voice_width_block + "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
-                "            refreshChatTextInputTypingAttributes(textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize)\n",
-                1,
-            )
-            repairs.append("initial text insets")
+        modern_load_anchor = (
+            "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
+            "            richTextInputNode.refreshTextInputTypingAttributes(textColor: presentationInterfaceState.theme.chat.inputPanel.primaryTextColor, baseFontSize: baseFontSize)\n"
+        )
+        if load_sentinel not in source:
+            if load_anchor in source:
+                source = source.replace(
+                    load_anchor,
+                    "        " + load_sentinel + "\n" + voice_width_block + load_anchor,
+                    1,
+                )
+                repairs.append("initial text insets")
+            elif modern_load_anchor in source:
+                source = source.replace(
+                    modern_load_anchor,
+                    "        " + load_sentinel + "\n" + voice_width_block + modern_load_anchor,
+                    1,
+                )
+                repairs.append("initial rich-text insets")
 
         gap_sentinel = "// AorusGram: keep liquid-glass composer clear of its outer buttons"
         gap_anchor = "        var audioRecordingItemsAlpha: CGFloat = 1.0\n"
@@ -23075,8 +23035,10 @@ def patch_voice_to_text(tg: Path) -> None:
     if "import AorusGramUI\n" not in t:
         t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
 
-    # 1) Stored properties (after the aiButton declaration).
-    prop_anchor = "    private var aiButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+    # 1) Stored properties (after Telegram's AI-button storage; renamed in 12.9).
+    legacy_prop_anchor = "    private var aiButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+    modern_prop_anchor = "    private var attachmentAIButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+    prop_anchor = legacy_prop_anchor if legacy_prop_anchor in t else modern_prop_anchor
     prop_inject = (
         prop_anchor
         + "    private var aorusVoiceButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
@@ -23091,9 +23053,11 @@ def patch_voice_to_text(tg: Path) -> None:
 
     # 2) Reserve width for the button in the text-field metrics phase.
     metrics_anchor = "        if self.isAIEnabled && width >= 500.0 {\n"
-    metrics_inject = voice_width_block + metrics_anchor
+    modern_metrics_anchor = "        var textFieldMinHeight: CGFloat = 35.0\n"
     if metrics_anchor in t:
-        t = t.replace(metrics_anchor, metrics_inject, 1)
+        t = t.replace(metrics_anchor, voice_width_block + metrics_anchor, 1)
+    elif modern_metrics_anchor in t:
+        t = t.replace(modern_metrics_anchor, voice_width_block + modern_metrics_anchor, 1)
     else:
         print("VoiceToText: WARNING metrics anchor not found")
 
@@ -23411,6 +23375,11 @@ def patch_disable_copy_protection(tg: Path) -> None:
         )
         if "// AorusGram: never treat content as copy-protected" in t:
             print("CopyProtection: message accessor already patched")
+        elif (
+            "AorusGram: channel copy bypass (msg group)" in t
+            and "AorusGram: channel copy bypass (msg channel)" in t
+        ):
+            print("CopyProtection: message accessor already uses the paid-media gate and channel bypass")
         elif anchor in t:
             msg.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
             print("CopyProtection: neutralised Message.isCopyProtected()")
@@ -23442,6 +23411,8 @@ def patch_disable_copy_protection(tg: Path) -> None:
         )
         if "// AorusGram: report peers as not copy-protected" in t:
             print("CopyProtection: peer accessor already patched")
+        elif "AorusGram: channel copy bypass (peer)" in t:
+            print("CopyProtection: peer accessor already neutralised by channel bypass")
         elif anchor in t:
             peer.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
             print("CopyProtection: neutralised Peer.isCopyProtectionEnabled")
@@ -23619,7 +23590,6 @@ def main() -> None:
     patch_remove_send_logs(tg)
     patch_app_bundle_name(tg)
     patch_call_proxy(tg)
-    patch_call_proxy_udp_media(tg)
     patch_tgcalls_v2_set_proxy(tg)
     patch_tgcalls_reflector_socks5_udp(tg)
     patch_show_stories_toggle(tg)

@@ -6,7 +6,8 @@ import MachO
 //
 // AUDIENCE: AorusGram ships via E-sign / AltStore sideloading — legitimate users are
 // NOT jailbroken. So a jailbreak / injection signal is, in practice, an attacker. That
-// lets us crash HARD on detection with negligible false-positive risk.
+// lets us deny protected operations on detection without crashing a legitimate
+// sideloaded client on a false positive.
 //
 // HONEST LIMITS: no client-side check is unbypassable (Shadow / Liberty / A-Bypass /
 // KernBypass hook detectors). This design instead maximizes cost to bypass:
@@ -14,13 +15,12 @@ import MachO
 //     first thing high-level bypass tweaks hook;
 //   • cross-API consistency: if FileManager says "absent" but a raw syscall says
 //     "present", a tweak is selectively lying → that itself is detection;
-//   • multiple independent enforcement sites + multiple fatal paths, so NOP-ing one
-//     call site or one crash does not disable the system;
+//   • multiple independent enforcement sites, so bypassing one call site does not
+//     disable the system;
 //   • re-checks on launch, at the gate, and before every signed license request.
 //
-// FALSE-POSITIVE SAFETY: every hard-crash trigger (JB artifacts, sandbox escape,
-// injected dylibs, DYLD_INSERT_LIBRARIES, JB symlinks) is ABSENT on a clean,
-// non-jailbroken device — including E-sign / AltStore installs.
+// FALSE-POSITIVE SAFETY: detection denies protected operations rather than
+// deliberately crashing the process.
 enum AorusEnvGuard {
 
     // The simulator runs on macOS, where /bin/bash etc. exist and /private is
@@ -31,26 +31,42 @@ enum AorusEnvGuard {
     private static let isSimulator = false
     #endif
 
-    // MARK: - Public enforcement (crashes hard if compromised)
+    // MARK: - Public enforcement
 
+    @discardableResult
     @inline(__always)
-    static func enforceAtLaunch() {
-        guard !isSimulator else { return }
-        if jailbrokenOrInjected(full: true) { selfDestruct(0xA1) }
+    static func enforceAtLaunch() -> Bool {
+        guard !isSimulator else { return true }
+        return recordIfCompromised(jailbrokenOrInjected(full: true))
     }
 
+    @discardableResult
     @inline(__always)
-    static func enforceAtGate() {
-        guard !isSimulator else { return }
-        // Independent site with its own crash code — patching the launch check is not enough.
-        if jailbrokenOrInjected(full: true) { selfDestruct(0xB2) }
+    static func enforceAtGate() -> Bool {
+        guard !isSimulator else { return true }
+        return recordIfCompromised(jailbrokenOrInjected(full: true))
     }
 
+    @discardableResult
     @inline(__always)
-    static func enforceBeforeRequest() {
-        guard !isSimulator else { return }
+    static func enforceBeforeRequest() -> Bool {
+        guard !isSimulator else { return true }
         // Fast subset run on the license request path itself.
-        if hasInjection() || hasSuspiciousPaths() || canEscapeSandbox() { selfDestruct(0xC3) }
+        return recordIfCompromised(hasInjection() || hasSuspiciousPaths() || canEscapeSandbox())
+    }
+
+    private static func recordIfCompromised(_ compromised: Bool) -> Bool {
+        guard compromised else { return true }
+        let defaults = UserDefaults.standard
+        let wasRecorded = defaults.bool(forKey: "_ag_environment_compromised")
+        defaults.set(true, forKey: "_ag_frida")
+        defaults.set(true, forKey: "_ag_environment_compromised")
+        guard !wasRecorded else { return false }
+        AorusTamperAccumulator.shared.increment()
+        NotificationCenter.default.post(
+            name: NSNotification.Name("aorusgram.environmentCompromised"), object: nil
+        )
+        return false
     }
 
     // MARK: - Anti-debug
@@ -172,14 +188,4 @@ enum AorusEnvGuard {
         return false
     }
 
-    // MARK: - Crash (multiple independent fatal paths)
-
-    private static func selfDestruct(_ tag: UInt8) -> Never {
-        // Spread fatal operations so NOP-ing any single one still ends the process.
-        let a = UnsafeMutablePointer<UInt8>(bitPattern: UInt(0x1 + Int(tag)))
-        a?.pointee = tag
-        let b = UnsafeMutablePointer<Int>(bitPattern: 0xF00D)
-        b?.pointee = Int(tag)
-        abort()
-    }
 }

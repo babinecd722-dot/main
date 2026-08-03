@@ -112,7 +112,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private var previousVisibleMessageIds = Set<MessageId>()
         private var loadDisposable: Disposable?
         private var loadMoreDisposable: Disposable?
-        private var badgeDisposable: Disposable?
         private var recommendationRequestDisposable: Disposable?
         private var recommendedChannelsDisposable: Disposable?
         private let recommendedPreloadDisposable = MetaDisposable()
@@ -192,8 +191,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         private static let recommendedScanBatch = 24
         private static let maxExpansionAdditions = 8
         private static let minimumHealthySourceCount = 8
-        private static let badgeScanBudget = 512
-        private static let badgeScanPerChannel = 16
         private var subscribedScanCursor = 0
         private var recommendedScanCursor = 0
         /// Also re-ask Telegram for recommendations periodically, not only when the
@@ -219,7 +216,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         deinit {
             self.loadDisposable?.dispose()
             self.loadMoreDisposable?.dispose()
-            self.badgeDisposable?.dispose()
             self.recommendationRequestDisposable?.dispose()
             self.recommendedChannelsDisposable?.dispose()
             self.recommendedPreloadDisposable.dispose()
@@ -1328,81 +1324,11 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             }
         }
 
-        /// Count what is waiting, independently of how a page is composed. A page applies
-        /// per-channel quotas and a length limit — good for a feed, useless as a counter.
+        /// The tab badge describes the exact Wall snapshot the user will open. Keeping one
+        /// source of truth avoids the previous jump between a Postbox unread estimate and the
+        /// actual feed (which also contains recommendations and Wall-specific seen state).
         func recountBadge() {
-            let accountId = self.accountId
-            self.badgeDisposable?.dispose()
-            self.badgeDisposable = (self.context.account.postbox.transaction { transaction -> Int in
-                let excluded = AorusWallSettingsStore.excludedPeerIds(accountId: accountId)
-                let seen = AorusWallSettingsStore.seenMessageIds(accountId: accountId)
-                let includeArchived = AorusWallSettingsStore.showArchived(accountId: accountId)
-
-                let channelFilter: (Peer) -> Bool = { peer in
-                    guard let channel = peer as? TelegramChannel, case .broadcast = channel.info else {
-                        return false
-                    }
-                    return !excluded.contains(channel.id.toInt64())
-                }
-
-                var peerIds = transaction.getUnreadChatListPeerIds(
-                    groupId: .root,
-                    filterPredicate: nil,
-                    additionalFilter: channelFilter,
-                    stopOnFirstMatch: false
-                )
-                if includeArchived {
-                    peerIds.append(contentsOf: transaction.getUnreadChatListPeerIds(
-                        groupId: Namespaces.PeerGroup.archive,
-                        filterPredicate: nil,
-                        additionalFilter: channelFilter,
-                        stopOnFirstMatch: false
-                    ))
-                }
-
-                var count = 0
-                var remainingScanBudget = Impl.badgeScanBudget
-                for peerId in Set(peerIds).sorted() {
-                    guard let readState = transaction.getCombinedPeerReadState(peerId) else {
-                        continue
-                    }
-                    let unreadCount = max(Int(readState.count), 0)
-                    guard unreadCount > 0 else {
-                        continue
-                    }
-                    let scanLimit = min(unreadCount, min(Impl.badgeScanPerChannel, remainingScanBudget))
-                    if scanLimit > 0 {
-                        let messages = transaction.aorusWallMessages(
-                            peerId: peerId,
-                            namespace: Namespaces.Message.Cloud,
-                            before: MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud),
-                            limit: scanLimit
-                        )
-                        for message in messages {
-                            if !readState.isIncomingMessageIndexRead(message.index)
-                                && !AorusWallSettingsStore.isSeen(message.id, in: seen) {
-                                count += 1
-                            }
-                        }
-                        remainingScanBudget -= scanLimit
-                    }
-                    // Counting every unread row in every channel made foregrounding the app read
-                    // well over one hundred thousand messages on large accounts. Rows outside the
-                    // bounded exact window are already known unread by Postbox, so use that count
-                    // as the badge estimate instead of materializing each Message object.
-                    count += max(0, unreadCount - scanLimit)
-                    if count >= 999 {
-                        count = 999
-                        break
-                    }
-                }
-                return count
-            }
-            |> deliverOn(self.queue)).start(next: { [weak self] count in
-                self?.publishBadge(count)
-                self?.badgeDisposable?.dispose()
-                self?.badgeDisposable = nil
-            })
+            self.publishCurrentBadge()
         }
 
         private func publishBadge(_ count: Int) {
@@ -1412,7 +1338,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         }
 
         private func publishCurrentBadge() {
-            self.publishBadge(max(0, self.currentMessageIds.count - self.markedInCurrentView.count))
+            self.publishBadge(min(999, max(0, self.currentMessageIds.count - self.markedInCurrentView.count)))
         }
     }
 
@@ -1449,7 +1375,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 
     private let impl: QueueLocalObject<Impl>
     private var latestBadge: Int = 0
-    private var badgeTimer: Foundation.Timer?
     private var visibilityTimer: Foundation.Timer?
     private var visibleMessagesProvider: (() -> (live: Set<MessageId>, readable: Set<MessageId>))?
     private var navigationSearchingDisposable: Disposable?
@@ -1539,18 +1464,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self?.applicationDidBecomeActive()
         })
 
-        // A minute is soon enough for a counter. At twenty seconds this ran a Postbox
-        // transaction three times a minute for the whole time the app was open, and the badge
-        // is refreshed anyway whenever the feed itself changes.
-        let badgeTimer = Foundation.Timer(timeInterval: 60.0, repeats: true) { [weak self] _ in
-            self?.recountBadge()
-        }
-        self.badgeTimer = badgeTimer
-        RunLoop.main.add(badgeTimer, forMode: .common)
     }
 
     deinit {
-        self.badgeTimer?.invalidate()
         self.visibilityTimer?.invalidate()
         self.navigationSearchingDisposable?.dispose()
         for observer in self.observers {

@@ -116,8 +116,7 @@ final class LicenseStore {
         switch cached {
         case .trialActive, .paidActive:
             guard let until = snap.activeUntil, let now = estimatedServerNow(snap) else {
-                // No timing info — allow briefly; the next online check corrects it.
-                return cached
+                return .expired
             }
             return now < until ? cached : .expired
         default:
@@ -149,8 +148,9 @@ final class LicenseStore {
 
     // HMAC-SHA256 with the embedded license key. Never logged.
     private func sign(_ s: Snapshot) -> String {
-        let key = LicenseKeyProvider.licenseHmacKeyBytes()
-        return LicenseCrypto.hmacSHA256Hex(message: Data(canonicalString(s).utf8), keyBytes: key)
+        return LicenseKeyProvider.withLicenseHmacKey { key in
+            LicenseCrypto.hmacSHA256Hex(message: Data(canonicalString(s).utf8), keyBytes: key)
+        } ?? ""
     }
 
     // MARK: - Keychain (JSON blob)

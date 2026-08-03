@@ -14,16 +14,20 @@ public enum AorusWallSettingsStore {
     public static let didChange = Notification.Name("aorusgram.wallSettingsChanged")
 
     private static let lock = NSLock()
-    private static let seenLimit = 12000
+    private static let seenLimit = 100000
+    private static let seenCompactionInterval = 2048
 
-    // Both of these used to be read straight out of UserDefaults on every call. The Wall calls
-    // them inside its page collection and its badge recount, so reading the seen list meant
-    // pulling up to 12 000 strings out of UserDefaults and rebuilding a Set every few seconds,
-    // and testing membership allocated one more string per scanned message. Held in memory and
-    // updated in place instead; UserDefaults is still the source of truth across launches.
-    private static var seenCache: [Int64: (ordered: [String], ids: Set<MessageId>)] = [:]
+    private struct SeenState {
+        var ordered: [String]
+        var ids: Set<MessageId>
+        var journalCount: Int
+    }
+
+    // Seen ids are queried on every page collection. Keep the lookup set in memory, while a
+    // compact snapshot plus an append-only journal makes every newly read post durable without
+    // serialising a giant UserDefaults array or losing the final batch when iOS kills the app.
+    private static var seenCache: [Int64: SeenState] = [:]
     private static var excludedCache: [Int64: Set<Int64>] = [:]
-    private static var seenFlushScheduled = Set<Int64>()
 
     private static func key(_ name: String, accountId: Int64) -> String {
         return "aorusgram_wall_\(name)_\(accountId)"
@@ -95,22 +99,117 @@ public enum AorusWallSettingsStore {
         return MessageId(peerId: PeerId(peerId), namespace: namespace, id: id)
     }
 
+    private static func seenDirectoryURL() -> URL? {
+        guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let directory = base.appendingPathComponent("AorusWallSeen", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: nil)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var mutableDirectory = directory
+            try? mutableDirectory.setResourceValues(values)
+            return directory
+        } catch {
+            return nil
+        }
+    }
+
+    private static func seenSnapshotURL(accountId: Int64) -> URL? {
+        return seenDirectoryURL()?.appendingPathComponent("\(accountId).snapshot")
+    }
+
+    private static func seenJournalURL(accountId: Int64) -> URL? {
+        return seenDirectoryURL()?.appendingPathComponent("\(accountId).journal")
+    }
+
+    private static func readLines(at url: URL?) -> [String] {
+        guard let url, let data = try? Data(contentsOf: url), !data.isEmpty,
+              let text = String(data: data, encoding: .utf8) else {
+            return []
+        }
+        return text.split(whereSeparator: { $0.isNewline }).map(String.init)
+    }
+
+    /// The caller must hold `lock`.
+    @discardableResult
+    private static func writeSeenSnapshotLocked(_ state: SeenState, accountId: Int64) -> Bool {
+        guard let snapshotURL = seenSnapshotURL(accountId: accountId),
+              let data = state.ordered.joined(separator: "\n").data(using: .utf8) else {
+            return false
+        }
+        do {
+            try data.write(to: snapshotURL, options: .atomic)
+            if let journalURL = seenJournalURL(accountId: accountId) {
+                try? FileManager.default.removeItem(at: journalURL)
+            }
+            UserDefaults.standard.removeObject(forKey: key("seen", accountId: accountId))
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// The caller must hold `lock`.
+    private static func appendSeenJournalLocked(_ values: [String], accountId: Int64) -> Bool {
+        guard !values.isEmpty, let journalURL = seenJournalURL(accountId: accountId),
+              let data = (values.joined(separator: "\n") + "\n").data(using: .utf8) else {
+            return values.isEmpty
+        }
+        if !FileManager.default.fileExists(atPath: journalURL.path) {
+            guard FileManager.default.createFile(atPath: journalURL.path, contents: nil, attributes: nil) else {
+                return false
+            }
+        }
+        guard let handle = FileHandle(forWritingAtPath: journalURL.path) else {
+            return false
+        }
+        handle.seekToEndOfFile()
+        handle.write(data)
+        handle.closeFile()
+        return true
+    }
+
     /// The caller must hold `lock`. `ordered` is the persisted form and keeps insertion order
     /// so the oldest entries can be dropped; `ids` is what lookups actually use.
-    private static func loadSeenLocked(accountId: Int64) -> (ordered: [String], ids: Set<MessageId>) {
+    private static func loadSeenLocked(accountId: Int64) -> SeenState {
         if let cached = seenCache[accountId] {
             return cached
         }
-        let ordered = UserDefaults.standard.stringArray(forKey: key("seen", accountId: accountId)) ?? []
+
+        let snapshot = readLines(at: seenSnapshotURL(accountId: accountId))
+        let journal = readLines(at: seenJournalURL(accountId: accountId))
+        let legacy = UserDefaults.standard.stringArray(forKey: key("seen", accountId: accountId)) ?? []
+        let source = snapshot + journal + legacy
+        var ordered: [String] = []
+        ordered.reserveCapacity(min(source.count, seenLimit))
+        var uniqueKeys = Set<String>()
         var ids = Set<MessageId>()
-        ids.reserveCapacity(ordered.count)
-        for value in ordered {
-            if let id = parseMessageKey(value) {
+        ids.reserveCapacity(min(source.count, seenLimit))
+        for value in source {
+            if uniqueKeys.insert(value).inserted, let id = parseMessageKey(value) {
+                ordered.append(value)
                 ids.insert(id)
             }
         }
-        let entry = (ordered: ordered, ids: ids)
+        if ordered.count > seenLimit {
+            let overflow = ordered.count - seenLimit
+            for value in ordered.prefix(overflow) {
+                if let id = parseMessageKey(value) {
+                    ids.remove(id)
+                }
+            }
+            ordered.removeFirst(overflow)
+        }
+        var entry = SeenState(ordered: ordered, ids: ids, journalCount: journal.count)
         seenCache[accountId] = entry
+        if !legacy.isEmpty || source.count != ordered.count || journal.count >= seenCompactionInterval {
+            if writeSeenSnapshotLocked(entry, accountId: accountId) {
+                entry.journalCount = 0
+                seenCache[accountId] = entry
+            }
+        }
         return entry
     }
 
@@ -126,14 +225,16 @@ public enum AorusWallSettingsStore {
         }
         lock.lock()
         var entry = loadSeenLocked(accountId: accountId)
-        var didAdd = false
+        var newValues: [String] = []
+        newValues.reserveCapacity(ids.count)
         for id in ids {
             if entry.ids.insert(id).inserted {
-                entry.ordered.append(messageKey(id))
-                didAdd = true
+                let value = messageKey(id)
+                entry.ordered.append(value)
+                newValues.append(value)
             }
         }
-        if didAdd {
+        if !newValues.isEmpty {
             let overflow = entry.ordered.count - seenLimit
             if overflow > 0 {
                 for value in entry.ordered.prefix(overflow) {
@@ -143,30 +244,23 @@ public enum AorusWallSettingsStore {
                 }
                 entry.ordered.removeFirst(overflow)
             }
+            let mustCompact = overflow > 0 || entry.journalCount + newValues.count >= seenCompactionInterval
+            if mustCompact {
+                if writeSeenSnapshotLocked(entry, accountId: accountId) {
+                    entry.journalCount = 0
+                } else {
+                    UserDefaults.standard.set(entry.ordered, forKey: key("seen", accountId: accountId))
+                }
+            } else if appendSeenJournalLocked(newValues, accountId: accountId) {
+                entry.journalCount += newValues.count
+            } else if writeSeenSnapshotLocked(entry, accountId: accountId) {
+                entry.journalCount = 0
+            } else {
+                UserDefaults.standard.set(entry.ordered, forKey: key("seen", accountId: accountId))
+            }
             seenCache[accountId] = entry
-            scheduleSeenFlushLocked(accountId: accountId)
         }
         lock.unlock()
-    }
-
-    /// Persist the seen list at most once every few seconds. Posts are marked as read while the
-    /// reader scrolls, and writing here means serialising the whole list — up to 12 000 strings
-    /// — into UserDefaults each time. The in-memory set is updated immediately, so filtering is
-    /// never stale; only the write to disk is batched. The caller must hold `lock`.
-    private static func scheduleSeenFlushLocked(accountId: Int64) {
-        guard !seenFlushScheduled.contains(accountId) else {
-            return
-        }
-        seenFlushScheduled.insert(accountId)
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 3.0) {
-            lock.lock()
-            seenFlushScheduled.remove(accountId)
-            let ordered = seenCache[accountId]?.ordered
-            lock.unlock()
-            if let ordered {
-                UserDefaults.standard.set(ordered, forKey: key("seen", accountId: accountId))
-            }
-        }
     }
 
     public static func isSeen(_ id: MessageId, in ids: Set<MessageId>) -> Bool {

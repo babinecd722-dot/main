@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -19,25 +19,37 @@ jobs:
     env:
       # Quiets GitHub deprecation warnings for actions/cache, checkout, upload-artifact on Node 20.
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      TELEGRAM_IOS_COMMIT: 6ad963e5b62d354da79040f388ae2b9132fb17b8
+      TELEGRAM_IOS_VERSION: 12.9.2
+      PILLOW_VERSION: 11.3.0
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: aorusgram
 
-      - name: Cache Telegram iOS source
-        id: tg-cache
-        uses: actions/cache@v4
-        with:
-          path: telegram-ios
-          key: tg-ios-src-v278-release-12.8-png8-alpha
+      - name: Release security preflight
+        run: python3 aorusgram/scripts/release_security_check.py aorusgram
 
-      - name: Clone Telegram iOS
+      # Cache only an immutable, unmodified upstream checkout. The working copy is
+      # recreated below on every run, so build-time HMAC injection can never leak
+      # into the cache or survive a secret rotation.
+      - name: Cache pristine Telegram iOS source
+        id: tg-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: telegram-ios-pristine
+          key: tg-ios-pristine-${{ runner.os }}-${{ env.TELEGRAM_IOS_COMMIT }}-v2
+
+      - name: Clone pristine Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth=1 --branch release-12.8 \
-            https://github.com/TelegramMessenger/Telegram-iOS.git telegram-ios
-          cd telegram-ios
+          git init telegram-ios-pristine
+          cd telegram-ios-pristine
+          git remote add origin https://github.com/TelegramMessenger/Telegram-iOS.git
+          git fetch --depth=1 origin "$TELEGRAM_IOS_COMMIT"
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$TELEGRAM_IOS_COMMIT"
           # Retry submodule fetch: a single --jobs=4 pass intermittently leaves a
           # submodule half-populated (e.g. webrtc missing experiments/field_trials.py),
           # which used to be silently swallowed by `|| true` and only surfaced as a
@@ -52,6 +64,18 @@ jobs:
             echo "submodule update attempt $attempt failed; retrying..."
             sleep $((attempt * 4))
           done
+          git submodule status --recursive | awk '$1 ~ /^[-+U]/ { bad=1 } END { exit bad }'
+
+      - name: Create clean Telegram iOS working copy
+        run: |
+          test -d telegram-ios-pristine/.git
+          test "$(git -C telegram-ios-pristine rev-parse HEAD)" = "$TELEGRAM_IOS_COMMIT"
+          test -z "$(git -C telegram-ios-pristine status --porcelain --untracked-files=no)"
+          git -C telegram-ios-pristine submodule status --recursive | awk '$1 ~ /^[-+U]/ { bad=1 } END { exit bad }'
+          rm -rf telegram-ios
+          cp -a telegram-ios-pristine telegram-ios
+          test "$(git -C telegram-ios rev-parse HEAD)" = "$TELEGRAM_IOS_COMMIT"
+          test "$(python3 -c 'import json; print(json.load(open("telegram-ios/versions.json"))["app"])')" = "$TELEGRAM_IOS_VERSION"
 
       - name: Ensure rlottie submodule
         run: |
@@ -59,11 +83,34 @@ jobs:
           CPP_COUNT=$(find submodules/rlottie/rlottie/src -name "*.cpp" 2>/dev/null | wc -l)
           echo "rlottie .cpp files found: $CPP_COUNT"
           if [ "$CPP_COUNT" -eq 0 ]; then
-            echo "rlottie empty — cloning directly..."
-            rm -rf submodules/rlottie/rlottie
-            git clone --depth=1 https://github.com/TelegramMessenger/rlottie.git submodules/rlottie/rlottie
+            echo "FATAL: pinned rlottie submodule is incomplete"
+            exit 1
           fi
           echo "rlottie .cpp count after: $(find submodules/rlottie/rlottie/src -name '*.cpp' | wc -l)"
+
+      - name: Verify current MTProxy Fake-TLS fingerprint
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+
+          path = Path("telegram-ios/submodules/MtProtoKit/Sources/MTTcpConnection.m")
+          if not path.is_file():
+              raise SystemExit("MTTcpConnection.m is missing")
+          text = path.read_text(encoding="utf-8")
+          # Telegram's 2026-04-07 Safari ClientHello update removes the obsolete,
+          # DPI-visible JA3/JA4 signature. Fail at the start of CI if the pinned
+          # Telegram branch/cache ever regresses to the old generator.
+          required = (
+              "generate_ml_kem_public_key",
+              "HelloGenerationCommandMlKemKey",
+              "HelloGenerationCommandBeginChoice",
+              "MTCreateSafariClientHello",
+          )
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit("MTProxy Fake-TLS fingerprint regression: " + ", ".join(missing))
+          print("MTProxy Fake-TLS fingerprint: current Safari/ML-KEM generator verified")
+          PY
 
       - name: Ensure webrtc submodule
         run: |
@@ -92,7 +139,13 @@ jobs:
             rm -rf "$WEBRTC_DIR"
             git clone https://github.com/ali-fareed/webrtc.git "$WEBRTC_DIR"
             if [ -n "$WEBRTC_SHA" ]; then
-              ( cd "$WEBRTC_DIR" && git checkout -q "$WEBRTC_SHA" ) || echo "WARNING: could not check out pinned webrtc sha $WEBRTC_SHA"
+              ( cd "$WEBRTC_DIR" && git checkout -q "$WEBRTC_SHA" ) || {
+                echo "FATAL: could not check out pinned webrtc sha $WEBRTC_SHA"
+                exit 1
+              }
+            else
+              echo "FATAL: pinned webrtc sha is missing from the Telegram tree"
+              exit 1
             fi
           fi
           if [ -f "$SENTINEL" ]; then
@@ -111,15 +164,13 @@ jobs:
       - name: Normalize non-8-bit PNGs to 8-bit (silence libpng warnings)
         run: |
           cd telegram-ios
-          python3 -m pip install --quiet --disable-pip-version-check Pillow >/dev/null 2>&1 || pip3 install --quiet Pillow >/dev/null 2>&1 || true
-          python3 << 'PYEOF'
+          PNG_VENV="$RUNNER_TEMP/aorus-png-venv"
+          rm -rf "$PNG_VENV"
+          python3 -m venv "$PNG_VENV"
+          "$PNG_VENV/bin/python" -m pip install --quiet --disable-pip-version-check "Pillow==$PILLOW_VERSION"
+          "$PNG_VENV/bin/python" << 'PYEOF'
           import os
-          try:
-              from PIL import Image
-              has_pillow = True
-          except Exception as e:
-              print("Pillow unavailable — leaving source PNGs unchanged:", e)
-              has_pillow = False
+          from PIL import Image
           names = {
               "VideoRecordArrow",
               "PhotoEditorCropCorners",
@@ -155,12 +206,9 @@ jobs:
                       continue
                   p = os.path.join(root, fn)
                   try:
-                      if has_pillow:
-                          normalize_with_pillow(p)
-                          count += 1
-                          print("8-bit:", p)
-                      else:
-                          print("unchanged:", p)
+                      normalize_with_pillow(p)
+                      count += 1
+                      print("8-bit:", p)
                   except Exception as e:
                       print("skip", p, e)
           print("PNG normalization done, converted", count)
@@ -891,7 +939,7 @@ jobs:
           ls -lh $RUNNER_TEMP/AorusGram-unsigned.ipa
 
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: AorusGram-unsigned-${{ github.run_number }}
           path: ${{ runner.temp }}/AorusGram-unsigned.ipa
@@ -899,7 +947,7 @@ jobs:
 
       - name: Upload build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: build-log-${{ github.run_number }}
           path: ${{ runner.temp }}/build.log
