@@ -12,18 +12,23 @@ import Foundation
 //      deleted messages, or TelegramCore postbox markers) → AorusL10n.current,
 //      which reads the resolved language persisted by AppDelegate's
 //      presentationData observer under the "aorusgram_lang" UserDefaults key.
-public enum AorusLang: String {
+public enum AorusLang: String, CaseIterable {
     case en
     case ru
+    case uk
+    case es
+    case pt
+    case de
+    case fr
+    case tr
 
-    // Map a Telegram base-language code to one of the two supported languages.
-    // Any language other than Russian falls back to English, as requested.
+    // Map a Telegram base-language code to a supported language. Telegram sends codes like
+    // "ru", "pt-br" or "es_419", so only the part before the separator is significant.
+    // Anything not supported yet falls back to English rather than showing nothing.
     public static func resolve(_ code: String?) -> AorusLang {
         guard let code = code?.lowercased() else { return .en }
-        if code == "ru" || code.hasPrefix("ru-") || code.hasPrefix("ru_") {
-            return .ru
-        }
-        return .en
+        let base = String(code.prefix(while: { $0 != "-" && $0 != "_" }))
+        return AorusLang(rawValue: base) ?? .en
     }
 
     // UserDefaults key shared with TelegramCore-injected code (postbox markers).
@@ -80,8 +85,19 @@ public struct AorusL10n {
         return AorusL10n(lang: AorusLang.current)
     }
 
+    // Russian and English are written inline at every call site, which is how this file
+    // grew. Additional languages live in AorusL10nTable keyed by the English string, so a
+    // new language is one table entry and needs no change here or at any call site. A
+    // missing entry falls back to English, which is always safe to display.
     private func t(_ ru: String, _ en: String) -> String {
-        return self.lang == .ru ? ru : en
+        switch self.lang {
+        case .ru:
+            return ru
+        case .en:
+            return en
+        default:
+            return AorusL10nTable.translation(of: en, into: self.lang) ?? en
+        }
     }
 
     // MARK: Settings — section headers
@@ -152,14 +168,23 @@ public struct AorusL10n {
     public var cacheAutoClean: String { t("Автоочистка кэша", "Auto-Clean Cache") }
     public var cacheInterval: String { t("Интервал очистки", "Cleanup Interval") }
     // Interval value in hours: "6 ч"/"6 h", or whole days as "7 дн"/"7 d".
+    //
+    // The number is substituted after translation, not before: interpolating first would make
+    // the string reaching t() different on every value ("6 h", "12 h", …) so it could never
+    // match a table key and every language but ru/en would silently stay English.
     public func cacheIntervalValue(_ hours: Int) -> String {
-        if hours % 24 == 0 { let d = hours / 24; return t("\(d) дн", "\(d) d") }
-        return t("\(hours) ч", "\(hours) h")
+        if hours % 24 == 0 {
+            let d = hours / 24
+            return t("%@ дн", "%@ d").replacingOccurrences(of: "%@", with: "\(d)")
+        }
+        return t("%@ ч", "%@ h").replacingOccurrences(of: "%@", with: "\(hours)")
     }
     public func ramIntervalValue(_ seconds: Int) -> String {
-        if seconds < 60 { return t("\(seconds) сек", "\(seconds) sec") }
+        if seconds < 60 {
+            return t("%@ сек", "%@ sec").replacingOccurrences(of: "%@", with: "\(seconds)")
+        }
         let minutes = seconds / 60
-        return t("\(minutes) мин", "\(minutes) min")
+        return t("%@ мин", "%@ min").replacingOccurrences(of: "%@", with: "\(minutes)")
     }
     public var glassUI: String { t("Эффекты стекла", "Glass Effects") }
     public var siriShortcuts: String { t("Siri Shortcuts", "Siri Shortcuts") }

@@ -1317,6 +1317,55 @@ def main() -> None:
     if wall_settings_text.count("object: NSNumber(value: accountId)") < 4:
         err.append("Wall: settings notifications are not scoped to their account")
 
+    # Translations are keyed by the English string, so a key that no longer matches a literal
+    # in the source silently falls back to English and the language looks half-done. Check each
+    # table against its source, including the %@ placeholders.
+    translation_pairs = (
+        (
+            "subscription",
+            tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionL10n.swift",
+            tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionL10nTable.swift",
+        ),
+        (
+            "AorusL10n",
+            tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift",
+            tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10nTable.swift",
+        ),
+    )
+    for area, src_path, tbl_path in translation_pairs:
+        if not (src_path.is_file() and tbl_path.is_file()):
+            continue
+        src_text = src_path.read_text(encoding="utf-8")
+        tbl_text = tbl_path.read_text(encoding="utf-8")
+        english_literals = {
+            match.group(2)
+            for match in re.finditer(
+                r't\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)', src_text, re.S
+            )
+        }
+        for literal in english_literals:
+            if "\\(" in literal:
+                err.append(
+                    f"Language: {area} string is interpolated before translation, "
+                    f"its key can never match — {literal}"
+                )
+        for name, body in re.findall(
+            r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", tbl_text, re.S
+        ):
+            keys = set(re.findall(r'^\s*"((?:[^"\\]|\\.)*)":', body, re.M))
+            for missing in sorted(english_literals - keys):
+                err.append(f"Language: {name} {area} translation is missing {missing!r}")
+            for stale in sorted(keys - english_literals):
+                err.append(f"Language: {name} {area} table has a stale key {stale!r}")
+            # A value that drops the placeholder renders "Active until" with no date at all.
+            for key, value in re.findall(
+                r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', body, re.M
+            ):
+                if key.count("%@") != value.count("%@"):
+                    err.append(
+                        f"Language: {name} {area} translation of {key!r} loses its %@ placeholder"
+                    )
+
     # Everything AorusGram shows follows the language selected inside Telegram. The device
     # language may only ever be a fallback for a fresh install that has no account yet, so a
     # bare Locale lookup with no Telegram key ahead of it is a regression.

@@ -33,8 +33,28 @@ enum SubL10n {
         return lang.hasPrefix("ru")
     }
 
+    /// Which of the supported languages Telegram is set to. Same rule as isRU: Telegram
+    /// first, device only when Telegram has no language yet.
+    static var lang: SubLanguage {
+        let raw = (telegramLanguageCode
+                   ?? Locale.preferredLanguages.first
+                   ?? Bundle.main.preferredLocalizations.first
+                   ?? "en").lowercased()
+        let base = String(raw.prefix(while: { $0 != "-" && $0 != "_" }))
+        return SubLanguage(rawValue: base) ?? .en
+    }
+
+    /// Russian and English are inline at every call site; other languages come from
+    /// SubscriptionL10nTable keyed by the English string. A missing entry falls back to
+    /// English, which is always safe to show.
     @inline(__always)
-    static func t(_ ru: String, _ en: String) -> String { isRU ? ru : en }
+    static func t(_ ru: String, _ en: String) -> String {
+        switch lang {
+        case .ru: return ru
+        case .en: return en
+        default: return SubscriptionL10nTable.translation(of: en, into: lang) ?? en
+        }
+    }
 
     // MARK: Trial welcome
     static var welcomeTitle: String { t("Добро пожаловать в AorusGram", "Welcome to AorusGram") }
@@ -72,8 +92,16 @@ enum SubL10n {
     static var planLabel: String { t("Тариф", "Plan") }
     static var renew: String { t("Продлить подписку", "Renew subscription") }
     static var enterAnotherKey: String { t("Ввести другой ключ", "Enter another key") }
-    static func activeUntil(_ date: String) -> String { t("Активна до \(date)", "Active until \(date)") }
-    static func trialUntil(_ date: String) -> String { t("Пробный период до \(date)", "Trial until \(date)") }
+    // Interpolated up front, the value reaching t() would be "Active until 5 Aug 2026" —
+    // different on every render and impossible to use as a translation key. The template is
+    // translated first and the date substituted after, so the key stays stable.
+    static func activeUntil(_ date: String) -> String {
+        return t("Активна до %@", "Active until %@").replacingOccurrences(of: "%@", with: date)
+    }
+
+    static func trialUntil(_ date: String) -> String {
+        return t("Пробный период до %@", "Trial until %@").replacingOccurrences(of: "%@", with: date)
+    }
 
     // MARK: Activation confirmation (deep link)
     static var confirmTitle: String { t("Подтверждение активации", "Activate subscription") }
