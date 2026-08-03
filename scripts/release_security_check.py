@@ -29,10 +29,34 @@ def main() -> int:
     commit = re.search(r"TELEGRAM_IOS_COMMIT:\s*([0-9a-f]{40})\b", workflow)
     if commit is None:
         fail(errors, "Telegram iOS must be pinned to an exact 40-character commit")
+    upstream_version_match = re.search(r"TELEGRAM_IOS_VERSION:\s*([0-9]+(?:\.[0-9]+)+)\b", workflow)
+    if upstream_version_match is None:
+        fail(errors, "Telegram iOS version must be declared explicitly")
+        upstream_version = None
+    else:
+        upstream_version = upstream_version_match.group(1)
+    if 'json.load(open("telegram-ios/versions.json"))["app"]' not in workflow:
+        fail(errors, "the pinned Telegram commit version must be verified before patching")
     if not re.search(r"Pillow==\$PILLOW_VERSION", workflow):
         fail(errors, "Pillow must be version-pinned")
     if re.search(r"pip[^\n]*Pillow[^\n]*(?:\|\|\s*true|\|\|\s*pip)", workflow):
         fail(errors, "Pillow installation must fail closed")
+
+    if upstream_version is not None:
+        spoof_paths = [
+            root / "AorusGram/Sources/Core/ClientSpoofManager.swift",
+            root / "patches/submodules/AorusGramUI/Sources/Core/ClientSpoofManager.swift",
+        ]
+        for path in spoof_paths:
+            text = path.read_text(encoding="utf-8")
+            version = re.search(r'officialAppVersion\s*=\s*"([^"]+)"', text)
+            if version is None or version.group(1) != upstream_version:
+                fail(errors, f"client spoof version is out of sync in {path.relative_to(root)}")
+
+        branding_text = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
+        branding_version = re.search(r'official_version\s*=\s*"([^"]+)"', branding_text)
+        if branding_version is None or branding_version.group(1) != upstream_version:
+            fail(errors, "branding app version is out of sync with Telegram iOS")
 
     provider = (root / "AorusGram/Sources/Features/Subscription/LicenseKeyProvider.swift").read_text(encoding="utf-8")
     if "withLicenseHmacKey" not in provider or "licenseHmacKeyBytes()" in provider:

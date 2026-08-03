@@ -185,9 +185,9 @@ def main() -> None:
         err.append("MessageSeconds: central timestamp formatter is missing")
     else:
         timestamp_text = timestamp_status.read_text(encoding="utf-8")
-        if timestamp_text.count("aorusgram_feature_message_seconds") != 3:
-            err.append("MessageSeconds: all three central timestamp call sites must use the setting")
-        if timestamp_text.count("withSeconds: UserDefaults.standard.bool") != 3:
+        if timestamp_text.count("aorusgram_feature_message_seconds") != 5:
+            err.append("MessageSeconds: all five central timestamp call sites must use the setting")
+        if timestamp_text.count("withSeconds: UserDefaults.standard.bool") != 5:
             err.append("MessageSeconds: Telegram's locale-aware formatter is not used consistently")
 
     multipart_fetch = tg / "submodules" / "TelegramCore" / "Sources" / "Network" / "MultipartFetch.swift"

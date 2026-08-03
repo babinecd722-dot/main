@@ -480,6 +480,13 @@ def patch_authorization_network_flood_wait(tg: Path) -> None:
             print("Authorization: automaticFloodWait for auth request")
     if t != orig:
         path.write_text(t, encoding="utf-8")
+    elif (
+        "account.network.request(sendCode, automaticFloodWait: true)" in t
+        and "auth.resendCode" in t
+        and "auth.signIn" in t
+        and "phoneCode: phoneCode, emailVerification: emailVerification), automaticFloodWait: true" in t
+    ):
+        print("Authorization: auth flood-wait handling already enabled upstream")
     else:
         print("Authorization: flood-wait markers not found (upstream drift)")
 
@@ -1368,7 +1375,7 @@ def patch_client_spoof_app_version(tg: Path) -> None:
         tg / "submodules/BuildConfig/Sources/BuildConfig.swift",
         tg / "Telegram/Telegram-iOS/BuildConfig.swift",
     ]
-    official_version = "12.8"
+    official_version = "12.9.2"
 
     for vpath in version_candidates:
         if not vpath.is_file():
@@ -1528,7 +1535,7 @@ def patch_message_timestamp_seconds(tg: Path) -> None:
         raise RuntimeError("MessageSeconds: StringForMessageTimestampStatus.swift not found")
     t = path.read_text(encoding="utf-8")
     key = "aorusgram_feature_message_seconds"
-    expected = 3
+    expected = 5
     if key in t:
         if t.count(key) != expected:
             raise RuntimeError(f"MessageSeconds: expected {expected} patched calls, found {t.count(key)}")
@@ -1538,7 +1545,7 @@ def patch_message_timestamp_seconds(tg: Path) -> None:
         (
             "stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)",
             f"stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat, withSeconds: UserDefaults.standard.bool(forKey: \"{key}\"))",
-            2,
+            4,
         ),
         (
             "stringForMessageTimestamp(timestamp: forwardInfo.date, dateTimeFormat: dateTimeFormat)",
@@ -1554,7 +1561,7 @@ def patch_message_timestamp_seconds(tg: Path) -> None:
     if t.count(key) != expected:
         raise RuntimeError("MessageSeconds: patch count mismatch")
     path.write_text(t, encoding="utf-8")
-    print("MessageSeconds: central Telegram timestamp formatter patched (3 call sites)")
+    print("MessageSeconds: central Telegram timestamp formatter patched (5 call sites)")
 
 
 def patch_max_media_quality(tg: Path) -> None:
@@ -3722,27 +3729,27 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
             print("AntiSpoofDeletePreflight: already injected")
         return
 
-    needle = (
+    declaration = (
         "func _internal_deleteMessagesInteractively(account: Account, messageIds: [MessageId], "
-        "type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {\n"
-        "    return account.postbox.transaction { transaction -> Void in\n"
-        "        deleteMessagesInteractively(transaction: transaction, stateManager: account.stateManager, "
-        "postbox: account.postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true)\n"
-        "    }\n"
-        "}"
+        "type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {"
     )
-    if needle not in t:
+    if declaration not in t:
         print("AntiSpoofDeletePreflight: anchor not found — skipped")
         return
 
-    replacement = (
+    # Keep Telegram's complete implementation intact and put the Aorus preflight in a
+    # wrapper. This matters on 12.9.2: upstream added EphemeralDeleteMessageRequest RPCs
+    # to this function, which an old whole-body replacement would silently discard.
+    original_declaration = declaration.replace(
+        "func _internal_deleteMessagesInteractively", "private func _aorus_original_deleteMessagesInteractively", 1
+    )
+    wrapper = (
         "func _internal_deleteMessagesInteractively(account: Account, messageIds: [MessageId], "
         "type: InteractiveMessagesDeletionType, deleteAllInGroup: Bool = false) -> Signal<Void, NoError> {\n"
         "    " + sentinel + "\n"
-        "    let normalDelete: Signal<Void, NoError> = account.postbox.transaction { transaction -> Void in\n"
-        "        deleteMessagesInteractively(transaction: transaction, stateManager: account.stateManager, "
-        "postbox: account.postbox, messageIds: messageIds, type: type, removeIfPossiblyDelivered: true)\n"
-        "    }\n"
+        "    let normalDelete = _aorus_original_deleteMessagesInteractively(\n"
+        "        account: account, messageIds: messageIds, type: type, deleteAllInGroup: deleteAllInGroup\n"
+        "    )\n"
         "    guard UserDefaults.standard.bool(forKey: \"aorusgram_antispoof_deleted\"), type == .forEveryone else {\n"
         "        return normalDelete\n"
         "    }\n"
@@ -3776,11 +3783,11 @@ def patch_anti_spoof_delete_preflight(tg: Path) -> None:
         "        }\n"
         "        return editPreflight |> then(normalDelete)\n"
         "    }\n"
-        "}"
+        "}\n\n"
     )
-    t = t.replace(needle, replacement, 1)
+    t = t.replace(declaration, wrapper + original_declaration, 1)
     path.write_text(t, encoding="utf-8")
-    print("AntiSpoofDeletePreflight: rewrote _internal_deleteMessagesInteractively with edit-before-delete chain")
+    print("AntiSpoofDeletePreflight: wrapped Telegram delete flow with edit-before-delete chain")
 
 
 def patch_app_delegate_publish_account_id(tg: Path) -> None:
@@ -3866,8 +3873,12 @@ def patch_app_delegate_activate_deeplink(tg: Path) -> None:
         if "aorusgram.activateKeyDeepLink" in t:
             print("ActivateDeeplink: AppDelegate already injected")
         else:
-            anchor = "private func openUrlWhenReady(url: URL, external: Bool) {\n"
-            if anchor in t:
+            anchors = (
+                "    private func openUrlWhenReady(accountId: AccountRecordId? = nil, url: URL, external: Bool = false) {\n",
+                "private func openUrlWhenReady(url: URL, external: Bool) {\n",
+            )
+            anchor = next((value for value in anchors if value in t), None)
+            if anchor is not None:
                 t = t.replace(anchor, anchor + activate_block("url", "        "), 1)
                 ad.write_text(t, encoding="utf-8")
                 print("ActivateDeeplink: AppDelegate openUrlWhenReady interceptor injected")
@@ -3984,7 +3995,7 @@ def patch_app_delegate_open_purchase_bot(tg: Path) -> None:
     window — which is the gate's lock window. The result: while the subscription is
     expired only the bot chat is reachable; dismissing it returns to the lock.
 
-    Signatures verified against Telegram-iOS release-12.8 (SharedAccountContext.
+    Signatures verified against Telegram-iOS release-12.9.2 (SharedAccountContext.
     openExternalUrl, OpenURLContext.generic, NavigationController(mode:theme:),
     NavigationControllerTheme(presentationTheme:)).
     """
@@ -5071,11 +5082,17 @@ def patch_chat_lock(tg: Path) -> None:
             #     message readable in the list defeats the "someone picked up my phone" case.
             #     messageText/entities are already mutable here (stock reassigns messageText
             #     for PSA chats a few lines above), so this is a plain reassignment.
-            text_anchor = (
+            legacy_text_anchor = (
                 "                    contentData = .chat(itemPeer: itemPeer, threadInfo: threadInfo, peer: peer, "
                 "hideAuthor: hideAuthor, messageText: messageText, messageEntities: messageEntities, "
                 "spoilers: spoilers, customEmojiRanges: customEmojiRanges)\n"
             )
+            rich_text_anchor = (
+                "                    contentData = .chat(itemPeer: itemPeer, threadInfo: threadInfo, peer: peer, "
+                "hideAuthor: hideAuthor, messageText: messageText, messageEntities: messageEntities, "
+                "spoilers: spoilers, customEmojiRanges: customEmojiRanges, richTextPreview: richTextPreview)\n"
+            )
+            text_anchor = rich_text_anchor if rich_text_anchor in t else legacy_text_anchor
             text_inject = (
                 "                    // AorusGram: Chat Protection — replace the preview of a protected\n"
                 "                    // chat's last message, and drop its entities/spoilers/emoji so no\n"
@@ -5089,8 +5106,9 @@ def patch_chat_lock(tg: Path) -> None:
                 # empty array would still read as \"has spoilers\" downstream.
                 "                        spoilers = nil\n"
                 "                        customEmojiRanges = nil\n"
-                "                        hideAuthor = true\n"
-                "                    }\n"
+                + ("                        richTextPreview = nil\n" if text_anchor == rich_text_anchor else "")
+                + "                        hideAuthor = true\n"
+                + "                    }\n"
                 + text_anchor
             )
             if text_anchor in t:
@@ -5996,10 +6014,34 @@ def patch_fix_media_caption_rich_edit(tg: Path) -> None:
         "                    richTextAttribute = richMarkdownAttributeIfNeeded(context: strongSelf.context, attributedText: expandedInputStateAttributedString(editMessage.inputState.inputText))\n"
         "                }\n"
     )
+    modern_anchor = (
+        "                let content = editMessage.inputState.content\n"
+        "                let richText: RichTextMessageAttribute? = content.isEntityExpressible() ? nil : RichTextMessageAttribute(instantPage: instantPage(from: content), fullInstantPage: nil)\n"
+    )
+    modern_replacement = (
+        "                let content = editMessage.inputState.content\n"
+        "                // AorusGram fix: captions must remain ordinary message text; sending an\n"
+        "                // Instant-Page richText attribute would make Telegram send text:\"\".\n"
+        "                let aorusEditHasCaptionMedia = message.effectiveMedia.contains(where: { media in\n"
+        "                    switch media {\n"
+        "                    case _ as TelegramMediaImage, _ as TelegramMediaFile, _ as TelegramMediaMap:\n"
+        "                        return true\n"
+        "                    default:\n"
+        "                        return false\n"
+        "                    }\n"
+        "                })\n"
+        "                let richText: RichTextMessageAttribute? = aorusEditHasCaptionMedia || content.isEntityExpressible()\n"
+        "                    ? nil\n"
+        "                    : RichTextMessageAttribute(instantPage: instantPage(from: content), fullInstantPage: nil)\n"
+    )
     if anchor in t:
         t = t.replace(anchor, replacement, 1)
         path.write_text(t, encoding="utf-8")
         print("Media-caption edit fix: patched (rich path skipped for media captions)")
+    elif modern_anchor in t:
+        t = t.replace(modern_anchor, modern_replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("Media-caption edit fix: patched 12.9 rich-content path")
     else:
         print("WARNING: media-caption edit fix anchor not found — NOT applied")
 
@@ -6659,6 +6701,8 @@ def patch_alternate_icons(tg: Path) -> None:
         if t_new != t:
             build.write_text(t_new, encoding="utf-8")
             print("AlternateIcons: updated alternate_icon_folders in BUILD")
+        elif f"alternate_icon_folders = [{new_folders}]" in t:
+            print("AlternateIcons: alternate_icon_folders already updated")
         else:
             print("AlternateIcons: WARNING alternate_icon_folders not found/changed in BUILD")
 
@@ -13460,15 +13504,22 @@ def patch_view_once_capture(tg: Path) -> None:
             # breaks it, leaving video protected while photos still work. Match the
             # OR-chain robustly on its stable isCopyProtected() prefix and rewrite it
             # to gate the view-once / paid sources.
-            pat = re.compile(r'^([ \t]*)let captureProtected = message\.isCopyProtected\(\).*$', re.MULTILINE)
+            pat = re.compile(r'^([ \t]*)let captureProtected = (?P<expression>[^\n]+)$', re.MULTILINE)
 
             def _cap_repl(m: "re.Match[str]") -> str:
                 ind = m.group(1)
-                return (ind + "let captureProtected = message.isCopyProtected() "
-                        f"|| (message.containsSecretMedia && !UserDefaults.standard.bool(forKey: \"{once}\")) "
+                expression = m.group("expression")
+                required = (
+                    "message.containsSecretMedia",
+                    "message.minAutoremoveOrClearTimeout == viewOnceTimeout",
+                    "message.paidContent != nil",
+                )
+                if not all(term in expression for term in required):
+                    return m.group(0)
+                return (ind + "let captureProtected = "
+                        f"(message.containsSecretMedia && !UserDefaults.standard.bool(forKey: \"{once}\")) "
                         f"|| (message.minAutoremoveOrClearTimeout == viewOnceTimeout && !UserDefaults.standard.bool(forKey: \"{once}\")) "
-                        f"|| (message.paidContent != nil && !UserDefaults.standard.bool(forKey: \"{paid}\")) "
-                        f"|| peerIsCopyProtected  {SENTINEL}")
+                        f"|| (message.paidContent != nil && !UserDefaults.standard.bool(forKey: \"{paid}\"))  {SENTINEL}")
 
             new_t, n = pat.subn(_cap_repl, t)
             if n > 0:
@@ -17197,8 +17248,12 @@ def patch_aorus_code_compose(tg: Path) -> None:
     t = t.replace(method_anchor, handler + hint_helper + method_anchor, 1)
 
     # Trigger the hint from updateLayout, right after the attachment button is framed.
-    hint_anchor = "        transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: self.attachmentButtonBackground.frame)\n"
-    if hint_anchor in t:
+    hint_anchors = (
+        "        transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: self.attachmentButtonBackground.frame)\n",
+        "        transition.updateFrame(node: self.attachmentButtonDisabledNode, frame: CGRect(origin: CGPoint(x: attachmentButtonFrame.minX, y: attachmentButtonFrame.maxY - 40.0), size: CGSize(width: 40.0, height: 40.0)))\n",
+    )
+    hint_anchor = next((value for value in hint_anchors if value in t), None)
+    if hint_anchor is not None:
         t = t.replace(hint_anchor, hint_anchor + "        self.aorusMaybeShowCodeHint()\n", 1)
     else:
         print("AorusCodeCompose: hint trigger anchor not found — hint not wired")
@@ -17376,10 +17431,20 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
         "            let updatedDateText = arguments.dateText\n"
         "            // AorusGram: status icons — 'edited' is shown as a pencil icon below, not text\n"
     )
-    if old_edited not in t:
+    new_upstream_edited = (
+        "            var updatedDateText = arguments.dateText\n"
+        "            if arguments.edited {\n"
+        "                if let useEditedTimestamp = arguments.context.getAppConfigValue(\"message_primary_edited_date\") as? Bool, useEditedTimestamp {\n"
+        "                } else {\n"
+        "                    updatedDateText = \"\\(arguments.presentationData.strings.Conversation_MessageEditedLabel) \\(updatedDateText)\"\n"
+        "                }\n"
+        "            }\n"
+    )
+    edited_anchor = old_edited if old_edited in t else new_upstream_edited
+    if edited_anchor not in t:
         print("StatusIcons: edited-text anchor not found — skip")
         return
-    t = t.replace(old_edited, new_edited, 1)
+    t = t.replace(edited_anchor, new_edited, 1)
 
     # Keep the impression (views) count as a SEPARATE prefix instead of prepending
     # it into updatedDateText. This lets the status icons sit AFTER the count (right
@@ -17674,8 +17739,12 @@ def patch_status_edit_delete_icons(tg: Path) -> None:
             # (a) Strip the invisible deleted-marker before the "has caption?" test so a
             #     media-only message doesn't spawn an empty text bubble (which would push
             #     the time off the photo overlay and hide the trash icon).
-            mt_anchor = "        if !messageText.isEmpty || message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) || isUnsupportedMedia || isStoryWithText {\n"
-            if "AorusGram: strip invisible deleted-marker" not in bi and mt_anchor in bi:
+            mt_anchors = (
+                "        if !messageText.isEmpty || message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) || isUnsupportedMedia || isStoryWithText {\n",
+                "        if !messageText.isEmpty || (message.attributes.contains(where: { $0 is TypingDraftMessageAttribute }) && richText == nil) || isUnsupportedMedia || isStoryWithText {\n",
+            )
+            mt_anchor = next((value for value in mt_anchors if value in bi), None)
+            if "AorusGram: strip invisible deleted-marker" not in bi and mt_anchor is not None:
                 bi = bi.replace(
                     mt_anchor,
                     "        // AorusGram: strip invisible deleted-marker so a media-only message keeps its photo overlay status (time + trash) instead of an empty text bubble\n"
@@ -21673,10 +21742,30 @@ def patch_wall_keep_settings_button(tg: Path) -> None:
         "        selfController.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
         "    }\n"
     )
+    modern_anchor = (
+        "        if rightBarButtonsUpdated {\n"
+        "            self.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
+        "        }\n"
+    )
+    modern_replacement = (
+        "        // AorusGram: never strip the Wall's settings gear. The Wall has no chat-owned\n"
+        "        // right buttons, so this assignment could only ever remove ours.\n"
+        "        var aorusIsWall = false\n"
+        "        if case let .customChatContents(aorusContents) = self.subject, aorusContents is AorusWallChatContents {\n"
+        "            aorusIsWall = true\n"
+        "        }\n"
+        "        if rightBarButtonsUpdated && !aorusIsWall {\n"
+        "            self.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)\n"
+        "        }\n"
+    )
     if anchor in t:
         t = t.replace(anchor, replacement, 1)
         path.write_text(t, encoding="utf-8")
         print("WallGear: settings gear is no longer wiped by chat state updates")
+    elif modern_anchor in t:
+        t = t.replace(modern_anchor, modern_replacement, 1)
+        path.write_text(t, encoding="utf-8")
+        print("WallGear: settings gear is no longer wiped by chat state updates (12.9+)")
     else:
         print("WallGear: WARNING — setRightBarButtonItems anchor not found")
 
@@ -22870,14 +22959,25 @@ def patch_voice_to_text(tg: Path) -> None:
             "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
             "            refreshChatTextInputTypingAttributes(textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize)\n"
         )
-        if load_sentinel not in source and load_anchor in source:
-            source = source.replace(
-                load_anchor,
-                "        " + load_sentinel + "\n" + voice_width_block + "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
-                "            refreshChatTextInputTypingAttributes(textInputNode.textView, theme: presentationInterfaceState.theme, baseFontSize: baseFontSize)\n",
-                1,
-            )
-            repairs.append("initial text insets")
+        modern_load_anchor = (
+            "        if let presentationInterfaceState = self.presentationInterfaceState {\n"
+            "            richTextInputNode.refreshTextInputTypingAttributes(textColor: presentationInterfaceState.theme.chat.inputPanel.primaryTextColor, baseFontSize: baseFontSize)\n"
+        )
+        if load_sentinel not in source:
+            if load_anchor in source:
+                source = source.replace(
+                    load_anchor,
+                    "        " + load_sentinel + "\n" + voice_width_block + load_anchor,
+                    1,
+                )
+                repairs.append("initial text insets")
+            elif modern_load_anchor in source:
+                source = source.replace(
+                    modern_load_anchor,
+                    "        " + load_sentinel + "\n" + voice_width_block + modern_load_anchor,
+                    1,
+                )
+                repairs.append("initial rich-text insets")
 
         gap_sentinel = "// AorusGram: keep liquid-glass composer clear of its outer buttons"
         gap_anchor = "        var audioRecordingItemsAlpha: CGFloat = 1.0\n"
@@ -22929,8 +23029,10 @@ def patch_voice_to_text(tg: Path) -> None:
     if "import AorusGramUI\n" not in t:
         t = t.replace("import AccountContext\n", "import AccountContext\nimport AorusGramUI\n", 1)
 
-    # 1) Stored properties (after the aiButton declaration).
-    prop_anchor = "    private var aiButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+    # 1) Stored properties (after Telegram's AI-button storage; renamed in 12.9).
+    legacy_prop_anchor = "    private var aiButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+    modern_prop_anchor = "    private var attachmentAIButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
+    prop_anchor = legacy_prop_anchor if legacy_prop_anchor in t else modern_prop_anchor
     prop_inject = (
         prop_anchor
         + "    private var aorusVoiceButton: (button: HighlightTrackingButton, icon: UIImageView)?\n"
@@ -22945,9 +23047,11 @@ def patch_voice_to_text(tg: Path) -> None:
 
     # 2) Reserve width for the button in the text-field metrics phase.
     metrics_anchor = "        if self.isAIEnabled && width >= 500.0 {\n"
-    metrics_inject = voice_width_block + metrics_anchor
+    modern_metrics_anchor = "        var textFieldMinHeight: CGFloat = 35.0\n"
     if metrics_anchor in t:
-        t = t.replace(metrics_anchor, metrics_inject, 1)
+        t = t.replace(metrics_anchor, voice_width_block + metrics_anchor, 1)
+    elif modern_metrics_anchor in t:
+        t = t.replace(modern_metrics_anchor, voice_width_block + modern_metrics_anchor, 1)
     else:
         print("VoiceToText: WARNING metrics anchor not found")
 
@@ -23260,6 +23364,11 @@ def patch_disable_copy_protection(tg: Path) -> None:
         )
         if "// AorusGram: never treat content as copy-protected" in t:
             print("CopyProtection: message accessor already patched")
+        elif (
+            "AorusGram: channel copy bypass (msg group)" in t
+            and "AorusGram: channel copy bypass (msg channel)" in t
+        ):
+            print("CopyProtection: message accessor already uses the paid-media gate and channel bypass")
         elif anchor in t:
             msg.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
             print("CopyProtection: neutralised Message.isCopyProtected()")
@@ -23291,6 +23400,8 @@ def patch_disable_copy_protection(tg: Path) -> None:
         )
         if "// AorusGram: report peers as not copy-protected" in t:
             print("CopyProtection: peer accessor already patched")
+        elif "AorusGram: channel copy bypass (peer)" in t:
+            print("CopyProtection: peer accessor already neutralised by channel bypass")
         elif anchor in t:
             peer.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
             print("CopyProtection: neutralised Peer.isCopyProtectionEnabled")

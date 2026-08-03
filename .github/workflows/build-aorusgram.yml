@@ -19,7 +19,8 @@ jobs:
     env:
       # Quiets GitHub deprecation warnings for actions/cache, checkout, upload-artifact on Node 20.
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      TELEGRAM_IOS_COMMIT: 6e370e06d147b091b07903071cb1b8a22152492d
+      TELEGRAM_IOS_COMMIT: 6ad963e5b62d354da79040f388ae2b9132fb17b8
+      TELEGRAM_IOS_VERSION: 12.9.2
       PILLOW_VERSION: 11.3.0
     steps:
       - name: Checkout
@@ -38,7 +39,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: telegram-ios-pristine
-          key: tg-ios-pristine-${{ runner.os }}-${{ env.TELEGRAM_IOS_COMMIT }}-v1
+          key: tg-ios-pristine-${{ runner.os }}-${{ env.TELEGRAM_IOS_COMMIT }}-v2
 
       - name: Clone pristine Telegram iOS
         if: steps.tg-cache.outputs.cache-hit != 'true'
@@ -74,6 +75,7 @@ jobs:
           rm -rf telegram-ios
           cp -a telegram-ios-pristine telegram-ios
           test "$(git -C telegram-ios rev-parse HEAD)" = "$TELEGRAM_IOS_COMMIT"
+          test "$(python3 -c 'import json; print(json.load(open("telegram-ios/versions.json"))["app"])')" = "$TELEGRAM_IOS_VERSION"
 
       - name: Ensure rlottie submodule
         run: |
