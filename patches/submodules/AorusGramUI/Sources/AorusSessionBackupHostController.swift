@@ -24,8 +24,8 @@ final class AorusSessionBackupHostController: ViewController {
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
 
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
-        let isRu = AorusLang.resolve(self.presentationData.strings.baseLanguageCode) == .ru
-        self.title = isRu ? "Бэкап аккаунтов" : "Account Backup"
+        let lang = AorusLang.resolve(self.presentationData.strings.baseLanguageCode)
+        self.title = aorusL("Бэкап аккаунтов", "Account Backup", lang)
         self.navigationItem.backBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Back, style: .plain, target: nil, action: nil)
     }
 
@@ -37,10 +37,10 @@ final class AorusSessionBackupHostController: ViewController {
         self.displayNode = ViewControllerTracingNode()
         self.displayNode.backgroundColor = self.presentationData.theme.list.blocksBackgroundColor
 
-        let isRu = AorusLang.resolve(self.presentationData.strings.baseLanguageCode) == .ru
+        let lang = AorusLang.resolve(self.presentationData.strings.baseLanguageCode)
         let root = AorusSessionBackupView(
             context: self.context,
-            isRu: isRu,
+            lang: lang,
             presentInfo: { [weak self] title, text, ok in
                 self?.presentInfoAlert(title: title, text: text, ok: ok)
             },

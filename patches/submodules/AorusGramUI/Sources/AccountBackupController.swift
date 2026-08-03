@@ -80,31 +80,22 @@ private struct BackupState: Equatable {
 }
 
 private struct BackupL10n {
-    let isRu: Bool
+    let lang: AorusLang
 
+    // Russian and English inline, everything else from AorusL10nTable keyed by the English
+    // string — the same rule the rest of AorusGramUI follows.
     private func t(_ ru: String, _ en: String) -> String {
-        return isRu ? ru : en
+        return aorusL(ru, en, self.lang)
     }
 
     var title: String { t("Бэкап аккаунтов", "Account Backup") }
     var backupAction: String { t("Бэкап в Keychain", "Back Up to Keychain") }
     var restoreAction: String { t("Восстановить из Keychain", "Restore from Keychain") }
     var deleteAction: String { t("Удалить бэкап из Keychain", "Delete Keychain Backup") }
+    // Written on one line on purpose: the English text is the translation key, and a key
+    // assembled from + concatenation cannot be checked against the table by the verifier.
     var info: String {
-        t(
-            "Сессии шифруются (AES-256) и хранятся в Keychain устройства. "
-            + "Сессии никогда не покидают ваше устройство.\n\n"
-            + "ВАЖНО: Чтобы восстановить сессии на новом устройстве или после "
-            + "сброса системы, ОБЯЗАТЕЛЬНО включите шифрование резервных копий ОС, "
-            + "иначе Keychain будет утерян при восстановлении.\n\n"
-            + "ПРИМЕЧАНИЕ: Сессии всё ещё могут быть разлогинены самим Telegram "
-            + "или с другого устройства.",
-            "Sessions are encrypted with AES-256 and stored in this device's Keychain. "
-            + "Sessions never leave your device.\n\n"
-            + "IMPORTANT: To restore sessions on a new device or after an OS reset, "
-            + "encrypted OS backups must be enabled, otherwise Keychain data will be lost.\n\n"
-            + "NOTE: Sessions can still be logged out by Telegram or from another device."
-        )
+        t("Сессии шифруются (AES-256) и хранятся в Keychain устройства. Сессии никогда не покидают ваше устройство.\n\nВАЖНО: Чтобы восстановить сессии на новом устройстве или после сброса системы, ОБЯЗАТЕЛЬНО включите шифрование резервных копий ОС, иначе Keychain будет утерян при восстановлении.\n\nПРИМЕЧАНИЕ: Сессии всё ещё могут быть разлогинены самим Telegram или с другого устройства.", "Sessions are encrypted with AES-256 and stored in this device's Keychain. Sessions never leave your device.\n\nIMPORTANT: To restore sessions on a new device or after an OS reset, encrypted OS backups must be enabled, otherwise Keychain data will be lost.\n\nNOTE: Sessions can still be logged out by Telegram or from another device.")
     }
     var statusHeader: String { t("СОСТОЯНИЕ", "STATUS") }
     var busy: String { t("Выполняется операция...", "Operation in progress...") }
@@ -132,14 +123,7 @@ private struct BackupL10n {
 
     var restoreTitle: String { t("Восстановить из бэкапа?", "Restore from Backup?") }
     var restoreText: String {
-        t(
-            "Текущие данные аккаунтов будут заменены данными из бэкапа. "
-            + "Перед заменой создаётся защитный снимок. После подготовки "
-            + "потребуется перезапуск приложения.",
-            "Current account data will be replaced with backup data. "
-            + "A safety snapshot is created before replacement. "
-            + "After preparation, the app must be restarted."
-        )
+        t("Текущие данные аккаунтов будут заменены данными из бэкапа. Перед заменой создаётся защитный снимок. После подготовки потребуется перезапуск приложения.", "Current account data will be replaced with backup data. A safety snapshot is created before replacement. After preparation, the app must be restarted.")
     }
     var restore: String { t("Восстановить", "Restore") }
     var restorePreparedTitle: String { t("Бэкап подготовлен", "Backup Ready") }
@@ -288,8 +272,8 @@ private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: B
     if !sessions.isEmpty {
         let loggedIn = Set(mgr.localAccountIds())
         let df = DateFormatter()
-        df.locale = l10n.isRu ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US")
-        df.dateFormat = l10n.isRu ? "d MMMM yyyy 'г.,' HH:mm" : "MMM d, yyyy, HH:mm"
+        df.locale = Locale(identifier: l10n.lang.localeIdentifier)
+        df.dateFormat = l10n.lang.dateTimeFormat
         let dateText = mgr.backupInfo().map { l10n.lastBackup(df.string(from: $0.date)) } ?? ""
         for (i, acc) in sessions.enumerated() {
             let title: String
@@ -371,7 +355,7 @@ private func accountBackupControllerLegacy(context: AccountContext) -> ViewContr
     }
 
     let currentL10n: () -> BackupL10n = {
-        return BackupL10n(isRu: AorusLang.current == .ru)
+        return BackupL10n(lang: AorusLang.current)
     }
 
     let arguments = BackupArguments(
@@ -484,7 +468,7 @@ private func accountBackupControllerLegacy(context: AccountContext) -> ViewContr
         |> deliverOnMainQueue
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let l10n = BackupL10n(isRu: AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru)
+            let l10n = BackupL10n(lang: AorusLang.resolve(presentationData.strings.baseLanguageCode))
             let entries = backupEntries(state: state, theme: presentationData.theme, l10n: l10n)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),

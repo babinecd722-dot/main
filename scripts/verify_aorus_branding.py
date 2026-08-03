@@ -1320,29 +1320,42 @@ def main() -> None:
     # Translations are keyed by the English string, so a key that no longer matches a literal
     # in the source silently falls back to English and the language looks half-done. Check each
     # table against its source, including the %@ placeholders.
+    aorusgram_ui = tg / "submodules" / "AorusGramUI" / "Sources"
+    subscription_dir = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription"
     translation_pairs = (
         (
             "subscription",
-            tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionL10n.swift",
-            tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "SubscriptionL10nTable.swift",
+            [subscription_dir / "SubscriptionL10n.swift"],
+            subscription_dir / "SubscriptionL10nTable.swift",
         ),
         (
-            "AorusL10n",
-            tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift",
-            tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10nTable.swift",
+            "AorusGramUI",
+            [
+                aorusgram_ui / "Core" / "AorusL10n.swift",
+                aorusgram_ui / "AccountBackupController.swift",
+                aorusgram_ui / "AorusSessionBackupView.swift",
+                aorusgram_ui / "AorusSessionBackupHostController.swift",
+            ],
+            aorusgram_ui / "Core" / "AorusL10nTable.swift",
         ),
     )
-    for area, src_path, tbl_path in translation_pairs:
-        if not (src_path.is_file() and tbl_path.is_file()):
+    for area, src_paths, tbl_path in translation_pairs:
+        present = [p for p in src_paths if p.is_file()]
+        if not present or not tbl_path.is_file():
             continue
-        src_text = src_path.read_text(encoding="utf-8")
         tbl_text = tbl_path.read_text(encoding="utf-8")
-        english_literals = {
-            match.group(2)
-            for match in re.finditer(
-                r't\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)', src_text, re.S
-            )
-        }
+        # Both the per-screen `t(ru, en)` helpers and the free `aorusL(ru, en)` used by the
+        # converted inline call sites resolve through the same table.
+        english_literals = set()
+        for src_path in present:
+            english_literals |= {
+                match.group(2)
+                for match in re.finditer(
+                    r'\b(?:t|aorusL)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
+                    src_path.read_text(encoding="utf-8"),
+                    re.S,
+                )
+            }
         for literal in english_literals:
             if "\\(" in literal:
                 err.append(

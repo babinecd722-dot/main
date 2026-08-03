@@ -31,6 +31,32 @@ public enum AorusLang: String, CaseIterable {
         return AorusLang(rawValue: base) ?? .en
     }
 
+    // Locale for dates and numbers rendered by AorusGram's own screens, so a German user
+    // does not read a Russian-formatted backup date.
+    public var localeIdentifier: String {
+        switch self {
+        case .en: return "en_US"
+        case .ru: return "ru_RU"
+        case .uk: return "uk_UA"
+        case .es: return "es_ES"
+        case .pt: return "pt_BR"
+        case .de: return "de_DE"
+        case .fr: return "fr_FR"
+        case .tr: return "tr_TR"
+        }
+    }
+
+    // "5 августа 2026 г., 14:03" in Russian, and whatever the equivalent day/month/year
+    // ordering is elsewhere, instead of forcing the English layout on every other language.
+    public var dateTimeFormat: String {
+        if self == .ru {
+            return "d MMMM yyyy 'г.,' HH:mm"
+        }
+        let locale = Locale(identifier: self.localeIdentifier)
+        return DateFormatter.dateFormat(fromTemplate: "d MMM yyyy HH:mm", options: 0, locale: locale)
+            ?? "MMM d, yyyy, HH:mm"
+    }
+
     // UserDefaults key shared with TelegramCore-injected code (postbox markers).
     public static let storageKey = "aorusgram_lang"
 
@@ -70,6 +96,26 @@ public enum AorusLang: String, CaseIterable {
     }
 }
 
+// The same ru/en/table rule for call sites that hold their own strings rather than going
+// through AorusL10n's properties — the per-screen L10n structs, and the inline
+// `isRu ? "…" : "…"` sites they are being converted from. Keeping one function means one
+// translation table for the whole module: every English literal in AorusGramUI resolves
+// through AorusL10nTable, and the verifier checks all of them against it at once.
+public func aorusL(_ ru: String, _ en: String) -> String {
+    return aorusL(ru, en, AorusLang.current)
+}
+
+public func aorusL(_ ru: String, _ en: String, _ lang: AorusLang) -> String {
+    switch lang {
+    case .ru:
+        return ru
+    case .en:
+        return en
+    default:
+        return AorusL10nTable.translation(of: en, into: lang) ?? en
+    }
+}
+
 public struct AorusL10n {
     public let lang: AorusLang
 
@@ -90,14 +136,7 @@ public struct AorusL10n {
     // new language is one table entry and needs no change here or at any call site. A
     // missing entry falls back to English, which is always safe to display.
     private func t(_ ru: String, _ en: String) -> String {
-        switch self.lang {
-        case .ru:
-            return ru
-        case .en:
-            return en
-        default:
-            return AorusL10nTable.translation(of: en, into: self.lang) ?? en
-        }
+        return aorusL(ru, en, self.lang)
     }
 
     // MARK: Settings — section headers

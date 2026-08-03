@@ -16,8 +16,10 @@ import TelegramPresentationData
 
 @available(iOS 13.0, *)
 private struct AorusSessionL10n {
-    let isRu: Bool
-    private func t(_ ru: String, _ en: String) -> String { isRu ? ru : en }
+    let lang: AorusLang
+    // Russian and English inline, everything else from AorusL10nTable keyed by the English
+    // string — the same rule the rest of AorusGramUI follows.
+    private func t(_ ru: String, _ en: String) -> String { aorusL(ru, en, self.lang) }
 
     var backup: String { t("Бэкап в Keychain", "Back Up to Keychain") }
     var restore: String { t("Восстановить из Keychain", "Restore from Keychain") }
@@ -99,7 +101,7 @@ struct AorusSessionBackupRow: View {
 @available(iOS 13.0, *)
 struct AorusSessionBackupView: View {
     let context: AccountContext
-    let isRu: Bool
+    let lang: AorusLang
     let presentInfo: (_ title: String, _ text: String, _ ok: String) -> Void
     let presentConfirmation: (_ title: String, _ text: String, _ confirm: String, _ cancel: String, _ destructive: Bool, _ action: @escaping () -> Void) -> Void
 
@@ -108,7 +110,7 @@ struct AorusSessionBackupView: View {
     @State private var dateText: String = ""
     @State private var isBusy = false
 
-    private var l10n: AorusSessionL10n { AorusSessionL10n(isRu: isRu) }
+    private var l10n: AorusSessionL10n { AorusSessionL10n(lang: lang) }
     private var hasBackup: Bool { AccountBackupManager.shared.hasBackup() }
 
     var body: some View {
@@ -190,8 +192,8 @@ struct AorusSessionBackupView: View {
         }
         if let info = mgr.backupInfo() {
             let df = DateFormatter()
-            df.locale = isRu ? Locale(identifier: "ru_RU") : Locale(identifier: "en_US")
-            df.dateFormat = isRu ? "d MMMM yyyy 'г.,' HH:mm" : "MMM d, yyyy, HH:mm"
+            df.locale = Locale(identifier: lang.localeIdentifier)
+            df.dateFormat = lang.dateTimeFormat
             self.dateText = df.string(from: info.date)
         } else {
             self.dateText = ""
