@@ -50,7 +50,13 @@ public enum AorusBadge {
             ?? UserDefaults.standard.string(forKey: "aorusgram_lang")
             ?? Locale.preferredLanguages.first
             ?? "en").lowercased()
-        let base = String(code.prefix(while: { $0 != "-" && $0 != "_" }))
+        // Full code first, then the base: Telegram ships Chinese as two packs, "zh-hans" and
+        // "zh-hant", and truncating at the separator would show one of them the wrong script.
+        let normalized = code.replacingOccurrences(of: "_", with: "-")
+        if let exact = table[normalized] {
+            return exact
+        }
+        let base = String(normalized.prefix(while: { $0 != "-" }))
         return table[base] ?? fallback
     }
 

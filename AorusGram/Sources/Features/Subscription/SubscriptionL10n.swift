@@ -40,7 +40,13 @@ enum SubL10n {
                    ?? Locale.preferredLanguages.first
                    ?? Bundle.main.preferredLocalizations.first
                    ?? "en").lowercased()
-        let base = String(raw.prefix(while: { $0 != "-" && $0 != "_" }))
+        // The full code first, then the part before the separator: zh-hans and zh-hant are
+        // different languages, so collapsing them to "zh" would show the wrong script.
+        let normalized = raw.replacingOccurrences(of: "_", with: "-")
+        if let exact = SubLanguage(rawValue: normalized) {
+            return exact
+        }
+        let base = String(normalized.prefix(while: { $0 != "-" }))
         return SubLanguage(rawValue: base) ?? .en
     }
 

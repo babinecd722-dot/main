@@ -2,7 +2,7 @@ import Foundation
 
 // AorusGram localization.
 //
-// The client speaks the nineteen languages Telegram for iOS ships and follows whichever
+// The client speaks every language Telegram offers and follows whichever
 // one is selected inside Telegram. Russian and English are written inline at every call
 // site — that is how these files grew and it keeps the two primary languages readable next
 // to each other; every other language is looked up in AorusL10nTable by the English string.
@@ -15,8 +15,9 @@ import Foundation
 //      which reads the resolved language persisted by AppDelegate's
 //      presentationData observer under the "aorusgram_lang" UserDefaults key.
 public enum AorusLang: String, CaseIterable {
-    // The nineteen languages Telegram for iOS ships. Russian and English are written inline
-    // at every call site; the rest come from AorusL10nTable.
+    // Russian and English are written inline at every call site; every other language is
+    // looked up in AorusL10nTable. The first nineteen are the packs bundled with the app; the
+    // rest are the ones Telegram serves from its translation platform.
     case en
     case ru
     case uk
@@ -36,13 +37,28 @@ public enum AorusLang: String, CaseIterable {
     case ko
     case ar
     case fa
+    case kk
+    case ja
+    case fi
+    case he
+    // Telegram serves Chinese as two packs; the raw value is the code it sends.
+    case zhHans = "zh-hans"
+    case zhHant = "zh-hant"
 
-    // Map a Telegram base-language code to a supported language. Telegram sends codes like
-    // "ru", "pt-br" or "es_419", so only the part before the separator is significant.
-    // Anything not supported yet falls back to English rather than showing nothing.
+    // Map a Telegram language code to a supported language.
+    //
+    // The full code is tried first, then the part before the separator. That order matters:
+    // Telegram ships Chinese as two separate packs, "zh-hans" and "zh-hant", which are not
+    // interchangeable — truncating to "zh" would show one of them the wrong script. The same
+    // applies to "pt-br" against "pt-pt". Anything still unmatched falls back to English,
+    // which is always safe to show, so a language can be added later without touching this.
     public static func resolve(_ code: String?) -> AorusLang {
         guard let code = code?.lowercased() else { return .en }
-        let base = String(code.prefix(while: { $0 != "-" && $0 != "_" }))
+        let normalized = code.replacingOccurrences(of: "_", with: "-")
+        if let exact = AorusLang(rawValue: normalized) {
+            return exact
+        }
+        let base = String(normalized.prefix(while: { $0 != "-" }))
         return AorusLang(rawValue: base) ?? .en
     }
 
@@ -69,6 +85,12 @@ public enum AorusLang: String, CaseIterable {
         case .ko: return "ko_KR"
         case .ar: return "ar_SA"
         case .fa: return "fa_IR"
+        case .kk: return "kk_KZ"
+        case .ja: return "ja_JP"
+        case .fi: return "fi_FI"
+        case .he: return "he_IL"
+        case .zhHans: return "zh_Hans_CN"
+        case .zhHant: return "zh_Hant_TW"
         }
     }
 
@@ -196,6 +218,20 @@ public func aorusPlural(_ n: Int, _ unit: AorusPluralUnit, _ lang: AorusLang = A
     // for 1 and the broken plural for the rest is what a reader expects.
     case (.ar, .year): forms = ["سنة", "سنوات"]
     case (.ar, .month): forms = ["شهر", "أشهر"]
+    // Kazakh, Chinese and Japanese do not inflect the noun after a numeral either.
+    case (.kk, .year): forms = ["жыл"]
+    case (.kk, .month): forms = ["ай"]
+    case (.zhHans, .year): forms = ["年"]
+    case (.zhHans, .month): forms = ["个月"]
+    case (.zhHant, .year): forms = ["年"]
+    case (.zhHant, .month): forms = ["個月"]
+    case (.ja, .year): forms = ["年"]
+    case (.ja, .month): forms = ["か月"]
+    // Finnish uses the partitive singular after any numeral other than one.
+    case (.fi, .year): forms = ["vuosi", "vuotta"]
+    case (.fi, .month): forms = ["kuukausi", "kuukautta"]
+    case (.he, .year): forms = ["שנה", "שנים"]
+    case (.he, .month): forms = ["חודש", "חודשים"]
     }
 
     let word: String

@@ -117,9 +117,15 @@ public final class AccountBackupManager {
             ?? UserDefaults.standard.string(forKey: "aorusgram_lang")
             ?? Locale.preferredLanguages.first
             ?? "en").lowercased()
-        let base = String(code.prefix(while: { $0 != "-" && $0 != "_" }))
+        // Full code first, then the base — see AorusLang.resolve: "zh-hans" and "zh-hant" are
+        // separate packs and must not collapse into one.
+        let normalized = code.replacingOccurrences(of: "_", with: "-")
+        let base = String(normalized.prefix(while: { $0 != "-" }))
         if base == "ru" {
             return ru
+        }
+        if let exact = AccountBackupL10n.tables[normalized]?[en] {
+            return exact
         }
         return AccountBackupL10n.tables[base]?[en] ?? en
     }
@@ -1158,6 +1164,60 @@ private enum AccountBackupL10n {
             "Backup decryption failed": "رمزگشایی پشتیبان ناموفق بود",
             "The selected account is missing from the backup": "حساب انتخاب‌شده در پشتیبان نیست",
             "The selected account data is missing": "داده‌های حساب انتخاب‌شده موجود نیست",
+        ],
+        "kk": [
+            "Account data path is unavailable": "Аккаунт деректерінің жолы қолжетімсіз",
+            "No account data available for backup": "Көшірме жасауға аккаунт деректері жоқ",
+            "Backup is too large": "Көшірме тым үлкен",
+            "Failed to create backup file": "Көшірме файлын жасау мүмкін болмады",
+            "Data encryption failed": "Деректерді шифрлау мүмкін болмады",
+            "Failed to save backup": "Көшірмені сақтау мүмкін болмады",
+            "Failed to save key in Keychain": "Кілтті Keychain-ге сақтау мүмкін болмады",
+            "Failed to save backup to Keychain": "Көшірмені Keychain-ге сақтау мүмкін болмады",
+            "No account selected to add": "Қосу үшін аккаунт таңдалмаған",
+            "Backup not found": "Көшірме табылмады",
+            "Failed to create restore folder": "Қалпына келтіру қалтасын жасау мүмкін болмады",
+            "Failed to open backup": "Көшірмені ашу мүмкін болмады",
+            "Backup file is corrupted": "Көшірме файлы бүлінген",
+            "Backup decryption failed": "Көшірмені шифрдан шығару мүмкін болмады",
+            "The selected account is missing from the backup": "Таңдалған аккаунт көшірмеде жоқ",
+            "The selected account data is missing": "Таңдалған аккаунт деректері жоқ",
+        ],
+        "zh-hans": [
+            "Account data path is unavailable": "账号数据路径不可用",
+            "No account data available for backup": "没有可备份的账号数据",
+            "Backup is too large": "备份文件过大",
+            "Failed to create backup file": "无法创建备份文件",
+            "Data encryption failed": "数据加密失败",
+            "Failed to save backup": "无法保存备份",
+            "Failed to save key in Keychain": "无法在钥匙串中保存密钥",
+            "Failed to save backup to Keychain": "无法将备份保存到钥匙串",
+            "No account selected to add": "未选择要添加的账号",
+            "Backup not found": "未找到备份",
+            "Failed to create restore folder": "无法创建恢复文件夹",
+            "Failed to open backup": "无法打开备份",
+            "Backup file is corrupted": "备份文件已损坏",
+            "Backup decryption failed": "备份解密失败",
+            "The selected account is missing from the backup": "备份中没有所选账号",
+            "The selected account data is missing": "所选账号的数据缺失",
+        ],
+        "zh-hant": [
+            "Account data path is unavailable": "帳號資料路徑不可用",
+            "No account data available for backup": "沒有可備份的帳號資料",
+            "Backup is too large": "備份檔案過大",
+            "Failed to create backup file": "無法建立備份檔案",
+            "Data encryption failed": "資料加密失敗",
+            "Failed to save backup": "無法儲存備份",
+            "Failed to save key in Keychain": "無法在鑰匙圈中儲存金鑰",
+            "Failed to save backup to Keychain": "無法將備份儲存到鑰匙圈",
+            "No account selected to add": "未選擇要新增的帳號",
+            "Backup not found": "未找到備份",
+            "Failed to create restore folder": "無法建立恢復資料夾",
+            "Failed to open backup": "無法開啟備份",
+            "Backup file is corrupted": "備份檔案已損壞",
+            "Backup decryption failed": "備份解密失敗",
+            "The selected account is missing from the backup": "備份中沒有所選帳號",
+            "The selected account data is missing": "所選帳號的資料缺失",
         ],
         "uk": [
             "Account data path is unavailable": "Шлях до даних акаунтів недоступний",
