@@ -1465,6 +1465,17 @@ def main() -> None:
         if "if case .BlockQuote = entities[i].type {" in entities_text:
             err.append("BlockQuote: the upstream merge pass still stops at the first quote")
 
+    # The same quote must also be ONE box in the composer. The input keeps a structural
+    # ChatInputContent and derives its attributed string from it, and upstream gives every
+    # quoted paragraph its own block — which leaves the newline between them unattributed and
+    # draws a box per line while the user types, whatever the send path does afterwards.
+    conversion_file = tg / "submodules" / "TextFormat" / "Sources" / "ChatInputContentConversion.swift"
+    if conversion_file.is_file():
+        conversion_text = conversion_file.read_text(encoding="utf-8")
+        for marker in ("var aorusOpenQuote: Int? = nil", "aorusMerged.append(.paragraph("):
+            if marker not in conversion_text:
+                err.append(f"InputQuote: composer quotes are still split per line — missing {marker}")
+
     # AccountBackupManager must stay byte-identical across the core and UI modules, so it
     # carries its own table instead of reaching for either module's. Nothing else checks it,
     # and a message added without an entry would silently show English.

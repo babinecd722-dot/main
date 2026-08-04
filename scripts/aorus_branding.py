@@ -6126,6 +6126,94 @@ def patch_fix_blockquote_split(tg: Path) -> None:
     print("BlockQuoteSplit: multi-line quotes now merge into one block")
 
 
+def patch_fix_input_quote_split(tg: Path) -> None:
+    """Draw a multi-line quote as ONE block in the composer, not one box per line.
+
+    This is the same bug as BlockQuoteSplit, one layer earlier. The chat input no longer
+    stores an NSAttributedString: ChatTextInputState keeps a structural ChatInputContent and
+    derives the attributed string from it, so every keystroke round-trips through
+    chatInputContent(from:) and attributedString(from:).
+
+    chatInputContent(from:) cuts the text into paragraphs and gives every quoted paragraph
+    its own .blockQuote block. attributedString(from:) then writes the block attribute over
+    each block's own text and puts a plain "\n" between them, so the newline inside what the
+    user selected as one quote carries no attribute. The composer draws a box per attributed
+    run, hence a box per line — which is exactly what the screenshot shows, and what the user
+    sees while typing even after the send path was fixed.
+
+    The fix keeps a quote open across consecutive quoted lines: a second quoted paragraph is
+    appended to the block the previous line opened instead of starting a new one. A line that
+    is not quoted (a blank line, for instance) closes it, so two quotes the user deliberately
+    kept apart stay apart.
+
+    The flat text is untouched: ChatInputContent.plainText joins the inner paragraphs with the
+    same "\n" that used to separate the two blocks, and blockFlatLength recurses into the
+    interior, so every selection offset and length is the same before and after. Idempotent.
+    """
+    path = tg / "submodules/TextFormat/Sources/ChatInputContentConversion.swift"
+    if not path.is_file():
+        print("InputQuoteSplit: ChatInputContentConversion.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusOpenQuote" in t:
+        print("InputQuoteSplit: already patched")
+        return
+
+    loop_anchor = (
+        "        paraRanges.append(NSRange(location: lineStart, length: end - lineStart))\n"
+        "        for pr in paraRanges {\n"
+    )
+    if loop_anchor not in t:
+        print("WARNING: InputQuoteSplit paragraph loop anchor not found — composer quotes stay split")
+        return
+    loop_replacement = (
+        "        paraRanges.append(NSRange(location: lineStart, length: end - lineStart))\n"
+        "        // AorusGram: index of the quote the previous line opened, if it is still open.\n"
+        "        var aorusOpenQuote: Int? = nil\n"
+        "        for pr in paraRanges {\n"
+    )
+
+    append_anchor = (
+        "                blocks.append(.blockQuote(ChatInputBlockQuote(\n"
+        "                    content: ChatInputContent(blocks: [.paragraph(ChatInputParagraph(style: .body, runs: runs))]),\n"
+        "                    collapsed: quoteCollapsed)))\n"
+        "            } else {\n"
+        "                blocks.append(.paragraph(ChatInputParagraph(style: .body, runs: runs)))\n"
+        "            }\n"
+    )
+    if append_anchor not in t:
+        print("WARNING: InputQuoteSplit block anchor not found — composer quotes stay split")
+        return
+    append_replacement = (
+        "                // AorusGram: a quote the previous line opened keeps going instead of a new\n"
+        "                // block starting here. One block per line leaves the \"\\n\" between them\n"
+        "                // unattributed, and the composer then draws a separate box per line.\n"
+        "                if !quoteCollapsed, let aorusOpenIndex = aorusOpenQuote,\n"
+        "                   case let .blockQuote(aorusOpen) = blocks[aorusOpenIndex], !aorusOpen.collapsed {\n"
+        "                    var aorusMerged = aorusOpen.content.blocks\n"
+        "                    aorusMerged.append(.paragraph(ChatInputParagraph(style: .body, runs: runs)))\n"
+        "                    blocks[aorusOpenIndex] = .blockQuote(ChatInputBlockQuote(\n"
+        "                        content: ChatInputContent(schemaVersion: aorusOpen.content.schemaVersion, blocks: aorusMerged),\n"
+        "                        collapsed: false,\n"
+        "                        author: aorusOpen.author))\n"
+        "                } else {\n"
+        "                    blocks.append(.blockQuote(ChatInputBlockQuote(\n"
+        "                        content: ChatInputContent(blocks: [.paragraph(ChatInputParagraph(style: .body, runs: runs))]),\n"
+        "                        collapsed: quoteCollapsed)))\n"
+        "                    aorusOpenQuote = quoteCollapsed ? nil : blocks.count - 1\n"
+        "                }\n"
+        "            } else {\n"
+        "                blocks.append(.paragraph(ChatInputParagraph(style: .body, runs: runs)))\n"
+        "                aorusOpenQuote = nil\n"
+        "            }\n"
+    )
+
+    t = t.replace(loop_anchor, loop_replacement, 1)
+    t = t.replace(append_anchor, append_replacement, 1)
+    path.write_text(t, encoding="utf-8")
+    print("InputQuoteSplit: consecutive quoted lines now form one quote in the composer")
+
+
 def patch_remove_send_logs(tg: Path) -> None:
     """Remove the debug "Send Logs" item from the message context menu.
 
@@ -23797,6 +23885,7 @@ def main() -> None:
     patch_unlimited_pinned_chats(tg)
     patch_user_messages_feature(tg)
     patch_fix_blockquote_split(tg)
+    patch_fix_input_quote_split(tg)
     patch_remove_send_logs(tg)
     patch_app_bundle_name(tg)
     patch_call_proxy(tg)
