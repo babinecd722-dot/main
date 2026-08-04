@@ -2,9 +2,11 @@ import Foundation
 
 // AorusGram localization.
 //
-// The client supports two languages — Russian and English — and follows the
-// language selected inside Telegram. Resolution rule: a Telegram base-language
-// code of "ru" (or any "ru-*" variant) → Russian; anything else → English.
+// The client speaks the nineteen languages Telegram for iOS ships and follows whichever
+// one is selected inside Telegram. Russian and English are written inline at every call
+// site — that is how these files grew and it keeps the two primary languages readable next
+// to each other; every other language is looked up in AorusL10nTable by the English string.
+// A language with no entry for a key falls back to English, which is always safe to show.
 //
 // Two consumption paths:
 //   1. UI with direct access to PresentationData → AorusL10n(strings.baseLanguageCode).
@@ -13,6 +15,8 @@ import Foundation
 //      which reads the resolved language persisted by AppDelegate's
 //      presentationData observer under the "aorusgram_lang" UserDefaults key.
 public enum AorusLang: String, CaseIterable {
+    // The nineteen languages Telegram for iOS ships. Russian and English are written inline
+    // at every call site; the rest come from AorusL10nTable.
     case en
     case ru
     case uk
@@ -21,6 +25,17 @@ public enum AorusLang: String, CaseIterable {
     case de
     case fr
     case tr
+    case it
+    case pl
+    case nl
+    case id
+    case ms
+    case ca
+    case be
+    case uz
+    case ko
+    case ar
+    case fa
 
     // Map a Telegram base-language code to a supported language. Telegram sends codes like
     // "ru", "pt-br" or "es_419", so only the part before the separator is significant.
@@ -43,6 +58,17 @@ public enum AorusLang: String, CaseIterable {
         case .de: return "de_DE"
         case .fr: return "fr_FR"
         case .tr: return "tr_TR"
+        case .it: return "it_IT"
+        case .pl: return "pl_PL"
+        case .nl: return "nl_NL"
+        case .id: return "id_ID"
+        case .ms: return "ms_MY"
+        case .ca: return "ca_ES"
+        case .be: return "be_BY"
+        case .uz: return "uz_UZ"
+        case .ko: return "ko_KR"
+        case .ar: return "ar_SA"
+        case .fa: return "fa_IR"
         }
     }
 
@@ -144,6 +170,32 @@ public func aorusPlural(_ n: Int, _ unit: AorusPluralUnit, _ lang: AorusLang = A
     case (.fr, .month): forms = ["mois", "mois"]
     case (.tr, .year): forms = ["yıl"]
     case (.tr, .month): forms = ["ay"]
+    case (.it, .year): forms = ["anno", "anni"]
+    case (.it, .month): forms = ["mese", "mesi"]
+    case (.nl, .year): forms = ["jaar", "jaar"]
+    case (.nl, .month): forms = ["maand", "maanden"]
+    case (.ca, .year): forms = ["any", "anys"]
+    case (.ca, .month): forms = ["mes", "mesos"]
+    // Polish and Belarusian take the same one/few/many rule as Russian and Ukrainian.
+    case (.pl, .year): forms = ["rok", "lata", "lat"]
+    case (.pl, .month): forms = ["miesiąc", "miesiące", "miesięcy"]
+    case (.be, .year): forms = ["год", "гады", "гадоў"]
+    case (.be, .month): forms = ["месяц", "месяцы", "месяцаў"]
+    // Indonesian, Malay, Uzbek, Korean and Persian do not inflect the noun after a numeral.
+    case (.id, .year): forms = ["tahun"]
+    case (.id, .month): forms = ["bulan"]
+    case (.ms, .year): forms = ["tahun"]
+    case (.ms, .month): forms = ["bulan"]
+    case (.uz, .year): forms = ["yil"]
+    case (.uz, .month): forms = ["oy"]
+    case (.ko, .year): forms = ["년"]
+    case (.ko, .month): forms = ["개월"]
+    case (.fa, .year): forms = ["سال"]
+    case (.fa, .month): forms = ["ماه"]
+    // Arabic has six plural categories; for the 1..~100 range these ages fall in, singular
+    // for 1 and the broken plural for the rest is what a reader expects.
+    case (.ar, .year): forms = ["سنة", "سنوات"]
+    case (.ar, .month): forms = ["شهر", "أشهر"]
     }
 
     let word: String

@@ -20,6 +20,17 @@ enum SubLanguage: String {
     case de
     case fr
     case tr
+    case it
+    case pl
+    case nl
+    case id
+    case ms
+    case ca
+    case be
+    case uz
+    case ko
+    case ar
+    case fa
 }
 
 enum SubscriptionL10nTable {
