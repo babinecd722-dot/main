@@ -104,14 +104,24 @@ public final class AccountBackupManager {
 
     private enum BackupError: Error { case truncated, corrupt }
 
+    // The AorusGram core module and AorusGramUI both compile this file and it has to stay
+    // byte-identical between them (release_security_check enforces that), so it can reach
+    // neither module's translation table — AorusGramUI sits above AorusGram, and importing
+    // it here would be a cycle. These sixteen backup failures are the only strings the
+    // manager shows, so they are resolved from a table right here.
+    //
+    // The order matches aorusL(): Telegram's language first, the device only when Telegram
+    // has none yet, which happens on a fresh install with no account.
     private func localized(_ ru: String, _ en: String) -> String {
-        // Telegram's own language first — the full code, then the collapsed ru/en value —
-        // and the device language only when Telegram has none yet.
         let code = (UserDefaults.standard.string(forKey: "aorusgram_lang_code")
             ?? UserDefaults.standard.string(forKey: "aorusgram_lang")
             ?? Locale.preferredLanguages.first
-            ?? Locale.current.identifier).lowercased()
-        return code.hasPrefix("ru") ? ru : en
+            ?? "en").lowercased()
+        let base = String(code.prefix(while: { $0 != "-" && $0 != "_" }))
+        if base == "ru" {
+            return ru
+        }
+        return AccountBackupL10n.tables[base]?[en] ?? en
     }
 
     // MARK: - Root path
@@ -944,4 +954,120 @@ public final class AccountBackupManager {
         for i in 0..<8 { v |= UInt64(b[i]) << (UInt64(i) * 8) }
         return v
     }
+}
+
+// Backup-failure messages in the languages AorusGram speaks beyond Russian and English.
+// Keyed by the English string, exactly like the tables in AorusGramUI and the
+// subscription module; a key with no entry falls back to English.
+private enum AccountBackupL10n {
+    static let tables: [String: [String: String]] = [
+        "uk": [
+            "Account data path is unavailable": "Шлях до даних акаунтів недоступний",
+            "No account data available for backup": "Немає даних акаунтів для резервної копії",
+            "Backup is too large": "Резервна копія завелика",
+            "Failed to create backup file": "Не вдалося створити файл резервної копії",
+            "Data encryption failed": "Помилка шифрування даних",
+            "Failed to save backup": "Не вдалося зберегти резервну копію",
+            "Failed to save key in Keychain": "Не вдалося зберегти ключ у Keychain",
+            "Failed to save backup to Keychain": "Не вдалося зберегти резервну копію в Keychain",
+            "No account selected to add": "Не вибрано акаунт для додавання",
+            "Backup not found": "Резервну копію не знайдено",
+            "Failed to create restore folder": "Не вдалося створити папку відновлення",
+            "Failed to open backup": "Не вдалося відкрити резервну копію",
+            "Backup file is corrupted": "Файл резервної копії пошкоджено",
+            "Backup decryption failed": "Помилка розшифрування резервної копії",
+            "The selected account is missing from the backup": "Акаунт відсутній у резервній копії",
+            "The selected account data is missing": "Дані вибраного акаунта відсутні",
+        ],
+        "es": [
+            "Account data path is unavailable": "La ruta de datos de las cuentas no está disponible",
+            "No account data available for backup": "No hay datos de cuentas para la copia",
+            "Backup is too large": "La copia es demasiado grande",
+            "Failed to create backup file": "No se pudo crear el archivo de la copia",
+            "Data encryption failed": "Fallo al cifrar los datos",
+            "Failed to save backup": "No se pudo guardar la copia",
+            "Failed to save key in Keychain": "No se pudo guardar la clave en el Keychain",
+            "Failed to save backup to Keychain": "No se pudo guardar la copia en el Keychain",
+            "No account selected to add": "No se ha elegido ninguna cuenta para añadir",
+            "Backup not found": "No se encontró la copia",
+            "Failed to create restore folder": "No se pudo crear la carpeta de restauración",
+            "Failed to open backup": "No se pudo abrir la copia",
+            "Backup file is corrupted": "El archivo de la copia está dañado",
+            "Backup decryption failed": "Fallo al descifrar la copia",
+            "The selected account is missing from the backup": "La cuenta elegida no está en la copia",
+            "The selected account data is missing": "Faltan los datos de la cuenta elegida",
+        ],
+        "pt": [
+            "Account data path is unavailable": "O caminho dos dados das contas está indisponível",
+            "No account data available for backup": "Não há dados de contas para o backup",
+            "Backup is too large": "O backup é grande demais",
+            "Failed to create backup file": "Não foi possível criar o arquivo de backup",
+            "Data encryption failed": "Falha ao criptografar os dados",
+            "Failed to save backup": "Não foi possível salvar o backup",
+            "Failed to save key in Keychain": "Não foi possível salvar a chave no Keychain",
+            "Failed to save backup to Keychain": "Não foi possível salvar o backup no Keychain",
+            "No account selected to add": "Nenhuma conta escolhida para adicionar",
+            "Backup not found": "Backup não encontrado",
+            "Failed to create restore folder": "Não foi possível criar a pasta de restauração",
+            "Failed to open backup": "Não foi possível abrir o backup",
+            "Backup file is corrupted": "O arquivo de backup está corrompido",
+            "Backup decryption failed": "Falha ao descriptografar o backup",
+            "The selected account is missing from the backup": "A conta escolhida não está no backup",
+            "The selected account data is missing": "Faltam os dados da conta escolhida",
+        ],
+        "de": [
+            "Account data path is unavailable": "Der Pfad zu den Kontodaten ist nicht verfügbar",
+            "No account data available for backup": "Keine Kontodaten für ein Backup vorhanden",
+            "Backup is too large": "Das Backup ist zu groß",
+            "Failed to create backup file": "Die Backup-Datei konnte nicht erstellt werden",
+            "Data encryption failed": "Die Daten konnten nicht verschlüsselt werden",
+            "Failed to save backup": "Das Backup konnte nicht gesichert werden",
+            "Failed to save key in Keychain": "Der Schlüssel konnte nicht im Schlüsselbund gesichert werden",
+            "Failed to save backup to Keychain": "Das Backup konnte nicht im Schlüsselbund gesichert werden",
+            "No account selected to add": "Es wurde kein Konto zum Hinzufügen gewählt",
+            "Backup not found": "Kein Backup gefunden",
+            "Failed to create restore folder": "Der Wiederherstellungsordner konnte nicht erstellt werden",
+            "Failed to open backup": "Das Backup konnte nicht geöffnet werden",
+            "Backup file is corrupted": "Die Backup-Datei ist beschädigt",
+            "Backup decryption failed": "Das Backup konnte nicht entschlüsselt werden",
+            "The selected account is missing from the backup": "Das gewählte Konto fehlt im Backup",
+            "The selected account data is missing": "Die Daten des gewählten Kontos fehlen",
+        ],
+        "fr": [
+            "Account data path is unavailable": "Le chemin des données des comptes est indisponible",
+            "No account data available for backup": "Aucune donnée de compte à sauvegarder",
+            "Backup is too large": "La sauvegarde est trop volumineuse",
+            "Failed to create backup file": "Impossible de créer le fichier de sauvegarde",
+            "Data encryption failed": "Échec du chiffrement des données",
+            "Failed to save backup": "Impossible d’enregistrer la sauvegarde",
+            "Failed to save key in Keychain": "Impossible d’enregistrer la clé dans le trousseau",
+            "Failed to save backup to Keychain": "Impossible d’enregistrer la sauvegarde dans le trousseau",
+            "No account selected to add": "Aucun compte sélectionné à ajouter",
+            "Backup not found": "Sauvegarde introuvable",
+            "Failed to create restore folder": "Impossible de créer le dossier de restauration",
+            "Failed to open backup": "Impossible d’ouvrir la sauvegarde",
+            "Backup file is corrupted": "Le fichier de sauvegarde est corrompu",
+            "Backup decryption failed": "Échec du déchiffrement de la sauvegarde",
+            "The selected account is missing from the backup": "Le compte sélectionné est absent de la sauvegarde",
+            "The selected account data is missing": "Les données du compte sélectionné sont absentes",
+        ],
+        "tr": [
+            "Account data path is unavailable": "Hesap verileri yolu kullanılamıyor",
+            "No account data available for backup": "Yedeklenecek hesap verisi yok",
+            "Backup is too large": "Yedek çok büyük",
+            "Failed to create backup file": "Yedek dosyası oluşturulamadı",
+            "Data encryption failed": "Veri şifreleme başarısız",
+            "Failed to save backup": "Yedek kaydedilemedi",
+            "Failed to save key in Keychain": "Anahtar Anahtar Zinciri’ne kaydedilemedi",
+            "Failed to save backup to Keychain": "Yedek Anahtar Zinciri’ne kaydedilemedi",
+            "No account selected to add": "Eklenecek hesap seçilmedi",
+            "Backup not found": "Yedek bulunamadı",
+            "Failed to create restore folder": "Geri yükleme klasörü oluşturulamadı",
+            "Failed to open backup": "Yedek açılamadı",
+            "Backup file is corrupted": "Yedek dosyası bozuk",
+            "Backup decryption failed": "Yedek şifresi çözülemedi",
+            "The selected account is missing from the backup": "Seçilen hesap yedekte yok",
+            "The selected account data is missing": "Seçilen hesabın verileri eksik",
+        ],
+    ]
 }

@@ -3601,8 +3601,9 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
     AntiSpoofManager (UserDefaults key aorusgram_peer_last_seen_<peerId>).
 
     Patch shadows the existing `string` binding with our override, keeping `activity`
-    intact. Reads UserDefaults directly to avoid adding a cross-module dep on
-    AorusGramUI / AorusGram from the ChatTitleView module.
+    intact. The peer timestamp is read straight from UserDefaults; the two status strings
+    go through aorusL, so ChatTitleView takes the AorusGramUI dep that
+    patch_translation_deps adds — hardcoded Russian was showing to every language.
     """
     path = tg / "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift"
     if not path.is_file():
@@ -3632,9 +3633,25 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
             t,
             flags=_re.MULTILINE,
         )
+        # An older tree carries the two statuses hardcoded in Russian for every language.
+        upgraded = upgraded.replace(
+            'if ago < 60 { return "в сети - AORUS" }',
+            'if ago < 60 { return aorusL("в сети - AORUS", "online - AORUS") }',
+        )
+        upgraded = upgraded.replace(
+            'if ago < 3600 { return "был(а) \\(Int(ago / 60)) мин назад - AORUS" }',
+            'if ago < 3600 { return aorusL("был(а) %@ мин назад - AORUS", "last seen %@ min ago - AORUS")'
+            '.replacingOccurrences(of: "%@", with: "\\(Int(ago / 60))") }',
+        )
+        upgraded = upgraded.replace(
+            '    if string.range(of: "в сети", options: .caseInsensitive) != nil { return string }\n'
+            '    if string.range(of: "online", options: .caseInsensitive) != nil { return string }\n',
+            '    let aorusOnlineWords = ["в сети", "online", "у мережі", "en línea", "em linha", "en ligne", "çevrimiçi"]\n'
+            '    if aorusOnlineWords.contains(where: { string.range(of: $0, options: .caseInsensitive) != nil }) { return string }\n',
+        )
         if upgraded != t:
             path.write_text(upgraded, encoding="utf-8")
-            print("ChatTitleAntiSpoof: restored previous presence override")
+            print("ChatTitleAntiSpoof: presence override brought up to date")
         else:
             print("ChatTitleAntiSpoof: already injected")
         return
@@ -3669,13 +3686,16 @@ def patch_chat_title_anti_spoof_status(tg: Path) -> None:
         + indent + "let string: String = {\n"
         + indent + "    let string = aorusBaseString\n"
         + indent + "    guard UserDefaults.standard.bool(forKey: \"aorusgram_antispoof_online\") else { return string }\n"
-        + indent + "    if string.range(of: \"в сети\", options: .caseInsensitive) != nil { return string }\n"
-        + indent + "    if string.range(of: \"online\", options: .caseInsensitive) != nil { return string }\n"
+        # Telegram already says "online" in the user's own language. Checking only the
+        # Russian and English wordings meant a German or Turkish user saw the override
+        # stamped over a status that was already correct.
+        + indent + "    let aorusOnlineWords = [\"в сети\", \"online\", \"у мережі\", \"en línea\", \"em linha\", \"en ligne\", \"çevrimiçi\"]\n"
+        + indent + "    if aorusOnlineWords.contains(where: { string.range(of: $0, options: .caseInsensitive) != nil }) { return string }\n"
         + indent + "    let aorusTs = UserDefaults.standard.double(forKey: \"aorusgram_peer_last_seen_\\(peer.id.toInt64())\")\n"
         + indent + "    guard aorusTs > 0 else { return string }\n"
         + indent + "    let ago = Date().timeIntervalSince1970 - aorusTs\n"
-        + indent + "    if ago < 60 { return \"в сети - AORUS\" }\n"
-        + indent + "    if ago < 3600 { return \"был(а) \\(Int(ago / 60)) мин назад - AORUS\" }\n"
+        + indent + "    if ago < 60 { return aorusL(\"в сети - AORUS\", \"online - AORUS\") }\n"
+        + indent + "    if ago < 3600 { return aorusL(\"был(а) %@ мин назад - AORUS\", \"last seen %@ min ago - AORUS\").replacingOccurrences(of: \"%@\", with: \"\\(Int(ago / 60))\") }\n"
         + indent + "    return string\n"
         + indent + "}()"
     )
@@ -7109,6 +7129,7 @@ def patch_translation_deps(tg: Path) -> None:
         "submodules/TelegramUI/Components/Chat/ChatInputMessageAccessoryPanel": [
             "Sources/ChatInputMessageAccessoryPanel.swift",
         ],
+        "submodules/TelegramUI/Components/ChatTitleView": ["Sources/ChatTitleView.swift"],
         "submodules/AuthorizationUI": [],
         "submodules/GalleryUI": ["Sources/SecretMediaPreviewController.swift"],
     }

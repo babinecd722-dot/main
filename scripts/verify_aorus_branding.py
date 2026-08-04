@@ -1337,11 +1337,38 @@ def main() -> None:
         subscription_sources += [
             p for p in sorted(aorus_module.rglob("*.swift")) if "SubL10n.t(" in p.read_text(encoding="utf-8", errors="replace")
         ]
+    # The patch script writes strings straight into Telegram's own files. Reading them from
+    # the script rather than from the patched tree keeps the check honest either way: if a
+    # patch silently failed to apply, its keys must still be present, not reported stale.
+    branding_source = Path(__file__).with_name("aorus_branding.py")
+    injected_literals: set[str] = set()
+    if branding_source.is_file():
+        branding_body = branding_source.read_text(encoding="utf-8")
+        injected_literals = {
+            match.group(2)
+            for match in re.finditer(
+                r'aorusL\(\\?"((?:[^"\\]|\\.)*?)\\?"\s*,\s*\\?"((?:[^"\\]|\\.)*?)\\?"\)', branding_body
+            )
+        } - {"{en}"}
+        icons = re.search(r"ICONS = \[(.*?)\n    \]", branding_body, re.S)
+        if icons:
+            injected_literals |= {
+                english
+                for _, _, english, _ in re.findall(
+                    r'\("([^"]*)",\s*"([^"]*)",\s*"([^"]*)",\s*(True|False)\)', icons.group(1)
+                )
+            }
+
     translation_pairs = (
-        ("subscription", subscription_sources, subscription_dir / "SubscriptionL10nTable.swift"),
-        ("AorusGramUI", aorusgram_ui_sources, aorusgram_ui / "Core" / "AorusL10nTable.swift"),
+        ("subscription", subscription_sources, subscription_dir / "SubscriptionL10nTable.swift", set()),
+        (
+            "AorusGramUI",
+            aorusgram_ui_sources,
+            aorusgram_ui / "Core" / "AorusL10nTable.swift",
+            injected_literals,
+        ),
     )
-    for area, src_paths, tbl_path in translation_pairs:
+    for area, src_paths, tbl_path, extra_literals in translation_pairs:
         present = [p for p in src_paths if p.is_file()]
         if not present or not tbl_path.is_file():
             continue
@@ -1353,9 +1380,11 @@ def main() -> None:
             src_body = src_path.read_text(encoding="utf-8")
             for pattern in (
                 # t(ru, en) on the per-screen helpers, the free aorusL(ru, en), SubL10n.t()
-                # in the AorusGram module, title(ru, en, isRu) in the metadata screen and
-                # localized(ru, en) in the backup manager all resolve through one table.
-                r'\b(?:t|aorusL|title|localized)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
+                # in the AorusGram module and title(ru, en, isRu) in the metadata screen all
+                # resolve through one table. AccountBackupManager's localized() deliberately
+                # does not: that file must stay byte-identical across two modules, so it
+                # carries its own table and is excluded here.
+                r'\b(?:t|aorusL|title)\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"',
                 # AorusLinkProtection carries its risk texts as ru:/en: template pairs and
                 # feeds them to aorusL() at display time.
                 r'\bru:\s*"((?:[^"\\]|\\.)*)"\s*,\s*\n?\s*en:\s*"((?:[^"\\]|\\.)*)"',
@@ -1363,6 +1392,7 @@ def main() -> None:
                 english_literals |= {
                     match.group(2) for match in re.finditer(pattern, src_body, re.S)
                 }
+        english_literals |= extra_literals
         for literal in english_literals:
             if "\\(" in literal:
                 err.append(
@@ -1385,6 +1415,26 @@ def main() -> None:
                     err.append(
                         f"Language: {name} {area} translation of {key!r} loses its %@ placeholder"
                     )
+
+    # AccountBackupManager must stay byte-identical across the core and UI modules, so it
+    # carries its own table instead of reaching for either module's. Nothing else checks it,
+    # and a message added without an entry would silently show English.
+    backup_manager = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "Accounts" / "AccountBackupManager.swift"
+    if backup_manager.is_file():
+        backup_text = backup_manager.read_text(encoding="utf-8")
+        backup_keys = {
+            match.group(2)
+            for match in re.finditer(
+                r'localized\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"', backup_text, re.S
+            )
+        }
+        backup_tables = re.findall(r'"(\w\w)": \[\n(.*?)\n        \],', backup_text, re.S)
+        if len(backup_tables) < 6:
+            err.append("Language: AccountBackupManager is missing translation tables")
+        for lang, table_body in backup_tables:
+            present = set(re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:', table_body, re.M))
+            for missing in sorted(backup_keys - present):
+                err.append(f"Language: AccountBackupManager {lang} is missing {missing!r}")
 
     # aorusL() lives in AorusGramUI. A file that calls it without the import, or in a package
     # without the Bazel dep, is a link error 40 minutes into the build — catch it here.
