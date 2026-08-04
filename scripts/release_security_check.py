@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -155,6 +156,54 @@ def main() -> int:
                 fail(errors, f"private key material is tracked: {path.relative_to(root)}")
             if re.search(r"\bghp_[A-Za-z0-9]{30,}\b", text):
                 fail(errors, f"GitHub token is tracked: {path.relative_to(root)}")
+
+    # The patch pipeline is 23k lines and main() is a flat list of ~150 calls, so a function
+    # deleted or renamed without updating the call is a NameError that only surfaces ninety
+    # seconds into the build — after the clone. py_compile does not catch it. Resolve every
+    # call main() makes against the module's own definitions here instead: this runs first
+    # and takes a second.
+    branding = root / "scripts" / "aorus_branding.py"
+    if branding.is_file():
+        try:
+            tree = ast.parse(branding.read_text(encoding="utf-8"))
+        except SyntaxError as error:
+            fail(errors, f"aorus_branding.py does not parse: {error}")
+        else:
+            defined = {
+                node.name
+                for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            defined |= {
+                target.id
+                for node in tree.body
+                if isinstance(node, ast.Assign)
+                for target in node.targets
+                if isinstance(target, ast.Name)
+            }
+            # Several patches live in sibling modules and arrive through `from ... import`.
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    defined |= {alias.asname or alias.name.split(".")[0] for alias in node.names}
+            main_def = next(
+                (
+                    node
+                    for node in tree.body
+                    if isinstance(node, ast.FunctionDef) and node.name == "main"
+                ),
+                None,
+            )
+            if main_def is None:
+                fail(errors, "aorus_branding.py has no main()")
+            else:
+                for node in ast.walk(main_def):
+                    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                        continue
+                    name = node.func.id
+                    if not name.startswith(("patch_", "_add_", "_ensure_", "write_", "apply_")):
+                        continue
+                    if name not in defined:
+                        fail(errors, f"aorus_branding.py main() calls {name}(), which is not defined")
 
     if errors:
         print("Release security check failed:")

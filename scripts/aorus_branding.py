@@ -6000,6 +6000,129 @@ def patch_user_messages_feature(tg: Path) -> None:
     print("User messages: patched context menu (override + opener item)")
 
 
+def patch_fix_blockquote_split(tg: Path) -> None:
+    """Fix an upstream bug: a multi-line quote is sent as one quote per line.
+
+    generateChatInputTextEntities turns the input's attributes into entities by walking
+    enumerateAttributes, which starts a new run wherever the attribute dictionary changes.
+    The newlines between quoted lines do not carry ChatTextInputAttributes.block, so a
+    three-line quote becomes three BlockQuote entities separated by a one-character gap.
+
+    Upstream has a merge pass for exactly this, and it is broken twice over: the `break
+    scan` below the inner loop means only the FIRST blockquote is ever examined, so nothing
+    after it merges, and it only joins ranges that touch exactly, which the newline gap
+    prevents. The result is the per-line quote in the sent message — and, because the
+    message round-trips back through these entities, in the edit field too.
+
+    The replacement considers every blockquote and treats a single newline between two of
+    them as the same quote continuing. A blank line (two or more newlines) still separates,
+    so two quotes the user deliberately kept apart are not glued together. Idempotent.
+    """
+    path = tg / "submodules/TextFormat/Sources/GenerateTextEntities.swift"
+    if not path.is_file():
+        print("BlockQuoteSplit: GenerateTextEntities.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusQuotesJoin" in t:
+        print("BlockQuoteSplit: already patched")
+        return
+    anchor = (
+        '    while true {\n'
+        '        var hadReductions = false\n'
+        '        \n'
+        '        scan: for i in 0 ..< entities.count {\n'
+        '            if case .BlockQuote = entities[i].type {\n'
+        '                inner: for j in 0 ..< entities.count {\n'
+        '                    if j == i {\n'
+        '                        continue inner\n'
+        '                    }\n'
+        '                    if case .BlockQuote = entities[j].type {\n'
+        '                        if entities[i].range.upperBound == entities[j].range.lowerBound || entities[i].range.lowerBound == entities[j].range.upperBound {\n'
+        '                            entities[i].range = min(entities[i].range.lowerBound, entities[j].range.lowerBound) ..< max(entities[i].range.upperBound, entities[j].range.upperBound)\n'
+        '                            entities.remove(at: j)\n'
+        '                            \n'
+        '                            hadReductions = true\n'
+        '                            break scan\n'
+        '                        }\n'
+        '                    }\n'
+        '                }\n'
+        '                \n'
+        '                break scan\n'
+        '            }\n'
+        '        }\n'
+        '        \n'
+        '        if !hadReductions {\n'
+        '            break\n'
+        '        }\n'
+        '    }\n'
+        '    \n'
+    )
+    replacement = (
+        '    // AorusGram fix: put the pieces of one quote back together.\n'
+        '    //\n'
+        '    // enumerateAttributes above starts a new run wherever the attribute dictionary changes,\n'
+        '    // and the newlines between the quoted lines do not carry the block attribute — so a\n'
+        '    // three-line quote arrives here as three BlockQuote entities with a one-character gap\n'
+        '    // between them, and the message is sent as one quote per line.\n'
+        '    //\n'
+        '    // Upstream already tries to merge, but it only ever examines the FIRST blockquote (the\n'
+        '    // `break scan` that sat below the inner loop) and only joins ranges that touch exactly,\n'
+        '    // so the newline defeats it. Both are fixed here: every blockquote is considered, and a\n'
+        '    // single newline between two of them is treated as the same quote continuing onto the\n'
+        '    // next paragraph. A blank line — two or more newlines — is a deliberate separation and\n'
+        '    // is left alone, so two quotes the user meant to keep apart stay apart.\n'
+        '    let aorusQuoteText = text.string as NSString\n'
+        '    let aorusQuotesJoin: (Int, Int) -> Bool = { lower, upper in\n'
+        '        if upper < lower {\n'
+        '            return false\n'
+        '        }\n'
+        '        if upper == lower {\n'
+        '            return true\n'
+        '        }\n'
+        '        if upper - lower != 1 || lower >= aorusQuoteText.length {\n'
+        '            return false\n'
+        '        }\n'
+        '        return aorusQuoteText.character(at: lower) == 0x0a\n'
+        '    }\n'
+        '    while true {\n'
+        '        var hadReductions = false\n'
+        '\n'
+        '        scan: for i in 0 ..< entities.count {\n'
+        '            guard case .BlockQuote = entities[i].type else {\n'
+        '                continue scan\n'
+        '            }\n'
+        '            inner: for j in 0 ..< entities.count {\n'
+        '                if j == i {\n'
+        '                    continue inner\n'
+        '                }\n'
+        '                guard case .BlockQuote = entities[j].type else {\n'
+        '                    continue inner\n'
+        '                }\n'
+        '                let first = entities[i].range\n'
+        '                let second = entities[j].range\n'
+        '                if aorusQuotesJoin(first.upperBound, second.lowerBound) || aorusQuotesJoin(second.upperBound, first.lowerBound) {\n'
+        '                    entities[i].range = min(first.lowerBound, second.lowerBound) ..< max(first.upperBound, second.upperBound)\n'
+        '                    entities.remove(at: j)\n'
+        '\n'
+        '                    hadReductions = true\n'
+        '                    break scan\n'
+        '                }\n'
+        '            }\n'
+        '        }\n'
+        '\n'
+        '        if !hadReductions {\n'
+        '            break\n'
+        '        }\n'
+        '    }\n'
+        '\n'
+    )
+    if anchor not in t:
+        print("WARNING: BlockQuoteSplit anchor not found — multi-line quotes stay split")
+        return
+    path.write_text(t.replace(anchor, replacement, 1), encoding="utf-8")
+    print("BlockQuoteSplit: multi-line quotes now merge into one block")
+
+
 def patch_remove_send_logs(tg: Path) -> None:
     """Remove the debug "Send Logs" item from the message context menu.
 
