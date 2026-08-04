@@ -514,11 +514,21 @@ private struct AorusTranslationLanguagePicker: View {
                 }
                 .listStyle(PlainListStyle())
             }
-            .navigationBarTitle(self.kind == .source
-                ? (aorusL("Язык оригинала", "Source Language"))
-                : (aorusL("Язык перевода", "Translation Language")), displayMode: .inline)
-            .navigationBarItems(trailing: Button(aorusL("Готово", "Done")) {
+            // Text(...) and a Button with a label closure, not a bare String: this module
+            // has no -disable-availability-checking, and the String overloads of
+            // navigationBarTitle and Button are iOS 14. With a literal the compiler picked
+            // the iOS 13 LocalizedStringKey/Text overloads; aorusL returns a String, which
+            // silently selected the newer ones.
+            .navigationBarTitle(
+                Text(self.kind == .source
+                    ? aorusL("Язык оригинала", "Source Language")
+                    : aorusL("Язык перевода", "Translation Language")),
+                displayMode: .inline
+            )
+            .navigationBarItems(trailing: Button(action: {
                 self.presentationMode.wrappedValue.dismiss()
+            }) {
+                Text(aorusL("Готово", "Done"))
             })
         }
         .accentColor(Color(self.accentColor))

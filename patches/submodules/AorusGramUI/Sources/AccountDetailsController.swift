@@ -565,7 +565,6 @@ private func aorusNoteEditorController(context: AccountContext, initialValue: St
     let signal = combineLatest(context.sharedContext.presentationData, valuePromise.get())
     |> deliverOnMainQueue
     |> map { presentationData, currentValue -> (ItemListControllerState, (ItemListNodeState, Any)) in
-        let ru = AorusLang.resolve(presentationData.strings.baseLanguageCode) == .ru
         let rightButton = ItemListNavigationButton(
             content: .text(aorusL("Сохранить", "Save")),
             style: .bold,
@@ -622,7 +621,6 @@ public func accountDetailsController(context: AccountContext, entityId: Int64, p
         UIPasteboard.general.string = "\(entityId)"
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         guard let controller = weakController else { return }
-        let ru = AorusLang.current == .ru
         let alert = textAlertController(
             context: context,
             title: nil,

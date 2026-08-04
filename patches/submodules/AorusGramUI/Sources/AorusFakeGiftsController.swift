@@ -209,7 +209,6 @@ public func aorusFakeGiftsController(context: AccountContext) -> ViewController 
             let _ = observerHolder
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = fakeGiftsEntries(state: state, theme: presentationData.theme)
-            let isRu = AorusLang.current == .ru
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(aorusL("Фейковые подарки", "Fake Gifts")),

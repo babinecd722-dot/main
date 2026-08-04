@@ -7108,8 +7108,10 @@ def patch_translation_deps(tg: Path) -> None:
         if "AorusGramUI" in swift_file.parts:
             continue
         body = swift_file.read_text(encoding="utf-8", errors="replace")
-        # Comments name the helper too; only real call sites need the dep.
-        if "aorusL(" not in "\n".join(line.split("//")[0] for line in body.split("\n")):
+        # Comments name the helper too; only real call sites need the dep. AorusLang counts
+        # as well — a file can reach for the language or its locale without calling aorusL.
+        code = "\n".join(line.split("//")[0] for line in body.split("\n"))
+        if "aorusL(" not in code and "AorusLang." not in code:
             continue
         package = swift_file.parent
         while package != tg and not (package / "BUILD").is_file():

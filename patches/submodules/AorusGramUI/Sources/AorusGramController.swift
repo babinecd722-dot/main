@@ -1075,7 +1075,6 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
     if state.antiSpamEnabled, let idx = entries.firstIndex(where: {
         if case .antiSpam = $0 { return true }; return false
     }) {
-        let isRu = AorusLang.current == .ru
         entries.insert(.antiSpamManage(theme, aorusL("Управление", "Manage")), at: idx + 1)
     }
 
@@ -1333,7 +1332,6 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         },
         clearCache: {
             let stored = (UserDefaults.standard.array(forKey: "aorusgram_preserved_msgs") as? [[String: Int64]]) ?? []
-            let isRu = AorusLang.current == .ru
             let showDone: () -> Void = {
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
                 let alert = UIAlertController(

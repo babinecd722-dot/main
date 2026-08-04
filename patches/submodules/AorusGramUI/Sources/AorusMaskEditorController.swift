@@ -1145,7 +1145,7 @@ final class AorusMaskEditorController: ViewController, UIImagePickerControllerDe
             message: nil,
             preferredStyle: .alert
         )
-        alert.addTextField { [weak self] field in
+        alert.addTextField { field in
             field.text = aorusL("Моя маска", "My Mask")
             field.clearButtonMode = .whileEditing
             field.autocapitalizationType = .sentences

@@ -149,7 +149,6 @@ private enum ManageEntry: ItemListNodeEntry {
 }
 
 private func manageEntries(state: ManageState, theme: PresentationTheme) -> [ManageEntry] {
-    let isRu = AorusLang.current == .ru
     var entries: [ManageEntry] = []
 
     entries.append(.senderHeader(theme, aorusL("ОТПРАВИТЕЛЬ", "SENDER")))
@@ -316,7 +315,6 @@ public func aorusFakeGiftManageController(context: AccountContext, stored: Aorus
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let entries = manageEntries(state: state, theme: presentationData.theme)
-            let isRu = AorusLang.current == .ru
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(aorusL("Подарок", "Gift")),

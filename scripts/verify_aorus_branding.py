@@ -1450,7 +1450,7 @@ def main() -> None:
         body = swift_file.read_text(encoding="utf-8", errors="replace")
         # Comments mention the helper by name; only real call sites need the dep.
         code = "\n".join(line.split("//")[0] for line in body.split("\n"))
-        if "aorusL(" not in code:
+        if "aorusL(" not in code and "AorusLang." not in code:
             continue
         parts = swift_file.parts
         if "AorusGramUI" in parts:
