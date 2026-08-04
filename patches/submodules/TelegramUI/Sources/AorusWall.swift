@@ -1483,14 +1483,17 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             AorusWallSettingsStore.addExcludedPeer(peerId, accountId: accountId)
 
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let isRussian = presentationData.strings.baseLanguageCode.lowercased().hasPrefix("ru")
+            // The screen's own language, not the global one: it keeps presentationData in
+            // use and follows whatever this controller is rendering with.
+            let aorusLang = AorusLang.resolve(presentationData.strings.baseLanguageCode)
             let peerTitle = (notification.userInfo?["peerTitle"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let text: String
             if peerTitle.isEmpty {
-                text = aorusL("Канал добавлен в исключения", "Channel added to exclusions")
+                text = aorusL("Канал добавлен в исключения", "Channel added to exclusions", aorusLang)
             } else {
-                text = aorusL("Канал «%@» добавлен в исключения", "Channel “%@” added to exclusions").replacingOccurrences(of: "%@", with: peerTitle)
+                text = aorusL("Канал «%@» добавлен в исключения", "Channel “%@” added to exclusions", aorusLang)
+                    .replacingOccurrences(of: "%@", with: peerTitle)
             }
             self.navigationController?.present(
                 UndoOverlayController(

@@ -336,10 +336,6 @@ struct AorusFormattingToolbarView: View {
         self.onTranslateText(self.model.sourceText, self.model.sourceLanguageCode, self.model.targetLanguageCode)
     }
 
-    private var isRussian: Bool {
-        self.model.interfaceLanguageCode.lowercased().hasPrefix("ru")
-    }
-
     private func formatButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: { if self.model.canFormat { action() } }) {
             Image(systemName: systemName)
@@ -473,10 +469,6 @@ private struct AorusTranslationLanguagePicker: View {
 
     @Environment(\.presentationMode) private var presentationMode
     @State private var query: String = ""
-
-    private var isRussian: Bool {
-        self.interfaceLanguageCode.lowercased().hasPrefix("ru")
-    }
 
     private var filteredCodes: [String] {
         AorusTranslationLanguage.supportedCodes

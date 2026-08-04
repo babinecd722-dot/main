@@ -612,6 +612,7 @@ enum AorusL10nTable {
         "Orbit White": "Орбіта біла",
         "Transfer Gift": "Передати подарунок",
         "Gift transferred": "Подарунок передано",
+        "Exported %1 · %2 messages": "Експортовано %1 · повідомлень: %2",
     ]
 
     private static let es: [String: String] = [
@@ -1200,6 +1201,7 @@ enum AorusL10nTable {
         "Orbit White": "Órbita blanca",
         "Transfer Gift": "Transferir el regalo",
         "Gift transferred": "Regalo transferido",
+        "Exported %1 · %2 messages": "Exportado el %1 · %2 mensajes",
     ]
 
     private static let pt: [String: String] = [
@@ -1788,6 +1790,7 @@ enum AorusL10nTable {
         "Orbit White": "Órbita branca",
         "Transfer Gift": "Transferir o presente",
         "Gift transferred": "Presente transferido",
+        "Exported %1 · %2 messages": "Exportado em %1 · %2 mensagens",
     ]
 
     private static let de: [String: String] = [
@@ -2376,6 +2379,7 @@ enum AorusL10nTable {
         "Orbit White": "Orbit Weiß",
         "Transfer Gift": "Geschenk übertragen",
         "Gift transferred": "Geschenk wurde übertragen",
+        "Exported %1 · %2 messages": "Exportiert am %1 · %2 Nachrichten",
     ]
 
     private static let fr: [String: String] = [
@@ -2964,6 +2968,7 @@ enum AorusL10nTable {
         "Orbit White": "Orbite blanche",
         "Transfer Gift": "Transférer le cadeau",
         "Gift transferred": "Cadeau transféré",
+        "Exported %1 · %2 messages": "Exporté le %1 · %2 messages",
     ]
 
     private static let tr: [String: String] = [
@@ -3552,5 +3557,6 @@ enum AorusL10nTable {
         "Orbit White": "Beyaz yörünge",
         "Transfer Gift": "Hediyeyi aktar",
         "Gift transferred": "Hediye aktarıldı",
+        "Exported %1 · %2 messages": "%1 tarihinde dışa aktarıldı · %2 mesaj",
     ]
 }

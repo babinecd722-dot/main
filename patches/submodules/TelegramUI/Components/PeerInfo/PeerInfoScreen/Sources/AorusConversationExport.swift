@@ -206,11 +206,14 @@ public enum AorusConversationExport {
         let mutedDark = UIColor(white: 0.45, alpha: 1.0)
         let mutedLight = UIColor(white: 1.0, alpha: 0.75)
 
+        // The exported PDF should read in the language the client is set to, not fall back
+        // to English for everyone who is not Russian.
+        let exportLocale = Locale(identifier: AorusLang.current.localeIdentifier)
         let dayFormatter = DateFormatter()
-        dayFormatter.locale = Locale(identifier: isRu ? "ru_RU" : "en_US")
+        dayFormatter.locale = exportLocale
         dayFormatter.dateFormat = "d MMMM yyyy"
         let timeFormatter = DateFormatter()
-        timeFormatter.locale = Locale(identifier: isRu ? "ru_RU" : "en_US")
+        timeFormatter.locale = exportLocale
         timeFormatter.dateFormat = "HH:mm"
 
         let measureOptions: NSStringDrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
@@ -229,12 +232,11 @@ public enum AorusConversationExport {
             titleAttr.draw(with: CGRect(x: marginX, y: y, width: contentWidth, height: ceil(titleBound.height)), options: measureOptions, context: nil)
             y += ceil(titleBound.height) + 4.0
 
-            let subtitleText: String
-            if isRu {
-                subtitleText = "Экспортировано \(dayFormatter.string(from: Date())) · сообщений: \(messages.count)"
-            } else {
-                subtitleText = "Exported \(dayFormatter.string(from: Date())) · \(messages.count) messages"
-            }
+            // Both values are substituted after translation so the English string stays a
+            // stable key in AorusL10nTable instead of differing on every export.
+            let subtitleText = aorusL("Экспортировано %1 · сообщений: %2", "Exported %1 · %2 messages")
+                .replacingOccurrences(of: "%1", with: dayFormatter.string(from: Date()))
+                .replacingOccurrences(of: "%2", with: "\(messages.count)")
             let subtitleAttr = NSAttributedString(string: subtitleText, attributes: [.font: subtitleFont, .foregroundColor: mutedDark])
             subtitleAttr.draw(with: CGRect(x: marginX, y: y, width: contentWidth, height: 20.0), options: measureOptions, context: nil)
             y += 26.0

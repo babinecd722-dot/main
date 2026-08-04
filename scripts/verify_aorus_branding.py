@@ -1413,14 +1413,16 @@ def main() -> None:
                 err.append(f"Language: {name} {area} translation is missing {missing!r}")
             for stale in sorted(keys - english_literals):
                 err.append(f"Language: {name} {area} table has a stale key {stale!r}")
-            # A value that drops the placeholder renders "Active until" with no date at all.
+            # A value that drops a placeholder renders "Active until" with no date at all.
+            # Strings carrying two values number them %1 and %2 instead of repeating %@.
             for key, value in re.findall(
                 r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', body, re.M
             ):
-                if key.count("%@") != value.count("%@"):
-                    err.append(
-                        f"Language: {name} {area} translation of {key!r} loses its %@ placeholder"
-                    )
+                for token in ("%@", "%1", "%2", "%3"):
+                    if key.count(token) != value.count(token):
+                        err.append(
+                            f"Language: {name} {area} translation of {key!r} loses its {token} placeholder"
+                        )
 
     # AccountBackupManager must stay byte-identical across the core and UI modules, so it
     # carries its own table instead of reaching for either module's. Nothing else checks it,

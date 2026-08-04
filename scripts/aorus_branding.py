@@ -2452,7 +2452,6 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                     "        if UserDefaults.standard.bool(forKey: \"aorusgram_feature_edit_locally\") {\n"
                     "            let aorusEditMsg = messages[0]\n"
                     "            let aorusEditMid = aorusEditMsg.id\n"
-                    "            let aorusEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
                     "            let aorusEditKey = \"aorusgram_local_edit_\\(aorusEditMid.peerId.toInt64())_\\(aorusEditMid.id)\"\n"
                     "            let aorusEditIsSticker = aorusEditMsg.media.contains(where: { media in\n"
                     "                guard let file = media as? TelegramMediaFile else { return false }\n"
@@ -2614,7 +2613,6 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "        let titleString: String\n"
                 "        let aorusLocalEditToken = \"\\(self.messageId.peerId.toInt64())_\\(self.messageId.id)\"\n"
                 "        if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
-                "            let aorusLocalEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
                 "            titleString = aorusL(\"Изменить локально\", \"Edit Locally\")\n"
                 "        } else if let message, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
             )
@@ -2650,7 +2648,6 @@ def patch_chat_context_menu_edit_locally(tg: Path) -> None:
                 "                let titleStringValue: String\n"
                 "                let aorusLocalEditToken = \"\\(edit.id.peerId.toInt64())_\\(edit.id.id)\"\n"
                 "                if UserDefaults.standard.string(forKey: \"aorusgram_local_edit_active_message\") == aorusLocalEditToken {\n"
-                "                    let aorusLocalEditLang = UserDefaults.standard.string(forKey: \"aorusgram_lang\") ?? (Locale.preferredLanguages.first ?? \"en\")\n"
                 "                    titleStringValue = aorusL(\"Изменить локально\", \"Edit Locally\")\n"
                 "                } else if let message = self.messages.first, message.id.namespace == Namespaces.Message.QuickReplyCloud {\n"
             )
@@ -11832,8 +11829,13 @@ def patch_stars_purchase_redirects(tg: Path) -> None:
         end = t.index(products_end, start)
         buttons_block = (
             "            var items: [AnyComponentWithIdentity<Empty>] = []\n"
-            "            let aorusFragmentTitle = aorusL(\"Купить в Fragment\", \"Buy on Fragment\")\n"
-            "            let aorusTelegramTitle = aorusL(\"Купить в Telegram\", \"Buy in Telegram\")\n"
+            # Pass the screen's own language rather than reading the global one: it keeps
+            # `strings` in use — this module builds with warnings as errors, and the
+            # binding went unused when the ru/en flag was removed — and it follows the
+            # presentation data the rest of the screen renders with.
+            "            let aorusLang = AorusLang.resolve(strings.baseLanguageCode)\n"
+            "            let aorusFragmentTitle = aorusL(\"Купить в Fragment\", \"Buy on Fragment\", aorusLang)\n"
+            "            let aorusTelegramTitle = aorusL(\"Купить в Telegram\", \"Buy in Telegram\", aorusLang)\n"
             "            let aorusOpenFragmentStars: () -> Void = {\n"
             "                guard let controller = controller(), let navigationController = controller.navigationController as? NavigationController else {\n"
             "                    return\n"
