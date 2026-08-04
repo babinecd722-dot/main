@@ -1449,6 +1449,22 @@ def main() -> None:
                             f"Language: {name} {area} translation of {key!r} loses its {token} placeholder"
                         )
 
+    # A multi-line quote must reach the server as one BlockQuote entity. Upstream splits it
+    # per line and its own merge pass cannot join the pieces, so the fix has to be present:
+    # without it every quote of more than one line is sent as a stack of one-line quotes.
+    entities_file = tg / "submodules" / "TextFormat" / "Sources" / "GenerateTextEntities.swift"
+    if entities_file.is_file():
+        entities_text = entities_file.read_text(encoding="utf-8")
+        for marker in ("aorusQuotesJoin", "aorusQuoteText.character(at: lower) == 0x0a"):
+            if marker not in entities_text:
+                err.append(f"BlockQuote: multi-line quotes are still split — missing {marker}")
+        # The upstream loop opens with `if case .BlockQuote` and breaks out after the first
+        # one; the fix opens with `guard case .BlockQuote ... else { continue scan }`. The
+        # neighbouring .Pre loop has the same shape and must not be matched, so pin the
+        # blockquote line itself rather than the shared `break scan`.
+        if "if case .BlockQuote = entities[i].type {" in entities_text:
+            err.append("BlockQuote: the upstream merge pass still stops at the first quote")
+
     # AccountBackupManager must stay byte-identical across the core and UI modules, so it
     # carries its own table instead of reaching for either module's. Nothing else checks it,
     # and a message added without an entry would silently show English.
