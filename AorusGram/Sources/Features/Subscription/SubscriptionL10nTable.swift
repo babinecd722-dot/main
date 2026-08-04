@@ -103,6 +103,17 @@ enum SubscriptionL10nTable {
         "Could not start the audio session: %@": "Не вдалося активувати аудіосесію: %@",
         "No recognizer is available for %@": "Розпізнавач для мови %@ недоступний",
         "Could not start recording: %@": "Не вдалося запустити запис: %@",
+        // Anti-spam toasts, patched into AppDelegate — see AorusPublicL10n.
+        "Threat detected": "Виявлено загрозу",
+        "A report will be sent automatically. Tap Cancel to stop": "Скаргу буде надіслано автоматично. Натисніть «Скасувати», щоб зупинити",
+        "Tap Report to send a complaint": "Натисніть «Поскаржитися», щоб надіслати скаргу",
+        "Blocked": "Заблоковано",
+        "Spam from a blocked sender was hidden": "Спам від заблокованого відправника сховано",
+        "Flood hidden": "Флуд сховано",
+        "Repeated spam was hidden": "Повторюваний спам сховано",
+        "Anti-spam": "Керування антиспамом",
+        "Spam was hidden": "Спам сховано",
+        "Report": "Поскаржитися",
     ]
 
     private static let es: [String: String] = [
@@ -172,6 +183,17 @@ enum SubscriptionL10nTable {
         "Could not start the audio session: %@": "No se pudo iniciar la sesión de audio: %@",
         "No recognizer is available for %@": "No hay reconocedor disponible para %@",
         "Could not start recording: %@": "No se pudo iniciar la grabación: %@",
+        // Anti-spam toasts, patched into AppDelegate — see AorusPublicL10n.
+        "Threat detected": "Amenaza detectada",
+        "A report will be sent automatically. Tap Cancel to stop": "La denuncia se enviará automáticamente. Toca «Cancelar» para detenerla",
+        "Tap Report to send a complaint": "Toca «Denunciar» para enviar una denuncia",
+        "Blocked": "Bloqueado",
+        "Spam from a blocked sender was hidden": "Se ocultó el spam de un remitente bloqueado",
+        "Flood hidden": "Flood oculto",
+        "Repeated spam was hidden": "Se ocultó spam repetido",
+        "Anti-spam": "Anti-spam",
+        "Spam was hidden": "Spam oculto",
+        "Report": "Denunciar",
     ]
 
     private static let pt: [String: String] = [
@@ -241,6 +263,17 @@ enum SubscriptionL10nTable {
         "Could not start the audio session: %@": "Não foi possível iniciar a sessão de áudio: %@",
         "No recognizer is available for %@": "Nenhum reconhecedor disponível para %@",
         "Could not start recording: %@": "Não foi possível iniciar a gravação: %@",
+        // Anti-spam toasts, patched into AppDelegate — see AorusPublicL10n.
+        "Threat detected": "Ameaça detectada",
+        "A report will be sent automatically. Tap Cancel to stop": "A denúncia será enviada automaticamente. Toque em «Cancelar» para parar",
+        "Tap Report to send a complaint": "Toque em «Denunciar» para enviar uma denúncia",
+        "Blocked": "Bloqueado",
+        "Spam from a blocked sender was hidden": "O spam de um remetente bloqueado foi ocultado",
+        "Flood hidden": "Flood ocultado",
+        "Repeated spam was hidden": "Spam repetido foi ocultado",
+        "Anti-spam": "Anti-spam",
+        "Spam was hidden": "Spam ocultado",
+        "Report": "Denunciar",
     ]
 
     private static let de: [String: String] = [
@@ -310,6 +343,17 @@ enum SubscriptionL10nTable {
         "Could not start the audio session: %@": "Die Audiositzung konnte nicht gestartet werden: %@",
         "No recognizer is available for %@": "Für %@ ist keine Erkennung verfügbar",
         "Could not start recording: %@": "Die Aufnahme konnte nicht gestartet werden: %@",
+        // Anti-spam toasts, patched into AppDelegate — see AorusPublicL10n.
+        "Threat detected": "Bedrohung erkannt",
+        "A report will be sent automatically. Tap Cancel to stop": "Die Meldung wird automatisch gesendet. Tippe auf „Abbrechen“, um sie zu stoppen",
+        "Tap Report to send a complaint": "Tippe auf „Melden“, um eine Meldung zu senden",
+        "Blocked": "Blockiert",
+        "Spam from a blocked sender was hidden": "Spam eines blockierten Absenders wurde ausgeblendet",
+        "Flood hidden": "Flood ausgeblendet",
+        "Repeated spam was hidden": "Wiederholter Spam wurde ausgeblendet",
+        "Anti-spam": "Anti-Spam",
+        "Spam was hidden": "Spam wurde ausgeblendet",
+        "Report": "Melden",
     ]
 
     private static let fr: [String: String] = [
@@ -379,6 +423,17 @@ enum SubscriptionL10nTable {
         "Could not start the audio session: %@": "Impossible de démarrer la session audio : %@",
         "No recognizer is available for %@": "Aucun moteur de reconnaissance disponible pour %@",
         "Could not start recording: %@": "Impossible de démarrer l’enregistrement : %@",
+        // Anti-spam toasts, patched into AppDelegate — see AorusPublicL10n.
+        "Threat detected": "Menace détectée",
+        "A report will be sent automatically. Tap Cancel to stop": "Le signalement sera envoyé automatiquement. Touchez « Annuler » pour l’arrêter",
+        "Tap Report to send a complaint": "Touchez « Signaler » pour envoyer un signalement",
+        "Blocked": "Bloqué",
+        "Spam from a blocked sender was hidden": "Le spam d’un expéditeur bloqué a été masqué",
+        "Flood hidden": "Flood masqué",
+        "Repeated spam was hidden": "Un spam répété a été masqué",
+        "Anti-spam": "Anti-spam",
+        "Spam was hidden": "Le spam a été masqué",
+        "Report": "Signaler",
     ]
 
     private static let tr: [String: String] = [
@@ -448,5 +503,16 @@ enum SubscriptionL10nTable {
         "Could not start the audio session: %@": "Ses oturumu başlatılamadı: %@",
         "No recognizer is available for %@": "%@ için tanıyıcı yok",
         "Could not start recording: %@": "Kayıt başlatılamadı: %@",
+        // Anti-spam toasts, patched into AppDelegate — see AorusPublicL10n.
+        "Threat detected": "Tehdit algılandı",
+        "A report will be sent automatically. Tap Cancel to stop": "Şikâyet otomatik gönderilecek. Durdurmak için «İptal»e dokunun",
+        "Tap Report to send a complaint": "Şikâyet göndermek için «Şikâyet et»e dokunun",
+        "Blocked": "Engellendi",
+        "Spam from a blocked sender was hidden": "Engellenen göndericinin spam’i gizlendi",
+        "Flood hidden": "Taşkın gizlendi",
+        "Repeated spam was hidden": "Yinelenen spam gizlendi",
+        "Anti-spam": "Anti-spam",
+        "Spam was hidden": "Spam gizlendi",
+        "Report": "Şikâyet et",
     ]
 }

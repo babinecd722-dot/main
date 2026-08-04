@@ -1347,7 +1347,10 @@ def main() -> None:
         injected_literals = {
             match.group(2)
             for match in re.finditer(
-                r'aorusL\(\\?"((?:[^"\\]|\\.)*?)\\?"\s*,\s*\\?"((?:[^"\\]|\\.)*?)\\?"\)', branding_body
+                # No closing paren in the pattern: aorusL also takes an explicit language
+                # as a third argument, and requiring ')' would drop those keys and then
+                # report them stale.
+                r'aorusL\(\\?"((?:[^"\\]|\\.)*?)\\?"\s*,\s*\\?"((?:[^"\\]|\\.)*?)\\?"', branding_body
             )
         } - {"{en}"}
         # Some injections build the Russian side from a Python variable, so only the English
@@ -1365,8 +1368,25 @@ def main() -> None:
                 )
             }
 
+    # aorusGramL() is the AorusGram module's public front door, used by the strings patched
+    # into AppDelegate; its literals live in the script, not in a tracked source file.
+    aorus_gram_injected: set[str] = set()
+    if branding_source.is_file():
+        aorus_gram_injected = {
+            match.group(2)
+            for match in re.finditer(
+                r'aorusGramL\(\\?"((?:[^"\\]|\\.)*?)\\?"\s*,\s*\\?"((?:[^"\\]|\\.)*?)\\?"',
+                branding_body,
+            )
+        }
+
     translation_pairs = (
-        ("subscription", subscription_sources, subscription_dir / "SubscriptionL10nTable.swift", set()),
+        (
+            "subscription",
+            subscription_sources,
+            subscription_dir / "SubscriptionL10nTable.swift",
+            aorus_gram_injected,
+        ),
         (
             "AorusGramUI",
             aorusgram_ui_sources,
@@ -1408,7 +1428,12 @@ def main() -> None:
         for name, body in re.findall(
             r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", tbl_text, re.S
         ):
-            keys = set(re.findall(r'^\s*"((?:[^"\\]|\\.)*)":', body, re.M))
+            ordered = re.findall(r'^\s*"((?:[^"\\]|\\.)*)":', body, re.M)
+            # A repeated key in a Swift dictionary literal is not a compile error — it traps
+            # at launch with "Dictionary literal contains duplicate keys".
+            for repeated in sorted({k for k in ordered if ordered.count(k) > 1}):
+                err.append(f"Language: {name} {area} table lists {repeated!r} twice")
+            keys = set(ordered)
             for missing in sorted(english_literals - keys):
                 err.append(f"Language: {name} {area} translation is missing {missing!r}")
             for stale in sorted(keys - english_literals):
@@ -1440,9 +1465,23 @@ def main() -> None:
         if len(backup_tables) < 6:
             err.append("Language: AccountBackupManager is missing translation tables")
         for lang, table_body in backup_tables:
-            present = set(re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:', table_body, re.M))
+            ordered = re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:', table_body, re.M)
+            for repeated in sorted({k for k in ordered if ordered.count(k) > 1}):
+                err.append(f"Language: AccountBackupManager {lang} lists {repeated!r} twice")
+            present = set(ordered)
             for missing in sorted(backup_keys - present):
                 err.append(f"Language: AccountBackupManager {lang} is missing {missing!r}")
+
+    # AorusGram and AorusGramUI ship 21 byte-identical files, so a file that imports both
+    # sees every shared public symbol twice. AppDelegate uses several of them and already
+    # imports AorusGram; its strings go through aorusGramL instead.
+    app_delegate = tg / "submodules" / "TelegramUI" / "Sources" / "AppDelegate.swift"
+    if app_delegate.is_file():
+        app_delegate_text = app_delegate.read_text(encoding="utf-8")
+        if "import AorusGramUI" in app_delegate_text:
+            err.append("Language: AppDelegate imports AorusGramUI — shared symbols become ambiguous")
+        if "aorusL(" in "\n".join(l.split("//")[0] for l in app_delegate_text.split("\n")):
+            err.append("Language: AppDelegate calls aorusL() — it must use aorusGramL()")
 
     # aorusL() lives in AorusGramUI. A file that calls it without the import, or in a package
     # without the Bazel dep, is a link error 40 minutes into the build — catch it here.
