@@ -823,7 +823,7 @@ def main() -> None:
         err.append("FakeGifts: recipient gifts can leak into the manager list")
     if (
         "genericGift.title?.trimmingCharacters" not in fake_gifts_controller_text
-        or 'return (isRu ? "Подарок" : "Gift", nil)' not in fake_gifts_controller_text
+        or 'return (aorusL("Подарок", "Gift"), nil)' not in fake_gifts_controller_text
         or 'genericGift.id)' in fake_gifts_controller_text
     ):
         err.append("FakeGifts: regular gift list does not use Telegram titles without exposing internal ids")
@@ -1350,6 +1350,12 @@ def main() -> None:
                 r'aorusL\(\\?"((?:[^"\\]|\\.)*?)\\?"\s*,\s*\\?"((?:[^"\\]|\\.)*?)\\?"\)', branding_body
             )
         } - {"{en}"}
+        # Some injections build the Russian side from a Python variable, so only the English
+        # literal is visible in the script text: aorusL(\"" + ru_title + "\", \"Transfer Gift\").
+        injected_literals |= {
+            match.group(1)
+            for match in re.finditer(r'\+\s*"\\",\s*\\"((?:[^"\\]|\\.)*?)\\"\)', branding_body)
+        }
         icons = re.search(r"ICONS = \[(.*?)\n    \]", branding_body, re.S)
         if icons:
             injected_literals |= {
@@ -1663,8 +1669,10 @@ def main() -> None:
     for marker in (
         "import UndoUI",
         "private weak var navigationController: ViewController?",
-        "Канал «\\(peerTitle)» добавлен в исключения",
-        "Channel “\\(peerTitle)” added to exclusions",
+        "Канал «%@» добавлен в исключения",
+        # The channel title is substituted after translation — interpolating it first made
+        # the string differ on every toast, so it could never match a key in the table.
+        "Channel “%@” added to exclusions",
         "content: .succeed(text: text, timeout: nil, customUndoText: nil)",
         # The toast is presented in .window(.root), whose insets are the safe area only — the
         # tab bar belongs to the tab controller, not the window. elevatedLayout must therefore

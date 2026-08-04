@@ -7075,69 +7075,59 @@ def _ensure_aorusgramui_import(path: Path) -> None:
     t = path.read_text(encoding="utf-8")
     if "import AorusGramUI" in t:
         return
-    marker = "\nimport "
-    index = t.find(marker)
-    if index < 0:
+    # Anchoring on "\nimport " alone misses a file whose only import is its very first line —
+    # match at the start of the text too.
+    match = re.search(r"^import ", t, re.M)
+    if match is None:
         print(f"L10n: WARNING — no import block in {path.name}, aorusL will not resolve")
         return
-    t = t[: index + 1] + "import AorusGramUI\n" + t[index + 1 :]
+    t = t[: match.start()] + "import AorusGramUI\n" + t[match.start() :]
     path.write_text(t, encoding="utf-8")
     print(f"L10n: added import AorusGramUI to {path.name}")
 
 
 def patch_translation_deps(tg: Path) -> None:
-    """Modules outside AorusGramUI that render AorusGram strings.
+    """Wire up every module that ended up calling aorusL().
 
-    Every AorusGram string in the client resolves through one table that lives in
-    AorusGramUI, so the modules the patches inject strings into need both the Bazel dep
-    and the import. AorusGramUI depends on none of these packages, so no cycle is
-    possible. TelegramCore is deliberately absent: it sits below AorusGramUI and its two
-    edit-history labels are resolved locally instead.
+    Each AorusGram string in the client resolves through one table that lives in
+    AorusGramUI, and the patches above inject those strings into Telegram's own files. Which
+    files those are shifts whenever a patch moves its anchor, so the list is discovered from
+    the patched tree rather than written down here — a hardcoded list is exactly how
+    ChatEmptyNode ended up calling aorusL() with no dep and failing the build.
 
-    The import is only added when the dep is in place — an import without it is a build
-    failure, while skipping both merely leaves that one screen in English.
+    Must run last, after every patch has written its injection.
+
+    AorusGramUI depends on none of these packages, so no cycle is possible. TelegramCore is
+    the exception it cannot serve — it sits below AorusGramUI, and its two edit-history
+    labels are resolved locally instead.
     """
-    # TelegramUI, SettingsUI and WallpaperGridScreen already carry the dep from earlier
-    # patches; the rest are added here.
-    packages = {
-        "submodules/TelegramUI": [
-            "Sources/AppDelegate.swift",
-            "Sources/ChatControllerNode.swift",
-            "Sources/ChatControllerContentData.swift",
-            "Sources/ChatInterfaceStateContextMenus.swift",
-            "Sources/EditAccessoryPanelNode.swift",
-        ],
-        "submodules/SettingsUI": [
-            "Sources/Themes/ThemeSettingsController.swift",
-            "Sources/Themes/ThemeSettingsAppIconItem.swift",
-        ],
-        "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen": [
-            "Sources/PeerInfoScreenPerformButtonAction.swift",
-        ],
-        "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode": [
-            "Sources/PeerInfoGiftsPaneNode.swift",
-        ],
-        "submodules/TelegramUI/Components/Stars/StarsPurchaseScreen": [
-            "Sources/StarsPurchaseScreen.swift",
-        ],
-        "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode": [
-            "Sources/ChatTextInputPanelNode.swift",
-        ],
-        "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode": [
-            "Sources/ChatMessageBubbleItemNode.swift",
-        ],
-        "submodules/TelegramUI/Components/Chat/ChatInputMessageAccessoryPanel": [
-            "Sources/ChatInputMessageAccessoryPanel.swift",
-        ],
-        "submodules/TelegramUI/Components/ChatTitleView": ["Sources/ChatTitleView.swift"],
-        "submodules/AuthorizationUI": [],
-        "submodules/GalleryUI": ["Sources/SecretMediaPreviewController.swift"],
-    }
-    for package, files in packages.items():
-        if not _add_aorusgramui_build_dep(tg, package, "//submodules/Display"):
+    submodules = tg / "submodules"
+    if not submodules.is_dir():
+        print("L10n: submodules not found — skipped")
+        return
+
+    wired = 0
+    for swift_file in sorted(submodules.rglob("*.swift")):
+        if "AorusGramUI" in swift_file.parts:
             continue
-        for name in files:
-            _ensure_aorusgramui_import(tg / package / name)
+        body = swift_file.read_text(encoding="utf-8", errors="replace")
+        # Comments name the helper too; only real call sites need the dep.
+        if "aorusL(" not in "\n".join(line.split("//")[0] for line in body.split("\n")):
+            continue
+        package = swift_file.parent
+        while package != tg and not (package / "BUILD").is_file():
+            package = package.parent
+        if package == tg:
+            print(f"L10n: WARNING — no BUILD owns {swift_file.name}, aorusL will not resolve")
+            continue
+        relative = package.relative_to(tg).as_posix()
+        # The import is only added once the dep is in place: an import without it is a build
+        # failure, while skipping both merely leaves that one screen in English.
+        if not _add_aorusgramui_build_dep(tg, relative, "//submodules/Display"):
+            continue
+        _ensure_aorusgramui_import(swift_file)
+        wired += 1
+    print(f"L10n: {wired} file(s) outside AorusGramUI wired to the translation table")
 
 
 def patch_aorus_badges(tg: Path) -> None:
@@ -23730,7 +23720,6 @@ def main() -> None:
     patch_default_auto_night(tg)
     patch_force_dark_base_theme(tg)
     patch_intro_default_dark(tg)
-    patch_translation_deps(tg)
     patch_aorus_badges(tg)
     patch_local_premium(tg)
     patch_fake_gifts(tg)
@@ -23802,6 +23791,10 @@ def main() -> None:
     patch_info_plist_face_id(tg)
     patch_info_plist_strings_only(tg)
     patch_localizable_strings_safe(tg)
+
+    # Last: discovers every file the patches above left calling aorusL() and gives its
+    # package the AorusGramUI dep and the import.
+    patch_translation_deps(tg)
 
 
 if __name__ == "__main__":

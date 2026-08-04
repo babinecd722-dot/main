@@ -610,6 +610,8 @@ enum AorusL10nTable {
         "GXC Classic": "GXC Класика",
         "Orbit": "Орбіта",
         "Orbit White": "Орбіта біла",
+        "Transfer Gift": "Передати подарунок",
+        "Gift transferred": "Подарунок передано",
     ]
 
     private static let es: [String: String] = [
@@ -1196,6 +1198,8 @@ enum AorusL10nTable {
         "GXC Classic": "GXC Clásico",
         "Orbit": "Órbita",
         "Orbit White": "Órbita blanca",
+        "Transfer Gift": "Transferir el regalo",
+        "Gift transferred": "Regalo transferido",
     ]
 
     private static let pt: [String: String] = [
@@ -1782,6 +1786,8 @@ enum AorusL10nTable {
         "GXC Classic": "GXC Clássico",
         "Orbit": "Órbita",
         "Orbit White": "Órbita branca",
+        "Transfer Gift": "Transferir o presente",
+        "Gift transferred": "Presente transferido",
     ]
 
     private static let de: [String: String] = [
@@ -2368,6 +2374,8 @@ enum AorusL10nTable {
         "GXC Classic": "GXC Klassik",
         "Orbit": "Orbit",
         "Orbit White": "Orbit Weiß",
+        "Transfer Gift": "Geschenk übertragen",
+        "Gift transferred": "Geschenk wurde übertragen",
     ]
 
     private static let fr: [String: String] = [
@@ -2954,6 +2962,8 @@ enum AorusL10nTable {
         "GXC Classic": "GXC Classique",
         "Orbit": "Orbite",
         "Orbit White": "Orbite blanche",
+        "Transfer Gift": "Transférer le cadeau",
+        "Gift transferred": "Cadeau transféré",
     ]
 
     private static let tr: [String: String] = [
@@ -3540,5 +3550,7 @@ enum AorusL10nTable {
         "GXC Classic": "GXC Klasik",
         "Orbit": "Yörünge",
         "Orbit White": "Beyaz yörünge",
+        "Transfer Gift": "Hediyeyi aktar",
+        "Gift transferred": "Hediye aktarıldı",
     ]
 }
