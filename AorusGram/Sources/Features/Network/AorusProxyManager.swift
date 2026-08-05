@@ -113,6 +113,106 @@ public final class AorusProxyManager {
             selector: #selector(_onForceProbeRequest),
             name: NSNotification.Name("aorusgram_request_probe"),
             object: nil)
+        startPathMonitor()
+    }
+
+    // MARK: - Network path monitoring
+
+    /// Watches the system network path and re-evaluates the proxy whenever it actually
+    /// changes — a VPN coming up or going down, Wi-Fi ↔ cellular, connectivity returning.
+    private func startPathMonitor() {
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            self?.onPathUpdate(path)
+        }
+        pathMonitor.start(queue: pathQueue)
+    }
+
+    /// A stable description of the path. Only a change in this string is worth reacting to:
+    /// the monitor also fires for churn that leaves routing identical.
+    private static func pathSignature(_ path: NWPath) -> String {
+        var parts: [String] = []
+        parts.append(path.status == .satisfied ? "up" : "down")
+        // A VPN tunnel surfaces as .other; it is the case this whole mechanism exists for.
+        parts.append(path.usesInterfaceType(.other) ? "vpn" : "-")
+        parts.append(path.usesInterfaceType(.wifi) ? "wifi" : "-")
+        parts.append(path.usesInterfaceType(.cellular) ? "cell" : "-")
+        parts.append(path.usesInterfaceType(.wiredEthernet) ? "eth" : "-")
+        parts.append(path.isExpensive ? "exp" : "-")
+        parts.append(path.availableInterfaces.map { $0.name }.sorted().joined(separator: ","))
+        return parts.joined(separator: "|")
+    }
+
+    private func onPathUpdate(_ path: NWPath) {
+        let signature = Self.pathSignature(path)
+        let satisfied = path.status == .satisfied
+
+        lock.lock()
+        let changed = (signature != lastPathSignature)
+        let isFirst = (lastPathSignature == nil)
+        lastPathSignature = signature
+        lock.unlock()
+
+        guard changed, !isFirst else { return }
+
+        // Coalesce the burst a VPN handshake produces into one reaction.
+        pathSettleWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.pathDidSettle(satisfied: satisfied)
+        }
+        pathSettleWork = work
+        pathQueue.asyncAfter(deadline: .now() + pathSettleDelay, execute: work)
+    }
+
+    /// The path changed and has stopped flapping. Everything measured on the previous path
+    /// is now meaningless — latencies, penalties, the fail-over cooldown — so it is dropped,
+    /// and the config is re-fetched and re-probed from scratch. This is the step that used
+    /// to require an app relaunch.
+    private func pathDidSettle(satisfied: Bool) {
+        guard licenseAllowsProxy else { return }
+
+        // Everything measured on the old path is now meaningless.
+        lock.lock()
+        smoothedProbeLatency = 0
+        penalizedServers.removeAll()
+        lastFailoverAt = .distantPast
+        consecutiveTotalFailures = 0
+        lock.unlock()
+
+        // No route at all: a fetch in flight cannot finish, so drop it and wait. The next
+        // satisfied path re-enters here.
+        guard satisfied else {
+            abandonInFlightFetch()
+            return
+        }
+
+        lock.lock()
+        let mayFetch = Date().timeIntervalSince(lastPathRefreshAt) > pathRefreshCooldown
+        if mayFetch { lastPathRefreshAt = Date() }
+        lock.unlock()
+
+        // On cooldown: leave any in-flight fetch alone (it may still complete) and let the
+        // watchdog re-probe the applied proxy on the new path — the metrics above were reset,
+        // so it evaluates the new route from scratch and fails over on its own if needed.
+        guard mayFetch else { return }
+
+        // A fetch started on the old route will sit there until its timeout, and while it does
+        // the in-flight guard would swallow the refresh below — the very refresh that recovers
+        // the connection.
+        abandonInFlightFetch()
+        refresh(force: true)
+    }
+
+    /// Drops the fetch in flight, if any: the generation bump makes its completion a no-op, so
+    /// a result measured on a route that no longer exists can neither be applied nor clear the
+    /// in-flight flag belonging to whatever replaces it.
+    private func abandonInFlightFetch() {
+        lock.lock()
+        let pending = currentFetchTask
+        currentFetchTask = nil
+        fetchGeneration &+= 1
+        inFlight = false
+        lock.unlock()
+        pending?.cancel()
     }
 
     // Diagnostics-triggered forced refresh: minimum 30s between API calls.
@@ -159,6 +259,17 @@ public final class AorusProxyManager {
     private var didLaunchFetch = false
     private let lock = NSLock()
 
+    // In-flight /getProxy bookkeeping. The task is held so a path change can cancel a fetch
+    // that is about to hang on a route which no longer exists, and the generation counter
+    // lets a cancelled fetch's completion be ignored instead of clearing the flag out from
+    // under the fetch that replaced it.
+    private weak var currentFetchTask: URLSessionDataTask?
+    private var inFlightSince: Date = .distantPast
+    private var fetchGeneration: UInt64 = 0
+    // Belt and braces: a fetch that outlived its own 15s request timeout is never going to
+    // complete, and must not keep the client from starting a new one.
+    private let staleFetchThreshold: TimeInterval = 20.0
+
     // Multi-proxy probing: each candidate MTProxy is TCP-probed `probeAttempts`
     // times (median latency); the fastest reachable one is chosen and kept for the
     // server-provided ttl. A single failure never disqualifies a proxy — only an
@@ -197,12 +308,72 @@ public final class AorusProxyManager {
     private let serverPenaltyDuration: TimeInterval = 300.0
     private var penalizedServers: [String: Date] = [:]
     private var lastFailoverAt: Date = .distantPast
-    // Snappy fail-over: check the live proxy every 10s with a short 3s probe. A server
-    // taken down for maintenance refuses connections instantly, so a dead proxy is
-    // detected and switched in ~10-15s instead of waiting for the hourly refresh.
-    // Snappy fail-over: 4s poll + 1s probe → worst-case detection ~6s (was 10+3+3=16s)
-    private let watchdogInterval: TimeInterval = 4.0
-    private let watchdogProbeTimeout: TimeInterval = 1.0
+    // Fail-over poll. A server taken down for maintenance refuses connections instantly,
+    // so a dead proxy is still caught within a couple of ticks; the MTProto beacon above
+    // catches the subtler case (TCP answers, handshake stalls) in 8s.
+    //
+    // The interval used to be 4s with a flat 1s probe timeout. That is below the round-trip
+    // of a slow path — notably any VPN, which adds a hop and often an ocean — so the live
+    // proxy kept failing its own health check, the client switched server, the switch
+    // rewrote socksProxySettings, MTProto redialled from scratch, and 4s later it happened
+    // again. The connection never had time to come up. Detection is now a little slower and
+    // the timeout adapts to the path actually in use.
+    private let watchdogInterval: TimeInterval = 8.0
+    private let watchdogProbeTimeoutMin: TimeInterval = 2.0
+    private let watchdogProbeTimeoutMax: TimeInterval = 6.0
+    private let watchdogProbeTimeoutFactor: Double = 4.0
+    // Smoothed latency of the last successful probe — the baseline the adaptive timeout is
+    // derived from. Zero until the first success (then the minimum is used).
+    private var smoothedProbeLatency: TimeInterval = 0
+    // Re-entrancy guard: with an adaptive timeout a tick can outlive the interval.
+    private var watchdogBusy = false
+    // Set for the duration of a candidate selection so the watchdog never starts a second
+    // one on top of the refresh's (both run probes on the same queue).
+    private var selectionInFlight = false
+    // Consecutive ticks where every candidate failed to answer. That is the signature of a
+    // broken path rather than a broken server, so past the threshold we re-fetch the whole
+    // config instead of silently doing nothing until the next hourly refresh.
+    private var consecutiveTotalFailures = 0
+    private let totalFailuresBeforeRefetch = 3
+    private var lastForcedRefetchAt: Date = .distantPast
+    private let forcedRefetchCooldown: TimeInterval = 120.0
+
+    /// Probe timeout for the watchdog, scaled to the path in use: four times the smoothed
+    /// latency of the last good probe, clamped. On a 30 ms home connection that is the 2s
+    /// floor; behind a VPN with 400 ms round-trips it opens up to 1.6s; on a bad mobile
+    /// path it reaches the 6s ceiling instead of declaring a healthy server dead.
+    private var adaptiveWatchdogTimeout: TimeInterval {
+        lock.lock()
+        let baseline = smoothedProbeLatency
+        lock.unlock()
+        guard baseline > 0 else { return watchdogProbeTimeoutMin }
+        return min(watchdogProbeTimeoutMax, max(watchdogProbeTimeoutMin, baseline * watchdogProbeTimeoutFactor))
+    }
+
+    // MARK: - Network path
+
+    // Applying a config (Keychain, AES, notification) is not probe work and must not sit on
+    // the probe queue: it delays the timeout blocks queued behind it, which inflates the
+    // latency of every probe still in flight. Serial, so two rapid applies stay ordered.
+    private let applyQueue = DispatchQueue(label: "com.aorusgram.proxy.apply", qos: .utility)
+
+    // Bringing a VPN up or down replaces the default route. Sockets opened on the old
+    // interface are dead but not reset, so they hang instead of failing, and nothing else in
+    // this class would notice: refresh() is throttled to an hour and the watchdog only ever
+    // switches AWAY from a server it can prove is dead. That is why the proxy used to need an
+    // app restart to recover — a relaunch is the one path that forces a re-fetch.
+    private let pathMonitor = NWPathMonitor()
+    private let pathQueue = DispatchQueue(label: "com.aorusgram.proxy.path", qos: .utility)
+    private var lastPathSignature: String?
+    private var pathSettleWork: DispatchWorkItem?
+    // A VPN handshake emits a burst of path updates; act once, after it settles.
+    private let pathSettleDelay: TimeInterval = 1.5
+    // Floor between path-triggered fetches. The debounce above collapses one transition into
+    // one reaction, but a user flipping a VPN on and off, or a train ride handing between
+    // cells, would still be a fetch each time — traffic that both loads the control API and
+    // gives a network observer a signal correlated with the tunnel going up and down.
+    private var lastPathRefreshAt: Date = .distantPast
+    private let pathRefreshCooldown: TimeInterval = 10.0
 
     private var licenseAllowsProxy: Bool {
         guard LicenseKeyProvider.isProvisioned else { return false }
@@ -277,16 +448,28 @@ public final class AorusProxyManager {
             DispatchQueue.main.async { completion?(hit) }
             return
         }
+        var staleTask: URLSessionDataTask?
         if inFlight {
-            lock.unlock()
-            completion?(currentProxy() ?? lastKnownProxy())
-            return
+            guard Date().timeIntervalSince(inFlightSince) > staleFetchThreshold else {
+                lock.unlock()
+                completion?(currentProxy() ?? lastKnownProxy())
+                return
+            }
+            // Past its own timeout — orphan it rather than let it block every future fetch.
+            staleTask = currentFetchTask
+            currentFetchTask = nil
         }
         inFlight = true
+        inFlightSince = Date()
+        fetchGeneration &+= 1
+        let generation = fetchGeneration
         lock.unlock()
+        staleTask?.cancel()
 
         guard let request = buildSignedRequest() else {
-            lock.lock(); inFlight = false; lock.unlock()
+            lock.lock()
+            if fetchGeneration == generation { inFlight = false }
+            lock.unlock()
             DispatchQueue.main.async { completion?(self.lastKnownProxy()) }
             return
         }
@@ -294,9 +477,22 @@ public final class AorusProxyManager {
         let task = apiSession.dataTask(with: request) { [weak self] data, response, _ in
             guard let self = self else { return }
 
-            // Probing is async, so inFlight is cleared only once selection finishes.
+            // Orphaned by a path change (or by the stale-fetch escape above): its answer was
+            // measured on a route that no longer exists, so it must not be applied at all.
+            self.lock.lock()
+            let stillCurrent = (self.fetchGeneration == generation)
+            self.lock.unlock()
+            guard stillCurrent else { return }
+
+            // Probing is async, so inFlight is cleared only once selection finishes — and only
+            // if this is still the current fetch. A fetch orphaned by a path change must not
+            // clear the flag belonging to the one that replaced it.
             let finish: (AorusProxyConfig?) -> Void = { result in
-                self.lock.lock(); self.inFlight = false; self.lock.unlock()
+                self.lock.lock()
+                let isCurrent = (self.fetchGeneration == generation)
+                if isCurrent { self.inFlight = false }
+                self.lock.unlock()
+                guard isCurrent else { return }
                 DispatchQueue.main.async { completion?(result ?? self.lastKnownProxy()) }
             }
 
@@ -355,6 +551,11 @@ public final class AorusProxyManager {
             let probeAtt = effectiveForce ? self.launchProbeAttempts : self.probeAttempts
             let probeTO  = effectiveForce ? self.launchProbeTimeout  : self.probeTimeout
             self.selectBestCandidate(candidates, attempts: probeAtt, timeout: probeTO) { best in
+                // Selection is async and the path can change under it; same rule as above.
+                self.lock.lock()
+                let selectionCurrent = (self.fetchGeneration == generation)
+                self.lock.unlock()
+                guard selectionCurrent else { return }
                 if let best = best {
                     let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: resp.ttl)
                     self.store(cfg)
@@ -372,6 +573,9 @@ public final class AorusProxyManager {
                 }
             }
         }
+        lock.lock()
+        currentFetchTask = task
+        lock.unlock()
         task.resume()
     }
 
@@ -396,6 +600,7 @@ public final class AorusProxyManager {
         self.lock.lock()
         self.penalizedServers = self.penalizedServers.filter { $0.value > nowDate }
         let penalized = self.penalizedServers
+        self.selectionInFlight = true
         self.lock.unlock()
         var pool = candidates.filter { penalized[self.serverKey($0.server, $0.port)] == nil }
         if pool.isEmpty { pool = candidates }
@@ -456,6 +661,7 @@ public final class AorusProxyManager {
             self.lock.lock()
             self.lastProbeReport = reportLines.isEmpty ? "—" : reportLines.joined(separator: "\n")
             self.lastServerStatuses = statuses
+            self.selectionInFlight = false
             self.lock.unlock()
             completion(sorted.first?.candidate)
         }
@@ -509,7 +715,7 @@ public final class AorusProxyManager {
         let start = Date()
         var didFinish = false
         let finishLock = NSLock()
-        let finish: (TimeInterval?) -> Void = { latency in
+        let finish: (TimeInterval?) -> Void = { [weak self] latency in
             finishLock.lock()
             if didFinish {
                 finishLock.unlock()
@@ -518,6 +724,7 @@ public final class AorusProxyManager {
             didFinish = true
             finishLock.unlock()
             connection.cancel()
+            if let latency = latency { self?.recordProbeLatency(latency) }
             completion(latency)
         }
         connection.stateUpdateHandler = { state in
@@ -534,6 +741,16 @@ public final class AorusProxyManager {
         probeQueue.asyncAfter(deadline: .now() + timeout) {
             finish(nil)
         }
+    }
+
+    /// Feeds the adaptive-timeout baseline. Smoothed rather than last-value so one lucky or
+    /// one unlucky handshake cannot swing the health check.
+    private func recordProbeLatency(_ latency: TimeInterval) {
+        lock.lock()
+        smoothedProbeLatency = smoothedProbeLatency > 0
+            ? smoothedProbeLatency * 0.7 + latency * 0.3
+            : latency
+        lock.unlock()
     }
 
     private static func median(_ values: [TimeInterval]) -> TimeInterval? {
@@ -577,15 +794,31 @@ public final class AorusProxyManager {
     /// switches AWAY from a dead proxy, so two healthy proxies never flap.
     private func watchdogTick() {
         lock.lock()
-        let busy = inFlight
+        if watchdogBusy {
+            lock.unlock()
+            return
+        }
+        let selecting = selectionInFlight
         let current = cached
         let candidates = lastCandidates
         let lastFailover = lastFailoverAt
+        let canRun = !selecting && current != nil && candidates.count >= 2
+        if canRun { watchdogBusy = true }
         lock.unlock()
 
-        // Nothing applied yet, a refresh is already re-probing, or no alternative.
-        guard !busy, let current = current, candidates.count >= 2 else {
+        // Nothing applied yet, a selection is already running, or no alternative to switch to.
+        // Note this no longer stands down for the whole of a /getProxy call: that request has
+        // a 15s timeout, and standing down for it left the client with no fail-over during the
+        // exact window a path change makes the fetch hang.
+        guard canRun, let current = current else {
             return
+        }
+
+        let finish: () -> Void = { [weak self] in
+            guard let self = self else { return }
+            self.lock.lock()
+            self.watchdogBusy = false
+            self.lock.unlock()
         }
 
         // MTProto-level health (set by the injected connection-status observer): if the live
@@ -602,36 +835,88 @@ public final class AorusProxyManager {
             lastFailoverAt = now
             lock.unlock()
             UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey) // re-arms if the new proxy is also bad
-            selectBestCandidate(candidates, attempts: probeAttempts, timeout: watchdogProbeTimeout) { [weak self] best in
-                guard let self = self, let best = best else { return }
-                if best.server != current.server || best.port != current.port {
+            selectBestCandidate(candidates, attempts: probeAttempts, timeout: adaptiveWatchdogTimeout) { [weak self] best in
+                guard let self = self else { return }
+                if let best = best, best.server != current.server || best.port != current.port {
                     let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: current.ttl)
                     self.store(cfg)
                 }
+                finish()
             }
             return
         }
 
-        probeLatency(host: current.server, port: current.port, timeout: watchdogProbeTimeout) { [weak self] latency in
+        let probeTimeout = adaptiveWatchdogTimeout
+        probeLatency(host: current.server, port: current.port, timeout: probeTimeout) { [weak self] latency in
             guard let self = self else { return }
             if latency != nil {
+                self.clearTotalFailureStreak()
+                finish()
                 return   // still alive
             }
-            self.probeLatency(host: current.server, port: current.port, timeout: self.watchdogProbeTimeout) { [weak self] retry in
+            self.probeLatency(host: current.server, port: current.port, timeout: probeTimeout) { [weak self] retry in
                 guard let self = self else { return }
                 if retry != nil {
+                    self.clearTotalFailureStreak()
+                    finish()
                     return   // recovered — was a transient blip
                 }
+                // Two misses in a row. The cooldown is enforced here as well as on the
+                // MTProto branch: without it this path could rewrite the proxy on every
+                // single tick, and each rewrite redials MTProto from scratch, so a slow
+                // path would never finish a handshake before being interrupted again.
+                guard Date().timeIntervalSince(lastFailover) > self.failoverCooldown else {
+                    finish()
+                    return
+                }
                 // Confirmed down: pick the fastest reachable alternative and switch.
-                self.selectBestCandidate(candidates, attempts: self.probeAttempts, timeout: self.watchdogProbeTimeout) { [weak self] best in
-                    guard let self = self, let best = best else { return }
+                self.selectBestCandidate(candidates, attempts: self.probeAttempts, timeout: probeTimeout) { [weak self] best in
+                    guard let self = self else { return }
+                    guard let best = best else {
+                        // Not one server answered. That is the path, not the servers.
+                        self.handleTotalProbeFailure()
+                        finish()
+                        return
+                    }
+                    self.clearTotalFailureStreak()
                     if best.server != current.server || best.port != current.port {
+                        self.lock.lock()
+                        self.lastFailoverAt = Date()
+                        self.lock.unlock()
                         let cfg = AorusProxyConfig(server: best.server, port: best.port, secret: best.secret, ttl: current.ttl)
                         self.store(cfg)
                     }
+                    finish()
                 }
             }
         }
+    }
+
+    private func clearTotalFailureStreak() {
+        lock.lock()
+        consecutiveTotalFailures = 0
+        lock.unlock()
+    }
+
+    /// Every known server failed to answer. A single such tick means little (a tunnel coming
+    /// up, a hand-off between cells); a run of them means the cached config cannot work on
+    /// this path, and no amount of local re-selection will help. Re-fetch the list instead of
+    /// sitting on it until the hourly refresh — that silence is what used to leave the proxy
+    /// dead until the app was relaunched. Rate-limited so a genuinely offline device is quiet.
+    private func handleTotalProbeFailure() {
+        lock.lock()
+        consecutiveTotalFailures += 1
+        let reached = consecutiveTotalFailures >= totalFailuresBeforeRefetch
+        let offCooldown = Date().timeIntervalSince(lastForcedRefetchAt) > forcedRefetchCooldown
+        let mayRefetch = reached && offCooldown
+        if mayRefetch {
+            consecutiveTotalFailures = 0
+            lastForcedRefetchAt = Date()
+        }
+        lock.unlock()
+
+        guard mayRefetch else { return }
+        refresh(force: true)
     }
 
     // MARK: - Request building
@@ -720,22 +1005,41 @@ public final class AorusProxyManager {
             clearProxyState(postUpdate: true)
             return
         }
+        // The in-memory state is published synchronously: a caller that gets its completion
+        // back must see the new config from currentProxy() straight away.
         lock.lock()
         cached = cfg
         cachedAt = Date()
         lock.unlock()
-        if let data = try? JSONEncoder().encode(cfg) {
-            ProxyKeychain.write(data)
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cacheStampKey)
+
+        // Everything below is I/O — Keychain (which can block), AES-GCM, JSON, UserDefaults —
+        // and store() is reached from the probe queue. Left there it delays the timeout blocks
+        // of probes still in flight, which inflates their measured latency and skews the very
+        // selection that called us. Serial queue, so two rapid applies keep their order.
+        applyQueue.async { [weak self] in
+            guard let self = self else { return }
+            // Re-check the licence HERE, not only at the top of store(). Moving this work off
+            // the calling thread means an apply can now land after a clearProxyState() that
+            // revoked access in the meantime — republishing a working proxy for a device that
+            // just lost its licence. The gate is cheap and this is the last moment before the
+            // secret reaches the vault, so it is the right place to fail closed.
+            guard self.licenseAllowsProxy else {
+                self.clearProxyState(postUpdate: true)
+                return
+            }
+            if let data = try? JSONEncoder().encode(cfg) {
+                ProxyKeychain.write(data)
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: self.cacheStampKey)
+            }
+            // Publish an ENCRYPTED, opaque copy for the system-proxy code injected into
+            // TelegramCore (which cannot import this module). server/port/secret are
+            // sealed with AES-GCM and stored as one opaque value — a jailbreak file
+            // browser sees only ciphertext, never the live proxy secret. (See ProxyVault.)
+            ProxyVault.publish(cfg, expiresAt: self.proxyLeaseExpiresAt(ttl: cfg.ttl))
+            self.writeDiagnostics() // AORUS-DIAG
+            // Wake the system-side bridge so it re-applies immediately.
+            NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
         }
-        // Publish an ENCRYPTED, opaque copy for the system-proxy code injected into
-        // TelegramCore (which cannot import this module). server/port/secret are
-        // sealed with AES-GCM and stored as one opaque value — a jailbreak file
-        // browser sees only ciphertext, never the live proxy secret. (See ProxyVault.)
-        ProxyVault.publish(cfg, expiresAt: proxyLeaseExpiresAt(ttl: cfg.ttl))
-        writeDiagnostics() // AORUS-DIAG
-        // Wake the system-side bridge so it re-applies immediately.
-        NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
     }
 
     private func proxyLeaseExpiresAt(ttl: TimeInterval) -> TimeInterval {
@@ -748,12 +1052,22 @@ public final class AorusProxyManager {
     }
 
     private func clearProxyState(postUpdate: Bool) {
+        // In-memory state is dropped synchronously so currentProxy() reads nil the instant
+        // access is revoked, whatever the queues are doing.
         lock.lock()
         cached = nil
         cachedAt = .distantPast
         lastCandidates = []
         lastServerStatuses = []
         lock.unlock()
+        // The erase stays SYNCHRONOUS, deliberately. Deferring it to applyQueue would open a
+        // window at launch — load() clears on a missing licence, and until the queue drained
+        // the previous, still-decryptable blob would remain live for the network layer to
+        // pick up. Revocation has to take effect on the calling thread.
+        //
+        // Ordering against store()'s asynchronous publish is handled on the other side: that
+        // block re-reads licenseAllowsProxy immediately before publishing, so an apply that
+        // was already in flight cannot resurrect a proxy behind a revoked licence.
         ProxyKeychain.clear()
         ProxyVault.clear()
         UserDefaults.standard.removeObject(forKey: cacheStampKey)
