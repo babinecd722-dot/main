@@ -89,6 +89,15 @@ public enum AorusBadge {
                 "he": "מפתח AorusGram",
                 "zh-hans": "AorusGram 开发者",
                 "zh-hant": "AorusGram 開發者",
+                "hr": "Programer AorusGrama",
+                "sr": "Програмер AorusGrama",
+                "cs": "Vývojář AorusGramu",
+                "sk": "Vývojár AorusGramu",
+                "ro": "Dezvoltator AorusGram",
+                "hu": "AorusGram fejlesztője",
+                "nb": "AorusGram-utvikler",
+                "sv": "AorusGram-utvecklare",
+                "vi": "Nhà phát triển AorusGram",
             ], "AorusGram Developer")
         case .meme:
             return localized([
@@ -116,6 +125,15 @@ public enum AorusBadge {
                 "he": "מנהל ראשי של AorusGram",
                 "zh-hans": "AorusGram 主管理员",
                 "zh-hant": "AorusGram 主管理員",
+                "hr": "Glavni administrator AorusGrama",
+                "sr": "Главни администратор AorusGrama",
+                "cs": "Hlavní administrátor AorusGramu",
+                "sk": "Hlavný administrátor AorusGramu",
+                "ro": "Administrator principal AorusGram",
+                "hu": "AorusGram főadminisztrátora",
+                "nb": "Hovedadministrator for AorusGram",
+                "sv": "Huvudadministratör för AorusGram",
+                "vi": "Quản trị viên chính của AorusGram",
             ], "AorusGram Head Administrator")
         }
     }
