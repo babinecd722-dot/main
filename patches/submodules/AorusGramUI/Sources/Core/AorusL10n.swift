@@ -41,6 +41,15 @@ public enum AorusLang: String, CaseIterable {
     case ja
     case fi
     case he
+    case hr
+    case cs
+    case hu
+    case nb
+    case ro
+    case sr
+    case sk
+    case sv
+    case vi
     // Telegram serves Chinese as two packs; the raw value is the code it sends.
     case zhHans = "zh-hans"
     case zhHant = "zh-hant"
@@ -89,6 +98,15 @@ public enum AorusLang: String, CaseIterable {
         case .ja: return "ja_JP"
         case .fi: return "fi_FI"
         case .he: return "he_IL"
+        case .hr: return "hr_HR"
+        case .cs: return "cs_CZ"
+        case .hu: return "hu_HU"
+        case .nb: return "nb_NO"
+        case .ro: return "ro_RO"
+        case .sr: return "sr_RS"
+        case .sk: return "sk_SK"
+        case .sv: return "sv_SE"
+        case .vi: return "vi_VN"
         case .zhHans: return "zh_Hans_CN"
         case .zhHant: return "zh_Hant_TW"
         }
@@ -232,6 +250,26 @@ public func aorusPlural(_ n: Int, _ unit: AorusPluralUnit, _ lang: AorusLang = A
     case (.fi, .month): forms = ["kuukausi", "kuukautta"]
     case (.he, .year): forms = ["שנה", "שנים"]
     case (.he, .month): forms = ["חודש", "חודשים"]
+    // Croatian, Serbian, Czech and Slovak take the same one/few/many rule as Russian.
+    case (.hr, .year): forms = ["godina", "godine", "godina"]
+    case (.hr, .month): forms = ["mjesec", "mjeseca", "mjeseci"]
+    case (.sr, .year): forms = ["година", "године", "година"]
+    case (.sr, .month): forms = ["месец", "месеца", "месеци"]
+    case (.cs, .year): forms = ["rok", "roky", "let"]
+    case (.cs, .month): forms = ["měsíc", "měsíce", "měsíců"]
+    case (.sk, .year): forms = ["rok", "roky", "rokov"]
+    case (.sk, .month): forms = ["mesiac", "mesiace", "mesiacov"]
+    case (.ro, .year): forms = ["an", "ani"]
+    case (.ro, .month): forms = ["lună", "luni"]
+    case (.nb, .year): forms = ["år", "år"]
+    case (.nb, .month): forms = ["måned", "måneder"]
+    case (.sv, .year): forms = ["år", "år"]
+    case (.sv, .month): forms = ["månad", "månader"]
+    // Hungarian and Vietnamese never inflect the noun after a numeral.
+    case (.hu, .year): forms = ["év"]
+    case (.hu, .month): forms = ["hónap"]
+    case (.vi, .year): forms = ["năm"]
+    case (.vi, .month): forms = ["tháng"]
     }
 
     let word: String
