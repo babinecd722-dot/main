@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Mask": "Maschera",
         "PRIVACY": "PRIVACY",
         "AI FEATURES": "FUNZIONI IA",
         "PERFORMANCE": "PRESTAZIONI",
@@ -626,6 +627,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Mask": "Maska",
         "PRIVACY": "PRYWATNOŚĆ",
         "AI FEATURES": "FUNKCJE AI",
         "PERFORMANCE": "WYDAJNOŚĆ",
@@ -1199,6 +1201,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Mask": "Masker",
         "PRIVACY": "PRIVACY",
         "AI FEATURES": "AI-FUNCTIES",
         "PERFORMANCE": "PRESTATIES",
@@ -1772,6 +1775,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Mask": "Màscara",
         "PRIVACY": "PRIVADESA",
         "AI FEATURES": "FUNCIONS D'IA",
         "PERFORMANCE": "RENDIMENT",
@@ -2345,6 +2349,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Mask": "Masker",
         "PRIVACY": "PRIVASI",
         "AI FEATURES": "FITUR AI",
         "PERFORMANCE": "PERFORMA",
@@ -2918,6 +2923,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Mask": "Topeng",
         "PRIVACY": "PRIVASI",
         "AI FEATURES": "CIRI AI",
         "PERFORMANCE": "PRESTASI",
@@ -3491,6 +3497,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Mask": "Маска",
         "PRIVACY": "ПРЫВАТНАСЦЬ",
         "AI FEATURES": "AI ФУНКЦЫІ",
         "PERFORMANCE": "ПРАДУКЦЫЙНАСЦЬ",
@@ -4064,6 +4071,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Mask": "Niqob",
         "PRIVACY": "MAXFIYLIK",
         "AI FEATURES": "AI FUNKSIYALARI",
         "PERFORMANCE": "UNUMDORLIK",
@@ -4637,6 +4645,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Mask": "마스크",
         "PRIVACY": "개인정보 보호",
         "AI FEATURES": "AI 기능",
         "PERFORMANCE": "성능",
@@ -5210,6 +5219,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Mask": "قناع",
         "PRIVACY": "الخصوصية",
         "AI FEATURES": "ميزات الذكاء الاصطناعي",
         "PERFORMANCE": "الأداء",
@@ -5783,6 +5793,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Mask": "ماسک",
         "PRIVACY": "حریم خصوصی",
         "AI FEATURES": "قابلیت‌های هوش مصنوعی",
         "PERFORMANCE": "کارایی",
@@ -6356,6 +6367,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Mask": "Маска",
         "PRIVACY": "ҚҰПИЯЛЫЛЫҚ",
         "AI FEATURES": "AI ФУНКЦИЯЛАРЫ",
         "PERFORMANCE": "ӨНІМДІЛІК",
@@ -6929,6 +6941,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Mask": "面具",
         "PRIVACY": "隐私",
         "AI FEATURES": "AI 功能",
         "PERFORMANCE": "性能",
@@ -7503,6 +7516,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Mask": "面具",
         "PRIVACY": "隱私",
         "AI FEATURES": "AI 功能",
         "PERFORMANCE": "效能",
@@ -8076,6 +8090,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Mask": "マスク",
         "PRIVACY": "プライバシー",
         "AI FEATURES": "AI 機能",
         "PERFORMANCE": "パフォーマンス",
@@ -8649,6 +8664,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Mask": "Naamio",
         "PRIVACY": "YKSITYISYYS",
         "AI FEATURES": "TEKOÄLYOMINAISUUDET",
         "PERFORMANCE": "SUORITUSKYKY",
@@ -9222,6 +9238,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Mask": "מסכה",
         "PRIVACY": "פרטיות",
         "AI FEATURES": "תכונות בינה מלאכותית",
         "PERFORMANCE": "ביצועים",
@@ -9795,6 +9812,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Mask": "Maska",
         "PRIVACY": "PRIVATNOST",
         "AI FEATURES": "AI ZNAČAJKE",
         "PERFORMANCE": "PERFORMANSE",
@@ -10368,6 +10386,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Mask": "Маска",
         "PRIVACY": "ПРИВАТНОСТ",
         "AI FEATURES": "AI ФУНКЦИЈЕ",
         "PERFORMANCE": "ПЕРФОРМАНСЕ",
@@ -10941,6 +10960,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Mask": "Maska",
         "PRIVACY": "SOUKROMÍ",
         "AI FEATURES": "FUNKCE AI",
         "PERFORMANCE": "VÝKON",
@@ -11514,6 +11534,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Mask": "Maska",
         "PRIVACY": "SÚKROMIE",
         "AI FEATURES": "FUNKCIE AI",
         "PERFORMANCE": "VÝKON",
@@ -12087,6 +12108,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Mask": "Mască",
         "PRIVACY": "CONFIDENȚIALITATE",
         "AI FEATURES": "FUNCȚII AI",
         "PERFORMANCE": "PERFORMANȚĂ",
@@ -12660,6 +12682,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Mask": "Maszk",
         "PRIVACY": "ADATVÉDELEM",
         "AI FEATURES": "MI-FUNKCIÓK",
         "PERFORMANCE": "TELJESÍTMÉNY",
@@ -13233,6 +13256,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Mask": "Maske",
         "PRIVACY": "PERSONVERN",
         "AI FEATURES": "KI-FUNKSJONER",
         "PERFORMANCE": "YTELSE",
@@ -13806,6 +13830,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Mask": "Mask",
         "PRIVACY": "INTEGRITET",
         "AI FEATURES": "AI-FUNKTIONER",
         "PERFORMANCE": "PRESTANDA",
@@ -14379,6 +14404,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Mask": "Mặt nạ",
         "PRIVACY": "QUYỀN RIÊNG TƯ",
         "AI FEATURES": "TÍNH NĂNG AI",
         "PERFORMANCE": "HIỆU NĂNG",
@@ -14952,6 +14978,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Mask": "Маска",
         "PRIVACY": "КОНФІДЕНЦІЙНІСТЬ",
         "AI FEATURES": "AI ФУНКЦІЇ",
         "PERFORMANCE": "ПРОДУКТИВНІСТЬ",
@@ -15534,6 +15561,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Mask": "Máscara",
         "PRIVACY": "PRIVACIDAD",
         "AI FEATURES": "FUNCIONES DE IA",
         "PERFORMANCE": "RENDIMIENTO",
@@ -16116,6 +16144,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Mask": "Máscara",
         "PRIVACY": "PRIVACIDADE",
         "AI FEATURES": "RECURSOS DE IA",
         "PERFORMANCE": "DESEMPENHO",
@@ -16698,6 +16727,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Mask": "Maske",
         "PRIVACY": "PRIVATSPHÄRE",
         "AI FEATURES": "KI-FUNKTIONEN",
         "PERFORMANCE": "LEISTUNG",
@@ -17280,6 +17310,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Mask": "Masque",
         "PRIVACY": "CONFIDENTIALITÉ",
         "AI FEATURES": "FONCTIONS IA",
         "PERFORMANCE": "PERFORMANCES",
@@ -17862,6 +17893,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Mask": "Maske",
         "PRIVACY": "GİZLİLİK",
         "AI FEATURES": "YAPAY ZEKÂ ÖZELLİKLERİ",
         "PERFORMANCE": "PERFORMANS",

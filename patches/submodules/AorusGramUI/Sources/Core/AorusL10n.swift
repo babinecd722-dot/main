@@ -471,6 +471,7 @@ public struct AorusL10n {
     public var videoMasks: String { t("Маски", "Masks") }
     public var videoMasksFooter: String { t("Маска накладывается на лицо в реальном времени во время видеозвонков и записи видеосообщений.", "The mask follows your face in real time during video calls and round video recording.") }
     public var videoMasksStyleHeader: String { t("СТИЛЬ МАСКИ", "MASK STYLE") }
+    public var maskButton: String { t("Маска", "Mask") }
     public var videoMaskSkull: String { t("Хрустальный череп", "Crystal Skull") }
     public var videoMaskCyber: String { t("Кибер-визор", "Cyber Visor") }
     public var videoMaskPhantom: String { t("Фантом", "Phantom") }

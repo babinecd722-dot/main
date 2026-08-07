@@ -14890,6 +14890,251 @@ def patch_glass_global_toggle(tg: Path) -> None:
         print("GlassToggle: ContextControllerActionsStackNode.swift not found — skip context menu")
 
 
+def patch_mask_picker_call(tg: Path) -> None:
+    """A fifth call button that slides in a strip of masks to choose from.
+
+    The masks themselves were already rendered into outgoing frames by
+    patch_video_masks(); what was missing was any way to change which one without
+    leaving the call for Settings. This adds a button next to Video and, above the
+    button row, a horizontally scrollable strip of circles — built-in presets first,
+    then the user's own masks, each with its artwork and name.
+
+    The strip lives in the leaf module AorusMaskPicker (UIKit only, no deps) because
+    CallScreen sits far below AorusGramUI and must not reach up into the settings UI.
+
+    Geometry note: the stock row is 56pt buttons with 36pt gaps, which is 332pt for
+    four and 424pt for five — wider than a 393pt screen. Rather than clipping, the
+    gaps shrink first and then the buttons, so five fit on every supported device.
+    """
+    # ---------------------------------------------------------------- ButtonGroupView
+    group = tg / "submodules/TelegramUI/Components/Calls/CallScreen/Sources/Components/ButtonGroupView.swift"
+    if not group.is_file():
+        raise RuntimeError("MaskPicker: ButtonGroupView.swift not found")
+    t = group.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: mask button"
+
+    if sentinel not in t:
+        if "import AorusMaskPicker" not in t:
+            t = t.replace("import TelegramPresentationData\n",
+                          "import TelegramPresentationData\nimport AorusMaskPicker\n", 1)
+
+        key_anchor = (
+            "                case microphone\n"
+            "                case end\n"
+            "            }\n"
+        )
+        if key_anchor not in t:
+            raise RuntimeError("MaskPicker: Button.Content.Key anchor not found")
+        t = t.replace(key_anchor,
+                      "                case microphone\n"
+                      "                case end\n"
+                      "                case mask " + sentinel + "\n"
+                      "            }\n", 1)
+
+        content_anchor = (
+            "            case microphone(isMuted: Bool)\n"
+            "            case end\n"
+        )
+        if content_anchor not in t:
+            raise RuntimeError("MaskPicker: Button.Content case anchor not found")
+        t = t.replace(content_anchor,
+                      content_anchor + "            case mask(isActive: Bool) " + sentinel + "\n", 1)
+
+        key_switch_anchor = (
+                "                case .end:\n"
+                "                    return .end\n"
+                "                }\n"
+        )
+        if key_switch_anchor not in t:
+            raise RuntimeError("MaskPicker: Content.key switch anchor not found")
+        t = t.replace(key_switch_anchor,
+                      "                case .end:\n"
+                      "                    return .end\n"
+                      "                case .mask:\n"
+                      "                    return .mask\n"
+                      "                }\n", 1)
+
+        # Adaptive sizing. `insets` are the screen's safe-area insets; 16pt a side keeps
+        # the row clear of the rounded display corners.
+        size_anchor = (
+            "        let buttonSize: CGFloat = 56.0\n"
+            "        let buttonSpacing: CGFloat = 36.0\n"
+        )
+        if size_anchor not in t:
+            raise RuntimeError("MaskPicker: button metrics anchor not found")
+        t = t.replace(size_anchor,
+            "        " + sentinel + ": five buttons do not fit at the stock 56/36 (5*56 + 4*36 = 424pt\n"
+            "        // against a 393pt screen), so the gaps give way first and only then the buttons.\n"
+            "        var buttonSize: CGFloat = 56.0\n"
+            "        var buttonSpacing: CGFloat = 36.0\n"
+            "        if buttons.count > 4 {\n"
+            "            let count = CGFloat(buttons.count)\n"
+            "            let available = size.width - insets.left - insets.right - 32.0\n"
+            "            if buttonSize * count + buttonSpacing * (count - 1.0) > available {\n"
+            "                let minSpacing: CGFloat = 12.0\n"
+            "                buttonSpacing = max(minSpacing, min(buttonSpacing, (available - buttonSize * count) / (count - 1.0)))\n"
+            "                if buttonSize * count + buttonSpacing * (count - 1.0) > available {\n"
+            "                    buttonSize = max(44.0, floor((available - buttonSpacing * (count - 1.0)) / count))\n"
+            "                }\n"
+            "            }\n"
+            "        }\n", 1)
+
+        icon_anchor = (
+            "            case .end:\n"
+            "                title = strings.Call_End\n"
+            "                image = UIImage(bundleImageName: \"Call/End\")\n"
+            "                isActive = false\n"
+            "                isDestructive = true\n"
+            "            }\n"
+        )
+        if icon_anchor not in t:
+            raise RuntimeError("MaskPicker: button icon switch anchor not found")
+        t = t.replace(icon_anchor,
+            icon_anchor[:-len("            }\n")] +
+            "            case let .mask(isActiveValue):\n"
+            "                " + sentinel + ": a system symbol, so its weight tracks the OS\n"
+            "                // instead of a bitmap that drifts away from the buttons beside it.\n"
+            "                title = AorusMaskCatalogue.buttonTitle\n"
+            "                image = AorusMaskPickerView.buttonIcon()\n"
+            "                isActive = isActiveValue\n"
+            "            }\n", 1)
+
+        # The host needs to know where the row starts to sit the strip above it.
+        row_top_anchor = "    private var buttons: [Button]?\n"
+        if row_top_anchor not in t:
+            raise RuntimeError("MaskPicker: buttons storage anchor not found")
+        t = t.replace(row_top_anchor,
+                      row_top_anchor +
+                      "    " + sentinel + ": top of the laid-out row, read by PrivateCallScreen\n"
+                      "    // so the mask strip can be positioned directly above it.\n"
+                      "    private(set) var aorusButtonRowTop: CGFloat = 0.0\n", 1)
+
+        y_anchor = "        var buttonX: CGFloat = floor((size.width - buttonSize * CGFloat(buttons.count) - buttonSpacing * CGFloat(buttons.count - 1)) * 0.5)\n"
+        if y_anchor not in t:
+            raise RuntimeError("MaskPicker: buttonX anchor not found")
+        t = t.replace(y_anchor, "        self.aorusButtonRowTop = buttonY\n" + y_anchor, 1)
+
+        group.write_text(t, encoding="utf-8")
+        print("MaskPicker: patched ButtonGroupView (mask button + adaptive row)")
+    else:
+        print("MaskPicker: ButtonGroupView already patched")
+
+    # ------------------------------------------------------------- PrivateCallScreen
+    screen = tg / "submodules/TelegramUI/Components/Calls/CallScreen/Sources/PrivateCallScreen.swift"
+    if not screen.is_file():
+        raise RuntimeError("MaskPicker: PrivateCallScreen.swift not found")
+    t = screen.read_text(encoding="utf-8")
+
+    if sentinel not in t:
+        if "import AorusMaskPicker" not in t:
+            t = t.replace("import ComponentFlow\n", "import ComponentFlow\nimport AorusMaskPicker\n", 1)
+
+        prop_anchor = "    private let buttonGroupView: ButtonGroupView\n"
+        if prop_anchor not in t:
+            raise RuntimeError("MaskPicker: buttonGroupView property anchor not found")
+        t = t.replace(prop_anchor,
+                      prop_anchor +
+                      "    " + sentinel + ": created on first use, so a call without masks pays nothing.\n"
+                      "    private var aorusMaskPickerView: AorusMaskPickerView?\n"
+                      "    private var aorusMaskPickerVisible: Bool = false\n", 1)
+
+        button_anchor = (
+            "            ButtonGroupView.Button(content: .microphone(isMuted: params.state.isLocalAudioMuted), isEnabled: !isTerminated, action: { [weak self] in\n"
+        )
+        if button_anchor not in t:
+            raise RuntimeError("MaskPicker: call button array anchor not found")
+        t = t.replace(button_anchor,
+            "            " + sentinel + ": sits right after Video, as the mask only affects outgoing video.\n"
+            "            ButtonGroupView.Button(content: .mask(isActive: self.aorusMaskPickerVisible), isEnabled: !isTerminated, action: { [weak self] in\n"
+            "                guard let self else {\n"
+            "                    return\n"
+            "                }\n"
+            "                self.aorusToggleMaskPicker()\n"
+            "            }),\n" + button_anchor, 1)
+
+        # Drop the button again when the feature is off — cheaper than branching the literal.
+        filter_anchor = "        if self.activeLocalVideoSource != nil {\n"
+        if filter_anchor not in t:
+            raise RuntimeError("MaskPicker: activeLocalVideoSource anchor not found")
+        t = t.replace(filter_anchor,
+            "        if !AorusMaskCatalogue.isEnabled {\n"
+            "            buttons.removeAll(where: { if case .mask = $0.content { return true } else { return false } })\n"
+            "            // Collapse it directly rather than through aorusSetMaskPicker(): we are inside\n"
+            "            // the layout pass, and that helper asks for another one.\n"
+            "            self.aorusMaskPickerVisible = false\n"
+            "            self.aorusMaskPickerView?.setVisible(false, animated: false)\n"
+            "        }\n" + filter_anchor, 1)
+
+        layout_anchor = "        let contentBottomInset = self.buttonGroupView.update(size: params.size, insets: params.insets, minWidth: wideContentWidth, controlsHidden: currentAreControlsHidden, displayClose: displayClose, strings: params.state.strings, buttons: buttons, notices: notices, isAnimatedOutToGroupCall: self.isAnimatedOutToGroupCall, transition: transition)\n"
+        if layout_anchor not in t:
+            raise RuntimeError("MaskPicker: buttonGroupView.update anchor not found")
+        t = t.replace(layout_anchor,
+            layout_anchor +
+            "        " + sentinel + ": hang the strip off the measured top of the button row rather\n"
+            "        // than recomputing the row geometry here, which would drift the moment upstream\n"
+            "        // changes a constant.\n"
+            "        if let aorusMaskPicker = self.aorusMaskPickerView {\n"
+            "            let aorusPickerHeight = AorusMaskPickerView.panelHeight\n"
+            "            let aorusPickerWidth = max(0.0, params.size.width - params.insets.left - params.insets.right - 24.0)\n"
+            "            aorusMaskPicker.frame = CGRect(\n"
+            "                x: params.insets.left + 12.0,\n"
+            "                y: self.buttonGroupView.aorusButtonRowTop - aorusPickerHeight - 16.0,\n"
+            "                width: aorusPickerWidth,\n"
+            "                height: aorusPickerHeight)\n"
+            "            if currentAreControlsHidden && self.aorusMaskPickerVisible {\n"
+            "                self.aorusMaskPickerVisible = false\n"
+            "                aorusMaskPicker.setVisible(false, animated: true)\n"
+            "            }\n"
+            "        }\n", 1)
+
+        methods_anchor = "    private func update(transition: ComponentTransition) {\n"
+        if methods_anchor not in t:
+            raise RuntimeError("MaskPicker: update(params:) anchor not found")
+        t = t.replace(methods_anchor,
+            "    " + sentinel + ": show/hide plumbing for the strip.\n"
+            "    private func aorusToggleMaskPicker() {\n"
+            "        self.aorusSetMaskPicker(visible: !self.aorusMaskPickerVisible, animated: true)\n"
+            "    }\n"
+            "    \n"
+            "    private func aorusSetMaskPicker(visible: Bool, animated: Bool) {\n"
+            "        if visible && self.aorusMaskPickerView == nil {\n"
+            "            let pickerView = AorusMaskPickerView(accentColor: UIColor(red: 0.39, green: 0.82, blue: 1.0, alpha: 1.0))\n"
+            "            pickerView.onSelect = { [weak self] _ in\n"
+            "                guard let self else {\n"
+            "                    return\n"
+            "                }\n"
+            "                self.update(transition: .animated(duration: 0.2, curve: .easeInOut))\n"
+            "            }\n"
+            "            self.aorusMaskPickerView = pickerView\n"
+            "            self.insertSubview(pickerView, belowSubview: self.buttonGroupView)\n"
+            "        }\n"
+            "        self.aorusMaskPickerVisible = visible\n"
+            "        self.aorusMaskPickerView?.setVisible(visible, animated: animated)\n"
+            "        self.update(transition: animated ? .animated(duration: 0.3, curve: .easeInOut) : .immediate)\n"
+            "    }\n"
+            "    \n" + methods_anchor, 1)
+
+        screen.write_text(t, encoding="utf-8")
+        print("MaskPicker: patched PrivateCallScreen (button + strip)")
+    else:
+        print("MaskPicker: PrivateCallScreen already patched")
+
+    # ------------------------------------------------------------------------- BUILD
+    build = tg / "submodules/TelegramUI/Components/Calls/CallScreen/BUILD"
+    if not build.is_file():
+        raise RuntimeError("MaskPicker: CallScreen BUILD not found")
+    bt = build.read_text(encoding="utf-8")
+    if "//submodules/AorusMaskPicker:AorusMaskPicker" in bt:
+        print("MaskPicker: CallScreen BUILD dep already present")
+        return
+    needle = '        "//submodules/Display",\n'
+    if needle not in bt:
+        raise RuntimeError("MaskPicker: CallScreen BUILD deps anchor not found")
+    bt = bt.replace(needle, needle + '        "//submodules/AorusMaskPicker:AorusMaskPicker",\n', 1)
+    build.write_text(bt, encoding="utf-8")
+    print("MaskPicker: added AorusMaskPicker dep to CallScreen BUILD")
+
+
 def patch_video_masks(tg: Path) -> None:
     """Render Aorus face masks into outgoing call and round-video frames.
 
@@ -23832,6 +24077,7 @@ def main() -> None:
     patch_voice_twin_video_notes(tg)
     patch_voice_twin_calls(tg)
     patch_video_masks(tg)
+    patch_mask_picker_call(tg)
     patch_video_mask_call_phase(tg)
     patch_glass_global_toggle(tg)
     patch_aorus_code_compose(tg)

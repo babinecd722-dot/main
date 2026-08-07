@@ -1465,6 +1465,33 @@ def main() -> None:
         if "if case .BlockQuote = entities[i].type {" in entities_text:
             err.append("BlockQuote: the upstream merge pass still stops at the first quote")
 
+    # The mask strip has three moving parts that must all land: the leaf module has to be
+    # in the tree, the call screen has to link it, and the button has to exist. Any one of
+    # them silently missing means the button never appears and nobody notices until a user
+    # reports it, so each is checked separately.
+    mask_module = tg / "submodules" / "AorusMaskPicker" / "Sources" / "AorusMaskPickerView.swift"
+    if not mask_module.is_file():
+        err.append("MaskPicker: AorusMaskPicker module was not copied into the tree")
+    call_build = tg / "submodules" / "TelegramUI" / "Components" / "Calls" / "CallScreen" / "BUILD"
+    if call_build.is_file() and "//submodules/AorusMaskPicker:AorusMaskPicker" not in call_build.read_text(encoding="utf-8"):
+        err.append("MaskPicker: CallScreen BUILD is missing the AorusMaskPicker dep")
+    group_view = tg / "submodules" / "TelegramUI" / "Components" / "Calls" / "CallScreen" / "Sources" / "Components" / "ButtonGroupView.swift"
+    if group_view.is_file():
+        group_text = group_view.read_text(encoding="utf-8")
+        for marker in ("case mask(isActive: Bool)", "AorusMaskPickerView.buttonIcon()", "aorusButtonRowTop"):
+            if marker not in group_text:
+                err.append(f"MaskPicker: ButtonGroupView is missing {marker}")
+        # Five buttons overflow at the stock metrics; if these ever go back to `let`
+        # the row is clipped rather than resized.
+        if "var buttonSize: CGFloat = 56.0" not in group_text:
+            err.append("MaskPicker: the call button row is no longer resizable for five buttons")
+    call_screen = tg / "submodules" / "TelegramUI" / "Components" / "Calls" / "CallScreen" / "Sources" / "PrivateCallScreen.swift"
+    if call_screen.is_file():
+        call_text = call_screen.read_text(encoding="utf-8")
+        for marker in ("aorusToggleMaskPicker", "AorusMaskCatalogue.isEnabled", "AorusMaskPickerView.panelHeight"):
+            if marker not in call_text:
+                err.append(f"MaskPicker: PrivateCallScreen is missing {marker}")
+
     # The same quote must also be ONE box in the composer. The input keeps a structural
     # ChatInputContent and derives its attributed string from it, and upstream gives every
     # quoted paragraph its own block — which leaves the newline between them unattributed and

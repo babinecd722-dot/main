@@ -495,6 +495,13 @@ jobs:
           mkdir -p $TG/submodules/AorusBadge
           cp -r $PATCHES/submodules/AorusBadge/. $TG/submodules/AorusBadge/
 
+          # 1c. Copy AorusMaskPicker module (mask strip shown inside calls and round videos).
+          # Leaf module, UIKit only: the call screen sits far below AorusGramUI and must not
+          # depend on the settings UI just to draw a row of thumbnails.
+          rm -rf $TG/submodules/AorusMaskPicker
+          mkdir -p $TG/submodules/AorusMaskPicker
+          cp -r $PATCHES/submodules/AorusMaskPicker/. $TG/submodules/AorusMaskPicker/
+
           # 2. Add AorusGramUI dep to the REAL PeerInfoScreen BUILD in place.
           #    (Do NOT overwrite with a stale full copy — upstream drifts, e.g. it
           #    removed WebSearchUI, which broke analysis when our copy still listed it.)
