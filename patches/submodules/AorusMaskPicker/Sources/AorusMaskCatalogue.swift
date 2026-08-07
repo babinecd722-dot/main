@@ -55,13 +55,12 @@ public enum AorusMaskCatalogue {
             return UserDefaults.standard.string(forKey: selectionKey) ?? defaultPreset
         }
         set {
+            // Only the selection is written. Choosing "no mask" deliberately leaves the Settings
+            // switch alone: it means "the mask strip is available", not "a mask is on right now".
+            // Clearing it here would take the button away with the mask and strand the user —
+            // the whole point of the entry is that turning the mask off and back on is one tap,
+            // in the call, without a trip to Settings.
             UserDefaults.standard.set(newValue, forKey: selectionKey)
-            // Choosing "no mask" is the user switching the feature off, so the Settings toggle
-            // has to follow — otherwise it would still read "on" while nothing is rendered.
-            // Both are plain UserDefaults keys and the settings screen reads them back live.
-            if newValue == offKey {
-                UserDefaults.standard.set(false, forKey: enabledKey)
-            }
         }
     }
 

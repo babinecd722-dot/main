@@ -218,8 +218,11 @@ private final class AorusMaskItemView: UIView {
         self.addSubview(self.circleView)
 
         self.imageView.contentMode = .scaleAspectFit
-        if let image = item.image {
-            self.imageView.image = image
+        // Decide by key, not by the image being nil: a custom mask whose file exists but fails
+        // to decode also arrives with no image, and drawing the "no mask" glyph under its name
+        // would be a lie. Such an entry stays an empty circle instead.
+        if item.key != AorusMaskCatalogue.offKey {
+            self.imageView.image = item.image
         } else if #available(iOS 13.0, *) {
             // The "no mask" entry: a system slashed circle, so it matches the weight of the
             // artwork beside it without shipping a bitmap of our own.

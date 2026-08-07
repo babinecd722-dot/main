@@ -1548,6 +1548,22 @@ def main() -> None:
             if marker not in call_text:
                 err.append(f"MaskPicker: PrivateCallScreen is missing {marker}")
 
+    # "none" is spelled out in three modules that cannot import one another: the processor
+    # that skips compositing, the picker that offers the entry, and the settings screen that
+    # restores a real mask when the feature is switched back on. If one is reworded the mask
+    # silently never comes back, so pin them together.
+    off_sources = [
+        (Path(__file__).parent.parent / "AorusGram" / "Sources" / "Features" / "AorusVideoMaskProcessor.swift",
+         'static let offPreset = "none"'),
+        (Path(__file__).parent.parent / "patches" / "submodules" / "AorusMaskPicker" / "Sources" / "AorusMaskCatalogue.swift",
+         'static let offKey = "none"'),
+        (Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusMasksController.swift",
+         'videoMaskPreset == "none"'),
+    ]
+    for source, marker in off_sources:
+        if source.is_file() and marker not in source.read_text(encoding="utf-8"):
+            err.append(f"MaskPicker: {source.name} no longer agrees on the off-mask value ({marker})")
+
     # Round videos get the same strip, hosted by two components injected into the camera
     # screen. The button is easy to lose silently — it only appears when masks are on — so
     # each piece is pinned separately, as on the call side.
