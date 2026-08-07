@@ -380,6 +380,11 @@ public func aorusMasksController(context: AccountContext) -> ViewController {
     var controller: ItemListController?
     let arguments = MasksArguments(
         setEnabled: { enabled in
+            // Switching back on while "no mask" is selected would leave the feature enabled and
+            // still rendering nothing, so restore a real mask at the same time.
+            if enabled && manager.videoMaskPreset == "none" {
+                manager.videoMaskPreset = "skull"
+            }
             manager.videoMasksEnabled = enabled
             updateState { state in
                 var state = state

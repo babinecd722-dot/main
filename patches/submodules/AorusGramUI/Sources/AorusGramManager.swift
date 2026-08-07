@@ -98,8 +98,20 @@ public final class AorusGramManager {
     public var voiceTwinPreset: String = "anonymous"  { didSet { save() } }
 
     // Video masks — rendered locally into outgoing call and round-video frames.
-    public var videoMasksEnabled: Bool = false       { didSet { save() } }
-    public var videoMaskPreset: String = "skull"     { didSet { save() } }
+    // These two live ONLY in UserDefaults, unlike every other setting here.
+    //
+    // The mask strip inside a call writes them from a leaf module that cannot reach this
+    // class. A second copy in the manager's dictionary would go stale the moment the user
+    // picked a mask mid-call, and the next unrelated setting change would call save() and
+    // write that stale copy straight back over their choice.
+    public var videoMasksEnabled: Bool {
+        get { !licenseLocked && UserDefaults.standard.bool(forKey: "aorusgram_video_masks_enabled") }
+        set { UserDefaults.standard.set(newValue, forKey: "aorusgram_video_masks_enabled") }
+    }
+    public var videoMaskPreset: String {
+        get { UserDefaults.standard.string(forKey: "aorusgram_video_mask_preset") ?? "skull" }
+        set { UserDefaults.standard.set(newValue, forKey: "aorusgram_video_mask_preset") }
+    }
 
     private let key = "aorusgram_settings_v1"
     private var licenseLocked: Bool {
@@ -145,8 +157,6 @@ public final class AorusGramManager {
         ud.set(effective(tripleTapDelete),     forKey: "aorusgram_feature_triple_delete")
         ud.set(effective(voiceTwinEnabled),    forKey: "aorusgram_voice_twin_enabled")
         ud.set(voiceTwinPreset,                forKey: "aorusgram_voice_twin_preset")
-        ud.set(effective(videoMasksEnabled),   forKey: "aorusgram_video_masks_enabled")
-        ud.set(videoMaskPreset,                forKey: "aorusgram_video_mask_preset")
     }
 
     private func load() {
@@ -204,8 +214,8 @@ public final class AorusGramManager {
         ramCleanInterval        = d["ramCleanInterval"]        as? Int  ?? 60
         voiceTwinEnabled    = d["voiceTwinEnabled"]    as? Bool   ?? false
         voiceTwinPreset     = d["voiceTwinPreset"]     as? String ?? "anonymous"
-        videoMasksEnabled   = d["videoMasksEnabled"]   as? Bool   ?? false
-        videoMaskPreset     = d["videoMaskPreset"]     as? String ?? "skull"
+        // Preset names that shipped in older builds, migrated in place. The value now lives
+        // in UserDefaults, so this rewrites it there rather than in the dictionary.
         switch videoMaskPreset {
         case "demon": videoMaskPreset = "oni"
         case "incognito": videoMaskPreset = "cyber"
@@ -265,8 +275,6 @@ public final class AorusGramManager {
             "ramCleanInterval":        ramCleanInterval,
             "voiceTwinEnabled":    voiceTwinEnabled,
             "voiceTwinPreset":     voiceTwinPreset,
-            "videoMasksEnabled":   videoMasksEnabled,
-            "videoMaskPreset":     videoMaskPreset,
         ], forKey: key)
 
         mirrorFlatKeys()
