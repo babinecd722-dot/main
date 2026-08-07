@@ -33,6 +33,10 @@ public final class AorusMaskPickerView: UIView {
     private var itemViews: [AorusMaskItemView] = []
     private var items: [AorusMaskItem] = []
     private var isVisible = false
+    /// Set when the strip is shown and consumed by the first layout pass with real bounds.
+    /// The host frames this view AFTER asking it to appear, so scrolling to the selection at
+    /// that moment measured against stale bounds and left the first circle half cut off.
+    private var pendingReveal = false
 
     public init(accentColor: UIColor) {
         self.accentColor = accentColor
@@ -124,6 +128,11 @@ public final class AorusMaskPickerView: UIView {
         }
         let contentWidth = max(self.bounds.width, x - Self.itemSpacing + Self.horizontalInset)
         self.scrollView.contentSize = CGSize(width: contentWidth, height: self.bounds.height)
+
+        if self.pendingReveal && self.bounds.width > 1.0 {
+            self.pendingReveal = false
+            self.revealSelection(animated: false)
+        }
     }
 
     /// Scrolls the chosen mask into view. Called by the host right after it becomes visible,
@@ -145,8 +154,8 @@ public final class AorusMaskPickerView: UIView {
         self.isVisible = visible
         if visible {
             self.reloadIfNeeded()
-            self.layoutIfNeeded()
-            self.revealSelection(animated: false)
+            self.pendingReveal = true
+            self.setNeedsLayout()
         }
         self.isUserInteractionEnabled = visible
 
@@ -209,7 +218,15 @@ private final class AorusMaskItemView: UIView {
         self.addSubview(self.circleView)
 
         self.imageView.contentMode = .scaleAspectFit
-        self.imageView.image = item.image
+        if let image = item.image {
+            self.imageView.image = image
+        } else if #available(iOS 13.0, *) {
+            // The "no mask" entry: a system slashed circle, so it matches the weight of the
+            // artwork beside it without shipping a bitmap of our own.
+            let configuration = UIImage.SymbolConfiguration(pointSize: 22.0, weight: .regular)
+            self.imageView.image = UIImage(systemName: "nosign", withConfiguration: configuration)?
+                .withTintColor(UIColor(white: 1.0, alpha: 0.85), renderingMode: .alwaysOriginal)
+        }
         self.circleView.addSubview(self.imageView)
 
         self.titleLabel.text = item.title

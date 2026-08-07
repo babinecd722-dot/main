@@ -22,6 +22,24 @@ public final class AorusVideoMaskProcessor: NSObject {
     public static let customPreset = "custom"
     private static let callPhaseKey = "aorusgram_video_mask_call_phase"
 
+    /// The picker's first entry. Selecting it has to stop the mask being composited without
+    /// making the user go to Settings to switch the whole feature off — so it is a preset
+    /// value rather than a second flag, and the gate below treats it as "not active".
+    public static let offPreset = "none"
+
+    /// The one place that decides whether a frame gets a mask at all. Was three copies of the
+    /// same expression; they now cannot drift, and the off entry is honoured everywhere at once.
+    static var isMaskingActive: Bool {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "aorusgram_license_locked") {
+            return false
+        }
+        guard defaults.bool(forKey: Self.enabledKey) else {
+            return false
+        }
+        return (defaults.string(forKey: Self.presetKey) ?? "skull") != Self.offPreset
+    }
+
     public static var supportedPresets: [String] {
         return ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat", Self.customPreset]
     }
@@ -153,8 +171,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     /// gate, preserve the fail-open behavior from Telegram's capture path so a
     /// transient Vision miss cannot reduce the encoded video's frame rate.
     public var shouldDiscardUnmaskedVideoFrame: Bool {
-        let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
-            && UserDefaults.standard.bool(forKey: Self.enabledKey)
+        let enabled = Self.isMaskingActive
         guard enabled else { return false }
 
         self.stateLock.lock()
@@ -207,8 +224,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         orientation rawOrientation: Int32,
         mirrored: Bool
     ) -> CVPixelBuffer? {
-        let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
-            && UserDefaults.standard.bool(forKey: Self.enabledKey)
+        let enabled = Self.isMaskingActive
         guard enabled else {
             self.callRenderLock.lock()
             self.callRenderGeneration &+= 1
@@ -296,8 +312,7 @@ public final class AorusVideoMaskProcessor: NSObject {
         publishesPreview: Bool,
         realtimeTracking: Bool
     ) -> CVPixelBuffer? {
-        let enabled = !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
-            && UserDefaults.standard.bool(forKey: Self.enabledKey)
+        let enabled = Self.isMaskingActive
         guard enabled else {
             self.deactivateTrackingIfNeeded()
             return nil

@@ -30,6 +30,8 @@ public enum AorusMaskCatalogue {
     public static let selectionKey = "aorusgram_video_mask_preset"
     static let enabledKey = "aorusgram_video_masks_enabled"
     static let defaultPreset = "skull"
+    /// Mirrors AorusVideoMaskProcessor.offPreset — the value that means "composite nothing".
+    public static let offKey = "none"
 
     /// Built-in presets, in the order AorusVideoMaskProcessor declares them.
     static let presetKeys = ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat"]
@@ -164,7 +166,12 @@ public enum AorusMaskCatalogue {
     /// Every mask the user can pick: the built-in presets first, then their own.
     /// A preset whose artwork is missing is dropped rather than shown as an empty circle.
     public static func items() -> [AorusMaskItem] {
-        var result: [AorusMaskItem] = []
+        // "No mask" leads the strip. It is a preset value rather than a second switch so that
+        // turning the mask off is one tap in the same place it was turned on, instead of a trip
+        // to Settings — and the button stays, so putting a mask back is one tap too.
+        var result: [AorusMaskItem] = [
+            AorusMaskItem(key: offKey, title: AorusMaskStrings.localized("_none"), image: nil)
+        ]
         for key in presetKeys {
             guard let image = thumbnail(for: key) else { continue }
             result.append(AorusMaskItem(key: key, title: AorusMaskStrings.localized(key), image: image))

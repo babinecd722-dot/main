@@ -14,6 +14,7 @@ OUT = pathlib.Path('patches/submodules/AorusMaskPicker/Sources/AorusMaskStrings.
 # picker key -> English string used as the table key
 WANTED = {
     '_button':  'Mask',
+    '_none':    'No Mask',
     'skull':    'Crystal Skull',
     'cyber':    'Cyber Visor',
     'oni':      'Oni Mask',

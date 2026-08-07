@@ -36,6 +36,7 @@ enum AorusMaskStrings {
 
     static let english: [String: String] = [
         "_button": "Mask",
+        "_none": "No Mask",
         "skull": "Crystal Skull",
         "cyber": "Cyber Visor",
         "oni": "Oni Mask",
@@ -48,6 +49,7 @@ enum AorusMaskStrings {
 
     private static let ru: [String: String] = [
         "_button": "Маска",
+        "_none": "Без маски",
         "skull": "Хрустальный череп",
         "cyber": "Кибер-визор",
         "oni": "Маска Они",
@@ -97,6 +99,7 @@ enum AorusMaskStrings {
 
     private static let ar: [String: String] = [
         "_button": "قناع",
+        "_none": "بدون قناع",
         "skull": "جمجمة كريستالية",
         "cyber": "حاجب سايبر",
         "oni": "قناع أوني",
@@ -109,6 +112,7 @@ enum AorusMaskStrings {
 
     private static let be: [String: String] = [
         "_button": "Маска",
+        "_none": "Без маскі",
         "skull": "Крыштальны чэрап",
         "cyber": "Кібер-візар",
         "oni": "Маска Оні",
@@ -121,6 +125,7 @@ enum AorusMaskStrings {
 
     private static let ca: [String: String] = [
         "_button": "Màscara",
+        "_none": "Sense màscara",
         "skull": "Calavera de cristall",
         "cyber": "Visor cibernètic",
         "oni": "Màscara Oni",
@@ -133,6 +138,7 @@ enum AorusMaskStrings {
 
     private static let cs: [String: String] = [
         "_button": "Maska",
+        "_none": "Bez masky",
         "skull": "Křišťálová lebka",
         "cyber": "Kybernetický vizír",
         "oni": "Maska oni",
@@ -145,6 +151,7 @@ enum AorusMaskStrings {
 
     private static let de: [String: String] = [
         "_button": "Maske",
+        "_none": "Ohne Maske",
         "skull": "Kristallschädel",
         "cyber": "Cyber-Visier",
         "oni": "Oni-Maske",
@@ -157,6 +164,7 @@ enum AorusMaskStrings {
 
     private static let es: [String: String] = [
         "_button": "Máscara",
+        "_none": "Sin máscara",
         "skull": "Calavera de cristal",
         "cyber": "Visor cibernético",
         "oni": "Máscara Oni",
@@ -169,6 +177,7 @@ enum AorusMaskStrings {
 
     private static let fa: [String: String] = [
         "_button": "ماسک",
+        "_none": "بدون ماسک",
         "skull": "جمجمهٔ بلورین",
         "cyber": "نقاب سایبری",
         "oni": "ماسک اونی",
@@ -181,6 +190,7 @@ enum AorusMaskStrings {
 
     private static let fi: [String: String] = [
         "_button": "Naamio",
+        "_none": "Ei naamiota",
         "skull": "Kristallikallo",
         "cyber": "Kybervisiiri",
         "oni": "Oni-naamio",
@@ -193,6 +203,7 @@ enum AorusMaskStrings {
 
     private static let fr: [String: String] = [
         "_button": "Masque",
+        "_none": "Sans masque",
         "skull": "Crâne de cristal",
         "cyber": "Visière cyber",
         "oni": "Masque Oni",
@@ -205,6 +216,7 @@ enum AorusMaskStrings {
 
     private static let he: [String: String] = [
         "_button": "מסכה",
+        "_none": "ללא מסכה",
         "skull": "גולגולת קריסטל",
         "cyber": "מגן סייבר",
         "oni": "מסכת אוני",
@@ -217,6 +229,7 @@ enum AorusMaskStrings {
 
     private static let hr: [String: String] = [
         "_button": "Maska",
+        "_none": "Bez maske",
         "skull": "Kristalna lubanja",
         "cyber": "Kibernetički vizir",
         "oni": "Oni maska",
@@ -229,6 +242,7 @@ enum AorusMaskStrings {
 
     private static let hu: [String: String] = [
         "_button": "Maszk",
+        "_none": "Maszk nélkül",
         "skull": "Kristálykoponya",
         "cyber": "Kiberszemellenző",
         "oni": "Oni maszk",
@@ -241,6 +255,7 @@ enum AorusMaskStrings {
 
     private static let id: [String: String] = [
         "_button": "Masker",
+        "_none": "Tanpa masker",
         "skull": "Tengkorak kristal",
         "cyber": "Visor siber",
         "oni": "Topeng Oni",
@@ -253,6 +268,7 @@ enum AorusMaskStrings {
 
     private static let it: [String: String] = [
         "_button": "Maschera",
+        "_none": "Senza maschera",
         "skull": "Teschio di cristallo",
         "cyber": "Visiera cyber",
         "oni": "Maschera Oni",
@@ -265,6 +281,7 @@ enum AorusMaskStrings {
 
     private static let ja: [String: String] = [
         "_button": "マスク",
+        "_none": "マスクなし",
         "skull": "クリスタルスカル",
         "cyber": "サイバーバイザー",
         "oni": "鬼面",
@@ -277,6 +294,7 @@ enum AorusMaskStrings {
 
     private static let kk: [String: String] = [
         "_button": "Маска",
+        "_none": "Маскасыз",
         "skull": "Кристалл бас сүйек",
         "cyber": "Кибер визор",
         "oni": "Они маскасы",
@@ -289,6 +307,7 @@ enum AorusMaskStrings {
 
     private static let ko: [String: String] = [
         "_button": "마스크",
+        "_none": "마스크 없음",
         "skull": "크리스털 해골",
         "cyber": "사이버 바이저",
         "oni": "오니 가면",
@@ -301,6 +320,7 @@ enum AorusMaskStrings {
 
     private static let ms: [String: String] = [
         "_button": "Topeng",
+        "_none": "Tiada topeng",
         "skull": "Tengkorak kristal",
         "cyber": "Visor siber",
         "oni": "Topeng Oni",
@@ -313,6 +333,7 @@ enum AorusMaskStrings {
 
     private static let nb: [String: String] = [
         "_button": "Maske",
+        "_none": "Uten maske",
         "skull": "Krystallhodeskalle",
         "cyber": "Cybervisir",
         "oni": "Oni-maske",
@@ -325,6 +346,7 @@ enum AorusMaskStrings {
 
     private static let nl: [String: String] = [
         "_button": "Masker",
+        "_none": "Geen masker",
         "skull": "Kristallen schedel",
         "cyber": "Cybervizier",
         "oni": "Oni-masker",
@@ -337,6 +359,7 @@ enum AorusMaskStrings {
 
     private static let pl: [String: String] = [
         "_button": "Maska",
+        "_none": "Bez maski",
         "skull": "Kryształowa czaszka",
         "cyber": "Cyberwizjer",
         "oni": "Maska Oni",
@@ -349,6 +372,7 @@ enum AorusMaskStrings {
 
     private static let pt: [String: String] = [
         "_button": "Máscara",
+        "_none": "Sem máscara",
         "skull": "Caveira de cristal",
         "cyber": "Visor cibernético",
         "oni": "Máscara Oni",
@@ -361,6 +385,7 @@ enum AorusMaskStrings {
 
     private static let ro: [String: String] = [
         "_button": "Mască",
+        "_none": "Fără mască",
         "skull": "Craniu de cristal",
         "cyber": "Vizor cibernetic",
         "oni": "Mască oni",
@@ -373,6 +398,7 @@ enum AorusMaskStrings {
 
     private static let sk: [String: String] = [
         "_button": "Maska",
+        "_none": "Bez masky",
         "skull": "Krištáľová lebka",
         "cyber": "Kybernetický vizír",
         "oni": "Maska oni",
@@ -385,6 +411,7 @@ enum AorusMaskStrings {
 
     private static let sr: [String: String] = [
         "_button": "Маска",
+        "_none": "Без маске",
         "skull": "Кристална лобања",
         "cyber": "Сајбер визир",
         "oni": "Они маска",
@@ -397,6 +424,7 @@ enum AorusMaskStrings {
 
     private static let sv: [String: String] = [
         "_button": "Mask",
+        "_none": "Ingen mask",
         "skull": "Kristallskalle",
         "cyber": "Cybervisir",
         "oni": "Oni-mask",
@@ -409,6 +437,7 @@ enum AorusMaskStrings {
 
     private static let tr: [String: String] = [
         "_button": "Maske",
+        "_none": "Maskesiz",
         "skull": "Kristal kafatası",
         "cyber": "Siber vizör",
         "oni": "Oni maskesi",
@@ -421,6 +450,7 @@ enum AorusMaskStrings {
 
     private static let uk: [String: String] = [
         "_button": "Маска",
+        "_none": "Без маски",
         "skull": "Кришталевий череп",
         "cyber": "Кібер-візор",
         "oni": "Маска Оні",
@@ -433,6 +463,7 @@ enum AorusMaskStrings {
 
     private static let uz: [String: String] = [
         "_button": "Niqob",
+        "_none": "Niqobsiz",
         "skull": "Billur bosh suyagi",
         "cyber": "Kiber vizor",
         "oni": "Oni niqobi",
@@ -445,6 +476,7 @@ enum AorusMaskStrings {
 
     private static let vi: [String: String] = [
         "_button": "Mặt nạ",
+        "_none": "Không dùng mặt nạ",
         "skull": "Sọ pha lê",
         "cyber": "Kính che mắt điện tử",
         "oni": "Mặt nạ Oni",
@@ -457,6 +489,7 @@ enum AorusMaskStrings {
 
     private static let zhHans: [String: String] = [
         "_button": "面具",
+        "_none": "不使用面具",
         "skull": "水晶头骨",
         "cyber": "赛博面罩",
         "oni": "般若面具",
@@ -469,6 +502,7 @@ enum AorusMaskStrings {
 
     private static let zhHant: [String: String] = [
         "_button": "面具",
+        "_none": "不使用面具",
         "skull": "水晶頭骨",
         "cyber": "賽博面罩",
         "oni": "般若面具",
