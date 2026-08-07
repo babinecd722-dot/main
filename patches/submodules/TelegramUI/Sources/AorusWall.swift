@@ -132,6 +132,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         // prefetch keeps the buffer full while the tab is open.
         private var prefetchTimer: SwiftSignalKit.Timer?
         private var isPrefetching = false
+        /// How many top-ups in a row have come back with nothing the reader can be shown.
+        /// Drives the retry spacing only; it never stops the retries.
+        private var consecutiveTopUpRetries = 0
 
         // The Wall serves a hand-assembled snapshot rather than a live history view, so
         // anything that mutates a message afterwards — a reaction being applied, an edit, a
@@ -165,6 +168,24 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
         /// dry and fetches another page; below the second, it also widens its sources.
         private static let prefetchThreshold = 40
         private static let expansionThreshold = 20
+
+        /// Spacing between top-up retries, and how far it is allowed to open up.
+        ///
+        /// Both retry paths in topUp used to call it again straight from the signal callback.
+        /// The guard at the top of topUp cannot stop that: isPrefetching and loadMoreDisposable
+        /// are both cleared a few lines earlier, so every retry passed it. Each attempt is a
+        /// full Postbox transaction that walks the unread chat lists — root and archive — and
+        /// then gathers and scores candidates per channel, so a reader scrolling steadily, which
+        /// is exactly what invalidates a page, kept a core busy from one transaction to the next
+        /// with nothing in between.
+        ///
+        /// The retries themselves are unchanged and unlimited: the feed still refills for as
+        /// long as it takes, so an endless feed stays endless. Only the spacing is new, and it
+        /// widens while retries keep coming up empty so a large or awkward feed cannot pin the
+        /// CPU either. A page that succeeds resets it, which is the normal path — a reader who
+        /// is not outrunning the loader never reaches any of this.
+        private static let topUpRetryDelay = 0.15
+        private static let topUpMaxRetryDelay = 1.0
 
         /// Page shape. The per-channel quotas live in collectPage; these bound the work.
         private static let pageLimit = 50
@@ -1114,6 +1135,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             self.loadMoreDisposable?.dispose()
             self.loadMoreDisposable = nil
             self.isPrefetching = false
+            self.consecutiveTopUpRetries = 0
             self.lastLoadMoreMarkedCount = 0
             self.placedIds.removeAll()
             self.subscribedScanCursor = 0
@@ -1226,6 +1248,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     // MUST NOT be .FillHole. ChatHistoryListNode discards such an update
                     // outright — `if case .Generic(.FillHole) = type { applyHole(); return }` —
                     // so the page would be collected and never rendered.
+                    self.consecutiveTopUpRetries = 0
                     self.applyMessages(appendableMessages, updateType: .Generic, preserveCurrent: true)
                     if self.recommendationsEnabled
                         && Set(appendableMessages.map(\.id.peerId)).count < Impl.minimumHealthySourceCount {
@@ -1237,7 +1260,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                     // The whole page fell behind the reader while it was loading. Those ids are
                     // intentionally retired for this session above; ask again from the current
                     // frontier instead of inserting them above or inside the viewport.
-                    self.topUp(force: true)
+                    self.scheduleTopUpRetry()
                     return
                 }
                 // Nothing in this window. Reach further back before giving up: a wider window
@@ -1250,8 +1273,26 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 let widened = span &* 4
                 self.windowSpan = widened >= Impl.maxWindowSpan ? 0 : widened
-                self.topUp(force: true)
+                self.scheduleTopUpRetry()
             })
+        }
+
+        /// Ask for another page from the queue instead of from inside the callback that just
+        /// finished. Same request, same conditions, same lack of any limit on how many times
+        /// it may happen — only spaced out, and spaced out further the longer a run of empty
+        /// results goes on. Success resets the spacing, so the ordinary case is untouched.
+        private func scheduleTopUpRetry() {
+            self.consecutiveTopUpRetries += 1
+            let delay = min(
+                Impl.topUpMaxRetryDelay,
+                Impl.topUpRetryDelay * Double(self.consecutiveTopUpRetries)
+            )
+            self.queue.after(delay) { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.topUp(force: true)
+            }
         }
 
         private func startPrefetchTimer() {
