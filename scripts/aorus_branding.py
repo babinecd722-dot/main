@@ -15103,14 +15103,14 @@ def patch_mask_picker_call(tg: Path) -> None:
             "                guard let self else {\n"
             "                    return\n"
             "                }\n"
-            "                self.update(transition: .animated(duration: 0.2, curve: .easeInOut))\n"
+            "                self.update(transition: ComponentTransition.easeInOut(duration: 0.2))\n"
             "            }\n"
             "            self.aorusMaskPickerView = pickerView\n"
             "            self.insertSubview(pickerView, belowSubview: self.buttonGroupView)\n"
             "        }\n"
             "        self.aorusMaskPickerVisible = visible\n"
             "        self.aorusMaskPickerView?.setVisible(visible, animated: animated)\n"
-            "        self.update(transition: animated ? .animated(duration: 0.3, curve: .easeInOut) : .immediate)\n"
+            "        self.update(transition: animated ? ComponentTransition.easeInOut(duration: 0.3) : ComponentTransition.immediate)\n"
             "    }\n"
             "    \n" + methods_anchor, 1)
 
