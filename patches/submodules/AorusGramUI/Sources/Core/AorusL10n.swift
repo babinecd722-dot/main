@@ -429,6 +429,7 @@ public struct AorusL10n {
     // Badge picker (notch-area logo): AorusGram / ATunnel / off.
     public var appBadge: String { t("Бейдж", "Badge") }
     public var appBadgeAorus: String { t("AorusGram", "AorusGram") }
+    public var appBadgeTitanium: String { t("Titanium", "Titanium") }
     public var appBadgeATunnel: String { t("ATunnel", "ATunnel") }
     public var appBadgeOff: String { t("Отключен", "Disabled") }
     public var hideCallsTab: String { t("Вкладка «Звонки»", "Calls Tab") }

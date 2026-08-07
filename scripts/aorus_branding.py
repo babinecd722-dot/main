@@ -18251,38 +18251,48 @@ def patch_app_badge(tg: Path) -> None:
     print("AppBadge: Contents.json verified")
 
 
-def patch_app_badge_switcher(tg: Path) -> None:
-    """Make the notch-area badge user-switchable at runtime: AorusGram / ATunnel / off.
+def _install_badge_imageset(tg: Path, asset: str) -> None:
+    """Install patches/assets/<asset>@3x.png as Components/<asset>.imageset.
 
-    1. Install a second imageset 'Components/AppBadgeATunnel' next to the AorusGram one.
+    Only the 3x slot is populated: the badge sits in the notch area, which exists
+    only on devices that render at 3x, so 1x/2x would never be asked for.
+    """
+    src_png = Path(__file__).parent.parent / "patches" / "assets" / f"{asset}@3x.png"
+    if not src_png.is_file():
+        print(f"AppBadgeSwitcher: source PNG not found at {src_png} — skipped {asset}")
+        return
+    components = tg / "submodules/TelegramUI/Images.xcassets/Components"
+    if not components.is_dir():
+        print(f"AppBadgeSwitcher: Components dir not found at {components} — skipped {asset}")
+        return
+    imageset = components / f"{asset}.imageset"
+    imageset.mkdir(parents=True, exist_ok=True)
+    import shutil as _shutil
+    _shutil.copy2(str(src_png), str(imageset / f"{asset}@3x.png"))
+    import json as _json
+    contents = {
+        "images": [
+            {"idiom": "universal", "scale": "1x"},
+            {"idiom": "universal", "scale": "2x"},
+            {"filename": f"{asset}@3x.png", "idiom": "universal", "scale": "3x"},
+        ],
+        "info": {"author": "xcode", "version": 1},
+    }
+    (imageset / "Contents.json").write_text(_json.dumps(contents, indent=2), encoding="utf-8")
+    print(f"AppBadgeSwitcher: installed Components/{asset}.imageset")
+
+
+def patch_app_badge_switcher(tg: Path) -> None:
+    """Make the notch-area badge user-switchable at runtime: AorusGram / Titanium / ATunnel / off.
+
+    1. Install an imageset next to the AorusGram one for every alternative badge.
     2. Patch WindowContent.swift so the badge image is chosen from UserDefaults
        ('aorusgram_app_badge') and reloads live when AorusGramUI posts the
        'aorusgram_app_badge_changed' notification. 'off' → nil image → hidden.
     """
-    # --- 1. ATunnel imageset --------------------------------------------------
-    src_png = Path(__file__).parent.parent / "patches" / "assets" / "AppBadgeATunnel@3x.png"
-    if not src_png.is_file():
-        print(f"AppBadgeSwitcher: source PNG not found at {src_png} — skipped imageset")
-    else:
-        components = tg / "submodules/TelegramUI/Images.xcassets/Components"
-        if not components.is_dir():
-            print(f"AppBadgeSwitcher: Components dir not found at {components} — skipped imageset")
-        else:
-            imageset = components / "AppBadgeATunnel.imageset"
-            imageset.mkdir(parents=True, exist_ok=True)
-            import shutil as _shutil
-            _shutil.copy2(str(src_png), str(imageset / "AppBadgeATunnel@3x.png"))
-            import json as _json
-            contents = {
-                "images": [
-                    {"idiom": "universal", "scale": "1x"},
-                    {"idiom": "universal", "scale": "2x"},
-                    {"filename": "AppBadgeATunnel@3x.png", "idiom": "universal", "scale": "3x"},
-                ],
-                "info": {"author": "xcode", "version": 1},
-            }
-            (imageset / "Contents.json").write_text(_json.dumps(contents, indent=2), encoding="utf-8")
-            print(f"AppBadgeSwitcher: installed Components/AppBadgeATunnel.imageset")
+    # --- 1. Alternative imagesets ---------------------------------------------
+    for asset in ("AppBadgeATunnel", "AppBadgeTitanium"):
+        _install_badge_imageset(tg, asset)
 
     # --- 2. WindowContent.swift -----------------------------------------------
     path = tg / "submodules/Display/Source/WindowContent.swift"
@@ -18314,6 +18324,9 @@ def patch_app_badge_switcher(tg: Path) -> None:
         "        }\n"
         '        if choice == "atunnel" {\n'
         '            return UIImage(bundleImageName: "Components/AppBadgeATunnel")\n'
+        "        }\n"
+        '        if choice == "titanium" {\n'
+        '            return UIImage(bundleImageName: "Components/AppBadgeTitanium")\n'
         "        }\n"
         '        return UIImage(bundleImageName: "Components/AppBadge")\n'
         "    }\n"

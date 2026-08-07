@@ -967,9 +967,10 @@ private enum AorusEntry: ItemListNodeEntry {
 // Display label for the currently-selected notch badge.
 private func appBadgeLabel(_ id: String, _ l10n: AorusL10n) -> String {
     switch id {
-    case "atunnel": return l10n.appBadgeATunnel
-    case "off":     return l10n.appBadgeOff
-    default:        return l10n.appBadgeAorus
+    case "titanium": return l10n.appBadgeTitanium
+    case "atunnel":  return l10n.appBadgeATunnel
+    case "off":      return l10n.appBadgeOff
+    default:         return l10n.appBadgeAorus
     }
 }
 
@@ -1464,6 +1465,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             let sheet = ActionSheetController(presentationData: presentationData)
             let options: [(String, String)] = [
                 ("aorusgram", l10n.appBadgeAorus),
+                ("titanium",  l10n.appBadgeTitanium),
                 ("atunnel",   l10n.appBadgeATunnel),
                 ("off",       l10n.appBadgeOff),
             ]
