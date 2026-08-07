@@ -52,53 +52,61 @@ public enum AorusWallSettingsStore {
         NotificationCenter.default.post(name: didChange, object: NSNumber(value: accountId))
     }
 
-    // MARK: - Channels the Wall discovered on its own
+    // MARK: - Posts the Wall put on screen
     //
-    // Only channels reached through recommendations are recorded — never the ones already in
-    // the chat list. Their media is the part of the cache the reader never asked for: an
-    // endless feed pulls photos and video from channels they are not subscribed to and will
-    // almost certainly not open again, and nothing in Telegram's own time-based cleanup knows
-    // that. The auto-clean sweep uses this list to reclaim exactly that and nothing else.
-    private static let recommendationLimit = 4096
-    private static var recommendationCache: [Int64: Set<Int64>] = [:]
+    // Recorded so the auto-clean sweep can reclaim their media later, when the Wall may not
+    // even be open. Message ids rather than channel ids on purpose: an endless feed shows posts
+    // from channels the reader IS subscribed to as well, and clearing a channel wholesale would
+    // wipe the cache of one they actually read. Clearing the exact posts the Wall displayed
+    // frees what the feed pulled in and leaves the rest of every channel alone.
+    private static let displayedLimit = 20000
+    private static var displayedCache: [Int64: [String]] = [:]
 
-    public static func recommendationPeerIds(accountId: Int64) -> Set<Int64> {
+    public static func displayedMessageIds(accountId: Int64) -> [MessageId] {
         lock.lock()
-        defer { lock.unlock() }
-        if let cached = recommendationCache[accountId] {
-            return cached
-        }
-        let values = UserDefaults.standard.array(forKey: key("wall_media_peers", accountId: accountId)) as? [NSNumber] ?? []
-        let result = Set(values.map(\.int64Value))
-        recommendationCache[accountId] = result
-        return result
+        let stored = displayedCache[accountId]
+            ?? (UserDefaults.standard.array(forKey: key("wall_displayed", accountId: accountId)) as? [String] ?? [])
+        displayedCache[accountId] = stored
+        lock.unlock()
+        return stored.compactMap(parseMessageKey)
     }
 
-    /// Records channels the Wall pulled in from recommendations. Cheap to call repeatedly:
-    /// it writes only when something is actually new, because it runs on every expansion.
-    public static func noteRecommendationPeers(_ peerIds: [Int64], accountId: Int64) {
-        guard !peerIds.isEmpty else {
+    /// Called once per collected page, not per scrolled row.
+    public static func noteDisplayedMessages(_ ids: [MessageId], accountId: Int64) {
+        guard !ids.isEmpty else {
             return
         }
         lock.lock()
-        var values = recommendationCache[accountId]
-            ?? Set((UserDefaults.standard.array(forKey: key("wall_media_peers", accountId: accountId)) as? [NSNumber] ?? []).map(\.int64Value))
-        let before = values.count
-        values.formUnion(peerIds)
-        guard values.count != before else {
-            recommendationCache[accountId] = values
+        var stored = displayedCache[accountId]
+            ?? (UserDefaults.standard.array(forKey: key("wall_displayed", accountId: accountId)) as? [String] ?? [])
+        var known = Set(stored)
+        var didChange = false
+        for id in ids {
+            let encoded = messageKey(id)
+            if known.insert(encoded).inserted {
+                stored.append(encoded)
+                didChange = true
+            }
+        }
+        guard didChange else {
             lock.unlock()
             return
         }
-        // The list only ever grows, so cap it. Dropping the oldest entries loses nothing but
-        // the chance to reclaim a little cache that Telegram's own cleanup will reach anyway.
-        var stored = Array(values)
-        if stored.count > recommendationLimit {
-            stored = Array(stored.suffix(recommendationLimit))
-            values = Set(stored)
+        // Oldest first, so trimming drops the posts furthest behind the reader. Losing them
+        // costs only the chance to reclaim a little cache; Telegram's own cleanup still reaches it.
+        if stored.count > displayedLimit {
+            stored.removeFirst(stored.count - displayedLimit)
         }
-        recommendationCache[accountId] = values
-        UserDefaults.standard.set(stored.map { NSNumber(value: $0) }, forKey: key("wall_media_peers", accountId: accountId))
+        displayedCache[accountId] = stored
+        UserDefaults.standard.set(stored, forKey: key("wall_displayed", accountId: accountId))
+        lock.unlock()
+    }
+
+    /// Called after a sweep: their media is gone, so there is nothing left to reclaim for them.
+    public static func clearDisplayedMessages(accountId: Int64) {
+        lock.lock()
+        displayedCache[accountId] = []
+        UserDefaults.standard.removeObject(forKey: key("wall_displayed", accountId: accountId))
         lock.unlock()
     }
 

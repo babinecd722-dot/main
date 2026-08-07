@@ -329,10 +329,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 self.recommendedPeerIds = mergedPeerIds
                 self.discoveredRecommendationPeerIds.formUnion(peerIds)
-                // Remember them across launches so the auto-clean sweep can reclaim their media
-                // later, when the Wall may not even be open.
-                AorusWallSettingsStore.noteRecommendationPeers(
-                    peerIds.map { $0.toInt64() }, accountId: self.accountId)
                 // Telegram's own recommendations are the closest sources there are.
                 for peerId in peerIds {
                     self.sourceGeneration[peerId] = 1
@@ -497,8 +493,6 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 self.recommendedPeerIds.append(contentsOf: additions)
                 self.discoveredRecommendationPeerIds.formUnion(additions)
-                AorusWallSettingsStore.noteRecommendationPeers(
-                    additions.map { $0.toInt64() }, accountId: self.accountId)
                 // Preloading is only needed to pull a channel's recent history INTO the local
                 // database; once it lands the posts stay there and are collected from disk.
                 // Holding these subscriptions forever would leave hundreds of channels being
@@ -904,6 +898,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             // Everything this page delivered counts as placed, so pagination never offers it
             // again even if it is trimmed later.
             self.placedIds.formUnion(messages.map(\.id))
+            // Remember what the feed put on screen so the auto-clean sweep can reclaim exactly
+            // that media later. One batch per collected page, not per scrolled row.
+            AorusWallSettingsStore.noteDisplayedMessages(messages.map(\.id), accountId: self.accountId)
 
             var messages = messages
             if preserveCurrent {
@@ -1704,55 +1701,52 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     }
 }
 
-/// Reclaim the media the Wall pulled in from channels the reader never subscribed to.
+/// Reclaim the media the Wall pulled in.
 ///
 /// Wired into the existing Settings → Performance → "Auto-Clean Cache" sweep rather than given
 /// a switch of its own: it is the same promise, and one control that means "reclaim space" is
 /// easier to trust than two that overlap.
 ///
-/// Scope is deliberately narrow. Only channels the Wall found through recommendations are
-/// touched, and any that have since appeared in the chat list are skipped — clearing those
-/// would wipe the cache of a channel the reader actually reads, which is not what they asked
-/// for. What remains is media from an endless feed of channels they will almost certainly not
-/// open again, which no time-based cleanup can distinguish.
+/// Clears by MESSAGE, not by channel. An endless feed shows posts from channels the reader is
+/// subscribed to as well as recommended ones, and clearing a channel wholesale would wipe the
+/// cache of one they actually read. Clearing the exact posts the Wall displayed frees what the
+/// feed pulled in — from both kinds of channel — and leaves the rest of every channel alone.
 ///
-/// One caveat, verified rather than assumed: StorageBox.remove(peerIds:) is not reference
-/// counted — internalRemove drops an entry along with every other peer's reference to it. So a
-/// file that also arrived in one of your chats, as a forward from one of these channels, is
-/// removed too and re-downloads when you next scroll to it. Telegram's own per-chat cache
-/// clearing behaves exactly the same way, and the cost is a re-download, not lost data.
+/// One consequence, from reading _internal_clearStorage rather than assuming: it resolves the
+/// resources of the messages it is given and removes them outright. A post the Wall showed from
+/// a channel you follow will therefore re-download if you later scroll to it in that channel.
+/// It is the same post, so that is unavoidable — and the cost is a re-download, not lost data.
 private func aorusInstallWallCacheCleanup(context: AccountContext) {
     let accountId = context.account.peerId.toInt64()
     AorusCacheManager.shared.wallMediaCleanup = { [weak context] in
         guard let context else {
             return
         }
-        let recorded = AorusWallSettingsStore.recommendationPeerIds(accountId: accountId)
+        let recorded = AorusWallSettingsStore.displayedMessageIds(accountId: accountId)
         guard !recorded.isEmpty else {
             return
         }
-        let _ = (context.account.postbox.transaction { transaction -> Set<PeerId> in
-            var result = Set<PeerId>()
-            for rawId in recorded {
-                let peerId = PeerId(rawId)
-                // In the chat list now — the reader subscribed after meeting it in the Wall.
-                // Their cache is theirs.
-                if transaction.getPeerChatListIndex(peerId) != nil {
-                    continue
+        let _ = (context.account.postbox.transaction { transaction -> [Message] in
+            var result: [Message] = []
+            result.reserveCapacity(recorded.count)
+            for id in recorded {
+                if let message = transaction.getMessage(id) {
+                    result.append(message)
                 }
-                result.insert(peerId)
             }
             return result
         }
-        |> deliverOnMainQueue).start(next: { peerIds in
-            guard !peerIds.isEmpty else {
+        |> deliverOnMainQueue).start(next: { messages in
+            // Every recorded post is dealt with either way: one whose message is gone from the
+            // database has no resources left to reclaim, so the list is cleared regardless and
+            // does not accumulate ids that can never be acted on.
+            AorusWallSettingsStore.clearDisplayedMessages(accountId: accountId)
+            guard !messages.isEmpty else {
                 return
             }
-            // Returns progress, so it is not instant on a large cache; nothing waits on it.
+            // Resolves and removes resources on a background queue of its own; nothing waits.
             let _ = context.engine.resources.clearStorage(
-                peerIds: peerIds,
-                includeMessages: [],
-                excludeMessages: []
+                messages: messages.map { EngineMessage($0) }
             ).startStandalone()
         })
     }

@@ -1551,15 +1551,15 @@ def main() -> None:
     # The Wall's media reclaim has three parts in three files, and a break in any one of them
     # is silent: the sweep simply stops freeing anything and storage grows again. Pin each.
     wall_store = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusWallSettingsController.swift"
-    if wall_store.is_file() and "func noteRecommendationPeers" not in wall_store.read_text(encoding="utf-8"):
-        err.append("WallCache: AorusWallSettingsStore no longer records the Wall's recommendation channels")
+    if wall_store.is_file() and "func noteDisplayedMessages" not in wall_store.read_text(encoding="utf-8"):
+        err.append("WallCache: AorusWallSettingsStore no longer records the posts the Wall displayed")
     cache_manager = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusCacheManager.swift"
     if cache_manager.is_file() and "self.wallMediaCleanup?()" not in cache_manager.read_text(encoding="utf-8"):
         err.append("WallCache: the auto-clean sweep no longer reclaims Wall media")
     wall_source = Path(__file__).parent.parent / "patches" / "submodules" / "TelegramUI" / "Sources" / "AorusWall.swift"
     if wall_source.is_file():
         wall_text = wall_source.read_text(encoding="utf-8")
-        for marker in ("aorusInstallWallCacheCleanup", "noteRecommendationPeers", "getPeerChatListIndex"):
+        for marker in ("aorusInstallWallCacheCleanup", "noteDisplayedMessages", "clearStorage(\n"):
             if marker not in wall_text:
                 err.append(f"WallCache: AorusWall.swift is missing {marker}")
 
