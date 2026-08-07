@@ -29,32 +29,14 @@ public struct AorusMaskItem: Equatable {
 public enum AorusMaskCatalogue {
     public static let selectionKey = "aorusgram_video_mask_preset"
     static let enabledKey = "aorusgram_video_masks_enabled"
-    static let localizedNamesKey = "aorusgram_mask_names"
     static let defaultPreset = "skull"
 
     /// Built-in presets, in the order AorusVideoMaskProcessor declares them.
     static let presetKeys = ["skull", "cyber", "oni", "phantom", "chrome", "aurora", "neonCat"]
 
-    /// Fallback titles. AorusGramUI publishes the translated set under `localizedNamesKey`
-    /// when the masks screen is shown — which is the only way the feature can be switched
-    /// on in the first place, so by the time this picker can appear the translations are
-    /// there. These stay as the safety net rather than a second copy of the phrase book.
-    static let englishNames: [String: String] = [
-        "skull": "Crystal Skull",
-        "cyber": "Cyber Visor",
-        "oni": "Oni Mask",
-        "phantom": "Phantom",
-        "chrome": "Liquid Chrome",
-        "aurora": "Aurora",
-        "neonCat": "Neon Cat"
-    ]
-
-    static let buttonTitleKey = "aorusgram_mask_button_title"
-
-    /// Caption under the call button that opens the strip. Published translated by
-    /// AorusGramUI alongside the mask names; English is the fallback.
+    /// Caption under the call button that opens the strip.
     public static var buttonTitle: String {
-        return UserDefaults.standard.string(forKey: buttonTitleKey) ?? "Mask"
+        return AorusMaskStrings.localized("_button")
     }
 
     /// Whether the picker should be offered at all.
@@ -156,12 +138,12 @@ public enum AorusMaskCatalogue {
     // MARK: - Items
 
     /// Custom masks, read straight from the manifest AorusCustomMaskStore writes.
-    private static func customItems(names: [String: String]) -> [AorusMaskItem] {
+    private static func customItems() -> [AorusMaskItem] {
         var result: [AorusMaskItem] = []
         if FileManager.default.fileExists(atPath: legacyCustomURL.path) {
             let key = "custom"
             result.append(AorusMaskItem(key: key,
-                                        title: names[key] ?? "My Mask",
+                                        title: AorusMaskStrings.localized(key),
                                         image: thumbnail(for: key)))
         }
         let manifest = customRoot.appendingPathComponent("masks.json")
@@ -182,15 +164,12 @@ public enum AorusMaskCatalogue {
     /// Every mask the user can pick: the built-in presets first, then their own.
     /// A preset whose artwork is missing is dropped rather than shown as an empty circle.
     public static func items() -> [AorusMaskItem] {
-        let names = (UserDefaults.standard.dictionary(forKey: localizedNamesKey) as? [String: String]) ?? [:]
         var result: [AorusMaskItem] = []
         for key in presetKeys {
             guard let image = thumbnail(for: key) else { continue }
-            result.append(AorusMaskItem(key: key,
-                                        title: names[key] ?? englishNames[key] ?? key,
-                                        image: image))
+            result.append(AorusMaskItem(key: key, title: AorusMaskStrings.localized(key), image: image))
         }
-        result.append(contentsOf: customItems(names: names))
+        result.append(contentsOf: customItems())
         return result
     }
 }

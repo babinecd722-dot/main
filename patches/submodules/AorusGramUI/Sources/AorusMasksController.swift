@@ -336,33 +336,7 @@ private final class AorusMaskPresetItemNode: ItemListRevealOptionsItemNode {
     }
 }
 
-/// Hands the translated mask names to AorusMaskPicker.
-///
-/// The picker is shown inside the call screen and the round-video screen, both of which sit
-/// far below this module and cannot import it — so instead of a second copy of the phrase
-/// book down there, the names are published under a shared UserDefaults key, the same idiom
-/// AppDelegate uses for "aorusgram_lang_code". Doing it from here is enough: masks can only
-/// be switched on from this screen, so by the time a picker can appear these have been written
-/// at least once, and they are refreshed on every visit — including after a language change.
-private func publishMaskNames(_ l10n: AorusL10n, customMasks: [AorusCustomMaskRecord]) {
-    var names: [String: String] = [
-        "skull": l10n.videoMaskSkull,
-        "cyber": l10n.videoMaskCyber,
-        "phantom": l10n.videoMaskPhantom,
-        "neonCat": l10n.videoMaskNeonCat,
-        "chrome": l10n.videoMaskChrome,
-        "oni": l10n.videoMaskOni,
-        "aurora": l10n.videoMaskAurora
-    ]
-    for mask in customMasks {
-        names[mask.presetKey] = mask.name
-    }
-    UserDefaults.standard.set(names, forKey: "aorusgram_mask_names")
-    UserDefaults.standard.set(l10n.maskButton, forKey: "aorusgram_mask_button_title")
-}
-
 private func masksEntries(state: MasksState, theme: PresentationTheme, l10n: AorusL10n) -> [MasksEntry] {
-    publishMaskNames(l10n, customMasks: state.customMasks)
     var entries: [MasksEntry] = [
         .toggle(theme, l10n.videoMasks, state.enabled),
         .footer(theme, l10n.videoMasksFooter)

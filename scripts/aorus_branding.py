@@ -15052,12 +15052,15 @@ def patch_mask_picker_call(tg: Path) -> None:
             "                self.aorusToggleMaskPicker()\n"
             "            }),\n" + button_anchor, 1)
 
-        # Drop the button again when the feature is off — cheaper than branching the literal.
+        # Drop the button again when it would do nothing — cheaper than branching the literal.
+        # The mask is only ever composited into an OUTGOING video frame, so on an audio call
+        # the control would be dead weight in a row that is already one button wider than
+        # upstream designed for. Same condition the flip-camera button uses below.
         filter_anchor = "        if self.activeLocalVideoSource != nil {\n"
         if filter_anchor not in t:
             raise RuntimeError("MaskPicker: activeLocalVideoSource anchor not found")
         t = t.replace(filter_anchor,
-            "        if !AorusMaskCatalogue.isEnabled {\n"
+            "        if !AorusMaskCatalogue.isEnabled || self.activeLocalVideoSource == nil {\n"
             "            buttons.removeAll(where: { if case .mask = $0.content { return true } else { return false } })\n"
             "            // Collapse it directly rather than through aorusSetMaskPicker(): we are inside\n"
             "            // the layout pass, and that helper asks for another one.\n"

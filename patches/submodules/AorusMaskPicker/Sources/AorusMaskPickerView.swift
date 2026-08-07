@@ -159,21 +159,15 @@ public final class AorusMaskPickerView: UIView {
             return
         }
 
-        if visible {
-            // Springy on the way in — it reads as the panel being pushed up by the button.
-            UIView.animate(withDuration: 0.42, delay: 0.0, usingSpringWithDamping: 0.78,
-                           initialSpringVelocity: 0.4, options: [.allowUserInteraction, .beginFromCurrentState]) {
-                self.alpha = 1.0
-                self.transform = shownTransform
-            }
-        } else {
-            // Flat and quick on the way out: a spring that overshoots while disappearing
-            // looks like a glitch rather than a dismissal.
-            UIView.animate(withDuration: 0.2, delay: 0.0,
-                           options: [.curveEaseIn, .allowUserInteraction, .beginFromCurrentState]) {
-                self.alpha = 0.0
-                self.transform = hiddenTransform
-            }
+        // One spring, both directions. The first version used a bouncy entrance and a flat,
+        // faster exit, which made the second tap feel like a different control — the panel
+        // arrived with character and then just blinked out. Damping is high enough that the
+        // exit does not visibly overshoot, so the same curve reads as deliberate either way.
+        UIView.animate(withDuration: 0.38, delay: 0.0, usingSpringWithDamping: 0.86,
+                       initialSpringVelocity: 0.0,
+                       options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.alpha = visible ? 1.0 : 0.0
+            self.transform = visible ? shownTransform : hiddenTransform
         }
     }
 

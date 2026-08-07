@@ -1465,6 +1465,62 @@ def main() -> None:
         if "if case .BlockQuote = entities[i].type {" in entities_text:
             err.append("BlockQuote: the upstream merge pass still stops at the first quote")
 
+    # The picker is a leaf module and carries its own copy of the nine strings it shows,
+    # generated from AorusL10nTable. Re-check the two agree: a translation fixed in the main
+    # phrase book but not regenerated here would leave the call screen showing the old wording,
+    # and nothing else in the build would notice.
+    mask_strings = Path(__file__).parent.parent / "patches" / "submodules" / "AorusMaskPicker" / "Sources" / "AorusMaskStrings.swift"
+    main_table = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10nTable.swift"
+    if mask_strings.is_file() and main_table.is_file():
+        picker_text = mask_strings.read_text(encoding="utf-8")
+        table_text = main_table.read_text(encoding="utf-8")
+        wanted = {
+            "_button": "Mask", "skull": "Crystal Skull", "cyber": "Cyber Visor",
+            "oni": "Oni Mask", "phantom": "Phantom", "chrome": "Liquid Chrome",
+            "aurora": "Aurora", "neonCat": "Neon Cat", "custom": "My Mask",
+        }
+        raw_codes = {"zhHans": "zh-hans", "zhHant": "zh-hant"}
+        picker_tables = {
+            m.group(1): dict(re.findall(r'^\s*"([\w_]+)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', m.group(2), re.M))
+            for m in re.finditer(r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", picker_text, re.S)
+        }
+        for name, body in re.findall(r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", table_text, re.S):
+            source = dict(re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', body, re.M))
+            mirrored = picker_tables.get(name)
+            if mirrored is None:
+                err.append(f"MaskPicker: AorusMaskStrings has no {name} table — regenerate it")
+                continue
+            for key, english in wanted.items():
+                if source.get(english) != mirrored.get(key):
+                    err.append(
+                        f"MaskPicker: {name} {english!r} differs between AorusL10nTable and "
+                        f"AorusMaskStrings — regenerate the picker's table"
+                    )
+        missing_codes = [c for c in raw_codes.values() if f'"{c}": ' not in picker_text]
+        if missing_codes:
+            err.append(f"MaskPicker: AorusMaskStrings is missing language codes {missing_codes}")
+
+        # Russian and English never reach AorusL10nTable — they are written inline at the call
+        # site — so the loop above cannot see them. Check them against that inline source, or a
+        # reworded Russian mask name would drift here unnoticed.
+        inline_source = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift"
+        if inline_source.is_file():
+            inline_text = inline_source.read_text(encoding="utf-8")
+            picker_ru = picker_tables.get("ru", {})
+            picker_en = dict(re.findall(
+                r'^\s*"([\w_]+)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$',
+                re.search(r"static let english: \[String: String\] = \[(.*?)\n    \]", picker_text, re.S).group(1)
+                if re.search(r"static let english: \[String: String\] = \[(.*?)\n    \]", picker_text, re.S) else "",
+                re.M))
+            for key, english in wanted.items():
+                match = re.search(r't\("((?:[^"\\]|\\.)*)",\s*"%s"\)' % re.escape(english), inline_text)
+                if match is None:
+                    err.append(f"MaskPicker: no inline source for {english!r} — the generator cannot run")
+                elif picker_ru.get(key) != match.group(1):
+                    err.append(f"MaskPicker: Russian {english!r} differs from AorusL10n — regenerate the picker's table")
+                if picker_en.get(key) != english:
+                    err.append(f"MaskPicker: English {english!r} differs in AorusMaskStrings — regenerate the picker's table")
+
     # The mask strip has three moving parts that must all land: the leaf module has to be
     # in the tree, the call screen has to link it, and the button has to exist. Any one of
     # them silently missing means the button never appears and nobody notices until a user
