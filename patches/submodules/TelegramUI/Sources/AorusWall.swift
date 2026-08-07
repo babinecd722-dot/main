@@ -329,6 +329,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 self.recommendedPeerIds = mergedPeerIds
                 self.discoveredRecommendationPeerIds.formUnion(peerIds)
+                // Remember them across launches so the auto-clean sweep can reclaim their media
+                // later, when the Wall may not even be open.
+                AorusWallSettingsStore.noteRecommendationPeers(
+                    peerIds.map { $0.toInt64() }, accountId: self.accountId)
                 // Telegram's own recommendations are the closest sources there are.
                 for peerId in peerIds {
                     self.sourceGeneration[peerId] = 1
@@ -493,6 +497,8 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
                 }
                 self.recommendedPeerIds.append(contentsOf: additions)
                 self.discoveredRecommendationPeerIds.formUnion(additions)
+                AorusWallSettingsStore.noteRecommendationPeers(
+                    additions.map { $0.toInt64() }, accountId: self.accountId)
                 // Preloading is only needed to pull a channel's recent history INTO the local
                 // database; once it lands the posts stay there and are collected from disk.
                 // Holding these subscriptions forever would leave hundreds of channels being
@@ -1698,7 +1704,62 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     }
 }
 
+/// Reclaim the media the Wall pulled in from channels the reader never subscribed to.
+///
+/// Wired into the existing Settings → Performance → "Auto-Clean Cache" sweep rather than given
+/// a switch of its own: it is the same promise, and one control that means "reclaim space" is
+/// easier to trust than two that overlap.
+///
+/// Scope is deliberately narrow. Only channels the Wall found through recommendations are
+/// touched, and any that have since appeared in the chat list are skipped — clearing those
+/// would wipe the cache of a channel the reader actually reads, which is not what they asked
+/// for. What remains is media from an endless feed of channels they will almost certainly not
+/// open again, which no time-based cleanup can distinguish.
+///
+/// One caveat, verified rather than assumed: StorageBox.remove(peerIds:) is not reference
+/// counted — internalRemove drops an entry along with every other peer's reference to it. So a
+/// file that also arrived in one of your chats, as a forward from one of these channels, is
+/// removed too and re-downloads when you next scroll to it. Telegram's own per-chat cache
+/// clearing behaves exactly the same way, and the cost is a re-download, not lost data.
+private func aorusInstallWallCacheCleanup(context: AccountContext) {
+    let accountId = context.account.peerId.toInt64()
+    AorusCacheManager.shared.wallMediaCleanup = { [weak context] in
+        guard let context else {
+            return
+        }
+        let recorded = AorusWallSettingsStore.recommendationPeerIds(accountId: accountId)
+        guard !recorded.isEmpty else {
+            return
+        }
+        let _ = (context.account.postbox.transaction { transaction -> Set<PeerId> in
+            var result = Set<PeerId>()
+            for rawId in recorded {
+                let peerId = PeerId(rawId)
+                // In the chat list now — the reader subscribed after meeting it in the Wall.
+                // Their cache is theirs.
+                if transaction.getPeerChatListIndex(peerId) != nil {
+                    continue
+                }
+                result.insert(peerId)
+            }
+            return result
+        }
+        |> deliverOnMainQueue).start(next: { peerIds in
+            guard !peerIds.isEmpty else {
+                return
+            }
+            // Returns progress, so it is not instant on a large cache; nothing waits on it.
+            let _ = context.engine.resources.clearStorage(
+                peerIds: peerIds,
+                includeMessages: [],
+                excludeMessages: []
+            ).startStandalone()
+        })
+    }
+}
+
 public func makeAorusWallController(context: AccountContext) -> ViewController {
+    aorusInstallWallCacheCleanup(context: context)
     let contents = AorusWallChatContents(context: context)
     let controller = context.sharedContext.makeChatController(
         context: context,

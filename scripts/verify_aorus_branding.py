@@ -1548,6 +1548,21 @@ def main() -> None:
             if marker not in call_text:
                 err.append(f"MaskPicker: PrivateCallScreen is missing {marker}")
 
+    # The Wall's media reclaim has three parts in three files, and a break in any one of them
+    # is silent: the sweep simply stops freeing anything and storage grows again. Pin each.
+    wall_store = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusWallSettingsController.swift"
+    if wall_store.is_file() and "func noteRecommendationPeers" not in wall_store.read_text(encoding="utf-8"):
+        err.append("WallCache: AorusWallSettingsStore no longer records the Wall's recommendation channels")
+    cache_manager = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusCacheManager.swift"
+    if cache_manager.is_file() and "self.wallMediaCleanup?()" not in cache_manager.read_text(encoding="utf-8"):
+        err.append("WallCache: the auto-clean sweep no longer reclaims Wall media")
+    wall_source = Path(__file__).parent.parent / "patches" / "submodules" / "TelegramUI" / "Sources" / "AorusWall.swift"
+    if wall_source.is_file():
+        wall_text = wall_source.read_text(encoding="utf-8")
+        for marker in ("aorusInstallWallCacheCleanup", "noteRecommendationPeers", "getPeerChatListIndex"):
+            if marker not in wall_text:
+                err.append(f"WallCache: AorusWall.swift is missing {marker}")
+
     # "none" is spelled out in three modules that cannot import one another: the processor
     # that skips compositing, the picker that offers the entry, and the settings screen that
     # restores a real mask when the feature is switched back on. If one is reworded the mask

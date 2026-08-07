@@ -7,6 +7,7 @@ import UIKit
 // When enabled, on the user-selected interval (in hours) it wipes:
 //   the deleted-messages SQLite cache (DeletedMessagesCache)
 //   URL / media response caches
+//   media downloaded by the Wall from channels the reader is not subscribed to
 // Toggled from Settings → Performance → "Auto-Clean Cache" (off by default).
 
 public final class AorusCacheManager {
@@ -15,6 +16,15 @@ public final class AorusCacheManager {
 
     private var cleanTimer: Timer?
     private var observing = false
+
+    /// Reclaims the Wall's media. Installed by the Wall itself, which is the only place with
+    /// an account context — this class deliberately has none, and giving it one to reach the
+    /// media box would tie a settings helper to the engine.
+    ///
+    /// nil until the Wall tab is built. That is the right shape rather than a gap: with no
+    /// Wall there is nothing of its to reclaim, and a stale leftover cache is reached by
+    /// Telegram's own storage cleanup like any other.
+    public var wallMediaCleanup: (() -> Void)?
 
     // MARK: - Public entry point
 
@@ -54,5 +64,8 @@ public final class AorusCacheManager {
         DeletedMessagesCache.shared.clearAll()
         URLCache.shared.removeAllCachedResponses()
         URLSession.shared.configuration.urlCache?.removeAllCachedResponses()
+        // Last, and asynchronous inside: this one walks the media box and can take a while on
+        // a large cache, whereas the three above return immediately.
+        self.wallMediaCleanup?()
     }
 }

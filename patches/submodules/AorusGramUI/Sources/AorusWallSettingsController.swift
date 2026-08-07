@@ -52,6 +52,56 @@ public enum AorusWallSettingsStore {
         NotificationCenter.default.post(name: didChange, object: NSNumber(value: accountId))
     }
 
+    // MARK: - Channels the Wall discovered on its own
+    //
+    // Only channels reached through recommendations are recorded — never the ones already in
+    // the chat list. Their media is the part of the cache the reader never asked for: an
+    // endless feed pulls photos and video from channels they are not subscribed to and will
+    // almost certainly not open again, and nothing in Telegram's own time-based cleanup knows
+    // that. The auto-clean sweep uses this list to reclaim exactly that and nothing else.
+    private static let recommendationLimit = 4096
+    private static var recommendationCache: [Int64: Set<Int64>] = [:]
+
+    public static func recommendationPeerIds(accountId: Int64) -> Set<Int64> {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = recommendationCache[accountId] {
+            return cached
+        }
+        let values = UserDefaults.standard.array(forKey: key("wall_media_peers", accountId: accountId)) as? [NSNumber] ?? []
+        let result = Set(values.map(\.int64Value))
+        recommendationCache[accountId] = result
+        return result
+    }
+
+    /// Records channels the Wall pulled in from recommendations. Cheap to call repeatedly:
+    /// it writes only when something is actually new, because it runs on every expansion.
+    public static func noteRecommendationPeers(_ peerIds: [Int64], accountId: Int64) {
+        guard !peerIds.isEmpty else {
+            return
+        }
+        lock.lock()
+        var values = recommendationCache[accountId]
+            ?? Set((UserDefaults.standard.array(forKey: key("wall_media_peers", accountId: accountId)) as? [NSNumber] ?? []).map(\.int64Value))
+        let before = values.count
+        values.formUnion(peerIds)
+        guard values.count != before else {
+            recommendationCache[accountId] = values
+            lock.unlock()
+            return
+        }
+        // The list only ever grows, so cap it. Dropping the oldest entries loses nothing but
+        // the chance to reclaim a little cache that Telegram's own cleanup will reach anyway.
+        var stored = Array(values)
+        if stored.count > recommendationLimit {
+            stored = Array(stored.suffix(recommendationLimit))
+            values = Set(stored)
+        }
+        recommendationCache[accountId] = values
+        UserDefaults.standard.set(stored.map { NSNumber(value: $0) }, forKey: key("wall_media_peers", accountId: accountId))
+        lock.unlock()
+    }
+
     public static func excludedPeerIds(accountId: Int64) -> Set<Int64> {
         lock.lock()
         defer { lock.unlock() }
