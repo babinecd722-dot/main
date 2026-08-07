@@ -1548,6 +1548,25 @@ def main() -> None:
             if marker not in call_text:
                 err.append(f"MaskPicker: PrivateCallScreen is missing {marker}")
 
+    # Round videos get the same strip, hosted by two components injected into the camera
+    # screen. The button is easy to lose silently — it only appears when masks are on — so
+    # each piece is pinned separately, as on the call side.
+    rv_screen = tg / "submodules" / "TelegramUI" / "Components" / "VideoMessageCameraScreen" / "Sources" / "VideoMessageCameraScreen.swift"
+    if rv_screen.is_file():
+        rv_text = rv_screen.read_text(encoding="utf-8")
+        for marker in (
+            "final class AorusMaskButtonComponent: Component",
+            "final class AorusMaskPickerComponent: Component",
+            "var aorusMaskPickerVisible = false",
+            "Child(AorusMaskPickerComponent.self)",
+            "AorusMaskCatalogue.isEnabled",
+        ):
+            if marker not in rv_text:
+                err.append(f"MaskPickerRV: VideoMessageCameraScreen is missing {marker}")
+    rv_build = tg / "submodules" / "TelegramUI" / "Components" / "VideoMessageCameraScreen" / "BUILD"
+    if rv_build.is_file() and "//submodules/AorusMaskPicker:AorusMaskPicker" not in rv_build.read_text(encoding="utf-8"):
+        err.append("MaskPickerRV: VideoMessageCameraScreen BUILD is missing the AorusMaskPicker dep")
+
     # The same quote must also be ONE box in the composer. The input keeps a structural
     # ChatInputContent and derives its attributed string from it, and upstream gives every
     # quoted paragraph its own block — which leaves the newline between them unattributed and

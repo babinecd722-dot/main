@@ -15138,6 +15138,264 @@ def patch_mask_picker_call(tg: Path) -> None:
     print("MaskPicker: added AorusMaskPicker dep to CallScreen BUILD")
 
 
+def patch_mask_picker_round_video(tg: Path) -> None:
+    """The same mask strip in the round-video recorder.
+
+    The camera panel is a CombinedComponent, not a view hierarchy, so the strip cannot
+    simply be inserted as a subview the way the call screen does it. Two small components
+    are injected into the file instead — a button and a host for the picker — both backed
+    by plain UIViews this repo owns, so nothing has to be assumed about CameraButton's or
+    Image's internals. The glass background is reused verbatim from the flash button, so
+    the new control is visually identical to the two beside it.
+
+    Visibility lives in the screen's own State: a CombinedComponent body is rebuilt from
+    state, and holding it anywhere else would lose it on the next recompose.
+    """
+    path = tg / "submodules/TelegramUI/Components/VideoMessageCameraScreen/Sources/VideoMessageCameraScreen.swift"
+    if not path.is_file():
+        raise RuntimeError("MaskPickerRV: VideoMessageCameraScreen.swift not found")
+    t = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram: round-video mask strip"
+    if sentinel in t:
+        print("MaskPickerRV: already patched")
+        return
+
+    # ---------------------------------------------------------------- components
+    import_anchor = "import CameraButtonComponent\n"
+    if import_anchor not in t:
+        raise RuntimeError("MaskPickerRV: import anchor not found")
+    components = (
+        import_anchor
+        + "import AorusMaskPicker\n"
+        + "\n"
+        + sentinel + ": the control that opens the strip.\n"
+        + "//\n"
+        + "// A component of our own rather than Telegram's CameraButton so the icon, the hit area\n"
+        + "// and the pressed state are all things this repo owns — the button sits between two\n"
+        + "// stock ones and only has to match them visually, which the shared glass background\n"
+        + "// behind it already guarantees.\n"
+        + "final class AorusMaskButtonComponent: Component {\n"
+        + "    typealias EnvironmentType = Empty\n"
+        + "    \n"
+        + "    let isActive: Bool\n"
+        + "    let action: () -> Void\n"
+        + "    \n"
+        + "    init(isActive: Bool, action: @escaping () -> Void) {\n"
+        + "        self.isActive = isActive\n"
+        + "        self.action = action\n"
+        + "    }\n"
+        + "    \n"
+        + "    static func ==(lhs: AorusMaskButtonComponent, rhs: AorusMaskButtonComponent) -> Bool {\n"
+        + "        return lhs.isActive == rhs.isActive\n"
+        + "    }\n"
+        + "    \n"
+        + "    final class View: UIView {\n"
+        + "        private let iconView = UIImageView()\n"
+        + "        private var component: AorusMaskButtonComponent?\n"
+        + "        \n"
+        + "        override init(frame: CGRect) {\n"
+        + "            super.init(frame: frame)\n"
+        + "            self.iconView.contentMode = .center\n"
+        + "            self.addSubview(self.iconView)\n"
+        + "            self.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.handleTap)))\n"
+        + "        }\n"
+        + "        \n"
+        + "        required init?(coder: NSCoder) {\n"
+        + "            preconditionFailure()\n"
+        + "        }\n"
+        + "        \n"
+        + "        @objc private func handleTap() {\n"
+        + "            self.component?.action()\n"
+        + "        }\n"
+        + "        \n"
+        + "        func update(component: AorusMaskButtonComponent, availableSize: CGSize, transition: ComponentTransition) -> CGSize {\n"
+        + "            self.component = component\n"
+        + "            let size = CGSize(width: 40.0, height: 40.0)\n"
+        + "            let tint = component.isActive ? UIColor(red: 0.58, green: 0.35, blue: 0.96, alpha: 1.0) : UIColor.white\n"
+        + "            self.iconView.image = AorusMaskPickerView.buttonIcon(pointSize: 20.0, color: tint)\n"
+        + "            self.iconView.frame = CGRect(origin: CGPoint(), size: size)\n"
+        + "            return size\n"
+        + "        }\n"
+        + "    }\n"
+        + "    \n"
+        + "    func makeView() -> View {\n"
+        + "        return View(frame: CGRect())\n"
+        + "    }\n"
+        + "    \n"
+        + "    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {\n"
+        + "        return view.update(component: self, availableSize: availableSize, transition: transition)\n"
+        + "    }\n"
+        + "}\n"
+        + "\n"
+        + sentinel + ": a host so the shared UIKit strip can live inside a component tree.\n"
+        + "final class AorusMaskPickerComponent: Component {\n"
+        + "    typealias EnvironmentType = Empty\n"
+        + "    \n"
+        + "    let isVisible: Bool\n"
+        + "    let onSelect: (String) -> Void\n"
+        + "    \n"
+        + "    init(isVisible: Bool, onSelect: @escaping (String) -> Void) {\n"
+        + "        self.isVisible = isVisible\n"
+        + "        self.onSelect = onSelect\n"
+        + "    }\n"
+        + "    \n"
+        + "    static func ==(lhs: AorusMaskPickerComponent, rhs: AorusMaskPickerComponent) -> Bool {\n"
+        + "        return lhs.isVisible == rhs.isVisible\n"
+        + "    }\n"
+        + "    \n"
+        + "    final class View: UIView {\n"
+        + "        private let picker = AorusMaskPickerView(accentColor: UIColor(red: 0.58, green: 0.35, blue: 0.96, alpha: 1.0))\n"
+        + "        private var component: AorusMaskPickerComponent?\n"
+        + "        \n"
+        + "        override init(frame: CGRect) {\n"
+        + "            super.init(frame: frame)\n"
+        + "            self.addSubview(self.picker)\n"
+        + "        }\n"
+        + "        \n"
+        + "        required init?(coder: NSCoder) {\n"
+        + "            preconditionFailure()\n"
+        + "        }\n"
+        + "        \n"
+        + "        func update(component: AorusMaskPickerComponent, availableSize: CGSize, transition: ComponentTransition) -> CGSize {\n"
+        + "            // The very first update must not animate: the strip would otherwise slide in\n"
+        + "            // once on its own the moment the panel is first laid out.\n"
+        + "            let isFirst = self.component == nil\n"
+        + "            self.component = component\n"
+        + "            self.picker.onSelect = component.onSelect\n"
+        + "            let size = CGSize(width: availableSize.width, height: AorusMaskPickerView.panelHeight)\n"
+        + "            self.picker.frame = CGRect(origin: CGPoint(), size: size)\n"
+        + "            self.picker.setVisible(component.isVisible, animated: !isFirst)\n"
+        + "            return size\n"
+        + "        }\n"
+        + "    }\n"
+        + "    \n"
+        + "    func makeView() -> View {\n"
+        + "        return View(frame: CGRect())\n"
+        + "    }\n"
+        + "    \n"
+        + "    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {\n"
+        + "        return view.update(component: self, availableSize: availableSize, transition: transition)\n"
+        + "    }\n"
+        + "}\n"
+    )
+    t = t.replace(import_anchor, components, 1)
+
+    # ---------------------------------------------------------------------- state
+    state_anchor = "    final class State: ComponentState {\n"
+    if state_anchor not in t:
+        raise RuntimeError("MaskPickerRV: State class anchor not found")
+    t = t.replace(state_anchor,
+        state_anchor
+        + "        " + sentinel + ": a CombinedComponent body is rebuilt from state, so the\n"
+        + "        // strip's visibility has to live here or it is lost on the next recompose.\n"
+        + "        var aorusMaskPickerVisible = false\n"
+        + "        \n"
+        + "        func aorusToggleMaskPicker() {\n"
+        + "            self.aorusMaskPickerVisible = !self.aorusMaskPickerVisible\n"
+        + "            self.updated(transition: .immediate)\n"
+        + "        }\n"
+        + "        \n", 1)
+
+    # --------------------------------------------------------------------- children
+    child_anchor = (
+        "        let flashButtonBackground = Child(GlassBackgroundComponent.self)\n"
+        "        let flashButton = Child(CameraButton.self)\n"
+    )
+    if child_anchor not in t:
+        raise RuntimeError("MaskPickerRV: Child declaration anchor not found")
+    t = t.replace(child_anchor,
+        child_anchor
+        + "        " + sentinel + "\n"
+        + "        let aorusMaskButtonBackground = Child(GlassBackgroundComponent.self)\n"
+        + "        let aorusMaskButton = Child(AorusMaskButtonComponent.self)\n"
+        + "        let aorusMaskPicker = Child(AorusMaskPickerComponent.self)\n", 1)
+
+    # --------------------------------------------------------------------- placement
+    place_anchor = (
+        "                    context.add(flashButton\n"
+        "                        .position(CGPoint(x: flipButton.size.width + sideInset + flashButton.size.width / 2.0 + 11.0, y: availableSize.height - flashButton.size.height / 2.0 - 8.0))\n"
+        "                        .appear(.default(scale: true, alpha: true))\n"
+        "                        .disappear(.default(scale: true, alpha: true))\n"
+        "                    )\n"
+    )
+    if place_anchor not in t:
+        raise RuntimeError("MaskPickerRV: flash button placement anchor not found")
+    t = t.replace(place_anchor,
+        place_anchor
+        + "                    \n"
+        + "                    " + sentinel + ": third in the row, after the flash button.\n"
+        + "                    if AorusMaskCatalogue.isEnabled {\n"
+        + "                        let aorusMaskButtonValue = aorusMaskButton.update(\n"
+        + "                            component: AorusMaskButtonComponent(\n"
+        + "                                isActive: state.aorusMaskPickerVisible,\n"
+        + "                                action: { [weak state] in\n"
+        + "                                    state?.aorusToggleMaskPicker()\n"
+        + "                                }\n"
+        + "                            ),\n"
+        + "                            availableSize: CGSize(width: 40.0, height: 40.0),\n"
+        + "                            transition: context.transition\n"
+        + "                        )\n"
+        + "                        let aorusMaskBackgroundValue = aorusMaskButtonBackground.update(\n"
+        + "                            component: GlassBackgroundComponent(\n"
+        + "                                size: CGSize(width: 40.0, height: 40.0),\n"
+        + "                                cornerRadius: 40.0 * 0.5,\n"
+        + "                                isDark: environment.theme.overallDarkAppearance,\n"
+        + "                                tintColor: .init(kind: .panel)\n"
+        + "                            ),\n"
+        + "                            availableSize: CGSize(width: 40.0, height: 40.0),\n"
+        + "                            transition: .immediate\n"
+        + "                        )\n"
+        + "                        // Left edge of the flash button plus its width and the same 11pt gap\n"
+        + "                        // the flash button leaves after the flip button.\n"
+        + "                        let aorusMaskCentreX = flipButton.size.width + sideInset + flashButton.size.width + 11.0 + 11.0 + aorusMaskButtonValue.size.width / 2.0\n"
+        + "                        let aorusMaskCentreY = availableSize.height - aorusMaskButtonValue.size.height / 2.0 - 8.0\n"
+        + "                        context.add(aorusMaskBackgroundValue\n"
+        + "                            .position(CGPoint(x: aorusMaskCentreX, y: aorusMaskCentreY))\n"
+        + "                            .appear(.default(scale: true, alpha: true))\n"
+        + "                            .disappear(.default(scale: true, alpha: true))\n"
+        + "                        )\n"
+        + "                        context.add(aorusMaskButtonValue\n"
+        + "                            .position(CGPoint(x: aorusMaskCentreX, y: aorusMaskCentreY))\n"
+        + "                            .appear(.default(scale: true, alpha: true))\n"
+        + "                            .disappear(.default(scale: true, alpha: true))\n"
+        + "                        )\n"
+        + "                        \n"
+        + "                        // The strip is added whatever its state: it owns its own show/hide\n"
+        + "                        // animation, and removing it from the tree would cut that short.\n"
+        + "                        let aorusPickerValue = aorusMaskPicker.update(\n"
+        + "                            component: AorusMaskPickerComponent(\n"
+        + "                                isVisible: state.aorusMaskPickerVisible,\n"
+        + "                                onSelect: { [weak state] _ in\n"
+        + "                                    state?.updated(transition: .immediate)\n"
+        + "                                }\n"
+        + "                            ),\n"
+        + "                            availableSize: CGSize(width: max(0.0, availableSize.width - 24.0), height: AorusMaskPickerView.panelHeight),\n"
+        + "                            transition: context.transition\n"
+        + "                        )\n"
+        + "                        context.add(aorusPickerValue\n"
+        + "                            .position(CGPoint(x: availableSize.width / 2.0, y: aorusMaskCentreY - 20.0 - 12.0 - aorusPickerValue.size.height / 2.0))\n"
+        + "                        )\n"
+        + "                    }\n", 1)
+
+    path.write_text(t, encoding="utf-8")
+    print("MaskPickerRV: patched VideoMessageCameraScreen (button + strip)")
+
+    # ------------------------------------------------------------------------- BUILD
+    build = tg / "submodules/TelegramUI/Components/VideoMessageCameraScreen/BUILD"
+    if not build.is_file():
+        raise RuntimeError("MaskPickerRV: VideoMessageCameraScreen BUILD not found")
+    bt = build.read_text(encoding="utf-8")
+    if "//submodules/AorusMaskPicker:AorusMaskPicker" in bt:
+        print("MaskPickerRV: BUILD dep already present")
+        return
+    needle = '        "//submodules/Display",\n'
+    if needle not in bt:
+        raise RuntimeError("MaskPickerRV: BUILD deps anchor not found")
+    bt = bt.replace(needle, needle + '        "//submodules/AorusMaskPicker:AorusMaskPicker",\n', 1)
+    build.write_text(bt, encoding="utf-8")
+    print("MaskPickerRV: added AorusMaskPicker dep to VideoMessageCameraScreen BUILD")
+
+
 def patch_video_masks(tg: Path) -> None:
     """Render Aorus face masks into outgoing call and round-video frames.
 
@@ -24081,6 +24339,7 @@ def main() -> None:
     patch_voice_twin_calls(tg)
     patch_video_masks(tg)
     patch_mask_picker_call(tg)
+    patch_mask_picker_round_video(tg)
     patch_video_mask_call_phase(tg)
     patch_glass_global_toggle(tg)
     patch_aorus_code_compose(tg)
