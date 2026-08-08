@@ -1,6 +1,17 @@
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 load("@build_bazel_rules_apple//apple:resources.bzl", "apple_resource_bundle")
+load("@build_bazel_rules_apple//apple:apple.bzl", "apple_static_xcframework_import")
 load("//build-system/bazel-utils:plist_fragment.bzl", "plist_fragment")
+
+apple_static_xcframework_import(
+    name = "LibXray",
+    xcframework_imports = glob([
+        "ThirdParty/LibXray.xcframework/**",
+    ]),
+    visibility = [
+        "//visibility:public",
+    ],
+)
 
 filegroup(
     name = "AorusVideoMaskImages",
@@ -45,6 +56,7 @@ swift_library(
         ":AorusVideoMaskAssets",
     ],
     deps = [
+        ":LibXray",
         "//submodules/Display:Display",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",

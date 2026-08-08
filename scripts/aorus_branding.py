@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import ipaddress
+import json
 import os
 import plistlib
 import re
+import secrets
 import sys
+import uuid
 from pathlib import Path
 
 from aorus_call_proxy_udp import (
@@ -4750,76 +4755,31 @@ def patch_info_plist_file_sharing(tg: Path) -> None:
             print(f"{name}: Documents sharing already disabled")
 
 
-# Inline Swift that builds an MTSocksProxySettings from the ENCRYPTED proxy blob
-# published by AorusProxyManager.ProxyVault. The blob is an AES-GCM sealed box of
-# "server\nport\nsecret\nexpiresAt", base64-encoded, stored under an opaque key in a dedicated
-# innocuously-named UserDefaults suite. The suite name, blob key and pepper bytes
-# below MUST stay byte-identical to ProxyVault in AorusProxyManager.swift, otherwise
-# decryption fails and no system proxy is applied.
-#
-# Returns nil when no system proxy is configured / decryption fails. CryptoKit +
-# Foundation + MtProtoKit only — safe to inline into TelegramCore (no UIKit). The
-# host file gets `import CryptoKit` via _ensure_import_cryptokit().
+# Inline Swift that builds Telegram's SOCKS settings for the in-process REALITY
+# endpoint. AorusRealityManager publishes the loopback port only after libXray has
+# started successfully. The marker is bound to the current PID, so a value persisted
+# by an earlier app launch is rejected instead of pointing Telegram at a dead port.
 _AORUS_PROXY_SNIPPET = (
     "({ () -> MTSocksProxySettings? in\n"
     "                guard let aorusStore = UserDefaults(suiteName: \"ng.session.store\"),\n"
-    "                      let aorusBlob = aorusStore.string(forKey: \"b7d4f0a2-1c93-4e85-9a6f-3d520e8c7b14\"),\n"
-    "                      let aorusBox = Data(base64Encoded: aorusBlob) else { return nil }\n"
-    "                let aorusS0: [UInt8] = [0x8c,0x21,0x47,0xf9,0x03,0xbe,0x5a,0xd7,0x6e,0x10,0xc4,0x9b]\n"
-    "                let aorusS1: [UInt8] = [0x2f,0xa8,0x73,0x14,0xe6,0x5d,0x0a,0xcf,0x91,0x46,0xb2,0x38]\n"
-    "                let aorusS2: [UInt8] = [0x7d,0xe1,0x4c,0x60,0xaa,0x05,0xf3,0x29,0x8b,0xd4,0x17,0x52]\n"
-    "                let aorusKey = SymmetricKey(data: Data(SHA256.hash(data: Data(aorusS0 + aorusS1 + aorusS2))))\n"
-    "                guard let aorusSealed = try? AES.GCM.SealedBox(combined: aorusBox),\n"
-    "                      let aorusPlain = try? AES.GCM.open(aorusSealed, using: aorusKey),\n"
-    "                      let aorusStr = String(data: aorusPlain, encoding: .utf8) else { return nil }\n"
-    "                let aorusParts = aorusStr.components(separatedBy: \"\\n\")\n"
-    "                guard aorusParts.count >= 4, !aorusParts[0].isEmpty, let aorusPort = Int(aorusParts[1]), aorusPort > 0, !aorusParts[2].isEmpty, let aorusExpires = TimeInterval(aorusParts[3]), Date().timeIntervalSince1970 < aorusExpires else { return nil }\n"
-    "                let aorusHost = aorusParts[0]\n"
-    "                let aorusSecretHex = aorusParts[2].lowercased()\n"
-    "                guard !aorusSecretHex.isEmpty, aorusSecretHex.count % 2 == 0 else { return nil }\n"
-    "                var aorusSecret = Data(capacity: aorusSecretHex.count / 2)\n"
-    "                var aorusIdx = aorusSecretHex.startIndex\n"
-    "                while aorusIdx < aorusSecretHex.endIndex {\n"
-    "                    guard let aorusNext = aorusSecretHex.index(aorusIdx, offsetBy: 2, limitedBy: aorusSecretHex.endIndex), aorusNext > aorusIdx, let aorusByte = UInt8(aorusSecretHex[aorusIdx..<aorusNext], radix: 16) else { return nil }\n"
-    "                    aorusSecret.append(aorusByte)\n"
-    "                    aorusIdx = aorusNext\n"
-    "                }\n"
-    "                // Fail closed: AorusGram accepts only Fake-TLS secrets in the form\n"
-    "                // ee + 16-byte proxy secret + a valid UTF-8 SNI hostname. Raw and\n"
-    "                // dd random-padding secrets must never downgrade the live tunnel.\n"
-    "                guard aorusSecret.count > 17, aorusSecret.first == 0xee else { return nil }\n"
-    "                let aorusSniBytes = aorusSecret.dropFirst(17)\n"
-    "                guard let aorusSni = String(bytes: aorusSniBytes, encoding: .utf8), !aorusSni.isEmpty, aorusSni.count <= 253 else { return nil }\n"
-    "                let aorusLabels = aorusSni.split(separator: \".\", omittingEmptySubsequences: false)\n"
-    "                guard aorusLabels.count >= 2, aorusLabels.allSatisfy({ aorusLabel in\n"
-    "                    guard !aorusLabel.isEmpty, aorusLabel.count <= 63, aorusLabel.first != \"-\", aorusLabel.last != \"-\" else { return false }\n"
-    "                    return aorusLabel.utf8.allSatisfy { ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x41 && $0 <= 0x5a) || ($0 >= 0x61 && $0 <= 0x7a) || $0 == 0x2d }\n"
-    "                }) else { return nil }\n"
-    "                return MTSocksProxySettings(ip: aorusHost, port: UInt16(clamping: aorusPort), username: nil, password: nil, secret: aorusSecret)\n"
+    "                      let aorusEndpoint = aorusStore.dictionary(forKey: \"71d447f8-9128-4d18-b63c-ec11ef43ba26\"),\n"
+    "                      let aorusPid = aorusEndpoint[\"pid\"] as? NSNumber,\n"
+    "                      aorusPid.int32Value == ProcessInfo.processInfo.processIdentifier,\n"
+    "                      let aorusPortValue = aorusEndpoint[\"port\"] as? NSNumber else { return nil }\n"
+    "                let aorusPort = aorusPortValue.intValue\n"
+    "                guard aorusPort > 0, aorusPort <= 65535 else { return nil }\n"
+    "                return MTSocksProxySettings(ip: \"127.0.0.1\", port: UInt16(aorusPort), username: nil, password: nil, secret: nil)\n"
     "            })()"
 )
 
 
-def _ensure_import_cryptokit(t: str) -> str:
-    """Idempotently add `import CryptoKit` so the inlined proxy snippet (which uses
-    SymmetricKey / SHA256 / AES.GCM) compiles in the host file."""
-    if "import CryptoKit" in t:
-        return t
-    marker = "import Foundation\n"
-    if marker in t:
-        return t.replace(marker, marker + "import CryptoKit\n", 1)
-    return "import CryptoKit\n" + t
-
-
 def patch_system_proxy_network_override(tg: Path) -> None:
-    """Force the AorusGram system proxy onto every MTProto connection.
+    """Force the in-process REALITY endpoint onto every MTProto connection.
 
-    The proxy is applied at the network layer (MTApiEnvironment) and is NEVER
+    The loopback proxy is applied at the network layer (MTApiEnvironment) and is NEVER
     stored in ProxySettings, so it never appears in the proxy list UI, has no
-    on/off toggle, shows no proxy status icon and cannot be copied as a
-    tg://proxy link. All DC connections, media, file downloads, updates and
-    call signalling inherit it because they all flow through this single
-    MTApiEnvironment chokepoint.
+    on/off toggle, shows no proxy status icon and cannot be copied as a link.
+    The remote VLESS/REALITY profile remains owned by AorusGram/libXray.
     """
     path = tg / "submodules/TelegramCore/Sources/Network/Network.swift"
     if not path.is_file():
@@ -4829,8 +4789,6 @@ def patch_system_proxy_network_override(tg: Path) -> None:
     if "ng.session.store" in t:
         print("Network.swift: system proxy override already present")
         return
-    t = _ensure_import_cryptokit(t)
-
     anchor = (
         "            if let effectiveActiveServer = proxySettings?.effectiveActiveServer {\n"
         "                apiEnvironment = apiEnvironment.withUpdatedSocksProxySettings(effectiveActiveServer.mtProxySettings)\n"
@@ -4857,14 +4815,8 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
     1. The existing shared-data proxy monitor is patched so the AorusGram system
        proxy always wins over whatever (if anything) is in ProxySettings.
     2. A NotificationCenter observer reacts to `aorusgram_proxy_config_updated`
-       (posted by AorusProxyManager after a fresh fetch) and re-applies the
-       proxy + drops the connection so the very first launch starts using the
-       proxy as soon as the control API responds — without needing a relaunch.
-    3. A connection-status observer mirrors the engine's `proxyHasConnectionIssues`
-       flag into the `aorusgram_proxy_unhealthy_since` defaults key. This is the
-       MTProto-level health beacon that AorusProxyManager's watchdog reads to fail
-       over off a proxy that is degraded but still TCP-reachable (a TCP probe alone
-       can't detect that). Cleared as soon as the connection recovers.
+       (posted after libXray starts or stops) and re-applies the endpoint plus
+       drops the connection, so first launch needs no relaunch.
     """
     path = tg / "submodules/TelegramCore/Sources/Account/Account.swift"
     if not path.is_file():
@@ -4874,8 +4826,6 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
     if "aorusgram_proxy_config_updated" in t:
         print("Account.swift: system proxy runtime monitor already present")
         return
-    t = _ensure_import_cryptokit(t)
-
     # 1) Force system proxy to win inside the existing monitor.
     monitor_anchor = (
         "        |> distinctUntilChanged).start(next: { activeServer in\n"
@@ -4912,8 +4862,7 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
     )
 
     observer_block = monitor_close + (
-        "        // AorusGram: apply the system proxy the moment the control API\n"
-        "        // delivers a fresh config (first launch needs no relaunch).\n"
+        "        // AorusGram: apply the loopback endpoint as soon as libXray starts.\n"
         "        self.managedOperationsDisposable.add({ () -> Disposable in\n"
         "            let aorusObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name(\"aorusgram_proxy_config_updated\"), object: nil, queue: nil) { _ in\n"
         "                let updated = " + _AORUS_PROXY_SNIPPET + "\n"
@@ -8372,6 +8321,94 @@ def patch_proxy_key_provider(tg: Path) -> None:
     replacement = "/* AORUS-BUILD-PROXY-KEY-INJECTED */ " + literal
     f.write_text(t.replace(marker, replacement, 1), encoding="utf-8")
     print("ProxyKey: provisioned obfuscated HMAC key (%d bytes)" % len(raw))
+
+
+def patch_reality_profile_provider(tg: Path) -> None:
+    """Inject a validated VLESS/REALITY profile from one build secret.
+
+    The profile is canonicalized before injection and split into a random one-time
+    mask plus ciphertext. This prevents endpoint credentials from being committed or
+    appearing as one searchable JSON/string literal in the application binary.
+    """
+    path = tg / "submodules/AorusGram/Sources/Features/Network/AorusRealityProfile.swift"
+    if not path.is_file():
+        raise RuntimeError("RealityProfile: AorusRealityProfile.swift not found")
+
+    ciphertext_marker = "/*__AORUS_REALITY_PROFILE_CIPHERTEXT__*/"
+    mask_marker = "/*__AORUS_REALITY_PROFILE_MASK__*/"
+    text = path.read_text(encoding="utf-8")
+    if ciphertext_marker not in text or mask_marker not in text:
+        if "/* AORUS-BUILD-REALITY-PROFILE-INJECTED */" in text:
+            raise RuntimeError("RealityProfile: refusing a previously injected source tree")
+        raise RuntimeError("RealityProfile: injection markers are missing")
+
+    encoded = os.environ.get("REALITY_PROFILE_B64", "").strip()
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+        value = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("RealityProfile: REALITY_PROFILE_B64 is not valid base64 JSON") from error
+    if not isinstance(value, dict):
+        raise RuntimeError("RealityProfile: profile must be a JSON object")
+
+    required = ("server", "port", "uuid", "publicKey", "shortId", "serverName")
+    if any(key not in value for key in required):
+        raise RuntimeError("RealityProfile: required profile field is missing")
+    server = str(value["server"]).strip()
+    server_name = str(value["serverName"]).strip().lower()
+    public_key = str(value["publicKey"]).strip()
+    short_id = str(value["shortId"]).strip().lower()
+    fingerprint = str(value.get("fingerprint", "safari")).strip().lower()
+    spider_x = str(value.get("spiderX", "/")).strip()
+    try:
+        port = int(value["port"])
+        normalized_uuid = str(uuid.UUID(str(value["uuid"])))
+    except (TypeError, ValueError, AttributeError) as error:
+        raise RuntimeError("RealityProfile: port or UUID is invalid") from error
+    if not server or not (1 <= port <= 65_535):
+        raise RuntimeError("RealityProfile: endpoint is invalid")
+    try:
+        ipaddress.ip_address(server)
+    except ValueError:
+        if not re.fullmatch(r"(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", server):
+            raise RuntimeError("RealityProfile: server must be an IP address or hostname")
+    if not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", server_name):
+        raise RuntimeError("RealityProfile: serverName is invalid")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", public_key):
+        raise RuntimeError("RealityProfile: REALITY public key is invalid")
+    if not re.fullmatch(r"(?:[0-9a-f]{2}){1,8}", short_id):
+        raise RuntimeError("RealityProfile: shortId must contain 2-16 hexadecimal characters")
+    if fingerprint not in {"chrome", "firefox", "safari", "ios", "android", "edge", "random", "randomized"}:
+        raise RuntimeError("RealityProfile: unsupported uTLS fingerprint")
+    if not spider_x.startswith("/") or len(spider_x) > 256 or any(ord(ch) < 0x20 for ch in spider_x):
+        raise RuntimeError("RealityProfile: spiderX is invalid")
+
+    canonical = json.dumps(
+        {
+            "server": server,
+            "port": port,
+            "uuid": normalized_uuid,
+            "publicKey": public_key,
+            "shortId": short_id,
+            "serverName": server_name,
+            "fingerprint": fingerprint,
+            "spiderX": spider_x,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    mask = secrets.token_bytes(len(canonical))
+    ciphertext = bytes(left ^ right for left, right in zip(canonical, mask))
+    ciphertext_literal = ", ".join(str(byte) for byte in ciphertext)
+    mask_literal = ", ".join(str(byte) for byte in mask)
+    text = text.replace(
+        ciphertext_marker,
+        "/* AORUS-BUILD-REALITY-PROFILE-INJECTED */ " + ciphertext_literal,
+        1,
+    )
+    text = text.replace(mask_marker, mask_literal, 1)
+    path.write_text(text, encoding="utf-8")
+    print("RealityProfile: provisioned validated profile (%d bytes)" % len(canonical))
 
 
 def patch_local_premium(tg: Path) -> None:
@@ -24464,6 +24501,37 @@ def patch_document_picker_upload(tg: Path) -> None:
             f"                            // {size_gate_marker}; the backend remains authoritative.\n",
             1,
         )
+
+        # The three limit values existed solely for the removed local gate.
+        # Drop their bindings as part of the same patch so Telegram's strict
+        # no-unused-values build remains clean on both device and simulator.
+        unused_limits = (
+            "            let (accountPeer, limits, premiumLimits) = result\n"
+            "            let isPremium = accountPeer?.isPremium ?? false\n"
+            "\n"
+        )
+        if unused_limits not in gate_text:
+            print(f"DocumentPicker: unused limit bindings not found in {gate_path.name} — skip")
+            continue
+        gate_text = gate_text.replace(unused_limits, "", 1)
+        if gate_path.name == "ChatControllerOpenAttachmentMenu.swift":
+            result_anchor = "startStandalone(next: { [weak self] result in"
+            if result_anchor not in gate_text:
+                print("DocumentPicker: chat result callback anchor not found — skip")
+                continue
+            gate_text = gate_text.replace(result_anchor, "startStandalone(next: { [weak self] _ in", 1)
+        else:
+            result_anchor = "start(next: { [weak self, weak view] result in"
+            component_anchor = "if let strongSelf = self, let view, let component = view.component {"
+            if result_anchor not in gate_text or component_anchor not in gate_text:
+                print("DocumentPicker: story cleanup anchors not found — skip")
+                continue
+            gate_text = gate_text.replace(result_anchor, "start(next: { [weak self, weak view] _ in", 1)
+            gate_text = gate_text.replace(
+                component_anchor,
+                "if let strongSelf = self, let view, view.component != nil {",
+                1,
+            )
         gate_path.write_text(gate_text, encoding="utf-8")
         print(f"DocumentPicker: removed local file-size gate from {gate_path.name}")
 
@@ -24602,6 +24670,7 @@ def main() -> None:
     patch_view_once_no_consume(tg)
     patch_license_key_provider(tg)
     patch_proxy_key_provider(tg)
+    patch_reality_profile_provider(tg)
     patch_chat_context_menu_media_metadata(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)

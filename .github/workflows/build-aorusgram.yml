@@ -4,6 +4,15 @@ on:
   push:
     branches: [ main, "claude/**", "cursor/**" ]
   workflow_dispatch:
+    inputs:
+      build_mode:
+        description: Build target
+        required: true
+        default: simulator
+        type: choice
+        options:
+          - simulator
+          - release
 
 # Do not cancel in-progress Bazel runs: a new push or manual dispatch must not kill a 40–60m build.
 concurrency:
@@ -22,6 +31,10 @@ jobs:
       TELEGRAM_IOS_COMMIT: 6ad963e5b62d354da79040f388ae2b9132fb17b8
       TELEGRAM_IOS_VERSION: 12.9.2
       PILLOW_VERSION: 11.3.0
+      LIBXRAY_VERSION: v26.7.28
+      LIBXRAY_APPLE_SHA256: 07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9
+      # Pushes are fast compile/link smoke tests. A device IPA is an explicit manual run.
+      BUILD_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_mode || 'simulator' }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -596,6 +609,26 @@ jobs:
           echo "--- AorusGramUI sources ---"
           ls -la $TG/submodules/AorusGramUI/Sources/
 
+      - name: Stage pinned official libXray XCFramework
+        run: |
+          set -euo pipefail
+          ARCHIVE="$RUNNER_TEMP/libxray-apple-cgo.zip"
+          EXTRACTED="$RUNNER_TEMP/libxray-apple-cgo"
+          TARGET="telegram-ios/submodules/AorusGram/ThirdParty/LibXray.xcframework"
+          URL="https://github.com/XTLS/libXray/releases/download/${LIBXRAY_VERSION}/libxray-apple-cgo.zip"
+
+          curl --fail --location --retry 4 --retry-all-errors --output "$ARCHIVE" "$URL"
+          echo "${LIBXRAY_APPLE_SHA256}  ${ARCHIVE}" | shasum -a 256 --check
+          rm -rf "$EXTRACTED" "$TARGET"
+          mkdir -p "$EXTRACTED" "$(dirname "$TARGET")"
+          ditto -x -k "$ARCHIVE" "$EXTRACTED"
+          SOURCE=$(find "$EXTRACTED" -type d -name LibXray.xcframework -print -quit)
+          test -n "$SOURCE"
+          ditto "$SOURCE" "$TARGET"
+          test -f "$TARGET/Info.plist"
+          /usr/libexec/PlistBuddy -c 'Print :AvailableLibraries' "$TARGET/Info.plist"
+          find "$TARGET" -type f -name '*.a' -print
+
       - name: AorusGram branding (launch screen, name, URLs, icons, strings)
         env:
           # License HMAC key — injected (obfuscated) into LicenseKeyProvider.swift
@@ -604,6 +637,8 @@ jobs:
           LICENSE_HMAC_KEY_HEX: ${{ secrets.LICENSE_HMAC_KEY_HEX }}
           # Separate rotatable request key for https://api.aorusgram.com/getProxy.
           PROXY_HMAC_KEY_HEX: ${{ secrets.PROXY_HMAC_KEY_HEX }}
+          # Validated VLESS/REALITY client profile, base64-encoded canonical JSON.
+          REALITY_PROFILE_B64: ${{ secrets.REALITY_PROFILE_B64 }}
         run: |
           python3 aorusgram/scripts/aorus_branding.py telegram-ios
           # Cached telegram-ios trees can carry AppDelegate edits without a matching import line.
@@ -853,6 +888,7 @@ jobs:
           security find-identity -v -p codesigning "$KEYCHAIN" 2>/dev/null || true
 
       - name: Build release_arm64 (device, no extensions; unsigned via disable_legacy_signing)
+        if: env.BUILD_MODE == 'release'
         working-directory: telegram-ios
         run: |
           echo "=== Python version ==="
@@ -872,6 +908,24 @@ jobs:
             2>&1 | tee "$RUNNER_TEMP/build.log" | tail -100
           exit "${PIPESTATUS[0]}"
 
+      - name: Build debug_sim_arm64 smoke test (full app)
+        if: env.BUILD_MODE == 'simulator'
+        working-directory: telegram-ios
+        run: |
+          echo "=== debug_sim_arm64 full application smoke test ==="
+          set -o pipefail
+          python3 build-system/Make/Make.py \
+            --overrideXcodeVersion \
+            --cacheDir ~/tg-bazel-cache \
+            build \
+            --configurationPath build-system/appstore-configuration.json \
+            --codesigningInformationPath $RUNNER_TEMP/signing \
+            --buildNumber=${{ github.run_number }} \
+            --configuration=debug_sim_arm64 \
+            --target=//Telegram/Telegram \
+            2>&1 | tee "$RUNNER_TEMP/build.log" | tail -100
+          exit "${PIPESTATUS[0]}"
+
       - name: Show compile errors
         if: always()
         run: |
@@ -883,7 +937,7 @@ jobs:
           tail -80 $RUNNER_TEMP/build.log 2>/dev/null || echo "(log not available)"
 
       - name: Collect build artifacts info
-        if: always()
+        if: always() && env.BUILD_MODE == 'release'
         working-directory: telegram-ios
         run: |
           echo "=== All .app and .ipa files (with symlinks) ===" > $RUNNER_TEMP/found_files.txt
@@ -896,6 +950,7 @@ jobs:
           cat $RUNNER_TEMP/found_files.txt
 
       - name: Package unsigned IPA
+        if: env.BUILD_MODE == 'release'
         run: |
           # 1. Проверяем --outputBuildArtifactsPath
           IPA=$(find $RUNNER_TEMP/artifacts -name "*.ipa" 2>/dev/null | head -1 || true)
@@ -946,6 +1001,7 @@ jobs:
           ls -lh $RUNNER_TEMP/AorusGram-unsigned.ipa
 
       - name: Upload unsigned IPA
+        if: env.BUILD_MODE == 'release'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: AorusGram-unsigned-${{ github.run_number }}

@@ -39,13 +39,11 @@ public final class AorusGramBootstrap {
         // fail-closed until LicenseGate receives a fresh active server response.
         LicenseGate.shared.start()
 
-        // System proxy (network shield) — touching `.shared` runs load(), which
-        // synchronously republishes the cached proxy to the flat UserDefaults
-        // keys read by the injected network layer, so a returning user connects
-        // through the proxy from the very first packet. Then refresh from the
-        // control API; on success it posts .aorusProxyConfigUpdated and the
-        // injected Account.swift observer hot-applies it without a relaunch.
-        AorusProxyManager.shared.refresh()
+        // System proxy (network shield). The legacy MTProxy control plane remains
+        // compiled as a rollback path but is intentionally paused. The official
+        // XTLS core now exposes VLESS/REALITY as an in-process loopback SOCKS5
+        // endpoint; TelegramCore hot-applies it through the existing observer.
+        AorusRealityManager.shared.startIfAuthorized()
 
         // Client spoof — must be before any MTProto connection is made
         ClientSpoofManager.applySwizzle()
@@ -226,8 +224,9 @@ public final class AorusGramBootstrap {
     @objc private func appDidBecomeActive() {
         DeletedMessagesCache.shared.scheduleBackgroundSync()
         StreakManager.shared.tick()
-        // Re-validate the system proxy on every foreground (TTL-aware inside).
-        AorusProxyManager.shared.refresh()
+        // iOS may suspend the embedded core in the background. Verify and restore
+        // it before Telegram resumes network work; this does not fetch legacy MTProxy.
+        AorusRealityManager.shared.ensureRunning()
         AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()
         if let uid = LicenseStore.shared.telegramUserId {
             AorusBannerService.shared.prewarm(accountId: uid)

@@ -989,13 +989,13 @@ def main() -> None:
     if network_source.is_file():
         network_text = network_source.read_text(encoding="utf-8")
         for marker in (
-            "aorusSecretHex.count % 2 == 0",
-            "aorusSecret.count > 17, aorusSecret.first == 0xee",
-            "let aorusSniBytes = aorusSecret.dropFirst(17)",
-            "aorusLabels.count >= 2",
+            'dictionary(forKey: "71d447f8-9128-4d18-b63c-ec11ef43ba26")',
+            "aorusPid.int32Value == ProcessInfo.processInfo.processIdentifier",
+            'MTSocksProxySettings(ip: "127.0.0.1"',
+            "secret: nil",
         ):
             if marker not in network_text:
-                err.append(f"MTProxyAntiDPI: ee-only Fake-TLS bridge is missing {marker}")
+                err.append(f"RealityProxy: loopback bridge is missing {marker}")
         for forbidden in (
             "aorusSecret.insert(0xdd, at: 0)",
             "aorusIsPadded",
@@ -1020,13 +1020,44 @@ def main() -> None:
     call_proxy_text = call_proxy.read_text(encoding="utf-8") if call_proxy.is_file() else ""
     for marker in (
         "aorusgram_call_proxy_diagnostics",
-        'status: "missing_blob"',
-        'status: "decrypt_failed"',
-        'status: "expired"',
-        'status: "ready"',
+        'status: "reality_not_ready"',
+        'status: "reality_ready"',
+        'udp: "xudp"',
+        'host: "127.0.0.1"',
+        'dictionary(forKey: "71d447f8-9128-4d18-b63c-ec11ef43ba26")',
     ):
         if marker not in call_proxy_text:
-            err.append(f"CallProxyUDP: provisioning diagnostics are missing {marker}")
+            err.append(f"CallProxyREALITY: provisioning invariant is missing {marker}")
+
+    reality_profile = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusRealityProfile.swift"
+    reality_manager = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusRealityManager.swift"
+    if not reality_profile.is_file() or not reality_manager.is_file():
+        err.append("RealityProxy: embedded core sources are missing")
+    else:
+        reality_profile_text = reality_profile.read_text(encoding="utf-8")
+        reality_manager_text = reality_manager.read_text(encoding="utf-8")
+        if "/*__AORUS_REALITY_PROFILE_" in reality_profile_text:
+            err.append("RealityProxy: build-time profile was not injected")
+        if "/* AORUS-BUILD-REALITY-PROFILE-INJECTED */" not in reality_profile_text:
+            err.append("RealityProxy: trusted profile injection sentinel is missing")
+        for marker in (
+            "import LibXray",
+            '"runXrayFromJson"',
+            '"packetEncoding": "xudp"',
+            '"security": "reality"',
+            "AorusTamperGuard.isFridaDetected",
+        ):
+            if marker not in reality_manager_text:
+                err.append(f"RealityProxy: core invariant is missing {marker}")
+
+    aorus_build = tg / "submodules" / "AorusGram" / "BUILD"
+    aorus_build_text = aorus_build.read_text(encoding="utf-8") if aorus_build.is_file() else ""
+    for marker in ("apple_static_xcframework_import", 'name = "LibXray"', '":LibXray"'):
+        if marker not in aorus_build_text:
+            err.append(f"RealityProxy: Bazel libXray import is missing {marker}")
+    xray_info = tg / "submodules" / "AorusGram" / "ThirdParty" / "LibXray.xcframework" / "Info.plist"
+    if not xray_info.is_file():
+        err.append("RealityProxy: pinned LibXray.xcframework was not staged")
 
     call_log_export = tg / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusCallLogsExport.swift"
     if call_log_export.exists():
@@ -2133,6 +2164,8 @@ def main() -> None:
             err.append(f"DocumentPicker: local file-size gate remains in {document_size_gate_file.name}")
         if "item.fileSize > Int64(premiumLimits.maxUploadFileParts)" in document_size_gate_text:
             err.append(f"DocumentPicker: premium file-size check remains in {document_size_gate_file.name}")
+        if "let (accountPeer, limits, premiumLimits) = result" in document_size_gate_text:
+            err.append(f"DocumentPicker: removed file-size gate left unused limit bindings in {document_size_gate_file.name}")
 
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"

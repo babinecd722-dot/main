@@ -42,6 +42,16 @@ def main() -> int:
         fail(errors, "Pillow must be version-pinned")
     if re.search(r"pip[^\n]*Pillow[^\n]*(?:\|\|\s*true|\|\|\s*pip)", workflow):
         fail(errors, "Pillow installation must fail closed")
+    for marker in (
+        "BUILD_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_mode || 'simulator' }}",
+        "--configuration=debug_sim_arm64",
+        "--target=//Telegram/Telegram",
+        "LIBXRAY_VERSION: v26.7.28",
+        "07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9",
+        "REALITY_PROFILE_B64: ${{ secrets.REALITY_PROFILE_B64 }}",
+    ):
+        if marker not in workflow:
+            fail(errors, f"simulator/REALITY workflow invariant is missing {marker}")
 
     if upstream_version is not None:
         spoof_paths = [
@@ -80,21 +90,56 @@ def main() -> int:
             fail(errors, f"proxy manager ee-only invariant is missing {marker}")
 
     branding = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
-    if branding.count("refusing a previously injected source tree") < 2:
+    if branding.count("refusing a previously injected source tree") < 3:
         fail(errors, "build injection must reject stale source trees")
     for marker in (
-        "aorusSecret.count > 17, aorusSecret.first == 0xee",
-        "let aorusSniBytes = aorusSecret.dropFirst(17)",
-        "aorusLabels.count >= 2",
+        'dictionary(forKey: \\"71d447f8-9128-4d18-b63c-ec11ef43ba26\\")',
+        'aorusPid.int32Value == ProcessInfo.processInfo.processIdentifier',
+        'MTSocksProxySettings(ip: \\"127.0.0.1\\"',
+        'secret: nil',
+        'patch_reality_profile_provider(tg)',
     ):
         if marker not in branding:
-            fail(errors, f"proxy bridge ee-only invariant is missing {marker}")
+            fail(errors, f"REALITY loopback bridge invariant is missing {marker}")
     for forbidden in (
         "aorusSecret.insert(0xdd, at: 0)",
         "aorusIsPadded",
     ):
         if forbidden in branding:
             fail(errors, f"legacy dd proxy downgrade remains in branding: {forbidden}")
+
+    reality_profile_path = root / "AorusGram/Sources/Features/Network/AorusRealityProfile.swift"
+    reality_manager_path = root / "AorusGram/Sources/Features/Network/AorusRealityManager.swift"
+    if not reality_profile_path.is_file() or not reality_manager_path.is_file():
+        fail(errors, "embedded REALITY sources are missing")
+    else:
+        reality_profile = reality_profile_path.read_text(encoding="utf-8")
+        reality_manager = reality_manager_path.read_text(encoding="utf-8")
+        for marker in (
+            "/*__AORUS_REALITY_PROFILE_CIPHERTEXT__*/",
+            "/*__AORUS_REALITY_PROFILE_MASK__*/",
+            "withProfile<Result>",
+        ):
+            if marker not in reality_profile:
+                fail(errors, f"REALITY profile invariant is missing {marker}")
+        for marker in (
+            "import LibXray",
+            '"runXrayFromJson"',
+            '"packetEncoding": "xudp"',
+            '"security": "reality"',
+            '"127.0.0.1"',
+            "AorusTamperGuard.isFridaDetected",
+        ):
+            if marker not in reality_manager:
+                fail(errors, f"REALITY manager invariant is missing {marker}")
+        for forbidden in ("104.143.218.253", "7c2fb9b6-fcb9-4715-8752-49f6534e3017"):
+            if forbidden in reality_profile or forbidden in reality_manager:
+                fail(errors, "test REALITY credentials must not be committed")
+
+    aorus_build = (root / "patches/submodules/AorusGram/BUILD").read_text(encoding="utf-8")
+    for marker in ("apple_static_xcframework_import", 'name = "LibXray"', '":LibXray"'):
+        if marker not in aorus_build:
+            fail(errors, f"libXray Bazel invariant is missing {marker}")
 
     store = (root / "AorusGram/Sources/Features/Subscription/LicenseStore.swift").read_text(encoding="utf-8")
     offline_block = store[store.find("func effectiveOfflineStatus"):store.find("func needsRecheck")]

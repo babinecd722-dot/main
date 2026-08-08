@@ -130,16 +130,11 @@ final class LicenseGate {
         }
     }
 
-    // The license just became active. Unlicensed devices carry no proxy (Telegram
-    // runs direct); the moment a subscription is active we force-fetch the proxy now
-    // so it applies immediately instead of waiting up to an hour for the next poll.
-    // A device that already has a still-valid proxy lease is left untouched (no
-    // redundant request). A stale cached proxy is not enough: it may decrypt to nil
-    // in the injected network reader because proxy leases now carry expiresAt.
+    // The license just became active. Start the embedded REALITY core immediately;
+    // its loopback SOCKS endpoint is hot-applied by TelegramCore without relaunching.
+    // The legacy MTProxy manager intentionally remains paused for rollback only.
     private func upgradeSystemProxy() {
-        if AorusProxyManager.shared.currentProxy() == nil {
-            AorusProxyManager.shared.refresh(force: true)
-        }
+        AorusRealityManager.shared.startIfAuthorized()
     }
 
     private func apply(status: LicenseStatus, response: LicenseResponse?) {
@@ -316,7 +311,7 @@ final class LicenseGate {
 
         if locked {
             startLockSweep()
-            AorusProxyManager.shared.licenseDidLock()
+            AorusRealityManager.shared.licenseDidLock()
             // Snapshot the real values ONCE (don't overwrite an existing backup — a
             // repeated locked verdict must not capture the already-zeroed state).
             if ud.object(forKey: LicenseGate.lockBackupKey) == nil {
@@ -338,6 +333,7 @@ final class LicenseGate {
                 for (k, v) in backup { if let b = v as? Bool { ud.set(b, forKey: k) } }
                 ud.removeObject(forKey: LicenseGate.lockBackupKey)
             }
+            AorusRealityManager.shared.startIfAuthorized()
         }
 
         // In-memory side effects (Anti-Screenshot, cached manager state) can't be
