@@ -1567,9 +1567,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     }
 
     deinit {
-        // A Wall that is torn down without a setVisible(false) would otherwise leave the flag
-        // stuck true and silently stop the cache sweep for the rest of the session.
-        AorusWallChatContents.aorusIsAnyWallVisible = false
+        // A Wall that is torn down without a setVisible(false) must only remove itself. Clearing
+        // a process-wide Bool here used to make cleanup run underneath another visible account.
+        AorusWallChatContents.aorusUpdateVisibility(self, isVisible: false)
         self.visibilityTimer?.invalidate()
         self.navigationSearchingDisposable?.dispose()
         for observer in self.observers {
@@ -1604,13 +1604,31 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     /// Whether a Wall is on screen right now. Set here, on the main thread, so the cache
     /// sweep can read it without a hop onto the feed's private queue — it must not clear the
     /// media of posts the reader is looking at.
-    fileprivate static var aorusIsAnyWallVisible = false
+    private static let aorusVisibilityLock = NSLock()
+    private static var aorusVisibleInstances = Set<ObjectIdentifier>()
+
+    fileprivate static var aorusIsAnyWallVisible: Bool {
+        self.aorusVisibilityLock.lock()
+        defer { self.aorusVisibilityLock.unlock() }
+        return !self.aorusVisibleInstances.isEmpty
+    }
+
+    private static func aorusUpdateVisibility(_ contents: AorusWallChatContents, isVisible: Bool) {
+        let identifier = ObjectIdentifier(contents)
+        self.aorusVisibilityLock.lock()
+        if isVisible {
+            self.aorusVisibleInstances.insert(identifier)
+        } else {
+            self.aorusVisibleInstances.remove(identifier)
+        }
+        self.aorusVisibilityLock.unlock()
+    }
 
     public func setVisible(
         _ value: Bool,
         visibleMessages: (() -> (live: Set<MessageId>, readable: Set<MessageId>))? = nil
     ) {
-        AorusWallChatContents.aorusIsAnyWallVisible = value
+        AorusWallChatContents.aorusUpdateVisibility(self, isVisible: value)
         self.visibilityTimer?.invalidate()
         self.visibilityTimer = nil
         self.visibleMessagesProvider = value ? visibleMessages : nil
@@ -1727,7 +1745,7 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
 /// It is the same post, so that is unavoidable — and the cost is a re-download, not lost data.
 private func aorusInstallWallCacheCleanup(context: AccountContext) {
     let accountId = context.account.peerId.toInt64()
-    AorusCacheManager.shared.wallMediaCleanup = { [weak context] in
+    AorusCacheManager.shared.registerWallMediaCleanup(accountId: context.account.id.int64) { [weak context] in
         guard let context else {
             return
         }
@@ -1752,6 +1770,11 @@ private func aorusInstallWallCacheCleanup(context: AccountContext) {
             return result
         }
         |> deliverOnMainQueue).start(next: { messages in
+            // The Postbox lookup above is asynchronous. The Wall may have become visible after
+            // the first guard, so check again before retiring ids or starting media deletion.
+            guard !AorusWallChatContents.aorusIsAnyWallVisible else {
+                return
+            }
             // Retire exactly the ids this sweep read, never the whole list: the lookup above is
             // asynchronous, and anything the feed recorded in the meantime has not been cleaned
             // yet. Wiping wholesale would drop those on the floor and leak their media for good.

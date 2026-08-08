@@ -1554,14 +1554,25 @@ def main() -> None:
     if wall_store.is_file() and "func noteDisplayedMessages" not in wall_store.read_text(encoding="utf-8"):
         err.append("WallCache: AorusWallSettingsStore no longer records the posts the Wall displayed")
     cache_manager = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Features" / "UI" / "AorusCacheManager.swift"
-    if cache_manager.is_file() and "self.wallMediaCleanup?()" not in cache_manager.read_text(encoding="utf-8"):
-        err.append("WallCache: the auto-clean sweep no longer reclaims Wall media")
+    if cache_manager.is_file():
+        cache_manager_text = cache_manager.read_text(encoding="utf-8")
+        for marker in ("registerWallMediaCleanup(accountId:", "wallMediaCleanups.values"):
+            if marker not in cache_manager_text:
+                err.append(f"WallCache: account-scoped auto-clean is missing {marker}")
     wall_source = Path(__file__).parent.parent / "patches" / "submodules" / "TelegramUI" / "Sources" / "AorusWall.swift"
     if wall_source.is_file():
         wall_text = wall_source.read_text(encoding="utf-8")
-        for marker in ("aorusInstallWallCacheCleanup", "noteDisplayedMessages", "clearStorage(\n"):
+        for marker in (
+            "aorusInstallWallCacheCleanup",
+            "noteDisplayedMessages",
+            "clearStorage(\n",
+            "aorusVisibleInstances",
+            "aorusUpdateVisibility(self, isVisible:",
+        ):
             if marker not in wall_text:
                 err.append(f"WallCache: AorusWall.swift is missing {marker}")
+        if wall_text.count("guard !AorusWallChatContents.aorusIsAnyWallVisible else") < 2:
+            err.append("WallCache: visibility must be checked both before and after the async Postbox lookup")
 
     # "none" is spelled out in three modules that cannot import one another: the processor
     # that skips compositing, the picker that offers the entry, and the settings screen that

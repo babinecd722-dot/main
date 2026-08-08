@@ -21,10 +21,20 @@ public final class AorusCacheManager {
     /// an account context — this class deliberately has none, and giving it one to reach the
     /// media box would tie a settings helper to the engine.
     ///
-    /// nil until the Wall tab is built. That is the right shape rather than a gap: with no
-    /// Wall there is nothing of its to reclaim, and a stale leftover cache is reached by
-    /// Telegram's own storage cleanup like any other.
-    public var wallMediaCleanup: (() -> Void)?
+    /// Entries are keyed by Telegram account id. A single callback is not sufficient here:
+    /// every account owns a separate media box, and constructing one Wall must not detach the
+    /// cleanup registered by another account.
+    private var wallMediaCleanups: [Int64: () -> Void] = [:]
+
+    public func registerWallMediaCleanup(accountId: Int64, cleanup: @escaping () -> Void) {
+        if Thread.isMainThread {
+            self.wallMediaCleanups[accountId] = cleanup
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.wallMediaCleanups[accountId] = cleanup
+            }
+        }
+    }
 
     // MARK: - Public entry point
 
@@ -59,13 +69,26 @@ public final class AorusCacheManager {
         RunLoop.main.add(t, forMode: .common)
     }
 
-    // Wipe caches now. Safe to call from any thread (each sink is thread-safe).
+    // Wipe caches now. Calls are serialized on main together with registration, so a cleanup
+    // cannot race an account switch while the individual cache sinks do their own async work.
     public func performCleanup() {
+        if Thread.isMainThread {
+            self._performCleanup()
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?._performCleanup()
+            }
+        }
+    }
+
+    private func _performCleanup() {
         DeletedMessagesCache.shared.clearAll()
         URLCache.shared.removeAllCachedResponses()
         URLSession.shared.configuration.urlCache?.removeAllCachedResponses()
         // Last, and asynchronous inside: this one walks the media box and can take a while on
         // a large cache, whereas the three above return immediately.
-        self.wallMediaCleanup?()
+        for cleanup in self.wallMediaCleanups.values {
+            cleanup()
+        }
     }
 }
