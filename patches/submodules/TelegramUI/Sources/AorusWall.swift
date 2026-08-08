@@ -1567,6 +1567,9 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     }
 
     deinit {
+        // A Wall that is torn down without a setVisible(false) would otherwise leave the flag
+        // stuck true and silently stop the cache sweep for the rest of the session.
+        AorusWallChatContents.aorusIsAnyWallVisible = false
         self.visibilityTimer?.invalidate()
         self.navigationSearchingDisposable?.dispose()
         for observer in self.observers {
@@ -1598,10 +1601,16 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
     public func hashtagSearchUpdate(query: String) {
     }
 
+    /// Whether a Wall is on screen right now. Set here, on the main thread, so the cache
+    /// sweep can read it without a hop onto the feed's private queue — it must not clear the
+    /// media of posts the reader is looking at.
+    fileprivate static var aorusIsAnyWallVisible = false
+
     public func setVisible(
         _ value: Bool,
         visibleMessages: (() -> (live: Set<MessageId>, readable: Set<MessageId>))? = nil
     ) {
+        AorusWallChatContents.aorusIsAnyWallVisible = value
         self.visibilityTimer?.invalidate()
         self.visibilityTimer = nil
         self.visibleMessagesProvider = value ? visibleMessages : nil
@@ -1722,6 +1731,12 @@ private func aorusInstallWallCacheCleanup(context: AccountContext) {
         guard let context else {
             return
         }
+        // Not while a Wall is on screen. Every recorded post is fair game, including the ones
+        // in the current feed, so sweeping now would delete the media of posts the reader is
+        // looking at and blank them out under them. The next tick catches up.
+        guard !AorusWallChatContents.aorusIsAnyWallVisible else {
+            return
+        }
         let recorded = AorusWallSettingsStore.displayedMessageIds(accountId: accountId)
         guard !recorded.isEmpty else {
             return
@@ -1737,10 +1752,13 @@ private func aorusInstallWallCacheCleanup(context: AccountContext) {
             return result
         }
         |> deliverOnMainQueue).start(next: { messages in
-            // Every recorded post is dealt with either way: one whose message is gone from the
-            // database has no resources left to reclaim, so the list is cleared regardless and
-            // does not accumulate ids that can never be acted on.
-            AorusWallSettingsStore.clearDisplayedMessages(accountId: accountId)
+            // Retire exactly the ids this sweep read, never the whole list: the lookup above is
+            // asynchronous, and anything the feed recorded in the meantime has not been cleaned
+            // yet. Wiping wholesale would drop those on the floor and leak their media for good.
+            //
+            // Ids whose message is gone from the database are retired too — there is nothing
+            // left to reclaim for them, and keeping them would grow a list that can never act.
+            AorusWallSettingsStore.removeDisplayedMessages(recorded, accountId: accountId)
             guard !messages.isEmpty else {
                 return
             }

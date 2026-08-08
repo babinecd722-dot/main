@@ -102,11 +102,27 @@ public enum AorusWallSettingsStore {
         lock.unlock()
     }
 
-    /// Called after a sweep: their media is gone, so there is nothing left to reclaim for them.
-    public static func clearDisplayedMessages(accountId: Int64) {
+    /// Retires the ids a sweep has dealt with — their media is gone, so there is nothing left
+    /// to reclaim for them.
+    ///
+    /// Takes the exact list rather than clearing everything: a sweep reads the ids, then looks
+    /// their messages up asynchronously, and the feed can record more in between. Those later
+    /// ones have not been cleaned, and dropping them would leak their media for good.
+    public static func removeDisplayedMessages(_ ids: [MessageId], accountId: Int64) {
+        guard !ids.isEmpty else {
+            return
+        }
         lock.lock()
-        displayedCache[accountId] = []
-        UserDefaults.standard.removeObject(forKey: key("wall_displayed", accountId: accountId))
+        let stored = displayedCache[accountId]
+            ?? (UserDefaults.standard.array(forKey: key("wall_displayed", accountId: accountId)) as? [String] ?? [])
+        let retired = Set(ids.map(messageKey))
+        let remaining = stored.filter { !retired.contains($0) }
+        displayedCache[accountId] = remaining
+        if remaining.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key("wall_displayed", accountId: accountId))
+        } else {
+            UserDefaults.standard.set(remaining, forKey: key("wall_displayed", accountId: accountId))
+        }
         lock.unlock()
     }
 
