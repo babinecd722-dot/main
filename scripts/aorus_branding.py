@@ -24296,6 +24296,178 @@ def patch_disable_copy_protection(tg: Path) -> None:
             print("CopyProtection: gallery captureProtected anchor not found — skip")
 
 
+def patch_document_picker_upload(tg: Path) -> None:
+    """Make Files-provider uploads work without iCloud and local size gates.
+
+    Telegram's stock implementation waits for an NSMetadataQuery over the
+    ubiquitous-document scopes when a selected provider URL is not downloaded
+    yet.  Sideloaded builds intentionally have no iCloud container entitlement,
+    so that query may never finish and the picker appears to do nothing after
+    the user taps Open.  A URL granted by UIDocumentPicker must instead be read
+    through NSFileCoordinator; the coordinator asks the provider to materialize
+    the file and does not require access to the app's own iCloud container.
+    """
+    path = tg / "submodules/ICloudResources/Sources/ICloudResources.swift"
+    if not path.is_file():
+        print("DocumentPicker: ICloudResources.swift not found — skip")
+    else:
+        text = path.read_text(encoding="utf-8")
+        marker = "AorusGram: coordinate user-selected documents without an iCloud entitlement"
+        if marker in text:
+            print("DocumentPicker: provider-safe upload path already patched")
+        else:
+            start = text.find("public func iCloudFileDescription(_ url: URL) -> Signal<ICloudFileDescription?, NoError> {")
+            end_marker = "\nprivate final class ICloudFileResourceCopyItem"
+            end = text.find(end_marker, start)
+            if start < 0 or end < 0:
+                print("DocumentPicker: iCloudFileDescription anchors not found — skip")
+            else:
+                replacement = '''public func iCloudFileDescription(_ url: URL) -> Signal<ICloudFileDescription?, NoError> {
+    return Signal { subscriber in
+        // AorusGram: coordinate user-selected documents without an iCloud entitlement.
+        // UIDocumentPicker grants access to the selected provider URL. Coordinating
+        // the read materializes remote iCloud/Files-provider items and avoids the
+        // entitlement-bound NSMetadataQuery used by the stock implementation.
+        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        if !didStartAccessing && !FileManager.default.isReadableFile(atPath: url.path) {
+            subscriber.putNext(nil)
+            subscriber.putCompletion()
+            return EmptyDisposable
+        }
+        let accessIsActive = Atomic<Bool>(value: didStartAccessing)
+        let stopAccessing: () -> Void = {
+            if accessIsActive.swap(false) {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        let accessIntent = NSFileAccessIntent.readingIntent(with: url, options: [.withoutChanges])
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .userInitiated
+
+        coordinator.coordinate(with: [accessIntent], queue: queue, byAccessor: { error in
+            defer { stopAccessing() }
+            if error == nil {
+                subscriber.putNext(descriptionWithUrl(accessIntent.url))
+            } else {
+                subscriber.putNext(nil)
+            }
+            subscriber.putCompletion()
+        })
+
+        return ActionDisposable {
+            coordinator.cancel()
+            stopAccessing()
+        }
+    }
+}
+'''
+                path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+                print("DocumentPicker: replaced entitlement-bound metadata query with coordinated provider access")
+
+        # The stock helper only stops security-scoped access on its success
+        # path. Balance it on every early return as well (bookmark, size, name).
+        text = path.read_text(encoding="utf-8")
+        helper_scope_marker = "AorusGram: balance helper security-scoped access on every return"
+        if helper_scope_marker in text:
+            print("DocumentPicker: helper security scope already balanced")
+        else:
+            helper_scope_anchor = (
+                "        guard url.startAccessingSecurityScopedResource() else {\n"
+                "            return nil\n"
+                "        }\n"
+                "        \n"
+                "        guard let urlData = try? url.bookmarkData"
+            )
+            helper_scope_replacement = (
+                "        guard url.startAccessingSecurityScopedResource() else {\n"
+                "            return nil\n"
+                "        }\n"
+                f"        // {helper_scope_marker}.\n"
+                "        defer { url.stopAccessingSecurityScopedResource() }\n"
+                "        \n"
+                "        guard let urlData = try? url.bookmarkData"
+            )
+            if helper_scope_anchor not in text:
+                print("DocumentPicker: helper security-scope anchor not found — skip")
+            else:
+                text = text.replace(helper_scope_anchor, helper_scope_replacement, 1)
+                explicit_stop_anchor = (
+                    "        \n"
+                    "        url.stopAccessingSecurityScopedResource()\n"
+                    "        \n"
+                    "        return result"
+                )
+                if explicit_stop_anchor not in text:
+                    print("DocumentPicker: helper explicit-stop anchor not found — skip")
+                else:
+                    text = text.replace(explicit_stop_anchor, "        \n        return result", 1)
+                    path.write_text(text, encoding="utf-8")
+                    print("DocumentPicker: balanced helper security scope across early returns")
+
+    # Do not pre-empt the upload with Telegram's PremiumLimitScreen. The
+    # transport/backend remains the authority for the actual protocol limit,
+    # while AorusGram can attempt every file the user explicitly selected.
+    size_gate_marker = "AorusGram: let Telegram validate the selected document size"
+    size_gate = '''                            for item in results {
+                                if let item = item {
+                                    if item.fileSize > Int64(premiumLimits.maxUploadFileParts) * 512 * 1024 {
+                                        let controller = PremiumLimitScreen(context: __CONTEXT__, subject: .files, count: 4, action: {
+                                            return true
+                                        })
+                                        __PUSH__(controller)
+                                        return
+                                    } else if item.fileSize > Int64(limits.maxUploadFileParts) * 512 * 1024 && !isPremium {
+                                        let context = __CONTEXT__
+                                        var replaceImpl: ((ViewController) -> Void)?
+                                        let controller = PremiumLimitScreen(context: context, subject: .files, count: 2, action: {
+                                            replaceImpl?(PremiumIntroScreen(context: context, source: .upload))
+                                            return true
+                                        })
+                                        replaceImpl = { [weak controller] c in
+                                            controller?.replace(with: c)
+                                        }
+                                        __PUSH__(controller)
+                                        return
+                                    }
+                                }
+                            }
+'''
+    size_gate_targets = (
+        (
+            tg / "submodules/TelegramUI/Sources/ChatControllerOpenAttachmentMenu.swift",
+            "strongSelf.context",
+            "strongSelf.push",
+        ),
+        (
+            tg / "submodules/TelegramUI/Components/Stories/StoryContainerScreen/Sources/StoryItemSetContainerViewSendMessage.swift",
+            "component.context",
+            "component.controller()?.push",
+        ),
+    )
+    for gate_path, context, push in size_gate_targets:
+        if not gate_path.is_file():
+            print(f"DocumentPicker: {gate_path.name} not found — skip size gate")
+            continue
+        gate_text = gate_path.read_text(encoding="utf-8")
+        if size_gate_marker in gate_text:
+            print(f"DocumentPicker: local size gate already removed in {gate_path.name}")
+            continue
+        gate_anchor = size_gate.replace("__CONTEXT__", context).replace("__PUSH__", push)
+        if gate_anchor not in gate_text:
+            print(f"DocumentPicker: local size gate anchor not found in {gate_path.name} — skip")
+            continue
+        gate_text = gate_text.replace(
+            gate_anchor,
+            f"                            // {size_gate_marker}; the backend remains authoritative.\n",
+            1,
+        )
+        gate_path.write_text(gate_text, encoding="utf-8")
+        print(f"DocumentPicker: removed local file-size gate from {gate_path.name}")
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     if not tg.is_dir():
@@ -24401,6 +24573,7 @@ def main() -> None:
     patch_login_backup_key_button(tg)
     patch_formatting_panel(tg)
     patch_voice_to_text(tg)
+    patch_document_picker_upload(tg)
     patch_disable_copy_protection(tg)
     patch_unlimited_recent_stickers(tg)
     patch_unlimited_pinned_chats(tg)

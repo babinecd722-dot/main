@@ -2106,6 +2106,34 @@ def main() -> None:
     if not performance_hud.is_file() or "updateGlassAppearance(enabled: settings.glassUI)" not in performance_hud.read_text(encoding="utf-8"):
         err.append("GlassEffects: performance HUD ignores the setting")
 
+    document_resources = tg / "submodules" / "ICloudResources" / "Sources" / "ICloudResources.swift"
+    document_resources_text = document_resources.read_text(encoding="utf-8") if document_resources.is_file() else ""
+    for marker in (
+        "AorusGram: coordinate user-selected documents without an iCloud entitlement",
+        "AorusGram: balance helper security-scoped access on every return",
+        "NSFileAccessIntent.readingIntent(with: url, options: [.withoutChanges])",
+        "descriptionWithUrl(accessIntent.url)",
+        "let accessIsActive = Atomic<Bool>(value: didStartAccessing)",
+        "url.stopAccessingSecurityScopedResource()",
+        "coordinator.cancel()\n            stopAccessing()",
+    ):
+        if marker not in document_resources_text:
+            err.append(f"DocumentPicker: provider-safe upload path is missing {marker}")
+    if "NSMetadataQueryUbiquitousDocumentsScope" in document_resources_text:
+        err.append("DocumentPicker: upload path still depends on entitlement-bound iCloud metadata scopes")
+
+    document_size_gate_marker = "AorusGram: let Telegram validate the selected document size"
+    document_size_gate_files = (
+        tg / "submodules" / "TelegramUI" / "Sources" / "ChatControllerOpenAttachmentMenu.swift",
+        tg / "submodules" / "TelegramUI" / "Components" / "Stories" / "StoryContainerScreen" / "Sources" / "StoryItemSetContainerViewSendMessage.swift",
+    )
+    for document_size_gate_file in document_size_gate_files:
+        document_size_gate_text = document_size_gate_file.read_text(encoding="utf-8") if document_size_gate_file.is_file() else ""
+        if document_size_gate_marker not in document_size_gate_text:
+            err.append(f"DocumentPicker: local file-size gate remains in {document_size_gate_file.name}")
+        if "item.fileSize > Int64(premiumLimits.maxUploadFileParts)" in document_size_gate_text:
+            err.append(f"DocumentPicker: premium file-size check remains in {document_size_gate_file.name}")
+
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"
     bgtask_val = "com.aorusgram.dmc.sync"
