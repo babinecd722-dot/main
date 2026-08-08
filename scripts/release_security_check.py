@@ -45,7 +45,7 @@ def main() -> int:
     for marker in (
         "BUILD_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_mode || 'simulator' }}",
         "--configuration=debug_sim_arm64",
-        "--target=//Telegram/Telegram",
+        "--target=//Telegram:Telegram",
         "LIBXRAY_VERSION: v26.7.28",
         "07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9",
         "REALITY_PROFILE_B64: ${{ secrets.REALITY_PROFILE_B64 }}",

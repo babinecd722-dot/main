@@ -922,7 +922,7 @@ jobs:
             --codesigningInformationPath $RUNNER_TEMP/signing \
             --buildNumber=${{ github.run_number }} \
             --configuration=debug_sim_arm64 \
-            --target=//Telegram/Telegram \
+            --target=//Telegram:Telegram \
             2>&1 | tee "$RUNNER_TEMP/build.log" | tail -100
           exit "${PIPESTATUS[0]}"
 
