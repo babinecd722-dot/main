@@ -13,6 +13,13 @@ apple_static_xcframework_import(
     ],
 )
 
+objc_library(
+    name = "LibXraySystemLibraries",
+    sdk_dylibs = [
+        "libresolv",
+    ],
+)
+
 filegroup(
     name = "AorusVideoMaskImages",
     srcs = glob([
@@ -57,6 +64,7 @@ swift_library(
     ],
     deps = [
         ":LibXray",
+        ":LibXraySystemLibraries",
         "//submodules/Display:Display",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",

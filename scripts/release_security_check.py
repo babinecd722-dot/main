@@ -53,6 +53,11 @@ def main() -> int:
         if marker not in workflow:
             fail(errors, f"simulator/REALITY workflow invariant is missing {marker}")
 
+    aorus_build = (root / "patches/submodules/AorusGram/BUILD").read_text(encoding="utf-8")
+    for marker in ('name = "LibXraySystemLibraries"', '"libresolv"', '":LibXraySystemLibraries"'):
+        if marker not in aorus_build:
+            fail(errors, f"LibXray system dependency invariant is missing {marker}")
+
     if upstream_version is not None:
         spoof_paths = [
             root / "AorusGram/Sources/Core/ClientSpoofManager.swift",
