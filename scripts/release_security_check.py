@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import sys
 from pathlib import Path
@@ -52,6 +53,23 @@ def main() -> int:
     ):
         if marker not in workflow:
             fail(errors, f"simulator/REALITY workflow invariant is missing {marker}")
+
+    for marker in (
+        '"enable_icloud": True',
+        "'com.apple.developer.icloud-services': ['CloudKit', 'CloudDocuments']",
+        "'com.apple.developer.icloud-container-identifiers': ['iCloud.' + base]",
+        "'com.apple.developer.ubiquity-kvstore-identifier': team + '.' + base",
+        "'com.apple.developer.icloud-container-environment': 'Development'",
+    ):
+        if marker not in workflow:
+            fail(errors, f"iCloud workflow invariant is missing {marker}")
+
+    build_config = json.loads((root / "build-config/appstore-configuration.json").read_text(encoding="utf-8"))
+    if build_config.get("enable_icloud") is not True:
+        fail(errors, "checked-in build configuration must enable iCloud")
+    apply_build_config = (root / "scripts/apply_build_config.py").read_text(encoding="utf-8")
+    if '"enable_icloud": True' not in apply_build_config:
+        fail(errors, "default build configuration must enable iCloud")
 
     aorus_build = (root / "patches/submodules/AorusGram/BUILD").read_text(encoding="utf-8")
     for marker in ('name = "LibXraySystemLibraries"', '"libresolv"', '":LibXraySystemLibraries"'):

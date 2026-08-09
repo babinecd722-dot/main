@@ -24273,22 +24273,21 @@ def patch_disable_copy_protection(tg: Path) -> None:
 
 
 def patch_document_picker_upload(tg: Path) -> None:
-    """Make Files-provider uploads work without iCloud and local size gates.
+    """Make local and cloud-backed Files-provider uploads reliable.
 
     Telegram's stock implementation waits for an NSMetadataQuery over the
     ubiquitous-document scopes when a selected provider URL is not downloaded
-    yet.  Sideloaded builds intentionally have no iCloud container entitlement,
-    so that query may never finish and the picker appears to do nothing after
-    the user taps Open.  A URL granted by UIDocumentPicker must instead be read
-    through NSFileCoordinator; the coordinator asks the provider to materialize
-    the file and does not require access to the app's own iCloud container.
+    yet. A provider may not make that query complete promptly, and a third-party
+    signer may also omit the app's iCloud entitlement. A URL granted by
+    UIDocumentPicker should instead be read through NSFileCoordinator; the
+    coordinator asks the selected provider to materialize the file directly.
     """
     path = tg / "submodules/ICloudResources/Sources/ICloudResources.swift"
     if not path.is_file():
         print("DocumentPicker: ICloudResources.swift not found — skip")
     else:
         text = path.read_text(encoding="utf-8")
-        marker = "AorusGram: coordinate user-selected documents without an iCloud entitlement"
+        marker = "AorusGram: coordinate user-selected documents through Files providers"
         if marker in text:
             print("DocumentPicker: provider-safe upload path already patched")
         else:
@@ -24300,7 +24299,7 @@ def patch_document_picker_upload(tg: Path) -> None:
             else:
                 replacement = '''public func iCloudFileDescription(_ url: URL) -> Signal<ICloudFileDescription?, NoError> {
     return Signal { subscriber in
-        // AorusGram: coordinate user-selected documents without an iCloud entitlement.
+        // AorusGram: coordinate user-selected documents through Files providers.
         // UIDocumentPicker grants access to the selected provider URL. Coordinating
         // the read materializes remote iCloud/Files-provider items and avoids the
         // entitlement-bound NSMetadataQuery used by the stock implementation.

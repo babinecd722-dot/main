@@ -2187,7 +2187,7 @@ def main() -> None:
     document_resources = tg / "submodules" / "ICloudResources" / "Sources" / "ICloudResources.swift"
     document_resources_text = document_resources.read_text(encoding="utf-8") if document_resources.is_file() else ""
     for marker in (
-        "AorusGram: coordinate user-selected documents without an iCloud entitlement",
+        "AorusGram: coordinate user-selected documents through Files providers",
         "AorusGram: balance helper security-scoped access on every return",
         "NSFileAccessIntent.readingIntent(with: url, options: [.withoutChanges])",
         "descriptionWithUrl(accessIntent.url)",

@@ -696,7 +696,7 @@ jobs:
               "app_specific_url_scheme": "aorusgram",
               "premium_iap_product_id": "",
               "enable_siri": False,
-              "enable_icloud": False
+              "enable_icloud": True
           }
           open('build-system/appstore-configuration.json', 'w').write(json.dumps(config, indent=2))
           print('Config written:')
@@ -827,6 +827,26 @@ jobs:
           ]
 
           for name, bundle_suffix in profiles:
+              entitlements = {
+                  'application-identifier': team + '.' + bundle_suffix,
+                  'aps-environment': 'development',
+                  'keychain-access-groups': [team + '.' + bundle_suffix, team + '.' + base],
+                  'com.apple.developer.team-identifier': team,
+                  # plisttool checks ALL entitlement keys in the generated
+                  # entitlements file against the provisioning profile.
+                  # The Telegram BUILD template includes app-groups for all targets.
+                  'com.apple.security.application-groups': ['group.' + base],
+              }
+              if name == 'Telegram':
+                  # Keep this in lockstep with Telegram/BUILD's icloud_fragment.
+                  # iCloud is a host-app capability; extensions do not receive the
+                  # container entitlement unless they explicitly start using it.
+                  entitlements.update({
+                      'com.apple.developer.icloud-services': ['CloudKit', 'CloudDocuments'],
+                      'com.apple.developer.icloud-container-identifiers': ['iCloud.' + base],
+                      'com.apple.developer.ubiquity-kvstore-identifier': team + '.' + base,
+                      'com.apple.developer.icloud-container-environment': 'Development',
+                  })
               plist = {
                   'AppIDName': 'AorusGram',
                   'ApplicationIdentifierPrefix': [team],
@@ -842,16 +862,7 @@ jobs:
                   'UUID': str(uuid.uuid4()),
                   'Version': 1,
                   'Platform': ['iOS'],
-                  'Entitlements': {
-                      'application-identifier': team + '.' + bundle_suffix,
-                      'aps-environment': 'development',
-                      'keychain-access-groups': [team + '.' + bundle_suffix, team + '.' + base],
-                      'com.apple.developer.team-identifier': team,
-                      # plisttool checks ALL entitlement keys in the generated
-                      # entitlements file against the provisioning profile.
-                      # The Telegram BUILD template includes app-groups for all targets.
-                      'com.apple.security.application-groups': ['group.' + base],
-                  }
+                  'Entitlements': entitlements
               }
               plist_bytes = plistlib.dumps(plist, fmt=plistlib.FMT_XML)
               tmp_plist = '/tmp/pp-' + name + '.plist'
