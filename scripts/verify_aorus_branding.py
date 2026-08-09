@@ -1027,7 +1027,7 @@ def main() -> None:
             'aorusgram_proxy_config_updated',
             'aorusgram_vless_connection_state',
             'aorusConnectionState = "online"',
-            'aorusConnectionState = "proxy_issue"',
+            'aorusConnectionState = aorusProxyHasIssues ? "proxy_issue" : "connecting"',
             'network.dropConnectionStatus()',
         ):
             if marker not in account_text:
