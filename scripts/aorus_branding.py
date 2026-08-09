@@ -4756,19 +4756,29 @@ def patch_info_plist_file_sharing(tg: Path) -> None:
 
 
 # Inline Swift that builds Telegram's SOCKS settings for the in-process REALITY
-# endpoint. AorusRealityManager publishes the loopback port only after libXray has
-# started successfully. The marker is bound to the current PID, so a value persisted
-# by an earlier app launch is rejected instead of pointing Telegram at a dead port.
+# endpoint. While a subscription is active, the persistent requirement marker
+# keeps Telegram on a deliberately closed loopback port until libXray is ready. This
+# is fail-closed: provisioning or core failures cannot silently reopen a direct route.
+# Without a subscription the marker is false and Telegram retains its direct path.
 _AORUS_PROXY_SNIPPET = (
     "({ () -> MTSocksProxySettings? in\n"
-    "                guard let aorusStore = UserDefaults(suiteName: \"ng.session.store\"),\n"
-    "                      let aorusEndpoint = aorusStore.dictionary(forKey: \"71d447f8-9128-4d18-b63c-ec11ef43ba26\"),\n"
-    "                      let aorusPid = aorusEndpoint[\"pid\"] as? NSNumber,\n"
-    "                      aorusPid.int32Value == ProcessInfo.processInfo.processIdentifier,\n"
-    "                      let aorusPortValue = aorusEndpoint[\"port\"] as? NSNumber else { return nil }\n"
-    "                let aorusPort = aorusPortValue.intValue\n"
-    "                guard aorusPort > 0, aorusPort <= 65535 else { return nil }\n"
-    "                return MTSocksProxySettings(ip: \"127.0.0.1\", port: UInt16(aorusPort), username: nil, password: nil, secret: nil)\n"
+    "                guard let aorusStore = UserDefaults(suiteName: \"ng.session.store\") else {\n"
+    "                    return MTSocksProxySettings(ip: \"127.0.0.1\", port: 38190, username: nil, password: nil, secret: nil)\n"
+    "                }\n"
+    "                let aorusCurrentPid = ProcessInfo.processInfo.processIdentifier\n"
+    "                let aorusRequirement = aorusStore.dictionary(forKey: \"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca\")\n"
+    "                let aorusRequired = (aorusRequirement?[\"required\"] as? NSNumber)?.boolValue ?? true\n"
+    "                guard aorusRequired else { return nil }\n"
+    "                if let aorusEndpoint = aorusStore.dictionary(forKey: \"71d447f8-9128-4d18-b63c-ec11ef43ba26\"),\n"
+    "                   let aorusPid = aorusEndpoint[\"pid\"] as? NSNumber,\n"
+    "                   aorusPid.int32Value == aorusCurrentPid,\n"
+    "                   let aorusPortValue = aorusEndpoint[\"port\"] as? NSNumber {\n"
+    "                    let aorusPort = aorusPortValue.intValue\n"
+    "                    if aorusPort > 0 && aorusPort <= 65535 {\n"
+    "                        return MTSocksProxySettings(ip: \"127.0.0.1\", port: UInt16(aorusPort), username: nil, password: nil, secret: nil)\n"
+    "                    }\n"
+    "                }\n"
+    "                return MTSocksProxySettings(ip: \"127.0.0.1\", port: 38190, username: nil, password: nil, secret: nil)\n"
     "            })()"
 )
 
@@ -4893,6 +4903,23 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
         "        self.managedOperationsDisposable.add(network.connectionStatus.start(next: { status in\n"
         "            let aorusDefaults = UserDefaults.standard\n"
         "            let aorusUnhealthyKey = \"aorusgram_proxy_unhealthy_since\"\n"
+        "            let aorusConnectionKey = \"aorusgram_vless_connection_state\"\n"
+        "            let aorusConnectionState: String\n"
+        "            switch status {\n"
+        "            case .waitingForNetwork:\n"
+        "                aorusConnectionState = \"waiting_for_network\"\n"
+        "            case let .connecting(_, aorusProxyHasIssues):\n"
+        "                aorusConnectionState = aorusProxyHasIssues ? \"proxy_issue\" : \"connecting\"\n"
+        "            case .updating:\n"
+        "                aorusConnectionState = \"updating\"\n"
+        "            case .online:\n"
+        "                aorusConnectionState = \"online\"\n"
+        "            }\n"
+        "            aorusDefaults.set([\n"
+        "                \"pid\": Int(ProcessInfo.processInfo.processIdentifier),\n"
+        "                \"state\": aorusConnectionState,\n"
+        "                \"updatedAt\": Date().timeIntervalSince1970\n"
+        "            ], forKey: aorusConnectionKey)\n"
         "            if case let .connecting(_, aorusProxyHasIssues) = status, aorusProxyHasIssues {\n"
         "                // Stamp the first moment issues appeared; keep it until they clear.\n"
         "                if aorusDefaults.double(forKey: aorusUnhealthyKey) == 0 {\n"

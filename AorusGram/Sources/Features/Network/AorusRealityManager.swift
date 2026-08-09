@@ -8,6 +8,7 @@ public final class AorusRealityManager {
 
     private static let suiteName = "ng.session.store"
     private static let endpointKey = "71d447f8-9128-4d18-b63c-ec11ef43ba26"
+    private static let requirementKey = "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"
     private static let candidatePorts = [38_191, 38_192, 38_193]
 
     private let queue = DispatchQueue(label: "com.aorusgram.reality", qos: .userInitiated)
@@ -24,10 +25,12 @@ public final class AorusRealityManager {
             licenseDidLock()
             return
         }
+        publishRequirement(required: true)
         AorusProxyManager.shared.refresh(force: false)
     }
 
     public func ensureRunning() {
+        publishRequirement(required: authorizationAllowsTunnel)
         queue.async { [weak self] in
             guard let self else { return }
             if self.mayRun,
@@ -45,6 +48,7 @@ public final class AorusRealityManager {
     }
 
     func apply(profile: AorusRealityProfile, rankedEndpoints: [AorusRealityEndpoint]) {
+        publishRequirement(required: authorizationAllowsTunnel)
         queue.async { [weak self] in
             guard let self else { return }
             guard self.authorizationAllowsTunnel,
@@ -72,6 +76,10 @@ public final class AorusRealityManager {
     }
 
     public func licenseDidLock() {
+        // This method is also used when provisioning fails. Reconcile against the
+        // actual license state so a transient control-plane error cannot reopen a
+        // direct route for a still-subscribed account.
+        publishRequirement(required: authorizationAllowsTunnel)
         queue.async { [weak self] in
             self?.stopLocked(clearProfile: true)
         }
@@ -229,6 +237,16 @@ public final class AorusRealityManager {
             "port": port,
             "updatedAt": Date().timeIntervalSince1970
         ], forKey: Self.endpointKey)
+        postProxyUpdate()
+    }
+
+    private func publishRequirement(required: Bool) {
+        guard let store = UserDefaults(suiteName: Self.suiteName) else { return }
+        store.set([
+            "pid": Int(ProcessInfo.processInfo.processIdentifier),
+            "required": required,
+            "updatedAt": Date().timeIntervalSince1970
+        ], forKey: Self.requirementKey)
         postProxyUpdate()
     }
 

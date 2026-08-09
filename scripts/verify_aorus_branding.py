@@ -1003,8 +1003,10 @@ def main() -> None:
         network_text = network_source.read_text(encoding="utf-8")
         for marker in (
             'dictionary(forKey: "71d447f8-9128-4d18-b63c-ec11ef43ba26")',
-            "aorusPid.int32Value == ProcessInfo.processInfo.processIdentifier",
+            'dictionary(forKey: "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca")',
+            "aorusPid.int32Value == aorusCurrentPid",
             'MTSocksProxySettings(ip: "127.0.0.1"',
+            "port: 38190",
             "secret: nil",
         ):
             if marker not in network_text:
@@ -1015,6 +1017,21 @@ def main() -> None:
         ):
             if forbidden in network_text:
                 err.append(f"MTProxyAntiDPI: legacy dd downgrade path remains {forbidden}")
+
+    account_source = tg / "submodules" / "TelegramCore" / "Sources" / "Account" / "Account.swift"
+    if not account_source.is_file():
+        err.append("RealityProxy: Account.swift is missing")
+    else:
+        account_text = account_source.read_text(encoding="utf-8")
+        for marker in (
+            'aorusgram_proxy_config_updated',
+            'aorusgram_vless_connection_state',
+            'aorusConnectionState = "online"',
+            'aorusConnectionState = "proxy_issue"',
+            'network.dropConnectionStatus()',
+        ):
+            if marker not in account_text:
+                err.append(f"RealityProxy: runtime enforcement is missing {marker}")
 
     call_context = tg / "submodules" / "TelegramVoip" / "Sources" / "OngoingCallContext.swift"
     call_context_text = call_context.read_text(encoding="utf-8") if call_context.is_file() else ""
@@ -1033,11 +1050,14 @@ def main() -> None:
     call_proxy_text = call_proxy.read_text(encoding="utf-8") if call_proxy.is_file() else ""
     for marker in (
         "aorusgram_call_proxy_diagnostics",
-        'status: "reality_not_ready"',
+        'status: "reality_required_not_ready"',
+        'status: "direct_without_subscription"',
         'status: "reality_ready"',
         'udp: "xudp"',
         'host: "127.0.0.1"',
-        'dictionary(forKey: "71d447f8-9128-4d18-b63c-ec11ef43ba26")',
+        'aorusRealityEndpointKey = "71d447f8-9128-4d18-b63c-ec11ef43ba26"',
+        'aorusRealityRequirementKey = "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"',
+        "aorusClosedProxyPort",
     ):
         if marker not in call_proxy_text:
             err.append(f"CallProxyREALITY: provisioning invariant is missing {marker}")
@@ -1070,6 +1090,8 @@ def main() -> None:
             '"runXrayFromJson"',
             '"packetEncoding": "xudp"',
             '"security": "reality"',
+            'publishRequirement(required: authorizationAllowsTunnel)',
+            '"required": required',
             "AorusTamperGuard.isFridaDetected",
         ):
             if marker not in reality_manager_text:

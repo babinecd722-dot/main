@@ -101,8 +101,11 @@ def main() -> int:
         fail(errors, "build injection must reject stale source trees")
     for marker in (
         'dictionary(forKey: \\"71d447f8-9128-4d18-b63c-ec11ef43ba26\\")',
-        'aorusPid.int32Value == ProcessInfo.processInfo.processIdentifier',
+        'dictionary(forKey: \\"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca\\")',
+        'aorusPid.int32Value == aorusCurrentPid',
         'MTSocksProxySettings(ip: \\"127.0.0.1\\"',
+        'port: 38190',
+        'aorusgram_vless_connection_state',
         'secret: nil',
     ):
         if marker not in branding:
@@ -136,6 +139,8 @@ def main() -> int:
             '"packetEncoding": "xudp"',
             '"security": "reality"',
             '"127.0.0.1"',
+            'publishRequirement(required: authorizationAllowsTunnel)',
+            '"required": required',
             "AorusTamperGuard.isFridaDetected",
         ):
             if marker not in reality_manager:
