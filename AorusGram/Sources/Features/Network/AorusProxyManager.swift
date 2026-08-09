@@ -595,7 +595,16 @@ public final class AorusProxyManager {
     }
 
     private func endpointLabel(_ endpoint: AorusRealityEndpoint) -> String {
-        "ATunnel \(endpoint.priority)"
+        if let region = endpoint.region?.trimmingCharacters(in: .whitespacesAndNewlines), !region.isEmpty {
+            return region.uppercased()
+        }
+        // Profiles issued before the signed `region` field was introduced use the
+        // stable production priority order. Keep their original ATunnel country UI.
+        switch endpoint.priority {
+        case 1: return "DE"
+        case 2: return "FI"
+        default: return "ATunnel \(endpoint.priority)"
+        }
     }
 
     private func hmacHex(message: String, keyHexBytes: [UInt8]) -> String? {

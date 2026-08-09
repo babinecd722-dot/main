@@ -21,6 +21,7 @@ struct AorusRealityCredential: Decodable, Equatable {
 struct AorusRealityEndpoint: Decodable, Equatable {
     let address: String
     let port: Int
+    let region: String?
     let serverName: String
     let publicKey: String
     let shortId: String
@@ -29,7 +30,7 @@ struct AorusRealityEndpoint: Decodable, Equatable {
     let priority: Int
 
     enum CodingKeys: String, CodingKey {
-        case address, port, priority, fingerprint
+        case address, port, region, priority, fingerprint
         case serverName = "server_name"
         case publicKey = "public_key"
         case shortId = "short_id"
@@ -49,6 +50,17 @@ struct AorusRealityEndpoint: Decodable, Equatable {
               spiderX.hasPrefix("/"), spiderX.count <= 128,
               fingerprint == "chrome" else {
             return false
+        }
+        if let region {
+            guard !region.isEmpty, region.count <= 32,
+                  region.utf8.allSatisfy({ byte in
+                      (byte >= 0x30 && byte <= 0x39) ||
+                      (byte >= 0x41 && byte <= 0x5a) ||
+                      (byte >= 0x61 && byte <= 0x7a) ||
+                      byte == 0x20 || byte == 0x2d
+                  }) else {
+                return false
+            }
         }
         return address.utf8.allSatisfy { byte in
             (byte >= 0x30 && byte <= 0x39) ||
