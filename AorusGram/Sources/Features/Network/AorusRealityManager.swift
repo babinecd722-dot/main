@@ -1,8 +1,8 @@
 import Foundation
 import LibXray
 
-/// Runs the official XTLS/Xray core in-process and exposes one loopback SOCKS5 endpoint.
-/// TelegramCore only ever sees 127.0.0.1; VLESS/REALITY credentials stay inside this module.
+/// Owns the in-process Xray core. Credentials are supplied at runtime by the
+/// signed control plane and never persisted by this class.
 public final class AorusRealityManager {
     public static let shared = AorusRealityManager()
 
@@ -11,104 +11,142 @@ public final class AorusRealityManager {
     private static let candidatePorts = [38_191, 38_192, 38_193]
 
     private let queue = DispatchQueue(label: "com.aorusgram.reality", qos: .userInitiated)
+    private var profile: AorusRealityProfile?
+    private var rankedEndpoints: [AorusRealityEndpoint] = []
+    private var activeEndpoint: AorusRealityEndpoint?
     private var activePort: Int?
     private var transitionInProgress = false
 
     private init() {}
 
     public func startIfAuthorized() {
-        queue.async { [weak self] in
-            self?.startLockedIfAuthorized()
+        guard authorizationAllowsTunnel else {
+            licenseDidLock()
+            return
         }
+        AorusProxyManager.shared.refresh(force: false)
     }
 
     public func ensureRunning() {
         queue.async { [weak self] in
             guard let self else { return }
-            if self.isCoreRunning(), let port = self.activePort ?? self.endpointForCurrentProcess() {
+            if self.mayRun,
+               self.isCoreRunning(),
+               let port = self.activePort ?? self.endpointForCurrentProcess() {
                 self.activePort = port
                 self.publishEndpoint(port: port)
-            } else {
-                self.activePort = nil
-                self.clearEndpoint(postUpdate: false)
-                self.startLockedIfAuthorized()
+                return
             }
+            self.stopLocked(clearProfile: false)
+            DispatchQueue.global(qos: .utility).async {
+                AorusProxyManager.shared.refresh(force: false)
+            }
+        }
+    }
+
+    func apply(profile: AorusRealityProfile, rankedEndpoints: [AorusRealityEndpoint]) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard self.authorizationAllowsTunnel,
+                  profile.isValid(for: DeviceFingerprint.deviceHash()) else {
+                self.stopLocked(clearProfile: true)
+                return
+            }
+            let validRanked = rankedEndpoints.filter { endpoint in
+                endpoint.isValid && profile.endpoints.contains(endpoint)
+            }
+            let nextRanked = validRanked.isEmpty ? profile.endpoints : validRanked
+            let canKeepRunning = self.profile?.credential == profile.credential &&
+                self.isCoreRunning() &&
+                self.activePort != nil &&
+                self.activeEndpoint == nextRanked.first
+            self.profile = profile
+            self.rankedEndpoints = nextRanked
+            if canKeepRunning, let port = self.activePort, let endpoint = self.activeEndpoint {
+                self.publishEndpoint(port: port)
+                AorusProxyManager.shared.realityEndpointDidActivate(endpoint)
+                return
+            }
+            self.restartLocked()
         }
     }
 
     public func licenseDidLock() {
         queue.async { [weak self] in
-            self?.stopLocked()
+            self?.stopLocked(clearProfile: true)
         }
     }
 
-    private var mayRun: Bool {
-        guard AorusRealityProfileProvider.isProvisioned,
-              LicenseKeyProvider.isProvisioned,
+    private var authorizationAllowsTunnel: Bool {
+        guard LicenseKeyProvider.isProvisioned,
               !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"),
               !AorusTamperGuard.isFridaDetected,
-              !UserDefaults.standard.bool(forKey: "_ag_frida") else {
+              !UserDefaults.standard.bool(forKey: "_ag_frida"),
+              !AorusTamperAccumulator.shared.isTripped else {
             return false
         }
         return LicenseStore.shared.effectiveOfflineStatus().allowsAppAccess
     }
 
-    private func startLockedIfAuthorized() {
+    private var mayRun: Bool {
+        guard authorizationAllowsTunnel, let profile else { return false }
+        return profile.isValid(for: DeviceFingerprint.deviceHash())
+    }
+
+    private func restartLocked() {
         guard !transitionInProgress else { return }
-        guard mayRun else {
-            stopLocked()
-            return
-        }
-        if isCoreRunning(), let port = activePort ?? endpointForCurrentProcess() {
-            activePort = port
-            publishEndpoint(port: port)
+        guard mayRun, let profile else {
+            stopLocked(clearProfile: true)
             return
         }
 
         transitionInProgress = true
         defer { transitionInProgress = false }
+        _ = invoke(method: "stopXray")
+        activePort = nil
+        activeEndpoint = nil
         clearEndpoint(postUpdate: false)
 
-        var startedPort: Int?
-        _ = AorusRealityProfileProvider.withProfile { profile in
-            for port in Self.candidatePorts {
-                guard let config = self.makeConfig(profile: profile, localPort: port) else { return }
-                let response = self.invoke(method: "runXrayFromJson", payload: ["configJSON": config])
-                if response?.success == true, self.isCoreRunning() {
-                    startedPort = port
+        let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints
+        for endpoint in endpointOrder {
+            guard mayRun else { break }
+            for localPort in Self.candidatePorts {
+                guard let config = makeConfig(profile: profile, endpoint: endpoint, localPort: localPort) else {
+                    continue
+                }
+                let response = invoke(method: "runXrayFromJson", payload: ["configJSON": config])
+                if response?.success == true, isCoreRunning() {
+                    activePort = localPort
+                    activeEndpoint = endpoint
+                    publishEndpoint(port: localPort)
+                    AorusProxyManager.shared.realityEndpointDidActivate(endpoint)
                     return
                 }
-                _ = self.invoke(method: "stopXray")
+                _ = invoke(method: "stopXray")
             }
         }
-
-        guard mayRun, let port = startedPort else {
-            _ = invoke(method: "stopXray")
-            activePort = nil
-            clearEndpoint(postUpdate: true)
-            return
-        }
-        activePort = port
-        publishEndpoint(port: port)
+        clearEndpoint(postUpdate: true)
     }
 
-    private func stopLocked() {
+    private func stopLocked(clearProfile: Bool) {
         if transitionInProgress { return }
         transitionInProgress = true
         defer { transitionInProgress = false }
         _ = invoke(method: "stopXray")
         activePort = nil
+        activeEndpoint = nil
+        if clearProfile {
+            profile = nil
+            rankedEndpoints.removeAll(keepingCapacity: false)
+        }
         clearEndpoint(postUpdate: true)
     }
 
-    private func makeConfig(profile: AorusRealityProfile, localPort: Int) -> String? {
-        let realitySettings: [String: Any] = [
-            "fingerprint": profile.fingerprint ?? "safari",
-            "serverName": profile.serverName,
-            "publicKey": profile.publicKey,
-            "shortId": profile.shortId,
-            "spiderX": profile.spiderX ?? "/"
-        ]
+    private func makeConfig(
+        profile: AorusRealityProfile,
+        endpoint: AorusRealityEndpoint,
+        localPort: Int
+    ) -> String? {
         let config: [String: Any] = [
             "log": ["loglevel": "warning"],
             "inbounds": [[
@@ -116,23 +154,19 @@ public final class AorusRealityManager {
                 "listen": "127.0.0.1",
                 "port": localPort,
                 "protocol": "socks",
-                "settings": [
-                    "auth": "noauth",
-                    "udp": true,
-                    "ip": "127.0.0.1"
-                ]
+                "settings": ["auth": "noauth", "udp": true, "ip": "127.0.0.1"]
             ]],
             "outbounds": [[
                 "tag": "aorus-reality",
                 "protocol": "vless",
                 "settings": [
                     "vnext": [[
-                        "address": profile.server,
-                        "port": profile.port,
+                        "address": endpoint.address,
+                        "port": endpoint.port,
                         "users": [[
-                            "id": profile.uuid,
+                            "id": profile.credential.uuid,
                             "encryption": "none",
-                            "flow": "xtls-rprx-vision"
+                            "flow": profile.credential.flow
                         ]]
                     ]],
                     "packetEncoding": "xudp"
@@ -140,7 +174,13 @@ public final class AorusRealityManager {
                 "streamSettings": [
                     "network": "raw",
                     "security": "reality",
-                    "realitySettings": realitySettings
+                    "realitySettings": [
+                        "fingerprint": endpoint.fingerprint,
+                        "serverName": endpoint.serverName,
+                        "publicKey": endpoint.publicKey,
+                        "shortId": endpoint.shortId,
+                        "spiderX": endpoint.spiderX
+                    ]
                 ]
             ]]
         ]
@@ -162,15 +202,14 @@ public final class AorusRealityManager {
         var request: [String: Any] = ["apiVersion": 1, "method": method]
         if let payload { request["payload"] = payload }
         guard JSONSerialization.isValidJSONObject(request),
-              let requestData = try? JSONSerialization.data(withJSONObject: request, options: [.sortedKeys]),
-              let requestString = String(data: requestData, encoding: .utf8) else {
+              let data = try? JSONSerialization.data(withJSONObject: request, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
             return nil
         }
-        return requestString.withCString { pointer in
+        return text.withCString { pointer in
             guard let raw = CGoInvoke(UnsafeMutablePointer(mutating: pointer)) else { return nil }
             defer { CGoFree(raw) }
-            let response = String(cString: raw)
-            return try? JSONDecoder().decode(InvokeResponse.self, from: Data(response.utf8))
+            return try? JSONDecoder().decode(InvokeResponse.self, from: Data(String(cString: raw).utf8))
         }
     }
 

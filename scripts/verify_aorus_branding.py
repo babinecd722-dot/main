@@ -957,19 +957,32 @@ def main() -> None:
             err.append("AorusProxyManager: build-time proxy key was not injected")
         if "/* AORUS-BUILD-PROXY-KEY-INJECTED */" not in proxy_text:
             err.append("AorusProxyManager: trusted build-time proxy injection sentinel is missing")
-        if "private let minFetchInterval: TimeInterval = 3600" not in proxy_text:
-            err.append("AorusProxyManager: the one-hour getProxy cadence changed")
         if "URLSession.shared.dataTask(with: request)" in proxy_text:
             err.append("AorusProxyManager: getProxy bypasses the protected API session")
         for marker in (
             "URLSessionConfiguration.ephemeral",
             "delegate: AorusPinnedSessionDelegate.shared",
-            "apiSession.dataTask(with: request)",
-            "ProxyKeychain.write(data)",
-            "ProxyVault.publish(cfg",
+            "apiSession.dataTask(with: signedRequest)",
+            'forHTTPHeaderField: "X-Aorus-Device-Key"',
+            'forHTTPHeaderField: "X-Aorus-Device-Proof"',
+            "AorusRealityDeviceIdentity.proof",
+            "AorusRealityEnvelopeVerifier.decode",
+            "worker.schema == 2",
+            "(1 ... 300).contains(worker.ttl)",
+            'mtprotoUnhealthyKey = "aorusgram_proxy_unhealthy_since"',
+            "penalizedEndpoints[endpointKey(activeEndpoint)]",
         ):
             if marker not in proxy_text:
-                err.append(f"AorusProxyManager: protected transport/cache invariant is missing {marker}")
+                err.append(f"AorusProxyManager: protected dynamic provision invariant is missing {marker}")
+        for forbidden in (
+            "ProxyKeychain",
+            "ProxyVault",
+            "AorusProxyConfig",
+            "AorusProxyCandidate",
+            "AorusCallProxyConfig",
+        ):
+            if forbidden in proxy_text:
+                err.append(f"AorusProxyManager: legacy persisted/static proxy path remains {forbidden}")
 
     mt_tcp_connection = tg / "submodules" / "MtProtoKit" / "Sources" / "MTTcpConnection.m"
     if not mt_tcp_connection.is_file():
@@ -1036,10 +1049,22 @@ def main() -> None:
     else:
         reality_profile_text = reality_profile.read_text(encoding="utf-8")
         reality_manager_text = reality_manager.read_text(encoding="utf-8")
-        if "/*__AORUS_REALITY_PROFILE_" in reality_profile_text:
-            err.append("RealityProxy: build-time profile was not injected")
-        if "/* AORUS-BUILD-REALITY-PROFILE-INJECTED */" not in reality_profile_text:
-            err.append("RealityProxy: trusted profile injection sentinel is missing")
+        for marker in (
+            "AorusRealityEnvelopeVerifier",
+            "Curve25519.Signing.PublicKey",
+            "AorusRealityDeviceIdentity",
+            "ecdsaSignatureMessageX962SHA256",
+            "envelope.requestNonce",
+        ):
+            if marker not in reality_profile_text:
+                err.append(f"RealityProxy: dynamic profile invariant is missing {marker}")
+        for forbidden in (
+            "AorusRealityProfileProvider",
+            "__AORUS_REALITY_PROFILE_",
+            "AORUS-BUILD-REALITY-PROFILE-INJECTED",
+        ):
+            if forbidden in reality_profile_text:
+                err.append(f"RealityProxy: static profile path remains {forbidden}")
         for marker in (
             "import LibXray",
             '"runXrayFromJson"',

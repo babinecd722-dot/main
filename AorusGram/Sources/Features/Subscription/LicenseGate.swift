@@ -132,7 +132,6 @@ final class LicenseGate {
 
     // The license just became active. Start the embedded REALITY core immediately;
     // its loopback SOCKS endpoint is hot-applied by TelegramCore without relaunching.
-    // The legacy MTProxy manager intentionally remains paused for rollback only.
     private func upgradeSystemProxy() {
         AorusRealityManager.shared.startIfAuthorized()
     }
@@ -311,6 +310,7 @@ final class LicenseGate {
 
         if locked {
             startLockSweep()
+            AorusProxyManager.shared.licenseDidLock()
             AorusRealityManager.shared.licenseDidLock()
             // Snapshot the real values ONCE (don't overwrite an existing backup — a
             // repeated locked verdict must not capture the already-zeroed state).

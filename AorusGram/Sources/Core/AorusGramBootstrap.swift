@@ -39,9 +39,8 @@ public final class AorusGramBootstrap {
         // fail-closed until LicenseGate receives a fresh active server response.
         LicenseGate.shared.start()
 
-        // System proxy (network shield). The legacy MTProxy control plane remains
-        // compiled as a rollback path but is intentionally paused. The official
-        // XTLS core now exposes VLESS/REALITY as an in-process loopback SOCKS5
+        // System transport. The signed control plane provisions VLESS/REALITY and
+        // the XTLS core exposes it as an in-process loopback SOCKS5
         // endpoint; TelegramCore hot-applies it through the existing observer.
         AorusRealityManager.shared.startIfAuthorized()
 
@@ -225,7 +224,7 @@ public final class AorusGramBootstrap {
         DeletedMessagesCache.shared.scheduleBackgroundSync()
         StreakManager.shared.tick()
         // iOS may suspend the embedded core in the background. Verify and restore
-        // it before Telegram resumes network work; this does not fetch legacy MTProxy.
+        // it before Telegram resumes network work.
         AorusRealityManager.shared.ensureRunning()
         AorusPerformanceHUDManager.shared.restorePersistedHUDAfterLaunch()
         if let uid = LicenseStore.shared.telegramUserId {

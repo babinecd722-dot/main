@@ -637,8 +637,6 @@ jobs:
           LICENSE_HMAC_KEY_HEX: ${{ secrets.LICENSE_HMAC_KEY_HEX }}
           # Separate rotatable request key for https://api.aorusgram.com/getProxy.
           PROXY_HMAC_KEY_HEX: ${{ secrets.PROXY_HMAC_KEY_HEX }}
-          # Validated VLESS/REALITY client profile, base64-encoded canonical JSON.
-          REALITY_PROFILE_B64: ${{ secrets.REALITY_PROFILE_B64 }}
         run: |
           python3 aorusgram/scripts/aorus_branding.py telegram-ios
           # Cached telegram-ios trees can carry AppDelegate edits without a matching import line.

@@ -8323,94 +8323,6 @@ def patch_proxy_key_provider(tg: Path) -> None:
     print("ProxyKey: provisioned obfuscated HMAC key (%d bytes)" % len(raw))
 
 
-def patch_reality_profile_provider(tg: Path) -> None:
-    """Inject a validated VLESS/REALITY profile from one build secret.
-
-    The profile is canonicalized before injection and split into a random one-time
-    mask plus ciphertext. This prevents endpoint credentials from being committed or
-    appearing as one searchable JSON/string literal in the application binary.
-    """
-    path = tg / "submodules/AorusGram/Sources/Features/Network/AorusRealityProfile.swift"
-    if not path.is_file():
-        raise RuntimeError("RealityProfile: AorusRealityProfile.swift not found")
-
-    ciphertext_marker = "/*__AORUS_REALITY_PROFILE_CIPHERTEXT__*/"
-    mask_marker = "/*__AORUS_REALITY_PROFILE_MASK__*/"
-    text = path.read_text(encoding="utf-8")
-    if ciphertext_marker not in text or mask_marker not in text:
-        if "/* AORUS-BUILD-REALITY-PROFILE-INJECTED */" in text:
-            raise RuntimeError("RealityProfile: refusing a previously injected source tree")
-        raise RuntimeError("RealityProfile: injection markers are missing")
-
-    encoded = os.environ.get("REALITY_PROFILE_B64", "").strip()
-    try:
-        raw = base64.b64decode(encoded, validate=True)
-        value = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise RuntimeError("RealityProfile: REALITY_PROFILE_B64 is not valid base64 JSON") from error
-    if not isinstance(value, dict):
-        raise RuntimeError("RealityProfile: profile must be a JSON object")
-
-    required = ("server", "port", "uuid", "publicKey", "shortId", "serverName")
-    if any(key not in value for key in required):
-        raise RuntimeError("RealityProfile: required profile field is missing")
-    server = str(value["server"]).strip()
-    server_name = str(value["serverName"]).strip().lower()
-    public_key = str(value["publicKey"]).strip()
-    short_id = str(value["shortId"]).strip().lower()
-    fingerprint = str(value.get("fingerprint", "safari")).strip().lower()
-    spider_x = str(value.get("spiderX", "/")).strip()
-    try:
-        port = int(value["port"])
-        normalized_uuid = str(uuid.UUID(str(value["uuid"])))
-    except (TypeError, ValueError, AttributeError) as error:
-        raise RuntimeError("RealityProfile: port or UUID is invalid") from error
-    if not server or not (1 <= port <= 65_535):
-        raise RuntimeError("RealityProfile: endpoint is invalid")
-    try:
-        ipaddress.ip_address(server)
-    except ValueError:
-        if not re.fullmatch(r"(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", server):
-            raise RuntimeError("RealityProfile: server must be an IP address or hostname")
-    if not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", server_name):
-        raise RuntimeError("RealityProfile: serverName is invalid")
-    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", public_key):
-        raise RuntimeError("RealityProfile: REALITY public key is invalid")
-    if not re.fullmatch(r"(?:[0-9a-f]{2}){1,8}", short_id):
-        raise RuntimeError("RealityProfile: shortId must contain 2-16 hexadecimal characters")
-    if fingerprint not in {"chrome", "firefox", "safari", "ios", "android", "edge", "random", "randomized"}:
-        raise RuntimeError("RealityProfile: unsupported uTLS fingerprint")
-    if not spider_x.startswith("/") or len(spider_x) > 256 or any(ord(ch) < 0x20 for ch in spider_x):
-        raise RuntimeError("RealityProfile: spiderX is invalid")
-
-    canonical = json.dumps(
-        {
-            "server": server,
-            "port": port,
-            "uuid": normalized_uuid,
-            "publicKey": public_key,
-            "shortId": short_id,
-            "serverName": server_name,
-            "fingerprint": fingerprint,
-            "spiderX": spider_x,
-        },
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    mask = secrets.token_bytes(len(canonical))
-    ciphertext = bytes(left ^ right for left, right in zip(canonical, mask))
-    ciphertext_literal = ", ".join(str(byte) for byte in ciphertext)
-    mask_literal = ", ".join(str(byte) for byte in mask)
-    text = text.replace(
-        ciphertext_marker,
-        "/* AORUS-BUILD-REALITY-PROFILE-INJECTED */ " + ciphertext_literal,
-        1,
-    )
-    text = text.replace(mask_marker, mask_literal, 1)
-    path.write_text(text, encoding="utf-8")
-    print("RealityProfile: provisioned validated profile (%d bytes)" % len(canonical))
-
-
 def patch_local_premium(tg: Path) -> None:
     """Local Telegram Premium for own accounts and locally gifted peers.
 
@@ -24670,7 +24582,6 @@ def main() -> None:
     patch_view_once_no_consume(tg)
     patch_license_key_provider(tg)
     patch_proxy_key_provider(tg)
-    patch_reality_profile_provider(tg)
     patch_chat_context_menu_media_metadata(tg)
     patch_chat_context_menu_edit_locally(tg)
     patch_chat_message_tap_gestures(tg)

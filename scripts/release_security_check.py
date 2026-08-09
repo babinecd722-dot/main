@@ -48,7 +48,7 @@ def main() -> int:
         "--target=//Telegram:Telegram",
         "LIBXRAY_VERSION: v26.7.28",
         "07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9",
-        "REALITY_PROFILE_B64: ${{ secrets.REALITY_PROFILE_B64 }}",
+        "PROXY_HMAC_KEY_HEX: ${{ secrets.PROXY_HMAC_KEY_HEX }}",
     ):
         if marker not in workflow:
             fail(errors, f"simulator/REALITY workflow invariant is missing {marker}")
@@ -86,23 +86,24 @@ def main() -> int:
     if "/*__AORUS_PROXY_KEY_OBFUSCATED__*/" not in proxy:
         fail(errors, "proxy HMAC injection marker is missing")
     for marker in (
-        "Self.isValidFakeTLSSecret($0.secret)",
-        "Self.isValidFakeTLSSecret(cfg.secret)",
-        "bytes[0] == 0xee",
-        "let labels = host.split",
+        'forHTTPHeaderField: "X-Aorus-Device-Key"',
+        'forHTTPHeaderField: "X-Aorus-Device-Proof"',
+        "AorusRealityDeviceIdentity.proof",
+        "AorusRealityEnvelopeVerifier.decode",
+        'mtprotoUnhealthyKey = "aorusgram_proxy_unhealthy_since"',
+        "penalizedEndpoints[endpointKey(activeEndpoint)]",
     ):
         if marker not in proxy:
-            fail(errors, f"proxy manager ee-only invariant is missing {marker}")
+            fail(errors, f"dynamic REALITY provisioner invariant is missing {marker}")
 
     branding = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
-    if branding.count("refusing a previously injected source tree") < 3:
+    if branding.count("refusing a previously injected source tree") < 2:
         fail(errors, "build injection must reject stale source trees")
     for marker in (
         'dictionary(forKey: \\"71d447f8-9128-4d18-b63c-ec11ef43ba26\\")',
         'aorusPid.int32Value == ProcessInfo.processInfo.processIdentifier',
         'MTSocksProxySettings(ip: \\"127.0.0.1\\"',
         'secret: nil',
-        'patch_reality_profile_provider(tg)',
     ):
         if marker not in branding:
             fail(errors, f"REALITY loopback bridge invariant is missing {marker}")
@@ -121,9 +122,11 @@ def main() -> int:
         reality_profile = reality_profile_path.read_text(encoding="utf-8")
         reality_manager = reality_manager_path.read_text(encoding="utf-8")
         for marker in (
-            "/*__AORUS_REALITY_PROFILE_CIPHERTEXT__*/",
-            "/*__AORUS_REALITY_PROFILE_MASK__*/",
-            "withProfile<Result>",
+            "AorusRealityEnvelopeVerifier",
+            "Curve25519.Signing.PublicKey",
+            "AorusRealityDeviceIdentity",
+            "ecdsaSignatureMessageX962SHA256",
+            "envelope.requestNonce",
         ):
             if marker not in reality_profile:
                 fail(errors, f"REALITY profile invariant is missing {marker}")
@@ -140,6 +143,13 @@ def main() -> int:
         for forbidden in ("104.143.218.253", "7c2fb9b6-fcb9-4715-8752-49f6534e3017"):
             if forbidden in reality_profile or forbidden in reality_manager:
                 fail(errors, "test REALITY credentials must not be committed")
+        for forbidden in (
+            "AorusRealityProfileProvider",
+            "__AORUS_REALITY_PROFILE_CIPHERTEXT__",
+            "__AORUS_REALITY_PROFILE_MASK__",
+        ):
+            if forbidden in reality_profile or forbidden in reality_manager:
+                fail(errors, f"static REALITY profile path remains: {forbidden}")
 
     aorus_build = (root / "patches/submodules/AorusGram/BUILD").read_text(encoding="utf-8")
     for marker in ("apple_static_xcframework_import", 'name = "LibXray"', '":LibXray"'):
