@@ -473,6 +473,7 @@ public struct AorusL10n {
     public var videoMasksStyleHeader: String { t("СТИЛЬ МАСКИ", "MASK STYLE") }
     public var maskButton: String { t("Маска", "Mask") }
     public var maskNone: String { t("Без маски", "No Mask") }
+    public var webAppTunnelUnavailable: String { t("Мини-программы работают через туннель только на iOS 17 и новее.", "Mini apps need iOS 17 or later while the tunnel is on.") }
     public var videoMaskSkull: String { t("Хрустальный череп", "Crystal Skull") }
     public var videoMaskCyber: String { t("Кибер-визор", "Cyber Visor") }
     public var videoMaskPhantom: String { t("Фантом", "Phantom") }

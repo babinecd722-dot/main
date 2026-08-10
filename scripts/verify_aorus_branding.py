@@ -1165,6 +1165,18 @@ def main() -> None:
             err.append(f"CallProxyUDP: reflector transport is missing {marker}")
     if "class AorusSocks5ProxySocket" in reflector_text:
         err.append("CallProxyUDP: obsolete TCP SOCKS5 reflector wrapper is still present")
+    # The relay is the in-process VLESS core, so it answers on loopback. A media
+    # socket bound to the interface address cannot reach it, and the failure is
+    # silent — the call negotiates and carries nothing. Pin the bind decision.
+    for marker in (
+        "const bool aorusProxyIsLocal = aorusUsesSocks5 && proxy().address.IsLoopbackIP();",
+        "? rtc::SocketAddress(proxy().address.ipaddr(), 0)",
+        "socket_factory()->CreateUdpSocket(aorusUdpBindAddress, min_port(), max_port());",
+    ):
+        if marker not in reflector_text:
+            err.append(f"CallProxyUDP: loopback media bind is missing {marker}")
+    if "CreateUdpSocket(rtc::SocketAddress(Network()->GetBestIP(), 0), min_port(), max_port())" in reflector_text:
+        err.append("CallProxyUDP: media socket still binds unconditionally to the interface address")
 
     chat_lock = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "Privacy" / "AorusChatLock.swift"
     chat_lock_text = chat_lock.read_text(encoding="utf-8") if chat_lock.is_file() else ""
@@ -1598,6 +1610,72 @@ def main() -> None:
                     err.append(f"MaskPicker: Russian {english!r} differs from AorusL10n — regenerate the picker's table")
                 if picker_en.get(key) != english:
                     err.append(f"MaskPicker: English {english!r} differs in AorusMaskStrings — regenerate the picker's table")
+
+    # Mini apps are the one surface with its own network stack: WKWebView never sees the
+    # proxy TelegramCore is pointed at. All four parts have to land or the mini app quietly
+    # becomes the only traffic leaving on a direct route, which nothing else would catch.
+    web_tunnel = tg / "submodules" / "WebUI" / "Sources" / "AorusWebTunnel.swift"
+    web_tunnel_strings = tg / "submodules" / "WebUI" / "Sources" / "AorusWebTunnelStrings.swift"
+    if not web_tunnel.is_file():
+        err.append("WebAppTunnel: AorusWebTunnel.swift was not copied into WebUI")
+    else:
+        web_tunnel_text = web_tunnel.read_text(encoding="utf-8")
+        for marker in (
+            '"71d447f8-9128-4d18-b63c-ec11ef43ba26"',
+            '"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"',
+            "aorusTunnelClosedPort = 38190",
+            "proxyConfigurations = [proxy]",
+            "ProxyConfiguration(socksv5Proxy:",
+            "pid.int32Value == ProcessInfo.processInfo.processIdentifier",
+        ):
+            if marker not in web_tunnel_text:
+                err.append(f"WebAppTunnel: helper is missing {marker}")
+        # A verdict that cannot be read has to keep the tunnel on, exactly like the
+        # network and call layers. Flipping either default silently reopens direct routes.
+        for marker in (
+            'return (requirement?["required"] as? NSNumber)?.boolValue ?? true',
+            "?? aorusTunnelClosedPort",
+        ):
+            if marker not in web_tunnel_text:
+                err.append(f"WebAppTunnel: fail-closed default is missing {marker}")
+    if not web_tunnel_strings.is_file():
+        err.append("WebAppTunnel: AorusWebTunnelStrings.swift was not copied into WebUI")
+    web_view_path = tg / "submodules" / "WebUI" / "Sources" / "WebAppWebView.swift"
+    web_view_text = web_view_path.read_text(encoding="utf-8") if web_view_path.is_file() else ""
+    if "aorusWebTunnelApply(to: configuration)" not in web_view_text:
+        err.append("WebAppTunnel: the mini app web view is not pointed at the tunnel")
+    web_controller_path = tg / "submodules" / "WebUI" / "Sources" / "WebAppController.swift"
+    web_controller_text = web_controller_path.read_text(encoding="utf-8") if web_controller_path.is_file() else ""
+    if "if !aorusWebTunnelAllowsMiniApps() {" not in web_controller_text:
+        err.append("WebAppTunnel: the mini app load is not gated on an applicable tunnel")
+
+    # Same drift rule as the picker: WebUI cannot import AorusGramUI, so it carries its own
+    # generated copy of the one message it shows. Regenerate with gen_webtunnel_strings.py.
+    web_strings_src = Path(__file__).parent.parent / "patches" / "submodules" / "WebUI" / "Sources" / "AorusWebTunnelStrings.swift"
+    if web_strings_src.is_file() and main_table.is_file():
+        web_text = web_strings_src.read_text(encoding="utf-8")
+        english = "Mini apps need iOS 17 or later while the tunnel is on."
+        web_tables = {
+            m.group(1): dict(re.findall(r'^\s*"([\w_]+)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', m.group(2), re.M))
+            for m in re.finditer(r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", web_text, re.S)
+        }
+        for name, body in re.findall(r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", main_table.read_text(encoding="utf-8"), re.S):
+            source = dict(re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', body, re.M))
+            mirrored = web_tables.get(name)
+            if mirrored is None:
+                err.append(f"WebAppTunnel: AorusWebTunnelStrings has no {name} table — run gen_webtunnel_strings.py")
+            elif source.get(english) != mirrored.get("unavailable"):
+                err.append(
+                    f"WebAppTunnel: {name} differs between AorusL10nTable and "
+                    f"AorusWebTunnelStrings — run gen_webtunnel_strings.py"
+                )
+        inline_source = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift"
+        if inline_source.is_file():
+            match = re.search(r't\("((?:[^"\\]|\\.)*)",\s*"%s"\)' % re.escape(english), inline_source.read_text(encoding="utf-8"))
+            if match is None:
+                err.append("WebAppTunnel: no inline source for the mini app message — the generator cannot run")
+            elif web_tables.get("ru", {}).get("unavailable") != match.group(1):
+                err.append("WebAppTunnel: Russian differs from AorusL10n — run gen_webtunnel_strings.py")
 
     # The mask strip has three moving parts that must all land: the leaf module has to be
     # in the tree, the call screen has to link it, and the button has to exist. Any one of

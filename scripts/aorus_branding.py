@@ -24138,6 +24138,86 @@ def patch_device_microphone(tg: Path) -> None:
     print("DeviceMicrophone: patched central Telegram audio routing")
 
 
+def patch_webapp_tunnel(tg: Path) -> None:
+    """Route bot mini apps through the in-process VLESS tunnel.
+
+    A WKWebView has its own network stack in a separate process: it never sees the
+    loopback SOCKS endpoint TelegramCore is pointed at. Without this, opening a mini
+    app while the tunnel is up would reach the bot's host directly, exposing the real
+    IP to a third-party web server while every other byte the client sends is tunnelled.
+
+    Two halves, both idempotent:
+      1. WebAppWebView applies the endpoint to its data store (iOS 17+, the first
+         release with WKWebsiteDataStore.proxyConfigurations). Re-applied on every
+         launch so a restarted core, which lands on a different local port, is picked
+         up without relaunching the app.
+      2. WebAppController refuses the load outright when the tunnel is required and
+         cannot be applied — below iOS 17 there is no supported way to proxy a
+         WKWebView, so the mini app is refused rather than sent out in the clear.
+
+    The helpers live in submodules/WebUI/Sources/AorusWebTunnel.swift, copied in by
+    the workflow; WebUI's BUILD globs Sources/**/*.swift, so no BUILD change is needed.
+    """
+    web_view = tg / "submodules/WebUI/Sources/WebAppWebView.swift"
+    if not web_view.is_file():
+        print("WebAppTunnel: WebAppWebView.swift not found — skip")
+    else:
+        t = web_view.read_text(encoding="utf-8")
+        if "aorusWebTunnelApply" in t:
+            print("WebAppTunnel: web view already routed through the tunnel")
+        else:
+            anchor = "        let contentController = WKUserContentController()\n"
+            if anchor not in t:
+                raise SystemExit("WebAppTunnel: WKUserContentController anchor not found")
+            replacement = (
+                "        // AorusGram: route the mini app through the in-process VLESS endpoint.\n"
+                "        // WKWebView ignores the proxy TelegramCore uses, so without this the\n"
+                "        // mini app would be the only traffic leaving on a direct route.\n"
+                "        if #available(iOS 17.0, *) {\n"
+                "            aorusWebTunnelApply(to: configuration)\n"
+                "        }\n"
+                "\n"
+            ) + anchor
+            t = t.replace(anchor, replacement, 1)
+            web_view.write_text(t, encoding="utf-8")
+            print("WebAppTunnel: mini app web view routed through the loopback endpoint")
+
+    controller = tg / "submodules/WebUI/Sources/WebAppController.swift"
+    if not controller.is_file():
+        print("WebAppTunnel: WebAppController.swift not found — skip")
+        return
+    t = controller.read_text(encoding="utf-8")
+    if "aorusWebTunnelAllowsMiniApps" in t:
+        print("WebAppTunnel: load gate already present")
+        return
+    anchor = (
+        "            if self.controller?.sameOrigin == true {\n"
+        "                self.webView?.bindTrustedOrigin(from: url)\n"
+    )
+    if anchor not in t:
+        raise SystemExit("WebAppTunnel: mini app load anchor not found")
+    gate = (
+        "            // AorusGram: a mini app must not reach its host outside the tunnel.\n"
+        "            // Below iOS 17 a WKWebView cannot be proxied at all, so the load is\n"
+        "            // refused instead of quietly leaving on a direct route.\n"
+        "            if !aorusWebTunnelAllowsMiniApps() {\n"
+        "                let alertController = AlertScreen(\n"
+        "                    context: self.context,\n"
+        "                    title: nil,\n"
+        "                    text: aorusWebTunnelUnavailableText(),\n"
+        "                    actions: [\n"
+        "                        .init(title: self.presentationData.strings.Common_OK, action: {})\n"
+        "                    ]\n"
+        "                )\n"
+        "                self.controller?.present(alertController, in: .window(.root))\n"
+        "                return\n"
+        "            }\n"
+    ) + anchor
+    t = t.replace(anchor, gate, 1)
+    controller.write_text(t, encoding="utf-8")
+    print("WebAppTunnel: mini app load gated on an applicable tunnel")
+
+
 def patch_disable_copy_protection(tg: Path) -> None:
     """Client-side: ignore channel/group content-protection so protected messages
     can still be forwarded / copied / saved. Both the per-message and per-peer
@@ -24580,6 +24660,7 @@ def main() -> None:
     patch_formatting_panel(tg)
     patch_voice_to_text(tg)
     patch_document_picker_upload(tg)
+    patch_webapp_tunnel(tg)
     patch_disable_copy_protection(tg)
     patch_unlimited_recent_stickers(tg)
     patch_unlimited_pinned_chats(tg)
