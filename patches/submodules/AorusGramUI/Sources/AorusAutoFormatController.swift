@@ -16,34 +16,48 @@ import AccountContext
 // The style vocabulary (`aorusAutoFormatStyles`, `aorusAutoFormatOff`, the defaults key and
 // the label lookup) is defined once in AorusMiscController and shared across the module.
 
+// Remembers the last real style, so flipping the switch off and back on restores the
+// choice instead of resetting to bold. Only this screen reads it; the composer and the
+// send path only ever look at the main key.
+private let aorusAutoFormatLastKey = "aorusgram_auto_format_last"
+
+private func aorusAutoFormatLastStyle() -> String {
+    let stored = UserDefaults.standard.string(forKey: aorusAutoFormatLastKey) ?? aorusAutoFormatStyles.first!
+    return aorusAutoFormatStyles.contains(stored) ? stored : aorusAutoFormatStyles.first!
+}
+
 private final class AorusAutoFormatArguments {
+    let setEnabled: (Bool) -> Void
     let select: (String) -> Void
 
-    init(select: @escaping (String) -> Void) {
+    init(setEnabled: @escaping (Bool) -> Void, select: @escaping (String) -> Void) {
+        self.setEnabled = setEnabled
         self.select = select
     }
 }
 
 private enum AorusAutoFormatEntry: ItemListNodeEntry {
+    case enabledSwitch(PresentationTheme, String, Bool)
     case header(PresentationTheme, String)
-    case off(PresentationTheme, String, Bool)
     case style(PresentationTheme, Int, String, String, Bool)
     case footer(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
-        case .header, .off, .style:
+        case .enabledSwitch:
             return 0
-        case .footer:
+        case .header, .style:
             return 1
+        case .footer:
+            return 2
         }
     }
 
     var stableId: Int32 {
         switch self {
-        case .header:
+        case .enabledSwitch:
             return 0
-        case .off:
+        case .header:
             return 1
         case let .style(_, index, _, _, _):
             return Int32(100 + index)
@@ -58,10 +72,10 @@ private enum AorusAutoFormatEntry: ItemListNodeEntry {
 
     static func == (lhs: AorusAutoFormatEntry, rhs: AorusAutoFormatEntry) -> Bool {
         switch lhs {
+        case let .enabledSwitch(lt, ls, lv):
+            if case let .enabledSwitch(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .header(lt, ls):
             if case let .header(rt, rs) = rhs { return lt === rt && ls == rs }
-        case let .off(lt, ls, lc):
-            if case let .off(rt, rs, rc) = rhs { return lt === rt && ls == rs && lc == rc }
         case let .style(lt, li, lk, ls, lc):
             if case let .style(rt, ri, rk, rs, rc) = rhs { return lt === rt && li == ri && lk == rk && ls == rs && lc == rc }
         case let .footer(lt, ls):
@@ -73,12 +87,12 @@ private enum AorusAutoFormatEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let args = arguments as! AorusAutoFormatArguments
         switch self {
+        case let .enabledSwitch(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { value in
+                args.setEnabled(value)
+            })
         case let .header(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
-        case let .off(_, title, checked):
-            return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .left, checked: checked, zeroSeparatorInsets: false, sectionId: section, action: {
-                args.select(aorusAutoFormatOff)
-            })
         case let .style(_, _, key, title, checked):
             return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .left, checked: checked, zeroSeparatorInsets: false, sectionId: section, action: {
                 args.select(key)
@@ -90,12 +104,16 @@ private enum AorusAutoFormatEntry: ItemListNodeEntry {
 }
 
 private func aorusAutoFormatEntries(selected: String, theme: PresentationTheme, strings: PresentationStrings) -> [AorusAutoFormatEntry] {
+    let isEnabled = selected != aorusAutoFormatOff
     var entries: [AorusAutoFormatEntry] = []
-    entries.append(.header(theme, aorusL("ФОРМАТИРОВАНИЕ", "FORMATTING")))
-    // "Off" leads the list, so turning the feature off is the first, obvious choice.
-    entries.append(.off(theme, aorusL("Выкл", "Off"), selected == aorusAutoFormatOff))
-    for (index, key) in aorusAutoFormatStyles.enumerated() {
-        entries.append(.style(theme, index, key, aorusAutoFormatLabel(key, strings), selected == key))
+    entries.append(.enabledSwitch(theme, aorusL("Авто-форматирование", "Auto-formatting"), isEnabled))
+    // The style list only appears while the feature is on — with it off there is nothing
+    // to choose, and an empty checkmark list would just be dead rows.
+    if isEnabled {
+        entries.append(.header(theme, aorusL("ФОРМАТИРОВАНИЕ", "FORMATTING")))
+        for (index, key) in aorusAutoFormatStyles.enumerated() {
+            entries.append(.style(theme, index, key, aorusAutoFormatLabel(key, strings), selected == key))
+        }
     }
     entries.append(.footer(theme, aorusL(
         "Весь набранный текст отправляется в выбранном стиле. Форматирование, которое вы добавили вручную, сохраняется поверх.",
@@ -107,12 +125,20 @@ private func aorusAutoFormatEntries(selected: String, theme: PresentationTheme, 
 public func aorusAutoFormatController(context: AccountContext, onChange: ((String) -> Void)? = nil) -> ViewController {
     let statePromise = ValuePromise(aorusAutoFormatStyle(), ignoreRepeated: true)
 
-    let arguments = AorusAutoFormatArguments(select: { style in
-        let value = (style == aorusAutoFormatOff || aorusAutoFormatStyles.contains(style)) ? style : aorusAutoFormatOff
+    let commit: (String) -> Void = { value in
         UserDefaults.standard.set(value, forKey: aorusAutoFormatKey)
         statePromise.set(value)
         // Let the settings row that opened this screen refresh its trailing label.
         onChange?(value)
+    }
+
+    let arguments = AorusAutoFormatArguments(setEnabled: { enabled in
+        // On: restore the last chosen style. Off: disable, but keep the choice remembered.
+        commit(enabled ? aorusAutoFormatLastStyle() : aorusAutoFormatOff)
+    }, select: { style in
+        guard aorusAutoFormatStyles.contains(style) else { return }
+        UserDefaults.standard.set(style, forKey: aorusAutoFormatLastKey)
+        commit(style)
     })
 
     let signal = statePromise.get()
