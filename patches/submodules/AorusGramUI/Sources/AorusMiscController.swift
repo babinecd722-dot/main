@@ -531,7 +531,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         profileLinkTargetPeerId: initialProfileLinkTargetPeerId,
         profileLinkTargetName: UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_name") ?? "",
         formattingPanel: UserDefaults.standard.bool(forKey: "aorusgram_formatting_panel"),
-        autoFormatStyle: AorusAutoFormat.style,
+        autoFormatStyle: aorusAutoFormatStyle(),
         phoneSpoof: AorusPhoneSpoofStore.isEnabled,
         phoneSpoofNumber: AorusPhoneSpoofStore.ensureNumber(),
         mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),

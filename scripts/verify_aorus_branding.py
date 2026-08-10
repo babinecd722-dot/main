@@ -1807,6 +1807,11 @@ def main() -> None:
         ):
             if marker not in misc_text:
                 err.append(f"AutoFormat: settings screen is missing {marker}")
+        # AorusGramUI cannot import TextFormat, so the store's type must never be named
+        # here — it compiles nowhere and the failure is a wall of inference errors that
+        # point everywhere except the one line at fault.
+        if "AorusAutoFormat." in misc_text:
+            err.append("AutoFormat: settings screen references AorusAutoFormat, which it cannot import")
 
     # The mask strip has three moving parts that must all land: the leaf module has to be
     # in the tree, the call screen has to link it, and the button has to exist. Any one of
