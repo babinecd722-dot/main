@@ -24523,114 +24523,19 @@ def patch_disable_copy_protection(tg: Path) -> None:
 
 
 def patch_document_picker_upload(tg: Path) -> None:
-    """Make local and cloud-backed Files-provider uploads reliable.
+    """Let AorusGram attempt every selected document, whatever its size.
 
-    Telegram's stock implementation waits for an NSMetadataQuery over the
-    ubiquitous-document scopes when a selected provider URL is not downloaded
-    yet. A provider may not make that query complete promptly, and a third-party
-    signer may also omit the app's iCloud entitlement. A URL granted by
-    UIDocumentPicker should instead be read through NSFileCoordinator; the
-    coordinator asks the selected provider to materialize the file directly.
+    ICloudResources is left exactly as upstream ships it. An earlier rewrite read
+    the picked URL through NSFileCoordinator and then bookmarked the coordinator's
+    presented URL instead of the original security-scoped one; at upload time that
+    bookmark could no longer re-open its security scope, so the copy produced
+    nothing and the file silently never sent. Stock code bookmarks the picker's own
+    security-scoped URL, which re-opens correctly — the behaviour Swiftgram relies
+    on with the same third-party certificate — so we keep it.
+
+    The only change here is removing Telegram's local PremiumLimitScreen size gate,
+    so the transport/backend stays the sole authority on the real protocol limit.
     """
-    path = tg / "submodules/ICloudResources/Sources/ICloudResources.swift"
-    if not path.is_file():
-        print("DocumentPicker: ICloudResources.swift not found — skip")
-    else:
-        text = path.read_text(encoding="utf-8")
-        marker = "AorusGram: coordinate user-selected documents through Files providers"
-        if marker in text:
-            print("DocumentPicker: provider-safe upload path already patched")
-        else:
-            start = text.find("public func iCloudFileDescription(_ url: URL) -> Signal<ICloudFileDescription?, NoError> {")
-            end_marker = "\nprivate final class ICloudFileResourceCopyItem"
-            end = text.find(end_marker, start)
-            if start < 0 or end < 0:
-                print("DocumentPicker: iCloudFileDescription anchors not found — skip")
-            else:
-                replacement = '''public func iCloudFileDescription(_ url: URL) -> Signal<ICloudFileDescription?, NoError> {
-    return Signal { subscriber in
-        // AorusGram: coordinate user-selected documents through Files providers.
-        // UIDocumentPicker grants access to the selected provider URL. Coordinating
-        // the read materializes remote iCloud/Files-provider items and avoids the
-        // entitlement-bound NSMetadataQuery used by the stock implementation.
-        let didStartAccessing = url.startAccessingSecurityScopedResource()
-        if !didStartAccessing && !FileManager.default.isReadableFile(atPath: url.path) {
-            subscriber.putNext(nil)
-            subscriber.putCompletion()
-            return EmptyDisposable
-        }
-        let accessIsActive = Atomic<Bool>(value: didStartAccessing)
-        let stopAccessing: () -> Void = {
-            if accessIsActive.swap(false) {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-
-        let coordinator = NSFileCoordinator(filePresenter: nil)
-        let accessIntent = NSFileAccessIntent.readingIntent(with: url, options: [.withoutChanges])
-        let queue = OperationQueue()
-        queue.maxConcurrentOperationCount = 1
-        queue.qualityOfService = .userInitiated
-
-        coordinator.coordinate(with: [accessIntent], queue: queue, byAccessor: { error in
-            defer { stopAccessing() }
-            if error == nil {
-                subscriber.putNext(descriptionWithUrl(accessIntent.url))
-            } else {
-                subscriber.putNext(nil)
-            }
-            subscriber.putCompletion()
-        })
-
-        return ActionDisposable {
-            coordinator.cancel()
-            stopAccessing()
-        }
-    }
-}
-'''
-                path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
-                print("DocumentPicker: replaced entitlement-bound metadata query with coordinated provider access")
-
-        # The stock helper only stops security-scoped access on its success
-        # path. Balance it on every early return as well (bookmark, size, name).
-        text = path.read_text(encoding="utf-8")
-        helper_scope_marker = "AorusGram: balance helper security-scoped access on every return"
-        if helper_scope_marker in text:
-            print("DocumentPicker: helper security scope already balanced")
-        else:
-            helper_scope_anchor = (
-                "        guard url.startAccessingSecurityScopedResource() else {\n"
-                "            return nil\n"
-                "        }\n"
-                "        \n"
-                "        guard let urlData = try? url.bookmarkData"
-            )
-            helper_scope_replacement = (
-                "        guard url.startAccessingSecurityScopedResource() else {\n"
-                "            return nil\n"
-                "        }\n"
-                f"        // {helper_scope_marker}.\n"
-                "        defer { url.stopAccessingSecurityScopedResource() }\n"
-                "        \n"
-                "        guard let urlData = try? url.bookmarkData"
-            )
-            if helper_scope_anchor not in text:
-                print("DocumentPicker: helper security-scope anchor not found — skip")
-            else:
-                text = text.replace(helper_scope_anchor, helper_scope_replacement, 1)
-                explicit_stop_anchor = (
-                    "        \n"
-                    "        url.stopAccessingSecurityScopedResource()\n"
-                    "        \n"
-                    "        return result"
-                )
-                if explicit_stop_anchor not in text:
-                    print("DocumentPicker: helper explicit-stop anchor not found — skip")
-                else:
-                    text = text.replace(explicit_stop_anchor, "        \n        return result", 1)
-                    path.write_text(text, encoding="utf-8")
-                    print("DocumentPicker: balanced helper security scope across early returns")
 
     # Do not pre-empt the upload with Telegram's PremiumLimitScreen. The
     # transport/backend remains the authority for the actual protocol limit,

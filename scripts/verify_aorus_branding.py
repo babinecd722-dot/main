@@ -2398,21 +2398,21 @@ def main() -> None:
     if not performance_hud.is_file() or "updateGlassAppearance(enabled: settings.glassUI)" not in performance_hud.read_text(encoding="utf-8"):
         err.append("GlassEffects: performance HUD ignores the setting")
 
+    # ICloudResources must stay upstream-stock. A prior rewrite read the picked URL
+    # through NSFileCoordinator and bookmarked the coordinator's presented URL instead
+    # of the picker's security-scoped one; the bookmark then failed to re-open its scope
+    # at upload time, so the copy produced nothing and the file silently never sent.
+    # Stock bookmarks the security-scoped URL, which re-opens — proven by Swiftgram on the
+    # same third-party certificate — so any reappearance of the coordinator rewrite is a
+    # regression, not an improvement.
     document_resources = tg / "submodules" / "ICloudResources" / "Sources" / "ICloudResources.swift"
     document_resources_text = document_resources.read_text(encoding="utf-8") if document_resources.is_file() else ""
-    for marker in (
+    for regression_marker in (
         "AorusGram: coordinate user-selected documents through Files providers",
-        "AorusGram: balance helper security-scoped access on every return",
-        "NSFileAccessIntent.readingIntent(with: url, options: [.withoutChanges])",
         "descriptionWithUrl(accessIntent.url)",
-        "let accessIsActive = Atomic<Bool>(value: didStartAccessing)",
-        "url.stopAccessingSecurityScopedResource()",
-        "coordinator.cancel()\n            stopAccessing()",
     ):
-        if marker not in document_resources_text:
-            err.append(f"DocumentPicker: provider-safe upload path is missing {marker}")
-    if "NSMetadataQueryUbiquitousDocumentsScope" in document_resources_text:
-        err.append("DocumentPicker: upload path still depends on entitlement-bound iCloud metadata scopes")
+        if regression_marker in document_resources_text:
+            err.append(f"DocumentPicker: coordinator rewrite is back — it breaks uploads ({regression_marker})")
 
     document_size_gate_marker = "AorusGram: let Telegram validate the selected document size"
     document_size_gate_files = (

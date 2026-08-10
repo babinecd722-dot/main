@@ -63,7 +63,8 @@ def main() -> int:
     # iCloud capability. iOS validates entitlements against the profile at launch, so the
     # app installs and then refuses to start — a failure with no crash log in the app and
     # no relation to any feature. Nothing needs the capability: the Files upload path is
-    # deliberately built on NSFileCoordinator, which asks the selected provider directly.
+    # upstream-stock and reads the picked document through its security-scoped URL, no
+    # iCloud container involved.
     for marker in (
         "'com.apple.developer.icloud-services'",
         "'com.apple.developer.icloud-container-identifiers'",
