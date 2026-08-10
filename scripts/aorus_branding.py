@@ -24138,6 +24138,45 @@ def patch_device_microphone(tg: Path) -> None:
     print("DeviceMicrophone: patched central Telegram audio routing")
 
 
+def patch_connection_title(tg: Path) -> None:
+    """Say what the client is actually waiting for while it connects.
+
+    The tunnel is applied at the network layer and never stored in ProxySettings, so
+    stock Telegram cannot know a proxy exists and writes plain "Connecting" — the same
+    word whether the tunnel is coming up, the servers are down, or the phone has no
+    signal. Both `.connecting` title sites are routed through a helper that reads the
+    subscription verdict and MTProto's own trouble stamp, so the title reads "Connecting
+    to proxy…" while it works and "Can't connect to proxy" once it clearly has not.
+
+    The helper lives in submodules/ChatListUI/Sources/AorusConnectionStatus.swift,
+    copied in by the workflow; ChatListUI globs Sources/**/*.swift, so no BUILD change
+    is needed. Idempotent.
+    """
+    path = tg / "submodules/ChatListUI/Sources/ChatListController.swift"
+    if not path.is_file():
+        print("ConnectionTitle: ChatListController.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusConnectingTitle(" in t:
+        print("ConnectionTitle: already patched")
+        return
+    anchor = "                let text = presentationData.strings.State_Connecting\n"
+    count = t.count(anchor)
+    # Two sites: the root chat list and the per-folder one. Both must be routed, or the
+    # title reverts to "Connecting" on whichever screen was missed.
+    if count != 2:
+        raise SystemExit(f"ConnectionTitle: expected 2 connecting title sites, found {count}")
+    replacement = (
+        "                // AorusGram: the tunnel is applied at the network layer and never\n"
+        "                // reaches ProxySettings, so Telegram cannot tell this is a proxied\n"
+        "                // connection. Name it, and say so when it is not coming up.\n"
+        "                let text = aorusConnectingTitle(fallback: presentationData.strings.State_Connecting)\n"
+    )
+    t = t.replace(anchor, replacement, 2)
+    path.write_text(t, encoding="utf-8")
+    print("ConnectionTitle: routed both connecting titles through the tunnel-aware helper")
+
+
 def patch_webapp_tunnel(tg: Path) -> None:
     """Route bot mini apps through the in-process VLESS tunnel.
 
@@ -24661,6 +24700,7 @@ def main() -> None:
     patch_voice_to_text(tg)
     patch_document_picker_upload(tg)
     patch_webapp_tunnel(tg)
+    patch_connection_title(tg)
     patch_disable_copy_protection(tg)
     patch_unlimited_recent_stickers(tg)
     patch_unlimited_pinned_chats(tg)

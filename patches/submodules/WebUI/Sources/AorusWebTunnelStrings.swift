@@ -1,12 +1,12 @@
 import Foundation
 
 // GENERATED from AorusL10nTable.swift — do not hand-edit.
-// Regenerate with: python3 scripts/gen_webtunnel_strings.py
+// Regenerate with: python3 scripts/gen_module_strings.py
 //
 // WebUI cannot import AorusGramUI, so it carries its own copy of the single message the
-// mini-app tunnel gate can show. The language comes from "aorusgram_lang_code", which
-// AppDelegate publishes from its presentationData observer at launch — the same key
-// AorusBadge and AorusMaskPicker read.
+// mini-app tunnel gate can show.
+// The language comes from "aorusgram_lang_code", which AppDelegate publishes from its
+// presentationData observer at launch — the same key AorusBadge and AorusMaskPicker read.
 enum AorusWebTunnelStrings {
     static func localized(_ key: String) -> String {
         let table = self.table(for: self.languageCode())

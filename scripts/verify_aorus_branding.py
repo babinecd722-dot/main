@@ -1650,7 +1650,7 @@ def main() -> None:
         err.append("WebAppTunnel: the mini app load is not gated on an applicable tunnel")
 
     # Same drift rule as the picker: WebUI cannot import AorusGramUI, so it carries its own
-    # generated copy of the one message it shows. Regenerate with gen_webtunnel_strings.py.
+    # generated copy of the one message it shows. Regenerate with gen_module_strings.py.
     web_strings_src = Path(__file__).parent.parent / "patches" / "submodules" / "WebUI" / "Sources" / "AorusWebTunnelStrings.swift"
     if web_strings_src.is_file() and main_table.is_file():
         web_text = web_strings_src.read_text(encoding="utf-8")
@@ -1663,11 +1663,11 @@ def main() -> None:
             source = dict(re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', body, re.M))
             mirrored = web_tables.get(name)
             if mirrored is None:
-                err.append(f"WebAppTunnel: AorusWebTunnelStrings has no {name} table — run gen_webtunnel_strings.py")
+                err.append(f"WebAppTunnel: AorusWebTunnelStrings has no {name} table — run gen_module_strings.py")
             elif source.get(english) != mirrored.get("unavailable"):
                 err.append(
                     f"WebAppTunnel: {name} differs between AorusL10nTable and "
-                    f"AorusWebTunnelStrings — run gen_webtunnel_strings.py"
+                    f"AorusWebTunnelStrings — run gen_module_strings.py"
                 )
         inline_source = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift"
         if inline_source.is_file():
@@ -1675,7 +1675,66 @@ def main() -> None:
             if match is None:
                 err.append("WebAppTunnel: no inline source for the mini app message — the generator cannot run")
             elif web_tables.get("ru", {}).get("unavailable") != match.group(1):
-                err.append("WebAppTunnel: Russian differs from AorusL10n — run gen_webtunnel_strings.py")
+                err.append("WebAppTunnel: Russian differs from AorusL10n — run gen_module_strings.py")
+
+    # The connection title has to say what is actually happening. Stock Telegram cannot:
+    # the tunnel never reaches ProxySettings, so it writes plain "Connecting" whether the
+    # core is coming up, the servers are gone, or there is no signal.
+    conn_helper = tg / "submodules" / "ChatListUI" / "Sources" / "AorusConnectionStatus.swift"
+    conn_strings_tree = tg / "submodules" / "ChatListUI" / "Sources" / "AorusConnectionStrings.swift"
+    if not conn_helper.is_file():
+        err.append("ConnectionTitle: AorusConnectionStatus.swift was not copied into ChatListUI")
+    else:
+        conn_text = conn_helper.read_text(encoding="utf-8")
+        for marker in (
+            '"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"',
+            '"aorusgram_proxy_unhealthy_since"',
+            "aorusUnhealthyThreshold: Double = 8.0",
+            'AorusConnectionStrings.localized("failed")',
+            'AorusConnectionStrings.localized("connecting")',
+        ):
+            if marker not in conn_text:
+                err.append(f"ConnectionTitle: helper is missing {marker}")
+    if not conn_strings_tree.is_file():
+        err.append("ConnectionTitle: AorusConnectionStrings.swift was not copied into ChatListUI")
+    chat_list_path = tg / "submodules" / "ChatListUI" / "Sources" / "ChatListController.swift"
+    chat_list_text = chat_list_path.read_text(encoding="utf-8") if chat_list_path.is_file() else ""
+    # Two sites: the root chat list and the per-folder one. Missing either leaves one
+    # screen saying "Connecting" while the other names the proxy.
+    routed = chat_list_text.count("aorusConnectingTitle(fallback: presentationData.strings.State_Connecting)")
+    if routed != 2:
+        err.append(f"ConnectionTitle: expected 2 routed connecting titles, found {routed}")
+
+    # Same drift rule as the other generated tables.
+    conn_strings_src = Path(__file__).parent.parent / "patches" / "submodules" / "ChatListUI" / "Sources" / "AorusConnectionStrings.swift"
+    if conn_strings_src.is_file() and main_table.is_file():
+        conn_src_text = conn_strings_src.read_text(encoding="utf-8")
+        conn_wanted = {"connecting": "Connecting to proxy\u2026", "failed": "Can't connect to proxy"}
+        conn_tables = {
+            m.group(1): dict(re.findall(r'^\s*"([\w_]+)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', m.group(2), re.M))
+            for m in re.finditer(r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", conn_src_text, re.S)
+        }
+        for name, body in re.findall(r"private static let (\w+): \[String: String\] = \[(.*?)\n    \]", main_table.read_text(encoding="utf-8"), re.S):
+            source = dict(re.findall(r'^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)",\s*$', body, re.M))
+            mirrored = conn_tables.get(name)
+            if mirrored is None:
+                err.append(f"ConnectionTitle: AorusConnectionStrings has no {name} table — run gen_module_strings.py")
+                continue
+            for key, english in conn_wanted.items():
+                if source.get(english) != mirrored.get(key):
+                    err.append(
+                        f"ConnectionTitle: {name} {english!r} differs between AorusL10nTable and "
+                        f"AorusConnectionStrings — run gen_module_strings.py"
+                    )
+        inline_conn = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "Core" / "AorusL10n.swift"
+        if inline_conn.is_file():
+            inline_conn_text = inline_conn.read_text(encoding="utf-8")
+            for key, english in conn_wanted.items():
+                match = re.search(r't\("((?:[^"\\]|\\.)*)",\s*"%s"\)' % re.escape(english), inline_conn_text)
+                if match is None:
+                    err.append(f"ConnectionTitle: no inline source for {english!r} — the generator cannot run")
+                elif conn_tables.get("ru", {}).get(key) != match.group(1):
+                    err.append(f"ConnectionTitle: Russian {english!r} differs from AorusL10n — run gen_module_strings.py")
 
     # The mask strip has three moving parts that must all land: the leaf module has to be
     # in the tree, the call screen has to link it, and the button has to exist. Any one of

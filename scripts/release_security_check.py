@@ -44,15 +44,19 @@ def main() -> int:
     if re.search(r"pip[^\n]*Pillow[^\n]*(?:\|\|\s*true|\|\|\s*pip)", workflow):
         fail(errors, "Pillow installation must fail closed")
     for marker in (
-        "BUILD_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.build_mode || 'simulator' }}",
-        "--configuration=debug_sim_arm64",
-        "--target=//Telegram:Telegram",
+        "--configuration=release_arm64",
+        "--outputBuildArtifactsPath $RUNNER_TEMP/artifacts",
         "LIBXRAY_VERSION: v26.7.28",
         "07f7ed7697277930e1c517755855950f594f41435b0dfc5917a66eea6278aeb9",
         "PROXY_HMAC_KEY_HEX: ${{ secrets.PROXY_HMAC_KEY_HEX }}",
     ):
         if marker not in workflow:
-            fail(errors, f"simulator/REALITY workflow invariant is missing {marker}")
+            fail(errors, f"release/REALITY workflow invariant is missing {marker}")
+    # Every push has to produce a device IPA. A build gated on a mode input, or one that
+    # only compiles for the simulator, looks green while shipping nothing installable.
+    for marker in ("BUILD_MODE", "debug_sim_arm64"):
+        if marker in workflow:
+            fail(errors, f"workflow must build a device IPA unconditionally — found {marker}")
 
     for marker in (
         '"enable_icloud": True',
