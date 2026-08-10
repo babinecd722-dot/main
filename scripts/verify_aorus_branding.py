@@ -1776,6 +1776,26 @@ def main() -> None:
     entities_source = entities_path.read_text(encoding="utf-8") if entities_path.is_file() else ""
     if "entities = aorusApplyBaseTextStyle(to: entities, length: text.length)" not in entities_source:
         err.append("AutoFormat: outgoing entities do not carry the base style")
+    # The live half: without it the composer shows plain text under an active style, which
+    # reads as the setting being broken even though the sent message is correct.
+    live_style = tg / "submodules" / "TelegramUI" / "Components" / "Chat" / "ChatInputTextNode" / "Sources" / "AorusBaseStyle.swift"
+    if not live_style.is_file():
+        err.append("AutoFormat: AorusBaseStyle.swift was not copied into ChatInputTextNode")
+    else:
+        live_style_text = live_style.read_text(encoding="utf-8")
+        for marker in (
+            'private let aorusBaseStyleKey = "aorusgram_auto_format_style"',
+            "func aorusBaseStyledText(",
+            "ChatTextInputAttributes.bold",
+            "ChatTextInputAttributes.spoiler",
+        ):
+            if marker not in live_style_text:
+                err.append(f"AutoFormat: live composer helper is missing {marker}")
+    rich_node = tg / "submodules" / "TelegramUI" / "Components" / "Chat" / "ChatInputTextNode" / "Sources" / "ChatRichTextInputNode.swift"
+    rich_node_text = rich_node.read_text(encoding="utf-8") if rich_node.is_file() else ""
+    if "if let aorusStyledText = aorusBaseStyledText(self.attributedText) {" not in rich_node_text:
+        err.append("AutoFormat: the composer does not draw the base style while typing")
+
     misc = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
     if misc.is_file():
         misc_text = misc.read_text(encoding="utf-8")

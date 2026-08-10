@@ -24181,6 +24181,51 @@ def patch_auto_format(tg: Path) -> None:
     print("AutoFormat: outgoing entities now carry the configured base style")
 
 
+def patch_live_base_style(tg: Path) -> None:
+    """Draw the base style in the composer as the user types.
+
+    The TextFormat hook decides what leaves the device; this is the other half, so what is
+    on screen matches. It is inserted at the top of the node's per-keystroke decoration
+    pass, before Telegram refreshes the input attributes — the style is therefore already
+    present when fonts and colours are derived from it, and nothing else has to change.
+
+    Writing `attributedText` back drops the selection, so the helper returns nil whenever
+    the text is already fully styled and the write is skipped on the vast majority of
+    keystrokes.
+
+    The helper lives in the same module; ChatInputTextNode globs Sources/**/*.swift.
+    Idempotent.
+    """
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatInputTextNode/Sources/ChatRichTextInputNode.swift"
+    if not path.is_file():
+        print("LiveBaseStyle: ChatRichTextInputNode.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusBaseStyledText(" in t:
+        print("LiveBaseStyle: already patched")
+        return
+    anchor = (
+        "        self.refreshTextInputAttributes(context: context, primaryTextColor: primaryTextColor, "
+        "accentTextColor: accentTextColor, baseFontSize: baseFontSize, spoilersRevealed: spoilersRevealed, "
+        "availableEmojis: availableEmojis, emojiViewProvider: emojiViewProvider)\n"
+    )
+    if t.count(anchor) != 1:
+        raise SystemExit("LiveBaseStyle: decoration anchor not found")
+    replacement = (
+        "        // AorusGram: stamp the configured base style before the attributes are\n"
+        "        // refreshed, so a letter is drawn in it the moment it is typed instead of\n"
+        "        // only once the message has been sent. No-op when nothing new to style.\n"
+        "        if let aorusStyledText = aorusBaseStyledText(self.attributedText) {\n"
+        "            let aorusSelectedRange = self.selectedRange\n"
+        "            self.attributedText = aorusStyledText\n"
+        "            self.selectedRange = aorusSelectedRange\n"
+        "        }\n"
+    ) + anchor
+    t = t.replace(anchor, replacement, 1)
+    path.write_text(t, encoding="utf-8")
+    print("LiveBaseStyle: composer now draws the configured base style while typing")
+
+
 def patch_peer_id_search(tg: Path) -> None:
     """Let the search field accept a Telegram ID.
 
@@ -24789,6 +24834,7 @@ def main() -> None:
     patch_connection_title(tg)
     patch_peer_id_search(tg)
     patch_auto_format(tg)
+    patch_live_base_style(tg)
     patch_disable_copy_protection(tg)
     patch_unlimited_recent_stickers(tg)
     patch_unlimited_pinned_chats(tg)

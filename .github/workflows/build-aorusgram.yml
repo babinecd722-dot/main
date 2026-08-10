@@ -606,6 +606,11 @@ jobs:
           #     to apply the configured base style by aorus_branding.py.
           cp $PATCHES/submodules/TextFormat/Sources/AorusAutoFormat.swift $TG/submodules/TextFormat/Sources/
 
+          # 13. Copy the live composer half of the same feature into ChatInputTextNode. The
+          #     per-keystroke decoration pass is patched to call it by aorus_branding.py.
+          cp $PATCHES/submodules/TelegramUI/Components/Chat/ChatInputTextNode/Sources/AorusBaseStyle.swift \
+             $TG/submodules/TelegramUI/Components/Chat/ChatInputTextNode/Sources/
+
           # 9. Copy the login-by-backup account picker into AuthorizationUI (compiled via
           #    its Sources/**/*.swift glob). The themed key button on the phone-entry
           #    screen that presents it is injected by aorus_branding.py.
