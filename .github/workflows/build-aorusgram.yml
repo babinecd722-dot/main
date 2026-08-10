@@ -598,6 +598,14 @@ jobs:
           cp $PATCHES/submodules/ChatListUI/Sources/AorusConnectionStatus.swift $TG/submodules/ChatListUI/Sources/
           cp $PATCHES/submodules/ChatListUI/Sources/AorusConnectionStrings.swift $TG/submodules/ChatListUI/Sources/
 
+          # 11. Copy the search-by-Telegram-ID helper into ChatListUI. The search pane is
+          #     patched to merge its results into the local section by aorus_branding.py.
+          cp $PATCHES/submodules/ChatListUI/Sources/AorusPeerIdSearch.swift $TG/submodules/ChatListUI/Sources/
+
+          # 12. Copy the auto-formatting store into TextFormat. Entity generation is patched
+          #     to apply the configured base style by aorus_branding.py.
+          cp $PATCHES/submodules/TextFormat/Sources/AorusAutoFormat.swift $TG/submodules/TextFormat/Sources/
+
           # 9. Copy the login-by-backup account picker into AuthorizationUI (compiled via
           #    its Sources/**/*.swift glob). The themed key button on the phone-entry
           #    screen that presents it is injected by aorus_branding.py.

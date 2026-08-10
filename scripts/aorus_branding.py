@@ -24138,6 +24138,92 @@ def patch_device_microphone(tg: Path) -> None:
     print("DeviceMicrophone: patched central Telegram audio routing")
 
 
+def patch_auto_format(tg: Path) -> None:
+    """Apply the base text style chosen in Settings to every outgoing message.
+
+    Hooked where entities are generated from the composer's attributed text, because that
+    is the one point every send path already passes through — new message, edit, caption,
+    reply — so a single patch covers all of them instead of one per screen.
+
+    The helper lives in submodules/TextFormat/Sources/AorusAutoFormat.swift, copied in by
+    the workflow; TextFormat globs Sources/**/*.swift. Idempotent.
+    """
+    path = tg / "submodules/TextFormat/Sources/GenerateTextEntities.swift"
+    if not path.is_file():
+        print("AutoFormat: GenerateTextEntities.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusApplyBaseTextStyle" in t:
+        print("AutoFormat: already patched")
+        return
+    # `return entities` appears twice in this file; anchor on the tail of the loop that
+    # precedes the one inside generateChatInputTextEntities so the other is left alone.
+    anchor = (
+        "        if !hadReductions {\n"
+        "            break\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+        "    return entities\n"
+    )
+    if t.count(anchor) != 1:
+        raise SystemExit("AutoFormat: generateChatInputTextEntities return anchor not found")
+    replacement = anchor.replace(
+        "    return entities\n",
+        "    // AorusGram: the base style picked in Settings spans the whole message.\n"
+        "    // Hand-marked runs keep their own entity on top, the way bold and italic nest.\n"
+        "    entities = aorusApplyBaseTextStyle(to: entities, length: text.length)\n"
+        "    return entities\n",
+        1,
+    )
+    t = t.replace(anchor, replacement, 1)
+    path.write_text(t, encoding="utf-8")
+    print("AutoFormat: outgoing entities now carry the configured base style")
+
+
+def patch_peer_id_search(tg: Path) -> None:
+    """Let the search field accept a Telegram ID.
+
+    Telegram's search understands names and usernames only, so a numeric query finds
+    nothing — yet the ID is the one identifier that never changes and the only one left
+    for someone with no username. Matches are merged into the local section of the normal
+    results, so an ID behaves exactly like any other query: same list, same rows, same tap.
+
+    The helper lives in submodules/ChatListUI/Sources/AorusPeerIdSearch.swift, copied in
+    by the workflow; ChatListUI globs Sources/**/*.swift. Idempotent.
+    """
+    path = tg / "submodules/ChatListUI/Sources/ChatListSearchListPaneNode.swift"
+    if not path.is_file():
+        print("PeerIdSearch: ChatListSearchListPaneNode.swift not found — skip")
+        return
+    t = path.read_text(encoding="utf-8")
+    if "aorusMergeIdSearch(" in t:
+        print("PeerIdSearch: already patched")
+        return
+
+    declaration = "            let foundRemotePeers: Signal<([FoundPeer], [FoundPeer], [AdPeer], Bool), NoError>\n"
+    if t.count(declaration) != 1:
+        raise SystemExit("PeerIdSearch: foundRemotePeers declaration anchor not found")
+    t = t.replace(declaration, declaration.replace("let ", "var ", 1), 1)
+
+    # After the whole if/else chain has picked a source, so both the assignment and the
+    # merge stay in one place instead of being duplicated into every branch.
+    anchor = "            let searchLocations: [SearchMessagesLocation]\n"
+    if t.count(anchor) != 1:
+        raise SystemExit("PeerIdSearch: searchLocations anchor not found")
+    merge = (
+        "            // AorusGram: a numeric query also resolves a Telegram ID. Restricted to\n"
+        "            // the chats pane: the other panes list a specific kind of result, and a\n"
+        "            // person resolved by id does not belong in any of them.\n"
+        "            if let query = query, case .chats = key {\n"
+        "                foundRemotePeers = aorusMergeIdSearch(engine: context.engine, query: query, into: foundRemotePeers)\n"
+        "            }\n"
+    ) + anchor
+    t = t.replace(anchor, merge, 1)
+    path.write_text(t, encoding="utf-8")
+    print("PeerIdSearch: numeric queries now resolve a Telegram ID in the chats pane")
+
+
 def patch_connection_title(tg: Path) -> None:
     """Say what the client is actually waiting for while it connects.
 
@@ -24701,6 +24787,8 @@ def main() -> None:
     patch_document_picker_upload(tg)
     patch_webapp_tunnel(tg)
     patch_connection_title(tg)
+    patch_peer_id_search(tg)
+    patch_auto_format(tg)
     patch_disable_copy_protection(tg)
     patch_unlimited_recent_stickers(tg)
     patch_unlimited_pinned_chats(tg)

@@ -1736,6 +1736,58 @@ def main() -> None:
                 elif conn_tables.get("ru", {}).get(key) != match.group(1):
                     err.append(f"ConnectionTitle: Russian {english!r} differs from AorusL10n — run gen_module_strings.py")
 
+    # Search by Telegram ID: the helper has to be in the tree and the search pane has to
+    # actually call it, or a numeric query silently goes back to finding nothing.
+    id_search = tg / "submodules" / "ChatListUI" / "Sources" / "AorusPeerIdSearch.swift"
+    if not id_search.is_file():
+        err.append("PeerIdSearch: AorusPeerIdSearch.swift was not copied into ChatListUI")
+    else:
+        id_search_text = id_search.read_text(encoding="utf-8")
+        for marker in (
+            "func aorusPeerIdCandidates(for query: String)",
+            "func aorusMergeIdSearch(",
+            "Namespaces.Peer.CloudUser",
+            "Namespaces.Peer.CloudChannel",
+            "Namespaces.Peer.CloudGroup",
+        ):
+            if marker not in id_search_text:
+                err.append(f"PeerIdSearch: helper is missing {marker}")
+    search_pane = tg / "submodules" / "ChatListUI" / "Sources" / "ChatListSearchListPaneNode.swift"
+    search_pane_text = search_pane.read_text(encoding="utf-8") if search_pane.is_file() else ""
+    if "foundRemotePeers = aorusMergeIdSearch(engine: context.engine, query: query, into: foundRemotePeers)" not in search_pane_text:
+        err.append("PeerIdSearch: the search pane does not merge id results")
+
+    # Auto-formatting: the store, the send hook and the settings row all have to line up,
+    # and the style vocabulary is duplicated across two modules that cannot import each
+    # other — so pin the two lists against each other rather than trusting they match.
+    auto_format = tg / "submodules" / "TextFormat" / "Sources" / "AorusAutoFormat.swift"
+    if not auto_format.is_file():
+        err.append("AutoFormat: AorusAutoFormat.swift was not copied into TextFormat")
+    else:
+        auto_format_text = auto_format.read_text(encoding="utf-8")
+        for marker in (
+            'styleKey = "aorusgram_auto_format_style"',
+            'public static let styles = ["bold", "italic", "monospace", "strikethrough", "underline", "spoiler"]',
+            "func aorusApplyBaseTextStyle(",
+        ):
+            if marker not in auto_format_text:
+                err.append(f"AutoFormat: store is missing {marker}")
+    entities_path = tg / "submodules" / "TextFormat" / "Sources" / "GenerateTextEntities.swift"
+    entities_source = entities_path.read_text(encoding="utf-8") if entities_path.is_file() else ""
+    if "entities = aorusApplyBaseTextStyle(to: entities, length: text.length)" not in entities_source:
+        err.append("AutoFormat: outgoing entities do not carry the base style")
+    misc = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
+    if misc.is_file():
+        misc_text = misc.read_text(encoding="utf-8")
+        for marker in (
+            'let aorusAutoFormatKey = "aorusgram_auto_format_style"',
+            'let aorusAutoFormatStyles = ["bold", "italic", "monospace", "strikethrough", "underline", "spoiler"]',
+            "openAutoFormat: {",
+            "case .autoFormat:       return 49",
+        ):
+            if marker not in misc_text:
+                err.append(f"AutoFormat: settings screen is missing {marker}")
+
     # The mask strip has three moving parts that must all land: the leaf module has to be
     # in the tree, the call screen has to link it, and the button has to exist. Any one of
     # them silently missing means the button never appears and nobody notices until a user

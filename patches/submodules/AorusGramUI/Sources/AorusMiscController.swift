@@ -14,6 +14,36 @@ import AccountContext
 // future features so the main settings list stays focused. Currently hosts the
 // Local Premium toggle and the Fake Gifts manager.
 
+// AorusGram: the base text style applied to everything you send.
+//
+// The identifiers and the defaults key are duplicated from AorusAutoFormat in TextFormat
+// rather than imported: TextFormat sits below this module and pulling it in just to read
+// one string would invert the dependency. scripts/verify_aorus_branding.py pins the two
+// lists against each other so they cannot drift apart.
+let aorusAutoFormatKey = "aorusgram_auto_format_style"
+let aorusAutoFormatOff = "off"
+let aorusAutoFormatStyles = ["bold", "italic", "monospace", "strikethrough", "underline", "spoiler"]
+
+func aorusAutoFormatStyle() -> String {
+    let stored = UserDefaults.standard.string(forKey: aorusAutoFormatKey) ?? aorusAutoFormatOff
+    return aorusAutoFormatStyles.contains(stored) ? stored : aorusAutoFormatOff
+}
+
+/// Style names come from Telegram's own formatting menu, so the row reads with the exact
+/// wording the user already sees when they format a selection by hand — in every language
+/// Telegram ships, with nothing for us to translate or keep in sync.
+func aorusAutoFormatLabel(_ style: String, _ strings: PresentationStrings) -> String {
+    switch style {
+    case "bold": return strings.TextFormat_Bold
+    case "italic": return strings.TextFormat_Italic
+    case "monospace": return strings.TextFormat_Monospace
+    case "strikethrough": return strings.TextFormat_Strikethrough
+    case "underline": return strings.TextFormat_Underline
+    case "spoiler": return strings.TextFormat_Spoiler
+    default: return AorusL10n(strings.baseLanguageCode).appBadgeOff
+    }
+}
+
 private enum MiscSection: Int32 {
     case premium
     case fakeGifts
@@ -38,6 +68,7 @@ private struct MiscState: Equatable {
     var profileLinkTargetPeerId: Int64
     var profileLinkTargetName: String
     var formattingPanel: Bool
+    var autoFormatStyle: String
     var phoneSpoof: Bool
     var phoneSpoofNumber: String
     var mediaMetadata: Bool
@@ -62,6 +93,7 @@ private final class MiscArguments {
     let selectProfileLinkSelf: () -> Void
     let selectProfileLinkPeer: () -> Void
     let setFormattingPanel: (Bool) -> Void
+    let openAutoFormat: () -> Void
     let openAnimatedWallpapers: () -> Void
     let openAnimatedBanner: () -> Void
     let setPhoneSpoof: (Bool) -> Void
@@ -74,7 +106,7 @@ private final class MiscArguments {
     let openChatLock: () -> Void
     let setActionConfirmation: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAutoFormat: @escaping () -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -88,6 +120,7 @@ private final class MiscArguments {
         self.selectProfileLinkSelf = selectProfileLinkSelf
         self.selectProfileLinkPeer = selectProfileLinkPeer
         self.setFormattingPanel = setFormattingPanel
+        self.openAutoFormat = openAutoFormat
         self.openAnimatedWallpapers = openAnimatedWallpapers
         self.openAnimatedBanner = openAnimatedBanner
         self.setPhoneSpoof = setPhoneSpoof
@@ -124,6 +157,7 @@ private enum MiscEntry: ItemListNodeEntry {
     case profileLinkPeer(PresentationTheme, String, String)
     case profileLinkInfo(PresentationTheme, String)
     case formattingPanel(PresentationTheme, String, Bool)
+    case autoFormat(PresentationTheme, String, String)
     case animatedWallpapers(PresentationTheme, String)
     case animatedBanner(PresentationTheme, String)
     case phoneSpoof(PresentationTheme, String, Bool)
@@ -157,7 +191,7 @@ private enum MiscEntry: ItemListNodeEntry {
              .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
              .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
-        case .formattingPanel:
+        case .formattingPanel, .autoFormat:
             return MiscSection.formattingPanelS.rawValue
         case .animatedWallpapers:
             return MiscSection.animatedWallpapersS.rawValue
@@ -198,6 +232,7 @@ private enum MiscEntry: ItemListNodeEntry {
         case .mediaMetadata:    return 43
         case .mediaMetadataInfo:return 44
         case .formattingPanel:  return 46
+        case .autoFormat:       return 49
         case .animatedWallpapers: return 47
         case .animatedBanner:   return 48
         case .securityHeader:   return 50
@@ -259,6 +294,8 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .profileLinkInfo(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .formattingPanel(lt, ls, lv):
             if case let .formattingPanel(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .autoFormat(lt, ls, lv):
+            if case let .autoFormat(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .animatedWallpapers(lt, ls):
             if case let .animatedWallpapers(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .animatedBanner(lt, ls):
@@ -362,6 +399,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         case let .formattingPanel(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setFormattingPanel($0) })
+        case let .autoFormat(_, title, value):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: value, sectionId: section, style: .blocks, action: args.openAutoFormat)
         case let .animatedWallpapers(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openAnimatedWallpapers)
         case let .animatedBanner(_, title):
@@ -416,7 +455,7 @@ private enum MiscEntry: ItemListNodeEntry {
     }
 }
 
-private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEntry] {
+private func miscEntries(state: MiscState, theme: PresentationTheme, strings: PresentationStrings) -> [MiscEntry] {
     var entries: [MiscEntry] = []
 
     entries.append(.premiumHeader(theme, aorusL("ПРЕМИУМ", "PREMIUM")))
@@ -457,6 +496,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme) -> [MiscEnt
     entries.append(.mediaMetadata(theme, aorusL("Метаданные медиа", "Media Metadata"), state.mediaMetadata))
     entries.append(.mediaMetadataInfo(theme, aorusL("Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл.", "Adds a Metadata item to photos, videos and GIFs and shows available EXIF, GPS, camera, container and file data.")))
     entries.append(.formattingPanel(theme, aorusL("Панель форматирования", "Formatting Panel"), state.formattingPanel))
+    entries.append(.autoFormat(theme, aorusL("Авто-форматирование при отправке", "Auto-formatting on send"), aorusAutoFormatLabel(state.autoFormatStyle, strings)))
     entries.append(.animatedWallpapers(theme, aorusL("Анимированные обои", "Animated Wallpapers")))
     entries.append(.animatedBanner(theme, aorusL("Анимированный баннер", "Animated Banner")))
 
@@ -491,6 +531,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         profileLinkTargetPeerId: initialProfileLinkTargetPeerId,
         profileLinkTargetName: UserDefaults.standard.string(forKey: "aorusgram_profile_link_target_name") ?? "",
         formattingPanel: UserDefaults.standard.bool(forKey: "aorusgram_formatting_panel"),
+        autoFormatStyle: AorusAutoFormat.style,
         phoneSpoof: AorusPhoneSpoofStore.isEnabled,
         phoneSpoofNumber: AorusPhoneSpoofStore.ensureNumber(),
         mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),
@@ -665,6 +706,38 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 return next
             }
         },
+        openAutoFormat: {
+            guard let controller = weakController else { return }
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let current = aorusAutoFormatStyle()
+
+            let sheet = ActionSheetController(presentationData: presentationData)
+            // "Off" is only offered once a style is active: with nothing set it would be a
+            // no-op row, exactly as in the badge picker this mirrors.
+            var options: [(String, String)] = []
+            if current != aorusAutoFormatOff {
+                options.append((aorusAutoFormatOff, AorusL10n(presentationData.strings.baseLanguageCode).appBadgeOff))
+            }
+            options.append(contentsOf: aorusAutoFormatStyles.map { style in
+                return (style, aorusAutoFormatLabel(style, presentationData.strings))
+            })
+            let optionItems: [ActionSheetButtonItem] = options.map { style, name in
+                return ActionSheetButtonItem(title: name, color: .accent, font: style == current ? .bold : .default, action: { [weak sheet] in
+                    sheet?.dismissAnimated()
+                    UserDefaults.standard.set(style, forKey: aorusAutoFormatKey)
+                    updateState { s in var n = s; n.autoFormatStyle = style; return n }
+                })
+            }
+            sheet.setItemGroups([
+                ActionSheetItemGroup(items: optionItems),
+                ActionSheetItemGroup(items: [
+                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
+                        sheet?.dismissAnimated()
+                    })
+                ])
+            ])
+            controller.present(sheet, in: .window(.root))
+        },
         openAnimatedWallpapers: {
             guard let controller = weakController,
                   let navigationController = controller.navigationController as? NavigationController else {
@@ -769,7 +842,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         |> deliverOnMainQueue
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let entries = miscEntries(state: state, theme: presentationData.theme)
+            let entries = miscEntries(state: state, theme: presentationData.theme, strings: presentationData.strings)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(aorusL("Прочее", "Other")),
