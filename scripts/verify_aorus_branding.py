@@ -1802,11 +1802,19 @@ def main() -> None:
         for marker in (
             'let aorusAutoFormatKey = "aorusgram_auto_format_style"',
             'let aorusAutoFormatStyles = ["bold", "italic", "monospace", "strikethrough", "underline", "spoiler"]',
-            "openAutoFormat: {",
             "case .autoFormat:       return 49",
+            "aorusAutoFormatController(context: context, onChange:",
         ):
             if marker not in misc_text:
                 err.append(f"AutoFormat: settings screen is missing {marker}")
+        # The row opens a pushed screen, not an action sheet.
+        if "ActionSheetController(presentationData: presentationData)\n            // \"Off\" is only offered" in misc_text:
+            err.append("AutoFormat: settings row still opens the old action sheet")
+    auto_format_screen = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusAutoFormatController.swift"
+    if not auto_format_screen.is_file():
+        err.append("AutoFormat: AorusAutoFormatController.swift is missing")
+    elif "public func aorusAutoFormatController(context: AccountContext" not in auto_format_screen.read_text(encoding="utf-8"):
+        err.append("AutoFormat: the picker screen entry point is missing")
         # AorusGramUI cannot import TextFormat, so the store's type must never be named
         # here — it compiles nowhere and the failure is a wall of inference errors that
         # point everywhere except the one line at fault.

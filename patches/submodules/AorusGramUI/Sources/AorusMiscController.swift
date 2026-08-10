@@ -707,36 +707,16 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
             }
         },
         openAutoFormat: {
-            guard let controller = weakController else { return }
-            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-            let current = aorusAutoFormatStyle()
-
-            let sheet = ActionSheetController(presentationData: presentationData)
-            // "Off" is only offered once a style is active: with nothing set it would be a
-            // no-op row, exactly as in the badge picker this mirrors.
-            var options: [(String, String)] = []
-            if current != aorusAutoFormatOff {
-                options.append((aorusAutoFormatOff, AorusL10n(presentationData.strings.baseLanguageCode).appBadgeOff))
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
             }
-            options.append(contentsOf: aorusAutoFormatStyles.map { style in
-                return (style, aorusAutoFormatLabel(style, presentationData.strings))
+            // A pushed screen rather than an action sheet: the list of styles is long enough
+            // that a full screen reads better, and it matches the Font picker next to it.
+            let screen = aorusAutoFormatController(context: context, onChange: { style in
+                updateState { s in var n = s; n.autoFormatStyle = style; return n }
             })
-            let optionItems: [ActionSheetButtonItem] = options.map { style, name in
-                return ActionSheetButtonItem(title: name, color: .accent, font: style == current ? .bold : .default, action: { [weak sheet] in
-                    sheet?.dismissAnimated()
-                    UserDefaults.standard.set(style, forKey: aorusAutoFormatKey)
-                    updateState { s in var n = s; n.autoFormatStyle = style; return n }
-                })
-            }
-            sheet.setItemGroups([
-                ActionSheetItemGroup(items: optionItems),
-                ActionSheetItemGroup(items: [
-                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak sheet] in
-                        sheet?.dismissAnimated()
-                    })
-                ])
-            ])
-            controller.present(sheet, in: .window(.root))
+            navigationController.pushViewController(screen)
         },
         openAnimatedWallpapers: {
             guard let controller = weakController,
