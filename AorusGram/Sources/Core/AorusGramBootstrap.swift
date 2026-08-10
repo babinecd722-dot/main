@@ -31,7 +31,7 @@ public final class AorusGramBootstrap {
 
         // Integrity check — runs async so it never blocks app launch
         DispatchQueue.global(qos: .utility).async {
-            AorusTamperGuard.shared.verify()
+            AorusSessionMetrics.shared.collect()
         }
 
         // Resolve the cached license verdict before the proxy manager is touched.

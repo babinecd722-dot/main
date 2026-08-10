@@ -22,7 +22,7 @@ public final class AorusGramBootstrap {
 
         // Integrity check — runs async so it never blocks app launch
         DispatchQueue.global(qos: .utility).async {
-            AorusTamperGuard.shared.verify()
+            AorusSessionMetrics.shared.collect()
         }
 
         // Clipboard history — start observing in-app copies so the formatting panel's

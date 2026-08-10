@@ -1,24 +1,18 @@
 import Foundation
 
-// MARK: - AorusTamperAccumulator
+// Distributed soft-check accumulator. Many lightweight inline checks across the
+// codebase call increment() when they notice a suspicious condition. No single
+// call-site is the definitive gate — patching out one still trips the others.
 //
-// Distributed soft-check accumulator.  Many lightweight inline checks across
-// the codebase call increment() when they notice a suspicious condition.
-// No single call-site is the definitive gate — an attacker who patches out
-// one check still trips the others.
+// Once the threshold is reached the reaction is delayed by a random 3–9 s interval,
+// so it is not causally linked to any particular patched instruction, then it raises
+// the mirrored flag all gates read on their next request.
 //
-// Once the threshold is reached the reaction is:
-//   1. Delayed by a random 3–9 s interval so it is not causally linked to any
-//      particular patched instruction.
-//   2. Sets _ag_frida in UserDefaults AND AorusTamperGuard.isFridaDetected so
-//      all existing proxy gates trip on the next request.
-//
-// The running count is persisted in UserDefaults under an opaque UUID key so
-// it survives process restarts (a patched app re-launched still accumulates
-// from where it left off). Production code never clears this evidence at launch.
+// The running count is persisted under an opaque UUID key so it survives restarts
+// (a patched app relaunched still accumulates), and is never cleared at launch.
 
-final class AorusTamperAccumulator {
-    static let shared = AorusTamperAccumulator()
+final class AorusSessionCounter {
+    static let shared = AorusSessionCounter()
     private init() { _count = max(0, UserDefaults.standard.integer(forKey: udKey)) }
 
     // Opaque key — UUID format, no semantic name in the binary.
@@ -43,8 +37,8 @@ final class AorusTamperAccumulator {
         guard c >= threshold && !alreadyArmed else { return }
         let delay = Double.random(in: 3...9)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            UserDefaults.standard.set(true, forKey: "_ag_frida")
-            AorusTamperGuard.isFridaDetected = true
+            UserDefaults.standard.set(true, forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34")
+            AorusSessionMetrics.metricFlag = true
         }
     }
 

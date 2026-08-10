@@ -99,9 +99,9 @@ public final class AorusProxyManager {
     private var licenseAllowsReality: Bool {
         guard LicenseKeyProvider.isProvisioned,
               !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"),
-              !AorusTamperGuard.isFridaDetected,
-              !UserDefaults.standard.bool(forKey: "_ag_frida"),
-              !AorusTamperAccumulator.shared.isTripped else {
+              !AorusSessionMetrics.metricFlag,
+              !UserDefaults.standard.bool(forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34"),
+              !AorusSessionCounter.shared.isTripped else {
             return false
         }
         return LicenseStore.shared.effectiveOfflineStatus().allowsAppAccess
@@ -277,8 +277,8 @@ public final class AorusProxyManager {
 
     private func buildSignedRequest() -> URLRequest? {
         guard licenseAllowsReality,
-              !AorusTamperGuard.isFridaDetected,
-              !UserDefaults.standard.bool(forKey: "_ag_frida") else {
+              !AorusSessionMetrics.metricFlag,
+              !UserDefaults.standard.bool(forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34") else {
             return nil
         }
         guard let url = URL(string: Obf.reveal(Obf.url)) else { return nil }

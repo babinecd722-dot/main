@@ -58,11 +58,11 @@ enum AorusEnvGuard {
     private static func recordIfCompromised(_ compromised: Bool) -> Bool {
         guard compromised else { return true }
         let defaults = UserDefaults.standard
-        let wasRecorded = defaults.bool(forKey: "_ag_environment_compromised")
-        defaults.set(true, forKey: "_ag_frida")
-        defaults.set(true, forKey: "_ag_environment_compromised")
+        let wasRecorded = defaults.bool(forKey: "e7b3f014-2a8d-4c61-9f05-3b6a1e8d4c02")
+        defaults.set(true, forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34")
+        defaults.set(true, forKey: "e7b3f014-2a8d-4c61-9f05-3b6a1e8d4c02")
         guard !wasRecorded else { return false }
-        AorusTamperAccumulator.shared.increment()
+        AorusSessionCounter.shared.increment()
         NotificationCenter.default.post(
             name: NSNotification.Name("aorusgram.environmentCompromised"), object: nil
         )

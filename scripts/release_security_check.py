@@ -170,7 +170,7 @@ def main() -> int:
             '"127.0.0.1"',
             'publishRequirement(required: authorizationAllowsTunnel)',
             '"required": required',
-            "AorusTamperGuard.isFridaDetected",
+            "AorusSessionMetrics.metricFlag",
         ):
             if marker not in reality_manager:
                 fail(errors, f"REALITY manager invariant is missing {marker}")
@@ -206,7 +206,7 @@ def main() -> int:
     ui_bootstrap = (root / "patches/submodules/AorusGramUI/Sources/Core/AorusGramBootstrap.swift").read_text(
         encoding="utf-8"
     )
-    if 'removeObject(forKey: "_ag_frida")' in ui_bootstrap:
+    if 'removeObject(forKey: "c0a8b1e2-6f4d-4a9c-b3e7-1d520f8a6b34")' in ui_bootstrap:
         fail(errors, "UI bootstrap must not clear persistent tamper evidence")
     accumulator = (root / "AorusGram/Sources/Security/AorusTamperAccumulator.swift").read_text(encoding="utf-8")
     if "resetForCleanLaunch" in accumulator:
