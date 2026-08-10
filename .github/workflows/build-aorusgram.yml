@@ -699,7 +699,7 @@ jobs:
               "app_specific_url_scheme": "aorusgram",
               "premium_iap_product_id": "",
               "enable_siri": False,
-              "enable_icloud": True
+              "enable_icloud": False
           }
           open('build-system/appstore-configuration.json', 'w').write(json.dumps(config, indent=2))
           print('Config written:')
@@ -840,16 +840,6 @@ jobs:
                   # The Telegram BUILD template includes app-groups for all targets.
                   'com.apple.security.application-groups': ['group.' + base],
               }
-              if name == 'Telegram':
-                  # Keep this in lockstep with Telegram/BUILD's icloud_fragment.
-                  # iCloud is a host-app capability; extensions do not receive the
-                  # container entitlement unless they explicitly start using it.
-                  entitlements.update({
-                      'com.apple.developer.icloud-services': ['CloudKit', 'CloudDocuments'],
-                      'com.apple.developer.icloud-container-identifiers': ['iCloud.' + base],
-                      'com.apple.developer.ubiquity-kvstore-identifier': team + '.' + base,
-                      'com.apple.developer.icloud-container-environment': 'Development',
-                  })
               plist = {
                   'AppIDName': 'AorusGram',
                   'ApplicationIdentifierPrefix': [team],

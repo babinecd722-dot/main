@@ -23,7 +23,7 @@ DEFAULT_CONFIG = {
     "app_specific_url_scheme": "aorusgram",
     "premium_iap_product_id": "",
     "enable_siri": False,
-    "enable_icloud": True,
+    "enable_icloud": False,
 }
 
 def main():

@@ -58,22 +58,28 @@ def main() -> int:
         if marker in workflow:
             fail(errors, f"workflow must build a device IPA unconditionally — found {marker}")
 
+    # iCloud must stay OFF. Enabling it bakes com.apple.developer.icloud-* into the app's
+    # code signature, and this IPA is re-signed downstream with certificates that carry no
+    # iCloud capability. iOS validates entitlements against the profile at launch, so the
+    # app installs and then refuses to start — a failure with no crash log in the app and
+    # no relation to any feature. Nothing needs the capability: the Files upload path is
+    # deliberately built on NSFileCoordinator, which asks the selected provider directly.
     for marker in (
+        "'com.apple.developer.icloud-services'",
+        "'com.apple.developer.icloud-container-identifiers'",
+        "'com.apple.developer.ubiquity-kvstore-identifier'",
+        "'com.apple.developer.icloud-container-environment'",
         '"enable_icloud": True',
-        "'com.apple.developer.icloud-services': ['CloudKit', 'CloudDocuments']",
-        "'com.apple.developer.icloud-container-identifiers': ['iCloud.' + base]",
-        "'com.apple.developer.ubiquity-kvstore-identifier': team + '.' + base",
-        "'com.apple.developer.icloud-container-environment': 'Development'",
     ):
-        if marker not in workflow:
-            fail(errors, f"iCloud workflow invariant is missing {marker}")
+        if marker in workflow:
+            fail(errors, f"workflow must not request iCloud entitlements — found {marker}")
 
     build_config = json.loads((root / "build-config/appstore-configuration.json").read_text(encoding="utf-8"))
-    if build_config.get("enable_icloud") is not True:
-        fail(errors, "checked-in build configuration must enable iCloud")
+    if build_config.get("enable_icloud") is not False:
+        fail(errors, "checked-in build configuration must keep iCloud disabled")
     apply_build_config = (root / "scripts/apply_build_config.py").read_text(encoding="utf-8")
-    if '"enable_icloud": True' not in apply_build_config:
-        fail(errors, "default build configuration must enable iCloud")
+    if '"enable_icloud": False' not in apply_build_config:
+        fail(errors, "default build configuration must keep iCloud disabled")
 
     aorus_build = (root / "patches/submodules/AorusGram/BUILD").read_text(encoding="utf-8")
     for marker in ('name = "LibXraySystemLibraries"', '"libresolv"', '":LibXraySystemLibraries"'):
