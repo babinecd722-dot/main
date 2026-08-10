@@ -24201,7 +24201,7 @@ def patch_live_base_style(tg: Path) -> None:
         print("LiveBaseStyle: ChatRichTextInputNode.swift not found — skip")
         return
     t = path.read_text(encoding="utf-8")
-    if "aorusBaseStyledText(" in t:
+    if "aorusApplyBaseStyle(" in t:
         print("LiveBaseStyle: already patched")
         return
     anchor = (
@@ -24215,11 +24215,7 @@ def patch_live_base_style(tg: Path) -> None:
         "        // AorusGram: stamp the configured base style before the attributes are\n"
         "        // refreshed, so a letter is drawn in it the moment it is typed instead of\n"
         "        // only once the message has been sent. No-op when nothing new to style.\n"
-        "        if let aorusStyledText = aorusBaseStyledText(self.attributedText) {\n"
-        "            let aorusSelectedRange = self.selectedRange\n"
-        "            self.attributedText = aorusStyledText\n"
-        "            self.selectedRange = aorusSelectedRange\n"
-        "        }\n"
+        "        aorusApplyBaseStyle(to: self.textInputNodeImpl.textView)\n"
     ) + anchor
     t = t.replace(anchor, replacement, 1)
     path.write_text(t, encoding="utf-8")

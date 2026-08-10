@@ -1816,15 +1816,21 @@ def main() -> None:
         live_style_text = live_style.read_text(encoding="utf-8")
         for marker in (
             'private let aorusBaseStyleKey = "aorusgram_auto_format_style"',
-            "func aorusBaseStyledText(",
+            "func aorusApplyBaseStyle(to textView: UITextView)",
             "ChatTextInputAttributes.bold",
             "ChatTextInputAttributes.spoiler",
         ):
             if marker not in live_style_text:
                 err.append(f"AutoFormat: live composer helper is missing {marker}")
+        # Must mutate storage in place and stand down during IME composition — a full
+        # attributedText reassignment on every keystroke cancels marked-text input.
+        if "textView.markedTextRange != nil" not in live_style_text:
+            err.append("AutoFormat: live styling does not guard against IME marked text")
+        if "storage.addAttribute(key" not in live_style_text:
+            err.append("AutoFormat: live styling no longer mutates storage in place")
     rich_node = tg / "submodules" / "TelegramUI" / "Components" / "Chat" / "ChatInputTextNode" / "Sources" / "ChatRichTextInputNode.swift"
     rich_node_text = rich_node.read_text(encoding="utf-8") if rich_node.is_file() else ""
-    if "if let aorusStyledText = aorusBaseStyledText(self.attributedText) {" not in rich_node_text:
+    if "aorusApplyBaseStyle(to: self.textInputNodeImpl.textView)" not in rich_node_text:
         err.append("AutoFormat: the composer does not draw the base style while typing")
 
     misc = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"

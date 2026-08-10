@@ -1,7 +1,8 @@
 import Foundation
+import UIKit
 import TextFormat
 
-// AorusGram: the base text style, applied as you type.
+// AorusGram: a base text style, applied as you type.
 //
 // The send-time hook in TextFormat decides what actually leaves the device; this is the
 // other half, so the composer shows the same thing. Without it a letter typed under a
@@ -9,8 +10,8 @@ import TextFormat
 // not working.
 //
 // It runs from the node's per-keystroke decoration pass, before Telegram refreshes the
-// input attributes — so the style is already on the text when fonts and colours are
-// derived from it, and no separate rendering path is needed.
+// input attributes, so the style is already on the text when fonts and colours are
+// derived from it — no separate rendering path is needed.
 //
 // The defaults key is duplicated from AorusAutoFormat rather than imported: this module
 // sits below the settings screen and beside TextFormat, and one shared string is cheaper
@@ -35,31 +36,35 @@ func aorusBaseStyleAttribute() -> NSAttributedString.Key? {
     }
 }
 
-/// The composer text with the base style spanning all of it, or nil when nothing needs to
-/// change.
+/// Spans the chosen style across the whole composer, in place.
 ///
-/// Returning nil for the common case matters: this runs on every keystroke, and writing
-/// `attributedText` back means restoring the selection, so it must only happen when there
-/// is genuinely something new to stamp — normally just the character that was typed.
-func aorusBaseStyledText(_ text: NSAttributedString?) -> NSAttributedString? {
-    guard let key = aorusBaseStyleAttribute(), let text, text.length != 0 else {
-        return nil
-    }
-    let fullRange = NSRange(location: 0, length: text.length)
-    var isFullyStyled = true
-    text.enumerateAttribute(key, in: fullRange, options: [], using: { value, _, stop in
+/// Crucially this mutates the live text storage rather than reassigning attributedText:
+/// a full reassignment on every keystroke cancels an input method mid-composition — CJK
+/// pinyin, Japanese kana, emoji search, predictive text — and resets undo. Telegram's own
+/// per-keystroke decoration mutates storage in place for exactly this reason, so this
+/// matches it. While an IME is composing (markedTextRange != nil) it stands down entirely;
+/// the just-composed run is styled on the next pass once composition commits.
+///
+/// A no-op on the common keystroke: the write only happens when the style does not already
+/// cover the whole text, and the selection is preserved across it.
+func aorusApplyBaseStyle(to textView: UITextView) {
+    guard let key = aorusBaseStyleAttribute() else { return }
+    if textView.markedTextRange != nil { return }
+    let storage = textView.textStorage
+    let full = NSRange(location: 0, length: storage.length)
+    guard full.length > 0 else { return }
+    var fullyStyled = true
+    storage.enumerateAttribute(key, in: full, options: []) { value, _, stop in
         if value == nil {
-            isFullyStyled = false
+            fullyStyled = false
             stop.pointee = true
         }
-    })
-    if isFullyStyled {
-        return nil
     }
-    let result = NSMutableAttributedString(attributedString: text)
-    // `true as NSNumber` is the marker every other producer of these attributes uses —
-    // StringWithAppliedEntities and the structural conversion both write exactly this, and
-    // the readers compare presence rather than value.
-    result.addAttribute(key, value: true as NSNumber, range: fullRange)
-    return result
+    if fullyStyled { return }
+    let selected = textView.selectedRange
+    storage.beginEditing()
+    // `true as NSNumber` is the marker every other producer of these attributes uses.
+    storage.addAttribute(key, value: true as NSNumber, range: full)
+    storage.endEditing()
+    textView.selectedRange = selected
 }
