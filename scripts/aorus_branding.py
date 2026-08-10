@@ -1728,7 +1728,7 @@ def patch_video_message_rear_camera(tg: Path) -> None:
         # visible flip and allowing the native state signal to overwrite the choice.
         legacy = (
             "                    // AorusGram: rear camera for video messages\n"
-            "                    position: (!UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)) ? .back : self.cameraState.position,\n"
+            "                    position: (!UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)) ? .back : self.cameraState.position,\n"
         )
         if legacy in t:
             t = t.replace(legacy, "                    position: self.cameraState.position,\n", 1)
@@ -1736,7 +1736,7 @@ def patch_video_message_rear_camera(tg: Path) -> None:
         anchor = '            let isFrontPosition = "".isEmpty\n'
         replacement = (
             "            " + sentinel + "\n"
-            "            let aorusStartWithRearCamera = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\")\n"
+            "            let aorusStartWithRearCamera = !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\")\n"
             "                && ((UserDefaults.standard.object(forKey: \"aorusgram_video_messages_rear_camera\") as? Bool) ?? true)\n"
             "            let isFrontPosition = !aorusStartWithRearCamera\n"
         )
@@ -2726,7 +2726,7 @@ def patch_chat_context_menu_media_metadata(tg: Path) -> None:
 
     injection = (
         "        " + sentinel + "\n"
-        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_media_metadata_enabled\") {\n"
+        "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") && UserDefaults.standard.bool(forKey: \"aorusgram_media_metadata_enabled\") {\n"
         "            let aorusMetaMsg = messages[0]\n"
         "            if AorusMediaMetadata.hasSupportedMedia(aorusMetaMsg) {\n"
         "                actions.append(.action(ContextMenuActionItem(text: aorusL(\"Метаданные\", \"Metadata\"), icon: { theme in\n"
@@ -5550,7 +5550,7 @@ def patch_profile_report_button(tg: Path) -> None:
 
     item = (
         f"                    {sentinel}\n"
-        "                    if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_profile_report_button\") && user.id != strongSelf.context.account.peerId && !user.isDeleted {\n"
+        "                    if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") && UserDefaults.standard.bool(forKey: \"aorusgram_profile_report_button\") && user.id != strongSelf.context.account.peerId && !user.isDeleted {\n"
         "                        items.append(.action(ContextMenuActionItem(text: presentationData.strings.ReportPeer_Report, textColor: .destructive, icon: { theme in\n"
         "                            generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Report\"), color: theme.contextMenu.destructiveColor)\n"
         "                        }, action: { [weak self] c, f in\n"
@@ -10071,14 +10071,14 @@ public enum AorusFakeStarsStore {
     public static let changedNotification = Notification.Name("AorusGramFakeStarsChanged")
 
     public static var isEnabled: Bool {
-        if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+        if UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
             return false
         }
         if UserDefaults.standard.object(forKey: enabledKey) == nil {
             if let data = aorusKeychainGet(account: keychainEnabledAccount), let flag = data.first {
                 let value = flag != 0
                 UserDefaults.standard.set(value, forKey: enabledKey)
-                return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && value
+                return !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && value
             }
             return false
         }
@@ -10086,7 +10086,7 @@ public enum AorusFakeStarsStore {
     }
 
     public static func setEnabled(_ value: Bool) {
-        let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value
+        let effectiveValue = UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") ? false : value
         UserDefaults.standard.set(effectiveValue, forKey: enabledKey)
         aorusKeychainSet(Data([effectiveValue ? 1 : 0]), account: keychainEnabledAccount)
         NotificationCenter.default.post(name: changedNotification, object: nil)
@@ -12056,11 +12056,11 @@ public enum AorusAntiSearchStore {
     private static let enabledKey = "aorusgram_anti_search_enabled"
 
     public static var isEnabled: Bool {
-        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value, forKey: enabledKey)
+        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") ? false : value, forKey: enabledKey)
     }
 }
 
@@ -12068,11 +12068,11 @@ public enum AorusAnonymousStickerStore {
     private static let enabledKey = "aorusgram_anonymous_stickers_enabled"
 
     public static var isEnabled: Bool {
-        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value, forKey: enabledKey)
+        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") ? false : value, forKey: enabledKey)
     }
 }
 
@@ -12081,11 +12081,11 @@ public enum AorusProfileLinkStore {
     private static let targetPeerIdKey = "aorusgram_profile_link_target_peer_id"
 
     public static var isEnabled: Bool {
-        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value, forKey: enabledKey)
+        UserDefaults.standard.set(UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") ? false : value, forKey: enabledKey)
     }
 
     public static func targetPeerId(default accountPeerId: PeerId) -> PeerId {
@@ -12277,11 +12277,11 @@ public enum AorusPhoneSpoofStore {
     }
 
     public static var isEnabled: Bool {
-        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") && UserDefaults.standard.bool(forKey: enabledKey)
+        return !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") && UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     public static func setEnabled(_ value: Bool) {
-        let effectiveValue = UserDefaults.standard.bool(forKey: "aorusgram_license_locked") ? false : value
+        let effectiveValue = UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") ? false : value
         if effectiveValue {
             _ = ensureNumber()
         }
@@ -17987,7 +17987,7 @@ def patch_aorus_code_compose(tg: Path) -> None:
     handler = (
         "    @objc private func aorusCodeLongPressed(_ gesture: UILongPressGestureRecognizer) {\n"
         "        guard gesture.state == .began,\n"
-        "              !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\"),\n"
+        "              !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\"),\n"
         "              UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_enabled\"),\n"
         "              let context = self.context,\n"
         "              let chatLocation = self.presentationInterfaceState?.chatLocation,\n"
@@ -18013,7 +18013,7 @@ def patch_aorus_code_compose(tg: Path) -> None:
     # (on the first chat entry after the feature is turned on / after install).
     hint_helper = (
         "    private func aorusMaybeShowCodeHint() {\n"
-        "        if UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") { return }\n"
+        "        if UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") { return }\n"
         "        if !UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_enabled\") { return }\n"
         "        if UserDefaults.standard.bool(forKey: \"aorusgram_aorus_code_hint_shown\") { return }\n"
         "        if self.attachmentButtonBackground.isHidden || self.attachmentButtonBackground.alpha <= 0.01 { return }\n"
@@ -19074,7 +19074,7 @@ private final class AorusCallRecorder {
     private weak var pendingCapturer: OngoingCallVideoCapturer?
 
     func onConnected(account: Account, callContext: OngoingCallContext) {
-        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        guard !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
         self.lock.lock()
         if self.active { self.lock.unlock(); return }
         self.active = true
@@ -19102,7 +19102,7 @@ private final class AorusCallRecorder {
     // already capture every participant — we just drive the start/stop and skip the
     // video PiP recorder (group video layout differs; audio is the proven path).
     func onConnectedGroup(account: Account) {
-        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        guard !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
         self.lock.lock()
         if self.active { self.lock.unlock(); return }
         self.active = true
@@ -19119,7 +19119,7 @@ private final class AorusCallRecorder {
     // Called when the local camera capturer is set (call init or requestVideo). Stores
     // it for PiP capture and, if recording is already running, attaches it immediately.
     func onLocalCapturer(_ capturer: OngoingCallVideoCapturer) {
-        guard !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
+        guard !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"), UserDefaults.standard.bool(forKey: "aorusgram_feature_call_recording") else { return }
         self.lock.lock()
         self.pendingCapturer = capturer
         let recorder = self.active ? self.videoRecorder : nil
@@ -23568,7 +23568,7 @@ def patch_formatting_panel(tg: Path) -> None:
         "    }\n"
         "\n"
         "    private func aorusPresentCodeComposer() {\n"
-        "        guard !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\"),\n"
+        "        guard !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\"),\n"
         "              let context = self.context,\n"
         "              let chatLocation = self.presentationInterfaceState?.chatLocation,\n"
         "              let peerId = chatLocation.peerId,\n"
@@ -23729,7 +23729,7 @@ def patch_voice_to_text(tg: Path) -> None:
     t = path.read_text(encoding="utf-8")
 
     voice_width_block = (
-        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
+        "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") {\n"
         "            if firstButton {\n"
         "                firstButton = false\n"
         "                accessoryButtonsWidth += self.accessoryButtonInset\n"
@@ -23744,7 +23744,7 @@ def patch_voice_to_text(tg: Path) -> None:
         repairs: list[str] = []
 
         old_width_block = (
-            "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
+            "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") {\n"
             "            accessoryButtonsWidth += self.accessoryButtonSpacing\n"
             "            accessoryButtonsWidth += 32.0\n"
             "        }\n"
@@ -23784,7 +23784,7 @@ def patch_voice_to_text(tg: Path) -> None:
             source = source.replace(
                 gap_anchor,
                 "        " + gap_sentinel + "\n"
-                "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && mediaRecordingState == nil {\n"
+                "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") && mediaRecordingState == nil {\n"
                 "            textFieldInsets.left += 4.0\n"
                 "            textFieldInsets.right += 4.0\n"
                 "        }\n"
@@ -23802,7 +23802,7 @@ def patch_voice_to_text(tg: Path) -> None:
         if action_sentinel not in source and action_anchor in source and next_action_anchor in source:
             source = source.replace(
                 action_anchor,
-                "        let aorusOuterActionSpacing: CGFloat = UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") ? 6.0 : 10.0\n"
+                "        let aorusOuterActionSpacing: CGFloat = UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") ? 6.0 : 10.0\n"
                 "        var mediaActionButtonsFrame = CGRect(origin: CGPoint(x: textInputContainerBackgroundFrame.maxX + aorusOuterActionSpacing, y: textInputContainerBackgroundFrame.maxY - mediaActionButtonsSize.height), size: mediaActionButtonsSize)\n",
                 1,
             )
@@ -23858,7 +23858,7 @@ def patch_voice_to_text(tg: Path) -> None:
     place_anchor = "        self.currentTextInputBackgroundWidthOffset = textInputBackgroundWidthOffset\n"
     place_inject = (
         "        // AorusGram: voice-to-text button (left of the accessory buttons)\n"
-        "        if !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") {\n"
+        "        if !UserDefaults.standard.bool(forKey: \"a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04\") {\n"
         "            let aorusVoiceButton: (button: HighlightTrackingButton, icon: UIImageView)\n"
         "            if let current = self.aorusVoiceButton {\n"
         "                aorusVoiceButton = current\n"
@@ -24185,13 +24185,14 @@ def patch_live_base_style(tg: Path) -> None:
     """Draw the base style in the composer as the user types.
 
     The TextFormat hook decides what leaves the device; this is the other half, so what is
-    on screen matches. It is inserted at the top of the node's per-keystroke decoration
-    pass, before Telegram refreshes the input attributes — the style is therefore already
-    present when fonts and colours are derived from it, and nothing else has to change.
+    on screen matches. The stamp is injected at the top of the concrete node's
+    `refreshTextInputAttributes` — the per-keystroke decoration pass, which is where the
+    live text view (`textInputNodeImpl.textView`) is reachable. It must go there rather
+    than in the protocol-default `decorateAfterTextChange`, whose `self` is the protocol
+    type and cannot see the concrete node's private text view.
 
-    Writing `attributedText` back drops the selection, so the helper returns nil whenever
-    the text is already fully styled and the write is skipped on the vast majority of
-    keystrokes.
+    The style is stamped in place on the text storage before Telegram re-derives fonts, so
+    it renders immediately, and stands down during IME composition (see AorusBaseStyle).
 
     The helper lives in the same module; ChatInputTextNode globs Sources/**/*.swift.
     Idempotent.
@@ -24204,19 +24205,28 @@ def patch_live_base_style(tg: Path) -> None:
     if "aorusApplyBaseStyle(" in t:
         print("LiveBaseStyle: already patched")
         return
+    # The concrete impl's body — unique because the stored-config variant uses cfg.* and the
+    # protocol requirement has no body.
     anchor = (
-        "        self.refreshTextInputAttributes(context: context, primaryTextColor: primaryTextColor, "
-        "accentTextColor: accentTextColor, baseFontSize: baseFontSize, spoilersRevealed: spoilersRevealed, "
-        "availableEmojis: availableEmojis, emojiViewProvider: emojiViewProvider)\n"
+        "    ) {\n"
+        "        refreshChatTextInputAttributes(context: context, textView: self.textInputNodeImpl.textView, "
+        "primaryTextColor: primaryTextColor, accentTextColor: accentTextColor, baseFontSize: baseFontSize, "
+        "spoilersRevealed: spoilersRevealed, availableEmojis: availableEmojis, emojiViewProvider: emojiViewProvider, "
+        "makeCollapsedQuoteAttachment: { text, attributes in\n"
     )
     if t.count(anchor) != 1:
-        raise SystemExit("LiveBaseStyle: decoration anchor not found")
+        raise SystemExit("LiveBaseStyle: refreshTextInputAttributes anchor not found")
     replacement = (
-        "        // AorusGram: stamp the configured base style before the attributes are\n"
-        "        // refreshed, so a letter is drawn in it the moment it is typed instead of\n"
-        "        // only once the message has been sent. No-op when nothing new to style.\n"
+        "    ) {\n"
+        "        // AorusGram: stamp the configured base style before fonts are re-derived, so a\n"
+        "        // letter is drawn in it as it is typed instead of only once the message is sent.\n"
+        "        // In place, and a no-op during IME composition (see AorusBaseStyle).\n"
         "        aorusApplyBaseStyle(to: self.textInputNodeImpl.textView)\n"
-    ) + anchor
+        "        refreshChatTextInputAttributes(context: context, textView: self.textInputNodeImpl.textView, "
+        "primaryTextColor: primaryTextColor, accentTextColor: accentTextColor, baseFontSize: baseFontSize, "
+        "spoilersRevealed: spoilersRevealed, availableEmojis: availableEmojis, emojiViewProvider: emojiViewProvider, "
+        "makeCollapsedQuoteAttachment: { text, attributes in\n"
+    )
     t = t.replace(anchor, replacement, 1)
     path.write_text(t, encoding="utf-8")
     print("LiveBaseStyle: composer now draws the configured base style while typing")

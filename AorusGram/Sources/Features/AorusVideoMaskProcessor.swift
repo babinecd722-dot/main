@@ -31,7 +31,7 @@ public final class AorusVideoMaskProcessor: NSObject {
     /// same expression; they now cannot drift, and the off entry is honoured everywhere at once.
     static var isMaskingActive: Bool {
         let defaults = UserDefaults.standard
-        if defaults.bool(forKey: "aorusgram_license_locked") {
+        if defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
             return false
         }
         guard defaults.bool(forKey: Self.enabledKey) else {
@@ -278,7 +278,7 @@ public final class AorusVideoMaskProcessor: NSObject {
                 }
                 self.callRenderLock.lock()
                 if generation == self.callRenderGeneration,
-                   !UserDefaults.standard.bool(forKey: "aorusgram_license_locked"),
+                   !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"),
                    UserDefaults.standard.bool(forKey: Self.enabledKey) {
                     self.latestCallFrame = output
                 }

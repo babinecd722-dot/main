@@ -294,7 +294,7 @@ final class LicenseGate {
     // link protection, aorus-code, phone/device spoof, bypass, the proxy, …) read flat
     // `aorusgram_*` UserDefaults flags and would keep running while the subscription is
     // expired. On every verdict we:
-    //   • publish `aorusgram_license_locked` (AorusGramConfig also gates on it), and
+    //   • publish `a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04` (AorusGramConfig also gates on it), and
     //   • force EVERY `aorusgram_*` boolean flag OFF while locked — not a hand-written
     //     list (which would silently miss features), but every CFBoolean in the
     //     namespace, so current AND future feature toggles are covered with no holes.
@@ -306,7 +306,7 @@ final class LicenseGate {
     private func setFeatureAccess(active: Bool) {
         let locked = !active
         let ud = UserDefaults.standard
-        ud.set(locked, forKey: "aorusgram_license_locked")
+        ud.set(locked, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
 
         if locked {
             startLockSweep()
@@ -346,7 +346,7 @@ final class LicenseGate {
     private func aorusBooleanFlags(in ud: UserDefaults) -> [(String, Any)] {
         ud.dictionaryRepresentation().filter { key, value in
             guard key.hasPrefix("aorusgram_"),
-                  key != "aorusgram_license_locked",
+                  key != "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04",
                   key != LicenseGate.lockBackupKey,
                   !key.hasPrefix("aorusgram_lic") else {
                 return false
@@ -360,7 +360,7 @@ final class LicenseGate {
         guard lockSweepTimer == nil else { return }
         lockSweepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
             let ud = UserDefaults.standard
-            guard ud.bool(forKey: "aorusgram_license_locked") else { return }
+            guard ud.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else { return }
             var backup = ud.dictionary(forKey: LicenseGate.lockBackupKey) ?? [:]
             var changed = false
             for (key, _) in self.aorusBooleanFlags(in: ud) {

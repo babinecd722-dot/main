@@ -44,7 +44,7 @@ public enum AorusMaskCatalogue {
     /// Whether the picker should be offered at all.
     public static var isEnabled: Bool {
         let defaults = UserDefaults.standard
-        if defaults.bool(forKey: "aorusgram_license_locked") {
+        if defaults.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
             return false
         }
         return defaults.bool(forKey: enabledKey)

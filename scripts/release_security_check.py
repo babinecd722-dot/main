@@ -203,6 +203,36 @@ def main() -> int:
     if "selfDestruct" in env_guard or "abort()" in env_guard:
         fail(errors, "environment checks must deny access instead of crashing")
 
+    # The license-lock gate key must not ship as a readable literal: `strings | grep
+    # license` used to map every feature gate at once. It is now an opaque UUID, written by
+    # one place and read everywhere under the same value. This is self-checking — a missed
+    # site would leave the plaintext token behind and fail here, in CI, not leak in prod.
+    LOCK_KEY_OPAQUE = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"
+    import subprocess as _sp
+    shipped = _sp.run(
+        ["grep", "-rl", "aorusgram_license_locked", "--include=*.swift", "AorusGram", "patches"],
+        cwd=str(root), capture_output=True, text=True,
+    ).stdout.strip()
+    if shipped:
+        fail(errors, f"license-lock key still ships as a plaintext literal in: {shipped.replace(chr(10), ', ')}")
+    branding = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
+    if "aorusgram_license_locked" in branding:
+        fail(errors, "aorus_branding.py still injects the plaintext license-lock key")
+    # The single writer and the two crown-jewel gates must use the opaque value.
+    gate_files = [
+        "AorusGram/Sources/Features/Subscription/LicenseGate.swift",
+        "AorusGram/Sources/Features/Network/AorusProxyManager.swift",
+        "AorusGram/Sources/Features/Network/AorusRealityManager.swift",
+    ]
+    for gf in gate_files:
+        if LOCK_KEY_OPAQUE not in (root / gf).read_text(encoding="utf-8"):
+            fail(errors, f"{gf} does not use the opaque license-lock key")
+    # The paid resource must not rest on the client bool alone: both proxy gates re-derive
+    # the HMAC-signed, device-bound snapshot, which a client-side patch cannot forge.
+    for gf in gate_files[1:]:
+        if "effectiveOfflineStatus().allowsAppAccess" not in (root / gf).read_text(encoding="utf-8"):
+            fail(errors, f"{gf} no longer re-derives the signed license snapshot")
+
     ui_bootstrap = (root / "patches/submodules/AorusGramUI/Sources/Core/AorusGramBootstrap.swift").read_text(
         encoding="utf-8"
     )

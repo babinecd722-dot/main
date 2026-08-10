@@ -115,7 +115,7 @@ public final class AorusGramManager {
 
     private let key = "aorusgram_settings_v1"
     private var licenseLocked: Bool {
-        UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+        UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
     }
 
     private func effective(_ value: Bool) -> Bool {

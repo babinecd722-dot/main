@@ -1830,8 +1830,11 @@ def main() -> None:
             err.append("AutoFormat: live styling no longer mutates storage in place")
     rich_node = tg / "submodules" / "TelegramUI" / "Components" / "Chat" / "ChatInputTextNode" / "Sources" / "ChatRichTextInputNode.swift"
     rich_node_text = rich_node.read_text(encoding="utf-8") if rich_node.is_file() else ""
+    # Injected into the concrete refreshTextInputAttributes, right before fonts are re-derived.
     if "aorusApplyBaseStyle(to: self.textInputNodeImpl.textView)" not in rich_node_text:
         err.append("AutoFormat: the composer does not draw the base style while typing")
+    if rich_node_text.count("aorusApplyBaseStyle(to: self.textInputNodeImpl.textView)") > 1:
+        err.append("AutoFormat: base-style stamp injected more than once")
 
     misc = Path(__file__).parent.parent / "patches" / "submodules" / "AorusGramUI" / "Sources" / "AorusMiscController.swift"
     if misc.is_file():

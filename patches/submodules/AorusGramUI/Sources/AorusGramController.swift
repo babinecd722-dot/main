@@ -1283,7 +1283,7 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
     // routes to the purchase/subscription screen instead (LicenseGate handles the
     // notification). Fail-open — an active user (flag absent/false) is never affected.
     // The global lock already blocks entry when expired; this covers a bypassed lock.
-    if UserDefaults.standard.bool(forKey: "aorusgram_license_locked") {
+    if UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
         NotificationCenter.default.post(
             name: NSNotification.Name("aorusgram.openSubscriptionManagement"), object: nil)
     }

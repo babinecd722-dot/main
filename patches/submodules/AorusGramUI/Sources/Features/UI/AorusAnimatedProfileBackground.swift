@@ -64,7 +64,7 @@ public enum AorusAnimatedProfileBackgroundStore {
     }
 
     public static func isEffectivelyEnabled(accountId: Int64) -> Bool {
-        return !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+        return !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
             && UserDefaults.standard.bool(forKey: key(enabledPrefix, accountId: accountId))
             && hasMedia(accountId: accountId)
     }
@@ -664,7 +664,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
               let targetId,
               targetId != 0,
               self.requestedVisible,
-              !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") else {
+              !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else {
             self.isHidden = true
             self.teardownRenderer()
             self.updateRemoteRefreshTimer()
@@ -729,7 +729,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
               self.requestedVisible,
               self.window != nil,
               UIApplication.shared.applicationState == .active,
-              !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") else {
+              !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else {
             return
         }
         self.requestRemoteBanner(targetId: targetId, viewerAccountId: viewerAccountId, force: force)
@@ -743,7 +743,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
             && self.requestedVisible
             && self.window != nil
             && UIApplication.shared.applicationState == .active
-            && !UserDefaults.standard.bool(forKey: "aorusgram_license_locked")
+            && !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
         guard shouldPoll else {
             self.remoteRefreshTimer?.invalidate()
             self.remoteRefreshTimer = nil

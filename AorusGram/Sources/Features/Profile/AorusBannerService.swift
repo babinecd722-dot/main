@@ -85,7 +85,7 @@ public final class AorusBannerService {
 
     public func publicationMode(for accountId: Int64) -> AorusBannerPublicationMode {
         guard accountId != 0,
-              !UserDefaults.standard.bool(forKey: "aorusgram_license_locked") else {
+              !UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") else {
             return .localOnly
         }
         if let ownerId = self.authorizedOwnerId() {
