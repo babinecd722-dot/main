@@ -29,6 +29,9 @@ final class LicenseGate {
     private var bannerShownThisLaunch = false
     private var inFlight = false
     private var lockSweepTimer: Timer?
+    private var tunnelReadyObserver: NSObjectProtocol?
+    private var tunnelReadyTimeout: DispatchWorkItem?
+    private var tunnelUnlockGeneration: UInt64 = 0
     // When the lock is temporarily hidden so the user can reach the bot to buy, this
     // forces a re-check (and re-lock if still not active) on the next foreground.
     private var pendingRelock = false
@@ -88,7 +91,10 @@ final class LicenseGate {
             guard let self = self else { return }
             let cached = initialStatus
             if cached.allowsAppAccess {
-                // Valid offline grace — let the app through; confirm with the server.
+                // A valid offline verdict permits provisioning, but the Telegram UI
+                // stays covered until the process-bound VLESS endpoint is ready.
+                self.showLoading()
+                self.unlockAfterTunnelReady(status: cached, response: nil)
             } else if cached.isLocked {
                 self.showExpired(banned: cached == .banned)
             } else {
@@ -136,13 +142,83 @@ final class LicenseGate {
         AorusRealityManager.shared.startIfAuthorized()
     }
 
+    /// Cold authorization must never become interactive between an active license
+    /// verdict and the VLESS loopback endpoint becoming ready. Publishing feature
+    /// access first makes TelegramCore fail closed; the lock window is removed only
+    /// after Xray has actually published its process-bound endpoint.
+    private func unlockAfterTunnelReady(
+        status: LicenseStatus,
+        response: LicenseResponse?,
+        toast: String? = nil
+    ) {
+        tunnelUnlockGeneration &+= 1
+        let generation = tunnelUnlockGeneration
+        cancelTunnelReadinessWait()
+
+        setFeatureAccess(active: true)
+
+        // A normal foreground re-check must not cover an already-running app.
+        // The strict wait is required only while the subscription lock is visible.
+        guard lockWindow != nil else {
+            upgradeSystemProxy()
+            maybeShowEntryBanner(status: status, response: response)
+            if let toast { showToast(toast) }
+            return
+        }
+
+        showLoading()
+
+        let finishIfReady: () -> Void = { [weak self] in
+            guard let self,
+                  generation == self.tunnelUnlockGeneration,
+                  AorusRealityManager.shared.isReadyForAuthorizedTraffic else {
+                return
+            }
+            self.cancelTunnelReadinessWait()
+            self.hideLock()
+            self.maybeShowEntryBanner(status: status, response: response)
+            if let toast { self.showToast(toast) }
+        }
+
+        tunnelReadyObserver = NotificationCenter.default.addObserver(
+            forName: .aorusProxyConfigUpdated,
+            object: nil,
+            queue: .main
+        ) { _ in
+            finishIfReady()
+        }
+
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self, generation == self.tunnelUnlockGeneration else { return }
+            self.cancelTunnelReadinessWait()
+            self.showConnection()
+        }
+        tunnelReadyTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: timeout)
+
+        upgradeSystemProxy()
+        finishIfReady()
+    }
+
+    private func cancelTunnelReadinessWait() {
+        if let observer = tunnelReadyObserver {
+            NotificationCenter.default.removeObserver(observer)
+            tunnelReadyObserver = nil
+        }
+        tunnelReadyTimeout?.cancel()
+        tunnelReadyTimeout = nil
+    }
+
+    private func invalidateTunnelReadinessWait() {
+        tunnelUnlockGeneration &+= 1
+        cancelTunnelReadinessWait()
+    }
+
     private func apply(status: LicenseStatus, response: LicenseResponse?) {
         pendingRelock = false   // the server just gave a definitive verdict
         switch status {
         case .trialActive, .paidActive:
-            hideLock()
-            upgradeSystemProxy()
-            maybeShowEntryBanner(status: status, response: response)
+            unlockAfterTunnelReady(status: status, response: response)
         case .notStarted:
             showTrialWelcome()
         case .expired:
@@ -160,7 +236,9 @@ final class LicenseGate {
         let cached = LicenseStore.shared.effectiveOfflineStatus()
         switch cached {
         case .trialActive, .paidActive:
-            hideLock()                                   // honour valid offline grace
+            // Honour valid offline grace only through the cached signed VLESS
+            // profile. If it cannot be restored, direct Telegram stays blocked.
+            unlockAfterTunnelReady(status: cached, response: nil)
         case .expired, .banned:
             showExpired(banned: cached == .banned)
         default:
@@ -177,6 +255,7 @@ final class LicenseGate {
     }
 
     private func showTrialWelcome() {
+        invalidateTunnelReadinessWait()
         setFeatureAccess(active: false)
         guard lockKind != .trial else { return }
         lockKind = .trial
@@ -194,9 +273,11 @@ final class LicenseGate {
                         LicenseStore.shared.save(response: response, telegramUserId: uid)
                         if response.status.allowsAppAccess {
                             self.bannerShownThisLaunch = true
-                            self.hideLock()
-                            self.upgradeSystemProxy()
-                            self.showToast(SubL10n.toastTrialActivated)
+                            self.unlockAfterTunnelReady(
+                                status: response.status,
+                                response: response,
+                                toast: SubL10n.toastTrialActivated
+                            )
                         } else {
                             self.apply(status: response.status, response: response)
                         }
@@ -211,6 +292,7 @@ final class LicenseGate {
     }
 
     private func showExpired(banned: Bool) {
+        invalidateTunnelReadinessWait()
         setFeatureAccess(active: false)
         let kind: LockKind = banned ? .banned : .expired
         guard lockKind != kind else { return }
@@ -226,6 +308,7 @@ final class LicenseGate {
     }
 
     private func showConnection() {
+        invalidateTunnelReadinessWait()
         setFeatureAccess(active: false)
         guard lockKind != .connection else { return }
         lockKind = .connection
@@ -245,11 +328,13 @@ final class LicenseGate {
         guard let nav = lockWindow?.rootViewController as? UINavigationController else { return }
         let vc = ActivateKeyController()
         vc.telegramUserId = telegramUserId
-        vc.onActivated = { [weak self] _ in
+        vc.onActivated = { [weak self] response in
             self?.bannerShownThisLaunch = true
-            self?.hideLock()
-            self?.upgradeSystemProxy()
-            self?.showToast(SubL10n.toastSubActivated)
+            self?.unlockAfterTunnelReady(
+                status: response.status,
+                response: response,
+                toast: SubL10n.toastSubActivated
+            )
         }
         nav.pushViewController(vc, animated: true)
     }
@@ -444,13 +529,15 @@ final class LicenseGate {
     private func makeActivateController() -> ActivateKeyController {
         let vc = ActivateKeyController()
         vc.telegramUserId = telegramUserId
-        vc.onActivated = { [weak self] _ in
+        vc.onActivated = { [weak self] response in
             self?.dismissModal()
             self?.pendingRelock = false
             self?.bannerShownThisLaunch = true
-            self?.hideLock()                       // no-op if not locked
-            self?.upgradeSystemProxy()
-            self?.showToast(SubL10n.toastSubActivated)
+            self?.unlockAfterTunnelReady(
+                status: response.status,
+                response: response,
+                toast: SubL10n.toastSubActivated
+            )
         }
         return vc
     }
@@ -464,9 +551,12 @@ final class LicenseGate {
             self?.dismissModal()
             self?.pendingRelock = false
             self?.bannerShownThisLaunch = true
-            self?.hideLock()
-            self?.upgradeSystemProxy()
-            self?.showToast(SubL10n.toastSubActivated)
+            let status = LicenseStore.shared.effectiveOfflineStatus()
+            self?.unlockAfterTunnelReady(
+                status: status,
+                response: nil,
+                toast: SubL10n.toastSubActivated
+            )
         }
         vc.onClose = { [weak self] in
             self?.dismissModal()

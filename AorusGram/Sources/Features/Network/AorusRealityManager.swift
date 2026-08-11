@@ -29,6 +29,14 @@ public final class AorusRealityManager {
         AorusProxyManager.shared.refresh(force: false)
     }
 
+    /// True only after the in-process Xray core has published a loopback endpoint
+    /// for this process. LicenseGate uses this to keep the cold-login UI covered
+    /// until Telegram can no longer race ahead on a direct connection.
+    public var isReadyForAuthorizedTraffic: Bool {
+        guard authorizationAllowsTunnel else { return false }
+        return endpointForCurrentProcess() != nil
+    }
+
     public func ensureRunning() {
         publishRequirement(required: authorizationAllowsTunnel)
         queue.async { [weak self] in
