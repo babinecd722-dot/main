@@ -18,14 +18,28 @@ import TextFormat
 // than a dependency edge. scripts/verify_aorus_branding.py pins them against each other.
 
 private let aorusBaseStyleKey = "aorusgram_auto_format_style"
+private let aorusManagedBaseStyle = NSAttributedString.Key("AorusGramManagedBaseStyle")
 
-/// The input attribute the configured base style maps to, or nil when none is set.
+/// The configured style and the input attribute it maps to, or nil when none is set.
 ///
 /// These are the same attributes Telegram's own formatting menu applies, so styled text
 /// behaves identically afterwards — it can be selected, unformatted by hand, and it round
 /// trips through the composer's structural state without special cases.
-func aorusBaseStyleAttribute() -> NSAttributedString.Key? {
-    switch UserDefaults.standard.string(forKey: aorusBaseStyleKey) ?? "off" {
+func aorusConfiguredBaseStyle() -> (String, NSAttributedString.Key)? {
+    let style = UserDefaults.standard.string(forKey: aorusBaseStyleKey) ?? "off"
+    switch style {
+    case "bold": return (style, ChatTextInputAttributes.bold)
+    case "italic": return (style, ChatTextInputAttributes.italic)
+    case "monospace": return (style, ChatTextInputAttributes.monospace)
+    case "strikethrough": return (style, ChatTextInputAttributes.strikethrough)
+    case "underline": return (style, ChatTextInputAttributes.underline)
+    case "spoiler": return (style, ChatTextInputAttributes.spoiler)
+    default: return nil
+    }
+}
+
+private func aorusBaseStyleAttribute(for style: String) -> NSAttributedString.Key? {
+    switch style {
     case "bold": return ChatTextInputAttributes.bold
     case "italic": return ChatTextInputAttributes.italic
     case "monospace": return ChatTextInputAttributes.monospace
@@ -48,28 +62,52 @@ func aorusBaseStyleAttribute() -> NSAttributedString.Key? {
 /// A no-op on the common keystroke: the write only happens when the style does not already
 /// cover the whole text, and the selection is preserved across it.
 func aorusApplyBaseStyle(to textView: UITextView) {
-    guard let key = aorusBaseStyleAttribute() else { return }
-    // Spoiler is the one style not drawn while typing. Applied live it would cover every
-    // character in dust the moment it is typed, so you could not see what you are writing.
-    // The send-time hook still marks the whole message a spoiler, so it goes out hidden
-    // with the normal tap-to-reveal behaviour — you just compose it in the clear.
-    if key == ChatTextInputAttributes.spoiler { return }
     if textView.markedTextRange != nil { return }
     let storage = textView.textStorage
     let full = NSRange(location: 0, length: storage.length)
     guard full.length > 0 else { return }
-    var fullyStyled = true
-    storage.enumerateAttribute(key, in: full, options: []) { value, _, stop in
+
+    let configured = aorusConfiguredBaseStyle()
+    let configuredStyle = configured?.0
+    var staleManagedRuns: [(String, NSRange)] = []
+    storage.enumerateAttribute(aorusManagedBaseStyle, in: full, options: []) { value, range, _ in
+        guard let style = value as? String, style != configuredStyle else { return }
+        staleManagedRuns.append((style, range))
+    }
+
+    // Remove only attributes that this helper added. Hand-formatted runs carry no marker
+    // and therefore survive disabling the feature or switching to another base style.
+    if !staleManagedRuns.isEmpty {
+        storage.beginEditing()
+        for (style, range) in staleManagedRuns {
+            if let key = aorusBaseStyleAttribute(for: style) {
+                storage.removeAttribute(key, range: range)
+            }
+            storage.removeAttribute(aorusManagedBaseStyle, range: range)
+        }
+        storage.endEditing()
+    }
+
+    guard let (style, key) = configured else { return }
+    // Spoiler is deliberately only a send-time style: hiding the whole composer while the
+    // user types makes it impossible to proofread. Switching to it still removes a former
+    // live base style above.
+    if key == ChatTextInputAttributes.spoiler { return }
+
+    var missingRanges: [NSRange] = []
+    storage.enumerateAttribute(key, in: full, options: []) { value, range, _ in
         if value == nil {
-            fullyStyled = false
-            stop.pointee = true
+            missingRanges.append(range)
         }
     }
-    if fullyStyled { return }
+    guard !missingRanges.isEmpty else { return }
     let selected = textView.selectedRange
     storage.beginEditing()
-    // `true as NSNumber` is the marker every other producer of these attributes uses.
-    storage.addAttribute(key, value: true as NSNumber, range: full)
+    for range in missingRanges {
+        // `true as NSNumber` is the marker every other producer of these attributes uses.
+        storage.addAttribute(key, value: true as NSNumber, range: range)
+        storage.addAttribute(aorusManagedBaseStyle, value: style as NSString, range: range)
+    }
     storage.endEditing()
     textView.selectedRange = selected
 }

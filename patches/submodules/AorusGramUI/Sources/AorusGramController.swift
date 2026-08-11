@@ -30,7 +30,11 @@ private struct _AorusVLESSStatus {
 private func _aorusVLESSStatus() -> _AorusVLESSStatus {
     let store = UserDefaults(suiteName: "ng.session.store")
     let requirement = store?.dictionary(forKey: _aorusRealityRequirementKey)
-    let required = (requirement?["required"] as? NSNumber)?.boolValue ?? true
+    let currentPid = ProcessInfo.processInfo.processIdentifier
+    let requirementPid = requirement?["pid"] as? NSNumber
+    let required = requirementPid?.int32Value == currentPid
+        ? ((requirement?["required"] as? NSNumber)?.boolValue ?? true)
+        : true
 
     guard required else {
         return _AorusVLESSStatus(
@@ -45,7 +49,7 @@ private func _aorusVLESSStatus() -> _AorusVLESSStatus {
     let endpoint = store?.dictionary(forKey: _aorusRealityEndpointKey)
     let endpointPid = endpoint?["pid"] as? NSNumber
     let endpointPort = endpoint?["port"] as? NSNumber
-    let endpointReady = endpointPid?.int32Value == ProcessInfo.processInfo.processIdentifier &&
+    let endpointReady = endpointPid?.int32Value == currentPid &&
         (1 ... 65_535).contains(endpointPort?.intValue ?? 0)
 
     guard endpointReady else {
@@ -60,7 +64,7 @@ private func _aorusVLESSStatus() -> _AorusVLESSStatus {
 
     let connection = UserDefaults.standard.dictionary(forKey: _aorusVLESSConnectionKey)
     let connectionPid = connection?["pid"] as? NSNumber
-    let connectionState = connectionPid?.int32Value == ProcessInfo.processInfo.processIdentifier
+    let connectionState = connectionPid?.int32Value == currentPid
         ? connection?["state"] as? String
         : nil
 

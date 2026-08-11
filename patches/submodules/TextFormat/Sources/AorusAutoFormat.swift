@@ -49,18 +49,16 @@ public enum AorusAutoFormat {
 
 /// Spans the chosen style across the whole message.
 ///
-/// Returns the entities untouched when no style is set, when the text is empty, or when
-/// the same style already covers everything — re-adding it would send a duplicate entity
-/// for text the user had already formatted by hand.
+/// Returns the entities untouched when no style is set or the text is empty. Existing
+/// entities of the configured type are replaced by one canonical full-range entity: a
+/// partial hand-applied entity of that same type is redundant under the base style, and
+/// keeping both creates overlapping duplicates for the server to normalize.
 func aorusApplyBaseTextStyle(to entities: [MessageTextEntity], length: Int) -> [MessageTextEntity] {
     guard length > 0, let type = AorusAutoFormat.entityType(for: AorusAutoFormat.style) else {
         return entities
     }
-    let fullRange = 0 ..< length
-    if entities.contains(where: { $0.type == type && $0.range == fullRange }) {
-        return entities
-    }
     // Prepended rather than appended: entity order is how the composer and the server read
-    // nesting, and the base style is the outermost one.
-    return [MessageTextEntity(range: fullRange, type: type)] + entities
+    // nesting, and the base style is the outermost one. Different manual styles remain
+    // untouched, so combinations such as a bold base with an italic run still work.
+    return [MessageTextEntity(range: 0 ..< length, type: type)] + entities.filter { $0.type != type }
 }

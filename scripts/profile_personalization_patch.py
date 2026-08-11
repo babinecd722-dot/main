@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+LICENSE_LOCK_KEY = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"
+
 
 def _replace_once(text: str, old: str, new: str, label: str) -> str:
     if old not in text:
@@ -114,7 +116,7 @@ def _patch_profile_header(tg: Path) -> None:
         text,
         "        let avatarCornerRadius: CGFloat = isForum ? floor(avatarSize * 0.25) : avatarSize / 2.0\n",
         "        // AorusGram: rounded-square avatars in profile/settings previews\n"
-        "        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
+        f"        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"{LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
         "        let avatarCornerRadius: CGFloat = (isForum || aorusSquareAvatars) ? floor(avatarSize * 0.25) : avatarSize / 2.0\n",
         "profile header avatar radius",
     )
@@ -168,7 +170,7 @@ def _patch_avatar_renderer(tg: Path) -> None:
         "            inactiveLineWidth: 1.5,\n"
         "            forceRoundedRect: isForum\n",
         "        // AorusGram: square avatar story ring\n"
-        "        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
+        f"        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"{LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
         "        self.avatarNode.setStoryStats(storyStats: storyStats, presentationParams: AvatarNode.StoryPresentationParams(\n"
         "            colors: colors,\n"
         "            lineWidth: 3.0,\n"
@@ -190,7 +192,7 @@ def _patch_avatar_renderer(tg: Path) -> None:
         "            if case let .channel(channel) = peer, channel.isForumOrMonoForum {\n"
         "                isForum = true\n"
         "            }\n"
-        "            let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
+        f"            let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"{LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
         "            let avatarCornerRadius: CGFloat = (isForum || aorusSquareAvatars) ? floor(avatarSize * 0.25) : avatarSize / 2.0\n",
         "avatar renderer radius",
     )
@@ -227,7 +229,7 @@ def _patch_editing_avatar(tg: Path) -> None:
             "            isForum = true\n"
             "        }\n"
             "        // AorusGram: square avatar while editing\n"
-            "        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
+            f"        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"{LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
             "        let avatarCornerRadius: CGFloat = (isForum || aorusSquareAvatars) ? floor(avatarSize * 0.25) : avatarSize / 2.0\n",
             "editing avatar radius",
         )
@@ -260,7 +262,7 @@ def _patch_editing_avatar(tg: Path) -> None:
         "            clipStyle = .round\n"
         "        }\n",
         "        // AorusGram: square editing overlay\n"
-        "        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
+        f"        let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"{LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
         "        let clipStyle: AvatarNodeClipStyle\n"
         "        if case let .channel(channel) = peer, channel.isForumOrMonoForum {\n"
         "            clipStyle = .roundedRect\n"
@@ -320,7 +322,7 @@ def _patch_profile_preview(tg: Path) -> None:
         "                }\n"
         "                self.avatarNode.setPeer(\n",
         "                default:\n"
-        "                    let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"aorusgram_license_locked\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
+        f"                    let aorusSquareAvatars = !UserDefaults.standard.bool(forKey: \"{LICENSE_LOCK_KEY}\") && UserDefaults.standard.bool(forKey: \"aorusgram_square_avatars\")\n"
         "                    clipStyle = aorusSquareAvatars ? .roundedRect : .round\n"
         "                }\n"
         "                self.avatarNode.setPeer(\n",

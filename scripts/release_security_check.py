@@ -125,12 +125,30 @@ def main() -> int:
         if marker not in proxy:
             fail(errors, f"dynamic REALITY provisioner invariant is missing {marker}")
 
+    call_proxy = (root / "patches/submodules/TelegramCallsUI/Sources/AorusCallProxy.swift").read_text(encoding="utf-8")
+    for marker in (
+        'requirementPid = requirement?["pid"] as? NSNumber',
+        "requirementPid?.int32Value == currentPid",
+        "required?.boolValue == true",
+    ):
+        if marker not in call_proxy:
+            fail(errors, f"call tunnel requirement must be bound to the current process: {marker}")
+
+    web_tunnel = (root / "patches/submodules/WebUI/Sources/AorusWebTunnel.swift").read_text(encoding="utf-8")
+    for marker in (
+        'let pid = requirement["pid"] as? NSNumber',
+        "pid.int32Value == ProcessInfo.processInfo.processIdentifier",
+    ):
+        if marker not in web_tunnel:
+            fail(errors, f"web tunnel requirement must be bound to the current process: {marker}")
+
     branding = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
     if branding.count("refusing a previously injected source tree") < 2:
         fail(errors, "build injection must reject stale source trees")
     for marker in (
         'dictionary(forKey: \\"71d447f8-9128-4d18-b63c-ec11ef43ba26\\")',
         'dictionary(forKey: \\"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca\\")',
+        'aorusRequirementPid?.int32Value == aorusCurrentPid',
         'aorusPid.int32Value == aorusCurrentPid',
         'MTSocksProxySettings(ip: \\"127.0.0.1\\"',
         'port: 38190',
@@ -218,6 +236,11 @@ def main() -> int:
     branding = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
     if "aorusgram_license_locked" in branding:
         fail(errors, "aorus_branding.py still injects the plaintext license-lock key")
+    profile_patch = (root / "scripts/profile_personalization_patch.py").read_text(encoding="utf-8")
+    if "aorusgram_license_locked" in profile_patch:
+        fail(errors, "profile_personalization_patch.py still injects the plaintext license-lock key")
+    if LOCK_KEY_OPAQUE not in profile_patch:
+        fail(errors, "profile_personalization_patch.py does not use the opaque license-lock key")
     # The single writer and the two crown-jewel gates must use the opaque value.
     gate_files = [
         "AorusGram/Sources/Features/Subscription/LicenseGate.swift",

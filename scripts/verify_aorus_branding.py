@@ -1004,6 +1004,7 @@ def main() -> None:
         for marker in (
             'dictionary(forKey: "71d447f8-9128-4d18-b63c-ec11ef43ba26")',
             'dictionary(forKey: "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca")',
+            "aorusRequirementPid?.int32Value == aorusCurrentPid",
             "aorusPid.int32Value == aorusCurrentPid",
             'MTSocksProxySettings(ip: "127.0.0.1"',
             "port: 38190",
@@ -1058,9 +1059,23 @@ def main() -> None:
         'aorusRealityEndpointKey = "71d447f8-9128-4d18-b63c-ec11ef43ba26"',
         'aorusRealityRequirementKey = "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"',
         "aorusClosedProxyPort",
+        'requirementPid = requirement?["pid"] as? NSNumber',
+        "requirementPid?.int32Value == currentPid",
+        "required?.boolValue == true",
     ):
         if marker not in call_proxy_text:
             err.append(f"CallProxyREALITY: provisioning invariant is missing {marker}")
+
+    web_tunnel = tg / "submodules" / "WebUI" / "Sources" / "AorusWebTunnel.swift"
+    web_tunnel_text = web_tunnel.read_text(encoding="utf-8") if web_tunnel.is_file() else ""
+    for marker in (
+        'aorusTunnelRequirementKey = "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"',
+        'let pid = requirement["pid"] as? NSNumber',
+        "pid.int32Value == ProcessInfo.processInfo.processIdentifier",
+        "return required.boolValue",
+    ):
+        if marker not in web_tunnel_text:
+            err.append(f"WebTunnelREALITY: process-bound requirement invariant is missing {marker}")
 
     reality_profile = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusRealityProfile.swift"
     reality_manager = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusRealityManager.swift"
@@ -1777,6 +1792,7 @@ def main() -> None:
         for marker in (
             "func aorusPeerIdCandidates(for query: String)",
             "func aorusMergeIdSearch(",
+            "maximumTelegramPeerId: Int64 = 0x00ff_ffff_ffff_ffff",
             "Namespaces.Peer.CloudUser",
             "Namespaces.Peer.CloudChannel",
             "Namespaces.Peer.CloudGroup",
@@ -1803,6 +1819,8 @@ def main() -> None:
         ):
             if marker not in auto_format_text:
                 err.append(f"AutoFormat: store is missing {marker}")
+        if "entities.filter { $0.type != type }" not in auto_format_text:
+            err.append("AutoFormat: outgoing base style can duplicate an existing entity of the same type")
     entities_path = tg / "submodules" / "TextFormat" / "Sources" / "GenerateTextEntities.swift"
     entities_source = entities_path.read_text(encoding="utf-8") if entities_path.is_file() else ""
     if "entities = aorusApplyBaseTextStyle(to: entities, length: text.length)" not in entities_source:
@@ -1828,6 +1846,8 @@ def main() -> None:
             err.append("AutoFormat: live styling does not guard against IME marked text")
         if "storage.addAttribute(key" not in live_style_text:
             err.append("AutoFormat: live styling no longer mutates storage in place")
+        if "aorusManagedBaseStyle" not in live_style_text or "storage.removeAttribute(key" not in live_style_text:
+            err.append("AutoFormat: live styling cannot clean up its managed style after disable/change")
     rich_node = tg / "submodules" / "TelegramUI" / "Components" / "Chat" / "ChatInputTextNode" / "Sources" / "ChatRichTextInputNode.swift"
     rich_node_text = rich_node.read_text(encoding="utf-8") if rich_node.is_file() else ""
     # Injected into the concrete refreshTextInputAttributes, right before fonts are re-derived.

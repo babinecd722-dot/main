@@ -25,11 +25,14 @@ private let aorusTunnelClosedPort = 38190
 /// Whether an active subscription requires everything to go through the tunnel.
 /// Defaults to `true`: a verdict that cannot be read must never open a direct route.
 func aorusWebTunnelIsRequired() -> Bool {
-    guard let store = UserDefaults(suiteName: aorusTunnelSuiteName) else {
+    guard let store = UserDefaults(suiteName: aorusTunnelSuiteName),
+          let requirement = store.dictionary(forKey: aorusTunnelRequirementKey),
+          let pid = requirement["pid"] as? NSNumber,
+          pid.int32Value == ProcessInfo.processInfo.processIdentifier,
+          let required = requirement["required"] as? NSNumber else {
         return true
     }
-    let requirement = store.dictionary(forKey: aorusTunnelRequirementKey)
-    return (requirement?["required"] as? NSNumber)?.boolValue ?? true
+    return required.boolValue
 }
 
 /// The live loopback SOCKS port, or nil while the core is not running. The record is

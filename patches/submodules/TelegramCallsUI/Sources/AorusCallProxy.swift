@@ -39,17 +39,22 @@ public func aorusCallProxyServerSettings() -> ProxyServerSettings? {
             connection: .socks5(username: nil, password: nil)
         )
     }
+    let currentPid = ProcessInfo.processInfo.processIdentifier
+    let requirement = store.dictionary(forKey: aorusRealityRequirementKey)
+    let requirementPid = requirement?["pid"] as? NSNumber
+    let required = requirement?["required"] as? NSNumber
+    if requirementPid?.int32Value == currentPid,
+       required?.boolValue == false {
+        aorusRecordCallProxyDiagnostic(store: store, status: "direct_without_subscription")
+        return nil
+    }
     guard let endpoint = store.dictionary(forKey: aorusRealityEndpointKey),
           let pid = endpoint["pid"] as? NSNumber,
-          pid.int32Value == ProcessInfo.processInfo.processIdentifier,
+          pid.int32Value == currentPid,
+          requirementPid?.int32Value == currentPid,
+          required?.boolValue == true,
           let portValue = endpoint["port"] as? NSNumber,
           (1 ... 65_535).contains(portValue.intValue) else {
-        let requirement = store.dictionary(forKey: aorusRealityRequirementKey)
-        let required = requirement?["required"] as? NSNumber
-        guard required?.boolValue ?? true else {
-            aorusRecordCallProxyDiagnostic(store: store, status: "direct_without_subscription")
-            return nil
-        }
         aorusRecordCallProxyDiagnostic(
             store: store,
             status: "reality_required_not_ready",
@@ -57,8 +62,8 @@ public func aorusCallProxyServerSettings() -> ProxyServerSettings? {
             port: aorusClosedProxyPort,
             udp: "blocked"
         )
-        // Active subscription: keep calls fail-closed until the real local
-        // VLESS endpoint is available instead of falling back to direct media.
+        // Active subscription or an unreadable/stale verdict: keep calls
+        // fail-closed until the current process publishes a live endpoint.
         return ProxyServerSettings(
             host: "127.0.0.1",
             port: aorusClosedProxyPort,

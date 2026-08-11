@@ -25,6 +25,10 @@ import TelegramCore
 /// channel) and `-…` (a legacy group). Every plausible reading is looked up and only the
 /// ones that exist survive, which is cheaper and more predictable than guessing.
 func aorusPeerIdCandidates(for query: String) -> [EnginePeer.Id] {
+    // Keep this aligned with Postbox PeerId.Id's positive-value mask. Rejecting larger
+    // decimal values before constructing Peer.Id avoids its debug assertion and pointless
+    // database lookups for pasted phone numbers or other long numbers.
+    let maximumTelegramPeerId: Int64 = 0x00ff_ffff_ffff_ffff
     var digits = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !digits.isEmpty else {
         return []
@@ -35,18 +39,28 @@ func aorusPeerIdCandidates(for query: String) -> [EnginePeer.Id] {
         digits.removeFirst()
     }
     // Four digits is the floor: below that a query is far likelier to be a year or an
-    // amount than an ID, and every candidate costs a lookup on each keystroke.
-    guard digits.count >= 4, digits.count <= 19, digits.allSatisfy({ $0.isNumber }),
-          let value = Int64(digits) else {
+    // amount than an ID, and every candidate costs a lookup on each keystroke. The Bot
+    // API channel prefix is validated separately because `100` is not part of Peer.Id.
+    guard digits.count >= 4, digits.count <= 20, digits.allSatisfy({ $0.isNumber }) else {
         return []
     }
 
     if isNegative {
         // Bot API channel form: -100 followed by the real channel id.
-        if digits.hasPrefix("100"), digits.count > 3, let channelValue = Int64(digits.dropFirst(3)) {
+        if digits.hasPrefix("100"), digits.count > 3, digits.count <= 20,
+           let channelValue = Int64(String(digits.dropFirst(3))),
+           channelValue > 0, channelValue <= maximumTelegramPeerId {
             return [EnginePeer.Id(namespace: Namespaces.Peer.CloudChannel, id: EnginePeer.Id.Id._internalFromInt64Value(channelValue))]
         }
+        guard digits.count <= 17, let value = Int64(digits),
+              value > 0, value <= maximumTelegramPeerId else {
+            return []
+        }
         return [EnginePeer.Id(namespace: Namespaces.Peer.CloudGroup, id: EnginePeer.Id.Id._internalFromInt64Value(value))]
+    }
+    guard digits.count <= 17, let value = Int64(digits),
+          value > 0, value <= maximumTelegramPeerId else {
+        return []
     }
     return [
         EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(value)),

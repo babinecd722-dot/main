@@ -20,10 +20,12 @@ import AccountContext
 // choice instead of resetting to bold. Only this screen reads it; the composer and the
 // send path only ever look at the main key.
 private let aorusAutoFormatLastKey = "aorusgram_auto_format_last"
+private let aorusAutoFormatFallbackStyle = "bold"
 
 private func aorusAutoFormatLastStyle() -> String {
-    let stored = UserDefaults.standard.string(forKey: aorusAutoFormatLastKey) ?? aorusAutoFormatStyles.first!
-    return aorusAutoFormatStyles.contains(stored) ? stored : aorusAutoFormatStyles.first!
+    let fallback = aorusAutoFormatStyles.first ?? aorusAutoFormatFallbackStyle
+    let stored = UserDefaults.standard.string(forKey: aorusAutoFormatLastKey) ?? fallback
+    return aorusAutoFormatStyles.contains(stored) ? stored : fallback
 }
 
 private final class AorusAutoFormatArguments {
