@@ -70,8 +70,14 @@ public final class AorusBannerService {
 
     private init() {
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 20.0
-        configuration.timeoutIntervalForResource = 60.0
+        // Uploading an animated banner sends the whole body and then waits while the
+        // server transcodes it. The idle (request) timeout counts the gap with no bytes
+        // flowing, so once the body is in, server-side processing that runs longer than
+        // this would fire it — the server stores the banner but the client reports a
+        // network failure ("sync error"). Give processing room; a genuinely dead request
+        // still fails at the resource ceiling.
+        configuration.timeoutIntervalForRequest = 60.0
+        configuration.timeoutIntervalForResource = 180.0
         configuration.waitsForConnectivity = false
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil

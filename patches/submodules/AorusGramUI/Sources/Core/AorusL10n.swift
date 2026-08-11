@@ -418,12 +418,12 @@ public struct AorusL10n {
     public var animatedProfileGalleryAccessDenied: String { t("Разрешите доступ к медиатеке в настройках iOS.", "Allow photo library access in iOS Settings.") }
     public var animatedProfileTransparency: String { t("Прозрачность", "Transparency") }
     public var resetAnimatedProfileBackground: String { t("Сбросить анимированный баннер", "Reset Animated Banner") }
-    public var preparingAnimatedProfileBackground: String { t("Подготовка анимированного фона…", "Preparing animated background…") }
+    public var preparingAnimatedProfileBackground: String { t("Подготовка анимированного баннера…", "Preparing animated banner…") }
     public var animatedProfileMediaTooLong: String { t("Выберите видео или GIF длительностью не более 30 секунд.", "Choose a video or GIF no longer than 30 seconds.") }
     public var animatedProfileMediaUnsupported: String { t("Поддерживаются только видео и GIF.", "Only videos and GIFs are supported.") }
-    public var animatedProfileMediaFailed: String { t("Не удалось подготовить анимированный фон.", "Could not prepare the animated background.") }
-    public var animatedProfileSyncFailed: String { t("Не удалось синхронизировать анимированный фон. Проверьте подключение и повторите попытку.", "Could not sync the animated background. Check your connection and try again.") }
-    public var animatedProfileRateLimited: String { t("Слишком много изменений фона. Повторите попытку позже.", "Too many background changes. Please try again later.") }
+    public var animatedProfileMediaFailed: String { t("Не удалось подготовить анимированный баннер.", "Could not prepare the animated banner.") }
+    public var animatedProfileSyncFailed: String { t("Не удалось синхронизировать анимированный баннер. Проверьте подключение и повторите попытку.", "Could not sync the animated banner. Check your connection and try again.") }
+    public var animatedProfileRateLimited: String { t("Слишком много изменений баннера. Повторите попытку позже.", "Too many banner changes. Please try again later.") }
     public var animatedProfileUploadTooLarge: String { t("Файл слишком большой. Выберите или обрежьте другое медиа.", "The file is too large. Choose or trim different media.") }
 
     // Badge picker (notch-area logo): AorusGram / ATunnel / off.

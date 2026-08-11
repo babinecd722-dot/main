@@ -49,6 +49,11 @@ func aorusBaseStyleAttribute() -> NSAttributedString.Key? {
 /// cover the whole text, and the selection is preserved across it.
 func aorusApplyBaseStyle(to textView: UITextView) {
     guard let key = aorusBaseStyleAttribute() else { return }
+    // Spoiler is the one style not drawn while typing. Applied live it would cover every
+    // character in dust the moment it is typed, so you could not see what you are writing.
+    // The send-time hook still marks the whole message a spoiler, so it goes out hidden
+    // with the normal tap-to-reveal behaviour — you just compose it in the clear.
+    if key == ChatTextInputAttributes.spoiler { return }
     if textView.markedTextRange != nil { return }
     let storage = textView.textStorage
     let full = NSRange(location: 0, length: storage.length)
