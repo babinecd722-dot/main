@@ -156,9 +156,15 @@ private final class FlagView: UIView {
 private final class ATunnelDiagnosticsBannerView: UIView {
     private let accent = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
     private let backgroundGradient = CAGradientLayer()
-    private let sheenGradient = CAGradientLayer()
-    private let waveLayers = [CAShapeLayer(), CAShapeLayer(), CAShapeLayer()]
+    private let accentGlow = CAGradientLayer()
+    private let scanGradient = CAGradientLayer()
+    private let gridLayer = CAShapeLayer()
+    private let iconTile = UIView()
+    private let iconView = UIImageView()
+    private let eyebrowLabel = UILabel()
     private let titleLabel = UILabel()
+    private let meterView = UIView()
+    private let meterBars = (0 ..< 5).map { _ in CALayer() }
     private var animatedWidth: CGFloat = 0
 
     init(title: String) {
@@ -170,47 +176,102 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         layer.borderWidth = 1
         layer.borderColor = UIColor.white.withAlphaComponent(0.07).cgColor
 
-        backgroundGradient.colors = [
-            UIColor(white: 0.09, alpha: 1.0).cgColor,
-            UIColor(red: 0.16, green: 0.12, blue: 0.25, alpha: 1.0).cgColor,
-            UIColor(white: 0.09, alpha: 1.0).cgColor,
-        ]
+        // The opaque base must be identical to the diagnostics screen. All visual
+        // depth comes from transparent overlays, so the banner never reads as an
+        // embedded bitmap with a slightly different black level.
+        backgroundGradient.colors = [UIColor.black.cgColor, UIColor.black.cgColor]
         backgroundGradient.startPoint = CGPoint(x: 0, y: 0.5)
         backgroundGradient.endPoint = CGPoint(x: 1, y: 0.5)
         layer.addSublayer(backgroundGradient)
 
-        sheenGradient.colors = [
-            UIColor.clear.cgColor,
-            accent.withAlphaComponent(0.20).cgColor,
-            UIColor.clear.cgColor,
-        ]
-        sheenGradient.locations = [0.0, 0.5, 1.0]
-        sheenGradient.startPoint = CGPoint(x: 0, y: 0.5)
-        sheenGradient.endPoint = CGPoint(x: 1, y: 0.5)
-        layer.addSublayer(sheenGradient)
+        accentGlow.type = .radial
+        accentGlow.colors = [accent.withAlphaComponent(0.24).cgColor, UIColor.clear.cgColor]
+        accentGlow.locations = [0.0, 1.0]
+        accentGlow.startPoint = CGPoint(x: 0.5, y: 0.5)
+        accentGlow.endPoint = CGPoint(x: 1.0, y: 1.0)
+        layer.addSublayer(accentGlow)
 
-        for (index, wave) in waveLayers.enumerated() {
-            wave.fillColor = UIColor.clear.cgColor
-            wave.strokeColor = accent.withAlphaComponent(0.34 - CGFloat(index) * 0.07).cgColor
-            wave.lineWidth = 1.2
-            wave.lineCap = .round
-            layer.addSublayer(wave)
-        }
+        gridLayer.fillColor = UIColor.clear.cgColor
+        gridLayer.strokeColor = UIColor.white.withAlphaComponent(0.045).cgColor
+        gridLayer.lineWidth = 0.5
+        layer.addSublayer(gridLayer)
+
+        scanGradient.colors = [UIColor.clear.cgColor,
+                               accent.withAlphaComponent(0.16).cgColor,
+                               UIColor.clear.cgColor]
+        scanGradient.locations = [0.0, 0.5, 1.0]
+        scanGradient.startPoint = CGPoint(x: 0, y: 0.5)
+        scanGradient.endPoint = CGPoint(x: 1, y: 0.5)
+        layer.addSublayer(scanGradient)
+
+        iconTile.backgroundColor = accent.withAlphaComponent(0.16)
+        iconTile.layer.cornerRadius = 15
+        iconTile.layer.cornerCurve = .continuous
+        iconTile.layer.borderWidth = 1
+        iconTile.layer.borderColor = accent.withAlphaComponent(0.24).cgColor
+        iconTile.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iconTile)
+
+        let symbolConfig = UIImage.SymbolConfiguration(pointSize: 23, weight: .semibold)
+        iconView.image = UIImage(systemName: "waveform.path.ecg", withConfiguration: symbolConfig)
+        iconView.tintColor = .white
+        iconView.contentMode = .scaleAspectFit
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconTile.addSubview(iconView)
+
+        eyebrowLabel.text = "ATUNNEL"
+        eyebrowLabel.font = Font.semibold(10.0)
+        eyebrowLabel.textColor = accent
+        eyebrowLabel.textAlignment = .natural
+        eyebrowLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(eyebrowLabel)
 
         titleLabel.text = title
-        titleLabel.font = Font.bold(19.0)
+        let baseTitleFont = Font.bold(21.0)
+        if let roundedDescriptor = baseTitleFont.fontDescriptor.withDesign(.rounded) {
+            titleLabel.font = UIFont(descriptor: roundedDescriptor, size: 21.0)
+        } else {
+            titleLabel.font = baseTitleFont
+        }
         titleLabel.textColor = .white
-        titleLabel.numberOfLines = 2
+        titleLabel.numberOfLines = 1
         titleLabel.adjustsFontSizeToFitWidth = true
-        titleLabel.minimumScaleFactor = 0.72
+        titleLabel.minimumScaleFactor = 0.76
         titleLabel.textAlignment = .natural
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(titleLabel)
 
+        meterView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(meterView)
+        for bar in meterBars {
+            bar.backgroundColor = accent.cgColor
+            bar.cornerRadius = 2
+            meterView.layer.addSublayer(bar)
+        }
+
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 22),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -22),
-            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconTile.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            iconTile.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconTile.widthAnchor.constraint(equalToConstant: 54),
+            iconTile.heightAnchor.constraint(equalToConstant: 54),
+
+            iconView.centerXAnchor.constraint(equalTo: iconTile.centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: iconTile.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 30),
+            iconView.heightAnchor.constraint(equalToConstant: 30),
+
+            eyebrowLabel.leadingAnchor.constraint(equalTo: iconTile.trailingAnchor, constant: 14),
+            eyebrowLabel.trailingAnchor.constraint(lessThanOrEqualTo: meterView.leadingAnchor, constant: -14),
+            eyebrowLabel.bottomAnchor.constraint(equalTo: centerYAnchor, constant: -4),
+
+            titleLabel.leadingAnchor.constraint(equalTo: eyebrowLabel.leadingAnchor),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: meterView.leadingAnchor, constant: -14),
+            titleLabel.topAnchor.constraint(equalTo: centerYAnchor, constant: 1),
+
+            meterView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            meterView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            meterView.widthAnchor.constraint(equalToConstant: 47),
+            meterView.heightAnchor.constraint(equalToConstant: 34),
         ])
     }
 
@@ -219,26 +280,37 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         backgroundGradient.frame = bounds
-        sheenGradient.frame = bounds.insetBy(dx: -bounds.width * 0.5, dy: 0)
+        accentGlow.frame = CGRect(x: bounds.width * 0.57, y: -bounds.height * 0.75,
+                                  width: bounds.width * 0.62, height: bounds.height * 2.5)
+        scanGradient.frame = CGRect(x: -bounds.width * 0.35, y: 0,
+                                    width: bounds.width * 0.35, height: bounds.height)
 
-        let startX = bounds.width * 0.52
-        let endX = bounds.width + 20
-        for (index, wave) in waveLayers.enumerated() {
-            let offset = CGFloat(index - 1) * 12
-            let centerY = bounds.midY + offset
-            let path = UIBezierPath()
-            path.move(to: CGPoint(x: startX, y: centerY))
-            path.addCurve(
-                to: CGPoint(x: endX, y: centerY),
-                controlPoint1: CGPoint(x: startX + bounds.width * 0.11, y: centerY - 24),
-                controlPoint2: CGPoint(x: endX - bounds.width * 0.12, y: centerY + 24)
-            )
-            wave.path = path.cgPath
+        let gridPath = UIBezierPath()
+        let gridStartX = bounds.width * 0.58
+        stride(from: gridStartX, through: bounds.width, by: 22).forEach { x in
+            gridPath.move(to: CGPoint(x: x, y: 0))
+            gridPath.addLine(to: CGPoint(x: x, y: bounds.height))
+        }
+        stride(from: CGFloat(16), through: bounds.height, by: 18).forEach { y in
+            gridPath.move(to: CGPoint(x: gridStartX, y: y))
+            gridPath.addLine(to: CGPoint(x: bounds.width, y: y))
+        }
+        gridLayer.path = gridPath.cgPath
+
+        let heights: [CGFloat] = [12, 21, 31, 18, 26]
+        let barWidth: CGFloat = 5
+        let spacing: CGFloat = 5.5
+        for (index, bar) in meterBars.enumerated() {
+            let height = heights[index]
+            bar.frame = CGRect(x: CGFloat(index) * (barWidth + spacing),
+                               y: meterView.bounds.height - height,
+                               width: barWidth, height: height)
+            bar.cornerRadius = barWidth / 2
         }
 
         if window != nil, abs(animatedWidth - bounds.width) > 0.5 {
             animatedWidth = bounds.width
-            sheenGradient.removeAnimation(forKey: "aorus.sheen")
+            stopLayerAnimations()
             startAnimatingIfNeeded()
         }
     }
@@ -246,7 +318,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil {
-            sheenGradient.removeAnimation(forKey: "aorus.sheen")
+            stopLayerAnimations()
             animatedWidth = 0
         } else {
             startAnimatingIfNeeded()
@@ -254,15 +326,31 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     }
 
     private func startAnimatingIfNeeded() {
-        guard sheenGradient.animation(forKey: "aorus.sheen") == nil else { return }
-        let animation = CABasicAnimation(keyPath: "transform.translation.x")
-        animation.fromValue = -bounds.width * 0.45
-        animation.toValue = bounds.width * 0.45
-        animation.duration = 3.6
-        animation.autoreverses = true
-        animation.repeatCount = .infinity
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        sheenGradient.add(animation, forKey: "aorus.sheen")
+        guard bounds.width > 0, scanGradient.animation(forKey: "aorus.scan") == nil else { return }
+
+        let scan = CABasicAnimation(keyPath: "transform.translation.x")
+        scan.fromValue = 0
+        scan.toValue = bounds.width * 1.35
+        scan.duration = 4.8
+        scan.repeatCount = .infinity
+        scan.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        scanGradient.add(scan, forKey: "aorus.scan")
+
+        for (index, bar) in meterBars.enumerated() {
+            let pulse = CAKeyframeAnimation(keyPath: "opacity")
+            pulse.values = [0.35, 1.0, 0.55, 0.35]
+            pulse.keyTimes = [0.0, 0.3, 0.68, 1.0]
+            pulse.duration = 1.8
+            pulse.beginTime = CACurrentMediaTime() + Double(index) * 0.11
+            pulse.repeatCount = .infinity
+            pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            bar.add(pulse, forKey: "aorus.meter")
+        }
+    }
+
+    private func stopLayerAnimations() {
+        scanGradient.removeAnimation(forKey: "aorus.scan")
+        meterBars.forEach { $0.removeAnimation(forKey: "aorus.meter") }
     }
 }
 
@@ -488,9 +576,7 @@ final class ATunnelStatusViewController: UIViewController {
     private let contentView = UIView()
 
     private let diagnosticsBanner = ATunnelDiagnosticsBannerView(
-        title: aorusL("Диагностика", "Diagnostics").uppercased(
-            with: Locale(identifier: AorusLang.current.localeIdentifier)
-        )
+        title: aorusL("Диагностика", "Diagnostics")
     )
     private let titleLabel     = UILabel()
     private let subtitleLabel  = UILabel()
