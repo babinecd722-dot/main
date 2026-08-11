@@ -1679,7 +1679,7 @@ def main() -> None:
         # A verdict that cannot be read has to keep the tunnel on, exactly like the
         # network and call layers. Flipping either default silently reopens direct routes.
         for marker in (
-            'return (requirement?["required"] as? NSNumber)?.boolValue ?? true',
+            'let required = requirement["required"] as? NSNumber else {\n        return true\n    }',
             "?? aorusTunnelClosedPort",
         ):
             if marker not in web_tunnel_text:
