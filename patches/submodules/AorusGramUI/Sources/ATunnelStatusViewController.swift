@@ -170,11 +170,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     init(title: String) {
         super.init(frame: .zero)
 
-        layer.cornerRadius = 18
-        layer.cornerCurve = .continuous
         layer.masksToBounds = true
-        layer.borderWidth = 1
-        layer.borderColor = UIColor.white.withAlphaComponent(0.07).cgColor
 
         // The opaque base must be identical to the diagnostics screen. All visual
         // depth comes from transparent overlays, so the banner never reads as an
