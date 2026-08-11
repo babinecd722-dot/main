@@ -148,6 +148,124 @@ private final class FlagView: UIView {
     }
 }
 
+// MARK: - Diagnostics banner
+
+// Drawn at runtime so the title always follows Telegram's current language and the
+// banner stays sharp at every scale. The animation is deliberately layer-only: it
+// does not schedule display-link work or redraw the view while it is on screen.
+private final class ATunnelDiagnosticsBannerView: UIView {
+    private let accent = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
+    private let backgroundGradient = CAGradientLayer()
+    private let sheenGradient = CAGradientLayer()
+    private let waveLayers = [CAShapeLayer(), CAShapeLayer(), CAShapeLayer()]
+    private let titleLabel = UILabel()
+    private var animatedWidth: CGFloat = 0
+
+    init(title: String) {
+        super.init(frame: .zero)
+
+        layer.cornerRadius = 18
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = true
+        layer.borderWidth = 1
+        layer.borderColor = UIColor.white.withAlphaComponent(0.07).cgColor
+
+        backgroundGradient.colors = [
+            UIColor(white: 0.09, alpha: 1.0).cgColor,
+            UIColor(red: 0.16, green: 0.12, blue: 0.25, alpha: 1.0).cgColor,
+            UIColor(white: 0.09, alpha: 1.0).cgColor,
+        ]
+        backgroundGradient.startPoint = CGPoint(x: 0, y: 0.5)
+        backgroundGradient.endPoint = CGPoint(x: 1, y: 0.5)
+        layer.addSublayer(backgroundGradient)
+
+        sheenGradient.colors = [
+            UIColor.clear.cgColor,
+            accent.withAlphaComponent(0.20).cgColor,
+            UIColor.clear.cgColor,
+        ]
+        sheenGradient.locations = [0.0, 0.5, 1.0]
+        sheenGradient.startPoint = CGPoint(x: 0, y: 0.5)
+        sheenGradient.endPoint = CGPoint(x: 1, y: 0.5)
+        layer.addSublayer(sheenGradient)
+
+        for (index, wave) in waveLayers.enumerated() {
+            wave.fillColor = UIColor.clear.cgColor
+            wave.strokeColor = accent.withAlphaComponent(0.34 - CGFloat(index) * 0.07).cgColor
+            wave.lineWidth = 1.2
+            wave.lineCap = .round
+            layer.addSublayer(wave)
+        }
+
+        titleLabel.text = title
+        titleLabel.font = Font.bold(19.0)
+        titleLabel.textColor = .white
+        titleLabel.numberOfLines = 2
+        titleLabel.adjustsFontSizeToFitWidth = true
+        titleLabel.minimumScaleFactor = 0.72
+        titleLabel.textAlignment = .natural
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 22),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -22),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        backgroundGradient.frame = bounds
+        sheenGradient.frame = bounds.insetBy(dx: -bounds.width * 0.5, dy: 0)
+
+        let startX = bounds.width * 0.52
+        let endX = bounds.width + 20
+        for (index, wave) in waveLayers.enumerated() {
+            let offset = CGFloat(index - 1) * 12
+            let centerY = bounds.midY + offset
+            let path = UIBezierPath()
+            path.move(to: CGPoint(x: startX, y: centerY))
+            path.addCurve(
+                to: CGPoint(x: endX, y: centerY),
+                controlPoint1: CGPoint(x: startX + bounds.width * 0.11, y: centerY - 24),
+                controlPoint2: CGPoint(x: endX - bounds.width * 0.12, y: centerY + 24)
+            )
+            wave.path = path.cgPath
+        }
+
+        if window != nil, abs(animatedWidth - bounds.width) > 0.5 {
+            animatedWidth = bounds.width
+            sheenGradient.removeAnimation(forKey: "aorus.sheen")
+            startAnimatingIfNeeded()
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            sheenGradient.removeAnimation(forKey: "aorus.sheen")
+            animatedWidth = 0
+        } else {
+            startAnimatingIfNeeded()
+        }
+    }
+
+    private func startAnimatingIfNeeded() {
+        guard sheenGradient.animation(forKey: "aorus.sheen") == nil else { return }
+        let animation = CABasicAnimation(keyPath: "transform.translation.x")
+        animation.fromValue = -bounds.width * 0.45
+        animation.toValue = bounds.width * 0.45
+        animation.duration = 3.6
+        animation.autoreverses = true
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        sheenGradient.add(animation, forKey: "aorus.sheen")
+    }
+}
+
 // MARK: - Flow View (Phone → ATunnel → Telegram)
 
 private enum ATunnelFlowState { case active, down, unknown }
@@ -164,8 +282,8 @@ private final class ATunnelFlowView: UIView {
     private let lineRight = CAShapeLayer()
     private let arrowLeft  = CAShapeLayer()
     private let arrowRight = CAShapeLayer()
-    private let cross1 = CAShapeLayer()
-    private let cross2 = CAShapeLayer()
+    private let downIndicator = UIView()
+    private let downIndicatorIcon = UIImageView()
 
     var state: ATunnelFlowState = .unknown { didSet { applyState() } }
 
@@ -192,7 +310,18 @@ private final class ATunnelFlowView: UIView {
         rightIcon.image = ATunnelFlowView.telegramPlaneImage(box: 30)
         rightIcon.contentMode = .scaleAspectFit
 
-        [leftIcon, centerBadge, rightIcon].forEach { addSubview($0) }
+        downIndicator.backgroundColor = .systemRed
+        downIndicator.layer.cornerRadius = 9
+        downIndicator.layer.borderWidth = 2
+        downIndicator.layer.borderColor = UIColor(white: 0.10, alpha: 1.0).cgColor
+        downIndicator.isHidden = true
+        let downConfig = UIImage.SymbolConfiguration(pointSize: 8, weight: .bold)
+        downIndicatorIcon.image = UIImage(systemName: "exclamationmark", withConfiguration: downConfig)
+        downIndicatorIcon.tintColor = .white
+        downIndicatorIcon.contentMode = .scaleAspectFit
+        downIndicator.addSubview(downIndicatorIcon)
+
+        [leftIcon, centerBadge, rightIcon, downIndicator].forEach { addSubview($0) }
 
         for l in [lineLeft, lineRight] {
             l.fillColor = UIColor.clear.cgColor
@@ -204,14 +333,6 @@ private final class ATunnelFlowView: UIView {
             l.fillColor = UIColor.clear.cgColor
             l.lineWidth = 1.5
             l.lineCap = .round
-            layer.addSublayer(l)
-        }
-        for l in [cross1, cross2] {
-            l.fillColor = UIColor.clear.cgColor
-            l.strokeColor = UIColor.systemRed.cgColor
-            l.lineWidth = 2.5
-            l.lineCap = .round
-            l.isHidden = true
             layer.addSublayer(l)
         }
         applyState()
@@ -231,6 +352,8 @@ private final class ATunnelFlowView: UIView {
         centerBadge.layer.cornerRadius = badgeW / 2
         centerLabel.frame = centerBadge.bounds
         rightIcon.frame = CGRect(x: w - 8 - iconW, y: (h - iconW) / 2, width: iconW, height: iconW)
+        downIndicator.frame = CGRect(x: centerBadge.frame.maxX - 11, y: centerBadge.frame.minY - 3, width: 18, height: 18)
+        downIndicatorIcon.frame = downIndicator.bounds.insetBy(dx: 5, dy: 4)
 
         let lE = leftIcon.frame.maxX + 6
         let cL = centerBadge.frame.minX - 6
@@ -242,14 +365,6 @@ private final class ATunnelFlowView: UIView {
         drawArrow(arrowLeft,  tip: CGPoint(x: cL, y: midY))
         drawArrow(arrowRight, tip: CGPoint(x: rE, y: midY))
 
-        let r = centerBadge.frame
-        let inset: CGFloat = 8
-        let p = UIBezierPath(); p.move(to: CGPoint(x: r.minX + inset, y: r.minY + inset))
-        p.addLine(to: CGPoint(x: r.maxX - inset, y: r.maxY - inset))
-        cross1.path = p.cgPath
-        let p2 = UIBezierPath(); p2.move(to: CGPoint(x: r.maxX - inset, y: r.minY + inset))
-        p2.addLine(to: CGPoint(x: r.minX + inset, y: r.maxY - inset))
-        cross2.path = p2.cgPath
     }
 
     private func drawLine(_ l: CAShapeLayer, from: CGPoint, to: CGPoint) {
@@ -274,25 +389,29 @@ private final class ATunnelFlowView: UIView {
             [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
             leftIcon.tintColor = purple
             centerBadge.backgroundColor = purple
+            centerLabel.textColor = .white
             rightIcon.tintColor = purple
-            cross1.isHidden = true; cross2.isHidden = true
+            downIndicator.isHidden = true
             [lineLeft, lineRight].forEach { addFlow($0) }
         case .down:
-            let c = UIColor.systemRed.cgColor
+            let red = UIColor.systemRed
+            let c = red.withAlphaComponent(0.82).cgColor
             [lineLeft, lineRight].forEach { $0.strokeColor = c; $0.lineDashPattern = [6, 4] }
             [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
-            leftIcon.tintColor = .systemRed
-            centerBadge.backgroundColor = .systemRed
-            rightIcon.tintColor = .systemRed
-            cross1.isHidden = false; cross2.isHidden = false
+            leftIcon.tintColor = UIColor(white: 0.46, alpha: 1)
+            centerBadge.backgroundColor = UIColor(white: 0.20, alpha: 1)
+            centerLabel.textColor = UIColor(white: 0.82, alpha: 1)
+            rightIcon.tintColor = UIColor(white: 0.46, alpha: 1)
+            downIndicator.isHidden = false
         case .unknown:
             let c = UIColor(white: 0.35, alpha: 1).cgColor
             [lineLeft, lineRight].forEach { $0.strokeColor = c; $0.lineDashPattern = [6, 4] }
             [arrowLeft, arrowRight].forEach { $0.strokeColor = c }
             leftIcon.tintColor = UIColor(white: 0.35, alpha: 1)
             centerBadge.backgroundColor = UIColor(white: 0.25, alpha: 1)
+            centerLabel.textColor = UIColor(white: 0.65, alpha: 1)
             rightIcon.tintColor = UIColor(white: 0.35, alpha: 1)
-            cross1.isHidden = true; cross2.isHidden = true
+            downIndicator.isHidden = true
         }
     }
 
@@ -368,7 +487,11 @@ final class ATunnelStatusViewController: UIViewController {
     private let scrollView  = UIScrollView()
     private let contentView = UIView()
 
-    private let duckView       = ATunnelDuckView(renderSizePx: 280)
+    private let diagnosticsBanner = ATunnelDiagnosticsBannerView(
+        title: aorusL("Диагностика", "Diagnostics").uppercased(
+            with: Locale(identifier: AorusLang.current.localeIdentifier)
+        )
+    )
     private let titleLabel     = UILabel()
     private let subtitleLabel  = UILabel()
 
@@ -417,7 +540,7 @@ final class ATunnelStatusViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         guard !didPlayEntrance else { return }
-        let animatable: [UIView] = [duckView, titleLabel, subtitleLabel, serversSectionLabel,
+        let animatable: [UIView] = [diagnosticsBanner, titleLabel, subtitleLabel, serversSectionLabel,
                                     serverCardsStack, callsSectionLabel, callCard, updatedLabel]
         animatable.forEach {
             $0.alpha = 0
@@ -436,12 +559,12 @@ final class ATunnelStatusViewController: UIViewController {
         guard !didPlayEntrance else { return }
         didPlayEntrance = true
 
-        // Duck pops in with spring
+        // Runtime-rendered diagnostics banner enters with the rest of the native UI.
         UIView.animate(withDuration: 0.55, delay: 0,
                        usingSpringWithDamping: 0.65, initialSpringVelocity: 0.5,
                        options: .allowUserInteraction) {
-            self.duckView.alpha = 1
-            self.duckView.transform = .identity
+            self.diagnosticsBanner.alpha = 1
+            self.diagnosticsBanner.transform = .identity
         }
         // Content cascades up
         let rest: [UIView] = [titleLabel, subtitleLabel, serversSectionLabel,
@@ -507,9 +630,8 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     private func setupHeader() {
-        // Duck
-        duckView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(duckView)
+        diagnosticsBanner.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(diagnosticsBanner)
 
         // Title
         titleLabel.text = "ATunnel"
@@ -529,12 +651,12 @@ final class ATunnelStatusViewController: UIViewController {
         contentView.addSubview(subtitleLabel)
 
         NSLayoutConstraint.activate([
-            duckView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
-            duckView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            duckView.widthAnchor.constraint(equalToConstant: 140),
-            duckView.heightAnchor.constraint(equalToConstant: 140),
+            diagnosticsBanner.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
+            diagnosticsBanner.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            diagnosticsBanner.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            diagnosticsBanner.heightAnchor.constraint(equalToConstant: 104),
 
-            titleLabel.topAnchor.constraint(equalTo: duckView.bottomAnchor, constant: 12),
+            titleLabel.topAnchor.constraint(equalTo: diagnosticsBanner.bottomAnchor, constant: 18),
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
             titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
 
