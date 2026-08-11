@@ -92,7 +92,7 @@ private enum AorusAutoFormatEntry: ItemListNodeEntry {
         case let .header(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .style(_, _, key, title, checked):
-            return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .left, checked: checked, zeroSeparatorInsets: false, sectionId: section, action: {
+            return ItemListCheckboxItem(presentationData: presentationData, title: title, style: .right, checked: checked, zeroSeparatorInsets: false, sectionId: section, action: {
                 args.select(key)
             })
         case let .footer(_, text):
