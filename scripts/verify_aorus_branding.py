@@ -932,9 +932,29 @@ def main() -> None:
     if "selectedAccountId: selectedAccountId" not in t or "mergeIntoExisting: isAddingAccount" not in t:
         err.append("LoginBackupKey: AppDelegate ignores the selected account or add-account mode")
 
-    # AorusGramBootstrap injection
-    if "AorusGramBootstrap" not in t:
+    # AorusGramBootstrap must run before Telegram creates either an authorized or
+    # unauthorized account.  The latter owns the phone/code authorization network,
+    # so moving this call below AccountManager would allow a cold-login connection
+    # to be created before the fail-closed VLESS requirement is published.
+    bootstrap_call = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
+    encryption_anchor = "let deviceSpecificEncryptionParameters = BuildConfig.deviceSpecificEncryptionParameters"
+    account_manager_anchor = "let accountManager = AccountManager"
+    shared_context_anchor = "SharedAccountContextImpl("
+    if bootstrap_call not in t:
         err.append("AppDelegate: missing AorusGramBootstrap.shared.setup() call (feature initialisation)")
+    else:
+        bootstrap_position = t.index(bootstrap_call)
+        for anchor, message in (
+            (encryption_anchor, "bootstrap no longer follows encryption/root-path setup"),
+            (account_manager_anchor, "bootstrap runs after AccountManager; cold-login VLESS can be bypassed"),
+            (shared_context_anchor, "bootstrap runs after SharedAccountContext; cold-login VLESS can be bypassed"),
+        ):
+            if anchor not in t:
+                err.append(f"AppDelegate: source drift, missing ordering anchor {anchor}")
+            elif anchor == encryption_anchor and t.index(anchor) > bootstrap_position:
+                err.append(f"AppDelegate: {message}")
+            elif anchor != encryption_anchor and bootstrap_position > t.index(anchor):
+                err.append(f"AppDelegate: {message}")
 
     license_provider = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "LicenseKeyProvider.swift"
     if not license_provider.is_file():
@@ -1018,6 +1038,17 @@ def main() -> None:
         ):
             if forbidden in network_text:
                 err.append(f"MTProxyAntiDPI: legacy dd downgrade path remains {forbidden}")
+        # initializedNetwork() is shared by authorized accounts and by both
+        # UnauthorizedAccount creation paths.  Keep the system proxy mutation before
+        # MTContext construction so phone-number and code requests cannot escape it.
+        proxy_marker = "AorusGram: system proxy overrides any user setting"
+        context_anchor = "let context = MTContext"
+        if proxy_marker not in network_text:
+            err.append("RealityProxy: system proxy injection marker is missing")
+        elif context_anchor not in network_text:
+            err.append("RealityProxy: Network.swift source drift, MTContext anchor is missing")
+        elif network_text.index(proxy_marker) > network_text.index(context_anchor):
+            err.append("RealityProxy: system proxy is applied after MTContext creation")
 
     account_source = tg / "submodules" / "TelegramCore" / "Sources" / "Account" / "Account.swift"
     if not account_source.is_file():
@@ -1033,6 +1064,12 @@ def main() -> None:
         ):
             if marker not in account_text:
                 err.append(f"RealityProxy: runtime enforcement is missing {marker}")
+        # Telegram's phone/code screen uses UnauthorizedAccount.  Guard both the
+        # persisted-unauthorized and first-account branches against upstream drift.
+        if account_text.count("return initializedNetwork(accountId: id") < 3:
+            err.append("RealityProxy: Account.swift no longer exposes all initializedNetwork account paths")
+        if account_text.count(".unauthorized(UnauthorizedAccount(") < 2:
+            err.append("RealityProxy: one of the cold-login UnauthorizedAccount paths is missing")
 
     call_context = tg / "submodules" / "TelegramVoip" / "Sources" / "OngoingCallContext.swift"
     call_context_text = call_context.read_text(encoding="utf-8") if call_context.is_file() else ""

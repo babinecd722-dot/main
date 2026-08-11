@@ -1321,10 +1321,11 @@ def patch_app_delegate_import_aorusgram(tg: Path) -> None:
 
 
 def patch_app_delegate_bootstrap(tg: Path) -> None:
-    """Call AorusGramBootstrap.shared.setup() after the account stack is ready.
+    """Call AorusGramBootstrap.shared.setup() before the account stack is created.
 
     The injection point is just after the DeviceSpecificEncryptionParameters call,
-    which is well after the account group URL is resolved and before any UI is shown.
+    which is after the account group URL is resolved but before AccountManager and
+    UnauthorizedAccount construct the phone/code authorization network.
     Also registers the BGTask identifier in the bootstrap.
     """
     path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"

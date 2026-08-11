@@ -1,7 +1,8 @@
 import Foundation
 import UIKit
 
-// Single entry point called once from AppDelegate after the account is ready.
+// Single entry point called once from AppDelegate before Telegram creates the
+// AccountManager or any authorized/unauthorized network.
 // aorus_branding.py patches AppDelegate.swift to insert:
 //   AorusGramBootstrap.shared.setup(accountPath:)
 public final class AorusGramBootstrap {
