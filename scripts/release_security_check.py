@@ -166,7 +166,6 @@ def main() -> int:
 
     reality_profile_path = root / "AorusGram/Sources/Features/Network/AorusRealityProfile.swift"
     reality_manager_path = root / "AorusGram/Sources/Features/Network/AorusRealityManager.swift"
-    license_gate_path = root / "AorusGram/Sources/Features/Subscription/LicenseGate.swift"
     if not reality_profile_path.is_file() or not reality_manager_path.is_file():
         fail(errors, "embedded REALITY sources are missing")
     else:
@@ -190,11 +189,10 @@ def main() -> int:
             'publishRequirement(required: authorizationAllowsTunnel)',
             '"required": required',
             "AorusSessionMetrics.metricFlag",
+            "isReadyForAuthorizedTraffic",
         ):
             if marker not in reality_manager:
                 fail(errors, f"REALITY manager invariant is missing {marker}")
-        if "isReadyForAuthorizedTraffic" not in reality_manager:
-            fail(errors, "REALITY manager no longer exposes process-bound tunnel readiness")
         for forbidden in ("104.143.218.253", "7c2fb9b6-fcb9-4715-8752-49f6534e3017"):
             if forbidden in reality_profile or forbidden in reality_manager:
                 fail(errors, "test REALITY credentials must not be committed")
@@ -206,27 +204,20 @@ def main() -> int:
             if forbidden in reality_profile or forbidden in reality_manager:
                 fail(errors, f"static REALITY profile path remains: {forbidden}")
 
+    license_gate_path = root / "AorusGram/Sources/Features/Subscription/LicenseGate.swift"
     if not license_gate_path.is_file():
         fail(errors, "license gate source is missing")
     else:
         license_gate = license_gate_path.read_text(encoding="utf-8")
         for marker in (
-            "unlockAfterTunnelReady",
-            "isReadyForAuthorizedTraffic",
-            ".aorusProxyConfigUpdated",
-            "showLoading()",
-            "showConnection()",
+            "setFeatureAccess(active: initialStatus.allowsAppAccess)",
+            "upgradeSystemProxy()",
+            "AorusRealityManager.shared.startIfAuthorized()",
         ):
             if marker not in license_gate:
-                fail(errors, f"cold-login VLESS gate invariant is missing {marker}")
-        if re.search(r"case \.trialActive, \.paidActive:\s*hideLock\(\)", license_gate):
-            fail(errors, "active license verdict must not expose Telegram before VLESS is ready")
-        active_case = license_gate[
-            license_gate.find("case .trialActive, .paidActive:"):
-            license_gate.find("case .notStarted:", license_gate.find("case .trialActive, .paidActive:"))
-        ]
-        if "unlockAfterTunnelReady" not in active_case:
-            fail(errors, "active license verdict no longer waits for VLESS readiness")
+                fail(errors, f"cold-login VLESS bootstrap invariant is missing {marker}")
+        if "unlockAfterTunnelReady" in license_gate:
+            fail(errors, "cold login must not restore the redundant VLESS loading overlay")
 
     aorus_build = (root / "patches/submodules/AorusGram/BUILD").read_text(encoding="utf-8")
     for marker in ("apple_static_xcframework_import", 'name = "LibXray"', '":LibXray"'):

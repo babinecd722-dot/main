@@ -166,6 +166,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     private let meterView = UIView()
     private let meterBars = (0 ..< 5).map { _ in CALayer() }
     private var animatedWidth: CGFloat = 0
+    private var isCompleted = false
 
     init(title: String) {
         super.init(frame: .zero)
@@ -307,7 +308,11 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         if window != nil, abs(animatedWidth - bounds.width) > 0.5 {
             animatedWidth = bounds.width
             stopLayerAnimations()
-            startAnimatingIfNeeded()
+            if isCompleted {
+                applyCompletedAppearance()
+            } else {
+                startAnimatingIfNeeded()
+            }
         }
     }
 
@@ -316,13 +321,29 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         if window == nil {
             stopLayerAnimations()
             animatedWidth = 0
+        } else if isCompleted {
+            applyCompletedAppearance()
         } else {
             startAnimatingIfNeeded()
         }
     }
 
+    func setCompleted(_ completed: Bool) {
+        guard isCompleted != completed else { return }
+        isCompleted = completed
+        stopLayerAnimations()
+        if completed {
+            applyCompletedAppearance()
+        } else {
+            scanGradient.opacity = 1
+            meterBars.forEach { $0.opacity = 1 }
+            startAnimatingIfNeeded()
+        }
+    }
+
     private func startAnimatingIfNeeded() {
-        guard bounds.width > 0, scanGradient.animation(forKey: "aorus.scan") == nil else { return }
+        guard !isCompleted, bounds.width > 0,
+              scanGradient.animation(forKey: "aorus.scan") == nil else { return }
 
         let scan = CABasicAnimation(keyPath: "transform.translation.x")
         scan.fromValue = 0
@@ -347,6 +368,17 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     private func stopLayerAnimations() {
         scanGradient.removeAnimation(forKey: "aorus.scan")
         meterBars.forEach { $0.removeAnimation(forKey: "aorus.meter") }
+    }
+
+    private func applyCompletedAppearance() {
+        let opacities: [Float] = [0.50, 0.72, 1.0, 0.68, 0.86]
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        scanGradient.opacity = 0
+        for (bar, opacity) in zip(meterBars, opacities) {
+            bar.opacity = opacity
+        }
+        CATransaction.commit()
     }
 }
 
@@ -571,9 +603,7 @@ final class ATunnelStatusViewController: UIViewController {
     private let scrollView  = UIScrollView()
     private let contentView = UIView()
 
-    private let diagnosticsBanner = ATunnelDiagnosticsBannerView(
-        title: aorusL("Диагностика", "Diagnostics")
-    )
+    private let duckView       = ATunnelDuckView(renderSizePx: 280)
     private let titleLabel     = UILabel()
     private let subtitleLabel  = UILabel()
 
@@ -622,7 +652,7 @@ final class ATunnelStatusViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         guard !didPlayEntrance else { return }
-        let animatable: [UIView] = [diagnosticsBanner, titleLabel, subtitleLabel, serversSectionLabel,
+        let animatable: [UIView] = [duckView, titleLabel, subtitleLabel, serversSectionLabel,
                                     serverCardsStack, callsSectionLabel, callCard, updatedLabel]
         animatable.forEach {
             $0.alpha = 0
@@ -641,12 +671,12 @@ final class ATunnelStatusViewController: UIViewController {
         guard !didPlayEntrance else { return }
         didPlayEntrance = true
 
-        // Runtime-rendered diagnostics banner enters with the rest of the native UI.
+        // Duck pops in with spring
         UIView.animate(withDuration: 0.55, delay: 0,
                        usingSpringWithDamping: 0.65, initialSpringVelocity: 0.5,
                        options: .allowUserInteraction) {
-            self.diagnosticsBanner.alpha = 1
-            self.diagnosticsBanner.transform = .identity
+            self.duckView.alpha = 1
+            self.duckView.transform = .identity
         }
         // Content cascades up
         let rest: [UIView] = [titleLabel, subtitleLabel, serversSectionLabel,
@@ -712,8 +742,9 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     private func setupHeader() {
-        diagnosticsBanner.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(diagnosticsBanner)
+        // Duck
+        duckView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(duckView)
 
         // Title
         titleLabel.text = "ATunnel"
@@ -733,12 +764,12 @@ final class ATunnelStatusViewController: UIViewController {
         contentView.addSubview(subtitleLabel)
 
         NSLayoutConstraint.activate([
-            diagnosticsBanner.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 18),
-            diagnosticsBanner.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            diagnosticsBanner.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            diagnosticsBanner.heightAnchor.constraint(equalToConstant: 104),
+            duckView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            duckView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            duckView.widthAnchor.constraint(equalToConstant: 140),
+            duckView.heightAnchor.constraint(equalToConstant: 140),
 
-            titleLabel.topAnchor.constraint(equalTo: diagnosticsBanner.bottomAnchor, constant: 18),
+            titleLabel.topAnchor.constraint(equalTo: duckView.bottomAnchor, constant: 12),
             titleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
             titleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
 
@@ -1090,7 +1121,9 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     private let cardBg = UIColor(white: 0.10, alpha: 1.0)
 
     private let handleBar    = UIView()
-    private let titleLabel   = UILabel()
+    private let diagnosticsBanner = ATunnelDiagnosticsBannerView(
+        title: aorusL("Диагностика", "Diagnostics")
+    )
     private let subtitleLabel = UILabel()
     private let stepsStack   = UIStackView()
     private let resultCard   = UIView()
@@ -1135,12 +1168,8 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         handleBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(handleBar)
 
-        titleLabel.text = aorusL("Диагностика", "Diagnostics")
-        titleLabel.font = Font.bold(20.0)
-        titleLabel.textColor = .white
-        titleLabel.textAlignment = .center
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(titleLabel)
+        diagnosticsBanner.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(diagnosticsBanner)
 
         subtitleLabel.text = aorusL("Проверка и восстановление ATunnel", "Checking and restoring ATunnel")
         subtitleLabel.font = Font.regular(14.0)
@@ -1201,11 +1230,12 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
             handleBar.widthAnchor.constraint(equalToConstant: 40),
             handleBar.heightAnchor.constraint(equalToConstant: 5),
 
-            titleLabel.topAnchor.constraint(equalTo: handleBar.bottomAnchor, constant: 20),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            diagnosticsBanner.topAnchor.constraint(equalTo: handleBar.bottomAnchor, constant: 18),
+            diagnosticsBanner.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            diagnosticsBanner.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            diagnosticsBanner.heightAnchor.constraint(equalToConstant: 104),
 
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
+            subtitleLabel.topAnchor.constraint(equalTo: diagnosticsBanner.bottomAnchor, constant: 12),
             subtitleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
             subtitleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
@@ -1239,6 +1269,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     }
 
     private func runDiagnostics() {
+        diagnosticsBanner.setCompleted(false)
         snapshotActiveRegion = currentActiveRegion()
         snapshotUpdatedAt    = currentUpdatedAt()
         stepRows[kStepAnalyze].setState(.running)
@@ -1286,6 +1317,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     }
 
     private func showResult(prev: String?, new: String?, allDown: Bool) {
+        diagnosticsBanner.setCompleted(!allDown && new != nil)
         let cfg = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
         if allDown {
             resultIcon.image = UIImage(systemName: "wifi.slash", withConfiguration: cfg)

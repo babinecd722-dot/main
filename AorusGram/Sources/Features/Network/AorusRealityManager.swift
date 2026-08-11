@@ -29,9 +29,9 @@ public final class AorusRealityManager {
         AorusProxyManager.shared.refresh(force: false)
     }
 
-    /// True only after the in-process Xray core has published a loopback endpoint
-    /// for this process. LicenseGate uses this to keep the cold-login UI covered
-    /// until Telegram can no longer race ahead on a direct connection.
+    /// Process-bound readiness signal used by diagnostics and release invariants.
+    /// Telegram itself remains fail-closed on the reserved loopback endpoint until
+    /// this becomes true; the app UI does not need a separate launch overlay.
     public var isReadyForAuthorizedTraffic: Bool {
         guard authorizationAllowsTunnel else { return false }
         return endpointForCurrentProcess() != nil
