@@ -496,7 +496,7 @@ private func miscEntries(state: MiscState, theme: PresentationTheme, strings: Pr
     entries.append(.mediaMetadata(theme, aorusL("Метаданные медиа", "Media Metadata"), state.mediaMetadata))
     entries.append(.mediaMetadataInfo(theme, aorusL("Добавляет пункт «Метаданные» в меню фото, видео и GIF и показывает доступные EXIF, GPS, камеру, контейнер и файл.", "Adds a Metadata item to photos, videos and GIFs and shows available EXIF, GPS, camera, container and file data.")))
     entries.append(.formattingPanel(theme, aorusL("Панель форматирования", "Formatting Panel"), state.formattingPanel))
-    entries.append(.autoFormat(theme, aorusL("Авто-форматирование при отправке", "Auto-formatting on send"), aorusAutoFormatLabel(state.autoFormatStyle, strings)))
+    entries.append(.autoFormat(theme, aorusL("Авто-форматирование", "Auto-formatting"), aorusAutoFormatLabel(state.autoFormatStyle, strings)))
     entries.append(.animatedWallpapers(theme, aorusL("Анимированные обои", "Animated Wallpapers")))
     entries.append(.animatedBanner(theme, aorusL("Анимированный баннер", "Animated Banner")))
 

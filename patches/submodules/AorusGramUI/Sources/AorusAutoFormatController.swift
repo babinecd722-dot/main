@@ -44,12 +44,10 @@ private enum AorusAutoFormatEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
-        case .enabledSwitch:
+        case .enabledSwitch, .footer:
             return 0
         case .header, .style:
             return 1
-        case .footer:
-            return 2
         }
     }
 
@@ -57,12 +55,12 @@ private enum AorusAutoFormatEntry: ItemListNodeEntry {
         switch self {
         case .enabledSwitch:
             return 0
-        case .header:
+        case .footer:
             return 1
+        case .header:
+            return 2
         case let .style(_, index, _, _, _):
             return Int32(100 + index)
-        case .footer:
-            return 10000
         }
     }
 
@@ -107,6 +105,12 @@ private func aorusAutoFormatEntries(selected: String, theme: PresentationTheme, 
     let isEnabled = selected != aorusAutoFormatOff
     var entries: [AorusAutoFormatEntry] = []
     entries.append(.enabledSwitch(theme, aorusL("Авто-форматирование", "Auto-formatting"), isEnabled))
+    // Caption directly under the switch, explaining what it does — before the choices,
+    // where iOS settings conventionally place a toggle's description.
+    entries.append(.footer(theme, aorusL(
+        "Весь набранный текст отправляется в выбранном стиле. Форматирование, которое вы добавили вручную, сохраняется поверх.",
+        "Everything you type is sent in the selected style. Any formatting you add by hand is kept on top of it."
+    )))
     // The style list only appears while the feature is on — with it off there is nothing
     // to choose, and an empty checkmark list would just be dead rows.
     if isEnabled {
@@ -115,10 +119,6 @@ private func aorusAutoFormatEntries(selected: String, theme: PresentationTheme, 
             entries.append(.style(theme, index, key, aorusAutoFormatLabel(key, strings), selected == key))
         }
     }
-    entries.append(.footer(theme, aorusL(
-        "Весь набранный текст отправляется в выбранном стиле. Форматирование, которое вы добавили вручную, сохраняется поверх.",
-        "Everything you type is sent in the selected style. Any formatting you add by hand is kept on top of it."
-    )))
     return entries
 }
 
