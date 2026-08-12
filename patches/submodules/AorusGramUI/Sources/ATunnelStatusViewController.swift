@@ -159,8 +159,6 @@ private final class ATunnelDiagnosticsBannerView: UIView {
     private let accentGlow = CAGradientLayer()
     private let scanGradient = CAGradientLayer()
     private let gridLayer = CAShapeLayer()
-    private let iconTile = UIView()
-    private let iconView = UIImageView()
     private let eyebrowLabel = UILabel()
     private let titleLabel = UILabel()
     private let meterView = UIView()
@@ -201,21 +199,6 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         scanGradient.endPoint = CGPoint(x: 1, y: 0.5)
         layer.addSublayer(scanGradient)
 
-        iconTile.backgroundColor = accent.withAlphaComponent(0.16)
-        iconTile.layer.cornerRadius = 15
-        iconTile.layer.cornerCurve = .continuous
-        iconTile.layer.borderWidth = 1
-        iconTile.layer.borderColor = accent.withAlphaComponent(0.24).cgColor
-        iconTile.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(iconTile)
-
-        let symbolConfig = UIImage.SymbolConfiguration(pointSize: 23, weight: .semibold)
-        iconView.image = UIImage(systemName: "waveform.path.ecg", withConfiguration: symbolConfig)
-        iconView.tintColor = .white
-        iconView.contentMode = .scaleAspectFit
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        iconTile.addSubview(iconView)
-
         eyebrowLabel.text = "ATUNNEL"
         eyebrowLabel.font = Font.semibold(10.0)
         eyebrowLabel.textColor = accent
@@ -247,17 +230,7 @@ private final class ATunnelDiagnosticsBannerView: UIView {
         }
 
         NSLayoutConstraint.activate([
-            iconTile.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            iconTile.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconTile.widthAnchor.constraint(equalToConstant: 54),
-            iconTile.heightAnchor.constraint(equalToConstant: 54),
-
-            iconView.centerXAnchor.constraint(equalTo: iconTile.centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: iconTile.centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 30),
-            iconView.heightAnchor.constraint(equalToConstant: 30),
-
-            eyebrowLabel.leadingAnchor.constraint(equalTo: iconTile.trailingAnchor, constant: 14),
+            eyebrowLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
             eyebrowLabel.trailingAnchor.constraint(lessThanOrEqualTo: meterView.leadingAnchor, constant: -14),
             eyebrowLabel.bottomAnchor.constraint(equalTo: centerYAnchor, constant: -4),
 
@@ -1100,8 +1073,9 @@ final class ATunnelStatusViewController: UIViewController {
         }
         if #available(iOS 15.0, *) {
             if let sheet = vc.sheetPresentationController {
-                sheet.detents = [.medium(), .large()]
-                sheet.prefersGrabberVisible = true
+                sheet.detents = [.large()]
+                sheet.prefersGrabberVisible = false
+                sheet.prefersScrollingExpandsWhenScrolledToEdge = false
                 sheet.preferredCornerRadius = 24
             }
         }
@@ -1120,7 +1094,6 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     private let purple = UIColor(red: 0.48, green: 0.40, blue: 0.97, alpha: 1.0)
     private let cardBg = UIColor(white: 0.10, alpha: 1.0)
 
-    private let handleBar    = UIView()
     private let diagnosticsBanner = ATunnelDiagnosticsBannerView(
         title: aorusL("Диагностика", "Diagnostics")
     )
@@ -1162,11 +1135,6 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     private func setupUI() {
         view.backgroundColor = .black
         overrideUserInterfaceStyle = .dark
-
-        handleBar.backgroundColor = UIColor(white: 0.35, alpha: 1)
-        handleBar.layer.cornerRadius = 2.5
-        handleBar.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(handleBar)
 
         diagnosticsBanner.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(diagnosticsBanner)
@@ -1225,12 +1193,7 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
         view.addSubview(closeButton)
 
         NSLayoutConstraint.activate([
-            handleBar.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
-            handleBar.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            handleBar.widthAnchor.constraint(equalToConstant: 40),
-            handleBar.heightAnchor.constraint(equalToConstant: 5),
-
-            diagnosticsBanner.topAnchor.constraint(equalTo: handleBar.bottomAnchor, constant: 18),
+            diagnosticsBanner.topAnchor.constraint(equalTo: view.topAnchor),
             diagnosticsBanner.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             diagnosticsBanner.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             diagnosticsBanner.heightAnchor.constraint(equalToConstant: 104),

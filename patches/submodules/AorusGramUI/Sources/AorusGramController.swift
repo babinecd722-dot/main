@@ -10,141 +10,6 @@ import ItemListUI
 import PresentationDataUtils
 import AccountContext
 
-private let _aorusRealityEndpointKey = "71d447f8-9128-4d18-b63c-ec11ef43ba26"
-private let _aorusRealityRequirementKey = "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"
-private let _aorusVLESSConnectionKey = "aorusgram_vless_connection_state"
-
-private struct _AorusVLESSDiagnostics: Decodable {
-    struct Server: Decodable {
-        let region: String
-        let active: Bool
-    }
-    let servers: [Server]
-}
-
-private struct _AorusVLESSStatus {
-    let title: String
-    let message: String
-}
-
-private func _aorusVLESSStatus() -> _AorusVLESSStatus {
-    let store = UserDefaults(suiteName: "ng.session.store")
-    let requirement = store?.dictionary(forKey: _aorusRealityRequirementKey)
-    let currentPid = ProcessInfo.processInfo.processIdentifier
-    let requirementPid = requirement?["pid"] as? NSNumber
-    let required = requirementPid?.int32Value == currentPid
-        ? ((requirement?["required"] as? NSNumber)?.boolValue ?? true)
-        : true
-
-    guard required else {
-        return _AorusVLESSStatus(
-            title: aorusL("Прямое подключение", "Direct connection"),
-            message: aorusL(
-                "Подписка неактивна. VLESS не требуется, используется прямое подключение.",
-                "The subscription is inactive. VLESS is not required and a direct connection is used."
-            )
-        )
-    }
-
-    let endpoint = store?.dictionary(forKey: _aorusRealityEndpointKey)
-    let endpointPid = endpoint?["pid"] as? NSNumber
-    let endpointPort = endpoint?["port"] as? NSNumber
-    let endpointReady = endpointPid?.int32Value == currentPid &&
-        (1 ... 65_535).contains(endpointPort?.intValue ?? 0)
-
-    guard endpointReady else {
-        return _AorusVLESSStatus(
-            title: aorusL("VLESS подключается", "VLESS is connecting"),
-            message: aorusL(
-                "Защищённый туннель запускается. Прямое подключение заблокировано до готовности VLESS.",
-                "The secure tunnel is starting. Direct connectivity is blocked until VLESS is ready."
-            )
-        )
-    }
-
-    let connection = UserDefaults.standard.dictionary(forKey: _aorusVLESSConnectionKey)
-    let connectionPid = connection?["pid"] as? NSNumber
-    let connectionState = connectionPid?.int32Value == currentPid
-        ? connection?["state"] as? String
-        : nil
-
-    let unhealthySince = UserDefaults.standard.double(forKey: "aorusgram_proxy_unhealthy_since")
-    if unhealthySince > 0 || connectionState == "proxy_issue" {
-        return _AorusVLESSStatus(
-            title: aorusL("Проблема VLESS", "VLESS issue"),
-            message: aorusL(
-                "Локальный туннель запущен, но Telegram обнаружил проблему соединения. Выполняется автоматическое переключение сервера; прямое подключение заблокировано.",
-                "The local tunnel is running, but Telegram detected a connection issue. Automatic server failover is in progress; direct connectivity remains blocked."
-            )
-        )
-    }
-
-    switch connectionState {
-    case "waiting_for_network":
-        return _AorusVLESSStatus(
-            title: aorusL("Нет сети", "No network"),
-            message: aorusL(
-                "VLESS включён, но устройство сейчас без доступа к сети. Прямое подключение заблокировано.",
-                "VLESS is enabled, but the device currently has no network access. Direct connectivity is blocked."
-            )
-        )
-    case "connecting", "updating", nil:
-        return _AorusVLESSStatus(
-            title: aorusL("Проверка VLESS", "Checking VLESS"),
-            message: aorusL(
-                "Локальный туннель запущен, Telegram устанавливает защищённое соединение. Прямое подключение заблокировано.",
-                "The local tunnel is running while Telegram establishes the protected connection. Direct connectivity is blocked."
-            )
-        )
-    case "online":
-        break
-    default:
-        return _AorusVLESSStatus(
-            title: aorusL("Проверка VLESS", "Checking VLESS"),
-            message: aorusL(
-                "Состояние соединения обновляется. Прямое подключение заблокировано.",
-                "The connection state is being refreshed. Direct connectivity is blocked."
-            )
-        )
-    }
-
-
-    var activeRegion: String?
-    if let text = UserDefaults.standard.string(forKey: "aorusgram_atunnel_status"),
-       let data = text.data(using: .utf8),
-       let diagnostics = try? JSONDecoder().decode(_AorusVLESSDiagnostics.self, from: data) {
-        activeRegion = diagnostics.servers.first(where: { $0.active })?.region.uppercased()
-    }
-    let server: String
-    switch activeRegion {
-    case "DE": server = aorusL("Германия", "Germany")
-    case "FI": server = aorusL("Финляндия", "Finland")
-    case let value?: server = value
-    case nil: server = aorusL("выбран автоматически", "selected automatically")
-    }
-    return _AorusVLESSStatus(
-        title: aorusL("VLESS подключён", "VLESS connected"),
-        message: aorusL(
-            "Защищённый туннель активен.\nСервер: %@\nМаршрут: VLESS + REALITY\nПрямое подключение заблокировано.",
-            "The secure tunnel is active.\nServer: %@\nRoute: VLESS + REALITY\nDirect connectivity is blocked."
-        ).replacingOccurrences(of: "%@", with: server)
-    )
-}
-
-private func _aorusPresentVLESSStatus(on controller: UIViewController) {
-    let status = _aorusVLESSStatus()
-    let alert = UIAlertController(title: status.title, message: status.message, preferredStyle: .alert)
-    alert.addAction(UIAlertAction(title: aorusL("Проверить", "Check"), style: .default, handler: { [weak controller] _ in
-        NotificationCenter.default.post(name: NSNotification.Name("aorusgram_request_probe"), object: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            guard let controller, controller.presentedViewController == nil else { return }
-            _aorusPresentVLESSStatus(on: controller)
-        }
-    }))
-    alert.addAction(UIAlertAction(title: aorusL("Готово", "Done"), style: .cancel))
-    controller.present(alert, animated: true)
-}
-
 // MARK: - Interval slider
 
 // Discrete snap points for performance sliders.
@@ -499,7 +364,6 @@ private final class AorusArguments {
     let setRAMCleanInterval: (Int) -> Void
     let setCacheInterval: (Int) -> Void
     let openProxyDiagnostics: () -> Void // AORUS-DIAG
-    let openVLESSStatus: () -> Void
     let openAppBadgePicker: () -> Void
     let openFont: () -> Void
 
@@ -517,7 +381,6 @@ private final class AorusArguments {
          setRAMCleanInterval: @escaping (Int) -> Void,
          setCacheInterval: @escaping (Int) -> Void,
          openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
-         openVLESSStatus: @escaping () -> Void,
          openAppBadgePicker: @escaping () -> Void,
          openFont: @escaping () -> Void) {
         self.set = set
@@ -534,7 +397,6 @@ private final class AorusArguments {
         self.setRAMCleanInterval = setRAMCleanInterval
         self.setCacheInterval = setCacheInterval
         self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
-        self.openVLESSStatus = openVLESSStatus
         self.openAppBadgePicker = openAppBadgePicker
         self.openFont = openFont
     }
@@ -634,7 +496,6 @@ private enum AorusEntry: ItemListNodeEntry {
     case subscription(PresentationTheme, String)
     case officialChannel(PresentationTheme, String)
     case proxyDiagnostics(PresentationTheme, String) // AORUS-DIAG
-    case vlessStatus(PresentationTheme, String)
 
     var section: ItemListSectionId {
         switch self {
@@ -675,7 +536,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.misc.rawValue
         case .aorusCodeHeader, .aorusCodeEnabled:
             return AorusSection.aorusCode.rawValue
-        case .subscription, .officialChannel, .proxyDiagnostics, .vlessStatus: // AORUS-DIAG
+        case .subscription, .officialChannel, .proxyDiagnostics: // AORUS-DIAG
             return AorusSection.channel.rawValue
         }
     }
@@ -761,7 +622,6 @@ private enum AorusEntry: ItemListNodeEntry {
         case .subscription:         return 106
         case .officialChannel:      return 107
         case .proxyDiagnostics:     return 117 // AORUS-DIAG
-        case .vlessStatus:          return 118
         }
     }
 
@@ -929,8 +789,6 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .officialChannel(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .proxyDiagnostics(lt, ls): // AORUS-DIAG
             if case let .proxyDiagnostics(rt, rs) = rhs { return lt === rt && ls == rs } // AORUS-DIAG
-        case let .vlessStatus(lt, ls):
-            if case let .vlessStatus(rt, rs) = rhs { return lt === rt && ls == rs }
         }
         return false
     }
@@ -1100,8 +958,6 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openChannel)
         case let .proxyDiagnostics(_, title): // AORUS-DIAG
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openProxyDiagnostics) // AORUS-DIAG
-        case let .vlessStatus(_, title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openVLESSStatus)
         }
     }
 }
@@ -1215,7 +1071,6 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .subscription(theme, l10n.subscription),
         .officialChannel(theme, l10n.officialChannel),
         .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
-        .vlessStatus(theme, "VLESS"),
     ]
 
     if state.antiSpamEnabled, let idx = entries.firstIndex(where: {
@@ -1600,10 +1455,6 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             let nav = UINavigationController(rootViewController: vc)
             nav.modalPresentationStyle = .fullScreen
             controller.present(nav, animated: true)
-        },
-        openVLESSStatus: {
-            guard let controller = weakController else { return }
-            _aorusPresentVLESSStatus(on: controller)
         },
         openAppBadgePicker: {
             guard let controller = weakController else { return }

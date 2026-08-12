@@ -119,11 +119,35 @@ def main() -> int:
         'forHTTPHeaderField: "X-Aorus-Device-Proof"',
         "AorusRealityDeviceIdentity.proof",
         "AorusRealityEnvelopeVerifier.decode",
+        "scheduleProvisioningRetry()",
+        "guard licenseAllowsReality else",
         'mtprotoUnhealthyKey = "aorusgram_proxy_unhealthy_since"',
         "penalizedEndpoints[endpointKey(activeEndpoint)]",
     ):
         if marker not in proxy:
             fail(errors, f"dynamic REALITY provisioner invariant is missing {marker}")
+
+    retry_start = proxy.find("private func scheduleProvisioningRetry()")
+    retry_end = proxy.find("private func buildSignedRequest()", retry_start)
+    retry_block = proxy[retry_start:retry_end]
+    for marker in (
+        "guard licenseAllowsReality else",
+        "self.licenseAllowsReality",
+        "self.refresh(force: true)",
+    ):
+        if marker not in retry_block:
+            fail(errors, f"VLESS provisioning retry is not license-gated: {marker}")
+
+    signed_guard_start = proxy.find("guard let signedRequest = buildSignedRequest()")
+    signed_guard_end = proxy.find("let task = apiSession.dataTask", signed_guard_start)
+    signed_guard = proxy[signed_guard_start:signed_guard_end]
+    if "scheduleProvisioningRetry" in signed_guard or "handleFetchFailure" in signed_guard:
+        fail(errors, "an unsigned VLESS request must fail closed without network-style retries")
+    for status in ("http.statusCode == 401", "http.statusCode == 403"):
+        if status not in proxy:
+            fail(errors, f"VLESS authorization failure must fail closed: {status}")
+    if "http.statusCode == 408 || http.statusCode == 429 || (500 ... 599).contains(http.statusCode)" not in proxy:
+        fail(errors, "VLESS retries must be limited to transient HTTP failures")
 
     call_proxy = (root / "patches/submodules/TelegramCallsUI/Sources/AorusCallProxy.swift").read_text(encoding="utf-8")
     for marker in (
@@ -218,6 +242,10 @@ def main() -> int:
                 fail(errors, f"cold-login VLESS bootstrap invariant is missing {marker}")
         if "unlockAfterTunnelReady" in license_gate:
             fail(errors, "cold login must not restore the redundant VLESS loading overlay")
+
+    settings_controller = (root / "patches/submodules/AorusGramUI/Sources/AorusGramController.swift").read_text(encoding="utf-8")
+    if "vlessStatus" in settings_controller or "_aorusPresentVLESSStatus" in settings_controller:
+        fail(errors, "the removed VLESS settings item must not be restored")
 
     aorus_build = (root / "patches/submodules/AorusGram/BUILD").read_text(encoding="utf-8")
     for marker in ("apple_static_xcframework_import", 'name = "LibXray"', '":LibXray"'):

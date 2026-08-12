@@ -52,6 +52,9 @@ public final class AorusProxyManager {
     private var currentTask: URLSessionDataTask?
     private var nextRefreshAt = Date.distantPast
     private var refreshTimer: DispatchSourceTimer?
+    private var provisioningRetryWorkItem: DispatchWorkItem?
+    private var provisioningRetryGeneration: UInt64 = 0
+    private var provisioningRetryAttempt = 0
     private var lastPathSignature: String?
     private var pathSettleWork: DispatchWorkItem?
     private var lastDiagnosticRefresh = Date.distantPast
@@ -68,6 +71,7 @@ public final class AorusProxyManager {
     private let failoverCooldown: TimeInterval = 20
     private let endpointPenaltyDuration: TimeInterval = 300
     private let watchdogInterval: TimeInterval = 5
+    private let provisioningRetryDelays: [TimeInterval] = [1, 2, 4, 8, 15, 30]
 
     private init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -158,6 +162,10 @@ public final class AorusProxyManager {
         lock.unlock()
 
         guard let signedRequest = buildSignedRequest() else {
+            // A request that cannot be signed is a local integrity/configuration
+            // failure, not a transient network race. Never retry it as though the
+            // license were temporarily offline and never permit a direct fallback.
+            clearProvisioning(stopTunnel: true)
             finish(generation: requestGeneration, success: false, completion: completion)
             return
         }
@@ -173,17 +181,35 @@ public final class AorusProxyManager {
                 self.handleFetchFailure(generation: requestGeneration, completion: completion)
                 return
             }
-            if http.statusCode == 403 {
+            if http.statusCode == 401 || http.statusCode == 403 {
                 self.clearProvisioning(stopTunnel: true)
                 self.finish(generation: requestGeneration, success: false, completion: completion)
                 return
             }
-            guard http.statusCode == 200,
-                  let data, data.count <= 70_000,
+
+            // Retry only transport/service availability failures. Other non-200
+            // responses are authoritative protocol/configuration failures and must
+            // not be converted into an offline-grace provisioning loop.
+            guard http.statusCode == 200 else {
+                if http.statusCode == 408 || http.statusCode == 429 || (500 ... 599).contains(http.statusCode) {
+                    self.handleFetchFailure(generation: requestGeneration, completion: completion)
+                } else {
+                    self.clearProvisioning(stopTunnel: true)
+                    self.finish(generation: requestGeneration, success: false, completion: completion)
+                }
+                return
+            }
+
+            // A malformed or unverifiable control-plane response is an integrity
+            // failure. Keep the subscribed client fail-closed and do not retry it as
+            // a network outage; a later foreground/server license check can start a
+            // fresh, independently signed provisioning attempt.
+            guard let data, data.count <= 70_000,
                   let worker = try? JSONDecoder().decode(AorusRealityWorkerResponse.self, from: data),
                   worker.schema == 2,
                   (1 ... 300).contains(worker.ttl) else {
-                self.handleFetchFailure(generation: requestGeneration, completion: completion)
+                self.clearProvisioning(stopTunnel: true)
+                self.finish(generation: requestGeneration, success: false, completion: completion)
                 return
             }
 
@@ -192,11 +218,23 @@ public final class AorusProxyManager {
                 worker.realityEnvelope,
                 expectedDeviceHash: deviceHash
             ) else {
-                self.handleFetchFailure(generation: requestGeneration, completion: completion)
+                self.clearProvisioning(stopTunnel: true)
+                self.finish(generation: requestGeneration, success: false, completion: completion)
+                return
+            }
+
+            guard self.licenseAllowsReality else {
+                self.clearProvisioning(stopTunnel: true)
+                self.finish(generation: requestGeneration, success: false, completion: completion)
                 return
             }
 
             self.rankEndpoints(profile.endpoints) { ranked, statuses in
+                guard self.licenseAllowsReality else {
+                    self.clearProvisioning(stopTunnel: true)
+                    self.finish(generation: requestGeneration, success: false, completion: completion)
+                    return
+                }
                 self.lock.lock()
                 let stillCurrent = self.generation == requestGeneration
                 if stillCurrent {
@@ -207,10 +245,15 @@ public final class AorusProxyManager {
                     let remaining = max(1, TimeInterval(profile.expiresAt) - Date().timeIntervalSince1970)
                     let delay = max(1, min(worker.ttl, remaining))
                     self.nextRefreshAt = Date().addingTimeInterval(delay)
+                    self.provisioningRetryGeneration &+= 1
+                    self.provisioningRetryAttempt = 0
                 }
+                let retry = stillCurrent ? self.provisioningRetryWorkItem : nil
+                if stillCurrent { self.provisioningRetryWorkItem = nil }
                 self.lock.unlock()
                 guard stillCurrent else { return }
 
+                retry?.cancel()
                 self.scheduleRefresh()
                 self.writeDiagnostics()
                 AorusRealityManager.shared.apply(profile: profile, rankedEndpoints: ranked)
@@ -237,7 +280,8 @@ public final class AorusProxyManager {
             AorusRealityManager.shared.apply(profile: cachedProfile, rankedEndpoints: endpoints)
             scheduleRefresh()
         } else {
-            clearProvisioning(stopTunnel: true)
+            clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false)
+            scheduleProvisioningRetry()
         }
         finish(generation: generation, success: usable, completion: completion)
     }
@@ -252,7 +296,7 @@ public final class AorusProxyManager {
         DispatchQueue.main.async { completion?(success) }
     }
 
-    private func clearProvisioning(stopTunnel: Bool) {
+    private func clearProvisioning(stopTunnel: Bool, cancelProvisioningRetry: Bool = true) {
         lock.lock()
         generation &+= 1
         let task = currentTask
@@ -267,12 +311,59 @@ public final class AorusProxyManager {
         nextRefreshAt = .distantPast
         let timer = refreshTimer
         refreshTimer = nil
+        let retry: DispatchWorkItem?
+        if cancelProvisioningRetry {
+            provisioningRetryGeneration &+= 1
+            provisioningRetryAttempt = 0
+            retry = provisioningRetryWorkItem
+            provisioningRetryWorkItem = nil
+        } else {
+            retry = nil
+        }
         lock.unlock()
         task?.cancel()
         timer?.cancel()
+        retry?.cancel()
         UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey)
         writeDiagnostics()
         if stopTunnel { AorusRealityManager.shared.licenseDidLock() }
+    }
+
+    /// A clean install has no VLESS profile on disk by design. If the first signed
+    /// provisioning request races network startup, keep the subscribed session
+    /// fail-closed and retry with bounded backoff. Every attempt re-evaluates the
+    /// verified, device-bound license snapshot; revocation/expiry cancels the loop.
+    private func scheduleProvisioningRetry() {
+        guard licenseAllowsReality else {
+            clearProvisioning(stopTunnel: true)
+            return
+        }
+
+        lock.lock()
+        provisioningRetryGeneration &+= 1
+        let retryGeneration = provisioningRetryGeneration
+        let delayIndex = min(provisioningRetryAttempt, provisioningRetryDelays.count - 1)
+        let delay = provisioningRetryDelays[delayIndex]
+        provisioningRetryAttempt = min(provisioningRetryAttempt + 1, provisioningRetryDelays.count - 1)
+        let previous = provisioningRetryWorkItem
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            let current = self.provisioningRetryGeneration == retryGeneration
+            if current { self.provisioningRetryWorkItem = nil }
+            self.lock.unlock()
+            guard current else { return }
+            guard self.licenseAllowsReality else {
+                self.clearProvisioning(stopTunnel: true)
+                return
+            }
+            self.refresh(force: true)
+        }
+        provisioningRetryWorkItem = work
+        lock.unlock()
+
+        previous?.cancel()
+        stateQueue.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func buildSignedRequest() -> URLRequest? {
