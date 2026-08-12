@@ -178,6 +178,11 @@ def main() -> int:
         'port: 38190',
         'aorusgram_vless_connection_state',
         'secret: nil',
+        "def patch_unauthorized_system_proxy_runtime_monitor",
+        "patch_unauthorized_system_proxy_runtime_monitor(tg)",
+        "AorusGram: hot-apply REALITY to the unauthorized login network",
+        "private var aorusProxyObserver: NSObjectProtocol?",
+        "NotificationCenter.default.removeObserver(aorusProxyObserver)",
     ):
         if marker not in branding:
             fail(errors, f"REALITY loopback bridge invariant is missing {marker}")

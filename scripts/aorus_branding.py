@@ -4968,6 +4968,86 @@ def patch_system_proxy_runtime_monitor(tg: Path) -> None:
         print("WARNING: Account.swift proxy monitor block not found — runtime monitor NOT applied")
 
 
+def patch_unauthorized_system_proxy_runtime_monitor(tg: Path) -> None:
+    """Hot-apply REALITY to the phone/code authorization network.
+
+    Telegram's UnauthorizedAccount is created before a clean-install trial can be
+    activated.  Its Network therefore starts on the fail-closed loopback port, but
+    unlike an authorized Account it has no shared-data proxy monitor.  Observe the
+    process-local endpoint publication for the lifetime of UnauthorizedAccount and
+    replace the API environment in place once libXray is actually ready.
+    """
+    path = tg / "submodules/TelegramCore/Sources/Account/Account.swift"
+    if not path.is_file():
+        raise FileNotFoundError("Account.swift not found for unauthorized system proxy runtime monitor")
+    t = path.read_text(encoding="utf-8")
+    sentinel = "AorusGram: hot-apply REALITY to the unauthorized login network"
+    if sentinel in t:
+        print("Account.swift: unauthorized system proxy runtime monitor already present")
+        return
+
+    class_start = t.find("public class UnauthorizedAccount")
+    class_end = t.find("\nfunc accountNetworkUsageInfoPath", class_start)
+    if class_start < 0 or class_end < 0:
+        raise RuntimeError("UnauthorizedAccount source boundaries not found")
+    block = t[class_start:class_end]
+
+    property_anchor = "    let stateManager: UnauthorizedAccountStateManager\n"
+    property_replacement = property_anchor + "    private var aorusProxyObserver: NSObjectProtocol?\n"
+    reset_anchor = "        self.stateManager.reset()\n"
+    reset_index = block.find(reset_anchor)
+    method_anchor = "    public func changedMasterDatacenterId"
+    method_index = block.find(method_anchor, reset_index + len(reset_anchor))
+    if property_anchor not in block:
+        raise RuntimeError("UnauthorizedAccount state-manager anchor not found")
+    if reset_index < 0 or method_index < 0:
+        raise RuntimeError("UnauthorizedAccount initializer boundary not found")
+    initializer_tail = block[reset_index + len(reset_anchor):method_index]
+    if initializer_tail.strip() != "}":
+        raise RuntimeError("Unexpected declarations after UnauthorizedAccount initializer")
+
+    init_replacement = (
+        "        self.stateManager.reset()\n"
+        "\n"
+        "        // AorusGram: hot-apply REALITY to the unauthorized login network.\n"
+        "        // A clean-install trial is activated after this Network already exists,\n"
+        "        // so the authorized Account observer cannot update phone/code requests.\n"
+        "        self.aorusProxyObserver = NotificationCenter.default.addObserver(\n"
+        "            forName: NSNotification.Name(\"aorusgram_proxy_config_updated\"),\n"
+        "            object: nil,\n"
+        "            queue: nil\n"
+        "        ) { [weak network] _ in\n"
+        "            guard let network else { return }\n"
+        "            let updated = " + _AORUS_PROXY_SNIPPET + "\n"
+        "            network.context.updateApiEnvironment { environment in\n"
+        "                let current = environment?.socksProxySettings\n"
+        "                let updateNetwork: Bool\n"
+        "                if let current, let updated {\n"
+        "                    updateNetwork = !current.isEqual(updated)\n"
+        "                } else {\n"
+        "                    updateNetwork = (current != nil) != (updated != nil)\n"
+        "                }\n"
+        "                guard updateNetwork else { return nil }\n"
+        "                network.dropConnectionStatus()\n"
+        "                return environment?.withUpdatedSocksProxySettings(updated)\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    deinit {\n"
+        "        if let aorusProxyObserver {\n"
+        "            NotificationCenter.default.removeObserver(aorusProxyObserver)\n"
+        "        }\n"
+        "    }\n"
+        "    \n"
+    )
+    block = block[:reset_index] + init_replacement + block[method_index:]
+    block = block.replace(property_anchor, property_replacement, 1)
+    t = t[:class_start] + block + t[class_end:]
+    path.write_text(t, encoding="utf-8")
+    print("Account.swift: injected unauthorized system proxy runtime monitor")
+
+
 def patch_chat_lock(tg: Path) -> None:
     """Chat Lock — protect selected chats behind Face ID / Touch ID / passcode.
 
@@ -24718,6 +24798,7 @@ def main() -> None:
     patch_client_spoof_build_info(tg)
     patch_system_proxy_network_override(tg)
     patch_system_proxy_runtime_monitor(tg)
+    patch_unauthorized_system_proxy_runtime_monitor(tg)
     patch_disable_call_p2p(tg)
     patch_app_delegate_language_bridge(tg)
     # Aorus visual theme is scoped to Telegram's stock "Night Theme: Off" state.

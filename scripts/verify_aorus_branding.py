@@ -1064,6 +1064,23 @@ def main() -> None:
         ):
             if marker not in account_text:
                 err.append(f"RealityProxy: runtime enforcement is missing {marker}")
+        unauthorized_start = account_text.find("public class UnauthorizedAccount")
+        unauthorized_end = account_text.find("func accountNetworkUsageInfoPath", unauthorized_start)
+        if unauthorized_start < 0 or unauthorized_end < 0:
+            err.append("RealityProxy: UnauthorizedAccount source boundaries are missing")
+        else:
+            unauthorized_text = account_text[unauthorized_start:unauthorized_end]
+            for marker in (
+                "AorusGram: hot-apply REALITY to the unauthorized login network",
+                "private var aorusProxyObserver: NSObjectProtocol?",
+                'NSNotification.Name("aorusgram_proxy_config_updated")',
+                "network.context.updateApiEnvironment",
+                "network.dropConnectionStatus()",
+                "withUpdatedSocksProxySettings(updated)",
+                "NotificationCenter.default.removeObserver(aorusProxyObserver)",
+            ):
+                if marker not in unauthorized_text:
+                    err.append(f"RealityProxy: cold-login hot-apply is missing {marker}")
         # Telegram's phone/code screen uses UnauthorizedAccount.  Guard both the
         # persisted-unauthorized and first-account branches against upstream drift.
         if account_text.count("return initializedNetwork(accountId: id") < 3:
