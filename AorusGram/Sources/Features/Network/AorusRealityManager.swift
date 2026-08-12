@@ -17,6 +17,13 @@ public final class AorusRealityManager {
     private var activeEndpoint: AorusRealityEndpoint?
     private var activePort: Int?
     private var transitionInProgress = false
+    private var restartRetryWorkItem: DispatchWorkItem?
+    private var restartRetryGeneration: UInt64 = 0
+    private var restartRetryAttempt = 0
+
+    private let coreStartTimeout: TimeInterval = 1.0
+    private let coreStartPollInterval: TimeInterval = 0.05
+    private let restartRetryDelays: [TimeInterval] = [0.25, 0.5, 1, 2, 4, 8, 15]
 
     private init() {}
 
@@ -48,6 +55,10 @@ public final class AorusRealityManager {
                 self.publishEndpoint(port: port)
                 return
             }
+            if self.mayRun {
+                self.restartLocked()
+                return
+            }
             self.stopLocked(clearProfile: false)
             DispatchQueue.global(qos: .utility).async {
                 AorusProxyManager.shared.refresh(force: false)
@@ -68,13 +79,18 @@ public final class AorusRealityManager {
                 endpoint.isValid && profile.endpoints.contains(endpoint)
             }
             let nextRanked = validRanked.isEmpty ? profile.endpoints : validRanked
+            let profileChanged = self.profile != profile || self.rankedEndpoints != nextRanked
             let canKeepRunning = self.profile?.credential == profile.credential &&
                 self.isCoreRunning() &&
                 self.activePort != nil &&
                 self.activeEndpoint == nextRanked.first
             self.profile = profile
             self.rankedEndpoints = nextRanked
+            if profileChanged {
+                self.cancelRestartRetryLocked(resetAttempt: true)
+            }
             if canKeepRunning, let port = self.activePort, let endpoint = self.activeEndpoint {
+                self.cancelRestartRetryLocked(resetAttempt: true)
                 self.publishEndpoint(port: port)
                 AorusProxyManager.shared.realityEndpointDidActivate(endpoint)
                 return
@@ -131,9 +147,10 @@ public final class AorusRealityManager {
                     continue
                 }
                 let response = invoke(method: "runXrayFromJson", payload: ["configJSON": config])
-                if response?.success == true, isCoreRunning() {
+                if response?.success == true, waitForCoreStart() {
                     activePort = localPort
                     activeEndpoint = endpoint
+                    cancelRestartRetryLocked(resetAttempt: true)
                     publishEndpoint(port: localPort)
                     AorusProxyManager.shared.realityEndpointDidActivate(endpoint)
                     return
@@ -142,10 +159,12 @@ public final class AorusRealityManager {
             }
         }
         clearEndpoint(postUpdate: true)
+        scheduleRestartRetryLocked()
     }
 
     private func stopLocked(clearProfile: Bool) {
         if transitionInProgress { return }
+        cancelRestartRetryLocked(resetAttempt: true)
         transitionInProgress = true
         defer { transitionInProgress = false }
         _ = invoke(method: "stopXray")
@@ -156,6 +175,52 @@ public final class AorusRealityManager {
             rankedEndpoints.removeAll(keepingCapacity: false)
         }
         clearEndpoint(postUpdate: true)
+    }
+
+    private func waitForCoreStart() -> Bool {
+        let deadline = Date().addingTimeInterval(coreStartTimeout)
+        repeat {
+            if isCoreRunning() { return true }
+            Thread.sleep(forTimeInterval: coreStartPollInterval)
+        } while Date() < deadline && mayRun
+        return isCoreRunning()
+    }
+
+    /// LibXray can briefly reject or delay its first in-process start while iOS is
+    /// restoring the app after a clean install. Keep the already verified,
+    /// device-bound profile in memory and retry only the local core. Direct
+    /// Telegram traffic remains pinned to the closed loopback port throughout.
+    private func scheduleRestartRetryLocked() {
+        guard mayRun else {
+            cancelRestartRetryLocked(resetAttempt: true)
+            return
+        }
+        guard restartRetryWorkItem == nil else { return }
+
+        restartRetryGeneration &+= 1
+        let generation = restartRetryGeneration
+        let delayIndex = min(restartRetryAttempt, restartRetryDelays.count - 1)
+        let delay = restartRetryDelays[delayIndex]
+        restartRetryAttempt = min(restartRetryAttempt + 1, restartRetryDelays.count - 1)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.restartRetryGeneration == generation else { return }
+            self.restartRetryWorkItem = nil
+            guard self.mayRun else {
+                self.cancelRestartRetryLocked(resetAttempt: true)
+                return
+            }
+            self.restartLocked()
+        }
+        restartRetryWorkItem = work
+        queue.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func cancelRestartRetryLocked(resetAttempt: Bool) {
+        restartRetryGeneration &+= 1
+        restartRetryWorkItem?.cancel()
+        restartRetryWorkItem = nil
+        if resetAttempt { restartRetryAttempt = 0 }
     }
 
     private func makeConfig(

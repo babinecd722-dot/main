@@ -1145,6 +1145,11 @@ def main() -> None:
             'publishRequirement(required: authorizationAllowsTunnel)',
             '"required": required',
             "AorusSessionMetrics.metricFlag",
+            "waitForCoreStart()",
+            "restartRetryDelays",
+            "scheduleRestartRetryLocked()",
+            "cancelRestartRetryLocked(resetAttempt: true)",
+            "let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints",
         ):
             if marker not in reality_manager_text:
                 err.append(f"RealityProxy: core invariant is missing {marker}")

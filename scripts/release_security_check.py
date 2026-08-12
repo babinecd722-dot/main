@@ -214,6 +214,11 @@ def main() -> int:
             '"required": required',
             "AorusSessionMetrics.metricFlag",
             "isReadyForAuthorizedTraffic",
+            "waitForCoreStart()",
+            "restartRetryDelays",
+            "scheduleRestartRetryLocked()",
+            "cancelRestartRetryLocked(resetAttempt: true)",
+            "let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints",
         ):
             if marker not in reality_manager:
                 fail(errors, f"REALITY manager invariant is missing {marker}")
