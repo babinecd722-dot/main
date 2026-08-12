@@ -990,6 +990,8 @@ def main() -> None:
             "worker.schema == 2",
             "(1 ... 300).contains(worker.ttl)",
             'mtprotoUnhealthyKey = "aorusgram_proxy_unhealthy_since"',
+            'mtprotoConnectionStateKey = "aorusgram_vless_connection_state"',
+            "mtprotoStallThreshold",
             "penalizedEndpoints[endpointKey(activeEndpoint)]",
         ):
             if marker not in proxy_text:
@@ -1058,6 +1060,7 @@ def main() -> None:
         for marker in (
             'aorusgram_proxy_config_updated',
             'aorusgram_vless_connection_state',
+            '"since": aorusStateSince',
             'aorusConnectionState = "online"',
             'aorusConnectionState = aorusProxyHasIssues ? "proxy_issue" : "connecting"',
             'network.dropConnectionStatus()',
@@ -1073,11 +1076,15 @@ def main() -> None:
             for marker in (
                 "AorusGram: hot-apply REALITY to the unauthorized login network",
                 "private var aorusProxyObserver: NSObjectProtocol?",
+                "private var aorusConnectionStatusDisposable: Disposable?",
                 'NSNotification.Name("aorusgram_proxy_config_updated")',
                 "network.context.updateApiEnvironment",
+                "network.connectionStatus.start",
+                '"since": since',
                 "network.dropConnectionStatus()",
                 "withUpdatedSocksProxySettings(updated)",
                 "NotificationCenter.default.removeObserver(aorusProxyObserver)",
+                "self.aorusConnectionStatusDisposable?.dispose()",
             ):
                 if marker not in unauthorized_text:
                     err.append(f"RealityProxy: cold-login hot-apply is missing {marker}")

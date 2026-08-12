@@ -122,6 +122,8 @@ def main() -> int:
         "scheduleProvisioningRetry()",
         "guard licenseAllowsReality else",
         'mtprotoUnhealthyKey = "aorusgram_proxy_unhealthy_since"',
+        'mtprotoConnectionStateKey = "aorusgram_vless_connection_state"',
+        "mtprotoStallThreshold",
         "penalizedEndpoints[endpointKey(activeEndpoint)]",
     ):
         if marker not in proxy:
@@ -182,7 +184,10 @@ def main() -> int:
         "patch_unauthorized_system_proxy_runtime_monitor(tg)",
         "AorusGram: hot-apply REALITY to the unauthorized login network",
         "private var aorusProxyObserver: NSObjectProtocol?",
+        "private var aorusConnectionStatusDisposable: Disposable?",
+        '\\"since\\": aorusStateSince',
         "NotificationCenter.default.removeObserver(aorusProxyObserver)",
+        "self.aorusConnectionStatusDisposable?.dispose()",
     ):
         if marker not in branding:
             fail(errors, f"REALITY loopback bridge invariant is missing {marker}")

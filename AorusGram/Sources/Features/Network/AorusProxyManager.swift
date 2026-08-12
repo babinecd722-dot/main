@@ -67,7 +67,9 @@ public final class AorusProxyManager {
     private let pathSettleDelay: TimeInterval = 1.25
     private let diagnosticCooldown: TimeInterval = 20
     private let mtprotoUnhealthyKey = "aorusgram_proxy_unhealthy_since"
+    private let mtprotoConnectionStateKey = "aorusgram_vless_connection_state"
     private let mtprotoUnhealthyThreshold: TimeInterval = 8
+    private let mtprotoStallThreshold: TimeInterval = 15
     private let failoverCooldown: TimeInterval = 20
     private let endpointPenaltyDuration: TimeInterval = 300
     private let watchdogInterval: TimeInterval = 5
@@ -131,7 +133,7 @@ public final class AorusProxyManager {
         }
         lock.unlock()
         if didChangeEndpoint {
-            UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey)
+            resetMTProtoHealthGracePeriod()
         }
         writeDiagnostics()
     }
@@ -325,6 +327,7 @@ public final class AorusProxyManager {
         timer?.cancel()
         retry?.cancel()
         UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey)
+        UserDefaults.standard.removeObject(forKey: mtprotoConnectionStateKey)
         writeDiagnostics()
         if stopTunnel { AorusRealityManager.shared.licenseDidLock() }
     }
@@ -560,7 +563,7 @@ public final class AorusProxyManager {
         }
         lock.unlock()
         guard changed else { return }
-        UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey)
+        resetMTProtoHealthGracePeriod()
 
         pathSettleWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
@@ -624,16 +627,40 @@ public final class AorusProxyManager {
         timer.resume()
     }
 
-    /// TCP reachability alone cannot detect a REALITY endpoint whose transport
-    /// accepts sockets but never completes Telegram's MTProto handshake. The
-    /// TelegramCore observer records that condition; after a stable threshold we
-    /// move only the active signed endpoint to the back of the local ranking.
+    /// TCP reachability and a running local Xray core do not prove that REALITY can
+    /// carry Telegram traffic. Some filtered networks accept the endpoint's TCP
+    /// socket but leave MTProto in `connecting` / `updating` forever without ever
+    /// setting Telegram's explicit proxy-issue bit. Treat both a sustained explicit
+    /// issue and a sustained handshake stall as endpoint failures.
     private func watchdogTick() {
         guard licenseAllowsReality else { return }
-        let unhealthySince = UserDefaults.standard.double(forKey: mtprotoUnhealthyKey)
+        let defaults = UserDefaults.standard
         let now = Date()
-        guard unhealthySince > 0,
-              now.timeIntervalSince1970 - unhealthySince >= mtprotoUnhealthyThreshold else {
+        let nowTimestamp = now.timeIntervalSince1970
+        let explicitUnhealthySince = defaults.double(forKey: mtprotoUnhealthyKey)
+
+        var failureSince: TimeInterval = 0
+        var failureThreshold = mtprotoUnhealthyThreshold
+        if explicitUnhealthySince > 0 {
+            failureSince = explicitUnhealthySince
+        }
+        if let connection = defaults.dictionary(forKey: mtprotoConnectionStateKey),
+           let pid = connection["pid"] as? NSNumber,
+           pid.int32Value == ProcessInfo.processInfo.processIdentifier,
+           let state = connection["state"] as? String,
+           let since = connection["since"] as? NSNumber {
+            switch state {
+            case "proxy_issue":
+                if failureSince == 0 { failureSince = since.doubleValue }
+            case "connecting", "updating":
+                failureSince = since.doubleValue
+                failureThreshold = mtprotoStallThreshold
+            default:
+                break
+            }
+        }
+        guard failureSince > 0,
+              nowTimestamp - failureSince >= failureThreshold else {
             return
         }
 
@@ -650,8 +677,25 @@ public final class AorusProxyManager {
         lastFailoverAt = now
         lock.unlock()
 
-        UserDefaults.standard.set(0, forKey: mtprotoUnhealthyKey)
+        resetMTProtoHealthGracePeriod()
         reprobeCurrentProfile()
+    }
+
+    /// A server or path transition gets a fresh handshake window. Preserve the
+    /// current state for diagnostics, but never carry an old stall timestamp to the
+    /// newly selected signed endpoint.
+    private func resetMTProtoHealthGracePeriod() {
+        let defaults = UserDefaults.standard
+        defaults.set(0, forKey: mtprotoUnhealthyKey)
+        guard var connection = defaults.dictionary(forKey: mtprotoConnectionStateKey),
+              let pid = connection["pid"] as? NSNumber,
+              pid.int32Value == ProcessInfo.processInfo.processIdentifier else {
+            return
+        }
+        let now = Date().timeIntervalSince1970
+        connection["since"] = now
+        connection["updatedAt"] = now
+        defaults.set(connection, forKey: mtprotoConnectionStateKey)
     }
 
     private func writeDiagnostics() {
