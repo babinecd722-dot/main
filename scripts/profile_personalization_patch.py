@@ -443,21 +443,21 @@ def _patch_profile_list_glass(tg: Path) -> None:
     else:
         if "import AorusGramUI\n" not in text:
             text = _replace_once(text, "import UIKit\n", "import UIKit\nimport AorusGramUI\n", "list section import")
+        # Appended after the stock assignments rather than replacing them, and anchored on a
+        # single line. A multi-line anchor has to match three consecutive lines byte for byte,
+        # which is exactly the kind of thing an earlier patch or a reformat quietly breaks —
+        # and a broken anchor here aborts the whole build before anything compiles.
+        anchor = "        self.bottomSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n"
         text = _replace_once(
             text,
-            "        self.backgroundNode.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor\n"
-            "        self.topSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n"
-            "        self.bottomSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n",
-            "        // AorusGram: under Interface 2.0 a section is glass over the tinted page,\n"
+            anchor,
+            anchor
+            + "        // AorusGram: under Interface 2.0 a section is glass over the tinted page,\n"
             "        // so the rows Telegram already draws take on the profile's own colours.\n"
             "        if let aorusColors = AorusGlassProfileTint.listSectionColors {\n"
             "            self.backgroundNode.backgroundColor = aorusColors.background\n"
             "            self.topSeparatorNode.backgroundColor = aorusColors.separator\n"
             "            self.bottomSeparatorNode.backgroundColor = aorusColors.separator\n"
-            "        } else {\n"
-            "            self.backgroundNode.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor\n"
-            "            self.topSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n"
-            "            self.bottomSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n"
             "        }\n",
             "list section colours",
         )
@@ -478,8 +478,7 @@ def _patch_profile_list_glass(tg: Path) -> None:
     # flash the wrong colour before the right one arrives.
     screen = _replace_once(
         screen,
-        "    private func updateBackgroundColor() {\n"
-        "        let color: UIColor\n",
+        "    private func updateBackgroundColor() {\n",
         "    private func updateBackgroundColor() {\n"
         "        // AorusGram: the page carries the avatar's colours the whole way down, so the\n"
         "        // list below the header continues the profile instead of meeting a flat\n"
@@ -487,8 +486,7 @@ def _patch_profile_list_glass(tg: Path) -> None:
         "        if AorusInterfaceV2.isEnabled, let aorusPageColor = AorusGlassProfileTint.pageBackgroundColor {\n"
         "            self.backgroundColor = aorusPageColor\n"
         "            return\n"
-        "        }\n"
-        "        let color: UIColor\n",
+        "        }\n",
         "screen background colour",
     )
     screen_path.write_text(screen, encoding="utf-8")
