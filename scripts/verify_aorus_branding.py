@@ -979,6 +979,11 @@ def main() -> None:
             err.append(f"RealityProxy: authorized-account handoff is missing {marker}")
     if "for aorusDelay in [2.0, 5.0, 12.0, 30.0]" in t:
         err.append("RealityProxy: authorized-account handoff still depends on launch timers")
+    handoff_assignment = t.find("            self.contextValue = context\n")
+    handoff_sentinel = t.find("AorusGram: publish the exact authorized-context transition", handoff_assignment)
+    handoff_restart = t.find("AorusRealityManager.shared.ensureRunning()", handoff_sentinel)
+    if handoff_assignment < 0 or handoff_sentinel < handoff_assignment or handoff_restart < handoff_sentinel:
+        err.append("RealityProxy: authorized-account VLESS handoff is not attached after contextValue assignment")
 
     license_provider = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "LicenseKeyProvider.swift"
     if not license_provider.is_file():
@@ -1052,6 +1057,7 @@ def main() -> None:
             'dictionary(forKey: "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca")',
             "aorusRequirementPid?.int32Value == aorusCurrentPid",
             "aorusPid.int32Value == aorusCurrentPid",
+            'Bundle.main.bundleURL.pathExtension.lowercased() == "appex"',
             'MTSocksProxySettings(ip: "127.0.0.1"',
             "port: 38190",
             "secret: nil",
@@ -1245,9 +1251,17 @@ def main() -> None:
             "scheduleRestartRetryLocked()",
             "cancelRestartRetryLocked(resetAttempt: true)",
             "let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints",
+            "let activeEndpoint = self.activeEndpoint",
+            "nextRanked.contains(activeEndpoint)",
+            "previousCredential == profile.credential",
         ):
             if marker not in reality_manager_text:
                 err.append(f"RealityProxy: core invariant is missing {marker}")
+        keep_start = reality_manager_text.find("if previousCredential == profile.credential")
+        keep_end = reality_manager_text.find('self.recordDiagnostic(stage: "profile_applied")', keep_start)
+        keep_block = reality_manager_text[keep_start:keep_end]
+        if "let preflight = self.realityPreflight(" not in keep_block or "canKeepRunning = preflight == .ready" not in keep_block:
+            err.append("RealityProxy: active endpoint can survive reranking without a fresh full preflight")
         for marker in (
             "AorusRealityManager.shared.profileDidVerify()",
             "AorusRealityManager.shared.recordEndpointProbe(",

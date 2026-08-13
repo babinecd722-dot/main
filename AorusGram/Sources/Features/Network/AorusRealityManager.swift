@@ -116,6 +116,24 @@ private final class AorusSocksProbeState: @unchecked Sendable {
     }
 }
 
+private final class AorusParallelProbeResults: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Int: AorusSocksProbeResult] = [:]
+
+    func set(_ result: AorusSocksProbeResult, at index: Int) {
+        lock.lock()
+        values[index] = result
+        lock.unlock()
+    }
+
+    func snapshot() -> [Int: AorusSocksProbeResult] {
+        lock.lock()
+        let result = values
+        lock.unlock()
+        return result
+    }
+}
+
 private struct AorusRealityBootstrapDiagnostic: Codable {
     let stage: String
     let errorCode: String?
@@ -481,8 +499,8 @@ public final class AorusRealityManager {
     /// Forces the lazy Xray outbound to establish VLESS/REALITY before its local
     /// SOCKS endpoint is published to Telegram. A successful SOCKS CONNECT proves
     /// the full path: local inbound -> selected bridge -> REALITY/VLESS -> remote
-    /// Telegram TCP destination. The second target is only attempted when the first
-    /// Telegram DC address itself cannot be reached through an otherwise live core.
+    /// Telegram TCP destination. Targets are probed concurrently so a blocked DC
+    /// cannot add a second full timeout to foreground recovery.
     private func realityPreflight(port: Int, endpointPriority: Int?) -> AorusSocksProbeResult {
         recordDiagnostic(
             stage: "reality_preflight_started",
@@ -490,16 +508,30 @@ public final class AorusRealityManager {
             endpointPriority: endpointPriority,
             localPort: port
         )
-        var lastResult: AorusSocksProbeResult = .tunnelConnectTimedOut
-        for target in Self.telegramPreflightTargets {
-            guard mayRun else { return .localConnectFailed }
-            let result = socksProbe(
-                port: port,
-                target: target,
-                timeout: realityPreflightTimeout,
-                requireTunnelConnect: true
-            )
-            if result == .ready {
+        guard mayRun else { return .localConnectFailed }
+        let results = AorusParallelProbeResults()
+        let resultReady = DispatchSemaphore(value: 0)
+        for (index, target) in Self.telegramPreflightTargets.enumerated() {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self else {
+                    resultReady.signal()
+                    return
+                }
+                let result = self.socksProbe(
+                    port: port,
+                    target: target,
+                    timeout: self.realityPreflightTimeout,
+                    requireTunnelConnect: true
+                )
+                results.set(result, at: index)
+                resultReady.signal()
+            }
+        }
+
+        let deadline = DispatchTime.now() + realityPreflightTimeout + 0.5
+        for _ in Self.telegramPreflightTargets {
+            if resultReady.wait(timeout: deadline) == .timedOut { break }
+            if results.snapshot().values.contains(.ready), mayRun {
                 recordDiagnostic(
                     stage: "reality_preflight_ready",
                     localSocksReady: true,
@@ -508,12 +540,14 @@ public final class AorusRealityManager {
                 )
                 return .ready
             }
-            lastResult = result
-            if !result.localSocksReady {
-                return result
-            }
         }
-        return lastResult
+
+        guard mayRun else { return .localConnectFailed }
+        let ordered = Self.telegramPreflightTargets.indices.compactMap { results.snapshot()[$0] }
+        if let localFailure = ordered.first(where: { !$0.localSocksReady }) {
+            return localFailure
+        }
+        return ordered.last ?? .tunnelConnectTimedOut
     }
 
     private func recordPreflightFailure(

@@ -4763,6 +4763,9 @@ def patch_info_plist_file_sharing(tg: Path) -> None:
 # Without a subscription the marker is false and Telegram retains its direct path.
 _AORUS_PROXY_SNIPPET = (
     "({ () -> MTSocksProxySettings? in\n"
+    "                // App extensions do not own the in-process libXray core. Do not\n"
+    "                // inherit the main app's PID-bound closed loopback endpoint.\n"
+    "                if Bundle.main.bundleURL.pathExtension.lowercased() == \"appex\" { return nil }\n"
     "                guard let aorusStore = UserDefaults(suiteName: \"ng.session.store\") else {\n"
     "                    return MTSocksProxySettings(ip: \"127.0.0.1\", port: 38190, username: nil, password: nil, secret: nil)\n"
     "                }\n"
