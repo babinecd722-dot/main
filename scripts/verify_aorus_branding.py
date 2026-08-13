@@ -13,6 +13,16 @@ def main() -> None:
     err: list[str] = []
 
     here = Path(__file__).resolve().parent
+    branding_source = (here / "aorus_branding.py").read_text(encoding="utf-8")
+    for marker in (
+        "patch_tgcalls_v2_set_proxy(tg)",
+        "patch_tgcalls_reflector_socks5_udp(tg)",
+    ):
+        if branding_source.count(marker) != 1:
+            err.append(f"CallTransport: expected exactly one active invocation of {marker}")
+    if "    patch_tgcalls_reflector_socks5(tg)" in branding_source:
+        err.append("CallTransport: legacy reflector TCP SOCKS5 patch is enabled")
+
     candidates = [
         tg.parent / "aorusgram" / "patches" / "assets" / "AorusGramAppIcon.png",
         Path("aorusgram/patches/assets/AorusGramAppIcon.png"),
@@ -1138,13 +1148,30 @@ def main() -> None:
         if marker not in web_tunnel_text:
             err.append(f"WebTunnelREALITY: process-bound requirement invariant is missing {marker}")
 
+    atunnel_status = tg / "submodules" / "AorusGramUI" / "Sources" / "ATunnelStatusViewController.swift"
+    atunnel_status_text = atunnel_status.read_text(encoding="utf-8") if atunnel_status.is_file() else ""
+    for marker in (
+        "processBoundTunnelState()",
+        'UserDefaults(suiteName: "ng.session.store")',
+        'requirement?["pid"] as? NSNumber',
+        "requirementPID == currentPID",
+        'requirement?["required"] as? NSNumber',
+        'endpoint?["pid"] as? NSNumber',
+        "endpointPID == currentPID",
+        "currentTunnelBlocked()",
+    ):
+        if marker not in atunnel_status_text:
+            err.append(f"ATunnelDiagnostics: process-bound invariant is missing {marker}")
+
     reality_profile = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusRealityProfile.swift"
     reality_manager = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusRealityManager.swift"
-    if not reality_profile.is_file() or not reality_manager.is_file():
+    reality_proxy = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Network" / "AorusProxyManager.swift"
+    if not reality_profile.is_file() or not reality_manager.is_file() or not reality_proxy.is_file():
         err.append("RealityProxy: embedded core sources are missing")
     else:
         reality_profile_text = reality_profile.read_text(encoding="utf-8")
         reality_manager_text = reality_manager.read_text(encoding="utf-8")
+        reality_proxy_text = reality_proxy.read_text(encoding="utf-8")
         for marker in (
             "AorusRealityEnvelopeVerifier",
             "Curve25519.Signing.PublicKey",
@@ -1169,8 +1196,27 @@ def main() -> None:
             'publishRequirement(required: authorizationAllowsTunnel)',
             '"required": required',
             "AorusSessionMetrics.metricFlag",
-            "waitForCoreAndLocalSocks(port: localPort)",
+            "waitForCoreAndLocalSocks(",
             "localSocksIsReady(port:",
+            "realityPreflight(port:",
+            "telegramPreflightTargets",
+            "reality_preflight_ready",
+            "reality_preflight_failed",
+            "local_socks_connect_timeout",
+            "local_socks_negotiation_timeout",
+            "reality_connect_timeout",
+            "var isRemotePathFailure: Bool",
+            "case .tunnelConnectFailed, .tunnelConnectTimedOut:",
+            "socksConnectRequest(host:",
+            "aorusgram_reality_bootstrap_trace",
+            "profileDidVerify()",
+            "recordEndpointProbe(priority:",
+            "bridge_tcp_reachable",
+            "profile_applied",
+            "realityEndpointDidFail(endpoint)",
+            "rankedEndpoints.remove(at: index)",
+            "rankedEndpoints.append(endpoint)",
+            "rankedEndpoints = [endpoint] + rankedEndpoints.filter",
             "Data([0x05, 0x01, 0x00])",
             "Data([0x05, 0x00])",
             "waitForCoreStop()",
@@ -1181,6 +1227,18 @@ def main() -> None:
         ):
             if marker not in reality_manager_text:
                 err.append(f"RealityProxy: core invariant is missing {marker}")
+        for marker in (
+            "AorusRealityManager.shared.profileDidVerify()",
+            "AorusRealityManager.shared.recordEndpointProbe(",
+            "func realityEndpointDidFail(_ endpoint:",
+            "penalizedEndpoints[endpointKey(endpoint)]",
+        ):
+            if marker not in reality_proxy_text:
+                err.append(f"RealityProxy: provisioner trace invariant is missing {marker}")
+        preflight_index = reality_manager_text.find("let preflight = realityPreflight(")
+        publish_index = reality_manager_text.find("publishEndpoint(port: localPort)", preflight_index)
+        if preflight_index < 0 or publish_index < 0 or publish_index < preflight_index:
+            err.append("RealityProxy: endpoint can be published before full tunnel preflight")
         if 'normalizedAddress != "0.0.0.0"' not in reality_profile_text:
             err.append("RealityProxy: endpoint validation accepts an unspecified address")
 
@@ -1807,6 +1865,8 @@ def main() -> None:
         for marker in (
             '"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"',
             '"aorusgram_proxy_unhealthy_since"',
+            'let pid = requirement["pid"] as? NSNumber',
+            "pid.int32Value == ProcessInfo.processInfo.processIdentifier",
             "aorusUnhealthyThreshold: Double = 8.0",
             'AorusConnectionStrings.localized("failed")',
             'AorusConnectionStrings.localized("connecting")',

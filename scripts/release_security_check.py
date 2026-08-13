@@ -169,6 +169,14 @@ def main() -> int:
             fail(errors, f"web tunnel requirement must be bound to the current process: {marker}")
 
     branding = (root / "scripts/aorus_branding.py").read_text(encoding="utf-8")
+    for marker in (
+        "patch_tgcalls_v2_set_proxy(tg)",
+        "patch_tgcalls_reflector_socks5_udp(tg)",
+    ):
+        if branding.count(marker) != 1:
+            fail(errors, f"call transport must apply exactly once: {marker}")
+    if "    patch_tgcalls_reflector_socks5(tg)" in branding:
+        fail(errors, "legacy reflector TCP SOCKS5 patch is enabled")
     if branding.count("refusing a previously injected source tree") < 2:
         fail(errors, "build injection must reject stale source trees")
     for marker in (
@@ -200,11 +208,13 @@ def main() -> int:
 
     reality_profile_path = root / "AorusGram/Sources/Features/Network/AorusRealityProfile.swift"
     reality_manager_path = root / "AorusGram/Sources/Features/Network/AorusRealityManager.swift"
-    if not reality_profile_path.is_file() or not reality_manager_path.is_file():
+    reality_proxy_path = root / "AorusGram/Sources/Features/Network/AorusProxyManager.swift"
+    if not reality_profile_path.is_file() or not reality_manager_path.is_file() or not reality_proxy_path.is_file():
         fail(errors, "embedded REALITY sources are missing")
     else:
         reality_profile = reality_profile_path.read_text(encoding="utf-8")
         reality_manager = reality_manager_path.read_text(encoding="utf-8")
+        reality_proxy = reality_proxy_path.read_text(encoding="utf-8")
         for marker in (
             "AorusRealityEnvelopeVerifier",
             "Curve25519.Signing.PublicKey",
@@ -224,8 +234,27 @@ def main() -> int:
             '"required": required',
             "AorusSessionMetrics.metricFlag",
             "isReadyForAuthorizedTraffic",
-            "waitForCoreAndLocalSocks(port: localPort)",
+            "waitForCoreAndLocalSocks(",
             "localSocksIsReady(port:",
+            "realityPreflight(port:",
+            "telegramPreflightTargets",
+            "reality_preflight_ready",
+            "reality_preflight_failed",
+            "local_socks_connect_timeout",
+            "local_socks_negotiation_timeout",
+            "reality_connect_timeout",
+            "var isRemotePathFailure: Bool",
+            "case .tunnelConnectFailed, .tunnelConnectTimedOut:",
+            "socksConnectRequest(host:",
+            "aorusgram_reality_bootstrap_trace",
+            "profileDidVerify()",
+            "recordEndpointProbe(priority:",
+            "bridge_tcp_reachable",
+            "profile_applied",
+            "realityEndpointDidFail(endpoint)",
+            "rankedEndpoints.remove(at: index)",
+            "rankedEndpoints.append(endpoint)",
+            "rankedEndpoints = [endpoint] + rankedEndpoints.filter",
             "Data([0x05, 0x01, 0x00])",
             "Data([0x05, 0x00])",
             "waitForCoreStop()",
@@ -236,6 +265,18 @@ def main() -> int:
         ):
             if marker not in reality_manager:
                 fail(errors, f"REALITY manager invariant is missing {marker}")
+        for marker in (
+            "AorusRealityManager.shared.profileDidVerify()",
+            "AorusRealityManager.shared.recordEndpointProbe(",
+            "func realityEndpointDidFail(_ endpoint:",
+            "penalizedEndpoints[endpointKey(endpoint)]",
+        ):
+            if marker not in reality_proxy:
+                fail(errors, f"REALITY provisioner trace invariant is missing {marker}")
+        preflight_index = reality_manager.find("let preflight = realityPreflight(")
+        publish_index = reality_manager.find("publishEndpoint(port: localPort)", preflight_index)
+        if preflight_index < 0 or publish_index < 0 or publish_index < preflight_index:
+            fail(errors, "REALITY endpoint can be published before the full tunnel preflight")
         if 'normalizedAddress != "0.0.0.0"' not in reality_profile:
             fail(errors, "REALITY endpoint validation accepts an unspecified address")
         for forbidden in ("104.143.218.253", "7c2fb9b6-fcb9-4715-8752-49f6534e3017"):
@@ -248,6 +289,30 @@ def main() -> int:
         ):
             if forbidden in reality_profile or forbidden in reality_manager:
                 fail(errors, f"static REALITY profile path remains: {forbidden}")
+
+    atunnel_status_path = root / "patches/submodules/AorusGramUI/Sources/ATunnelStatusViewController.swift"
+    atunnel_status = atunnel_status_path.read_text(encoding="utf-8")
+    for marker in (
+        "processBoundTunnelState()",
+        'UserDefaults(suiteName: "ng.session.store")',
+        'requirement?["pid"] as? NSNumber',
+        "requirementPID == currentPID",
+        'requirement?["required"] as? NSNumber',
+        'endpoint?["pid"] as? NSNumber',
+        "endpointPID == currentPID",
+        "currentTunnelBlocked()",
+    ):
+        if marker not in atunnel_status:
+            fail(errors, f"ATunnel process-bound diagnostic invariant is missing {marker}")
+
+    connection_status_path = root / "patches/submodules/ChatListUI/Sources/AorusConnectionStatus.swift"
+    connection_status = connection_status_path.read_text(encoding="utf-8")
+    for marker in (
+        'let pid = requirement["pid"] as? NSNumber',
+        "pid.int32Value == ProcessInfo.processInfo.processIdentifier",
+    ):
+        if marker not in connection_status:
+            fail(errors, f"connection title process binding is missing {marker}")
 
     license_gate_path = root / "AorusGram/Sources/Features/Subscription/LicenseGate.swift"
     if not license_gate_path.is_file():

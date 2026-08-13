@@ -121,6 +121,11 @@ public final class AorusProxyManager {
         lock.lock()
         let didChangeEndpoint = activeEndpoint != endpoint
         activeEndpoint = endpoint
+        penalizedEndpoints.removeValue(forKey: endpointKey(endpoint))
+        if let index = rankedEndpoints.firstIndex(of: endpoint), index != 0 {
+            rankedEndpoints.remove(at: index)
+            rankedEndpoints.insert(endpoint, at: 0)
+        }
         statuses = statuses.map {
             ATunnelDiagData.Server(
                 region: $0.region,
@@ -138,6 +143,32 @@ public final class AorusProxyManager {
         writeDiagnostics()
     }
 
+    func realityEndpointDidFail(_ endpoint: AorusRealityEndpoint) {
+        lock.lock()
+        penalizedEndpoints[endpointKey(endpoint)] = Date().addingTimeInterval(endpointPenaltyDuration)
+        if activeEndpoint == endpoint {
+            activeEndpoint = nil
+        }
+        if let index = rankedEndpoints.firstIndex(of: endpoint) {
+            rankedEndpoints.remove(at: index)
+            rankedEndpoints.append(endpoint)
+        }
+        let failedRegion = endpointLabel(endpoint)
+        statuses = statuses.map {
+            guard $0.region == failedRegion else { return $0 }
+            return ATunnelDiagData.Server(
+                region: $0.region,
+                available: false,
+                active: false,
+                latencyMs: $0.latencyMs,
+                jitterMs: $0.jitterMs,
+                lossCount: $0.lossCount
+            )
+        }
+        lock.unlock()
+        writeDiagnostics()
+    }
+
     public func refresh(force: Bool = false, completion: ((Bool) -> Void)? = nil) {
         guard licenseAllowsReality else {
             clearProvisioning(stopTunnel: true)
@@ -149,6 +180,7 @@ public final class AorusProxyManager {
         if !force, let profile, profile.isValid(for: DeviceFingerprint.deviceHash()), Date() < nextRefreshAt {
             let endpoints = rankedEndpoints
             lock.unlock()
+            AorusRealityManager.shared.profileDidVerify()
             AorusRealityManager.shared.apply(profile: profile, rankedEndpoints: endpoints)
             DispatchQueue.main.async { completion?(true) }
             return
@@ -231,6 +263,7 @@ public final class AorusProxyManager {
                 return
             }
 
+            AorusRealityManager.shared.profileDidVerify()
             self.rankEndpoints(profile.endpoints) { ranked, statuses in
                 guard self.licenseAllowsReality else {
                     self.clearProvisioning(stopTunnel: true)
@@ -456,6 +489,13 @@ public final class AorusProxyManager {
                     latencyMs: metrics.latency.map { Int(($0 * 1000).rounded()) },
                     jitterMs: metrics.jitter.map { Int(($0 * 1000).rounded()) },
                     lossCount: metrics.lossCount
+                )
+            }
+            for endpoint in endpoints.sorted(by: { $0.priority < $1.priority }) {
+                let available = metricsByEndpoint[self.endpointKey(endpoint)]?.latency != nil
+                AorusRealityManager.shared.recordEndpointProbe(
+                    priority: endpoint.priority,
+                    available: available
                 )
             }
             completion(sorted, statuses)

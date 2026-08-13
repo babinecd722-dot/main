@@ -37,6 +37,8 @@ private let aorusUnhealthyThreshold: Double = 8.0
 func aorusConnectingTitle(fallback: String) -> String {
     guard let store = UserDefaults(suiteName: aorusTunnelSuiteName),
           let requirement = store.dictionary(forKey: aorusTunnelRequirementKey),
+          let pid = requirement["pid"] as? NSNumber,
+          pid.int32Value == ProcessInfo.processInfo.processIdentifier,
           (requirement["required"] as? NSNumber)?.boolValue == true else {
         return fallback
     }
