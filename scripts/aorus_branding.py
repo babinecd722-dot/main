@@ -3836,9 +3836,11 @@ def patch_app_delegate_publish_account_id(tg: Path) -> None:
     auto-reply hook uses) and post it on NotificationCenter; AorusGramBootstrap
     forwards it to LicenseGate.setTelegramUserId (which de-dupes).
 
-    We publish on a few staggered delays (to catch both an already-logged-in cold
-    start and a login that completes mid-session) and again on every foreground.
-    Nothing sensitive is logged.
+    Publish from the real AuthorizedApplicationContext transition rather than from
+    launch timers. Login can finish after any fixed delay, and the new Account owns
+    a different Network than UnauthorizedAccount. Re-applying the already verified
+    process-local tunnel at this exact transition prevents the authorized network
+    from remaining on its initial closed loopback endpoint.
     """
     path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
     if not path.is_file():
@@ -3849,31 +3851,29 @@ def patch_app_delegate_publish_account_id(tg: Path) -> None:
         print("PublishAccountId: already injected")
         return
 
-    sentinel = "// AorusGram: publish active Telegram account id"
+    sentinel = "// AorusGram: publish the exact authorized-context transition"
     hook = (
-        "\n        " + sentinel + "\n"
-        "        let aorusgramPublishAccountId: () -> Void = { [weak self] in\n"
-        "            guard let app = self?.contextValue else { return }\n"
-        "            let aorusUid = app.context.account.peerId.id._internalGetInt64Value()\n"
-        "            guard aorusUid != 0 else { return }\n"
-        "            NotificationCenter.default.post(\n"
-        "                name: NSNotification.Name(\"aorusgram.activeAccountId\"),\n"
-        "                object: nil, userInfo: [\"telegramUserId\": NSNumber(value: aorusUid)])\n"
-        "        }\n"
-        "        for aorusDelay in [2.0, 5.0, 12.0, 30.0] {\n"
-        "            DispatchQueue.main.asyncAfter(deadline: .now() + aorusDelay, execute: aorusgramPublishAccountId)\n"
-        "        }\n"
-        "        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification,\n"
-        "            object: nil, queue: .main) { _ in aorusgramPublishAccountId() }\n"
+        "            " + sentinel + "\n"
+        "            if let context = context {\n"
+        "                let aorusUid = context.context.account.peerId.id._internalGetInt64Value()\n"
+        "                if aorusUid != 0 {\n"
+        "                    NotificationCenter.default.post(\n"
+        "                        name: NSNotification.Name(\"aorusgram.activeAccountId\"),\n"
+        "                        object: nil,\n"
+        "                        userInfo: [\"telegramUserId\": NSNumber(value: aorusUid)]\n"
+        "                    )\n"
+        "                }\n"
+        "                AorusRealityManager.shared.ensureRunning()\n"
+        "            }\n"
     )
 
-    anchor = "AorusGramBootstrap.shared.setup(accountPath: rootPath)"
+    anchor = "            self.contextValue = context\n"
     if anchor in t:
         t = t.replace(anchor, anchor + hook, 1)
         path.write_text(t, encoding="utf-8")
-        print("PublishAccountId: account-id publisher injected after bootstrap call")
+        print("PublishAccountId: publisher injected at AuthorizedApplicationContext transition")
     else:
-        print("PublishAccountId: bootstrap anchor not found — skipped gracefully")
+        raise RuntimeError("PublishAccountId: AuthorizedApplicationContext anchor not found")
 
 
 def patch_app_delegate_activate_deeplink(tg: Path) -> None:
@@ -4763,6 +4763,9 @@ def patch_info_plist_file_sharing(tg: Path) -> None:
 # Without a subscription the marker is false and Telegram retains its direct path.
 _AORUS_PROXY_SNIPPET = (
     "({ () -> MTSocksProxySettings? in\n"
+    "                // App extensions do not own the in-process libXray core. Do not\n"
+    "                // inherit the main app's PID-bound closed loopback endpoint.\n"
+    "                if Bundle.main.bundleURL.pathExtension.lowercased() == \"appex\" { return nil }\n"
     "                guard let aorusStore = UserDefaults(suiteName: \"ng.session.store\") else {\n"
     "                    return MTSocksProxySettings(ip: \"127.0.0.1\", port: 38190, username: nil, password: nil, secret: nil)\n"
     "                }\n"
@@ -5046,8 +5049,10 @@ def patch_unauthorized_system_proxy_runtime_monitor(tg: Path) -> None:
         "        }\n"
         "        self.aorusConnectionStatusDisposable = network.connectionStatus.start(next: { status in\n"
         "            let defaults = UserDefaults.standard\n"
-        "            let unhealthyKey = \"aorusgram_proxy_unhealthy_since\"\n"
-        "            let connectionKey = \"aorusgram_vless_connection_state\"\n"
+        # UnauthorizedAccount exists only for phone/code login and can overlap the
+        # newly-created authorized Account briefly. Never let its stale connection
+        # status overwrite the authorized watchdog state during that handoff.
+        "            let connectionKey = \"aorusgram_vless_unauthorized_connection_state\"\n"
         "            let state: String\n"
         "            switch status {\n"
         "            case .waitingForNetwork:\n"
@@ -5072,13 +5077,6 @@ def patch_unauthorized_system_proxy_runtime_monitor(tg: Path) -> None:
         "                \"since\": since,\n"
         "                \"updatedAt\": now\n"
         "            ], forKey: connectionKey)\n"
-        "            if case let .connecting(_, proxyHasIssues) = status, proxyHasIssues {\n"
-        "                if defaults.double(forKey: unhealthyKey) == 0 {\n"
-        "                    defaults.set(now, forKey: unhealthyKey)\n"
-        "                }\n"
-        "            } else if defaults.double(forKey: unhealthyKey) != 0 {\n"
-        "                defaults.set(0, forKey: unhealthyKey)\n"
-        "            }\n"
         "        })\n"
         "    }\n"
         "\n"

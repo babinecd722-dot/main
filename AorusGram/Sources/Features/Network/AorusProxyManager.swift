@@ -16,6 +16,7 @@ private struct AorusRealityWorkerResponse: Decodable {
 private struct ATunnelDiagData: Codable {
     struct Server: Codable {
         let region: String
+        let endpointPriority: Int
         let available: Bool
         let active: Bool
         let latencyMs: Int?
@@ -129,8 +130,9 @@ public final class AorusProxyManager {
         statuses = statuses.map {
             ATunnelDiagData.Server(
                 region: $0.region,
+                endpointPriority: $0.endpointPriority,
                 available: $0.available,
-                active: $0.region == endpointLabel(endpoint),
+                active: $0.endpointPriority == endpoint.priority,
                 latencyMs: $0.latencyMs,
                 jitterMs: $0.jitterMs,
                 lossCount: $0.lossCount
@@ -153,11 +155,11 @@ public final class AorusProxyManager {
             rankedEndpoints.remove(at: index)
             rankedEndpoints.append(endpoint)
         }
-        let failedRegion = endpointLabel(endpoint)
         statuses = statuses.map {
-            guard $0.region == failedRegion else { return $0 }
+            guard $0.endpointPriority == endpoint.priority else { return $0 }
             return ATunnelDiagData.Server(
                 region: $0.region,
+                endpointPriority: $0.endpointPriority,
                 available: false,
                 active: false,
                 latencyMs: $0.latencyMs,
@@ -196,11 +198,10 @@ public final class AorusProxyManager {
         lock.unlock()
 
         guard let signedRequest = buildSignedRequest() else {
-            // A request that cannot be signed is a local integrity/configuration
-            // failure, not a transient network race. Never retry it as though the
-            // license were temporarily offline and never permit a direct fallback.
-            clearProvisioning(stopTunnel: true)
-            finish(generation: requestGeneration, success: false, completion: completion)
+            // Keychain can be briefly unavailable while the device is unlocking.
+            // Keep the subscribed session fail-closed, but do not strand it until
+            // the next foreground transition: retry the complete signed flow.
+            handleFetchFailure(generation: requestGeneration, completion: completion)
             return
         }
 
@@ -216,34 +217,32 @@ public final class AorusProxyManager {
                 return
             }
             if http.statusCode == 401 || http.statusCode == 403 {
-                self.clearProvisioning(stopTunnel: true)
-                self.finish(generation: requestGeneration, success: false, completion: completion)
+                // An authorization rejection invalidates the current tunnel
+                // immediately. Retry only to recover from a stale edge/cache;
+                // traffic remains fail-closed and no rejected profile is reused.
+                self.handleProvisioningRejection(generation: requestGeneration, completion: completion)
                 return
             }
 
-            // Retry only transport/service availability failures. Other non-200
-            // responses are authoritative protocol/configuration failures and must
-            // not be converted into an offline-grace provisioning loop.
             guard http.statusCode == 200 else {
                 if http.statusCode == 408 || http.statusCode == 429 || (500 ... 599).contains(http.statusCode) {
                     self.handleFetchFailure(generation: requestGeneration, completion: completion)
                 } else {
-                    self.clearProvisioning(stopTunnel: true)
-                    self.finish(generation: requestGeneration, success: false, completion: completion)
+                    // Unknown client errors must not become a permanent closed-port
+                    // state. Discard all tunnel material, then retry from scratch.
+                    self.handleProvisioningRejection(generation: requestGeneration, completion: completion)
                 }
                 return
             }
 
-            // A malformed or unverifiable control-plane response is an integrity
-            // failure. Keep the subscribed client fail-closed and do not retry it as
-            // a network outage; a later foreground/server license check can start a
-            // fresh, independently signed provisioning attempt.
+            // Never accept malformed control-plane data. A still-valid, previously
+            // signed profile may run only until its own signed expiry; otherwise the
+            // client stays fail-closed and retries provisioning with bounded backoff.
             guard let data, data.count <= 70_000,
                   let worker = try? JSONDecoder().decode(AorusRealityWorkerResponse.self, from: data),
                   worker.schema == 2,
                   (1 ... 300).contains(worker.ttl) else {
-                self.clearProvisioning(stopTunnel: true)
-                self.finish(generation: requestGeneration, success: false, completion: completion)
+                self.handleFetchFailure(generation: requestGeneration, completion: completion)
                 return
             }
 
@@ -252,8 +251,7 @@ public final class AorusProxyManager {
                 worker.realityEnvelope,
                 expectedDeviceHash: deviceHash
             ) else {
-                self.clearProvisioning(stopTunnel: true)
-                self.finish(generation: requestGeneration, success: false, completion: completion)
+                self.handleFetchFailure(generation: requestGeneration, completion: completion)
                 return
             }
 
@@ -319,6 +317,17 @@ public final class AorusProxyManager {
             scheduleProvisioningRetry()
         }
         finish(generation: generation, success: usable, completion: completion)
+    }
+
+    /// Handles an authoritative HTTP rejection without weakening fail-closed.
+    /// Existing VLESS material is removed immediately; retries can only restore
+    /// connectivity after a new authenticated request and signed profile succeed.
+    private func handleProvisioningRejection(generation: UInt64, completion: ((Bool) -> Void)?) {
+        clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false)
+        if licenseAllowsReality {
+            scheduleProvisioningRetry()
+        }
+        finish(generation: generation, success: false, completion: completion)
     }
 
     private func finish(generation: UInt64, success: Bool, completion: ((Bool) -> Void)?) {
@@ -484,6 +493,7 @@ public final class AorusProxyManager {
                 )
                 return ATunnelDiagData.Server(
                     region: self.endpointLabel(endpoint),
+                    endpointPriority: endpoint.priority,
                     available: metrics.latency != nil,
                     active: false,
                     latencyMs: metrics.latency.map { Int(($0 * 1000).rounded()) },

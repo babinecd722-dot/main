@@ -143,13 +143,36 @@ def main() -> int:
     signed_guard_start = proxy.find("guard let signedRequest = buildSignedRequest()")
     signed_guard_end = proxy.find("let task = apiSession.dataTask", signed_guard_start)
     signed_guard = proxy[signed_guard_start:signed_guard_end]
-    if "scheduleProvisioningRetry" in signed_guard or "handleFetchFailure" in signed_guard:
-        fail(errors, "an unsigned VLESS request must fail closed without network-style retries")
+    if "handleFetchFailure" not in signed_guard:
+        fail(errors, "an unavailable VLESS device signature can permanently strand provisioning")
+    if "apiSession" in signed_guard or ".resume()" in signed_guard:
+        fail(errors, "VLESS must never send a request before device/build signing succeeds")
     for status in ("http.statusCode == 401", "http.statusCode == 403"):
         if status not in proxy:
             fail(errors, f"VLESS authorization failure must fail closed: {status}")
+    if "handleProvisioningRejection(generation:" not in proxy:
+        fail(errors, "VLESS authorization rejection recovery is missing")
     if "http.statusCode == 408 || http.statusCode == 429 || (500 ... 599).contains(http.statusCode)" not in proxy:
-        fail(errors, "VLESS retries must be limited to transient HTTP failures")
+        fail(errors, "transient VLESS HTTP failures must preserve a still-valid signed profile")
+    rejection_start = proxy.find("private func handleProvisioningRejection(")
+    rejection_end = proxy.find("private func finish(", rejection_start)
+    rejection_block = proxy[rejection_start:rejection_end]
+    for marker in (
+        "clearProvisioning(stopTunnel: true, cancelProvisioningRetry: false)",
+        "if licenseAllowsReality",
+        "scheduleProvisioningRetry()",
+    ):
+        if marker not in rejection_block:
+            fail(errors, f"VLESS rejection recovery must stay fail-closed and license-gated: {marker}")
+    if "cachedProfile" in rejection_block or "shared.apply" in rejection_block:
+        fail(errors, "an authorization-rejected VLESS profile must never be reused")
+    for marker in (
+        "let endpointPriority: Int",
+        "active: $0.endpointPriority == endpoint.priority",
+        "guard $0.endpointPriority == endpoint.priority else { return $0 }",
+    ):
+        if marker not in proxy:
+            fail(errors, f"VLESS diagnostics/failover must identify one signed endpoint exactly: {marker}")
 
     call_proxy = (root / "patches/submodules/TelegramCallsUI/Sources/AorusCallProxy.swift").read_text(encoding="utf-8")
     for marker in (
@@ -184,6 +207,7 @@ def main() -> int:
         'dictionary(forKey: \\"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca\\")',
         'aorusRequirementPid?.int32Value == aorusCurrentPid',
         'aorusPid.int32Value == aorusCurrentPid',
+        'Bundle.main.bundleURL.pathExtension.lowercased() == \\"appex\\"',
         'MTSocksProxySettings(ip: \\"127.0.0.1\\"',
         'port: 38190',
         'aorusgram_vless_connection_state',
@@ -193,12 +217,19 @@ def main() -> int:
         "AorusGram: hot-apply REALITY to the unauthorized login network",
         "private var aorusProxyObserver: NSObjectProtocol?",
         "private var aorusConnectionStatusDisposable: Disposable?",
+        'aorusgram_vless_unauthorized_connection_state',
         '\\"since\\": aorusStateSince',
         "NotificationCenter.default.removeObserver(aorusProxyObserver)",
         "self.aorusConnectionStatusDisposable?.dispose()",
+        "AorusGram: publish the exact authorized-context transition",
+        "AorusRealityManager.shared.ensureRunning()",
     ):
         if marker not in branding:
             fail(errors, f"REALITY loopback bridge invariant is missing {marker}")
+    if "for aorusDelay in [2.0, 5.0, 12.0, 30.0]" in branding:
+        fail(errors, "authorized-account VLESS handoff must not depend on launch timers")
+    if 'anchor = "            self.contextValue = context\\n"' not in branding or "t.replace(anchor, anchor + hook, 1)" not in branding:
+        fail(errors, "authorized-account VLESS handoff must run after contextValue assignment")
     for forbidden in (
         "aorusSecret.insert(0xdd, at: 0)",
         "aorusIsPadded",
@@ -237,6 +268,7 @@ def main() -> int:
             "waitForCoreAndLocalSocks(",
             "localSocksIsReady(port:",
             "realityPreflight(port:",
+            "nextRanked.contains(activeEndpoint)",
             "telegramPreflightTargets",
             "reality_preflight_ready",
             "reality_preflight_failed",
@@ -247,6 +279,9 @@ def main() -> int:
             "case .tunnelConnectFailed, .tunnelConnectTimedOut:",
             "socksConnectRequest(host:",
             "aorusgram_reality_bootstrap_trace",
+            "AorusParallelProbeResults",
+            "DispatchQueue.global(qos: .userInitiated).async",
+            "results.snapshot().values.contains(.ready)",
             "profileDidVerify()",
             "recordEndpointProbe(priority:",
             "bridge_tcp_reachable",
@@ -262,9 +297,17 @@ def main() -> int:
             "scheduleRestartRetryLocked()",
             "cancelRestartRetryLocked(resetAttempt: true)",
             "let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints",
+            "let activeEndpoint = self.activeEndpoint",
+            "nextRanked.contains(activeEndpoint)",
+            "previousCredential == profile.credential",
         ):
             if marker not in reality_manager:
                 fail(errors, f"REALITY manager invariant is missing {marker}")
+        keep_start = reality_manager.find("if previousCredential == profile.credential")
+        keep_end = reality_manager.find("self.recordDiagnostic(stage: \"profile_applied\")", keep_start)
+        keep_block = reality_manager[keep_start:keep_end]
+        if "let preflight = self.realityPreflight(" not in keep_block or "canKeepRunning = preflight == .ready" not in keep_block:
+            fail(errors, "REALITY must retain the active ranked endpoint only after a fresh full preflight")
         for marker in (
             "AorusRealityManager.shared.profileDidVerify()",
             "AorusRealityManager.shared.recordEndpointProbe(",
