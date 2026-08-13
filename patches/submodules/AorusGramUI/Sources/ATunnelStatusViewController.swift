@@ -24,6 +24,11 @@ private struct ATunnelDiag: Codable {
     let updatedAt: Double
 }
 
+private struct ATunnelProcessBoundState {
+    let required: Bool
+    let ready: Bool
+}
+
 // MARK: - Duck animation (TGS)
 // Same pattern as SubscriptionDuckView — materialize base64 to tmp, feed LocalTgsSource.
 
@@ -1265,24 +1270,39 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
             guard let self = self else { return }
             self.stepRows[self.kStepSelect].setState(.running)
             let newActive = self.currentActiveRegion()
-            let allDown   = self.currentAllDown()
+            let serversDown = self.currentServersDown()
+            let tunnelBlocked = self.currentTunnelBlocked()
+            let connectionFailed = serversDown || tunnelBlocked
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self = self else { return }
-                self.stepRows[self.kStepSelect].setState(allDown ? .fail : .ok)
+                self.stepRows[self.kStepSelect].setState(serversDown ? .fail : .ok)
                 self.stepRows[self.kStepApply].setState(.running)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
                     guard let self = self else { return }
-                    self.stepRows[self.kStepApply].setState(allDown ? .fail : .ok)
-                    self.showResult(prev: self.snapshotActiveRegion, new: newActive, allDown: allDown)
+                    self.stepRows[self.kStepApply].setState(connectionFailed ? .fail : .ok)
+                    self.showResult(
+                        prev: self.snapshotActiveRegion,
+                        new: newActive,
+                        serversDown: serversDown,
+                        tunnelBlocked: tunnelBlocked
+                    )
                 }
             }
         }
     }
 
-    private func showResult(prev: String?, new: String?, allDown: Bool) {
-        diagnosticsBanner.setCompleted(!allDown && new != nil)
+    private func showResult(prev: String?, new: String?, serversDown: Bool, tunnelBlocked: Bool) {
+        diagnosticsBanner.setCompleted(!serversDown && !tunnelBlocked && new != nil)
         let cfg = UIImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
-        if allDown {
+        if tunnelBlocked {
+            resultIcon.image = UIImage(systemName: "lock.slash.fill", withConfiguration: cfg)
+            resultIcon.tintColor = .systemRed
+            resultTitle.text = aorusL("Туннель не подключён", "Tunnel is not connected")
+            resultBody.text = aorusL(
+                "Сервер отвечает, но защищённый маршрут не установлен.",
+                "The server responds, but the protected route is not established."
+            )
+        } else if serversDown {
             resultIcon.image = UIImage(systemName: "wifi.slash", withConfiguration: cfg)
             resultIcon.tintColor = .systemRed
             resultTitle.text = aorusL("Серверы недоступны", "Servers unreachable")
@@ -1313,7 +1333,26 @@ private final class ATunnelDiagnosticsViewController: UIViewController {
     }
     private func currentActiveRegion() -> String? { parsedDiag()?.servers.first(where: { $0.active })?.region }
     private func currentUpdatedAt() -> Double      { parsedDiag()?.updatedAt ?? 0 }
-    private func currentAllDown() -> Bool          { parsedDiag()?.servers.allSatisfy { !$0.available } ?? true }
+    private func currentServersDown() -> Bool      { parsedDiag()?.servers.allSatisfy { !$0.available } ?? true }
+    private func currentTunnelBlocked() -> Bool {
+        let state = processBoundTunnelState()
+        return state.required && !state.ready
+    }
+
+    private func processBoundTunnelState() -> ATunnelProcessBoundState {
+        guard let store = UserDefaults(suiteName: "ng.session.store") else {
+            return ATunnelProcessBoundState(required: false, ready: false)
+        }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        let requirement = store.dictionary(forKey: "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca")
+        let requirementPID = (requirement?["pid"] as? NSNumber)?.int32Value
+        let required = requirementPID == currentPID && (requirement?["required"] as? NSNumber)?.boolValue == true
+        let endpoint = store.dictionary(forKey: "71d447f8-9128-4d18-b63c-ec11ef43ba26")
+        let endpointPID = (endpoint?["pid"] as? NSNumber)?.int32Value
+        let endpointPort = (endpoint?["port"] as? NSNumber)?.intValue ?? 0
+        let ready = endpointPID == currentPID && (1 ... 65_535).contains(endpointPort)
+        return ATunnelProcessBoundState(required: required, ready: ready)
+    }
 
     @objc private func closeTapped() {
         closeButton.isEnabled = false
