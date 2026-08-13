@@ -138,11 +138,11 @@ public final class AorusGramBootstrap {
             }
         }
 
-        // Active Telegram account id → license gate. Published from AppDelegate
-        // (cold start + each foreground) and from TelegramCore after a state sync,
-        // both via NotificationCenter (branding.py injects the publishers). The gate
-        // de-dupes, so multiple publishers are harmless. This is what lets keys issued
-        // to a specific Telegram ID activate (check/bootstrap/activate carry the id).
+        // Active Telegram account id → license gate. AppDelegate publishes at the
+        // exact AuthorizedApplicationContext transition, while TelegramCore can
+        // republish after state sync. The gate de-dupes both sources. This is what lets
+        // keys issued to a specific Telegram ID activate (check/bootstrap/activate
+        // carry the id) without relying on launch timers that can expire before login.
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("aorusgram.activeAccountId"),
             object: nil,

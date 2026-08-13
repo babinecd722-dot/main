@@ -966,6 +966,20 @@ def main() -> None:
             elif anchor != encryption_anchor and bootstrap_position > t.index(anchor):
                 err.append(f"AppDelegate: {message}")
 
+    # Login completion is event-driven. Fixed launch delays miss users who finish
+    # phone/code authorization later and leave the new authorized Network attached
+    # to the closed bootstrap endpoint forever.
+    for marker in (
+        "AorusGram: publish the exact authorized-context transition",
+        "self.contextValue = context",
+        "AorusRealityManager.shared.ensureRunning()",
+        'NSNotification.Name("aorusgram.activeAccountId")',
+    ):
+        if marker not in t:
+            err.append(f"RealityProxy: authorized-account handoff is missing {marker}")
+    if "for aorusDelay in [2.0, 5.0, 12.0, 30.0]" in t:
+        err.append("RealityProxy: authorized-account handoff still depends on launch timers")
+
     license_provider = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "Subscription" / "LicenseKeyProvider.swift"
     if not license_provider.is_file():
         err.append("LicenseKeyProvider.swift is missing")
@@ -1090,6 +1104,7 @@ def main() -> None:
                 'NSNotification.Name("aorusgram_proxy_config_updated")',
                 "network.context.updateApiEnvironment",
                 "network.connectionStatus.start",
+                '"aorusgram_vless_unauthorized_connection_state"',
                 '"since": since',
                 "network.dropConnectionStatus()",
                 "withUpdatedSocksProxySettings(updated)",
@@ -1098,6 +1113,12 @@ def main() -> None:
             ):
                 if marker not in unauthorized_text:
                     err.append(f"RealityProxy: cold-login hot-apply is missing {marker}")
+            for forbidden in (
+                '"aorusgram_vless_connection_state"',
+                '"aorusgram_proxy_unhealthy_since"',
+            ):
+                if forbidden in unauthorized_text:
+                    err.append(f"RealityProxy: cold-login state can overwrite authorized watchdog {forbidden}")
         # Telegram's phone/code screen uses UnauthorizedAccount.  Guard both the
         # persisted-unauthorized and first-account branches against upstream drift.
         if account_text.count("return initializedNetwork(accountId: id") < 3:

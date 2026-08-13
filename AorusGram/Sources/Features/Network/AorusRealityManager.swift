@@ -241,13 +241,21 @@ public final class AorusRealityManager {
             self.profile = profile
             self.rankedEndpoints = nextRanked
             var canKeepRunning = false
+            // Endpoint ranking is advisory. Latency/jitter probes can reorder two
+            // healthy bridges on every profile refresh or path update; restarting
+            // Xray merely because the current bridge moved from rank 1 to rank 2
+            // tears down a valid MTProto session and leaves Telegram in Updating.
+            // Keep the current signed endpoint while its full REALITY preflight is
+            // healthy. Rotation, removal from the signed profile, or an actual
+            // preflight failure still takes the normal restart/failover path.
             if previousCredential == profile.credential,
                self.isCoreRunning(),
                let activePort = self.activePort,
-               self.activeEndpoint == nextRanked.first {
+               let activeEndpoint = self.activeEndpoint,
+               nextRanked.contains(activeEndpoint) {
                 let preflight = self.realityPreflight(
                     port: activePort,
-                    endpointPriority: self.activeEndpoint?.priority
+                    endpointPriority: activeEndpoint.priority
                 )
                 canKeepRunning = preflight == .ready
                 if !canKeepRunning {

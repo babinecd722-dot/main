@@ -193,12 +193,17 @@ def main() -> int:
         "AorusGram: hot-apply REALITY to the unauthorized login network",
         "private var aorusProxyObserver: NSObjectProtocol?",
         "private var aorusConnectionStatusDisposable: Disposable?",
+        'aorusgram_vless_unauthorized_connection_state',
         '\\"since\\": aorusStateSince',
         "NotificationCenter.default.removeObserver(aorusProxyObserver)",
         "self.aorusConnectionStatusDisposable?.dispose()",
+        "AorusGram: publish the exact authorized-context transition",
+        "AorusRealityManager.shared.ensureRunning()",
     ):
         if marker not in branding:
             fail(errors, f"REALITY loopback bridge invariant is missing {marker}")
+    if "for aorusDelay in [2.0, 5.0, 12.0, 30.0]" in branding:
+        fail(errors, "authorized-account VLESS handoff must not depend on launch timers")
     for forbidden in (
         "aorusSecret.insert(0xdd, at: 0)",
         "aorusIsPadded",
@@ -237,6 +242,7 @@ def main() -> int:
             "waitForCoreAndLocalSocks(",
             "localSocksIsReady(port:",
             "realityPreflight(port:",
+            "nextRanked.contains(activeEndpoint)",
             "telegramPreflightTargets",
             "reality_preflight_ready",
             "reality_preflight_failed",
