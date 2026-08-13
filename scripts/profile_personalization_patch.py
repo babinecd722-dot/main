@@ -178,6 +178,9 @@ _GLASS_PROFILE_METHODS = '''
                 self.regularContentNode.alpha = 1.0
                 self.avatarOverlayNode.alpha = 1.0
             }
+            // Cleared, not left behind: a stock profile must draw its tab bar exactly as
+            // Telegram does, including right after leaving a glass one.
+            AorusGlassProfileTint.selectedTabColor = nil
             return nil
         }
 
@@ -275,6 +278,9 @@ _GLASS_PROFILE_METHODS = '''
         )
 
         let height = self.aorusGlassProfileView.update(model: model, width: width)
+        // Published after the update so the tab bar picks up the palette the avatar produced
+        // on this pass, not the one from before the photo finished loading.
+        AorusGlassProfileTint.selectedTabColor = self.aorusGlassProfileView.currentPalette.accentText
         self.aorusGlassProfileView.frame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: height))
         return height
     }
@@ -366,6 +372,82 @@ def _patch_glass_profile(tg: Path) -> None:
     )
     path.write_text(text, encoding="utf-8")
     print("GlassProfile: patched PeerInfoHeaderNode")
+
+
+def _patch_profile_tabs_tint(tg: Path) -> None:
+    """Let the profile tab bar paint its selected tab with the avatar's colour.
+
+    Telegram's tab bar is already the glass capsule Interface 2.0 wants, so it is kept and
+    tinted rather than replaced — substituting a simpler control would cost tab reordering,
+    context menus, badges, gift icons and the dozen-odd pane kinds it knows how to title.
+    Both the regular and the selected copy of a tab are rendered from the same ItemComponent
+    with the same colour, the selection being drawn by a lens moving across them; this makes
+    the selected copy able to take a different one.
+    """
+    path = tg / "submodules/TelegramUI/Components/HorizontalTabsComponent/Sources/HorizontalTabsComponent.swift"
+    if not path.is_file():
+        raise RuntimeError("GlassProfileTabs: HorizontalTabsComponent.swift is missing")
+    text = path.read_text(encoding="utf-8")
+    if "aorusSelectedAccent" in text:
+        print("GlassProfileTabs: HorizontalTabsComponent already patched")
+        return
+
+    if "import AorusGramUI\n" not in text:
+        text = _replace_once(
+            text,
+            "import MultilineTextWithEntitiesComponent\n",
+            "import MultilineTextWithEntitiesComponent\nimport AorusGramUI\n",
+            "tabs Aorus import",
+        )
+    # Captured at init rather than read at draw time so that the component compares unequal
+    # when the tint changes — otherwise ComponentFlow would reuse the view and the tab would
+    # keep the previous profile's colour.
+    text = _replace_once(
+        text,
+        "    let isSelected: Bool\n",
+        "    let isSelected: Bool\n    let aorusSelectedAccent: UIColor?\n",
+        "tabs accent property",
+    )
+    text = _replace_once(
+        text,
+        "        self.isSelected = isSelected\n",
+        "        self.isSelected = isSelected\n        self.aorusSelectedAccent = AorusGlassProfileTint.selectedTabColor\n",
+        "tabs accent assignment",
+    )
+    text = _replace_once(
+        text,
+        "        if lhs.isSelected != rhs.isSelected {\n            return false\n        }\n",
+        "        if lhs.isSelected != rhs.isSelected {\n            return false\n        }\n"
+        "        if lhs.aorusSelectedAccent != rhs.aorusSelectedAccent {\n            return false\n        }\n",
+        "tabs accent equality",
+    )
+    text = _replace_once(
+        text,
+        "                    .foregroundColor: component.theme.chat.inputPanel.panelControlColor\n"
+        "                ], range: NSRange(location: 0, length: titleString.length))\n",
+        "                    // AorusGram: the selected tab takes the avatar's colour under\n"
+        "                    // Interface 2.0, and the stock colour whenever it is off.\n"
+        "                    .foregroundColor: (component.isSelected ? component.aorusSelectedAccent : nil) ?? component.theme.chat.inputPanel.panelControlColor\n"
+        "                ], range: NSRange(location: 0, length: titleString.length))\n",
+        "tabs accent colour",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    build = tg / "submodules/TelegramUI/Components/HorizontalTabsComponent/BUILD"
+    if not build.is_file():
+        raise RuntimeError("GlassProfileTabs: HorizontalTabsComponent BUILD is missing")
+    build_text = build.read_text(encoding="utf-8")
+    if '"//submodules/AorusGramUI"' not in build_text:
+        build.write_text(
+            _replace_once(
+                build_text,
+                "    deps = [\n",
+                '    deps = [\n        "//submodules/AorusGramUI",\n',
+                "tabs BUILD dependency",
+            ),
+            encoding="utf-8",
+        )
+    print("GlassProfileTabs: patched HorizontalTabsComponent")
 
 
 def _patch_avatar_renderer(tg: Path) -> None:
@@ -974,6 +1056,7 @@ def patch_profile_personalization(tg: Path) -> None:
     _patch_profile_header(tg)
     # After the header patch: the glass property is anchored on the one it inserts.
     _patch_glass_profile(tg)
+    _patch_profile_tabs_tint(tg)
     _patch_avatar_renderer(tg)
     _patch_editing_avatar(tg)
     _patch_profile_preview(tg)
