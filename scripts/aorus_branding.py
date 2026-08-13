@@ -9484,7 +9484,14 @@ public enum AorusFakeGiftsStore {
     public static func update(_ stored: AorusStoredGift) {
         var gifts = all()
         if let index = gifts.firstIndex(where: { $0.storageKey == stored.storageKey }) {
-            gifts[index] = stored
+            var normalized = stored
+            // Telegram never leaves a hidden gift pinned in the profile header.
+            // Enforce the same invariant for edits made through the local manager.
+            if !normalized.showInProfile {
+                normalized.pinnedToTop = false
+                normalized.pinnedOrder = 0
+            }
+            gifts[index] = normalized
             persist(gifts)
         }
     }
@@ -9555,6 +9562,7 @@ public enum AorusFakeGiftsStore {
         if let target, let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) {
             gifts[index].pinnedToTop = value
             if value {
+                gifts[index].showInProfile = true
                 // Append to the end of the pinned sequence: 1, 2, 3, … so the first
                 // pinned gift stays first in the list.
                 let maxOrder = gifts.filter { $0.ownerPeerId == 0 && $0.pinnedToTop && $0.instanceId != target.instanceId }.map { $0.pinnedOrder }.max() ?? 0
@@ -9573,6 +9581,7 @@ public enum AorusFakeGiftsStore {
         guard let index = gifts.firstIndex(where: { $0.instanceId == target.instanceId }) else { return false }
         gifts[index].pinnedToTop = value
         if value {
+            gifts[index].showInProfile = true
             let maxOrder = gifts.filter { $0.ownerPeerId == 0 && $0.pinnedToTop && $0.instanceId != target.instanceId }.map { $0.pinnedOrder }.max() ?? 0
             gifts[index].pinnedOrder = maxOrder + 1
         } else {
@@ -9599,6 +9608,10 @@ public enum AorusFakeGiftsStore {
         for index in gifts.indices where gifts[index].ownerPeerId == 0 {
             let order = localOrder[gifts[index].instanceId]
             let pinned = order != nil
+            if pinned && !gifts[index].showInProfile {
+                gifts[index].showInProfile = true
+                changed = true
+            }
             if gifts[index].pinnedToTop != pinned || gifts[index].pinnedOrder != (order ?? 0) {
                 gifts[index].pinnedToTop = pinned
                 gifts[index].pinnedOrder = order ?? 0
@@ -9922,7 +9935,7 @@ public enum AorusFakeGiftsStore {
             "gift": giftObject,
             "date": Int(stored.date),
             "nameHidden": renderedSenderPeerId == 0,
-            "savedToProfile": true,
+            "savedToProfile": stored.showInProfile,
             "pinnedToTop": stored.pinnedToTop,
             "canUpgrade": false
         ]
@@ -9994,9 +10007,12 @@ public enum AorusFakeGiftsStore {
     // The wrappers to inject into the user's own profile gifts pane: pinned gifts first
     // (in pin order 1, 2, 3…), then the rest in stored order — like real Telegram.
     public static func profileWrappers(senderPeer: EnginePeer? = nil) -> [ProfileGiftsContext.State.StarGift] {
-        let visible = all().filter { $0.showInProfile && $0.ownerPeerId == 0 }
-        let pinned = visible.filter { $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
-        let unpinned = visible.filter { !$0.pinnedToTop }
+        // Telegram keeps hidden gifts in the owner's management list and marks them
+        // through savedToProfile instead of deleting them from the list. This lets the
+        // native cell/detail UI offer Show again after a gift has been hidden.
+        let ownGifts = all().filter { $0.ownerPeerId == 0 }
+        let pinned = ownGifts.filter { $0.showInProfile && $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }
+        let unpinned = ownGifts.filter { !$0.pinnedToTop || !$0.showInProfile }
         return (pinned + unpinned).compactMap { wrapper(for: $0, senderPeer: senderPeer) }
     }
 
@@ -10004,7 +10020,7 @@ public enum AorusFakeGiftsStore {
     // "All gifts" view. Used so a fake only shows inside the collections it belongs to,
     // never polluting every collection.
     public static func profileWrappers(inCollection collectionId: Int32, senderPeer: EnginePeer? = nil) -> [ProfileGiftsContext.State.StarGift] {
-        let visible = all().filter { $0.showInProfile && $0.ownerPeerId == 0 && $0.collectionIds.contains(collectionId) }
+        let visible = all().filter { $0.ownerPeerId == 0 && $0.collectionIds.contains(collectionId) }
         let orderKey = String(collectionId)
         if visible.contains(where: { $0.collectionOrders[orderKey] != nil }) {
             return visible.sorted {
@@ -10868,11 +10884,7 @@ def patch_fake_gifts(tg: Path) -> None:
             )
             toggle_inject = (
                 "                                            if pinnedToTop && self.pinnedReferences.count >= self.maxPinnedCount {\n"
-                "                                                if AorusFakeGiftsStore.contains(reference: reference) {\n"
-                "                                                    self.parentController?.present(UndoOverlayController(presentationData: params.presentationData, content: .info(title: nil, text: params.presentationData.strings.PeerInfo_Gifts_ToastPinLimit_Text(Int32(self.maxPinnedCount)), timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
-                "                                                } else {\n"
-                "                                                    self.displayUnpinScreen?(product, { dismissImpl?() })\n"
-                "                                                }\n"
+                "                                                self.displayUnpinScreen?(product, { dismissImpl?() })\n"
                 "                                                return false\n"
                 "                                            }\n"
                 "                                            if AorusFakeGiftsStore.contains(reference: reference) {\n"
@@ -10886,6 +10898,36 @@ def patch_fake_gifts(tg: Path) -> None:
             else:
                 ok = False
                 print("FakeGifts: WARNING GiftsListView pin-limit anchor not found")
+
+            # Hidden fake gifts stay in Telegram's own-profile management grid, just as
+            # server gifts do. Route the detail sheet's Hide/Show action locally so its
+            # savedToProfile state is durable and no synthetic reference reaches Telegram.
+            visibility_anchor = (
+                "                                        updateSavedToProfile: { [weak self] reference, added in\n"
+                "                                            guard let self else {\n"
+                "                                                return\n"
+                "                                            }\n"
+                "                                            self.profileGifts.updateStarGiftAddedToProfile(reference: reference, added: added)\n"
+                "                                        },\n"
+            )
+            visibility_inject = (
+                "                                        updateSavedToProfile: { [weak self] reference, added in\n"
+                "                                            guard let self else {\n"
+                "                                                return\n"
+                "                                            }\n"
+                "                                            // AorusGram: native detail Hide/Show for local fake gifts\n"
+                "                                            if AorusFakeGiftsStore.contains(reference: reference) {\n"
+                "                                                _ = AorusFakeGiftsStore.setProfileVisibility(reference: reference, added)\n"
+                "                                            } else {\n"
+                "                                                self.profileGifts.updateStarGiftAddedToProfile(reference: reference, added: added)\n"
+                "                                            }\n"
+                "                                        },\n"
+            )
+            if visibility_anchor in t:
+                t = t.replace(visibility_anchor, visibility_inject, 1)
+            else:
+                ok = False
+                print("FakeGifts: WARNING GiftsListView detail visibility anchor not found")
 
             # The native GiftView header calls this closure for its Transfer button. Route
             # only stored local gifts through the local store; server gifts retain the
@@ -11365,6 +11407,46 @@ def patch_fake_gifts(tg: Path) -> None:
     if pane.is_file():
         t = pane.read_text(encoding="utf-8")
 
+        # Telegram's GiftUnpinScreen is the canonical 6/6 replacement flow. Feed it the
+        # merged local + server pin set, then split the resulting order at the persistence
+        # boundary so fake references never reach Telegram and real references never enter
+        # the local store.
+        unpin_marker = "// AorusGram: native mixed-gift replacement screen"
+        unpin_state_anchor = (
+            "        guard let pinnedGifts = self.profileGifts.currentState?.gifts.filter({ $0.pinnedToTop }), let presentationData = self.currentParams?.presentationData else {\n"
+            "            return\n"
+            "        }\n"
+        )
+        unpin_state_inject = (
+            "        " + unpin_marker + "\n"
+            "        guard let serverGifts = self.profileGifts.currentState?.gifts, let presentationData = self.currentParams?.presentationData else {\n"
+            "            return\n"
+            "        }\n"
+            "        let pinCandidates = serverGifts.filter({ $0.pinnedToTop }) + AorusFakeGiftsStore.pinnedProfileWrappers()\n"
+            "        let pinnedGifts = self.giftsListView.pinnedReferences.compactMap { reference in\n"
+            "            pinCandidates.first(where: { $0.reference == reference })\n"
+            "        }\n"
+        )
+        unpin_commit_anchor = (
+            "                self.profileGifts.updatePinnedToTopStarGifts(references: updatedPinnedGifts)\n"
+        )
+        unpin_commit_inject = (
+            "                AorusFakeGiftsStore.updatePinnedReferences(updatedPinnedGifts, maxCount: self.giftsListView.maxPinnedCount)\n"
+            "                let serverPinnedReferences = updatedPinnedGifts.filter { !AorusFakeGiftsStore.contains(reference: $0) }\n"
+            "                self.profileGifts.updatePinnedToTopStarGifts(references: serverPinnedReferences)\n"
+        )
+        if unpin_marker in t:
+            print("FakeGifts: PeerInfoGiftsPaneNode mixed unpin screen already patched")
+        elif unpin_state_anchor in t and unpin_commit_anchor in t:
+            t = t.replace(unpin_state_anchor, unpin_state_inject, 1)
+            t = t.replace(unpin_commit_anchor, unpin_commit_inject, 1)
+            pane.write_text(t, encoding="utf-8")
+            print("FakeGifts: patched native mixed local/server pin replacement")
+        else:
+            raise RuntimeError("FakeGifts: PeerInfoGiftsPaneNode unpin-screen anchor not found")
+
+        t = pane.read_text(encoding="utf-8")
+
         # The long-press gift context menu owns a separate Pin/Unpin action and normally
         # sends it straight to ProfileGiftsContext. Route only stored fake gifts through
         # the established local mutation while preserving Telegram's native limit and
@@ -11382,11 +11464,7 @@ def patch_fake_gifts(tg: Path) -> None:
             "                        " + context_pin_marker + "\n"
             "                        let aorusIsFakeGift = AorusFakeGiftsStore.contains(reference: reference)\n"
             "                        if pinnedToTop && self.giftsListView.pinnedReferences.count >= self.giftsListView.maxPinnedCount {\n"
-            "                            if aorusIsFakeGift {\n"
-            "                                self.parentController?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: strings.PeerInfo_Gifts_ToastPinLimit_Text(Int32(self.giftsListView.maxPinnedCount)), timeout: nil, customUndoText: nil), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))\n"
-            "                            } else {\n"
-            "                                self.displayUnpinScreen(gift: gift)\n"
-            "                            }\n"
+            "                            self.displayUnpinScreen(gift: gift)\n"
             "                            return\n"
             "                        }\n"
             "                        \n"

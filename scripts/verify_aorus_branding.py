@@ -704,6 +704,14 @@ def main() -> None:
             err.append("FakeGifts: repeated regular purchases are not stored independently")
         if 'dict["fromPeerId"] = ["iv": renderedSenderPeerId]' not in fake_store_text:
             err.append("FakeGifts: edited sender is not reflected by regular gift wrappers")
+        if '"savedToProfile": stored.showInProfile' not in fake_store_text:
+            err.append("FakeGifts: hidden local gifts do not expose Telegram's native savedToProfile state")
+        if "let ownGifts = all().filter { $0.ownerPeerId == 0 }" not in fake_store_text:
+            err.append("FakeGifts: hidden own-profile gifts are removed instead of remaining manageable")
+        if "if !normalized.showInProfile" not in fake_store_text or "normalized.pinnedToTop = false" not in fake_store_text:
+            err.append("FakeGifts: local manager can leave a hidden gift pinned")
+        if "if value {\n                gifts[index].showInProfile = true" not in fake_store_text:
+            err.append("FakeGifts: pinning a hidden local gift does not restore profile visibility")
         if "senderPeer.id.toInt64() == renderedSenderPeerId" not in fake_store_text or "fromPeer: senderPeer" not in fake_store_text:
             err.append("FakeGifts: non-anonymous local purchases do not resolve their sender peer")
         fake_gift_view = (
@@ -736,11 +744,12 @@ def main() -> None:
             "stargifts_pinned_to_top_limit" not in fake_gifts_list_text
             or "self.pinnedReferences.count >= self.maxPinnedCount" not in fake_gifts_list_text
             or "AorusFakeGiftsStore.setPinned(reference: reference, pinnedToTop)" not in fake_gifts_list_text
-            or "PeerInfo_Gifts_ToastPinLimit_Text" not in fake_gifts_list_text
+            or "self.displayUnpinScreen?(product" not in fake_gifts_list_text
+            or "// AorusGram: native detail Hide/Show for local fake gifts" not in fake_gifts_list_text
             or "AorusFakeGiftsStore.updateCollectionOrder(collectionId: collectionId" not in fake_gifts_list_text
             or "let serverOrderedReferences = orderedReferences.filter" not in fake_gifts_list_text
         ):
-            err.append("FakeGifts: established Pin/Unpin route does not enforce Telegram's native pin limit")
+            err.append("FakeGifts: detail Hide/Show or native Pin/Unpin replacement route is incomplete")
         fake_gifts_pane = (
             tg
             / "submodules"
@@ -754,11 +763,14 @@ def main() -> None:
         fake_gifts_pane_text = fake_gifts_pane.read_text(encoding="utf-8") if fake_gifts_pane.is_file() else ""
         if (
             "// AorusGram: local fake gift context Pin/Unpin" not in fake_gifts_pane_text
+            or "// AorusGram: native mixed-gift replacement screen" not in fake_gifts_pane_text
             or "AorusFakeGiftsStore.setPinned(reference: reference, pinnedToTop)" not in fake_gifts_pane_text
+            or "AorusFakeGiftsStore.updatePinnedReferences(updatedPinnedGifts" not in fake_gifts_pane_text
+            or "let serverPinnedReferences = updatedPinnedGifts.filter" not in fake_gifts_pane_text
             or "profileGifts.updateStarGiftPinnedToTop(reference: reference, pinnedToTop: pinnedToTop)" not in fake_gifts_pane_text
-            or "PeerInfo_Gifts_ToastPinLimit_Text" not in fake_gifts_pane_text
+            or "self.displayUnpinScreen(gift: gift)" not in fake_gifts_pane_text
         ):
-            err.append("FakeGifts: long-press Pin/Unpin is not synchronized with local gift state and native limits")
+            err.append("FakeGifts: native mixed local/server pin replacement is incomplete")
         context_action_markers = (
             "// AorusGram: local fake gift context Wear/TakeOff",
             "// AorusGram: local fake gift context Hide/Show",
