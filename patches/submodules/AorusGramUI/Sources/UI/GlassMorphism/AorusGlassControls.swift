@@ -279,8 +279,10 @@ public final class AorusGlassSegmentedControl: UIControl {
     }
 
     private func applySelectionColors() {
+        // The selected tab takes the avatar's accent and the rest stay plain white — the
+        // selection is the one label the picture colours, which is what marks it as chosen.
         for (index, label) in self.titleLabels.enumerated() {
-            label.textColor = index == self.selectedIndex ? self.palette.primaryText : self.palette.secondaryText
+            label.textColor = index == self.selectedIndex ? self.palette.accentText : self.palette.primaryText
         }
     }
 

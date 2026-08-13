@@ -24,6 +24,11 @@ public struct AorusGlassPalette: Equatable {
     public let backgroundBottom: UIColor
     /// Laid over the blur of every glass surface.
     public let glassTint: UIColor
+    /// The avatar's colour brought up to a readable tint, used for everything that names a
+    /// thing rather than being the thing: the row captions, the status line, the QR glyph,
+    /// the selected tab. This is what makes a profile read as belonging to its picture — on a
+    /// black-hole avatar those all go pink, on a blue one they go blue.
+    public let accentText: UIColor
     /// Fill of the selected segment in the tab bar.
     public let selectedSegment: UIColor
     /// Hairlines inside cards.
@@ -35,8 +40,10 @@ public struct AorusGlassPalette: Equatable {
         return self.prefersDarkContent ? UIColor(white: 0.06, alpha: 1.0) : .white
     }
 
+    /// Captions and the status line. Deliberately the accent rather than a neutral grey —
+    /// a grey caption here would be the one part of the screen the avatar had not coloured.
     public var secondaryText: UIColor {
-        return self.prefersDarkContent ? UIColor(white: 0.06, alpha: 0.6) : UIColor(white: 1.0, alpha: 0.72)
+        return self.accentText
     }
 
     /// The palette used before an avatar has loaded, and for peers that have no photo at all.
@@ -48,6 +55,7 @@ public struct AorusGlassPalette: Equatable {
         backgroundTop: UIColor(red: 0.16, green: 0.22, blue: 0.31, alpha: 1.0),
         backgroundBottom: UIColor(red: 0.09, green: 0.12, blue: 0.18, alpha: 1.0),
         glassTint: UIColor(white: 1.0, alpha: 0.12),
+        accentText: UIColor(red: 0.72, green: 0.80, blue: 0.90, alpha: 1.0),
         selectedSegment: UIColor(white: 0.0, alpha: 0.22),
         separator: UIColor(white: 1.0, alpha: 0.15),
         prefersDarkContent: false
@@ -92,12 +100,24 @@ public struct AorusGlassPalette: Equatable {
         let brightness = backgroundTop.aorusBrightness
         let prefersDarkContent = brightness > 0.68
 
+        // Lifted well clear of the page it sits on rather than simply reusing `accent`: the
+        // accent is tuned to tint large surfaces, and at that strength it is too dim to read
+        // as 13 pt text. The saturation floor keeps a near-greyscale avatar from producing
+        // captions indistinguishable from plain white.
+        let accentText = accent.aorusAdjusted(
+            saturation: 1.25,
+            minSaturation: 0.32,
+            brightness: prefersDarkContent ? 0.55 : 1.9,
+            range: prefersDarkContent ? 0.20 ... 0.45 : 0.80 ... 1.0
+        )
+
         return AorusGlassPalette(
             accent: accent,
             edge: edge,
             backgroundTop: backgroundTop,
             backgroundBottom: backgroundBottom,
             glassTint: glassTint,
+            accentText: accentText,
             selectedSegment: UIColor(white: 0.0, alpha: 0.26),
             separator: UIColor(white: prefersDarkContent ? 0.0 : 1.0, alpha: 0.15),
             prefersDarkContent: prefersDarkContent

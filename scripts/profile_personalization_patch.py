@@ -233,10 +233,26 @@ _GLASS_PROFILE_METHODS = '''
 
         var infoSections: [AorusGlassInfoSection] = []
         if let addressName = peer.addressName, !addressName.isEmpty {
+            // The other usernames this peer has collected. Inactive ones are bought or
+            // reserved but not in use, so listing them would advertise addresses that do not
+            // resolve; the primary one is dropped because it is already the row's value.
+            var allUsernames: [TelegramPeerUsername] = []
+            switch peer {
+            case let .user(user):
+                allUsernames = user.usernames
+            case let .channel(channel):
+                allUsernames = channel.usernames
+            default:
+                break
+            }
+            let otherUsernames = allUsernames
+                .filter { $0.flags.contains(.isActive) && $0.username != addressName }
+                .map { "@\\($0.username)" }
             infoSections.append(AorusGlassInfoSection(
                 identifier: "username",
                 caption: aorusL("имя пользователя", "username"),
                 value: "@\\(addressName)",
+                detail: otherUsernames.isEmpty ? nil : aorusL("также", "also") + " " + otherUsernames.joined(separator: ", "),
                 showsQRCode: true
             ))
         }

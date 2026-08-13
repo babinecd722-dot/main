@@ -221,8 +221,10 @@ public final class AorusGlassInfoCardView: UIView {
         func update(palette: AorusGlassPalette, width: CGFloat) -> CGFloat {
             self.captionLabel.textColor = palette.secondaryText
             self.valueLabel.textColor = palette.primaryText
-            self.detailLabel.textColor = palette.secondaryText
-            self.qrCodeButton?.tintColor = palette.primaryText
+            // The extra usernames are values too, not a caption, so they stay white with the
+            // one they follow rather than taking the accent the captions carry.
+            self.detailLabel.textColor = palette.primaryText
+            self.qrCodeButton?.tintColor = palette.accentText
 
             var availableWidth = max(0.0, width - AorusGlassInfoCardView.horizontalPadding * 2.0)
             if self.qrCodeButton != nil {
