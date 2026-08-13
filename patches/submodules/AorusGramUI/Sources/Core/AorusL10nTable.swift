@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Restart the app to apply": "Riavvia l'app per applicare",
         "also": "anche",
         "Audio Call": "Chiamata audio",
         "Video Call": "Videochiamata",
@@ -646,6 +647,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Restart the app to apply": "Uruchom ponownie aplikację, aby zastosować",
         "also": "także",
         "Audio Call": "Połączenie głosowe",
         "Video Call": "Połączenie wideo",
@@ -1239,6 +1241,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Restart the app to apply": "Start de app opnieuw om toe te passen",
         "also": "ook",
         "Audio Call": "Audiogesprek",
         "Video Call": "Videogesprek",
@@ -1832,6 +1835,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Restart the app to apply": "Reinicia l'aplicació per aplicar-ho",
         "also": "també",
         "Audio Call": "Trucada d'àudio",
         "Video Call": "Videotrucada",
@@ -2425,6 +2429,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Restart the app to apply": "Mulai ulang aplikasi untuk menerapkan",
         "also": "juga",
         "Audio Call": "Panggilan Suara",
         "Video Call": "Panggilan Video",
@@ -3018,6 +3023,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Restart the app to apply": "Mulakan semula apl untuk menggunakan",
         "also": "juga",
         "Audio Call": "Panggilan Audio",
         "Video Call": "Panggilan Video",
@@ -3611,6 +3617,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Restart the app to apply": "Перазапусціце праграму, каб ужыць",
         "also": "таксама",
         "Audio Call": "Аудыёзванок",
         "Video Call": "Відэазванок",
@@ -4204,6 +4211,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Restart the app to apply": "Qo'llash uchun ilovani qayta ishga tushiring",
         "also": "shuningdek",
         "Audio Call": "Audio qo'ng'iroq",
         "Video Call": "Video qo'ng'iroq",
@@ -4797,6 +4805,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Restart the app to apply": "적용하려면 앱을 다시 시작하세요",
         "also": "또한",
         "Audio Call": "음성 통화",
         "Video Call": "영상 통화",
@@ -5390,6 +5399,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Restart the app to apply": "أعد تشغيل التطبيق للتطبيق",
         "also": "أيضًا",
         "Audio Call": "مكالمة صوتية",
         "Video Call": "مكالمة فيديو",
@@ -5983,6 +5993,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Restart the app to apply": "برای اعمال، برنامه را دوباره اجرا کنید",
         "also": "همچنین",
         "Audio Call": "تماس صوتی",
         "Video Call": "تماس تصویری",
@@ -6576,6 +6587,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Restart the app to apply": "Қолдану үшін қолданбаны қайта іске қосыңыз",
         "also": "сондай-ақ",
         "Audio Call": "Аудиоқоңырау",
         "Video Call": "Бейнеқоңырау",
@@ -7169,6 +7181,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Restart the app to apply": "重启应用以应用更改",
         "also": "其他",
         "Audio Call": "语音通话",
         "Video Call": "视频通话",
@@ -7763,6 +7776,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Restart the app to apply": "重新啟動應用程式以套用",
         "also": "其他",
         "Audio Call": "語音通話",
         "Video Call": "視訊通話",
@@ -8356,6 +8370,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Restart the app to apply": "アプリを再起動すると適用されます",
         "also": "他に",
         "Audio Call": "音声通話",
         "Video Call": "ビデオ通話",
@@ -8949,6 +8964,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Restart the app to apply": "Käynnistä sovellus uudelleen ottaaksesi käyttöön",
         "also": "myös",
         "Audio Call": "Äänipuhelu",
         "Video Call": "Videopuhelu",
@@ -9542,6 +9558,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Restart the app to apply": "הפעילו מחדש את האפליקציה כדי להחיל",
         "also": "גם",
         "Audio Call": "שיחה קולית",
         "Video Call": "שיחת וידאו",
@@ -10135,6 +10152,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Restart the app to apply": "Ponovno pokrenite aplikaciju za primjenu",
         "also": "također",
         "Audio Call": "Audiopoziv",
         "Video Call": "Videopoziv",
@@ -10728,6 +10746,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Restart the app to apply": "Поново покрените апликацију да примените",
         "also": "такође",
         "Audio Call": "Аудио позив",
         "Video Call": "Видео позив",
@@ -11321,6 +11340,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Restart the app to apply": "Restartujte aplikaci pro použití",
         "also": "také",
         "Audio Call": "Hlasový hovor",
         "Video Call": "Videohovor",
@@ -11914,6 +11934,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Restart the app to apply": "Reštartujte aplikáciu na použitie",
         "also": "tiež",
         "Audio Call": "Hlasový hovor",
         "Video Call": "Videohovor",
@@ -12507,6 +12528,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Restart the app to apply": "Reporniți aplicația pentru a aplica",
         "also": "de asemenea",
         "Audio Call": "Apel audio",
         "Video Call": "Apel video",
@@ -13100,6 +13122,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Restart the app to apply": "Indítsa újra az alkalmazást az alkalmazáshoz",
         "also": "valamint",
         "Audio Call": "Hanghívás",
         "Video Call": "Videóhívás",
@@ -13693,6 +13716,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Restart the app to apply": "Start appen på nytt for å bruke",
         "also": "også",
         "Audio Call": "Lydsamtale",
         "Video Call": "Videosamtale",
@@ -14286,6 +14310,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Restart the app to apply": "Starta om appen för att tillämpa",
         "also": "även",
         "Audio Call": "Röstsamtal",
         "Video Call": "Videosamtal",
@@ -14879,6 +14904,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Restart the app to apply": "Khởi động lại ứng dụng để áp dụng",
         "also": "cũng",
         "Audio Call": "Cuộc gọi thoại",
         "Video Call": "Cuộc gọi video",
@@ -15472,6 +15498,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Restart the app to apply": "Перезапустіть застосунок, щоб застосувати",
         "also": "також",
         "Audio Call": "Аудіодзвінок",
         "Video Call": "Відеодзвінок",
@@ -16074,6 +16101,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Restart the app to apply": "Reinicia la app para aplicar",
         "also": "también",
         "Audio Call": "Llamada de audio",
         "Video Call": "Videollamada",
@@ -16676,6 +16704,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Restart the app to apply": "Reinicie o app para aplicar",
         "also": "também",
         "Audio Call": "Chamada de áudio",
         "Video Call": "Chamada de vídeo",
@@ -17278,6 +17307,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Restart the app to apply": "Starte die App neu, um zu übernehmen",
         "also": "auch",
         "Audio Call": "Audioanruf",
         "Video Call": "Videoanruf",
@@ -17880,6 +17910,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Restart the app to apply": "Redémarrez l'app pour appliquer",
         "also": "aussi",
         "Audio Call": "Appel audio",
         "Video Call": "Appel vidéo",
@@ -18482,6 +18513,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Restart the app to apply": "Uygulamak için uygulamayı yeniden başlatın",
         "also": "ayrıca",
         "Audio Call": "Sesli Arama",
         "Video Call": "Görüntülü Arama",

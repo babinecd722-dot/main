@@ -864,6 +864,12 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         },
         setInterfaceV2: { value in
             AorusInterfaceV2.setEnabled(value)
+            // Screens already on the stack keep the header and theme they were built with,
+            // so say that plainly instead of leaving a half-changed app to be puzzled over.
+            AorusGlassToast.present(text: aorusL(
+                "Перезапустите приложение, чтобы применить",
+                "Restart the app to apply"
+            ))
             updateState { current in
                 var next = current
                 next.interfaceV2 = value
