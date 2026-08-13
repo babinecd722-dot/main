@@ -1098,7 +1098,6 @@ def _patch_build(tg: Path) -> None:
 def patch_profile_personalization(tg: Path) -> None:
     _patch_profile_header(tg)
     # After the header patch: the glass property is anchored on the one it inserts.
-    _patch_glass_profile(tg)
     _patch_profile_tabs_tint(tg)
     _patch_profile_list_glass(tg)
     _patch_avatar_renderer(tg)

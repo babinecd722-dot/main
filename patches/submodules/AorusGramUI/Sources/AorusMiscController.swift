@@ -553,8 +553,8 @@ private func miscEntries(state: MiscState, theme: PresentationTheme, strings: Pr
     entries.append(.interfaceV2Header(theme, aorusL("ИНТЕРФЕЙС", "INTERFACE")))
     entries.append(.interfaceV2(theme, "Interface 2.0", state.interfaceV2))
     entries.append(.interfaceV2Info(theme, aorusL(
-        "Профили в стекле: аватар открывается сразу большим, а фон, кнопки и вкладки окрашиваются под его цвета.",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours."
+        "Списки, карточки и меню становятся стеклянными, а вкладки в профиле берут цвет аватарки.",
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar."
     )))
 
     return entries

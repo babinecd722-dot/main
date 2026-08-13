@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Elenchi, schede e menu diventano di vetro e le schede del profilo assumono il colore dell'avatar.",
         "Restart the app to apply": "Riavvia l'app per applicare",
         "Audio Call": "Chiamata audio",
         "Video Call": "Videochiamata",
@@ -60,7 +61,6 @@ enum AorusL10nTable {
         "More": "Altro",
         "Notifications": "Notifiche",
         "Search": "Cerca",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profili di vetro: l'avatar si apre subito in grande e lo sfondo, i pulsanti e le schede ne assumono i colori.",
         "No Mask": "Senza maschera",
         "FORMATTING": "FORMATTAZIONE",
         "Auto-formatting": "Formattazione automatica",
@@ -644,6 +644,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listy, karty i menu stają się szklane, a karty profilu przejmują kolor awatara.",
         "Restart the app to apply": "Uruchom ponownie aplikację, aby zastosować",
         "Audio Call": "Połączenie głosowe",
         "Video Call": "Połączenie wideo",
@@ -651,7 +652,6 @@ enum AorusL10nTable {
         "More": "Więcej",
         "Notifications": "Powiadomienia",
         "Search": "Szukaj",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profile ze szkła: awatar od razu otwiera się w dużym rozmiarze, a tło, przyciski i karty przejmują jego kolory.",
         "No Mask": "Bez maski",
         "FORMATTING": "FORMATOWANIE",
         "Auto-formatting": "Automatyczne formatowanie",
@@ -1235,6 +1235,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Lijsten, kaarten en menu's worden glas, en de profieltabbladen nemen de kleur van de avatar over.",
         "Restart the app to apply": "Start de app opnieuw om toe te passen",
         "Audio Call": "Audiogesprek",
         "Video Call": "Videogesprek",
@@ -1242,7 +1243,6 @@ enum AorusL10nTable {
         "More": "Meer",
         "Notifications": "Meldingen",
         "Search": "Zoeken",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profielen in glas: de avatar opent meteen op groot formaat, en de achtergrond, knoppen en tabbladen nemen de kleuren ervan over.",
         "No Mask": "Geen masker",
         "FORMATTING": "OPMAAK",
         "Auto-formatting": "Automatische opmaak",
@@ -1826,6 +1826,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Les llistes, les targetes i els menús es tornen de vidre, i les pestanyes del perfil agafen el color de l'avatar.",
         "Restart the app to apply": "Reinicia l'aplicació per aplicar-ho",
         "Audio Call": "Trucada d'àudio",
         "Video Call": "Videotrucada",
@@ -1833,7 +1834,6 @@ enum AorusL10nTable {
         "More": "Més",
         "Notifications": "Notificacions",
         "Search": "Cerca",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Perfils de vidre: l'avatar s'obre de seguida en gran, i el fons, els botons i les pestanyes n'agafen els colors.",
         "No Mask": "Sense màscara",
         "FORMATTING": "FORMAT",
         "Auto-formatting": "Format automàtic",
@@ -2417,6 +2417,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Daftar, kartu, dan menu menjadi kaca, dan tab profil mengambil warna avatar.",
         "Restart the app to apply": "Mulai ulang aplikasi untuk menerapkan",
         "Audio Call": "Panggilan Suara",
         "Video Call": "Panggilan Video",
@@ -2424,7 +2425,6 @@ enum AorusL10nTable {
         "More": "Lainnya",
         "Notifications": "Notifikasi",
         "Search": "Cari",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profil dalam kaca: avatar langsung terbuka berukuran besar, dan latar, tombol, serta tab mengambil warnanya.",
         "No Mask": "Tanpa masker",
         "FORMATTING": "PEMFORMATAN",
         "Auto-formatting": "Format otomatis",
@@ -3008,6 +3008,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Senarai, kad dan menu menjadi kaca, dan tab profil mengambil warna avatar.",
         "Restart the app to apply": "Mulakan semula apl untuk menggunakan",
         "Audio Call": "Panggilan Audio",
         "Video Call": "Panggilan Video",
@@ -3015,7 +3016,6 @@ enum AorusL10nTable {
         "More": "Lagi",
         "Notifications": "Pemberitahuan",
         "Search": "Cari",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profil dalam kaca: avatar terus dibuka bersaiz besar, dan latar, butang serta tab mengambil warnanya.",
         "No Mask": "Tiada topeng",
         "FORMATTING": "PEMFORMATAN",
         "Auto-formatting": "Format automatik",
@@ -3599,6 +3599,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Спісы, карткі і меню становяцца шклянымі, а ўкладкі профілю бяруць колер аватара.",
         "Restart the app to apply": "Перазапусціце праграму, каб ужыць",
         "Audio Call": "Аудыёзванок",
         "Video Call": "Відэазванок",
@@ -3606,7 +3607,6 @@ enum AorusL10nTable {
         "More": "Яшчэ",
         "Notifications": "Апавяшчэнні",
         "Search": "Пошук",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Профілі ў шкле: аватар адразу адкрываецца вялікім, а фон, кнопкі і ўкладкі набываюць яго колеры.",
         "No Mask": "Без маскі",
         "FORMATTING": "ФАРМАТАВАННЕ",
         "Auto-formatting": "Аўтафарматаванне",
@@ -4190,6 +4190,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Ro'yxatlar, kartalar va menyular shishaga aylanadi, profil yorliqlari esa avatar rangini oladi.",
         "Restart the app to apply": "Qo'llash uchun ilovani qayta ishga tushiring",
         "Audio Call": "Audio qo'ng'iroq",
         "Video Call": "Video qo'ng'iroq",
@@ -4197,7 +4198,6 @@ enum AorusL10nTable {
         "More": "Yana",
         "Notifications": "Bildirishnomalar",
         "Search": "Qidiruv",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Shishadagi profillar: avatar darhol katta ochiladi, fon, tugmalar va yorliqlar esa uning ranglarini oladi.",
         "No Mask": "Niqobsiz",
         "FORMATTING": "FORMATLASH",
         "Auto-formatting": "Avtomatik formatlash",
@@ -4781,6 +4781,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "목록과 카드, 메뉴가 유리로 바뀌고 프로필 탭은 프로필 사진의 색을 따릅니다.",
         "Restart the app to apply": "적용하려면 앱을 다시 시작하세요",
         "Audio Call": "음성 통화",
         "Video Call": "영상 통화",
@@ -4788,7 +4789,6 @@ enum AorusL10nTable {
         "More": "더 보기",
         "Notifications": "알림",
         "Search": "검색",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "유리 프로필: 프로필 사진이 처음부터 크게 열리고 배경과 버튼, 탭이 그 색을 따릅니다.",
         "No Mask": "마스크 없음",
         "FORMATTING": "서식",
         "Auto-formatting": "자동 서식",
@@ -5372,6 +5372,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "تتحول القوائم والبطاقات والقوائم المنسدلة إلى زجاج، وتأخذ علامات الملف الشخصي لون الصورة الرمزية.",
         "Restart the app to apply": "أعد تشغيل التطبيق للتطبيق",
         "Audio Call": "مكالمة صوتية",
         "Video Call": "مكالمة فيديو",
@@ -5379,7 +5380,6 @@ enum AorusL10nTable {
         "More": "المزيد",
         "Notifications": "الإشعارات",
         "Search": "بحث",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "ملفات شخصية زجاجية: تفتح الصورة الرمزية بحجم كبير فورًا، وتأخذ الخلفية والأزرار والعلامات ألوانها.",
         "No Mask": "بدون قناع",
         "FORMATTING": "التنسيق",
         "Auto-formatting": "التنسيق التلقائي",
@@ -5963,6 +5963,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "فهرست‌ها، کارت‌ها و منوها شیشه‌ای می‌شوند و زبانه‌های نمایه رنگ عکس نمایه را می‌گیرند.",
         "Restart the app to apply": "برای اعمال، برنامه را دوباره اجرا کنید",
         "Audio Call": "تماس صوتی",
         "Video Call": "تماس تصویری",
@@ -5970,7 +5971,6 @@ enum AorusL10nTable {
         "More": "بیشتر",
         "Notifications": "اعلان‌ها",
         "Search": "جستجو",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "نمایه‌های شیشه‌ای: عکس نمایه بی‌درنگ در اندازهٔ بزرگ باز می‌شود و پس‌زمینه، دکمه‌ها و زبانه‌ها رنگ آن را می‌گیرند.",
         "No Mask": "بدون ماسک",
         "FORMATTING": "قالب‌بندی",
         "Auto-formatting": "قالب‌بندی خودکار",
@@ -6554,6 +6554,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Тізімдер, карточкалар мен мәзірлер шыныға айналады, ал профиль қойындылары аватар түсін алады.",
         "Restart the app to apply": "Қолдану үшін қолданбаны қайта іске қосыңыз",
         "Audio Call": "Аудиоқоңырау",
         "Video Call": "Бейнеқоңырау",
@@ -6561,7 +6562,6 @@ enum AorusL10nTable {
         "More": "Тағы",
         "Notifications": "Хабарландырулар",
         "Search": "Іздеу",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Шыныдағы профильдер: аватар бірден үлкен ашылады, ал фон, түймелер мен қойындылар оның түстерін қабылдайды.",
         "No Mask": "Маскасыз",
         "FORMATTING": "ПІШІМДЕУ",
         "Auto-formatting": "Автоматты пішімдеу",
@@ -7145,6 +7145,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "列表、卡片和菜单变成玻璃，资料页的标签则采用头像的色调。",
         "Restart the app to apply": "重启应用以应用更改",
         "Audio Call": "语音通话",
         "Video Call": "视频通话",
@@ -7152,7 +7153,6 @@ enum AorusL10nTable {
         "More": "更多",
         "Notifications": "通知",
         "Search": "搜索",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "玻璃资料页：头像一打开就是大图，背景、按钮和标签都会染上它的色调。",
         "No Mask": "不使用面具",
         "FORMATTING": "格式",
         "Auto-formatting": "自动格式化",
@@ -7737,6 +7737,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "清單、卡片與選單變成玻璃，個人檔案的分頁則採用頭像的色調。",
         "Restart the app to apply": "重新啟動應用程式以套用",
         "Audio Call": "語音通話",
         "Video Call": "視訊通話",
@@ -7744,7 +7745,6 @@ enum AorusL10nTable {
         "More": "更多",
         "Notifications": "通知",
         "Search": "搜尋",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "玻璃個人檔案：頭像一開啟就是大圖，背景、按鈕與分頁都會染上它的色調。",
         "No Mask": "不使用面具",
         "FORMATTING": "格式",
         "Auto-formatting": "自動格式化",
@@ -8328,6 +8328,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "リスト、カード、メニューがガラスになり、プロフィールのタブはアイコンの色を受け継ぎます。",
         "Restart the app to apply": "アプリを再起動すると適用されます",
         "Audio Call": "音声通話",
         "Video Call": "ビデオ通話",
@@ -8335,7 +8336,6 @@ enum AorusL10nTable {
         "More": "その他",
         "Notifications": "通知",
         "Search": "検索",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "ガラスのプロフィール：アイコンは最初から大きく開き、背景やボタン、タブがその色に染まります。",
         "No Mask": "マスクなし",
         "FORMATTING": "書式",
         "Auto-formatting": "自動書式",
@@ -8919,6 +8919,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listoista, korteista ja valikoista tulee lasia, ja profiilin välilehdet saavat profiilikuvan värin.",
         "Restart the app to apply": "Käynnistä sovellus uudelleen ottaaksesi käyttöön",
         "Audio Call": "Äänipuhelu",
         "Video Call": "Videopuhelu",
@@ -8926,7 +8927,6 @@ enum AorusL10nTable {
         "More": "Lisää",
         "Notifications": "Ilmoitukset",
         "Search": "Haku",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profiilit lasissa: profiilikuva avautuu heti täydessä koossa, ja tausta, painikkeet ja välilehdet saavat sen värit.",
         "No Mask": "Ei naamiota",
         "FORMATTING": "MUOTOILU",
         "Auto-formatting": "Automaattinen muotoilu",
@@ -9510,6 +9510,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "רשימות, כרטיסים ותפריטים הופכים לזכוכית, ולשוניות הפרופיל מקבלות את צבע תמונת הפרופיל.",
         "Restart the app to apply": "הפעילו מחדש את האפליקציה כדי להחיל",
         "Audio Call": "שיחה קולית",
         "Video Call": "שיחת וידאו",
@@ -9517,7 +9518,6 @@ enum AorusL10nTable {
         "More": "עוד",
         "Notifications": "התראות",
         "Search": "חיפוש",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "פרופילים בזכוכית: תמונת הפרופיל נפתחת מיד בגודל מלא, והרקע, הכפתורים והלשוניות מקבלים את צבעיה.",
         "No Mask": "ללא מסכה",
         "FORMATTING": "עיצוב",
         "Auto-formatting": "עיצוב אוטומטי",
@@ -10101,6 +10101,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Popisi, kartice i izbornici postaju stakleni, a kartice profila preuzimaju boju avatara.",
         "Restart the app to apply": "Ponovno pokrenite aplikaciju za primjenu",
         "Audio Call": "Audiopoziv",
         "Video Call": "Videopoziv",
@@ -10108,7 +10109,6 @@ enum AorusL10nTable {
         "More": "Više",
         "Notifications": "Obavijesti",
         "Search": "Pretraživanje",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profili u staklu: avatar se odmah otvara u punoj veličini, a pozadina, gumbi i kartice preuzimaju njegove boje.",
         "No Mask": "Bez maske",
         "FORMATTING": "OBLIKOVANJE",
         "Auto-formatting": "Automatsko oblikovanje",
@@ -10692,6 +10692,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Листе, картице и менији постају стаклени, а картице профила преузимају боју аватара.",
         "Restart the app to apply": "Поново покрените апликацију да примените",
         "Audio Call": "Аудио позив",
         "Video Call": "Видео позив",
@@ -10699,7 +10700,6 @@ enum AorusL10nTable {
         "More": "Још",
         "Notifications": "Обавештења",
         "Search": "Претрага",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Профили у стаклу: аватар се одмах отвара у пуној величини, а позадина, дугмад и картице преузимају његове боје.",
         "No Mask": "Без маске",
         "FORMATTING": "ОБЛИКОВАЊЕ",
         "Auto-formatting": "Аутоматско обликовање",
@@ -11283,6 +11283,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Seznamy, karty a nabídky se promění ve sklo a karty profilu převezmou barvu avatara.",
         "Restart the app to apply": "Restartujte aplikaci pro použití",
         "Audio Call": "Hlasový hovor",
         "Video Call": "Videohovor",
@@ -11290,7 +11291,6 @@ enum AorusL10nTable {
         "More": "Více",
         "Notifications": "Oznámení",
         "Search": "Hledat",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profily ve skle: avatar se hned otevře ve velké velikosti a pozadí, tlačítka i karty převezmou jeho barvy.",
         "No Mask": "Bez masky",
         "FORMATTING": "FORMÁTOVÁNÍ",
         "Auto-formatting": "Automatické formátování",
@@ -11874,6 +11874,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Zoznamy, karty a ponuky sa zmenia na sklo a karty profilu preberú farbu avatara.",
         "Restart the app to apply": "Reštartujte aplikáciu na použitie",
         "Audio Call": "Hlasový hovor",
         "Video Call": "Videohovor",
@@ -11881,7 +11882,6 @@ enum AorusL10nTable {
         "More": "Viac",
         "Notifications": "Upozornenia",
         "Search": "Hľadať",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profily v skle: avatar sa hneď otvorí vo veľkej veľkosti a pozadie, tlačidlá aj karty preberú jeho farby.",
         "No Mask": "Bez masky",
         "FORMATTING": "FORMÁTOVANIE",
         "Auto-formatting": "Automatické formátovanie",
@@ -12465,6 +12465,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listele, cardurile și meniurile devin de sticlă, iar filele profilului preiau culoarea avatarului.",
         "Restart the app to apply": "Reporniți aplicația pentru a aplica",
         "Audio Call": "Apel audio",
         "Video Call": "Apel video",
@@ -12472,7 +12473,6 @@ enum AorusL10nTable {
         "More": "Mai multe",
         "Notifications": "Notificări",
         "Search": "Căutare",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profiluri din sticlă: avatarul se deschide imediat la dimensiune mare, iar fundalul, butoanele și filele îi preiau culorile.",
         "No Mask": "Fără mască",
         "FORMATTING": "FORMATARE",
         "Auto-formatting": "Formatare automată",
@@ -13056,6 +13056,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "A listák, kártyák és menük üveggé válnak, a profil lapjai pedig a profilkép színét veszik fel.",
         "Restart the app to apply": "Indítsa újra az alkalmazást az alkalmazáshoz",
         "Audio Call": "Hanghívás",
         "Video Call": "Videóhívás",
@@ -13063,7 +13064,6 @@ enum AorusL10nTable {
         "More": "Továbbiak",
         "Notifications": "Értesítések",
         "Search": "Keresés",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profilok üvegben: a profilkép azonnal teljes méretben nyílik meg, a háttér, a gombok és a lapok pedig felveszik a színeit.",
         "No Mask": "Maszk nélkül",
         "FORMATTING": "FORMÁZÁS",
         "Auto-formatting": "Automatikus formázás",
@@ -13647,6 +13647,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Lister, kort og menyer blir glass, og profilfanene tar fargen fra profilbildet.",
         "Restart the app to apply": "Start appen på nytt for å bruke",
         "Audio Call": "Lydsamtale",
         "Video Call": "Videosamtale",
@@ -13654,7 +13655,6 @@ enum AorusL10nTable {
         "More": "Mer",
         "Notifications": "Varsler",
         "Search": "Søk",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profiler i glass: profilbildet åpnes med en gang i full størrelse, og bakgrunnen, knappene og fanene tar fargene fra det.",
         "No Mask": "Uten maske",
         "FORMATTING": "FORMATERING",
         "Auto-formatting": "Automatisk formatering",
@@ -14238,6 +14238,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listor, kort och menyer blir glas, och profilflikarna tar färg efter profilbilden.",
         "Restart the app to apply": "Starta om appen för att tillämpa",
         "Audio Call": "Röstsamtal",
         "Video Call": "Videosamtal",
@@ -14245,7 +14246,6 @@ enum AorusL10nTable {
         "More": "Mer",
         "Notifications": "Aviseringar",
         "Search": "Sök",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profiler i glas: profilbilden öppnas direkt i full storlek, och bakgrunden, knapparna och flikarna tar upp dess färger.",
         "No Mask": "Ingen mask",
         "FORMATTING": "FORMATERING",
         "Auto-formatting": "Automatisk formatering",
@@ -14829,6 +14829,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Danh sách, thẻ và menu chuyển thành kính, còn các tab hồ sơ lấy màu của ảnh đại diện.",
         "Restart the app to apply": "Khởi động lại ứng dụng để áp dụng",
         "Audio Call": "Cuộc gọi thoại",
         "Video Call": "Cuộc gọi video",
@@ -14836,7 +14837,6 @@ enum AorusL10nTable {
         "More": "Thêm",
         "Notifications": "Thông báo",
         "Search": "Tìm kiếm",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Hồ sơ bằng kính: ảnh đại diện mở ra ngay ở kích thước lớn, còn nền, nút và tab mang màu sắc của nó.",
         "No Mask": "Không dùng mặt nạ",
         "FORMATTING": "ĐỊNH DẠNG",
         "Auto-formatting": "Tự động định dạng",
@@ -15420,6 +15420,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Списки, картки та меню стають скляними, а вкладки у профілі беруть колір аватара.",
         "Restart the app to apply": "Перезапустіть застосунок, щоб застосувати",
         "Audio Call": "Аудіодзвінок",
         "Video Call": "Відеодзвінок",
@@ -15427,7 +15428,6 @@ enum AorusL10nTable {
         "More": "Ще",
         "Notifications": "Сповіщення",
         "Search": "Пошук",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Профілі у склі: аватар одразу відкривається великим, а фон, кнопки та вкладки набувають його кольорів.",
         "No Mask": "Без маски",
         "FORMATTING": "ФОРМАТУВАННЯ",
         "Auto-formatting": "Автоформатування",
@@ -16020,6 +16020,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Las listas, las tarjetas y los menús se vuelven de cristal, y las pestañas del perfil toman el color del avatar.",
         "Restart the app to apply": "Reinicia la app para aplicar",
         "Audio Call": "Llamada de audio",
         "Video Call": "Videollamada",
@@ -16027,7 +16028,6 @@ enum AorusL10nTable {
         "More": "Más",
         "Notifications": "Notificaciones",
         "Search": "Buscar",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Perfiles de cristal: el avatar se abre en grande desde el principio, y el fondo, los botones y las pestañas toman sus colores.",
         "No Mask": "Sin máscara",
         "FORMATTING": "FORMATO",
         "Auto-formatting": "Formato automático",
@@ -16620,6 +16620,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listas, cartões e menus viram vidro, e as abas do perfil assumem a cor do avatar.",
         "Restart the app to apply": "Reinicie o app para aplicar",
         "Audio Call": "Chamada de áudio",
         "Video Call": "Chamada de vídeo",
@@ -16627,7 +16628,6 @@ enum AorusL10nTable {
         "More": "Mais",
         "Notifications": "Notificações",
         "Search": "Pesquisar",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Perfis de vidro: o avatar abre logo em tamanho grande, e o fundo, os botões e as abas assumem as cores dele.",
         "No Mask": "Sem máscara",
         "FORMATTING": "FORMATAÇÃO",
         "Auto-formatting": "Formatação automática",
@@ -17220,6 +17220,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listen, Karten und Menüs werden zu Glas, und die Profil-Tabs übernehmen die Farbe des Profilbilds.",
         "Restart the app to apply": "Starte die App neu, um zu übernehmen",
         "Audio Call": "Audioanruf",
         "Video Call": "Videoanruf",
@@ -17227,7 +17228,6 @@ enum AorusL10nTable {
         "More": "Mehr",
         "Notifications": "Mitteilungen",
         "Search": "Suche",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profile aus Glas: Das Profilbild öffnet sich sofort in voller Größe, und Hintergrund, Schaltflächen und Tabs nehmen seine Farben an.",
         "No Mask": "Ohne Maske",
         "FORMATTING": "FORMATIERUNG",
         "Auto-formatting": "Automatische Formatierung",
@@ -17820,6 +17820,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Les listes, les cartes et les menus deviennent du verre, et les onglets du profil prennent la couleur de l'avatar.",
         "Restart the app to apply": "Redémarrez l'app pour appliquer",
         "Audio Call": "Appel audio",
         "Video Call": "Appel vidéo",
@@ -17827,7 +17828,6 @@ enum AorusL10nTable {
         "More": "Plus",
         "Notifications": "Notifications",
         "Search": "Rechercher",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Profils en verre : l'avatar s'ouvre tout de suite en grand, et le fond, les boutons et les onglets prennent ses couleurs.",
         "No Mask": "Sans masque",
         "FORMATTING": "MISE EN FORME",
         "Auto-formatting": "Mise en forme automatique",
@@ -18420,6 +18420,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listeler, kartlar ve menüler cama dönüşür; profil sekmeleri de avatarın rengini alır.",
         "Restart the app to apply": "Uygulamak için uygulamayı yeniden başlatın",
         "Audio Call": "Sesli Arama",
         "Video Call": "Görüntülü Arama",
@@ -18427,7 +18428,6 @@ enum AorusL10nTable {
         "More": "Daha Fazla",
         "Notifications": "Bildirimler",
         "Search": "Ara",
-        "Profiles in glass: the avatar opens at full size, and the background, buttons and tabs take on its colours.": "Camdan profiller: avatar hemen büyük açılır; arka plan, düğmeler ve sekmeler onun renklerini alır.",
         "No Mask": "Maskesiz",
         "FORMATTING": "BİÇİMLENDİRME",
         "Auto-formatting": "Otomatik biçimlendirme",
