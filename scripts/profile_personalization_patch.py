@@ -381,6 +381,88 @@ def _patch_expanded_avatar_default(tg: Path) -> None:
     print("ExpandedAvatar: patched PeerInfoHeaderNode")
 
 
+def _patch_round_action_buttons(tg: Path) -> None:
+    """Draw the profile action row as circles of icons under Interface 2.0.
+
+    The stock row is wide rounded rectangles stretched across the width with a caption
+    under each icon. The reference design is four circles and no captions. Both the shape
+    and the captions are decided inside the button node from the size it is handed, so the
+    header only has to hand it a square and the node does the rest — no second button
+    implementation, which is what keeps the context-menu anchors, the gesture handling and
+    the icon animations working.
+    """
+    button = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift"
+    if not button.is_file():
+        raise RuntimeError("RoundButtons: PeerInfoHeaderButtonNode.swift is missing")
+    text = button.read_text(encoding="utf-8")
+    if "aorusIsRound" in text:
+        print("RoundButtons: button node already patched")
+    else:
+        text = _replace_once(
+            text,
+            "        let iconSize = CGSize(width: 40.0, height: 40.0)\n",
+            "        let iconSize = CGSize(width: 40.0, height: 40.0)\n"
+            "        // AorusGram: a square means Interface 2.0 asked for a circle. Deriving it\n"
+            "        // from the size keeps this the only button implementation there is.\n"
+            "        let aorusIsRound = abs(size.width - size.height) < 0.5\n",
+            "round button flag",
+        )
+        text = _replace_once(
+            text,
+            "        self.textNode.attributedText = NSAttributedString(string: text.lowercased(), font: Font.regular(11.0), textColor: .white)\n",
+            "        // The circle carries the meaning on its own; the caption is what makes the\n"
+            "        // stock row tall. Accessibility still gets the label below.\n"
+            "        self.textNode.attributedText = aorusIsRound ? nil : NSAttributedString(string: text.lowercased(), font: Font.regular(11.0), textColor: .white)\n",
+            "round button caption",
+        )
+        text = _replace_once(
+            text,
+            "        transition.updateCornerRadius(layer: self.backgroundView.layer, cornerRadius: min(16.0, backgroundFrame.height * 0.5))\n",
+            "        transition.updateCornerRadius(layer: self.backgroundView.layer, cornerRadius: aorusIsRound ? backgroundFrame.height * 0.5 : min(16.0, backgroundFrame.height * 0.5))\n",
+            "round button radius",
+        )
+        # With no caption underneath, the icon belongs in the middle rather than pinned to
+        # the top edge where the label used to leave room for it.
+        text = _replace_once(
+            text,
+            "        transition.updateFrame(node: self.iconNode, frame: CGRect(origin: CGPoint(x: floor((size.width - iconSize.width) / 2.0), y: 1.0), size: iconSize))\n",
+            "        let aorusIconY: CGFloat = aorusIsRound ? floor((size.height - iconSize.height) / 2.0) : 1.0\n"
+            "        transition.updateFrame(node: self.iconNode, frame: CGRect(origin: CGPoint(x: floor((size.width - iconSize.width) / 2.0), y: aorusIconY), size: iconSize))\n",
+            "round button icon",
+        )
+        text = _replace_once(
+            text,
+            "            transition.updateFrame(view: animatedIconView, frame: CGRect(origin: CGPoint(x: floor((size.width - iconSize.width) / 2.0), y: 1.0), size: iconSize))\n",
+            "            transition.updateFrame(view: animatedIconView, frame: CGRect(origin: CGPoint(x: floor((size.width - iconSize.width) / 2.0), y: aorusIsRound ? floor((size.height - iconSize.height) / 2.0) : 1.0), size: iconSize))\n",
+            "round button animated icon",
+        )
+        button.write_text(text, encoding="utf-8")
+        print("RoundButtons: patched button node")
+
+    header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    head = header.read_text(encoding="utf-8")
+    if "aorusRoundButtons" in head:
+        print("RoundButtons: header row already patched")
+        return
+    head = _replace_once(
+        head,
+        "        let buttonWidth = (width - buttonSideInset * 2.0 + buttonSpacing) / CGFloat(buttonKeys.count) - buttonSpacing\n"
+        "        let buttonSize = CGSize(width: buttonWidth, height: 58.0)\n"
+        "        var buttonRightOrigin = CGPoint(x: width - buttonSideInset, y: backgroundHeight - bottomInset - 16.0 - buttonSize.height)\n",
+        "        // AorusGram: Interface 2.0 lays the row out as centred circles instead of\n"
+        "        // rectangles stretched edge to edge.\n"
+        "        let aorusRoundButtons = !buttonKeys.isEmpty && UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\")\n"
+        "        let aorusRoundButtonDiameter: CGFloat = 64.0\n"
+        "        let buttonWidth = aorusRoundButtons ? aorusRoundButtonDiameter : ((width - buttonSideInset * 2.0 + buttonSpacing) / CGFloat(buttonKeys.count) - buttonSpacing)\n"
+        "        let buttonSize = CGSize(width: buttonWidth, height: aorusRoundButtons ? aorusRoundButtonDiameter : 58.0)\n"
+        "        let aorusRowWidth = CGFloat(buttonKeys.count) * buttonSize.width + CGFloat(max(0, buttonKeys.count - 1)) * buttonSpacing\n"
+        "        var buttonRightOrigin = CGPoint(x: aorusRoundButtons ? floor((width + aorusRowWidth) / 2.0) : width - buttonSideInset, y: backgroundHeight - bottomInset - 16.0 - buttonSize.height)\n",
+        "round button row",
+    )
+    header.write_text(head, encoding="utf-8")
+    print("RoundButtons: patched header row")
+
+
 def _patch_profile_tabs_tint(tg: Path) -> None:
     """Let the profile tab bar paint its selected tab with the avatar's colour.
 
@@ -1134,6 +1216,7 @@ def patch_profile_personalization(tg: Path) -> None:
     _patch_profile_header(tg)
     # After the header patch: the glass property is anchored on the one it inserts.
     _patch_expanded_avatar_default(tg)
+    _patch_round_action_buttons(tg)
     _patch_profile_tabs_tint(tg)
     _patch_profile_list_glass(tg)
     _patch_avatar_renderer(tg)
