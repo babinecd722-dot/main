@@ -20,6 +20,9 @@ public final class AorusGlassProfileHeaderView: UIView {
     /// integration's business.
     public enum ActionKind: Equatable {
         case call
+        /// Stands in for `call` on peers that cannot be called — a channel, a group, a bot.
+        /// The design always shows four buttons, so the slot is filled rather than dropped.
+        case message
         case notifications
         case search
         case more
@@ -116,6 +119,13 @@ public final class AorusGlassProfileHeaderView: UIView {
 
     private var palette: AorusGlassPalette = .placeholder
     private var paletteSourceImage: UIImage?
+
+    /// The palette currently derived from the avatar, so anything presented on top of the
+    /// profile — the call chooser — can be cut from the same glass.
+    public var currentPalette: AorusGlassPalette {
+        return self.palette
+    }
+
     private var actions: [Action] = []
     private var hasTabs = false
 

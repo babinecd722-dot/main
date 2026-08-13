@@ -153,6 +153,205 @@ def _patch_profile_header(tg: Path) -> None:
     print("ProfilePersonalization: patched PeerInfoHeaderNode")
 
 
+_GLASS_PROFILE_METHODS = '''
+    // MARK: - AorusGram Interface 2.0
+
+    /// Lays the glass profile over the stock header and returns its height, or nil when the
+    /// feature is off and the caller should keep the stock result.
+    ///
+    /// This runs at the end of the stock layout instead of replacing it. Telegram's avatar
+    /// list still loads its photos and builds its gallery entries either way — that is where
+    /// the glass header reads the avatar from, and what a tap on it opens — so the stock
+    /// content is faded to zero rather than hidden, which would starve that loading.
+    func aorusUpdateGlassProfile(
+        width: CGFloat,
+        peer: EnginePeer?,
+        statusData: PeerInfoStatusData?,
+        cachedData: EngineCachedPeerData?,
+        savedMusic: TelegramMediaFile?,
+        buttonKeys: [PeerInfoHeaderButtonKey],
+        presentationData: PresentationData
+    ) -> CGFloat? {
+        guard AorusInterfaceV2.isEnabled, !self.isSettings, let peer, width > 0.0 else {
+            if self.aorusGlassProfileView.superview != nil {
+                self.aorusGlassProfileView.removeFromSuperview()
+                self.regularContentNode.alpha = 1.0
+                self.avatarOverlayNode.alpha = 1.0
+            }
+            return nil
+        }
+
+        if self.aorusGlassProfileView.superview == nil {
+            self.aorusGlassProfileView.onAvatarTap = { [weak self] in
+                self?.initiateAvatarExpansion(gallery: true, first: false)
+            }
+            self.aorusGlassProfileView.onNowPlayingTap = { [weak self] in
+                self?.displaySavedMusic?()
+            }
+            self.aorusGlassProfileView.onAction = { [weak self] kind in
+                self?.aorusPerformGlassAction(kind)
+            }
+            // Below the navigation container so Back and Edit keep working and keep their
+            // stock appearance, which already matches this design.
+            self.view.insertSubview(self.aorusGlassProfileView, belowSubview: self.navigationButtonContainer.view)
+        }
+        self.regularContentNode.alpha = 0.0
+        self.avatarOverlayNode.alpha = 0.0
+
+        // Always four buttons, always ending in More. Whether the first one places a call or
+        // opens the chat follows Telegram's own decision for this peer, so a channel, a group
+        // and a bot each get the button that actually does something for them.
+        let canCall = buttonKeys.contains(.call) || buttonKeys.contains(.videoCall)
+        var actions: [AorusGlassProfileHeaderView.Action] = []
+        if canCall {
+            actions.append(AorusGlassProfileHeaderView.Action(kind: .call, systemImageName: "phone.fill", accessibilityLabel: aorusL("Позвонить", "Call")))
+        } else {
+            actions.append(AorusGlassProfileHeaderView.Action(kind: .message, systemImageName: "bubble.left.fill", accessibilityLabel: aorusL("Сообщение", "Message")))
+        }
+        actions.append(AorusGlassProfileHeaderView.Action(kind: .notifications, systemImageName: "bell.fill", accessibilityLabel: aorusL("Уведомления", "Notifications")))
+        actions.append(AorusGlassProfileHeaderView.Action(kind: .search, systemImageName: "magnifyingglass", accessibilityLabel: aorusL("Поиск", "Search")))
+        actions.append(AorusGlassProfileHeaderView.Action(kind: .more, systemImageName: "ellipsis", accessibilityLabel: aorusL("Ещё", "More")))
+
+        // Read from the same saved-music state the stock header draws, so the capsule shows a
+        // real track rather than a second, separate idea of what is playing.
+        var nowPlaying: AorusGlassProfileHeaderView.NowPlaying?
+        if let savedMusic {
+            var performer: String?
+            var trackTitle: String?
+            for attribute in savedMusic.attributes {
+                if case let .Audio(_, _, title, audioPerformer, _) = attribute {
+                    performer = audioPerformer
+                    trackTitle = title
+                    break
+                }
+            }
+            nowPlaying = AorusGlassProfileHeaderView.NowPlaying(
+                track: trackTitle ?? savedMusic.fileName ?? presentationData.strings.MediaPlayer_UnknownTrack,
+                artist: performer ?? presentationData.strings.MediaPlayer_UnknownArtist
+            )
+        }
+
+        var infoSections: [AorusGlassInfoSection] = []
+        if let addressName = peer.addressName, !addressName.isEmpty {
+            infoSections.append(AorusGlassInfoSection(
+                identifier: "username",
+                caption: aorusL("имя пользователя", "username"),
+                value: "@\\(addressName)",
+                showsQRCode: true
+            ))
+        }
+        if let userData = cachedData as? CachedUserData, let about = userData.about, !about.isEmpty {
+            infoSections.append(AorusGlassInfoSection(
+                identifier: "bio",
+                caption: aorusL("о себе", "bio"),
+                value: about,
+                allowsMultipleLines: true
+            ))
+        }
+
+        let model = AorusGlassProfileHeaderView.Model(
+            title: peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder),
+            status: statusData?.text ?? "",
+            avatarImage: self.avatarListNode.avatarContainerNode.avatarNode.unroundedImage,
+            actions: actions,
+            nowPlaying: nowPlaying,
+            infoSections: infoSections
+        )
+
+        let height = self.aorusGlassProfileView.update(model: model, width: width)
+        self.aorusGlassProfileView.frame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: height))
+        return height
+    }
+
+    private func aorusPerformGlassAction(_ kind: AorusGlassProfileHeaderView.ActionKind) {
+        switch kind {
+        case .call:
+            self.aorusPresentCallChooser()
+        case .message:
+            self.performButtonAction?(.message, nil, nil)
+        case .notifications:
+            // Telegram's own mute action, so notification behaviour is unchanged.
+            self.performButtonAction?(.mute, nil, nil)
+        case .search:
+            self.performButtonAction?(.search, nil, nil)
+        case .more:
+            self.performButtonAction?(.more, nil, nil)
+        }
+    }
+
+    /// One phone button covers both kinds of call, so the choice moves into a sheet cut from
+    /// the same glass as the profile it was opened from.
+    private func aorusPresentCallChooser() {
+        guard let controller = self.controller else {
+            return
+        }
+        let chooser = AorusGlassCallChooserController(
+            palette: self.aorusGlassProfileView.currentPalette,
+            completion: { [weak self] selection in
+                switch selection {
+                case .audio:
+                    self?.performButtonAction?(.call, nil, nil)
+                case .video:
+                    self?.performButtonAction?(.videoCall, nil, nil)
+                }
+            }
+        )
+        // Presented without a UIKit animation: the sheet runs its own spring from
+        // viewDidAppear, and playing both would double the motion.
+        controller.present(chooser, animated: false)
+    }
+
+'''
+
+
+def _patch_glass_profile(tg: Path) -> None:
+    """Wire the Interface 2.0 glass header into PeerInfoHeaderNode."""
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    if not path.is_file():
+        raise RuntimeError("GlassProfile: PeerInfoHeaderNode.swift is missing")
+    text = path.read_text(encoding="utf-8")
+    if "// MARK: - AorusGram Interface 2.0" in text:
+        print("GlassProfile: PeerInfoHeaderNode already patched")
+        return
+
+    text = _replace_once(
+        text,
+        "    let aorusAnimatedProfileBackgroundView = AorusAnimatedProfileBackgroundView()\n",
+        "    let aorusAnimatedProfileBackgroundView = AorusAnimatedProfileBackgroundView()\n"
+        "    let aorusGlassProfileView = AorusGlassProfileHeaderView(frame: CGRect())\n",
+        "glass profile property",
+    )
+    text = _replace_once(
+        text,
+        "    func initiateAvatarExpansion(gallery: Bool, first: Bool) {\n",
+        _GLASS_PROFILE_METHODS + "    func initiateAvatarExpansion(gallery: Bool, first: Bool) {\n",
+        "glass profile methods",
+    )
+    # Patched at the return rather than at the top of update(): every local the glass header
+    # needs — the resolved button set, the saved-music file — is computed by the stock layout
+    # on the way here, so nothing has to be derived a second time.
+    text = _replace_once(
+        text,
+        "        return resolvedHeight\n    }\n",
+        "        if let aorusGlassHeight = self.aorusUpdateGlassProfile(\n"
+        "            width: width,\n"
+        "            peer: peer,\n"
+        "            statusData: statusData,\n"
+        "            cachedData: cachedData,\n"
+        "            savedMusic: currentSavedMusic,\n"
+        "            buttonKeys: buttonKeys,\n"
+        "            presentationData: presentationData\n"
+        "        ) {\n"
+        "            return aorusGlassHeight\n"
+        "        }\n"
+        "        \n"
+        "        return resolvedHeight\n    }\n",
+        "glass profile return",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("GlassProfile: patched PeerInfoHeaderNode")
+
+
 def _patch_avatar_renderer(tg: Path) -> None:
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoAvatarTransformContainerNode.swift"
     if not path.is_file():
@@ -757,6 +956,8 @@ def _patch_build(tg: Path) -> None:
 
 def patch_profile_personalization(tg: Path) -> None:
     _patch_profile_header(tg)
+    # After the header patch: the glass property is anchored on the one it inserts.
+    _patch_glass_profile(tg)
     _patch_avatar_renderer(tg)
     _patch_editing_avatar(tg)
     _patch_profile_preview(tg)
