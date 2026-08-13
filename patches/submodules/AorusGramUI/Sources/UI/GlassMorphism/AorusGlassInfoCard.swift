@@ -134,7 +134,7 @@ public final class AorusGlassInfoCardView: UIView {
 
     // MARK: - Row
 
-    private final class RowView: UIView {
+    private final class RowView: UIView, UIGestureRecognizerDelegate {
         private let section: AorusGlassInfoSection
         private let captionLabel = UILabel()
         private let valueLabel = UILabel()
@@ -180,6 +180,9 @@ public final class AorusGlassInfoCardView: UIView {
             }
 
             let tapRecognizer = UITapGestureRecognizer(target: self, action: #selector(self.handleTap))
+            // The QR button sits inside the row, so without this the row's own tap would fire
+            // alongside it and a QR tap would also copy the username.
+            tapRecognizer.delegate = self
             self.addGestureRecognizer(tapRecognizer)
 
             self.isAccessibilityElement = true
@@ -190,6 +193,11 @@ public final class AorusGlassInfoCardView: UIView {
         @available(*, unavailable)
         required init?(coder: NSCoder) {
             fatalError("init(coder:) is not supported")
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let qrCodeButton = self.qrCodeButton else { return true }
+            return !qrCodeButton.frame.contains(touch.location(in: self))
         }
 
         @objc private func handleTap() {

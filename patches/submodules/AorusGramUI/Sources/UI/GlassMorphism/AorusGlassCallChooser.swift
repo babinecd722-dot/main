@@ -168,7 +168,11 @@ public final class AorusGlassCallChooserController: UIViewController {
             self.dimView.alpha = 0.0
             self.containerView.transform = CGAffineTransform(translationX: 0.0, y: offset)
         }, completion: { _ in
-            self.presentingViewController?.dismiss(animated: false, completion: then)
+            // Dismissed through self, not through presentingViewController: Telegram's
+            // ViewController overrides dismiss(animated:) to filter itself out of its
+            // navigation stack, so asking the presenter to dismiss would run that instead of
+            // closing this sheet.
+            self.dismiss(animated: false, completion: then)
         })
     }
 

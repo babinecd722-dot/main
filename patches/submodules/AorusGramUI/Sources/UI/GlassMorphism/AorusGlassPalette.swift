@@ -130,36 +130,48 @@ public struct AorusGlassPalette: Equatable {
         let side = 16
         let bytesPerRow = side * 4
         var buffer = [UInt8](repeating: 0, count: bytesPerRow * side)
-        guard let context = CGContext(
-            data: &buffer,
-            width: side,
-            height: side,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            return nil
-        }
-        context.draw(source, in: CGRect(x: 0, y: 0, width: side, height: side))
 
         var totalR = 0.0
         var totalG = 0.0
         var totalB = 0.0
         var totalWeight = 0.0
-        for index in stride(from: 0, to: buffer.count, by: 4) {
-            let alpha = Double(buffer[index + 3]) / 255.0
-            guard alpha > 0.0 else { continue }
-            // The buffer is premultiplied, so each channel already carries its own alpha
-            // weighting. Summing the channels and dividing by the summed alpha is therefore
-            // exactly the alpha-weighted average of the un-premultiplied colours — a
-            // transparent border contributes nothing instead of dragging the palette to black.
-            totalR += Double(buffer[index]) / 255.0
-            totalG += Double(buffer[index + 1]) / 255.0
-            totalB += Double(buffer[index + 2]) / 255.0
-            totalWeight += alpha
+
+        // Drawing and reading both happen inside withUnsafeMutableBytes. Taking `&buffer` and
+        // using the pointer after the call returns would leave CoreGraphics writing into
+        // storage Swift no longer guarantees — the classic way this kind of sampling produces
+        // colours that are right in a debug build and garbage in a release one.
+        let didDraw: Bool = buffer.withUnsafeMutableBytes { rawBuffer -> Bool in
+            guard let baseAddress = rawBuffer.baseAddress else { return false }
+            guard let context = CGContext(
+                data: baseAddress,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else {
+                return false
+            }
+            context.draw(source, in: CGRect(x: 0, y: 0, width: side, height: side))
+
+            let pixels = rawBuffer.bindMemory(to: UInt8.self)
+            for index in stride(from: 0, to: pixels.count, by: 4) {
+                let alpha = Double(pixels[index + 3]) / 255.0
+                guard alpha > 0.0 else { continue }
+                // The buffer is premultiplied, so each channel already carries its own alpha
+                // weighting. Summing the channels and dividing by the summed alpha is exactly
+                // the alpha-weighted average of the un-premultiplied colours — a transparent
+                // border contributes nothing instead of dragging the palette to black.
+                totalR += Double(pixels[index]) / 255.0
+                totalG += Double(pixels[index + 1]) / 255.0
+                totalB += Double(pixels[index + 2]) / 255.0
+                totalWeight += alpha
+            }
+            return true
         }
-        guard totalWeight > 0.0 else { return nil }
+
+        guard didDraw, totalWeight > 0.0 else { return nil }
         return UIColor(
             red: CGFloat(totalR / totalWeight),
             green: CGFloat(totalG / totalWeight),
