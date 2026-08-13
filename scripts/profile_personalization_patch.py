@@ -463,6 +463,81 @@ def _patch_round_action_buttons(tg: Path) -> None:
     print("RoundButtons: patched header row")
 
 
+def _patch_music_capsule(tg: Path) -> None:
+    """Give the saved-music row the glass capsule the design asks for.
+
+    The stock row is a full-width strip of text. The design is a pill that hugs the track
+    name and sits centred under the buttons. Both come from the same component: dropping
+    its minimum width lets it size to its content, and a rounded backing view behind it
+    supplies the capsule. The component itself, its marquee and its tap action are
+    untouched, so the row still opens the same screen it always did.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    if not path.is_file():
+        raise RuntimeError("MusicCapsule: PeerInfoHeaderNode.swift is missing")
+    text = path.read_text(encoding="utf-8")
+    if "aorusMusicCapsule" in text:
+        print("MusicCapsule: already patched")
+        return
+
+    text = _replace_once(
+        text,
+        "    let aorusAnimatedProfileBackgroundView = AorusAnimatedProfileBackgroundView()\n",
+        "    let aorusAnimatedProfileBackgroundView = AorusAnimatedProfileBackgroundView()\n"
+        "    let aorusMusicCapsule = UIView()\n",
+        "music capsule property",
+    )
+    # Zero minimum width: the component then reports the width its content actually needs,
+    # which is what the capsule is sized from.
+    text = _replace_once(
+        text,
+        "                        minSize: CGSize(width: backgroundFrame.width, height: musicHeight),\n",
+        "                        minSize: CGSize(width: aorusInterfaceV2Enabled ? 0.0 : backgroundFrame.width, height: musicHeight),\n",
+        "music capsule min size",
+    )
+    text = _replace_once(
+        text,
+        "            let musicFrame = CGRect(origin: CGPoint(x: 0.0, y:",
+        "            let aorusMusicX: CGFloat = aorusInterfaceV2Enabled ? floor((backgroundFrame.width - musicSize.width) / 2.0) : 0.0\n"
+        "            let musicFrame = CGRect(origin: CGPoint(x: aorusMusicX, y:",
+        "music capsule frame",
+    )
+    text = _replace_once(
+        text,
+        "                if musicView.superview == nil {\n"
+        "                    self.regularContentNode.view.addSubview(musicView)\n",
+        "                if aorusInterfaceV2Enabled {\n"
+        "                    // Inserted below the row rather than behind it as a sublayer so it\n"
+        "                    // travels with the same additive transitions the row already uses.\n"
+        "                    if self.aorusMusicCapsule.superview == nil {\n"
+        "                        self.aorusMusicCapsule.isUserInteractionEnabled = false\n"
+        "                        self.aorusMusicCapsule.layer.cornerCurve = .continuous\n"
+        "                        self.regularContentNode.view.addSubview(self.aorusMusicCapsule)\n"
+        "                    }\n"
+        "                    self.aorusMusicCapsule.backgroundColor = UIColor(white: 1.0, alpha: 0.16)\n"
+        "                    let aorusCapsuleFrame = musicFrame.insetBy(dx: -12.0, dy: -7.0)\n"
+        "                    self.aorusMusicCapsule.layer.cornerRadius = aorusCapsuleFrame.height * 0.5\n"
+        "                    musicTransition.updateFrame(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
+        "                    self.aorusMusicCapsule.alpha = 1.0\n"
+        "                } else if self.aorusMusicCapsule.superview != nil {\n"
+        "                    self.aorusMusicCapsule.removeFromSuperview()\n"
+        "                }\n"
+        "                if musicView.superview == nil {\n"
+        "                    self.regularContentNode.view.addSubview(musicView)\n",
+        "music capsule view",
+    )
+    # One flag for the whole music block, read once where the block begins.
+    text = _replace_once(
+        text,
+        "        if let currentSavedMusic {\n",
+        "        let aorusInterfaceV2Enabled = UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\")\n"
+        "        if let currentSavedMusic {\n",
+        "music capsule flag",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("MusicCapsule: patched PeerInfoHeaderNode")
+
+
 def _patch_profile_tabs_tint(tg: Path) -> None:
     """Let the profile tab bar paint its selected tab with the avatar's colour.
 
@@ -1217,6 +1292,7 @@ def patch_profile_personalization(tg: Path) -> None:
     # After the header patch: the glass property is anchored on the one it inserts.
     _patch_expanded_avatar_default(tg)
     _patch_round_action_buttons(tg)
+    _patch_music_capsule(tg)
     _patch_profile_tabs_tint(tg)
     _patch_profile_list_glass(tg)
     _patch_avatar_renderer(tg)
