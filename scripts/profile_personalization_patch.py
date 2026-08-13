@@ -538,6 +538,72 @@ def _patch_music_capsule(tg: Path) -> None:
     print("MusicCapsule: patched PeerInfoHeaderNode")
 
 
+def _patch_call_type_sheet(tg: Path) -> None:
+    """Ask which kind of call the phone button should place.
+
+    Interface 2.0 shows one phone button where the stock header shows separate Call and
+    Video buttons, so the choice has to happen somewhere. It happens in the sheet iOS users
+    already expect from a phone button, and both answers go back through Telegram's own
+    button actions — the call is placed by exactly the code that placed it before.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    if not path.is_file():
+        raise RuntimeError("CallSheet: PeerInfoHeaderNode.swift is missing")
+    text = path.read_text(encoding="utf-8")
+    if "aorusPresentCallTypeSheet" in text:
+        print("CallSheet: already patched")
+        return
+    text = _replace_once(
+        text,
+        "        self.performButtonAction?(buttonNode.key, buttonNode, gesture)\n",
+        "        // AorusGram: a long press still opens Telegram's own context menu, so the\n"
+        "        // sheet is only for a plain tap.\n"
+        "        if buttonNode.key == .call, gesture == nil, self.videoCallsEnabled,\n"
+        "           UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\"),\n"
+        "           self.aorusPresentCallTypeSheet() {\n"
+        "            return\n"
+        "        }\n"
+        "        self.performButtonAction?(buttonNode.key, buttonNode, gesture)\n",
+        "call sheet interception",
+    )
+    text = _replace_once(
+        text,
+        "    func initiateAvatarExpansion(gallery: Bool, first: Bool) {\n",
+        "    /// Returns false when the sheet cannot be shown, so the caller falls back to the\n"
+        "    /// stock action rather than leaving a dead button.\n"
+        "    private func aorusPresentCallTypeSheet() -> Bool {\n"
+        "        guard let presentationData = self.presentationData, let controller = self.controller else {\n"
+        "            return false\n"
+        "        }\n"
+        "        let sheet = ActionSheetController(presentationData: presentationData)\n"
+        "        sheet.setItemGroups([\n"
+        "            ActionSheetItemGroup(items: [\n"
+        "                ActionSheetButtonItem(title: aorusL(\"Аудиозвонок\", \"Audio Call\"), color: .accent, action: { [weak self, weak sheet] in\n"
+        "                    sheet?.dismissAnimated()\n"
+        "                    self?.performButtonAction?(.call, nil, nil)\n"
+        "                }),\n"
+        "                ActionSheetButtonItem(title: aorusL(\"Видеозвонок\", \"Video Call\"), color: .accent, action: { [weak self, weak sheet] in\n"
+        "                    sheet?.dismissAnimated()\n"
+        "                    self?.performButtonAction?(.videoCall, nil, nil)\n"
+        "                })\n"
+        "            ]),\n"
+        "            ActionSheetItemGroup(items: [\n"
+        "                ActionSheetButtonItem(title: aorusL(\"Отмена\", \"Cancel\"), color: .accent, font: .bold, action: { [weak sheet] in\n"
+        "                    sheet?.dismissAnimated()\n"
+        "                })\n"
+        "            ])\n"
+        "        ])\n"
+        "        controller.present(sheet, in: .window(.root))\n"
+        "        return true\n"
+        "    }\n"
+        "\n"
+        "    func initiateAvatarExpansion(gallery: Bool, first: Bool) {\n",
+        "call sheet method",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("CallSheet: patched PeerInfoHeaderNode")
+
+
 def _patch_profile_tabs_tint(tg: Path) -> None:
     """Let the profile tab bar paint its selected tab with the avatar's colour.
 
@@ -1293,6 +1359,7 @@ def patch_profile_personalization(tg: Path) -> None:
     _patch_expanded_avatar_default(tg)
     _patch_round_action_buttons(tg)
     _patch_music_capsule(tg)
+    _patch_call_type_sheet(tg)
     _patch_profile_tabs_tint(tg)
     _patch_profile_list_glass(tg)
     _patch_avatar_renderer(tg)
