@@ -1169,7 +1169,11 @@ def main() -> None:
             'publishRequirement(required: authorizationAllowsTunnel)',
             '"required": required',
             "AorusSessionMetrics.metricFlag",
-            "waitForCoreStart()",
+            "waitForCoreAndLocalSocks(port: localPort)",
+            "localSocksIsReady(port:",
+            "Data([0x05, 0x01, 0x00])",
+            "Data([0x05, 0x00])",
+            "waitForCoreStop()",
             "restartRetryDelays",
             "scheduleRestartRetryLocked()",
             "cancelRestartRetryLocked(resetAttempt: true)",
@@ -1177,6 +1181,8 @@ def main() -> None:
         ):
             if marker not in reality_manager_text:
                 err.append(f"RealityProxy: core invariant is missing {marker}")
+        if 'normalizedAddress != "0.0.0.0"' not in reality_profile_text:
+            err.append("RealityProxy: endpoint validation accepts an unspecified address")
 
     # The runtime integrity guard must not leak what it is. It was defeated once because
     # every jailbreak path and framework name shipped as a plain literal and the type and

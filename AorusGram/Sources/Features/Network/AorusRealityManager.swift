@@ -1,5 +1,38 @@
 import Foundation
 import LibXray
+import Network
+
+private final class AorusSocksProbeState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    private var result = false
+    let semaphore = DispatchSemaphore(value: 0)
+
+    func finish(_ success: Bool) {
+        lock.lock()
+        guard !finished else {
+            lock.unlock()
+            return
+        }
+        finished = true
+        result = success
+        lock.unlock()
+        semaphore.signal()
+    }
+
+    var succeeded: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return result
+    }
+}
+
+private struct AorusRealityBootstrapDiagnostic: Codable {
+    let stage: String
+    let errorCode: String?
+    let localSocksReady: Bool
+    let updatedAt: Double
+}
 
 /// Owns the in-process Xray core. Credentials are supplied at runtime by the
 /// signed control plane and never persisted by this class.
@@ -9,9 +42,11 @@ public final class AorusRealityManager {
     private static let suiteName = "ng.session.store"
     private static let endpointKey = "71d447f8-9128-4d18-b63c-ec11ef43ba26"
     private static let requirementKey = "b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca"
+    private static let diagnosticKey = "aorusgram_reality_bootstrap_status"
     private static let candidatePorts = [38_191, 38_192, 38_193]
 
     private let queue = DispatchQueue(label: "com.aorusgram.reality", qos: .userInitiated)
+    private let readinessQueue = DispatchQueue(label: "com.aorusgram.reality.readiness", qos: .userInitiated)
     private var profile: AorusRealityProfile?
     private var rankedEndpoints: [AorusRealityEndpoint] = []
     private var activeEndpoint: AorusRealityEndpoint?
@@ -21,7 +56,7 @@ public final class AorusRealityManager {
     private var restartRetryGeneration: UInt64 = 0
     private var restartRetryAttempt = 0
 
-    private let coreStartTimeout: TimeInterval = 1.0
+    private let coreStartTimeout: TimeInterval = 3.0
     private let coreStartPollInterval: TimeInterval = 0.05
     private let restartRetryDelays: [TimeInterval] = [0.25, 0.5, 1, 2, 4, 8, 15]
 
@@ -32,6 +67,7 @@ public final class AorusRealityManager {
             licenseDidLock()
             return
         }
+        recordDiagnostic(stage: "awaiting_profile")
         publishRequirement(required: true)
         AorusProxyManager.shared.refresh(force: false)
     }
@@ -50,8 +86,10 @@ public final class AorusRealityManager {
             guard let self else { return }
             if self.mayRun,
                self.isCoreRunning(),
-               let port = self.activePort ?? self.endpointForCurrentProcess() {
+               let port = self.activePort ?? self.endpointForCurrentProcess(),
+               self.localSocksIsReady(port: port, timeout: 0.75) {
                 self.activePort = port
+                self.recordDiagnostic(stage: "local_socks_ready", localSocksReady: true)
                 self.publishEndpoint(port: port)
                 return
             }
@@ -72,9 +110,11 @@ public final class AorusRealityManager {
             guard let self else { return }
             guard self.authorizationAllowsTunnel,
                   profile.isValid(for: DeviceFingerprint.deviceHash()) else {
+                self.recordDiagnostic(stage: "profile_rejected", errorCode: "profile_validation_failed")
                 self.stopLocked(clearProfile: true)
                 return
             }
+            self.recordDiagnostic(stage: "profile_received")
             let validRanked = rankedEndpoints.filter { endpoint in
                 endpoint.isValid && profile.endpoints.contains(endpoint)
             }
@@ -82,7 +122,7 @@ public final class AorusRealityManager {
             let profileChanged = self.profile != profile || self.rankedEndpoints != nextRanked
             let canKeepRunning = self.profile?.credential == profile.credential &&
                 self.isCoreRunning() &&
-                self.activePort != nil &&
+                self.activePort.map { self.localSocksIsReady(port: $0, timeout: 0.75) } == true &&
                 self.activeEndpoint == nextRanked.first
             self.profile = profile
             self.rankedEndpoints = nextRanked
@@ -134,7 +174,9 @@ public final class AorusRealityManager {
 
         transitionInProgress = true
         defer { transitionInProgress = false }
+        recordDiagnostic(stage: "starting_core")
         _ = invoke(method: "stopXray")
+        waitForCoreStop()
         activePort = nil
         activeEndpoint = nil
         clearEndpoint(postUpdate: false)
@@ -142,20 +184,30 @@ public final class AorusRealityManager {
         let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints
         for endpoint in endpointOrder {
             guard mayRun else { break }
+            recordDiagnostic(stage: "endpoint_selected")
             for localPort in Self.candidatePorts {
                 guard let config = makeConfig(profile: profile, endpoint: endpoint, localPort: localPort) else {
                     continue
                 }
+                recordDiagnostic(stage: "core_start_requested")
                 let response = invoke(method: "runXrayFromJson", payload: ["configJSON": config])
-                if response?.success == true, waitForCoreStart() {
+                guard response?.success == true else {
+                    recordDiagnostic(stage: "core_start_failed", errorCode: "xray_start_rejected")
+                    _ = invoke(method: "stopXray")
+                    waitForCoreStop()
+                    continue
+                }
+                if waitForCoreAndLocalSocks(port: localPort) {
                     activePort = localPort
                     activeEndpoint = endpoint
                     cancelRestartRetryLocked(resetAttempt: true)
+                    recordDiagnostic(stage: "endpoint_published", localSocksReady: true)
                     publishEndpoint(port: localPort)
                     AorusProxyManager.shared.realityEndpointDidActivate(endpoint)
                     return
                 }
                 _ = invoke(method: "stopXray")
+                waitForCoreStop()
             }
         }
         clearEndpoint(postUpdate: true)
@@ -168,6 +220,7 @@ public final class AorusRealityManager {
         transitionInProgress = true
         defer { transitionInProgress = false }
         _ = invoke(method: "stopXray")
+        waitForCoreStop()
         activePort = nil
         activeEndpoint = nil
         if clearProfile {
@@ -177,13 +230,83 @@ public final class AorusRealityManager {
         clearEndpoint(postUpdate: true)
     }
 
-    private func waitForCoreStart() -> Bool {
+    private func waitForCoreAndLocalSocks(port: Int) -> Bool {
         let deadline = Date().addingTimeInterval(coreStartTimeout)
+        var observedRunningCore = false
         repeat {
-            if isCoreRunning() { return true }
+            if isCoreRunning() {
+                if !observedRunningCore {
+                    observedRunningCore = true
+                    recordDiagnostic(stage: "core_running")
+                }
+                let remaining = deadline.timeIntervalSinceNow
+                if remaining > 0,
+                   localSocksIsReady(port: port, timeout: min(0.4, remaining)) {
+                    recordDiagnostic(stage: "local_socks_ready", localSocksReady: true)
+                    return true
+                }
+            }
             Thread.sleep(forTimeInterval: coreStartPollInterval)
         } while Date() < deadline && mayRun
-        return isCoreRunning()
+        if observedRunningCore {
+            recordDiagnostic(stage: "local_socks_failed", errorCode: "local_socks_handshake_timeout")
+        } else {
+            recordDiagnostic(stage: "core_start_failed", errorCode: "core_running_timeout")
+        }
+        return false
+    }
+
+    private func waitForCoreStop() {
+        let deadline = Date().addingTimeInterval(1.0)
+        while isCoreRunning(), Date() < deadline {
+            Thread.sleep(forTimeInterval: coreStartPollInterval)
+        }
+    }
+
+    /// `getXrayState.running` is set before the local inbound is guaranteed to be
+    /// bound on slower devices. Telegram must not receive the loopback endpoint
+    /// until the SOCKS server has completed a real protocol handshake.
+    private func localSocksIsReady(port: Int, timeout: TimeInterval) -> Bool {
+        guard timeout > 0,
+              let networkPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+            return false
+        }
+
+        let state = AorusSocksProbeState()
+        let connection = NWConnection(host: "127.0.0.1", port: networkPort, using: .tcp)
+        connection.stateUpdateHandler = { connectionState in
+            switch connectionState {
+            case .ready:
+                connection.send(content: Data([0x05, 0x01, 0x00]), completion: .contentProcessed { error in
+                    guard error == nil else {
+                        state.finish(false)
+                        connection.cancel()
+                        return
+                    }
+                    connection.receive(minimumIncompleteLength: 2, maximumLength: 2) { data, _, _, error in
+                        state.finish(error == nil && data == Data([0x05, 0x00]))
+                        connection.cancel()
+                    }
+                })
+            case .failed:
+                state.finish(false)
+                connection.cancel()
+            case .waiting:
+                // The localhost route can briefly wait while Xray finishes
+                // binding. The probe timeout remains the failure boundary.
+                break
+            case .cancelled:
+                state.finish(false)
+            default:
+                break
+            }
+        }
+        connection.start(queue: readinessQueue)
+        if state.semaphore.wait(timeout: .now() + timeout) == .timedOut {
+            state.finish(false)
+            connection.cancel()
+        }
+        return state.succeeded
     }
 
     /// LibXray can briefly reject or delay its first in-process start while iOS is
@@ -196,6 +319,8 @@ public final class AorusRealityManager {
             return
         }
         guard restartRetryWorkItem == nil else { return }
+
+        recordDiagnostic(stage: "retry_scheduled", errorCode: "no_ready_local_tunnel")
 
         restartRetryGeneration &+= 1
         let generation = restartRetryGeneration
@@ -343,5 +468,25 @@ public final class AorusRealityManager {
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .aorusProxyConfigUpdated, object: nil)
         }
+    }
+
+    private func recordDiagnostic(
+        stage: String,
+        errorCode: String? = nil,
+        localSocksReady: Bool = false
+    ) {
+        let diagnostic = AorusRealityBootstrapDiagnostic(
+            stage: stage,
+            errorCode: errorCode,
+            localSocksReady: localSocksReady,
+            updatedAt: Date().timeIntervalSince1970
+        )
+        guard let data = try? JSONEncoder().encode(diagnostic),
+              let text = String(data: data, encoding: .utf8) else {
+            return
+        }
+        // Intentionally contains no endpoint address, UUID, keys, raw Xray error,
+        // device hash, or signed profile material.
+        UserDefaults.standard.set(text, forKey: Self.diagnosticKey)
     }
 }

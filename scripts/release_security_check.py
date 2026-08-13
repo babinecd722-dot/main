@@ -224,7 +224,11 @@ def main() -> int:
             '"required": required',
             "AorusSessionMetrics.metricFlag",
             "isReadyForAuthorizedTraffic",
-            "waitForCoreStart()",
+            "waitForCoreAndLocalSocks(port: localPort)",
+            "localSocksIsReady(port:",
+            "Data([0x05, 0x01, 0x00])",
+            "Data([0x05, 0x00])",
+            "waitForCoreStop()",
             "restartRetryDelays",
             "scheduleRestartRetryLocked()",
             "cancelRestartRetryLocked(resetAttempt: true)",
@@ -232,6 +236,8 @@ def main() -> int:
         ):
             if marker not in reality_manager:
                 fail(errors, f"REALITY manager invariant is missing {marker}")
+        if 'normalizedAddress != "0.0.0.0"' not in reality_profile:
+            fail(errors, "REALITY endpoint validation accepts an unspecified address")
         for forbidden in ("104.143.218.253", "7c2fb9b6-fcb9-4715-8752-49f6534e3017"):
             if forbidden in reality_profile or forbidden in reality_manager:
                 fail(errors, "test REALITY credentials must not be committed")

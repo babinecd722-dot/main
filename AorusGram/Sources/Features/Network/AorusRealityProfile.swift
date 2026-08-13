@@ -38,7 +38,13 @@ struct AorusRealityEndpoint: Decodable, Equatable {
     }
 
     var isValid: Bool {
+        let normalizedAddress = address.lowercased()
         guard !address.isEmpty, address.count <= 255,
+              normalizedAddress != "0.0.0.0",
+              normalizedAddress != "::",
+              normalizedAddress != "::0",
+              normalizedAddress != "localhost",
+              !normalizedAddress.hasPrefix("127."),
               (1 ... 65_535).contains(port),
               (1 ... 100).contains(priority),
               (40 ... 64).contains(publicKey.count),
