@@ -4,6 +4,11 @@ from pathlib import Path
 
 LICENSE_LOCK_KEY = "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04"
 
+# Kept in step with AorusGlassProfileTint.key, which writes this value. The tab bar reads it
+# straight from defaults because it cannot import AorusGramUI without closing a cycle in the
+# build graph (ItemListUI -> HorizontalTabsComponent -> AorusGramUI -> ItemListUI).
+_PROFILE_TAB_ACCENT_KEY = "aorusgram_profile_tab_accent"
+
 
 def _replace_once(text: str, old: str, new: str, label: str) -> str:
     if old not in text:
@@ -180,7 +185,7 @@ _GLASS_PROFILE_METHODS = '''
             }
             // Cleared, not left behind: a stock profile must draw its tab bar exactly as
             // Telegram does, including right after leaving a glass one.
-            AorusGlassProfileTint.selectedTabColor = nil
+            AorusGlassProfileTint.setSelectedTabColor(nil)
             return nil
         }
 
@@ -280,7 +285,7 @@ _GLASS_PROFILE_METHODS = '''
         let height = self.aorusGlassProfileView.update(model: model, width: width)
         // Published after the update so the tab bar picks up the palette the avatar produced
         // on this pass, not the one from before the photo finished loading.
-        AorusGlassProfileTint.selectedTabColor = self.aorusGlassProfileView.currentPalette.accentText
+        AorusGlassProfileTint.setSelectedTabColor(self.aorusGlassProfileView.currentPalette.accentText)
         self.aorusGlassProfileView.frame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: height))
         return height
     }
@@ -392,13 +397,31 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
         print("GlassProfileTabs: HorizontalTabsComponent already patched")
         return
 
-    if "import AorusGramUI\n" not in text:
-        text = _replace_once(
-            text,
-            "import MultilineTextWithEntitiesComponent\n",
-            "import MultilineTextWithEntitiesComponent\nimport AorusGramUI\n",
-            "tabs Aorus import",
-        )
+    # Read from shared defaults rather than by importing AorusGramUI. ItemListUI depends on
+    # this module and AorusGramUI depends back on ItemListUI, so a module edge here closes a
+    # cycle in the build graph and nothing links at all. The key is pinned against
+    # AorusGlassProfileTint.key on the writing side.
+    text = _replace_once(
+        text,
+        "import MultilineTextWithEntitiesComponent\n",
+        "import MultilineTextWithEntitiesComponent\n"
+        "\n"
+        "// AorusGram: the accent Interface 2.0 gives the selected profile tab, or nil for stock.\n"
+        f"private let aorusProfileTabAccentKey = \"{_PROFILE_TAB_ACCENT_KEY}\"\n"
+        "\n"
+        "private func aorusProfileTabAccent() -> UIColor? {\n"
+        "    guard let value = UserDefaults.standard.object(forKey: aorusProfileTabAccentKey) as? Int else {\n"
+        "        return nil\n"
+        "    }\n"
+        "    return UIColor(\n"
+        "        red: CGFloat((value >> 16) & 0xff) / 255.0,\n"
+        "        green: CGFloat((value >> 8) & 0xff) / 255.0,\n"
+        "        blue: CGFloat(value & 0xff) / 255.0,\n"
+        "        alpha: 1.0\n"
+        "    )\n"
+        "}\n",
+        "tabs accent reader",
+    )
     # Captured at init rather than read at draw time so that the component compares unequal
     # when the tint changes — otherwise ComponentFlow would reuse the view and the tab would
     # keep the previous profile's colour.
@@ -411,7 +434,7 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
     text = _replace_once(
         text,
         "        self.isSelected = isSelected\n",
-        "        self.isSelected = isSelected\n        self.aorusSelectedAccent = AorusGlassProfileTint.selectedTabColor\n",
+        "        self.isSelected = isSelected\n        self.aorusSelectedAccent = aorusProfileTabAccent()\n",
         "tabs accent assignment",
     )
     text = _replace_once(
@@ -432,21 +455,7 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
         "tabs accent colour",
     )
     path.write_text(text, encoding="utf-8")
-
-    build = tg / "submodules/TelegramUI/Components/HorizontalTabsComponent/BUILD"
-    if not build.is_file():
-        raise RuntimeError("GlassProfileTabs: HorizontalTabsComponent BUILD is missing")
-    build_text = build.read_text(encoding="utf-8")
-    if '"//submodules/AorusGramUI"' not in build_text:
-        build.write_text(
-            _replace_once(
-                build_text,
-                "    deps = [\n",
-                '    deps = [\n        "//submodules/AorusGramUI",\n',
-                "tabs BUILD dependency",
-            ),
-            encoding="utf-8",
-        )
+    # No BUILD dependency is added on purpose — see the reader comment above.
     print("GlassProfileTabs: patched HorizontalTabsComponent")
 
 
