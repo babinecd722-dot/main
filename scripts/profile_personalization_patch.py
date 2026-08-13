@@ -186,6 +186,7 @@ _GLASS_PROFILE_METHODS = '''
             // Cleared, not left behind: a stock profile must draw its tab bar exactly as
             // Telegram does, including right after leaving a glass one.
             AorusGlassProfileTint.setSelectedTabColor(nil)
+        AorusGlassProfileTint.setPageBackgroundColor(nil)
             return nil
         }
 
@@ -239,53 +240,19 @@ _GLASS_PROFILE_METHODS = '''
             )
         }
 
-        var infoSections: [AorusGlassInfoSection] = []
-        if let addressName = peer.addressName, !addressName.isEmpty {
-            // The other usernames this peer has collected. Inactive ones are bought or
-            // reserved but not in use, so listing them would advertise addresses that do not
-            // resolve; the primary one is dropped because it is already the row's value.
-            var allUsernames: [TelegramPeerUsername] = []
-            switch peer {
-            case let .user(user):
-                allUsernames = user.usernames
-            case let .channel(channel):
-                allUsernames = channel.usernames
-            default:
-                break
-            }
-            let otherUsernames = allUsernames
-                .filter { $0.flags.contains(.isActive) && $0.username != addressName }
-                .map { "@\\($0.username)" }
-            infoSections.append(AorusGlassInfoSection(
-                identifier: "username",
-                caption: aorusL("имя пользователя", "username"),
-                value: "@\\(addressName)",
-                detail: otherUsernames.isEmpty ? nil : aorusL("также", "also") + " " + otherUsernames.joined(separator: ", "),
-                showsQRCode: true
-            ))
-        }
-        if let userData = cachedData as? CachedUserData, let about = userData.about, !about.isEmpty {
-            infoSections.append(AorusGlassInfoSection(
-                identifier: "bio",
-                caption: aorusL("о себе", "bio"),
-                value: about,
-                allowsMultipleLines: true
-            ))
-        }
-
         let model = AorusGlassProfileHeaderView.Model(
             title: peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder),
             status: statusData?.text ?? "",
             avatarImage: self.avatarListNode.avatarContainerNode.avatarNode.unroundedImage,
             actions: actions,
-            nowPlaying: nowPlaying,
-            infoSections: infoSections
+            nowPlaying: nowPlaying
         )
 
         let height = self.aorusGlassProfileView.update(model: model, width: width)
         // Published after the update so the tab bar picks up the palette the avatar produced
         // on this pass, not the one from before the photo finished loading.
         AorusGlassProfileTint.setSelectedTabColor(self.aorusGlassProfileView.currentPalette.accentText)
+        AorusGlassProfileTint.setPageBackgroundColor(self.aorusGlassProfileView.currentPalette.backgroundBottom)
         self.aorusGlassProfileView.frame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: height))
         return height
     }
@@ -457,6 +424,75 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
     path.write_text(text, encoding="utf-8")
     # No BUILD dependency is added on purpose — see the reader comment above.
     print("GlassProfileTabs: patched HorizontalTabsComponent")
+
+
+def _patch_profile_list_glass(tg: Path) -> None:
+    """Restyle the peer-info list itself, instead of laying panels over it.
+
+    Interface 2.0 keeps every row the screen already draws — the username, More, Add to
+    Contacts, Block — and changes what they are made of: panes of glass on a page tinted from
+    the avatar rather than opaque blocks on a flat theme background. One anchor covers every
+    section, because every section container paints itself from the same two theme colours.
+    """
+    section_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenItemSectionContainerNode.swift"
+    if not section_path.is_file():
+        raise RuntimeError("GlassProfileList: PeerInfoScreenItemSectionContainerNode.swift is missing")
+    text = section_path.read_text(encoding="utf-8")
+    if "AorusGlassProfileTint.listSectionColors" in text:
+        print("GlassProfileList: section container already patched")
+    else:
+        if "import AorusGramUI\n" not in text:
+            text = _replace_once(text, "import UIKit\n", "import UIKit\nimport AorusGramUI\n", "list section import")
+        text = _replace_once(
+            text,
+            "        self.backgroundNode.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor\n"
+            "        self.topSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n"
+            "        self.bottomSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n",
+            "        // AorusGram: under Interface 2.0 a section is glass over the tinted page,\n"
+            "        // so the rows Telegram already draws take on the profile's own colours.\n"
+            "        if let aorusColors = AorusGlassProfileTint.listSectionColors {\n"
+            "            self.backgroundNode.backgroundColor = aorusColors.background\n"
+            "            self.topSeparatorNode.backgroundColor = aorusColors.separator\n"
+            "            self.bottomSeparatorNode.backgroundColor = aorusColors.separator\n"
+            "        } else {\n"
+            "            self.backgroundNode.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor\n"
+            "            self.topSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n"
+            "            self.bottomSeparatorNode.backgroundColor = presentationData.theme.list.itemBlocksSeparatorColor\n"
+            "        }\n",
+            "list section colours",
+        )
+        section_path.write_text(text, encoding="utf-8")
+        print("GlassProfileList: patched section container")
+
+    screen_path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
+    if not screen_path.is_file():
+        raise RuntimeError("GlassProfileList: PeerInfoScreen.swift is missing")
+    screen = screen_path.read_text(encoding="utf-8")
+    if "AorusGlassProfileTint.pageBackgroundColor" in screen:
+        print("GlassProfileList: screen background already patched")
+        return
+    if "import AorusGramUI\n" not in screen:
+        screen = _replace_once(screen, "import UIKit\n", "import UIKit\nimport AorusGramUI\n", "screen Aorus import")
+    # Only the update path is patched, never the initial assignment: at init the avatar has
+    # not loaded, so the only tint available would be the previous profile's, which would
+    # flash the wrong colour before the right one arrives.
+    screen = _replace_once(
+        screen,
+        "    private func updateBackgroundColor() {\n"
+        "        let color: UIColor\n",
+        "    private func updateBackgroundColor() {\n"
+        "        // AorusGram: the page carries the avatar's colours the whole way down, so the\n"
+        "        // list below the header continues the profile instead of meeting a flat\n"
+        "        // background partway through it.\n"
+        "        if AorusInterfaceV2.isEnabled, let aorusPageColor = AorusGlassProfileTint.pageBackgroundColor {\n"
+        "            self.backgroundColor = aorusPageColor\n"
+        "            return\n"
+        "        }\n"
+        "        let color: UIColor\n",
+        "screen background colour",
+    )
+    screen_path.write_text(screen, encoding="utf-8")
+    print("GlassProfileList: patched screen background")
 
 
 def _patch_avatar_renderer(tg: Path) -> None:
@@ -1066,6 +1102,7 @@ def patch_profile_personalization(tg: Path) -> None:
     # After the header patch: the glass property is anchored on the one it inserts.
     _patch_glass_profile(tg)
     _patch_profile_tabs_tint(tg)
+    _patch_profile_list_glass(tg)
     _patch_avatar_renderer(tg)
     _patch_editing_avatar(tg)
     _patch_profile_preview(tg)

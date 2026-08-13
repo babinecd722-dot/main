@@ -85,13 +85,16 @@ public final class AorusGlassSurfaceView: UIView {
 
     private func applyPaletteColors() {
         self.tintLayer.backgroundColor = self.palette.glassTint.cgColor
-        let sheenAlpha: CGFloat = self.palette.prefersDarkContent ? 0.22 : 0.34
+        let sheenAlpha: CGFloat = self.palette.prefersDarkContent ? 0.30 : 0.42
         self.sheenLayer.colors = [
             UIColor(white: 1.0, alpha: sheenAlpha).cgColor,
             UIColor(white: 1.0, alpha: sheenAlpha * 0.22).cgColor,
             UIColor.clear.cgColor
         ]
-        self.rimLayer.strokeColor = UIColor(white: 1.0, alpha: self.palette.prefersDarkContent ? 0.30 : 0.24).cgColor
+        // The rim carries most of the glass: a bright edge against the blurred photo is what
+        // gives an otherwise transparent shape a readable boundary, and it has to hold up on
+        // a pale avatar where the fill contributes almost nothing.
+        self.rimLayer.strokeColor = UIColor(white: 1.0, alpha: self.palette.prefersDarkContent ? 0.45 : 0.38).cgColor
     }
 
     private func cornerRadius(for size: CGSize) -> CGFloat {

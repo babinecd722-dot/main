@@ -93,9 +93,11 @@ public struct AorusGlassPalette: Equatable {
         let backgroundTop = edge.aorusAdjusted(saturation: 1.0, minSaturation: 0.0, brightness: 0.82, range: 0.12 ... 0.50)
         let backgroundBottom = edge.aorusAdjusted(saturation: 0.85, minSaturation: 0.0, brightness: 0.42, range: 0.05 ... 0.26)
 
-        // Glass is the accent at low opacity over a blur, not a grey wash: that is what makes
-        // the buttons read as belonging to this particular avatar.
-        let glassTint = accent.withAlphaComponent(0.22)
+        // Deliberately faint. A flat fill over the blur is what stops a control reading as
+        // glass at all — past roughly 0.15 the blurred photo behind it stops showing through
+        // and the button turns into a grey disc, which is exactly how it looked at 0.22 on a
+        // pale avatar. The colour identity comes from the page and the rim instead.
+        let glassTint = accent.withAlphaComponent(0.13)
 
         let brightness = backgroundTop.aorusBrightness
         let prefersDarkContent = brightness > 0.68
