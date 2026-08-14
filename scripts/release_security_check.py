@@ -296,7 +296,7 @@ def main() -> int:
             "restartRetryDelays",
             "scheduleRestartRetryLocked()",
             "cancelRestartRetryLocked(resetAttempt: true)",
-            "let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints",
+            "let endpointOrder = rankedEndpoints.isEmpty ? profile.validEndpoints : rankedEndpoints",
             "let activeEndpoint = self.activeEndpoint",
             "nextRanked.contains(activeEndpoint)",
             "previousCredential == profile.credential",
