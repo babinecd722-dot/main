@@ -646,6 +646,14 @@ public final class AorusProxyManager {
         var failures = 0
 
         func runProbe(_ remaining: Int, isWarmUp: Bool) {
+            // Once a majority is arithmetically out of reach the endpoint is already
+            // unhealthy, and the remaining probes can only spend their full timeout to
+            // confirm it. On a blocked network that was the difference between a sweep of
+            // seconds and one of tens of seconds before the tunnel even started.
+            if !isWarmUp, failures * 2 >= sampleCount {
+                self.finishProbe(samples: samples, failures: failures, sampleCount: sampleCount, completion: completion)
+                return
+            }
             guard remaining > 0 || isWarmUp else {
                 self.finishProbe(samples: samples, failures: failures, sampleCount: sampleCount, completion: completion)
                 return
