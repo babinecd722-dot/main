@@ -786,7 +786,11 @@ public final class AorusRealityManager {
                     "packetEncoding": "xudp"
                 ],
                 "streamSettings": [
-                    "network": "raw",
+                    // "tcp", not "raw": they are the same transport on the wire, but "raw"
+                    // is the newer name and only cores from 25.1.30 accept it. A working
+                    // client against this same infrastructure sends "tcp", so this is the
+                    // name that cannot be the thing that differs.
+                    "network": "tcp",
                     "security": "reality",
                     "realitySettings": [
                         "fingerprint": endpoint.fingerprint,

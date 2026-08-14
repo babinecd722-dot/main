@@ -494,15 +494,25 @@ public final class AorusProxyManager {
         var metricsByEndpoint: [String: AorusEndpointProbeMetrics] = [:]
 
         let probeSlots = DispatchSemaphore(value: maxConcurrentEndpointProbes)
-        for endpoint in endpoints {
+        // Every enter() happens before the loop is handed off, otherwise notify could fire
+        // against a group nothing has entered yet.
+        for _ in endpoints {
             group.enter()
-            probeSlots.wait()
-            probeEndpoint(endpoint) { metrics in
-                probeSlots.signal()
-                resultsLock.lock()
-                metricsByEndpoint[self.endpointKey(endpoint)] = metrics
-                resultsLock.unlock()
-                group.leave()
+        }
+        // rankEndpoints is called from the provisioning response handler, which runs on a
+        // URLSession delegate thread. Waiting for probe slots there would hold one of that
+        // pool's threads for the length of the whole sweep and delay unrelated requests,
+        // including the licence check, so the waiting happens on our own queue.
+        probeQueue.async {
+            for endpoint in endpoints {
+                probeSlots.wait()
+                self.probeEndpoint(endpoint) { metrics in
+                    probeSlots.signal()
+                    resultsLock.lock()
+                    metricsByEndpoint[self.endpointKey(endpoint)] = metrics
+                    resultsLock.unlock()
+                    group.leave()
+                }
             }
         }
 
@@ -549,7 +559,7 @@ public final class AorusProxyManager {
                 // the path. The challenger has to hold that margin across consecutive
                 // cycles before the live session is torn down for it.
                 self.lock.lock()
-                var streak = clearlyBetter ? (self.challengerStreak[self.endpointKey(challenger)] ?? 0) + 1 : 0
+                let streak = clearlyBetter ? (self.challengerStreak[self.endpointKey(challenger)] ?? 0) + 1 : 0
                 if !clearlyBetter {
                     self.challengerStreak.removeAll(keepingCapacity: true)
                 } else {
@@ -563,7 +573,9 @@ public final class AorusProxyManager {
                         endpointId: challenger.stableId,
                         detail: "gain=\(gainMs)ms cycles=\(streak)/\(needed)"
                     )
-                    streak = 0
+                    self.lock.lock()
+                    self.challengerStreak.removeAll(keepingCapacity: true)
+                    self.lock.unlock()
                     ranked = sorted
                 } else {
                     AorusRealityManager.shared.recordProxyEvent(
