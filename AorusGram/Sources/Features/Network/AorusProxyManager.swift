@@ -662,7 +662,15 @@ public final class AorusProxyManager {
                 self.finishProbe(samples: samples, failures: failures, sampleCount: sampleCount, completion: completion)
                 return
             }
-            probeLatency(endpoint: endpoint, timeout: 1.2) { latency in
+            let probeNumber = isWarmUp ? 0 : sampleCount - remaining + 1
+            probeLatency(endpoint: endpoint, timeout: 1.2) { latency, family, error in
+                AorusRealityManager.shared.recordProxyEvent(
+                    stage: "probe",
+                    errorCode: error,
+                    endpointId: endpoint.stableId,
+                    detail: "n=\(probeNumber) warmup=\(isWarmUp) family=\(family) "
+                        + (latency.map { "rtt=\(Int(($0 * 1000).rounded()))ms" } ?? "rtt=none")
+                )
                 if !isWarmUp {
                     if let latency {
                         samples.append(latency)
@@ -712,49 +720,27 @@ public final class AorusProxyManager {
         ))
     }
 
-    private func legacyProbeEndpoint(
-        _ endpoint: AorusRealityEndpoint,
-        sampleCount: Int = 3,
-        completion: @escaping (AorusEndpointProbeMetrics) -> Void
-    ) {
-        let group = DispatchGroup()
-        let sampleLock = NSLock()
-        var samples: [TimeInterval] = []
-        for _ in 0 ..< sampleCount {
-            group.enter()
-            probeLatency(endpoint: endpoint, timeout: 1.5) { latency in
-                if let latency {
-                    sampleLock.lock()
-                    samples.append(latency)
-                    sampleLock.unlock()
-                }
-                group.leave()
-            }
+    /// Address family the connection actually used, read from the established path.
+    ///
+    /// This is the evidence for NAT64: a hostname that resolves to v6 on a v6-only carrier
+    /// proves the synthesis happened, and an IPv4 literal that never connects there proves
+    /// it could not. Neither is inferable from the profile, so it has to be observed.
+    private static func addressFamily(of connection: NWConnection) -> String {
+        guard case let .hostPort(host, _)? = connection.currentPath?.remoteEndpoint else {
+            return "unknown"
         }
-        group.notify(queue: probeQueue) {
-            sampleLock.lock()
-            let sorted = samples.sorted()
-            sampleLock.unlock()
-            guard !sorted.isEmpty else {
-                completion(AorusEndpointProbeMetrics(latency: nil, jitter: nil, lossCount: sampleCount))
-                return
-            }
-            let median = sorted[sorted.count / 2]
-            let jitter = sorted.count > 1
-                ? (sorted.last ?? median) - (sorted.first ?? median)
-                : 0
-            completion(AorusEndpointProbeMetrics(
-                latency: median,
-                jitter: jitter,
-                lossCount: sampleCount - sorted.count
-            ))
+        switch host {
+        case .ipv4: return "ipv4"
+        case .ipv6: return "ipv6"
+        case .name: return "name"
+        @unknown default: return "unknown"
         }
     }
 
     private func probeLatency(
         endpoint: AorusRealityEndpoint,
         timeout: TimeInterval,
-        completion: @escaping (TimeInterval?) -> Void
+        completion: @escaping (TimeInterval?, String, String?) -> Void
     ) {
         guard let port = NWEndpoint.Port(rawValue: UInt16(endpoint.port)) else {
             completion(nil)
@@ -764,23 +750,28 @@ public final class AorusProxyManager {
         let startedAt = Date()
         let finishLock = NSLock()
         var finished = false
-        let finish: (TimeInterval?) -> Void = { latency in
+        let finish: (TimeInterval?, String, String?) -> Void = { latency, family, error in
             finishLock.lock()
             guard !finished else { finishLock.unlock(); return }
             finished = true
             finishLock.unlock()
             connection.cancel()
-            completion(latency)
+            completion(latency, family, error)
         }
         connection.stateUpdateHandler = { state in
             switch state {
-            case .ready: finish(Date().timeIntervalSince(startedAt))
-            case .failed, .cancelled: finish(nil)
+            case .ready:
+                finish(Date().timeIntervalSince(startedAt), Self.addressFamily(of: connection), nil)
+            case let .failed(error):
+                // Errno only: the description can carry the resolved address.
+                finish(nil, Self.addressFamily(of: connection), "posix_\(error.errorCode)")
+            case .cancelled:
+                finish(nil, "unknown", "cancelled")
             default: break
             }
         }
         connection.start(queue: probeQueue)
-        probeQueue.asyncAfter(deadline: .now() + timeout) { finish(nil) }
+        probeQueue.asyncAfter(deadline: .now() + timeout) { finish(nil, Self.addressFamily(of: connection), "timeout") }
     }
 
     private func scheduleRefresh() {

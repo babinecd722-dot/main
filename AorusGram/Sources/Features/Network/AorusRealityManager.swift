@@ -401,8 +401,12 @@ public final class AorusRealityManager {
                     endpointPriority: endpoint.priority,
                     localPort: localPort,
                     endpointId: endpoint.stableId,
-                    // Literal or hostname, never the address itself.
-                    detail: endpoint.address.contains(where: { $0.isLetter }) ? "hostname" : "ip_literal"
+                    // The dial target and the route are not secrets — the device owner
+                    // already holds them in the profile — and without them a blocked bridge
+                    // cannot be told apart from a client dialling the wrong thing. The
+                    // credential, the keys and the SNI stay out.
+                    detail: "target=\(endpoint.address):\(endpoint.port) route=\(endpoint.routeType ?? "direct")"
+                        + (endpoint.via.map { " via=\($0)" } ?? "")
                 )
                 let response = invoke(method: "runXrayFromJson", payload: ["configJSON": config])
                 guard response?.success == true else {
