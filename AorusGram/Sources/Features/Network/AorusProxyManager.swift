@@ -245,6 +245,10 @@ public final class AorusProxyManager {
                 return
             }
 
+            AorusRealityManager.shared.recordProxyEvent(
+                stage: "profile_http",
+                detail: "status=\(http.statusCode)"
+            )
             guard http.statusCode == 200 else {
                 if http.statusCode == 408 || http.statusCode == 429 || (500 ... 599).contains(http.statusCode) {
                     self.handleFetchFailure(generation: requestGeneration, completion: completion)
@@ -283,6 +287,10 @@ public final class AorusProxyManager {
             }
 
             AorusRealityManager.shared.profileDidVerify()
+            AorusRealityManager.shared.recordProxyEvent(
+                stage: "profile_decoded",
+                detail: "endpoints=\(profile.endpoints.count) valid=\(profile.validEndpoints.count)"
+            )
             self.rankEndpoints(profile.validEndpoints) { ranked, statuses in
                 guard self.licenseAllowsReality else {
                     self.clearProvisioning(stopTunnel: true)
@@ -521,9 +529,20 @@ public final class AorusProxyManager {
                let challengerLatency = metricsByEndpoint[self.endpointKey(challenger)]?.latency {
                 let absoluteGain = currentLatency - challengerLatency
                 let relativeGain = currentLatency > 0 ? absoluteGain / currentLatency : 0
+                let gainMs = Int((absoluteGain * 1000).rounded())
                 if absoluteGain < 0.020 && relativeGain < 0.15 {
+                    AorusRealityManager.shared.recordProxyEvent(
+                        stage: "selection_kept",
+                        endpointId: current.stableId,
+                        detail: "gain=\(gainMs)ms below_threshold"
+                    )
                     ranked = [current] + sorted.filter { $0 != current }
                 } else {
+                    AorusRealityManager.shared.recordProxyEvent(
+                        stage: "selection_switched",
+                        endpointId: challenger.stableId,
+                        detail: "gain=\(gainMs)ms"
+                    )
                     ranked = sorted
                 }
             } else {
@@ -614,11 +633,20 @@ public final class AorusProxyManager {
     ) {
         let sorted = samples.sorted()
         guard sorted.count * 2 > sampleCount else {
+            AorusRealityManager.shared.recordProxyEvent(
+                stage: "probe_unhealthy",
+                errorCode: "insufficient_successful_probes",
+                detail: "ok=\(sorted.count)/\(sampleCount)"
+            )
             completion(AorusEndpointProbeMetrics(latency: nil, jitter: nil, lossCount: max(failures, sampleCount - sorted.count)))
             return
         }
         let median = sorted[sorted.count / 2]
         let jitter = sorted.count > 1 ? (sorted.last ?? median) - (sorted.first ?? median) : 0
+        AorusRealityManager.shared.recordProxyEvent(
+            stage: "probe_result",
+            detail: "median=\(Int((median * 1000).rounded()))ms ok=\(sorted.count)/\(sampleCount)"
+        )
         completion(AorusEndpointProbeMetrics(
             latency: median,
             jitter: jitter,
@@ -706,7 +734,10 @@ public final class AorusProxyManager {
         lock.unlock()
         previous?.cancel()
         timer.schedule(deadline: .now() + delay, leeway: .seconds(2))
-        timer.setEventHandler { [weak self] in self?.refresh(force: true) }
+        timer.setEventHandler { [weak self] in
+            AorusRealityManager.shared.recordProxyEvent(stage: "refresh", detail: "reason=ttl")
+            self?.refresh(force: true)
+        }
         timer.resume()
     }
 

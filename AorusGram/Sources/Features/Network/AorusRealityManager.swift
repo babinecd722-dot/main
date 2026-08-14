@@ -147,6 +147,13 @@ private struct AorusRealityBootstrapEvent: Codable {
     let endpointPriority: Int?
     let localPort: Int?
     let updatedAt: Double
+    /// Control-plane id of the endpoint the stage concerns, and one short free-form field
+    /// for counts and reasons. Both optional so a trace written by an older build decodes.
+    ///
+    /// `detail` is written by us at every call site and must stay free of addresses, UUIDs,
+    /// keys, device hashes and raw Xray output — the trace is user-visible.
+    let endpointId: String?
+    let detail: String?
 }
 
 /// Owns the in-process Xray core. Credentials are supplied at runtime by the
@@ -258,6 +265,17 @@ public final class AorusRealityManager {
             let profileChanged = self.profile != profile || self.rankedEndpoints != nextRanked
             self.profile = profile
             self.rankedEndpoints = nextRanked
+            self.recordDiagnostic(
+                stage: "profile_applied",
+                detail: "valid=\(profile.validEndpoints.count) of=\(profile.endpoints.count)"
+            )
+            for rejected in profile.rejectedEndpoints {
+                self.recordDiagnostic(
+                    stage: "endpoint_rejected",
+                    errorCode: rejected.reason,
+                    endpointId: rejected.id
+                )
+            }
             var canKeepRunning = false
             // Endpoint ranking is advisory. Latency/jitter probes can reorder two
             // healthy bridges on every profile refresh or path update; restarting
@@ -311,6 +329,15 @@ public final class AorusRealityManager {
     func profileDidVerify() {
         queue.async { [weak self] in
             self?.recordDiagnostic(stage: "profile_received")
+        }
+    }
+
+    /// Trace entry for the provisioning and probing side, which lives in AorusProxyManager
+    /// and has no diagnostic writer of its own. Same redaction rule: no addresses, UUIDs,
+    /// keys or device hashes.
+    func recordProxyEvent(stage: String, errorCode: String? = nil, endpointId: String? = nil, detail: String? = nil) {
+        queue.async { [weak self] in
+            self?.recordDiagnostic(stage: stage, errorCode: errorCode, endpointId: endpointId, detail: detail)
         }
     }
 
@@ -369,6 +396,14 @@ public final class AorusRealityManager {
                     endpointPriority: endpoint.priority,
                     localPort: localPort
                 )
+                recordDiagnostic(
+                    stage: "dial_target_resolved",
+                    endpointPriority: endpoint.priority,
+                    localPort: localPort,
+                    endpointId: endpoint.stableId,
+                    // Literal or hostname, never the address itself.
+                    detail: endpoint.address.contains(where: { $0.isLetter }) ? "hostname" : "ip_literal"
+                )
                 let response = invoke(method: "runXrayFromJson", payload: ["configJSON": config])
                 guard response?.success == true else {
                     recordDiagnostic(
@@ -404,6 +439,13 @@ public final class AorusRealityManager {
                         endpointPriority: endpoint.priority,
                         localPort: localPort
                     )
+                    recordDiagnostic(
+                        stage: "tunnel_ready",
+                        localSocksReady: true,
+                        endpointPriority: endpoint.priority,
+                        localPort: localPort,
+                        endpointId: endpoint.stableId
+                    )
                     publishEndpoint(port: localPort)
                     AorusProxyManager.shared.realityEndpointDidActivate(endpoint)
                     return
@@ -412,6 +454,13 @@ public final class AorusRealityManager {
                 waitForCoreStop()
             }
         }
+        // Nothing published: MTProto stays on the closed loopback port, which is what the
+        // user sees as a connection that never finishes.
+        recordDiagnostic(
+            stage: "no_endpoint_published",
+            errorCode: "all_endpoints_failed",
+            detail: "tried=\(endpointOrder.count)"
+        )
         clearEndpoint(postUpdate: true)
         scheduleRestartRetryLocked()
     }
@@ -834,7 +883,9 @@ public final class AorusRealityManager {
         errorCode: String? = nil,
         localSocksReady: Bool = false,
         endpointPriority: Int? = nil,
-        localPort: Int? = nil
+        localPort: Int? = nil,
+        endpointId: String? = nil,
+        detail: String? = nil
     ) {
         let now = Date().timeIntervalSince1970
         let diagnostic = AorusRealityBootstrapDiagnostic(
@@ -854,7 +905,9 @@ public final class AorusRealityManager {
             errorCode: errorCode,
             endpointPriority: endpointPriority,
             localPort: localPort,
-            updatedAt: now
+            updatedAt: now,
+            endpointId: endpointId,
+            detail: detail
         )
         diagnosticLock.lock()
         defer { diagnosticLock.unlock() }
