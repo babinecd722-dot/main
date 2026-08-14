@@ -506,6 +506,29 @@ public final class AorusProxyManager {
                 case (.none, .none): return left.priority < right.priority
                 }
             }
+            // Hysteresis. A working endpoint is kept unless the challenger is clearly and
+            // not marginally faster, because every switch restarts the core and drops the
+            // live MTProto session: trading a live connection for three milliseconds on
+            // paper is a bad deal, and probe noise alone would keep making it. A current
+            // endpoint that has stopped responding is not defended — that failover is
+            // immediate.
+            let ranked: [AorusRealityEndpoint]
+            if let current = self.activeEndpointSnapshot(),
+               let currentMetrics = metricsByEndpoint[self.endpointKey(current)],
+               let currentLatency = currentMetrics.latency,
+               penalties[self.endpointKey(current)] == nil,
+               let challenger = sorted.first, challenger != current,
+               let challengerLatency = metricsByEndpoint[self.endpointKey(challenger)]?.latency {
+                let absoluteGain = currentLatency - challengerLatency
+                let relativeGain = currentLatency > 0 ? absoluteGain / currentLatency : 0
+                if absoluteGain < 0.020 && relativeGain < 0.15 {
+                    ranked = [current] + sorted.filter { $0 != current }
+                } else {
+                    ranked = sorted
+                }
+            } else {
+                ranked = sorted
+            }
             let statuses = endpoints.sorted(by: { $0.priority < $1.priority }).map { endpoint in
                 let metrics = metricsByEndpoint[self.endpointKey(endpoint)] ?? AorusEndpointProbeMetrics(
                     latency: nil,
@@ -534,11 +557,76 @@ public final class AorusProxyManager {
                     available: available
                 )
             }
-            completion(sorted, statuses)
+            completion(ranked, statuses)
         }
     }
 
+    /// Measures an endpoint with a warm-up probe followed by several timed ones, run one
+    /// after another.
+    ///
+    /// The previous version fired every probe at once, which is where the implausible
+    /// readings came from: the first connection pays for DNS and route setup and the rest
+    /// ride on what it warmed, so the median described a path that had already been opened
+    /// rather than the cost of opening one. Running them in sequence and discarding the
+    /// first measures the same thing every time.
+    ///
+    /// A failed probe is recorded as a loss, never as zero — counting a timeout as 0 ms is
+    /// how a dead endpoint wins a ranking.
     private func probeEndpoint(
+        _ endpoint: AorusRealityEndpoint,
+        sampleCount: Int = 4,
+        completion: @escaping (AorusEndpointProbeMetrics) -> Void
+    ) {
+        var samples: [TimeInterval] = []
+        var failures = 0
+
+        func runProbe(_ remaining: Int, isWarmUp: Bool) {
+            guard remaining > 0 || isWarmUp else {
+                self.finishProbe(samples: samples, failures: failures, sampleCount: sampleCount, completion: completion)
+                return
+            }
+            probeLatency(endpoint: endpoint, timeout: 2.0) { latency in
+                if !isWarmUp {
+                    if let latency {
+                        samples.append(latency)
+                    } else {
+                        failures += 1
+                    }
+                }
+                // Sequential, so probes never overlap and never share a warmed path.
+                self.probeQueue.async {
+                    runProbe(isWarmUp ? sampleCount : remaining - 1, isWarmUp: false)
+                }
+            }
+        }
+        probeQueue.async { runProbe(sampleCount, isWarmUp: true) }
+    }
+
+    /// Median of the successful probes, plus how many were lost.
+    ///
+    /// An endpoint is only reported as reachable when a majority of its probes came back;
+    /// one lucky response among three timeouts describes a path nobody can use.
+    private func finishProbe(
+        samples: [TimeInterval],
+        failures: Int,
+        sampleCount: Int,
+        completion: @escaping (AorusEndpointProbeMetrics) -> Void
+    ) {
+        let sorted = samples.sorted()
+        guard sorted.count * 2 > sampleCount else {
+            completion(AorusEndpointProbeMetrics(latency: nil, jitter: nil, lossCount: max(failures, sampleCount - sorted.count)))
+            return
+        }
+        let median = sorted[sorted.count / 2]
+        let jitter = sorted.count > 1 ? (sorted.last ?? median) - (sorted.first ?? median) : 0
+        completion(AorusEndpointProbeMetrics(
+            latency: median,
+            jitter: jitter,
+            lossCount: sampleCount - sorted.count
+        ))
+    }
+
+    private func legacyProbeEndpoint(
         _ endpoint: AorusRealityEndpoint,
         sampleCount: Int = 3,
         completion: @escaping (AorusEndpointProbeMetrics) -> Void
@@ -788,6 +876,12 @@ public final class AorusProxyManager {
         guard let data = try? JSONEncoder().encode(diagnostics),
               let text = String(data: data, encoding: .utf8) else { return }
         UserDefaults.standard.set(text, forKey: "aorusgram_atunnel_status")
+    }
+
+    private func activeEndpointSnapshot() -> AorusRealityEndpoint? {
+        lock.lock()
+        defer { lock.unlock() }
+        return activeEndpoint
     }
 
     private func endpointKey(_ endpoint: AorusRealityEndpoint) -> String {
