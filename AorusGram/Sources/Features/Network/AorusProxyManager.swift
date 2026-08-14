@@ -22,6 +22,17 @@ private struct ATunnelDiagData: Codable {
         let latencyMs: Int?
         let jitterMs: Int?
         let lossCount: Int
+        /// Control-plane identity (`de_direct`, `fi_via_moscow`, …). The UI names and
+        /// flags a card from this and `country`, never from priority or address — both
+        /// of those change when routes are re-provisioned, and the card would follow.
+        /// Optional so a diagnostics blob written by an older build still decodes.
+        let id: String?
+        let country: String?
+        let routeType: String?
+        let via: String?
+        /// When the latency was taken, so the UI can tell a fresh reading from a stale one
+        /// instead of presenting an old number as current.
+        let measuredAt: Double?
     }
     let servers: [Server]
     let callTunnel: Bool
@@ -135,7 +146,12 @@ public final class AorusProxyManager {
                 active: $0.endpointPriority == endpoint.priority,
                 latencyMs: $0.latencyMs,
                 jitterMs: $0.jitterMs,
-                lossCount: $0.lossCount
+                lossCount: $0.lossCount,
+                id: $0.id,
+                country: $0.country,
+                routeType: $0.routeType,
+                via: $0.via,
+                measuredAt: $0.measuredAt
             )
         }
         lock.unlock()
@@ -164,7 +180,12 @@ public final class AorusProxyManager {
                 active: false,
                 latencyMs: $0.latencyMs,
                 jitterMs: $0.jitterMs,
-                lossCount: $0.lossCount
+                lossCount: $0.lossCount,
+                id: $0.id,
+                country: $0.country,
+                routeType: $0.routeType,
+                via: $0.via,
+                measuredAt: $0.measuredAt
             )
         }
         lock.unlock()
@@ -262,7 +283,7 @@ public final class AorusProxyManager {
             }
 
             AorusRealityManager.shared.profileDidVerify()
-            self.rankEndpoints(profile.endpoints) { ranked, statuses in
+            self.rankEndpoints(profile.validEndpoints) { ranked, statuses in
                 guard self.licenseAllowsReality else {
                     self.clearProvisioning(stopTunnel: true)
                     self.finish(generation: requestGeneration, success: false, completion: completion)
@@ -498,7 +519,12 @@ public final class AorusProxyManager {
                     active: false,
                     latencyMs: metrics.latency.map { Int(($0 * 1000).rounded()) },
                     jitterMs: metrics.jitter.map { Int(($0 * 1000).rounded()) },
-                    lossCount: metrics.lossCount
+                    lossCount: metrics.lossCount,
+                    id: endpoint.id,
+                    country: endpoint.country,
+                    routeType: endpoint.routeType,
+                    via: endpoint.via,
+                    measuredAt: metrics.latency != nil ? Date().timeIntervalSince1970 : nil
                 )
             }
             for endpoint in endpoints.sorted(by: { $0.priority < $1.priority }) {
@@ -648,7 +674,7 @@ public final class AorusProxyManager {
         let currentProbeGeneration = probeGeneration
         lock.unlock()
 
-        rankEndpoints(currentProfile.endpoints) { [weak self] ranked, statuses in
+        rankEndpoints(currentProfile.validEndpoints) { [weak self] ranked, statuses in
             guard let self else { return }
             self.lock.lock()
             let stillCurrent = self.probeGeneration == currentProbeGeneration &&
@@ -717,7 +743,7 @@ public final class AorusProxyManager {
         lock.lock()
         guard let profile,
               profile.isValid(for: DeviceFingerprint.deviceHash()),
-              profile.endpoints.count > 1,
+              profile.validEndpoints.count > 1,
               let activeEndpoint,
               now.timeIntervalSince(lastFailoverAt) >= failoverCooldown else {
             lock.unlock()

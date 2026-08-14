@@ -251,9 +251,9 @@ public final class AorusRealityManager {
                 return
             }
             let validRanked = rankedEndpoints.filter { endpoint in
-                endpoint.isValid && profile.endpoints.contains(endpoint)
+                endpoint.isValid && profile.validEndpoints.contains(endpoint)
             }
-            let nextRanked = validRanked.isEmpty ? profile.endpoints : validRanked
+            let nextRanked = validRanked.isEmpty ? profile.validEndpoints : validRanked
             let previousCredential = self.profile?.credential
             let profileChanged = self.profile != profile || self.rankedEndpoints != nextRanked
             self.profile = profile
@@ -356,7 +356,7 @@ public final class AorusRealityManager {
         activeEndpoint = nil
         clearEndpoint(postUpdate: false)
 
-        let endpointOrder = rankedEndpoints.isEmpty ? profile.endpoints : rankedEndpoints
+        let endpointOrder = rankedEndpoints.isEmpty ? profile.validEndpoints : rankedEndpoints
         for endpoint in endpointOrder {
             guard mayRun else { break }
             recordDiagnostic(stage: "endpoint_selected", endpointPriority: endpoint.priority)

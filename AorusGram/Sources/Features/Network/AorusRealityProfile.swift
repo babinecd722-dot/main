@@ -18,6 +18,13 @@ struct AorusRealityCredential: Decodable, Equatable {
     }
 }
 
+/// uTLS ClientHello shapes Xray can imitate. Kept as a list rather than a single pinned
+/// value so the masquerade can be changed from the signed profile when a censor starts
+/// recognising one of them — the alternative is shipping a new build for every such move.
+private let aorusAllowedFingerprints: Set<String> = [
+    "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized"
+]
+
 struct AorusRealityEndpoint: Decodable, Equatable {
     let address: String
     let port: Int
@@ -28,16 +35,64 @@ struct AorusRealityEndpoint: Decodable, Equatable {
     let spiderX: String
     let fingerprint: String
     let priority: Int
+    /// Stable identity from the control plane (`de_direct`, `fi_via_moscow`, …). The UI keys
+    /// its card off this rather than off priority or address, both of which move.
+    let id: String?
+    let country: String?
+    let routeType: String?
+    let via: String?
 
     enum CodingKeys: String, CodingKey {
-        case address, port, region, priority, fingerprint
+        case address, port, region, priority, fingerprint, id, country, via
         case serverName = "server_name"
         case publicKey = "public_key"
         case shortId = "short_id"
         case spiderX = "spider_x"
+        case routeType = "route_type"
     }
 
-    var isValid: Bool {
+    /// Human-readable reason this endpoint was dropped, or nil when it is usable.
+    ///
+    /// Returned instead of a bare Bool so a rejected endpoint can say why in the diagnostic
+    /// log. Silently dropping one and leaving an empty server list was the previous
+    /// behaviour, and it made a server-side typo indistinguishable from an outage.
+    var invalidReason: String? {
+        let normalizedAddress = address.lowercased()
+        if address.isEmpty || address.count > 255 { return "address_length" }
+        if normalizedAddress == "0.0.0.0" || normalizedAddress == "::" || normalizedAddress == "::0" { return "address_unspecified" }
+        if normalizedAddress == "localhost" || normalizedAddress.hasPrefix("127.") { return "address_loopback" }
+        if !(1 ... 65_535).contains(port) { return "port_range" }
+        if !(1 ... 100).contains(priority) { return "priority_range" }
+        if !(40 ... 64).contains(publicKey.count) || !publicKey.utf8.allSatisfy(Self.isBase64URLByte) { return "public_key" }
+        if shortId.count > 16 || !shortId.count.isMultiple(of: 2) { return "short_id_length" }
+        if shortId != shortId.lowercased() || !shortId.allSatisfy({ $0.isHexDigit }) { return "short_id_charset" }
+        if !Self.isValidHostname(serverName) { return "server_name" }
+        if !spiderX.hasPrefix("/") || spiderX.count > 128 { return "spider_x" }
+        if !aorusAllowedFingerprints.contains(fingerprint) { return "fingerprint" }
+        if let region, region.isEmpty || region.count > 32 || !region.utf8.allSatisfy({ byte in
+            (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5a) ||
+            (byte >= 0x61 && byte <= 0x7a) || byte == 0x20 || byte == 0x2d
+        }) { return "region_charset" }
+        // Accepts both an IPv4 literal and a DNS hostname: the control plane now issues
+        // hostnames so the dial target can move without a client release, and NAT64 networks
+        // need a name to synthesise from.
+        if !address.utf8.allSatisfy({ byte in
+            (byte >= 0x30 && byte <= 0x39) || (byte >= 0x41 && byte <= 0x5a) ||
+            (byte >= 0x61 && byte <= 0x7a) || byte == 0x2d || byte == 0x2e || byte == 0x3a
+        }) { return "address_charset" }
+        return nil
+    }
+
+    var isValid: Bool { return invalidReason == nil }
+
+    /// Identity used by the UI and by failover bookkeeping. Falls back to address:port for
+    /// profiles issued before the control plane carried an id.
+    var stableId: String {
+        if let id, !id.isEmpty { return id }
+        return "\(address):\(port)"
+    }
+
+    private var legacyIsValid: Bool {
         let normalizedAddress = address.lowercased()
         guard !address.isEmpty, address.count <= 255,
               normalizedAddress != "0.0.0.0",
@@ -110,6 +165,19 @@ struct AorusRealityProfile: Decodable, Equatable {
     let credential: AorusRealityCredential
     let endpoints: [AorusRealityEndpoint]
 
+    /// The endpoints that survived validation, in the order the control plane sent them.
+    var validEndpoints: [AorusRealityEndpoint] {
+        return endpoints.filter { $0.isValid }
+    }
+
+    /// Why each rejected endpoint was rejected, for the diagnostic log.
+    var rejectedEndpoints: [(id: String, reason: String)] {
+        return endpoints.compactMap { endpoint in
+            guard let reason = endpoint.invalidReason else { return nil }
+            return (endpoint.stableId, reason)
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
         case schema, credential, endpoints
         case deviceHash = "device_hash"
@@ -128,12 +196,16 @@ struct AorusRealityProfile: Decodable, Equatable {
               expiresAt > now,
               activeUntil >= expiresAt,
               credential.isValid,
-              (1 ... 4).contains(endpoints.count),
-              endpoints.allSatisfy(\.isValid) else {
+              (1 ... 8).contains(endpoints.count),
+              // One malformed endpoint used to reject the whole profile, which turned a
+              // single server-side typo into a client with no servers at all. Now the bad
+              // ones are dropped and the rest still connect.
+              !validEndpoints.isEmpty else {
             return false
         }
-        return Set(endpoints.map { "\($0.address):\($0.port)" }).count == endpoints.count &&
-            Set(endpoints.map(\.priority)).count == endpoints.count
+        let dialTargets = validEndpoints.map { "\($0.address):\($0.port)" }
+        return Set(dialTargets).count == validEndpoints.count &&
+            Set(validEndpoints.map(\.priority)).count == validEndpoints.count
     }
 }
 
