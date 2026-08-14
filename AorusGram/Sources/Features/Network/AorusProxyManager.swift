@@ -93,9 +93,13 @@ public final class AorusProxyManager {
     /// switch. One cycle is a single noisy sample of a shared radio; three in a row is a
     /// property of the path. Hard failure of the current endpoint ignores this entirely.
     private let requiredWinningCycles = 3
-    /// Endpoints probed at once. Firing every endpoint together is a connection storm from
-    /// one handset and distorts the very measurement it is taking.
-    private let maxConcurrentEndpointProbes = 2
+    /// Endpoints probed at once. Probes *within* one endpoint must stay sequential — that
+    /// is what stopped later probes riding a path the first one warmed, which is where the
+    /// implausible readings came from. Different endpoints are different hosts and share no
+    /// such path, so running them together costs nothing in accuracy and is what keeps a
+    /// sweep to the length of its slowest endpoint rather than the sum of all of them.
+    /// One socket per endpoint is not a storm.
+    private let maxConcurrentEndpointProbes = 4
     private var challengerStreak: [String: Int] = [:]
 
     private init() {
@@ -658,7 +662,7 @@ public final class AorusProxyManager {
                 self.finishProbe(samples: samples, failures: failures, sampleCount: sampleCount, completion: completion)
                 return
             }
-            probeLatency(endpoint: endpoint, timeout: 2.0) { latency in
+            probeLatency(endpoint: endpoint, timeout: 1.2) { latency in
                 if !isWarmUp {
                     if let latency {
                         samples.append(latency)
