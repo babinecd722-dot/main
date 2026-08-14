@@ -743,7 +743,7 @@ public final class AorusProxyManager {
         completion: @escaping (TimeInterval?, String, String?) -> Void
     ) {
         guard let port = NWEndpoint.Port(rawValue: UInt16(endpoint.port)) else {
-            completion(nil)
+            completion(nil, "unknown", "invalid_port")
             return
         }
         let connection = NWConnection(host: NWEndpoint.Host(endpoint.address), port: port, using: .tcp)
