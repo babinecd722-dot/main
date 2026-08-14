@@ -86,6 +86,17 @@ public final class AorusProxyManager {
     private let endpointPenaltyDuration: TimeInterval = 300
     private let watchdogInterval: TimeInterval = 5
     private let provisioningRetryDelays: [TimeInterval] = [1, 2, 4, 8, 15, 30]
+    /// How long a latency reading stays meaningful. Past this the UI must say it is
+    /// measuring rather than present an old number as current.
+    static let latencyTTL: TimeInterval = 90
+    /// Consecutive health cycles a challenger has to stay better before a performance
+    /// switch. One cycle is a single noisy sample of a shared radio; three in a row is a
+    /// property of the path. Hard failure of the current endpoint ignores this entirely.
+    private let requiredWinningCycles = 3
+    /// Endpoints probed at once. Firing every endpoint together is a connection storm from
+    /// one handset and distorts the very measurement it is taking.
+    private let maxConcurrentEndpointProbes = 2
+    private var challengerStreak: [String: Int] = [:]
 
     private init() {
         let configuration = URLSessionConfiguration.ephemeral
@@ -482,9 +493,12 @@ public final class AorusProxyManager {
         let resultsLock = NSLock()
         var metricsByEndpoint: [String: AorusEndpointProbeMetrics] = [:]
 
+        let probeSlots = DispatchSemaphore(value: maxConcurrentEndpointProbes)
         for endpoint in endpoints {
             group.enter()
+            probeSlots.wait()
             probeEndpoint(endpoint) { metrics in
+                probeSlots.signal()
                 resultsLock.lock()
                 metricsByEndpoint[self.endpointKey(endpoint)] = metrics
                 resultsLock.unlock()
@@ -530,22 +544,42 @@ public final class AorusProxyManager {
                 let absoluteGain = currentLatency - challengerLatency
                 let relativeGain = currentLatency > 0 ? absoluteGain / currentLatency : 0
                 let gainMs = Int((absoluteGain * 1000).rounded())
-                if absoluteGain < 0.020 && relativeGain < 0.15 {
-                    AorusRealityManager.shared.recordProxyEvent(
-                        stage: "selection_kept",
-                        endpointId: current.stableId,
-                        detail: "gain=\(gainMs)ms below_threshold"
-                    )
-                    ranked = [current] + sorted.filter { $0 != current }
+                let clearlyBetter = absoluteGain >= 0.020 || relativeGain >= 0.15
+                // A margin on one cycle is a sample of a shared radio, not a property of
+                // the path. The challenger has to hold that margin across consecutive
+                // cycles before the live session is torn down for it.
+                self.lock.lock()
+                var streak = clearlyBetter ? (self.challengerStreak[self.endpointKey(challenger)] ?? 0) + 1 : 0
+                if !clearlyBetter {
+                    self.challengerStreak.removeAll(keepingCapacity: true)
                 } else {
+                    self.challengerStreak = [self.endpointKey(challenger): streak]
+                }
+                let needed = self.requiredWinningCycles
+                self.lock.unlock()
+                if clearlyBetter && streak >= needed {
                     AorusRealityManager.shared.recordProxyEvent(
                         stage: "selection_switched",
                         endpointId: challenger.stableId,
-                        detail: "gain=\(gainMs)ms"
+                        detail: "gain=\(gainMs)ms cycles=\(streak)/\(needed)"
                     )
+                    streak = 0
                     ranked = sorted
+                } else {
+                    AorusRealityManager.shared.recordProxyEvent(
+                        stage: "selection_kept",
+                        endpointId: current.stableId,
+                        detail: clearlyBetter
+                            ? "gain=\(gainMs)ms cycles=\(streak)/\(needed)"
+                            : "gain=\(gainMs)ms below_threshold"
+                    )
+                    ranked = [current] + sorted.filter { $0 != current }
                 }
             } else {
+                // Current endpoint is gone or unmeasurable: no defending, no streak.
+                self.lock.lock()
+                self.challengerStreak.removeAll(keepingCapacity: true)
+                self.lock.unlock()
                 ranked = sorted
             }
             let statuses = endpoints.sorted(by: { $0.priority < $1.priority }).map { endpoint in

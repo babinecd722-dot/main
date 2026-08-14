@@ -9,6 +9,9 @@ import Display
 
 // MARK: - Data Model
 
+/// Kept in step with AorusProxyManager.latencyTTL, which stamps the readings.
+private let aorusLatencyTTL: TimeInterval = 90
+
 private struct ATunnelServerEntry: Codable {
     let region: String
     let available: Bool
@@ -967,11 +970,21 @@ final class ATunnelStatusViewController: UIViewController {
         let detail = UILabel()
         detail.font = Font.regular(13.0)
         detail.translatesAutoresizingMaskIntoConstraints = false
-        if server.available, let lat = server.latencyMs, let jit = server.jitterMs {
+        // A reading older than its TTL describes a network the phone may have left. Showing
+        // it next to a live indicator would present a stale number as current, so the card
+        // says it is measuring instead of inventing one.
+        let latencyIsFresh: Bool = {
+            guard let measuredAt = server.measuredAt else { return server.latencyMs != nil }
+            return Date().timeIntervalSince1970 - measuredAt <= aorusLatencyTTL
+        }()
+        if server.available, let lat = server.latencyMs, let jit = server.jitterMs, latencyIsFresh {
             detail.textColor = UIColor(white: 0.55, alpha: 1)
             let ms  = aorusL("мс", "ms")
             let jw  = aorusL("джиттер", "jitter")
             detail.text = "⚡ \(Int(lat)) \(ms) · \(jw) \(Int(jit)) \(ms)"
+        } else if server.available {
+            detail.textColor = UIColor(white: 0.55, alpha: 1)
+            detail.text = aorusL("Проверка…", "Checking…")
         } else {
             detail.textColor = .systemRed
             detail.text = aorusL("Сервер недоступен", "Server unavailable")

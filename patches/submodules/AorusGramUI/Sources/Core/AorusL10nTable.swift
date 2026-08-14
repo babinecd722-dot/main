@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Checking…": "Verifica…",
         "%@ via Moscow": "%@ via Mosca",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Elenchi, schede e menu diventano di vetro e le schede del profilo assumono il colore dell'avatar.",
         "Restart the app to apply": "Riavvia l'app per applicare",
@@ -641,6 +642,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Checking…": "Sprawdzanie…",
         "%@ via Moscow": "%@ przez Moskwę",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listy, karty i menu stają się szklane, a karty profilu przejmują kolor awatara.",
         "Restart the app to apply": "Uruchom ponownie aplikację, aby zastosować",
@@ -1229,6 +1231,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Checking…": "Controleren…",
         "%@ via Moscow": "%@ via Moskou",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Lijsten, kaarten en menu's worden glas, en de profieltabbladen nemen de kleur van de avatar over.",
         "Restart the app to apply": "Start de app opnieuw om toe te passen",
@@ -1817,6 +1820,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Checking…": "Comprovant…",
         "%@ via Moscow": "%@ via Moscou",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Les llistes, les targetes i els menús es tornen de vidre, i les pestanyes del perfil agafen el color de l'avatar.",
         "Restart the app to apply": "Reinicia l'aplicació per aplicar-ho",
@@ -2405,6 +2409,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Checking…": "Memeriksa…",
         "%@ via Moscow": "%@ via Moskow",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Daftar, kartu, dan menu menjadi kaca, dan tab profil mengambil warna avatar.",
         "Restart the app to apply": "Mulai ulang aplikasi untuk menerapkan",
@@ -2993,6 +2998,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Checking…": "Menyemak…",
         "%@ via Moscow": "%@ melalui Moscow",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Senarai, kad dan menu menjadi kaca, dan tab profil mengambil warna avatar.",
         "Restart the app to apply": "Mulakan semula apl untuk menggunakan",
@@ -3581,6 +3587,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Checking…": "Праверка…",
         "%@ via Moscow": "%@ праз Маскву",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Спісы, карткі і меню становяцца шклянымі, а ўкладкі профілю бяруць колер аватара.",
         "Restart the app to apply": "Перазапусціце праграму, каб ужыць",
@@ -4169,6 +4176,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Checking…": "Tekshirilmoqda…",
         "%@ via Moscow": "%@ Moskva orqali",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Ro'yxatlar, kartalar va menyular shishaga aylanadi, profil yorliqlari esa avatar rangini oladi.",
         "Restart the app to apply": "Qo'llash uchun ilovani qayta ishga tushiring",
@@ -4757,6 +4765,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Checking…": "확인 중…",
         "%@ via Moscow": "%@ (모스크바 경유)",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "목록과 카드, 메뉴가 유리로 바뀌고 프로필 탭은 프로필 사진의 색을 따릅니다.",
         "Restart the app to apply": "적용하려면 앱을 다시 시작하세요",
@@ -5345,6 +5354,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Checking…": "جارٍ التحقق…",
         "%@ via Moscow": "%@ عبر موسكو",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "تتحول القوائم والبطاقات والقوائم المنسدلة إلى زجاج، وتأخذ علامات الملف الشخصي لون الصورة الرمزية.",
         "Restart the app to apply": "أعد تشغيل التطبيق للتطبيق",
@@ -5933,6 +5943,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Checking…": "در حال بررسی…",
         "%@ via Moscow": "%@ از طریق مسکو",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "فهرست‌ها، کارت‌ها و منوها شیشه‌ای می‌شوند و زبانه‌های نمایه رنگ عکس نمایه را می‌گیرند.",
         "Restart the app to apply": "برای اعمال، برنامه را دوباره اجرا کنید",
@@ -6521,6 +6532,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Checking…": "Тексерілуде…",
         "%@ via Moscow": "%@ Мәскеу арқылы",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Тізімдер, карточкалар мен мәзірлер шыныға айналады, ал профиль қойындылары аватар түсін алады.",
         "Restart the app to apply": "Қолдану үшін қолданбаны қайта іске қосыңыз",
@@ -7109,6 +7121,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Checking…": "检查中…",
         "%@ via Moscow": "%@（经莫斯科）",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "列表、卡片和菜单变成玻璃，资料页的标签则采用头像的色调。",
         "Restart the app to apply": "重启应用以应用更改",
@@ -7698,6 +7711,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Checking…": "檢查中…",
         "%@ via Moscow": "%@（經莫斯科）",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "清單、卡片與選單變成玻璃，個人檔案的分頁則採用頭像的色調。",
         "Restart the app to apply": "重新啟動應用程式以套用",
@@ -8286,6 +8300,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Checking…": "確認中…",
         "%@ via Moscow": "%@（モスクワ経由）",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "リスト、カード、メニューがガラスになり、プロフィールのタブはアイコンの色を受け継ぎます。",
         "Restart the app to apply": "アプリを再起動すると適用されます",
@@ -8874,6 +8889,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Checking…": "Tarkistetaan…",
         "%@ via Moscow": "%@ Moskovan kautta",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listoista, korteista ja valikoista tulee lasia, ja profiilin välilehdet saavat profiilikuvan värin.",
         "Restart the app to apply": "Käynnistä sovellus uudelleen ottaaksesi käyttöön",
@@ -9462,6 +9478,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Checking…": "בודק…",
         "%@ via Moscow": "%@ דרך מוסקבה",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "רשימות, כרטיסים ותפריטים הופכים לזכוכית, ולשוניות הפרופיל מקבלות את צבע תמונת הפרופיל.",
         "Restart the app to apply": "הפעילו מחדש את האפליקציה כדי להחיל",
@@ -10050,6 +10067,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Checking…": "Provjera…",
         "%@ via Moscow": "%@ preko Moskve",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Popisi, kartice i izbornici postaju stakleni, a kartice profila preuzimaju boju avatara.",
         "Restart the app to apply": "Ponovno pokrenite aplikaciju za primjenu",
@@ -10638,6 +10656,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Checking…": "Провера…",
         "%@ via Moscow": "%@ преко Москве",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Листе, картице и менији постају стаклени, а картице профила преузимају боју аватара.",
         "Restart the app to apply": "Поново покрените апликацију да примените",
@@ -11226,6 +11245,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Checking…": "Kontrola…",
         "%@ via Moscow": "%@ přes Moskvu",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Seznamy, karty a nabídky se promění ve sklo a karty profilu převezmou barvu avatara.",
         "Restart the app to apply": "Restartujte aplikaci pro použití",
@@ -11814,6 +11834,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Checking…": "Kontroluje sa…",
         "%@ via Moscow": "%@ cez Moskvu",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Zoznamy, karty a ponuky sa zmenia na sklo a karty profilu preberú farbu avatara.",
         "Restart the app to apply": "Reštartujte aplikáciu na použitie",
@@ -12402,6 +12423,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Checking…": "Se verifică…",
         "%@ via Moscow": "%@ prin Moscova",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listele, cardurile și meniurile devin de sticlă, iar filele profilului preiau culoarea avatarului.",
         "Restart the app to apply": "Reporniți aplicația pentru a aplica",
@@ -12990,6 +13012,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Checking…": "Ellenőrzés…",
         "%@ via Moscow": "%@ Moszkván át",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "A listák, kártyák és menük üveggé válnak, a profil lapjai pedig a profilkép színét veszik fel.",
         "Restart the app to apply": "Indítsa újra az alkalmazást az alkalmazáshoz",
@@ -13578,6 +13601,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Checking…": "Sjekker…",
         "%@ via Moscow": "%@ via Moskva",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Lister, kort og menyer blir glass, og profilfanene tar fargen fra profilbildet.",
         "Restart the app to apply": "Start appen på nytt for å bruke",
@@ -14166,6 +14190,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Checking…": "Kontrollerar…",
         "%@ via Moscow": "%@ via Moskva",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listor, kort och menyer blir glas, och profilflikarna tar färg efter profilbilden.",
         "Restart the app to apply": "Starta om appen för att tillämpa",
@@ -14754,6 +14779,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Checking…": "Đang kiểm tra…",
         "%@ via Moscow": "%@ qua Moskva",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Danh sách, thẻ và menu chuyển thành kính, còn các tab hồ sơ lấy màu của ảnh đại diện.",
         "Restart the app to apply": "Khởi động lại ứng dụng để áp dụng",
@@ -15342,6 +15368,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Checking…": "Перевірка…",
         "%@ via Moscow": "%@ через Москву",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Списки, картки та меню стають скляними, а вкладки у профілі беруть колір аватара.",
         "Restart the app to apply": "Перезапустіть застосунок, щоб застосувати",
@@ -15939,6 +15966,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Checking…": "Comprobando…",
         "%@ via Moscow": "%@ vía Moscú",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Las listas, las tarjetas y los menús se vuelven de cristal, y las pestañas del perfil toman el color del avatar.",
         "Restart the app to apply": "Reinicia la app para aplicar",
@@ -16536,6 +16564,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Checking…": "Verificando…",
         "%@ via Moscow": "%@ via Moscou",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listas, cartões e menus viram vidro, e as abas do perfil assumem a cor do avatar.",
         "Restart the app to apply": "Reinicie o app para aplicar",
@@ -17133,6 +17162,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Checking…": "Wird geprüft…",
         "%@ via Moscow": "%@ über Moskau",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listen, Karten und Menüs werden zu Glas, und die Profil-Tabs übernehmen die Farbe des Profilbilds.",
         "Restart the app to apply": "Starte die App neu, um zu übernehmen",
@@ -17730,6 +17760,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Checking…": "Vérification…",
         "%@ via Moscow": "%@ via Moscou",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Les listes, les cartes et les menus deviennent du verre, et les onglets du profil prennent la couleur de l'avatar.",
         "Restart the app to apply": "Redémarrez l'app pour appliquer",
@@ -18327,6 +18358,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Checking…": "Kontrol ediliyor…",
         "%@ via Moscow": "%@ Moskova üzerinden",
         "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar.": "Listeler, kartlar ve menüler cama dönüşür; profil sekmeleri de avatarın rengini alır.",
         "Restart the app to apply": "Uygulamak için uygulamayı yeniden başlatın",
