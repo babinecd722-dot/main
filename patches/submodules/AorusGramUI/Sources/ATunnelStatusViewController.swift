@@ -16,6 +16,13 @@ private struct ATunnelServerEntry: Codable {
     let latencyMs: Double?
     let jitterMs: Double?
     let lossCount: Int?
+    // Control-plane identity. All optional so a blob written by an older build still
+    // decodes and the card falls back to `region`, which is what it used before.
+    let id: String?
+    let country: String?
+    let routeType: String?
+    let via: String?
+    let measuredAt: Double?
 }
 
 private struct ATunnelDiag: Codable {
@@ -937,12 +944,12 @@ final class ATunnelStatusViewController: UIViewController {
         card.layer.cornerCurve = .continuous
 
         // Flag
-        let flag = FlagView(regionCode: server.region)
+        let flag = FlagView(regionCode: server.country ?? server.region)
         flag.translatesAutoresizingMaskIntoConstraints = false
 
         // Region full name
         let regionLabel = UILabel()
-        regionLabel.text = localizedRegion(server.region)
+        regionLabel.text = localizedServerName(server)
         regionLabel.font = Font.semibold(16.0)
         regionLabel.textColor = .white
         regionLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -1038,6 +1045,24 @@ final class ATunnelStatusViewController: UIViewController {
     }
 
     // Map server region code → localized display name
+    /// Card title built from the control plane's own identity.
+    ///
+    /// The country supplies the name and the flag, the route supplies the suffix, so a
+    /// bridged route reads as the same country reached a different way and keeps that
+    /// country's flag. Naming from priority or address would re-label the cards the moment
+    /// routes are re-provisioned.
+    private func localizedServerName(_ server: ATunnelServerEntry) -> String {
+        let base = localizedRegion(server.country ?? server.region)
+        guard server.routeType?.lowercased() == "bridge",
+              let via = server.via?.lowercased(), !via.isEmpty else {
+            return base
+        }
+        if via == "moscow" {
+            return String(format: aorusL("%@ через Москву", "%@ via Moscow"), base)
+        }
+        return base
+    }
+
     private func localizedRegion(_ region: String) -> String {
         let r = region.lowercased()
         if r == "de" || r.contains("germ") || r.contains("герм") || r.contains("frankfurt") || r.contains("франкф") {
