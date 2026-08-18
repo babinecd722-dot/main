@@ -3,11 +3,11 @@ import UIKit
 
 // AorusGram Interface 2.0: the one glass surface every other component is built from.
 //
-// The four action buttons, the now-playing capsule, the info card and the tab bar are the
-// same material at different sizes — a blur, the avatar's colour laid over it, a sheen down
-// from the top edge and a hairline rim. Keeping that in a single view is what makes them
-// look like one set rather than four things that happen to be translucent: a change to the
-// material lands everywhere at once, and each component only describes its own shape.
+// Deliberately nothing but the system material and a shape. An earlier version added a
+// white rim, a sheen and a colour wash on top, and that is exactly what stopped it reading
+// as glass: the system look comes from the blur alone, and anything painted over it reads
+// as a translucent panel someone drew. iOS does not outline its own glass, so neither does
+// this. Each component supplies only its corner radius.
 
 public final class AorusGlassSurfaceView: UIView {
     public enum Shape: Equatable {
@@ -17,9 +17,6 @@ public final class AorusGlassSurfaceView: UIView {
     }
 
     private let blurView: UIVisualEffectView
-    private let tintLayer = CALayer()
-    private let sheenLayer = CAGradientLayer()
-    private let rimLayer = CAShapeLayer()
 
     private var shape: Shape
     private var palette: AorusGlassPalette
@@ -36,22 +33,6 @@ public final class AorusGlassSurfaceView: UIView {
 
         self.blurView.isUserInteractionEnabled = false
         self.addSubview(self.blurView)
-
-        // Overlays live in the blur's contentView, which is the only place UIKit supports
-        // putting content on a UIVisualEffectView.
-        self.tintLayer.actions = ["backgroundColor": NSNull()]
-        self.blurView.contentView.layer.addSublayer(self.tintLayer)
-
-        // A vertical sheen: brightest along the top edge, gone by the middle. This is the
-        // single cue that reads as "glass" rather than "translucent rectangle".
-        self.sheenLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
-        self.sheenLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
-        self.sheenLayer.locations = [0.0, 0.55, 1.0]
-        self.blurView.contentView.layer.addSublayer(self.sheenLayer)
-
-        self.rimLayer.fillColor = UIColor.clear.cgColor
-        self.rimLayer.lineWidth = 1.0
-        self.layer.addSublayer(self.rimLayer)
 
         self.clipsToBounds = false
         self.layer.cornerCurve = .continuous
@@ -84,17 +65,8 @@ public final class AorusGlassSurfaceView: UIView {
     }
 
     private func applyPaletteColors() {
-        self.tintLayer.backgroundColor = self.palette.glassTint.cgColor
-        let sheenAlpha: CGFloat = self.palette.prefersDarkContent ? 0.30 : 0.42
-        self.sheenLayer.colors = [
-            UIColor(white: 1.0, alpha: sheenAlpha).cgColor,
-            UIColor(white: 1.0, alpha: sheenAlpha * 0.22).cgColor,
-            UIColor.clear.cgColor
-        ]
-        // The rim carries most of the glass: a bright edge against the blurred photo is what
-        // gives an otherwise transparent shape a readable boundary, and it has to hold up on
-        // a pale avatar where the fill contributes almost nothing.
-        self.rimLayer.strokeColor = UIColor(white: 1.0, alpha: self.palette.prefersDarkContent ? 0.45 : 0.38).cgColor
+        // Nothing to paint: the material is the whole appearance. Only which system
+        // material — light or dark — depends on the page underneath.
     }
 
     private func cornerRadius(for size: CGSize) -> CGFloat {
@@ -117,16 +89,5 @@ public final class AorusGlassSurfaceView: UIView {
 
         // Layer frames are set without an implicit animation; otherwise every header layout
         // pass would cross-fade the tint and sheen a frame behind the view itself.
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        self.tintLayer.frame = bounds
-        self.sheenLayer.frame = bounds
-        // Inset by half the line width so the stroke sits on the edge instead of straddling
-        // it — a straddling stroke is clipped to half its width and reads as 0.5 pt.
-        self.rimLayer.path = UIBezierPath(
-            roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-            cornerRadius: max(0.0, radius - 0.5)
-        ).cgPath
-        CATransaction.commit()
     }
 }
