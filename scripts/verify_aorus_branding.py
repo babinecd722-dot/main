@@ -2628,6 +2628,62 @@ def main() -> None:
             if marker not in pinning_text:
                 err.append(f"AorusPinnedSessionDelegate: fail-closed pinning is missing {marker}")
 
+    # AorusAI. The sources have to have landed in the tree, the settings row and the
+    # message-menu hand-off have to have been integrated, and the screen has to be drawn
+    # in the user's own theme rather than in a palette of its own.
+    ai_dir = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI"
+    ai_controllers = ai_dir / "AorusAIControllers.swift"
+    ai_design = ai_dir / "AorusAIDesign.swift"
+    ai_mention = ai_dir / "AorusAIMention.swift"
+    for path in (ai_controllers, ai_design, ai_mention):
+        if not path.is_file():
+            err.append(f"AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/{path.name}")
+    if ai_design.is_file():
+        design_text = ai_design.read_text(encoding="utf-8")
+        # A literal colour here is a colour that ignores the theme the user chose.
+        strays = [
+            value
+            for value in re.findall(r"UIColor\(rgb: 0x[0-9A-Fa-f]+\)", design_text)
+        ]
+        if strays:
+            err.append(f"AorusAI: the palette must come from the theme, found {strays[0]}")
+        if "list.itemAccentColor" not in design_text:
+            err.append("AorusAI: the accent must be the theme's own itemAccentColor")
+    if ai_controllers.is_file():
+        controllers_text = ai_controllers.read_text(encoding="utf-8")
+        for exported in (
+            "public func aorusAIConversationListController(",
+            "public func aorusAIMessageMenuTitle()",
+            "public func aorusAIMessageMenuIconName()",
+        ):
+            if exported not in controllers_text:
+                err.append(f"AorusAI: export missing — {exported}")
+        # Display's NavigationController traps in `present`, so a UIKit modal raised from a
+        # menu action has to go through the helper that finds a real presenter.
+        if re.search(r"navigationController\.present\(", controllers_text):
+            err.append("AorusAI: a UIKit modal is presented on the navigation controller (Display traps there)")
+        if "AorusAIMentionRenderer.map(entities:" not in controllers_text:
+            err.append("AorusAI: message bodies no longer draw their mentions inline")
+    ai_menu_host = tg / "submodules" / "TelegramUI" / "Sources" / "ChatInterfaceStateContextMenus.swift"
+    if not ai_menu_host.is_file():
+        err.append("AorusAI: missing ChatInterfaceStateContextMenus.swift")
+    else:
+        ai_menu_text = ai_menu_host.read_text(encoding="utf-8")
+        if "// AorusGram: AorusAI message action v7" not in ai_menu_text:
+            err.append("AorusAI: the message menu hand-off was not integrated")
+        for legacy in ("v1", "v2", "v3", "v4", "v5", "v6"):
+            if f"// AorusGram: AorusAI message action {legacy}" in ai_menu_text:
+                err.append(f"AorusAI: legacy message action ({legacy}) is still present")
+        if ai_menu_text.count("aorusAIPresentMessageActions(") != 1:
+            err.append("AorusAI: the message menu row must present the sheet exactly once")
+    ai_settings_items = (
+        tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoSettingsItems.swift"
+    )
+    if ai_settings_items.is_file():
+        settings_text = ai_settings_items.read_text(encoding="utf-8")
+        if "interaction.openSettings(.aorusAI)" not in settings_text:
+            err.append("AorusAI: the settings row was not integrated")
+
     glass_components = tg / "submodules" / "AorusGramUI" / "Sources" / "UI" / "GlassMorphism" / "GlassMorphismComponents.swift"
     if not glass_components.is_file():
         err.append("GlassEffects: component implementation is missing")

@@ -25,131 +25,10 @@ import AorusGram
 // an attribute, and `aorusAIPlainText` walks those attributes to rebuild exactly what was
 // written. That string — not what is on screen — is what the composer sends, so the
 // transport is byte-for-byte what it was before the pill existed.
-
-/// One handle that has been resolved to a real peer.
-struct AorusAIMention: Equatable {
-    /// Exactly what was written: `@durov`, `t.me/durov`, `https://t.me/durov/12`.
-    var sourceText: String
-    var username: String
-    var peerId: Int64
-    var displayName: String
-}
-
-/// Box for the attributed-string attribute.
-///
-/// Deliberately without an `isEqual(_:)` override: `NSAttributedString` merges adjacent
-/// runs whose attribute values compare equal, and identity comparison is what keeps two
-/// mentions written back to back — `@durov@durov` — as two runs instead of one, which is
-/// the difference between rebuilding the source text correctly and silently dropping a
-/// handle.
-final class AorusAIMentionBox: NSObject {
-    let mention: AorusAIMention
-
-    init(_ mention: AorusAIMention) {
-        self.mention = mention
-    }
-}
-
-extension NSAttributedString.Key {
-    static let aorusAIMention = NSAttributedString.Key("AorusAIMention")
-}
-
-extension NSAttributedString {
-    /// The text as it was written, with every pill collapsed back to its source handle.
-    var aorusAIPlainText: String {
-        guard length > 0 else { return "" }
-        let source = string as NSString
-        var result = ""
-        enumerateAttribute(.aorusAIMention, in: NSRange(location: 0, length: length), options: []) { value, range, _ in
-            if let box = value as? AorusAIMentionBox {
-                result += box.mention.sourceText
-            } else {
-                result += source.substring(with: range)
-            }
-        }
-        return result
-    }
-}
-
-/// Finds Telegram handles in plain text.
-///
-/// Both spellings the user asked for are recognised everywhere: the bare `@name` and the
-/// link form, with or without a scheme and with or without a trailing message id. The
-/// floor is four characters, not five: Telegram sells four-letter usernames through
-/// Fragment and they are exactly the ones people write about.
-enum AorusAIMentionScanner {
-    struct Match {
-        var range: NSRange
-        var username: String
-    }
-
-    private static let expressions: [NSRegularExpression] = {
-        let patterns = [
-            // Not after a word character, so an e-mail address is not read as a mention,
-            // and not after another @.
-            #"(?<![\w@])@([A-Za-z0-9_]{4,32})(?![A-Za-z0-9_])"#,
-            #"(?<![\w@/.])(?:https?://)?t\.me/(?:s/)?([A-Za-z0-9_]{4,32})(?:/\d+)?(?![A-Za-z0-9_])"#
-        ]
-        return patterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
-    }()
-
-    /// Every handle in `text`, in the order it appears, never overlapping.
-    static func matches(in text: String) -> [Match] {
-        guard !text.isEmpty else { return [] }
-        let source = text as NSString
-        let full = NSRange(location: 0, length: source.length)
-        var result: [Match] = []
-        var occupied: [NSRange] = []
-        for expression in expressions {
-            for match in expression.matches(in: text, range: full) {
-                guard match.numberOfRanges > 1 else { continue }
-                guard !occupied.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) else { continue }
-                occupied.append(match.range)
-                result.append(Match(range: match.range, username: source.substring(with: match.range(at: 1))))
-            }
-        }
-        return result.sorted { $0.range.location < $1.range.location }
-    }
-}
-
-/// Handles this session has already resolved.
-///
-/// "Instantly" is only possible for a handle whose peer is already known, so every
-/// resolution is remembered: the second time the same name is written — in the input, in
-/// the next question, in the model's answer — the pill is drawn in the same frame, with no
-/// round trip and no flicker from plain text to pill.
-final class AorusAIMentionStore {
-    static let shared = AorusAIMentionStore()
-
-    private let lock = NSLock()
-    private var entries: [String: (peerId: Int64, displayName: String)] = [:]
-    private var order: [String] = []
-    private static let limit = 512
-
-    private init() {}
-
-    func lookup(_ username: String) -> (peerId: Int64, displayName: String)? {
-        let key = username.lowercased()
-        lock.lock()
-        defer { lock.unlock() }
-        return entries[key]
-    }
-
-    func store(username: String, peerId: Int64, displayName: String) {
-        let key = username.lowercased()
-        guard !key.isEmpty, peerId != 0, !displayName.isEmpty else { return }
-        lock.lock()
-        defer { lock.unlock() }
-        if entries[key] == nil {
-            order.append(key)
-            if order.count > Self.limit {
-                let evicted = order.removeFirst()
-                entries.removeValue(forKey: evicted)
-            }
-        }
-        entries[key] = (peerId: peerId, displayName: displayName)
-    }
-}
+//
+// What a mention *is*, how one is found in text and how that reconstruction works live in
+// the AorusGram core module, where the preflight can typecheck them and run tests against
+// them. This file is only the drawing.
 
 enum AorusAIMentionRenderer {
     /// The circle is sized to the cap height of the surrounding text rather than to a
@@ -578,21 +457,35 @@ class AorusAIMentionTextView: UITextView {
     func rangeCoveringMentions(_ range: NSRange) -> NSRange {
         let length = textStorage.length
         guard length > 0 else { return range }
-        var lower = max(0, min(range.location, length))
-        var upper = max(lower, min(NSMaxRange(range), length))
-        // A caret-sized deletion arrives as the single character before the caret; a
-        // caret sitting immediately after a pill therefore lands inside its last run.
-        let probeLower = lower < length ? lower : max(0, length - 1)
-        var effective = NSRange(location: 0, length: 0)
-        if textStorage.attribute(.aorusAIMention, at: probeLower, effectiveRange: &effective) != nil {
-            lower = min(lower, effective.location)
-            upper = max(upper, NSMaxRange(effective))
-        }
-        if upper > lower, upper - 1 < length {
-            var tail = NSRange(location: 0, length: 0)
-            if textStorage.attribute(.aorusAIMention, at: upper - 1, effectiveRange: &tail) != nil {
-                lower = min(lower, tail.location)
-                upper = max(upper, NSMaxRange(tail))
+        let start = max(0, min(range.location, length))
+        let end = max(start, min(NSMaxRange(range), length))
+        var lower = start
+        var upper = end
+
+        if end > start {
+            // A deletion or a replacement. Every pill it would cut in half is taken whole:
+            // backspacing at the end of `Pavel Durov` deletes the person, not the "v" that
+            // would leave a name standing for nobody.
+            var index = start
+            while index < end {
+                var effective = NSRange(location: 0, length: 0)
+                let attribute = textStorage.attribute(.aorusAIMention, at: index, effectiveRange: &effective)
+                if attribute != nil {
+                    lower = min(lower, effective.location)
+                    upper = max(upper, NSMaxRange(effective))
+                }
+                index = max(NSMaxRange(effective), index + 1)
+            }
+        } else if start > 0, start < length {
+            // An insertion. Only a caret that has been put *inside* a pill is a problem —
+            // typing there would leave half a name carrying a source handle it no longer
+            // spells. A caret resting against either edge simply types next to it, and
+            // must not disturb the pill at all.
+            var effective = NSRange(location: 0, length: 0)
+            if textStorage.attribute(.aorusAIMention, at: start, effectiveRange: &effective) != nil,
+               start > effective.location {
+                lower = effective.location
+                upper = NSMaxRange(effective)
             }
         }
         return NSRange(location: lower, length: upper - lower)

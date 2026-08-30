@@ -14,6 +14,141 @@ def fail(errors: list[str], message: str) -> None:
     errors.append(message)
 
 
+def check_aorus_ai(root: Path, errors: list[str]) -> None:
+    """AorusAI invariants that no test can reach.
+
+    Everything here is something that is correct today and would be silently wrong if a
+    later edit dropped one line: what the transport sends, who decides the words on a
+    consent dialog, and what bounds a stream the client does not control.
+    """
+    ai_client_path = root / "AorusGram/Sources/Features/AI/AorusAIClient.swift"
+    ai_models_path = root / "AorusGram/Sources/Features/AI/AorusAIModels.swift"
+    ai_parser_path = root / "AorusGram/Sources/Features/AI/AorusAISSEParser.swift"
+    ai_flow_path = root / "AorusGram/Sources/Features/AI/AorusAIArtifactFlow.swift"
+    ai_controllers_path = root / "patches/submodules/AorusGramUI/Sources/Features/AI/AorusAIControllers.swift"
+    ai_mention_path = root / "patches/submodules/AorusGramUI/Sources/Features/AI/AorusAIMention.swift"
+    for path in (ai_client_path, ai_models_path, ai_parser_path, ai_flow_path, ai_controllers_path, ai_mention_path):
+        if not path.is_file():
+            fail(errors, f"AorusAI source is missing: {path.name}")
+            return
+    ai_client = ai_client_path.read_text(encoding="utf-8")
+    ai_models = ai_models_path.read_text(encoding="utf-8")
+    ai_parser = ai_parser_path.read_text(encoding="utf-8")
+    ai_controllers = ai_controllers_path.read_text(encoding="utf-8")
+    ai_mention = ai_mention_path.read_text(encoding="utf-8")
+
+    # Transport. A bodyless method has to be signed over empty bytes, the download path
+    # has to be the sanitized one, and no vault token may ever exist on the device.
+    if 'if method != "GET" && method != "HEAD" { request.httpBody = body }' not in ai_client:
+        fail(errors, "AorusAI: artifact GET/HEAD must be signed over an empty body")
+    if "AorusAIArtifactFlow.decode(object)" not in ai_client:
+        fail(errors, "AorusAI: artifact.ready must be decoded through AorusAIArtifactFlow")
+    if "AorusAIArtifactFlow.signingPath(for: artifact)" not in ai_client:
+        fail(errors, "AorusAI: artifact downloads must use the sanitized signing path")
+    for marker in ("vaultToken", "vault_token", "?token=", "&token="):
+        if marker in ai_client or marker in ai_models:
+            fail(errors, f"AorusAI: the client must not deal in vault tokens — found {marker}")
+
+    # The AI host carries the prompt and, once approved, a real conversation. It is the
+    # most sensitive payload this client sends and may never fall back to system trust.
+    config = (root / "AorusGram/Sources/Features/Subscription/SubscriptionConfig.swift").read_text(encoding="utf-8")
+    if '"ai.aorusgram.com": aiAPISPKIPins' not in config:
+        fail(errors, "AorusAI: ai.aorusgram.com is not SPKI-pinned")
+
+    # A file opens in the sandboxed preview, never in Safari, and a link the model wrote
+    # shows where it goes first.
+    if "QLPreviewController" not in ai_controllers:
+        fail(errors, "AorusAI: a downloaded artifact must open in Quick Look")
+    if re.search(r"UIApplication\.shared\.open\(", ai_controllers):
+        fail(errors, "AorusAI: an artifact must never be handed to Safari")
+    if "private func presentExternalLink(" not in ai_controllers:
+        fail(errors, "AorusAI: an external link must show its destination before opening")
+    if 'scheme == "http" || scheme == "https"' not in ai_controllers:
+        fail(errors, "AorusAI: only http(s) links may be opened")
+
+    # Nothing about a peer beyond what the clamped value type carries, and never a phone
+    # number.
+    if "resolveProfileContext(usernames:" not in ai_controllers:
+        fail(errors, "AorusAI: mentioned profiles must be resolved before the request is sent")
+    if "transportBlock(labels: labels)" not in ai_controllers:
+        fail(errors, "AorusAI: profile context must travel through AorusAIProfileSummary.transportBlock")
+    if "timeout(2.5, queue: Queue.mainQueue()" not in ai_controllers:
+        fail(errors, "AorusAI: the profile lookup must have a ceiling so a turn can never hang on it")
+    for marker in ("phoneNumber", "peer.phone"):
+        if marker in ai_controllers:
+            fail(errors, f"AorusAI: a phone number must never be transported — found {marker}")
+
+    # Consent. The words that decide what is being agreed to are the client's, and the
+    # silent profile lookup is limited to handles the conversation actually names.
+    if "Self.optionTitle(option)" not in ai_controllers:
+        fail(errors, "AorusAI: permission buttons must state what they share, not the server's label")
+    if "private static func optionTitle(" not in ai_controllers:
+        fail(errors, "AorusAI: the client-authoritative permission button title is missing")
+    if "option.limit ?? Self.defaultHistoryLimit" not in ai_controllers:
+        fail(errors, "AorusAI: a permission button must name the same default the executor uses")
+    if "limit ?? Self.defaultHistoryLimit" not in ai_controllers:
+        fail(errors, "AorusAI: the history executor must use the documented default limit")
+    if "request.requiresUserApproval || !conversationMentions(request.username)" not in ai_controllers:
+        fail(errors, "AorusAI: a silent profile lookup must be limited to handles the conversation names")
+    if "private func conversationMentions(" not in ai_controllers:
+        fail(errors, "AorusAI: the mentioned-handle check is missing")
+
+    # Mentions. The pill is a drawing; the transport is still the handles that were typed.
+    ai_mention_model_path = root / "AorusGram/Sources/Features/AI/AorusAIMentionModel.swift"
+    if not ai_mention_model_path.is_file():
+        fail(errors, "AorusAI: AorusAIMentionModel.swift is missing")
+        return
+    ai_mention_model = ai_mention_model_path.read_text(encoding="utf-8")
+    if "textView.attributedText?.aorusAIPlainText" not in ai_controllers:
+        fail(errors, "AorusAI: the composer must send the source handles, not the rendered pills")
+    if "public var aorusAIPlainText: String" not in ai_mention_model:
+        fail(errors, "AorusAI: the pill-to-source reconstruction is missing")
+    if "removingResolvedEntitySources" in ai_controllers:
+        fail(errors, "AorusAI: a resolved handle must stay in the text, not be cut out of it")
+    if "override func isEqual" in ai_mention_model or "override func isEqual" in ai_mention:
+        fail(errors, "AorusAI: mention boxes must compare by identity, or two adjacent pills merge into one")
+    mention_tests = root / "scripts/tests/AorusAIMentionTests.swift"
+    if not mention_tests.is_file():
+        fail(errors, "AorusAI: the mention tests are missing")
+    elif "AorusAIMentionTests.swift" not in (root / ".github/workflows/build-aorusgram.yml").read_text(encoding="utf-8"):
+        fail(errors, "AorusAI: the mention tests are not wired into the preflight")
+
+    # Bounds on everything the server drives.
+    for marker in ("static let maximumLineBytes", "static let maximumEventBytes"):
+        if marker not in ai_parser:
+            fail(errors, f"AorusAI: the SSE parser has no ceiling — {marker} is missing")
+    for marker in ("static let responseCharacters", "static let responseArtifactCount"):
+        if marker not in ai_models:
+            fail(errors, f"AorusAI: a streamed answer has no ceiling — {marker} is missing")
+    if "AorusAIRequestLimits.responseCharacters" not in ai_controllers:
+        fail(errors, "AorusAI: the streamed answer ceiling is declared but never applied")
+
+    tests = root / "scripts/tests/AorusAISSEParserTests.swift"
+    if not tests.is_file():
+        fail(errors, "AorusAI: the SSE parser tests are missing")
+    else:
+        body = tests.read_text(encoding="utf-8")
+        for name in ("overlongLineIsDiscardedAndStreamRecovers", "overlongEventIsDroppedWholeAndStreamRecovers"):
+            if body.count(name) < 2:
+                fail(errors, f"AorusAI: {name} is defined but never run")
+    workflow = (root / ".github/workflows/build-aorusgram.yml").read_text(encoding="utf-8")
+    for name in ("AorusAISSEParserTests.swift", "AorusAIArtifactFlowTests.swift", "aorus_ai_scope_check.py", "aorus_ai_integration.py"):
+        if name not in workflow:
+            fail(errors, f"AorusAI: {name} is not wired into the build")
+
+    # The integrator writes a versioned sentinel into Telegram's own file and the tree
+    # verifier demands one. When the two drift the build dies after the clone, so they are
+    # compared here, where it costs nothing.
+    integrator = (root / "scripts/aorus_ai_integration.py").read_text(encoding="utf-8")
+    verifier = (root / "scripts/verify_aorus_branding.py").read_text(encoding="utf-8")
+    sentinels = re.findall(r'"(// AorusGram: AorusAI message action v\d+)"', integrator)
+    current = [value for value in sentinels if f'sentinel = "{value}"' in integrator]
+    if len(current) != 1:
+        fail(errors, "AorusAI: the integrator must declare exactly one current menu sentinel")
+    elif f'"{current[0]}" not in ai_menu_text' not in verifier:
+        fail(errors, f"AorusAI: verify_aorus_branding.py does not require the current sentinel ({current[0]})")
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     errors: list[str] = []
@@ -540,6 +675,8 @@ def main() -> int:
                         continue
                     if name not in defined:
                         fail(errors, f"aorus_branding.py main() calls {name}(), which is not defined")
+
+    check_aorus_ai(root, errors)
 
     if errors:
         print("Release security check failed:")
