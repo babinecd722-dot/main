@@ -50,6 +50,92 @@ def declared_names(root: Path, pattern: re.Pattern) -> set:
     return names
 
 
+# Frameworks the SDK provides. Everything else an AorusGramUI file imports has to be a
+# Bazel dependency of the module, or the build dies an hour in with "no such module".
+SYSTEM_MODULES = {
+    "Foundation",
+    "UIKit",
+    "CoreGraphics",
+    "CoreText",
+    "QuartzCore",
+    "AVFoundation",
+    "AVKit",
+    "Speech",
+    "QuickLook",
+    "Photos",
+    "Intents",
+    "SwiftUI",
+    "Combine",
+    "os",
+    "Darwin",
+    "Network",
+    "CryptoKit",
+    "Security",
+    "MobileCoreServices",
+    "UniformTypeIdentifiers",
+    "LocalAuthentication",
+    "StoreKit",
+    "WebKit",
+    "SafariServices",
+    "MessageUI",
+    "UserNotifications",
+    "CoreLocation",
+    "CoreMotion",
+    "AudioToolbox",
+    "MetalKit",
+    "Accelerate",
+    "Dispatch",
+    "ObjectiveC",
+    "MachO",
+    "SQLite3",
+    "ImageIO",
+    "IntentsUI",
+    "BackgroundTasks",
+    "CoreImage",
+    "CoreServices",
+    "SystemConfiguration",
+    "VideoToolbox",
+    "CoreMedia",
+    "CoreVideo",
+    "NaturalLanguage",
+    "Vision",
+    "PhotosUI",
+    "CallKit",
+    "PushKit",
+    "NetworkExtension",
+    "CoreTelephony",
+    "AuthenticationServices",
+    "LinkPresentation",
+    "GameController",
+}
+
+IMPORT = re.compile(r"^\s*import\s+(?:struct\s+|class\s+|enum\s+|func\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*$", re.MULTILINE)
+
+
+def check_build_dependencies(root: Path, ui: Path, errors: list) -> None:
+    """Every module the sources import must be a dependency of the Bazel target.
+
+    `swiftc -frontend -parse` never resolves an import, so a file that names a module the
+    BUILD file does not list parses cleanly here and fails deep inside the Bazel run. The
+    two lists are compared instead.
+    """
+    build = root / "patches/submodules/AorusGramUI/BUILD"
+    if not build.is_file():
+        errors.append("patches/submodules/AorusGramUI/BUILD is missing")
+        return
+    build_text = build.read_text(encoding="utf-8")
+    for source in sorted(ui.rglob("*.swift")):
+        text = COMMENT.sub(" ", source.read_text(encoding="utf-8"))
+        for module in sorted(set(IMPORT.findall(text))):
+            if module in SYSTEM_MODULES or module == "AorusGramUI":
+                continue
+            if f":{module}\"" in build_text or f"//submodules/{module}\"" in build_text:
+                continue
+            errors.append(
+                f"{source.relative_to(root)} imports {module}, which AorusGramUI/BUILD does not depend on"
+            )
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
     core = root / CORE_SOURCES
@@ -75,6 +161,8 @@ def main() -> int:
         if used:
             relative = source.relative_to(root)
             errors.append(f"{relative} uses {', '.join(used)} without `import AorusGram`")
+
+    check_build_dependencies(root, ui, errors)
 
     for error in errors:
         print(f"AorusAI scope check: {error}", file=sys.stderr)

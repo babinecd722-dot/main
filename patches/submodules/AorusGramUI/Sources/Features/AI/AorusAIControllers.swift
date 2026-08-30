@@ -530,31 +530,12 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         self.palette = AorusAIPalette.resolve(presentationData.theme)
         self.accountId = context.account.id.int64
         let palette = self.palette
-        // The design draws one flat surface from the status bar down, so the navigation
-        // bar takes the page background, drops its blur and hides its separator instead
-        // of keeping Telegram's own bar colour above a #0E0E12 page.
-        let base = NavigationBarPresentationData(presentationData: presentationData)
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(
-            theme: NavigationBarTheme(
-                overallDarkAppearance: palette.isDark,
-                buttonColor: palette.accent,
-                disabledButtonColor: palette.tertiary,
-                primaryTextColor: palette.label,
-                backgroundColor: palette.background,
-                opaqueBackgroundColor: palette.background,
-                enableBackgroundBlur: false,
-                separatorColor: .clear,
-                badgeBackgroundColor: palette.accent,
-                badgeStrokeColor: palette.accent,
-                badgeTextColor: palette.onAccent,
-                accentButtonColor: palette.accent,
-                accentDisabledButtonColor: palette.tertiary,
-                accentForegroundColor: palette.onAccent
-            ),
-            strings: base.strings
-        ))
+        // Telegram's own navigation bar, unmodified: the blur, the separator and the
+        // button colours every other screen in the app has. A hand-built bar was what made
+        // this screen read as a different application pasted into Telegram.
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         self.title = "AorusAI"
-        self.statusBar.statusBarStyle = palette.isDark ? .White : .Black
+        self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         // Telegram's navigation bar draws only `image` and `title` of a bar button item, so a
         // system item such as `.add` renders as an empty tap area — which is why the button
         // looked missing. The compose glyph is the one the chat list itself uses, retinted
@@ -772,17 +753,13 @@ private final class AorusAIConversationListController: ViewController, UITableVi
 /// this shape without fighting its internals.
 private final class AorusAISearchFieldView: UIView {
     let textField = UITextField()
-    private let materialView = UIVisualEffectView()
     private let iconView = UIImageView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.layer.cornerRadius = 19.0
         self.layer.cornerCurve = .continuous
-        self.layer.borderWidth = UIScreenPixel
         self.clipsToBounds = true
-        materialView.isUserInteractionEnabled = false
-        addSubview(materialView)
         iconView.contentMode = .scaleAspectFit
         iconView.image = UIImage(systemName: "magnifyingglass")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .medium))
         textField.font = .systemFont(ofSize: 15.0)
@@ -797,10 +774,9 @@ private final class AorusAISearchFieldView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(palette: AorusAIPalette, placeholder: String) {
-        backgroundColor = .clear
-        materialView.effect = aorusAIGlassEffect(palette: palette)
-        materialView.backgroundColor = aorusAIGlassTint(palette: palette)
-        layer.borderColor = aorusAIGlassBorder(palette: palette).cgColor
+        // A plain filled capsule, the way iOS draws a search field: no blur to sample an
+        // opaque page through and no outline around it.
+        backgroundColor = palette.fill
         iconView.tintColor = palette.tertiary
         textField.textColor = palette.label
         textField.tintColor = palette.accent
@@ -813,7 +789,6 @@ private final class AorusAISearchFieldView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        materialView.frame = bounds
         iconView.frame = CGRect(x: 12.0, y: floor((bounds.height - 16.0) / 2.0), width: 16.0, height: 16.0)
         textField.frame = CGRect(x: 36.0, y: 0.0, width: max(0.0, bounds.width - 48.0), height: bounds.height)
     }
@@ -858,10 +833,8 @@ private final class AorusAIConversationListHeaderView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        // The design sets the greeting in the system serif, the one place on the screen
-        // where the type turns editorial.
-        greetingLabel.font = aorusAISerifFont(size: 26.0, weight: .semibold)
-        // "Добрый вечер, " plus a full display name does not fit one 26pt serif line on a
+        greetingLabel.font = aorusAITitleFont(size: 26.0, weight: .semibold)
+        // "Добрый вечер, " plus a full display name does not fit one 26pt line on a
         // narrow phone. It used to be squeezed into a fixed 32pt frame, which is what put
         // the text outside the header; it wraps to a second line instead.
         greetingLabel.numberOfLines = 2
@@ -1015,7 +988,7 @@ private final class AorusAIConversationListEmptyView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         iconView.contentMode = .scaleAspectFit
-        titleLabel.font = aorusAISerifFont(size: 20.0, weight: .semibold)
+        titleLabel.font = aorusAITitleFont(size: 20.0, weight: .semibold)
         titleLabel.textAlignment = .center
         titleLabel.text = aorusAILocalized("Начните новый диалог", "Start a new chat")
         detailLabel.font = .systemFont(ofSize: 14)
@@ -1182,36 +1155,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.initialPrompt = initialPrompt
         self.initialRequest = initialRequest
         self.pendingReference = reference
-        // The same flat bar as the conversation list: no blur, no separator, the screen's
-        // own background continued behind the status bar. `NavigationBarTheme` is spelled
-        // out because the shared presentation theme would bring back Telegram's chat bar
-        // colours and blur, which the design does not have.
-        let base = NavigationBarPresentationData(presentationData: presentationData)
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(
-            theme: NavigationBarTheme(
-                overallDarkAppearance: palette.isDark,
-                buttonColor: palette.accent,
-                disabledButtonColor: palette.tertiary,
-                primaryTextColor: palette.label,
-                backgroundColor: palette.background,
-                opaqueBackgroundColor: palette.background,
-                enableBackgroundBlur: false,
-                separatorColor: .clear,
-                badgeBackgroundColor: palette.accent,
-                badgeStrokeColor: palette.accent,
-                badgeTextColor: palette.onAccent,
-                accentButtonColor: palette.accent,
-                accentDisabledButtonColor: palette.tertiary,
-                accentForegroundColor: palette.onAccent
-            ),
-            strings: base.strings
-        ))
+        // The same unmodified Telegram bar as the conversation list.
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
         // `title` stays unset because Telegram's navigation bar draws either the string or
         // the custom view, never both.
         let titleView = AorusAINavigationTitleView(theme: presentationData.theme)
         self.headerView = titleView
         self.navigationItem.titleView = titleView
-        self.statusBar.statusBarStyle = palette.isDark ? .White : .Black
+        self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -1452,13 +1403,22 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     func textViewDidChange(_ textView: UITextView) {
-        conversation.draft = textView.text
+        // `composer.text` — not `textView.text` — because the input draws resolved handles
+        // as avatars, and the draft has to be the handles the user actually typed.
+        let source = composer.text
+        conversation.draft = source
         conversation.updatedAt = Date()
         composer.invalidateHeight()
-        resolveDraftEntities(in: textView.text)
+        resolveDraftEntities(in: source)
         if let layout = lastLayout { applyLayout(layout, transition: .immediate) }
         updateComposer()
         persist(force: false)
+    }
+
+    /// A mention pill is one object as far as editing is concerned.
+    func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        guard textView === composer.textView else { return true }
+        return composer.handleTextChange(in: range, replacement: text)
     }
 
     // The composer carries no brand row: the header already says AorusAI, and a second
@@ -2231,10 +2191,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         draftEntities = AorusAIFormat.entities(in: draftEntitiesText)
         composer.entities = draftEntities
         for index in draftEntities.indices {
-            guard let username = draftEntities[index].username else { continue }
+            guard let username = draftEntities[index].username, draftEntities[index].peerId == nil else { continue }
             let expectedText = draftEntitiesText
             let disposable = (context.engine.peers.resolvePeerByName(name: username, referrer: nil) |> deliverOnMainQueue).start(next: { [weak self] result in
-                guard let self, self.draftEntitiesText == expectedText, case let .result(peer) = result, let peer else { return }
+                guard let self, case let .result(peer) = result, let peer else { return }
+                // Remembered before the draft check: the answer is just as valid for the
+                // next message even if the user has already typed past this one.
+                AorusAIMentionStore.shared.store(username: username, peerId: peer.id.toInt64(), displayName: self.displayName(of: peer))
+                guard self.draftEntitiesText == expectedText else { return }
                 guard index < self.draftEntities.count, self.draftEntities[index].username?.lowercased() == username.lowercased() else { return }
                 self.draftEntities[index].peerId = peer.id.toInt64()
                 self.draftEntities[index].displayName = self.displayName(of: peer)
@@ -2435,11 +2399,19 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         let parsed = AorusAIFormat.entities(in: conversation.messages[messageIndex].rawText)
         conversation.messages[messageIndex].telegramEntities = parsed
         var disposables: [Disposable] = []
+        var resolvedFromCache = false
         for entityIndex in parsed.indices {
             guard let username = parsed[entityIndex].username else { continue }
+            // The scanner already filled in anything this session knows, so a repeated
+            // handle draws its pill without waiting for the network again.
+            if parsed[entityIndex].peerId != nil {
+                resolvedFromCache = true
+                continue
+            }
             let disposable = (context.engine.peers.resolvePeerByName(name: username, referrer: nil) |> deliverOnMainQueue).start(next: { [weak self] result in
-                guard let self, case let .result(peer) = result, let peer,
-                      let currentMessageIndex = self.conversation.messages.firstIndex(where: { $0.id == messageId }),
+                guard let self, case let .result(peer) = result, let peer else { return }
+                AorusAIMentionStore.shared.store(username: username, peerId: peer.id.toInt64(), displayName: self.displayName(of: peer))
+                guard let currentMessageIndex = self.conversation.messages.firstIndex(where: { $0.id == messageId }),
                       entityIndex < self.conversation.messages[currentMessageIndex].telegramEntities.count else { return }
                 self.conversation.messages[currentMessageIndex].telegramEntities[entityIndex].peerId = peer.id.toInt64()
                 self.conversation.messages[currentMessageIndex].telegramEntities[entityIndex].displayName = self.displayName(of: peer)
@@ -2447,6 +2419,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 self.persist(force: false)
             })
             disposables.append(disposable)
+        }
+        if resolvedFromCache {
+            reloadMessage(id: messageId)
         }
         messageEntityResolutionDisposables[messageId] = disposables
     }
@@ -2708,7 +2683,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 }
 
 private final class AorusAIComposerView: UIView {
-    let textView = UITextView()
+    let textView = AorusAIMentionTextView.make()
     private let container = UIView()
     private let glassView = UIVisualEffectView()
     private let placeholder = UILabel()
@@ -2726,17 +2701,22 @@ private final class AorusAIComposerView: UIView {
     var onDictation: (() -> Void)?
     private var theme: PresentationTheme?
     private var context: AccountContext?
-    /// Mentions the controller has resolved to real peers. They are styled inside the
-    /// input itself — the row of chips that used to sit above it is gone, because a
-    /// resolved @username reads as a name, not as an attachment.
+    /// Mentions the controller has resolved to real peers. Setting them redraws the pills
+    /// inside the input itself: the handle the user typed becomes that person's avatar and
+    /// name, in place, without the text they will actually send changing at all.
     var entities: [AorusAITelegramEntity] = [] {
         didSet { applyMentionStyling() }
     }
 
+    /// What the user wrote, with every pill collapsed back to the handle it was made
+    /// from. This — never what is drawn — is the draft, the transport text and the string
+    /// mentions are scanned in.
     var text: String {
-        get { textView.text }
+        get { textView.attributedText?.aorusAIPlainText ?? "" }
         set {
-            textView.text = newValue
+            renderedMentionSignature = nil
+            textView.attributedText = NSAttributedString(string: newValue, attributes: baseTextAttributes())
+            textView.rebuildMentionAvatars()
             placeholder.isHidden = isDictating || !newValue.isEmpty
             applyMentionStyling()
         }
@@ -2812,6 +2792,10 @@ private final class AorusAIComposerView: UIView {
         referenceLine.backgroundColor = palette.accent
         referenceClose.tintColor = palette.tertiary
         dictationWaveform.configure(accent: palette.secondary)
+        textView.configureMentions(context: context, theme: theme)
+        // The theme decides the base colour every run is drawn in, so the last render is
+        // no longer valid and has to be redone rather than skipped as unchanged.
+        renderedMentionSignature = nil
         applyMentionStyling()
         refreshButton()
         refreshDictationButton()
@@ -2883,46 +2867,130 @@ private final class AorusAIComposerView: UIView {
         dictationButton.accessibilityLabel = isDictating ? aorusAILocalized("Остановить диктовку", "Stop dictation") : aorusAILocalized("Диктовать", "Dictate")
     }
 
-    /// Styles every resolved mention inside the input. The text itself is untouched, so
-    /// what the transport sends is still exactly what the user typed; only the run that
-    /// the client has proved is a real peer is drawn in the accent colour.
+    private static let inputFont = UIFont.systemFont(ofSize: 16.0)
+
+    private func baseTextAttributes() -> [NSAttributedString.Key: Any] {
+        let color = theme.map { AorusAIPalette.resolve($0).label } ?? UIColor.label
+        return [.font: AorusAIComposerView.inputFont, .foregroundColor: color]
+    }
+
+    /// What the pills currently drawn in the input describe. Comparing against it is what
+    /// keeps an ordinary keystroke from rewriting the whole attributed text — and moving
+    /// the caret — when nothing about the mentions has changed.
+    private var renderedMentionSignature: String?
+
+    /// Draws every resolved handle in the input as its person.
+    ///
+    /// The rebuild is deliberately rare: it happens when a handle finishes resolving, is
+    /// typed, or is deleted, and never while the user is simply typing words. When it does
+    /// happen the caret is carried across by counting characters from the end of the
+    /// *source* text, so it stays where the user left it even though the displayed text
+    /// just changed length.
     private func applyMentionStyling() {
         guard let theme else { return }
         let palette = AorusAIPalette.resolve(theme)
-        let plain = textView.text ?? ""
-        let base: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 16),
-            .foregroundColor: palette.label
-        ]
+        let base = baseTextAttributes()
         textView.typingAttributes = base
-        guard !plain.isEmpty else { return }
-        let resolved = entities.filter { $0.peerId != nil && !$0.sourceText.isEmpty }
-        guard !resolved.isEmpty else {
-            if textView.attributedText.length > 0 {
-                let selection = textView.selectedRange
-                textView.attributedText = NSAttributedString(string: plain, attributes: base)
-                textView.selectedRange = selection
-            }
-            return
-        }
-        let full = plain as NSString
-        let attributed = NSMutableAttributedString(string: plain, attributes: base)
-        let highlight: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 16, weight: .semibold),
-            .foregroundColor: palette.accent
-        ]
-        for entity in resolved {
-            let range = NSRange(location: entity.rangeLocation, length: entity.rangeLength)
-            // Offsets were taken from an earlier revision of the text, so only trust a
-            // range that still holds exactly the run it was resolved from.
-            guard range.location >= 0, range.length > 0, range.location + range.length <= full.length,
-                  full.substring(with: range) == entity.sourceText else { continue }
-            attributed.addAttributes(highlight, range: range)
-        }
+        let source = self.text
+        let resolved = AorusAIMentionRenderer.map(from: entities)
+        let signature = AorusAIMentionRenderer.signature(source: source, resolved: resolved)
+        guard signature != renderedMentionSignature else { return }
+        renderedMentionSignature = signature
+
+        let sourceLength = (source as NSString).length
         let selection = textView.selectedRange
-        textView.attributedText = attributed
-        textView.selectedRange = selection
+        let tail = max(0, sourceLength - Self.sourceOffset(forRendered: selection.location, placements: currentPlacements()))
+
+        let rendered = AorusAIMentionRenderer.render(
+            source: source,
+            resolved: resolved,
+            base: base,
+            font: AorusAIComposerView.inputFont,
+            accent: palette.accent,
+            link: false
+        )
+        textView.attributedText = rendered.text
         textView.typingAttributes = base
+        let caretSource = max(0, sourceLength - tail)
+        let caret = min(rendered.text.length, Self.renderedOffset(forSource: caretSource, placements: rendered.placements))
+        textView.selectedRange = NSRange(location: caret, length: 0)
+        textView.rebuildMentionAvatars()
+    }
+
+    /// Where each pill currently on screen sits, in both coordinate systems.
+    ///
+    /// Derived from the text view itself rather than remembered from the last render: an
+    /// edit that removed a pill has already changed what is displayed, and a cached map
+    /// would put the caret by the geometry of a text that no longer exists.
+    private func currentPlacements() -> [AorusAIMentionRenderer.Placement] {
+        guard let value = textView.attributedText, value.length > 0 else { return [] }
+        var placements: [AorusAIMentionRenderer.Placement] = []
+        var sourceCursor = 0
+        value.enumerateAttribute(.aorusAIMention, in: NSRange(location: 0, length: value.length), options: []) { attribute, range, _ in
+            if let box = attribute as? AorusAIMentionBox {
+                let sourceLength = (box.mention.sourceText as NSString).length
+                placements.append(AorusAIMentionRenderer.Placement(
+                    source: NSRange(location: sourceCursor, length: sourceLength),
+                    rendered: range
+                ))
+                sourceCursor += sourceLength
+            } else {
+                sourceCursor += range.length
+            }
+        }
+        return placements
+    }
+
+    private static func sourceOffset(forRendered offset: Int, placements: [AorusAIMentionRenderer.Placement]) -> Int {
+        var result = offset
+        for placement in placements {
+            if offset >= NSMaxRange(placement.rendered) {
+                result += placement.source.length - placement.rendered.length
+            } else if offset > placement.rendered.location {
+                // Inside a pill: the whole thing belongs to its source run.
+                return NSMaxRange(placement.source)
+            } else {
+                break
+            }
+        }
+        return max(0, result)
+    }
+
+    private static func renderedOffset(forSource offset: Int, placements: [AorusAIMentionRenderer.Placement]) -> Int {
+        var result = offset
+        for placement in placements {
+            if offset >= NSMaxRange(placement.source) {
+                result += placement.rendered.length - placement.source.length
+            } else if offset > placement.source.location {
+                return NSMaxRange(placement.rendered)
+            } else {
+                break
+            }
+        }
+        return max(0, result)
+    }
+
+    /// Makes a pill a single object to the keyboard: one backspace removes the person, not
+    /// the last letter of a name that no longer stands for anything.
+    ///
+    /// Returns false when it performed the edit itself, which is the contract
+    /// `textView(_:shouldChangeTextIn:replacementText:)` expects.
+    func handleTextChange(in range: NSRange, replacement: String) -> Bool {
+        let expanded = textView.rangeCoveringMentions(range)
+        guard expanded.location != range.location || expanded.length != range.length else { return true }
+        guard NSMaxRange(expanded) <= textView.textStorage.length else { return true }
+        let insertion = NSAttributedString(string: replacement, attributes: baseTextAttributes())
+        let storage = textView.textStorage
+        storage.beginEditing()
+        storage.replaceCharacters(in: expanded, with: insertion)
+        storage.endEditing()
+        textView.selectedRange = NSRange(location: expanded.location + (replacement as NSString).length, length: 0)
+        // The pill has been taken out of the text, so what is drawn no longer matches the
+        // last signature; the next pass has to rebuild rather than skip as unchanged.
+        renderedMentionSignature = nil
+        textView.rebuildMentionAvatars()
+        textView.delegate?.textViewDidChange?(textView)
+        return false
     }
 
     @objc private func closeReference() { onDismissReference?() }
@@ -3082,7 +3150,7 @@ private final class AorusAIWaveformView: UIView {
 
 private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     private enum BodySlot {
-        case text(UITextView)
+        case text(AorusAIMentionTextView)
         case code(AorusAICodeCard)
         case quote(AorusAIQuoteCard)
         case separator
@@ -3284,10 +3352,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     /// to fall back to a full rebuild.
     func applyIncremental(message: AorusAIMessage, theme: PresentationTheme, canRetry: Bool, loadingArtifactIds: Set<String>) -> Bool {
         guard configuredMessageId == message.id, configuredTheme === theme else { return false }
-        let resolvedEntities = message.telegramEntities.filter { $0.peerId != nil }
-        let displayText = AorusAIFormat.removingResolvedEntitySources(from: message.rawText, entities: resolvedEntities)
-        let blocks = AorusAIMarkdown.blocks(displayText)
-        guard Self.signature(blocks: blocks, message: message, entities: resolvedEntities, loadingArtifactIds: loadingArtifactIds) == structureSignature,
+        let mentions = AorusAIMentionRenderer.map(entities: message.telegramEntities, text: message.rawText)
+        let blocks = AorusAIMarkdown.blocks(message.rawText)
+        guard Self.signature(blocks: blocks, message: message, mentions: mentions, loadingArtifactIds: loadingArtifactIds) == structureSignature,
               blocks.count == slots.count, blocks.count == slotValues.count else {
             return false
         }
@@ -3297,11 +3364,12 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             slotValues[index] = value
             switch (slots[index], blocks[index]) {
             case let (.text(view), .text(source)):
-                view.attributedText = AorusAIMarkdown.attributed(source, color: configuredTextColor, accent: configuredAccent)
+                view.attributedText = AorusAIMarkdown.attributed(source, color: configuredTextColor, accent: configuredAccent, mentions: mentions)
+                view.rebuildMentionAvatars()
             case let (.code(card), .code(language, code)):
                 card.configure(language: language, code: code, theme: theme)
             case let (.quote(card), .quote(source)):
-                card.configure(text: source, theme: theme, textColor: configuredTextColor, accentOnColor: false)
+                card.configure(text: source, theme: theme, textColor: configuredTextColor, accentOnColor: false, mentions: mentions)
             default:
                 return false
             }
@@ -3332,11 +3400,13 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         return blocks.isEmpty && message.artifacts.isEmpty
     }
 
-    private static func signature(blocks: [AorusAIMarkdownBlock], message: AorusAIMessage, entities: [AorusAITelegramEntity], loadingArtifactIds: Set<String>) -> String {
+    private static func signature(blocks: [AorusAIMarkdownBlock], message: AorusAIMessage, mentions: [String: AorusAIMention], loadingArtifactIds: Set<String>) -> String {
         var parts: [String] = [message.referencedMessage == nil ? "r0" : "r1"]
         parts.append(showsTyping(blocks: blocks, message: message) ? "y1" : "y0")
         parts.append("n:" + (notice(for: message)?.rawValue ?? ""))
-        parts.append("e:" + entities.map { "\($0.peerId ?? 0)/\($0.displayName)" }.joined(separator: ","))
+        // A handle that has just resolved changes what the text renders as, so it is part
+        // of the structure: the incremental path must not keep drawing the old plain run.
+        parts.append("e:" + mentions.keys.sorted().map { "\($0)/\(mentions[$0]?.peerId ?? 0)" }.joined(separator: ","))
         for block in blocks {
             switch block {
             case .text: parts.append("t")
@@ -3371,13 +3441,15 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             : bubble.widthAnchor.constraint(equalTo: contentStack.widthAnchor)
         bubbleWidthConstraint.isActive = true
         self.bubbleWidthConstraint = bubbleWidthConstraint
-        bubble.effect = isUser ? aorusAIGlassEffect(palette: palette) : nil
-        bubble.backgroundColor = isUser ? aorusAIGlassTint(palette: palette, strong: true) : .clear
+        // The user's own turn is a plain filled bubble, like an outgoing message. It had a
+        // blur and an outline, which over an opaque table view bought nothing but a render
+        // pass and a line around every question.
+        bubble.effect = nil
+        bubble.backgroundColor = isUser ? palette.fillStrong : .clear
         bubble.layer.cornerRadius = isUser ? 20.0 : 0.0
         bubble.layer.cornerCurve = .continuous
         bubble.clipsToBounds = isUser
-        bubble.layer.borderWidth = isUser ? UIScreenPixel : 0.0
-        bubble.layer.borderColor = isUser ? aorusAIGlassBorder(palette: palette).cgColor : UIColor.clear.cgColor
+        bubble.layer.borderWidth = 0.0
         applyBodyInsets(isUser: isUser)
 
         if let reference = message.referencedMessage {
@@ -3394,17 +3466,6 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             referenceCard = referenceView
         }
 
-        let resolvedEntities = message.telegramEntities.filter { $0.peerId != nil }
-        if !resolvedEntities.isEmpty {
-            let entityRow = AorusAIEntityRowView()
-            entityRow.configure(context: context, entities: resolvedEntities, theme: theme, accentOnColor: false)
-            entityRow.onOpenPeer = { [weak self] peerId in
-                guard let url = URL(string: "aorus-peer://\(peerId.toInt64())") else { return }
-                self?.onOpenLink?(url)
-            }
-            bodyStack.addArrangedSubview(entityRow)
-        }
-
         // The bubble is neutral in both roles now, so the text keeps the label colour and
         // links keep the accent — no white-on-accent special case.
         let textColor: UIColor = palette.label
@@ -3413,9 +3474,11 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         configuredAccent = accent
         configuredTheme = theme
         configuredMessageId = message.id
-        let displayText = AorusAIFormat.removingResolvedEntitySources(from: message.rawText, entities: resolvedEntities)
-        let blocks = AorusAIMarkdown.blocks(displayText)
-        structureSignature = Self.signature(blocks: blocks, message: message, entities: resolvedEntities, loadingArtifactIds: loadingArtifactIds)
+        // Handles are drawn as people inside the sentence they were written in — there is
+        // no separate strip of chips and nothing is cut out of the text.
+        let mentions = AorusAIMentionRenderer.map(entities: message.telegramEntities, text: message.rawText)
+        let blocks = AorusAIMarkdown.blocks(message.rawText)
+        structureSignature = Self.signature(blocks: blocks, message: message, mentions: mentions, loadingArtifactIds: loadingArtifactIds)
         if Self.showsTyping(blocks: blocks, message: message) {
             typingIndicator.configure(theme: theme)
             bodyStack.addArrangedSubview(typingIndicator)
@@ -3427,7 +3490,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             slotValues.append(Self.value(of: block))
             switch block {
             case let .text(value):
-                let view = UITextView()
+                let view = AorusAIMentionTextView.make()
                 view.backgroundColor = .clear
                 view.isEditable = false
                 view.isScrollEnabled = false
@@ -3435,7 +3498,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
                 view.textContainer.lineFragmentPadding = 0
                 view.delegate = self
                 view.linkTextAttributes = [.foregroundColor: accent, .underlineStyle: 0]
-                view.attributedText = AorusAIMarkdown.attributed(value, color: textColor, accent: accent)
+                view.configureMentions(context: context, theme: theme)
+                view.attributedText = AorusAIMarkdown.attributed(value, color: textColor, accent: accent, mentions: mentions)
+                view.rebuildMentionAvatars()
                 bodyStack.addArrangedSubview(view)
                 slots.append(.text(view))
             case let .code(language, code):
@@ -3446,7 +3511,8 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
                 slots.append(.code(card))
             case let .quote(value):
                 let card = AorusAIQuoteCard()
-                card.configure(text: value, theme: theme, textColor: textColor, accentOnColor: false)
+                card.configureMentions(context: context, theme: theme)
+                card.configure(text: value, theme: theme, textColor: textColor, accentOnColor: false, mentions: mentions)
                 bodyStack.addArrangedSubview(card)
                 slots.append(.quote(card))
             case .separator:
@@ -3728,51 +3794,13 @@ private final class AorusAINoticeCard: UIView {
     @objc private func retry() { onRetry?() }
 }
 
-private final class AorusAIEntityRowView: UIView {
-    private let scrollView = UIScrollView()
-    private let stackView = UIStackView()
-    var onOpenPeer: ((PeerId) -> Void)?
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        scrollView.showsHorizontalScrollIndicator = false
-        stackView.axis = .horizontal
-        stackView.alignment = .center
-        stackView.spacing = 6
-        addSubview(scrollView)
-        scrollView.addSubview(stackView)
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 28),
-            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stackView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            stackView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
-            stackView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            stackView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
-            stackView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func configure(context: AccountContext, entities: [AorusAITelegramEntity], theme: PresentationTheme, accentOnColor: Bool) {
-        stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for entity in entities {
-            let chip = AorusAIEntityChipView()
-            chip.configure(context: context, entity: entity, theme: theme, accentOnColor: accentOnColor)
-            chip.onOpenPeer = { [weak self] peerId in self?.onOpenPeer?(peerId) }
-            stackView.addArrangedSubview(chip)
-        }
-    }
-}
-
 private final class AorusAIQuoteCard: UIView {
     private let line = UIView()
-    private let textView = UITextView()
+    private let textView = AorusAIMentionTextView.make()
+
+    func configureMentions(context: AccountContext, theme: PresentationTheme) {
+        textView.configureMentions(context: context, theme: theme)
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -3804,13 +3832,14 @@ private final class AorusAIQuoteCard: UIView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(text: String, theme: PresentationTheme, textColor: UIColor, accentOnColor: Bool) {
+    func configure(text: String, theme: PresentationTheme, textColor: UIColor, accentOnColor: Bool, mentions: [String: AorusAIMention] = [:]) {
         let palette = AorusAIPalette.resolve(theme)
         let accent = accentOnColor ? UIColor.white.withAlphaComponent(0.8) : palette.accent
         backgroundColor = accentOnColor ? UIColor.white.withAlphaComponent(0.12) : palette.fill
         line.backgroundColor = accent
         textView.linkTextAttributes = [.foregroundColor: accent, .underlineStyle: 0]
-        textView.attributedText = AorusAIMarkdown.attributed(text, color: textColor, accent: accent)
+        textView.attributedText = AorusAIMarkdown.attributed(text, color: textColor, accent: accent, mentions: mentions)
+        textView.rebuildMentionAvatars()
     }
 }
 
@@ -3867,9 +3896,12 @@ private final class AorusAIEntityChipView: UIControl {
         titleLabel.textColor = accent
         titleLabel.text = entity.displayName
         accessibilityLabel = aorusAILocalized("Профиль ", "Profile ") + entity.displayName
-        // No ring around the avatar: the placeholder Telegram draws is already a round
-        // gradient, and an extra border is exactly the kind of outline the design bans.
-        avatarNode.view.layer.borderWidth = 0.0
+        // The same ringed circle the inline pills use, so a quoted author and a mention
+        // inside the answer next to it are visibly the same kind of thing.
+        avatarNode.view.layer.cornerRadius = AorusAIEntityChipView.avatarSize / 2.0
+        avatarNode.view.layer.masksToBounds = true
+        avatarNode.view.layer.borderWidth = 1.0 + UIScreenPixel
+        avatarNode.view.layer.borderColor = accent.cgColor
         // A peer that is not resolved yet still gets Telegram's own gradient letter
         // placeholder instead of an empty hole, so the chip never reads as broken.
         avatarNode.setCustomLetters(AorusAIEntityChipView.letters(for: entity.displayName))
@@ -4203,12 +4235,15 @@ private enum AorusAIMarkdown {
         flushPlain()
     }
 
-    static func attributed(_ source: String, color: UIColor, accent: UIColor) -> NSAttributedString {
+    /// The body face. Answers are set at 16.5/26.
+    static let bodyFont = UIFont.systemFont(ofSize: 16.5)
+
+    static func attributed(_ source: String, color: UIColor, accent: UIColor, mentions: [String: AorusAIMention] = [:]) -> NSAttributedString {
         let normalized = normalizeLists(source)
-        // The design sets the answer at 16.5/26. The leading is expressed as line spacing
-        // rather than a fixed line height so a serif heading in the same paragraph keeps
-        // its own ascent instead of being clipped into a 26pt box.
-        let output = NSMutableAttributedString(string: normalized, attributes: [.font: UIFont.systemFont(ofSize: 16.5), .foregroundColor: color])
+        // The leading is expressed as line spacing rather than a fixed line height so a
+        // heading in the same paragraph keeps its own ascent instead of being clipped into
+        // a 26pt box.
+        let output = NSMutableAttributedString(string: normalized, attributes: [.font: bodyFont, .foregroundColor: color])
         applyMarkdownLinks(in: output, accent: accent)
         apply(pattern: #"\*\*(.+?)\*\*"#, in: output, font: .systemFont(ofSize: 16.5, weight: .semibold))
         apply(pattern: #"(?<!\*)\*([^*\n]+)\*(?!\*)"#, in: output, font: .italicSystemFont(ofSize: 16.5))
@@ -4218,6 +4253,15 @@ private enum AorusAIMarkdown {
         applyLinks(in: output, accent: accent)
         let paragraph = NSMutableParagraphStyle(); paragraph.lineSpacing = 6.0
         output.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: output.length))
+        // Last, on the finished text: the mention ranges are found in what will actually be
+        // drawn, so nothing the markdown pass moved can put a pill on the wrong words.
+        AorusAIMentionRenderer.apply(
+            to: output,
+            resolved: mentions,
+            font: bodyFont,
+            accent: accent,
+            link: true
+        )
         return output
     }
 
@@ -4283,7 +4327,7 @@ private enum AorusAIMarkdown {
             // Headings are the design's serif voice: 22 / 19 / 17, the same scale the
             // answer titles use in the mockup.
             let size: CGFloat = level == 1 ? 22.0 : (level == 2 ? 19.0 : 17.0)
-            value.addAttribute(.font, value: aorusAISerifFont(size: size, weight: .semibold), range: NSRange(location: match.range.location, length: (text as NSString).length))
+            value.addAttribute(.font, value: aorusAITitleFont(size: size, weight: .semibold), range: NSRange(location: match.range.location, length: (text as NSString).length))
         }
     }
 
@@ -4378,34 +4422,25 @@ private enum AorusAIFormat {
         }
         return title + "\n" + detail
     }
+    /// Every handle in `text`, pre-filled from the session's mention cache.
+    ///
+    /// A handle this session has already resolved comes back carrying its peer, so the
+    /// pill is drawn on the same frame the text appears in rather than one network round
+    /// trip later. A handle nobody has looked up yet comes back unresolved and is drawn
+    /// as plain text until it is.
     static func entities(in text: String) -> [AorusAITelegramEntity] {
-        let source = text as NSString
-        let fullRange = NSRange(location: 0, length: source.length)
-        let patterns = [
-            #"(?<![\w@])@([A-Za-z0-9_]{5,32})"#,
-            #"(?:(?:https?://)?t\.me/)([A-Za-z0-9_]{5,32})(?:/\d+)?"#
-        ]
-        var entities: [AorusAITelegramEntity] = []
-        var occupied: [NSRange] = []
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
-            for match in regex.matches(in: text, range: fullRange) {
-                guard match.numberOfRanges > 1, !occupied.contains(where: { NSIntersectionRange($0, match.range).length > 0 }) else { continue }
-                let username = source.substring(with: match.range(at: 1))
-                entities.append(AorusAITelegramEntity(peerId: nil, username: username, displayName: username, sourceText: source.substring(with: match.range), rangeLocation: match.range.location, rangeLength: match.range.length))
-                occupied.append(match.range)
-            }
+        return AorusAIMentionScanner.matches(in: text).map { match in
+            let source = (text as NSString).substring(with: match.range)
+            let cached = AorusAIMentionStore.shared.lookup(match.username)
+            return AorusAITelegramEntity(
+                peerId: cached?.peerId,
+                username: match.username,
+                displayName: cached?.displayName ?? match.username,
+                sourceText: source,
+                rangeLocation: match.range.location,
+                rangeLength: match.range.length
+            )
         }
-        return entities.sorted { $0.rangeLocation < $1.rangeLocation }
-    }
-    static func removingResolvedEntitySources(from text: String, entities: [AorusAITelegramEntity]) -> String {
-        let mutable = NSMutableString(string: text)
-        for entity in entities.sorted(by: { $0.rangeLocation > $1.rangeLocation }) {
-            let range = NSRange(location: entity.rangeLocation, length: entity.rangeLength)
-            guard range.location >= 0, range.length > 0, NSMaxRange(range) <= mutable.length else { continue }
-            mutable.replaceCharacters(in: range, with: "")
-        }
-        return mutable.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     static func safeStatus(_ value: String, progress: Double? = nil) -> String {
         let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
