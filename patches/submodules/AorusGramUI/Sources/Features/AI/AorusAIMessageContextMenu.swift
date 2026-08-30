@@ -84,10 +84,11 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
-        materialView.effect = aorusAIGlassEffect(palette: palette)
-        materialView.backgroundColor = aorusAIGlassTint(palette: palette)
-        view.addSubview(materialView)
+        // A page sheet already has the system's own presentation; a blur inside it only
+        // sampled the sheet's own opaque background. The page colour of the rest of
+        // AorusAI is used instead, so the sheet belongs to the same screen family.
+        view.backgroundColor = palette.background
+        materialView.isHidden = true
 
         titleLabel.text = aorusAILocalized("ИИ-компаньон", "AI Companion")
         titleLabel.font = .systemFont(ofSize: 20.0, weight: .bold)
@@ -100,7 +101,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
             for: .normal
         )
         closeButton.tintColor = palette.secondary
-        closeButton.backgroundColor = aorusAIGlassTint(palette: palette, strong: true)
+        closeButton.backgroundColor = palette.fill
         closeButton.layer.cornerRadius = 16.0
         closeButton.layer.cornerCurve = .continuous
         closeButton.accessibilityLabel = aorusAILocalized("Закрыть", "Close")
@@ -109,7 +110,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         view.addSubview(headerView)
 
         segments.selectedSegmentIndex = 0
-        segments.selectedSegmentTintColor = aorusAIGlassTint(palette: palette, strong: true)
+        segments.selectedSegmentTintColor = palette.elevated
         segments.setTitleTextAttributes([.foregroundColor: palette.secondary], for: .normal)
         segments.setTitleTextAttributes([.foregroundColor: palette.label, .font: UIFont.systemFont(ofSize: 12.0, weight: .semibold)], for: .selected)
         segments.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
@@ -129,11 +130,9 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         newChatButton.titleLabel?.font = .systemFont(ofSize: 15.0, weight: .semibold)
         newChatButton.semanticContentAttribute = .forceLeftToRight
         newChatButton.imageEdgeInsets = UIEdgeInsets(top: 0.0, left: -5.0, bottom: 0.0, right: 5.0)
-        newChatButton.backgroundColor = aorusAIGlassTint(palette: palette, strong: true)
+        newChatButton.backgroundColor = palette.accentSoft
         newChatButton.layer.cornerRadius = 20.0
         newChatButton.layer.cornerCurve = .continuous
-        newChatButton.layer.borderWidth = UIScreenPixel
-        newChatButton.layer.borderColor = aorusAIGlassBorder(palette: palette).cgColor
         newChatButton.addTarget(self, action: #selector(newChat), for: .touchUpInside)
         view.addSubview(newChatButton)
 
@@ -208,7 +207,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         cell.backgroundColor = .clear
         cell.accessoryType = .none
         let selected = UIView()
-        selected.backgroundColor = aorusAIGlassTint(palette: palette, strong: true)
+        selected.backgroundColor = palette.fill
         cell.selectedBackgroundView = selected
         return cell
     }

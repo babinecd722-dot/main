@@ -37,12 +37,53 @@ private func eofAndColonlessFields() {
     require(final == [AorusAISSEParser.Event(name: "message", data: Data("{}".utf8))], "EOF and colonless field")
 }
 
+/// A peer that never sends a newline must not be able to grow the parser's buffer until
+/// the app is killed, and the stream has to keep working afterwards.
+private func overlongLineIsDiscardedAndStreamRecovers() {
+    let parser = AorusAISSEParser()
+    let chunk = Data(repeating: 0x41, count: 256 * 1024)
+    for _ in 0 ..< 8 {
+        require(parser.append(chunk).isEmpty, "an unterminated line emits nothing")
+    }
+    // The tail of the discarded line, then a well-formed event after it.
+    let events = parser.append(Data("AAAA\ndata: {\"ignored\":true}\n\nevent: done\ndata: {\"ok\":true}\n\n".utf8))
+    require(events.count == 1, "only the event after the discarded one survives")
+    require(events[0].name == "done", "the stream recovers on the next event")
+    require(String(decoding: events[0].data, as: UTF8.self) == "{\"ok\":true}", "recovered payload")
+}
+
+/// The same ceiling for an event assembled from many `data:` lines.
+private func overlongEventIsDroppedWholeAndStreamRecovers() {
+    let parser = AorusAISSEParser()
+    let line = "data: " + String(repeating: "x", count: 64 * 1024) + "\n"
+    var events: [AorusAISSEParser.Event] = []
+    for _ in 0 ..< 80 {
+        events.append(contentsOf: parser.append(Data(line.utf8)))
+    }
+    require(events.isEmpty, "an over-long event emits nothing")
+    events.append(contentsOf: parser.append(Data("\nevent: done\ndata: {\"ok\":true}\n\n".utf8)))
+    require(events.count == 1, "the over-long event is dropped whole")
+    require(events[0].name == "done", "the stream recovers after an over-long event")
+}
+
+/// An event name is an identifier, never an unbounded server string.
+private func eventNameIsClamped() {
+    let parser = AorusAISSEParser()
+    let name = String(repeating: "n", count: 4096)
+    let events = parser.append(Data("event: \(name)\ndata: {}\n\n".utf8))
+    require(events.count == 1, "clamped-name event count")
+    require(events[0].name.count == 128, "event name is clamped to 128 bytes")
+}
+
 @main
 private enum AorusAISSEParserTests {
     static func main() {
         fragmentedUTF8AndCRLF()
         heartbeatMultilineAndMultipleEvents()
         eofAndColonlessFields()
+        overlongLineIsDiscardedAndStreamRecovers()
+        overlongEventIsDroppedWholeAndStreamRecovers()
+        eventNameIsClamped()
         print("AorusAISSEParser tests: OK")
     }
 }

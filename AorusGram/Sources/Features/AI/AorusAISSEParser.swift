@@ -11,9 +11,22 @@ public final class AorusAISSEParser {
         }
     }
 
+    /// The longest single SSE line that will be kept. An answer arrives as many small
+    /// deltas, so nothing legitimate comes close; a peer that never sends a newline would
+    /// otherwise grow this buffer until the app is killed.
+    public static let maximumLineBytes = 1 << 20
+    /// The largest event body that will be assembled from `data:` lines.
+    public static let maximumEventBytes = 4 << 20
+
     private var buffer = Data()
     private var eventName = "message"
     private var dataLines: [Data] = []
+    private var dataBytes = 0
+    /// Set when a line or an event has run past its ceiling. Everything up to the next
+    /// event boundary is then discarded rather than accumulated, and the stream carries on
+    /// with the next event instead of the connection being torn down.
+    private var isDiscardingLine = false
+    private var isDiscardingEvent = false
 
     public init() {}
 
@@ -25,7 +38,18 @@ public final class AorusAISSEParser {
             var line = Data(buffer[..<newline])
             buffer.removeSubrange(...newline)
             if line.last == 0x0d { line.removeLast() }
+            if isDiscardingLine {
+                // The tail of an over-long line. Its head is already gone, so what is left
+                // is not a field and must not be parsed as one.
+                isDiscardingLine = false
+                isDiscardingEvent = true
+                continue
+            }
             consume(line: line, into: &events)
+        }
+        if buffer.count > Self.maximumLineBytes {
+            buffer.removeAll(keepingCapacity: false)
+            isDiscardingLine = true
         }
         return events
     }
@@ -36,7 +60,12 @@ public final class AorusAISSEParser {
             var line = buffer
             buffer.removeAll(keepingCapacity: false)
             if line.last == 0x0d { line.removeLast() }
-            consume(line: line, into: &events)
+            if isDiscardingLine {
+                isDiscardingLine = false
+                isDiscardingEvent = true
+            } else {
+                consume(line: line, into: &events)
+            }
         }
         dispatch(into: &events)
         return events
@@ -48,6 +77,7 @@ public final class AorusAISSEParser {
             return
         }
         guard line.first != 0x3a else { return }
+        guard !isDiscardingEvent else { return }
         let field: String
         let value: Data
         if let colon = line.firstIndex(of: 0x3a) {
@@ -63,13 +93,31 @@ public final class AorusAISSEParser {
             value = Data()
         }
         if field == "event" {
-            eventName = String(decoding: value, as: UTF8.self)
+            // An event name is a short identifier; anything longer is not one, and keeping
+            // it would put an unbounded server string into every event this parser emits.
+            eventName = String(decoding: value.prefix(128), as: UTF8.self)
         } else if field == "data" {
+            guard dataBytes + value.count <= Self.maximumEventBytes else {
+                dataLines.removeAll(keepingCapacity: false)
+                dataBytes = 0
+                isDiscardingEvent = true
+                return
+            }
+            dataBytes += value.count + 1
             dataLines.append(value)
         }
     }
 
     private func dispatch(into events: inout [Event]) {
+        defer {
+            isDiscardingEvent = false
+            dataBytes = 0
+        }
+        guard !isDiscardingEvent else {
+            dataLines.removeAll(keepingCapacity: false)
+            eventName = "message"
+            return
+        }
         guard !dataLines.isEmpty else {
             eventName = "message"
             return

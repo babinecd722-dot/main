@@ -1586,10 +1586,18 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         case .responseStarted:
             conversation.messages[index].statusLabel = nil
         case let .responseDelta(delta):
-            conversation.messages[index].rawText.append(delta)
+            // Bounded: a stream that never ended would otherwise grow this message, the
+            // encrypted history file and every attributed string built from it forever.
+            // What arrived is kept — the turn is not failed over it — and the rest is
+            // dropped.
+            let room = AorusAIRequestLimits.responseCharacters - conversation.messages[index].rawText.count
+            if room > 0 {
+                conversation.messages[index].rawText.append(room >= delta.count ? delta : String(delta.prefix(room)))
+            }
             conversation.messages[index].statusLabel = nil
         case let .artifactReady(artifact):
-            if !conversation.messages[index].artifacts.contains(where: { $0.artifactId == artifact.artifactId }) {
+            if conversation.messages[index].artifacts.count < AorusAIRequestLimits.responseArtifactCount,
+               !conversation.messages[index].artifacts.contains(where: { $0.artifactId == artifact.artifactId }) {
                 conversation.messages[index].artifacts.append(artifact)
             }
         case let .toolRequest(request):
@@ -1809,11 +1817,42 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // §4: `telegram.profile.get` arrives with `requires_user_approval == false` and
         // must therefore run without any extra dialog. The flag is still honoured
         // literally, so the day the backend flips it the client asks first.
-        if request.requiresUserApproval {
+        //
+        // With one addition the contract does not cover: the silent path is only for a
+        // handle this conversation has actually written. Looking one up uses the user's
+        // own authenticated Telegram session, and a backend free to name any handle at all
+        // could resolve arbitrary usernames through the user's account without them ever
+        // seeing it. A handle nobody here mentioned is therefore asked about.
+        if request.requiresUserApproval || !conversationMentions(request.username) {
             presentToolApproval(request)
             return
         }
         executeProfileTool(request)
+    }
+
+    /// True when the handle appears somewhere in this conversation — in a question, in an
+    /// answer, in the quoted message it started from, or in what is being typed right now.
+    private func conversationMentions(_ username: String?) -> Bool {
+        guard let username = username?.trimmingCharacters(in: CharacterSet(charactersIn: "@ ")).lowercased(), !username.isEmpty else {
+            return false
+        }
+        var haystacks: [String] = []
+        for message in conversation.messages {
+            haystacks.append(message.rawText)
+            if let reference = message.referencedMessage {
+                haystacks.append(reference.text)
+            }
+        }
+        if let reference = pendingReference {
+            haystacks.append(reference.text)
+        }
+        haystacks.append(composer.text)
+        for text in haystacks where !text.isEmpty {
+            if AorusAIMentionScanner.matches(in: text).contains(where: { $0.username.lowercased() == username }) {
+                return true
+            }
+        }
+        return false
     }
 
     private func presentToolApproval(_ request: AorusAIToolRequest) {
@@ -1822,12 +1861,16 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             return
         }
         let handle = request.username.map { "@\($0)" } ?? ""
-        let label = request.label?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = (label?.isEmpty == false)
-            ? (label ?? "")
-            : (handle.isEmpty
-                ? aorusAILocalized("AorusAI запрашивает данные профиля.", "AorusAI requests profile data.")
-                : aorusAILocalized("AorusAI запрашивает данные профиля \(handle).", "AorusAI requests the profile data of \(handle)."))
+        // The heading and the first sentence are the client's own and name the handle this
+        // device would actually look up. The backend's explanation is shown underneath as
+        // what it is — an explanation — rather than as the whole question, so a payload
+        // cannot describe one action while asking for another.
+        var message = handle.isEmpty
+            ? aorusAILocalized("AorusAI запрашивает данные профиля.", "AorusAI requests profile data.")
+            : aorusAILocalized("AorusAI запрашивает данные профиля \(handle).", "AorusAI requests the profile data of \(handle).")
+        if let label = request.label?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty {
+            message += "\n\n" + String(label.prefix(300))
+        }
         let sheet = UIAlertController(title: aorusAILocalized("Разрешить доступ?", "Allow access?"), message: message, preferredStyle: .actionSheet)
         sheet.addAction(UIAlertAction(title: aorusAILocalized("Разрешить", "Allow"), style: .default, handler: { [weak self] _ in
             self?.executeProfileTool(request)
@@ -1878,24 +1921,29 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             return
         }
         let handle = request.username.map { "@\($0)" } ?? ""
-        let title = request.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let text = request.text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        // This dialog is the only thing between the model and a private conversation, so
+        // none of the words that decide what the user is agreeing to come from the server.
+        // The heading names the chat this device would actually read, and every button
+        // states the number of messages that choice really shares — derived from what the
+        // client will do, not from the label the payload asked for. A payload that titled
+        // itself "Разрешить уведомления?" and labelled its button "Отмена" would otherwise
+        // hand over a whole chat.
+        var message = aorusAILocalized(
+            "AorusAI получит только выбранный тобой объём сообщений для этого запроса.",
+            "AorusAI will only receive the amount of messages you choose for this request."
+        )
+        if let text = request.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            message += "\n\n" + String(text.prefix(300))
+        }
         let sheet = UIAlertController(
-            title: (title?.isEmpty == false)
-                ? title
-                : (handle.isEmpty
-                    ? aorusAILocalized("Посмотреть переписку?", "Look at the chat?")
-                    : aorusAILocalized("Посмотреть переписку с \(handle)?", "Look at the chat with \(handle)?")),
-            message: (text?.isEmpty == false)
-                ? text
-                : aorusAILocalized(
-                    "AorusAI получит только выбранный тобой объём сообщений для этого запроса.",
-                    "AorusAI will only receive the amount of messages you choose for this request."
-                ),
+            title: handle.isEmpty
+                ? aorusAILocalized("Посмотреть переписку?", "Look at the chat?")
+                : aorusAILocalized("Посмотреть переписку с \(handle)?", "Look at the chat with \(handle)?"),
+            message: message,
             preferredStyle: .actionSheet
         )
         for option in request.options {
-            sheet.addAction(UIAlertAction(title: option.label, style: .default, handler: { [weak self] _ in
+            sheet.addAction(UIAlertAction(title: Self.optionTitle(option), style: .default, handler: { [weak self] _ in
                 self?.select(option: option, for: request)
             }))
         }
@@ -1914,6 +1962,37 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             self?.denyPermission(request)
         }))
         aorusAIPresentActionSheet(sheet, from: self)
+    }
+
+    /// What one permission button will actually do, in the client's own words.
+    ///
+    /// An option that carries neither a limit nor a known mode still shares a chat — the
+    /// executor's own default of 50 messages — so it is labelled with that number rather
+    /// than with whatever the payload wanted written on the button.
+    private static func optionTitle(_ option: AorusAIPermissionOption) -> String {
+        if option.isPeriod {
+            return aorusAILocalized("Выбрать период", "Choose a period")
+        }
+        let count = min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, option.limit ?? Self.defaultHistoryLimit))
+        return aorusAILocalized(
+            "Передать \(count) \(Self.russianMessageWord(count))",
+            count == 1 ? "Share 1 message" : "Share \(count) messages"
+        )
+    }
+
+    /// The messages a permission option shares when it names no number of its own. It is
+    /// the same value `executeHistoryTool` falls back to, so the button cannot promise one
+    /// amount and hand over another.
+    private static let defaultHistoryLimit = 50
+
+    private static func russianMessageWord(_ count: Int) -> String {
+        let tail = count % 100
+        if tail >= 11 && tail <= 14 { return "сообщений" }
+        switch count % 10 {
+        case 1: return "сообщение"
+        case 2, 3, 4: return "сообщения"
+        default: return "сообщений"
+        }
     }
 
     private func select(option: AorusAIPermissionOption, for request: AorusAIPermissionRequest) {
@@ -1961,7 +2040,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             submit(toolResult: .failure(tool: request.tool, requestId: request.requestId, username: request.username, reason: "missing_username"))
             return
         }
-        let requested = min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, limit ?? 50))
+        let requested = min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, limit ?? Self.defaultHistoryLimit))
         let context = self.context
         let strings = presentationData.strings
         let nameOrder = presentationData.nameDisplayOrder
@@ -2540,8 +2619,30 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 self?.openPeer(peer.id)
             })
         } else {
-            context.sharedContext.applicationBindings.openUrl(url.absoluteString)
+            presentExternalLink(url)
         }
+    }
+
+    /// Opens a link the model wrote, after showing where it actually leads.
+    ///
+    /// Markdown lets the visible words differ from the destination — `[Оплатить](https://…)`
+    /// — and here those words are written by a model rather than by a person the user
+    /// knows, so the address is put in front of them before anything is handed to the
+    /// system. The scheme is checked as well: nothing but http(s) is ever opened, whatever
+    /// a future change to the text renderer might start producing.
+    private func presentExternalLink(_ url: URL) {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return }
+        let sheet = UIAlertController(
+            title: aorusAILocalized("Открыть ссылку?", "Open this link?"),
+            message: String(url.absoluteString.prefix(300)),
+            preferredStyle: .actionSheet
+        )
+        sheet.addAction(UIAlertAction(title: aorusAILocalized("Открыть", "Open"), style: .default, handler: { [weak self] _ in
+            guard let self else { return }
+            self.context.sharedContext.applicationBindings.openUrl(url.absoluteString)
+        }))
+        sheet.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+        aorusAIPresentActionSheet(sheet, from: self)
     }
 
     private func openPeer(_ peerId: PeerId) {

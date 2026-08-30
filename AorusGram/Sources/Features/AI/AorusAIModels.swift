@@ -440,6 +440,13 @@ public enum AorusAIRequestLimits {
     public static let chatHistoryMessageCount = 200
     /// Per-Telegram-message clamp used by the chat analysis workflow.
     public static let chatHistoryMessageCharacters = 700
+    /// The most an answer may grow to while it streams. No real answer approaches it; a
+    /// server that never stopped sending deltas would otherwise grow the message, the
+    /// encrypted history file and every attributed string built from it without limit.
+    public static let responseCharacters = 200_000
+    /// Files one turn may attach. `artifact.ready` is server-driven and repeats are
+    /// already ignored, but distinct ids are not bounded by anything else.
+    public static let responseArtifactCount = 24
 }
 
 /// The production body of `POST /v1/aorus/agent`.
