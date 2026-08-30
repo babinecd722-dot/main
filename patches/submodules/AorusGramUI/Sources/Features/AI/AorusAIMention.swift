@@ -178,6 +178,29 @@ enum AorusAIMentionRenderer {
         return replaced
     }
 
+    /// A one-line preview — a row in the conversation list, the caption of a quoted
+    /// message — with every known handle written as the person's name in the accent
+    /// colour.
+    ///
+    /// No avatar here on purpose: these lines live in scrolling rows, and a real
+    /// `AvatarNode` per row costs more than a preview is worth. The name alone is already
+    /// the difference between "расскажи про @durov" and "расскажи про Pavel Durov".
+    static func previewText(_ source: String, color: UIColor, font: UIFont, accent: UIColor) -> NSAttributedString {
+        let value = NSMutableAttributedString(string: source, attributes: [.font: font, .foregroundColor: color])
+        let matches = AorusAIMentionScanner.matches(in: source)
+        guard !matches.isEmpty else { return value }
+        let nameFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+        for match in matches.reversed() {
+            guard let cached = AorusAIMentionStore.shared.lookup(match.username) else { continue }
+            guard NSMaxRange(match.range) <= value.length else { continue }
+            value.replaceCharacters(in: match.range, with: NSAttributedString(
+                string: cached.displayName,
+                attributes: [.font: nameFont, .foregroundColor: accent]
+            ))
+        }
+        return value
+    }
+
     /// The lookup a renderer takes, built from whatever the screen has resolved so far.
     /// Entities that never resolved are simply absent, so their handle stays plain text
     /// rather than turning into a pill for a person who does not exist.

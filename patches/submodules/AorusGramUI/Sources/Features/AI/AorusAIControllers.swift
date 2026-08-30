@@ -494,8 +494,6 @@ private final class AorusAIConversationListController: ViewController, UITableVi
     private let searchField = AorusAISearchFieldView()
     private let listHeader = AorusAIConversationListHeaderView()
     private let emptyView = AorusAIConversationListEmptyView()
-    private let bottomBar = UIView()
-    private let newChatButton = UIButton(type: .system)
     private let profileNameDisposable = MetaDisposable()
     private var conversations: [AorusAIConversation] = []
     private var sections: [Section] = []
@@ -583,22 +581,6 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         searchField.textField.addTarget(self, action: #selector(searchTextChanged), for: .editingChanged)
         self.displayNode.view.addSubview(searchField)
 
-        bottomBar.backgroundColor = palette.background
-        newChatButton.backgroundColor = palette.accent
-        newChatButton.tintColor = palette.onAccent
-        newChatButton.setTitleColor(palette.onAccent, for: .normal)
-        newChatButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
-        newChatButton.setTitle(aorusAILocalized("Новый диалог", "New chat"), for: .normal)
-        newChatButton.setImage(UIImage(systemName: "square.and.pencil")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)), for: .normal)
-        newChatButton.semanticContentAttribute = .forceLeftToRight
-        newChatButton.imageEdgeInsets = UIEdgeInsets(top: 0.0, left: -4.0, bottom: 0.0, right: 4.0)
-        newChatButton.layer.cornerRadius = 24.0
-        newChatButton.layer.cornerCurve = .continuous
-        newChatButton.addTarget(self, action: #selector(createConversation), for: .touchUpInside)
-        newChatButton.accessibilityLabel = aorusAILocalized("Новый диалог", "New chat")
-        bottomBar.addSubview(newChatButton)
-        self.displayNode.view.addSubview(bottomBar)
-
         observer = NotificationCenter.default.addObserver(forName: AorusAIStore.changedNotification, object: nil, queue: .main) { [weak self] note in
             guard let self, (note.object as? NSNumber)?.int64Value == self.accountId else { return }
             self.reload()
@@ -621,12 +603,14 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         let top = self.navigationLayout(layout: layout).navigationFrame.maxY
         let searchFrame = CGRect(x: 16.0, y: top, width: max(0.0, layout.size.width - 32.0), height: 38.0)
         transition.updateFrame(view: searchField, frame: searchFrame)
-        let barHeight: CGFloat = 60.0 + layout.intrinsicInsets.bottom
-        let bottomFrame = CGRect(x: 0.0, y: layout.size.height - barHeight, width: layout.size.width, height: barHeight)
-        transition.updateFrame(view: bottomBar, frame: bottomFrame)
-        transition.updateFrame(view: newChatButton, frame: CGRect(x: 16.0, y: 8.0, width: max(0.0, layout.size.width - 32.0), height: 48.0))
+        // The list runs to the bottom of the screen, the way every list in Telegram does.
+        // A permanent 60pt bar holding a second "New chat" button sat under it, duplicating
+        // the compose item in the navigation bar and taking a row's worth of the list with
+        // it for the whole life of the screen.
         let tableTop = searchFrame.maxY + 12.0
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0.0, y: tableTop, width: layout.size.width, height: max(0.0, bottomFrame.minY - tableTop)))
+        transition.updateFrame(view: tableView, frame: CGRect(x: 0.0, y: tableTop, width: layout.size.width, height: max(0.0, layout.size.height - tableTop)))
+        tableView.contentInset = UIEdgeInsets(top: 0.0, left: 0.0, bottom: layout.intrinsicInsets.bottom + 12.0, right: 0.0)
+        tableView.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0.0, left: 0.0, bottom: layout.intrinsicInsets.bottom, right: 0.0)
         listWidth = layout.size.width
         updateTableAccessories()
     }
@@ -934,15 +918,23 @@ private final class AorusAIConversationCell: UITableViewCell {
     func configure(conversation: AorusAIConversation, palette: AorusAIPalette, position: AorusAIGroupPosition) {
         self.backgroundColor = .clear
         self.contentView.backgroundColor = .clear
-        cardView.configure(palette: palette, position: position, radius: 18.0, separatorInset: Self.contentInset)
+        cardView.configure(palette: palette, position: position, radius: 12.0, separatorInset: Self.contentInset)
         highlightView.backgroundColor = palette.fill
         titleLabel.textColor = palette.label
         previewLabel.textColor = palette.secondary
         dateLabel.textColor = palette.tertiary
         chevronView.tintColor = palette.tertiary.withAlphaComponent(0.7)
         titleLabel.text = conversation.title.isEmpty ? aorusAILocalized("Новый диалог", "New chat") : conversation.title
-        previewLabel.text = conversation.messages.last(where: { !$0.rawText.isEmpty })?.rawText
+        let preview = conversation.messages.last(where: { !$0.rawText.isEmpty })?.rawText
             ?? aorusAILocalized("Начните разговор с AorusAI", "Start a conversation with AorusAI")
+        // A handle the session knows is written as the person here too — without the
+        // avatar, which a scrolling row does not need.
+        previewLabel.attributedText = AorusAIMentionRenderer.previewText(
+            preview.replacingOccurrences(of: "\n", with: " "),
+            color: palette.secondary,
+            font: UIFont.systemFont(ofSize: 14.0),
+            accent: palette.accent
+        )
         dateLabel.text = AorusAIFormat.relativeDate(conversation.updatedAt)
         isAccessibilityElement = true
         accessibilityTraits = .button
@@ -2825,8 +2817,30 @@ private final class AorusAIComposerView: UIView {
     var reference: AorusAIReferencedMessage? {
         didSet {
             referenceView.isHidden = reference == nil
-            referenceLabel.text = reference.map { "\($0.authorName ?? aorusAILocalized("Сообщение", "Message")): \($0.text)" }
+            refreshReferenceLabel()
         }
+    }
+
+    /// The quoted message above the input, with any handle in it written as the person.
+    /// Called from `configure` as well: the reference can be set before the theme is
+    /// known, and until it is there is no colour to draw the name in.
+    private func refreshReferenceLabel() {
+        guard let reference else {
+            referenceLabel.attributedText = nil
+            return
+        }
+        let text = "\(reference.authorName ?? aorusAILocalized("Сообщение", "Message")): \(reference.text)"
+        guard let theme else {
+            referenceLabel.text = text
+            return
+        }
+        let palette = AorusAIPalette.resolve(theme)
+        referenceLabel.attributedText = AorusAIMentionRenderer.previewText(
+            text.replacingOccurrences(of: "\n", with: " "),
+            color: palette.secondary,
+            font: UIFont.systemFont(ofSize: 12.0),
+            accent: palette.accent
+        )
     }
     var isGenerating = false { didSet { refreshButton() } }
     var canSend = false { didSet { refreshButton() } }
@@ -2893,6 +2907,7 @@ private final class AorusAIComposerView: UIView {
         referenceLine.backgroundColor = palette.accent
         referenceClose.tintColor = palette.tertiary
         dictationWaveform.configure(accent: palette.secondary)
+        refreshReferenceLabel()
         textView.configureMentions(context: context, theme: theme)
         // The theme decides the base colour every run is drawn in, so the last render is
         // no longer valid and has to be redone rather than skipped as unchanged.
@@ -4106,8 +4121,18 @@ private final class AorusAIReferenceCard: UIView {
             entityCollapse = collapse
         }
         line.backgroundColor = accentOnColor ? UIColor.white.withAlphaComponent(0.75) : theme.list.itemAccentColor
-        label.textColor = accentOnColor ? UIColor.white.withAlphaComponent(0.88) : theme.list.itemSecondaryTextColor
-        label.text = reference.text
+        let quoteColor = accentOnColor ? UIColor.white.withAlphaComponent(0.88) : theme.list.itemSecondaryTextColor
+        label.textColor = quoteColor
+        // A handle inside the quoted message is written as the person, like everywhere else.
+        func quote(_ text: String) -> NSAttributedString {
+            return AorusAIMentionRenderer.previewText(
+                text,
+                color: quoteColor,
+                font: UIFont.systemFont(ofSize: 13.0),
+                accent: accentOnColor ? UIColor.white : theme.list.itemAccentColor
+            )
+        }
+        label.attributedText = quote(reference.text)
         if let rawPeerId = reference.authorPeerId, rawPeerId != 0 {
             let name = reference.authorName ?? aorusAILocalized("Профиль", "Profile")
             let entity = AorusAITelegramEntity(peerId: rawPeerId, username: nil, displayName: name, sourceText: name, rangeLocation: 0, rangeLength: 0)
@@ -4126,7 +4151,7 @@ private final class AorusAIReferenceCard: UIView {
             entityCollapse?.isActive = false
         } else {
             let author = reference.authorName ?? aorusAILocalized("Сообщение", "Message")
-            label.text = author + "\n" + reference.text
+            label.attributedText = quote(author + "\n" + reference.text)
             entityCollapse?.isActive = true
         }
     }
