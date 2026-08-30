@@ -28,6 +28,10 @@ swift_library(
         "//submodules/AnimatedStickerNode:AnimatedStickerNode",
         "//submodules/TelegramUI/Components/ItemListDatePickerItem:ItemListDatePickerItem",
         "//submodules/UndoUI:UndoUI",
+        # AorusAI draws real peer avatars inline in its text, and names them with the
+        # user's own name-order preference.
+        "//submodules/AvatarNode:AvatarNode",
+        "//submodules/LocalizedPeerData:LocalizedPeerData",
     ],
     visibility = [
         "//visibility:public",

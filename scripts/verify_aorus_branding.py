@@ -2608,6 +2608,10 @@ def main() -> None:
         for host in ("license.aorusgram.com", "api.aorusgram.com"):
             if f'"{host}": protectedAPISPKIPins' not in config_text:
                 err.append(f"SubscriptionConfig: SPKI pin set is missing for {host}")
+        # AorusAI transports prompts and approved chat excerpts. It carries the most
+        # sensitive payload the client sends, so it may never fall back to system trust.
+        if '"ai.aorusgram.com": aiAPISPKIPins' not in config_text:
+            err.append("SubscriptionConfig: SPKI pin set is missing for ai.aorusgram.com")
         if len(re.findall(r'"[A-Za-z0-9+/]{43}="', config_text)) < 3:
             err.append("SubscriptionConfig: protected API SPKI rotation set is incomplete")
 
