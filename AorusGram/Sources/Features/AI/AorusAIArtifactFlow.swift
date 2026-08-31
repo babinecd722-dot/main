@@ -90,9 +90,18 @@ public enum AorusAIArtifactFlow {
               !raw.contains("\\"), !raw.contains("\r"), !raw.contains("\n"), !raw.contains(" ") else { return nil }
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-_.~")
         guard raw.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
-        // The path must address this very artifact: a valid-looking path pointing at
-        // some other object is a server bug at best.
-        guard raw.split(separator: "/").contains(where: { $0 == artifactId[...] }) else { return nil }
+        // The path must address this very artifact: a valid-looking path pointing at some
+        // other object is a server bug at best. The component may carry the file's own
+        // extension — `/download/<id>.pptx` is the same object as `/download/<id>` — and
+        // refusing that was enough to send the client to a canonical path the vault does
+        // not serve, which came back as "the file is no longer available".
+        let addressesArtifact = raw.split(separator: "/").contains { component in
+            if component == artifactId[...] { return true }
+            guard component.hasPrefix(artifactId), component.count > artifactId.count else { return false }
+            let suffix = component.dropFirst(artifactId.count)
+            return suffix.first == "." && suffix.dropFirst().allSatisfy { $0.isLetter || $0.isNumber }
+        }
+        guard addressesArtifact else { return nil }
         return raw
     }
 

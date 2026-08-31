@@ -3007,15 +3007,23 @@ private final class AorusAIComposerView: UIView {
         set {
             renderedMentionSignature = nil
             textView.attributedText = NSAttributedString(string: newValue, attributes: baseTextAttributes())
-            textView.rebuildMentionAvatars()
+            textView.refreshMentionImages()
             placeholder.isHidden = isDictating || !newValue.isEmpty
             applyMentionStyling()
+            // The controller owns this view's frame and measures it from the text, so a
+            // change it did not type has to say so. Without this the panel kept the height
+            // of the long message that was just sent and stood there empty and tall.
+            onHeightChanged?()
         }
     }
     var reference: AorusAIReferencedMessage? {
         didSet {
             referenceView.isHidden = reference == nil
             refreshReferenceLabel()
+            // The quoted row is a row of height, so attaching or dropping one re-measures.
+            if (oldValue == nil) != (reference == nil) {
+                onHeightChanged?()
+            }
         }
     }
 
@@ -3246,7 +3254,7 @@ private final class AorusAIComposerView: UIView {
         let caretSource = max(0, sourceLength - tail)
         let caret = min(rendered.text.length, Self.renderedOffset(forSource: caretSource, placements: rendered.placements))
         textView.selectedRange = NSRange(location: caret, length: 0)
-        textView.rebuildMentionAvatars()
+        textView.refreshMentionImages()
     }
 
     /// Where each pill currently on screen sits, in both coordinate systems.
@@ -3320,7 +3328,7 @@ private final class AorusAIComposerView: UIView {
         // The pill has been taken out of the text, so what is drawn no longer matches the
         // last signature; the next pass has to rebuild rather than skip as unchanged.
         renderedMentionSignature = nil
-        textView.rebuildMentionAvatars()
+        textView.refreshMentionImages()
         textView.delegate?.textViewDidChange?(textView)
         return false
     }
@@ -3657,7 +3665,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             switch (slots[index], blocks[index]) {
             case let (.text(view), .text(source)):
                 view.attributedText = AorusAIMarkdown.attributed(source, color: configuredTextColor, accent: configuredAccent, mentions: mentions)
-                view.rebuildMentionAvatars()
+                view.refreshMentionImages()
             case let (.code(card), .code(language, code)):
                 card.configure(language: language, code: code, theme: theme)
             case let (.quote(card), .quote(source)):
@@ -3792,7 +3800,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
                 view.linkTextAttributes = [.foregroundColor: accent, .underlineStyle: 0]
                 view.configureMentions(context: context, theme: theme)
                 view.attributedText = AorusAIMarkdown.attributed(value, color: textColor, accent: accent, mentions: mentions)
-                view.rebuildMentionAvatars()
+                view.refreshMentionImages()
                 bodyStack.addArrangedSubview(view)
                 slots.append(.text(view))
             case let .code(language, code):
@@ -4165,7 +4173,7 @@ private final class AorusAIQuoteCard: UIView {
         line.backgroundColor = accent
         textView.linkTextAttributes = [.foregroundColor: accent, .underlineStyle: 0]
         textView.attributedText = AorusAIMarkdown.attributed(text, color: textColor, accent: accent, mentions: mentions)
-        textView.rebuildMentionAvatars()
+        textView.refreshMentionImages()
     }
 }
 
@@ -4821,7 +4829,9 @@ private enum AorusAIFormat {
         case .artifactGone: return aorusAILocalized("Файл больше недоступен", "The file is no longer available")
         case .artifactDownloadFailed: return aorusAILocalized("Не удалось скачать файл", "The file could not be downloaded")
         case .cancelled: return aorusAILocalized("Остановлено", "Stopped")
-        case .http: return aorusAILocalized("Не удалось выполнить запрос. Попробуйте ещё раз.", "The request could not be completed. Please try again.")
+        // The status is named: without it every gateway refusal reached the user, and
+        // the next bug report, as one indistinguishable sentence.
+        case let .http(status): return aorusAILocalized("Не удалось выполнить запрос (код \(status)). Попробуйте ещё раз.", "The request could not be completed (code \(status)). Please try again.")
         }
     }
 }

@@ -282,18 +282,14 @@ public final class AorusAIClient {
                 DispatchQueue.main.async { completion(.failure(Self.mapArtifactHTTP(http.statusCode))) }
                 return
             }
+            // What this guard is for is refusing an error page dressed as a document. It
+            // used to demand that the served type match the artifact's own, which fails a
+            // gateway that serves a perfectly good file under a type of its choosing —
+            // and every one of those failures reached the user as "couldn't open file".
             if let responseMIME = http.mimeType?.lowercased(),
-               let expectedMIME = AorusAIArtifactFlow.safeMIME(artifact.mime)?.lowercased(),
-               expectedMIME != "application/octet-stream" {
-                // The authenticated public gateway may intentionally normalize a safe
-                // binary download to octet-stream. Accept that transport type, but never
-                // accept an HTML/text error page as a document artifact.
-                let isGenericBinary = responseMIME == "application/octet-stream"
-                let isExpectedType = responseMIME == expectedMIME
-                guard isGenericBinary || isExpectedType else {
-                    DispatchQueue.main.async { completion(.failure(.malformedResponse)) }
-                    return
-                }
+               responseMIME.hasPrefix("text/html") || responseMIME.hasPrefix("application/xhtml") {
+                DispatchQueue.main.async { completion(.failure(.malformedResponse)) }
+                return
             }
             if http.expectedContentLength > 512 * 1024 * 1024 {
                 DispatchQueue.main.async { completion(.failure(.malformedResponse)) }
@@ -307,13 +303,15 @@ public final class AorusAIClient {
             do {
                 let attributes = try FileManager.default.attributesOfItem(atPath: temporaryURL.path)
                 let actualSize = (attributes[.size] as? NSNumber)?.int64Value ?? -1
-                // artifact.size is response metadata, not an HTTP framing contract. The
-                // transport's own Content-Length is the authoritative exact-byte check.
-                let responseSizeMatches = isPartial || http.expectedContentLength < 0 || actualSize == http.expectedContentLength
+                // Not compared against `expectedContentLength`: that is the length of the
+                // *encoded* body, and URLSession hands back the decoded file, so any
+                // gateway with compression turned on produced a mismatch on every single
+                // download. A truncated transfer is already an error from the task itself,
+                // which is what actually guards against a short file; what is left to check
+                // is that the file is plausible.
                 let hasExpectedPayload = isPartial || artifact.size == 0 || actualSize > 0
                 guard actualSize >= 0,
                       actualSize <= 512 * 1024 * 1024,
-                      responseSizeMatches,
                       hasExpectedPayload else {
                     DispatchQueue.main.async { completion(.failure(.malformedResponse)) }
                     return

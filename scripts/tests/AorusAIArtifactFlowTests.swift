@@ -254,6 +254,13 @@ private func buildsTheURLOnlyFromTheTrustedBase() {
 
     // A nested but still local path is legitimate.
     require(AorusAIArtifactFlow.sanitizedPath("/v1/artifacts/\(id)/file", artifactId: id) == "/v1/artifacts/\(id)/file", "nested local path is accepted")
+    // The component may carry the file's own extension: /download/<id>.pptx addresses the
+    // same object, and refusing it sent the client to a canonical path the vault does not
+    // serve.
+    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id).pptx", artifactId: id) == "/download/\(id).pptx", "an extension on the id is accepted")
+    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id).tar.gz", artifactId: id) == nil, "only a single extension is accepted")
+    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id)evil", artifactId: id) == nil, "a longer id is a different object")
+    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id).", artifactId: id) == nil, "a trailing dot is not an extension")
     // Surrounding whitespace is trimmed rather than treated as a different path.
     require(AorusAIArtifactFlow.sanitizedPath("  /download/\(id)\n", artifactId: id) == "/download/\(id)", "surrounding whitespace is trimmed")
     // A hostile filename cannot escape the download directory.

@@ -8589,6 +8589,23 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
     if "AorusGram: one-time playback" in text:
         print("OneTimeVoice: playback appearance already ordinary")
         return
+    # The flag is declared beside `isViewOnceMessage` itself, because both halves of the
+    # one-time treatment — the ring and the counter — read it from different scopes.
+    old_flag = (
+        "        let isViewOnceMessage = isVoice && message.minAutoremoveOrClearTimeout == viewOnceTimeout\n"
+    )
+    new_flag = (
+        "        let isViewOnceMessage = isVoice && message.minAutoremoveOrClearTimeout == viewOnceTimeout\n"
+        "        // AorusGram: a one-time voice is listened to like any other. The ring that\n"
+        "        // burns it down and the counter that ticks it away are both behind this, and\n"
+        "        // nothing writes it — the stock behaviour is one default away rather than one\n"
+        "        // patch away, and the code that draws it keeps its readers.\n"
+        "        let aorusBurnsWhilePlaying = UserDefaults.standard.bool(forKey: \"aorusgram_one_time_voice_burn\")\n"
+    )
+    if text.count(old_flag) != 1:
+        raise RuntimeError(f"OneTimeVoice: flag anchor not unique ({text.count(old_flag)})")
+    text = text.replace(old_flag, new_flag, 1)
+
     old = (
         "                (self.waveformView?.componentView as? AudioWaveformComponent.View)?.enableScrubbing = !isViewOnceMessage\n"
         "                \n"
@@ -8614,11 +8631,10 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
         "                // recording away, and a waveform that can be scrubbed. It is not reported as\n"
         "                // consumed either, so it does not vanish when it ends.\n"
         "                //\n"
-        "                // The ring stays in the source behind a default nothing writes, rather\n"
-        "                // than being cut out: it is the only reader of the playback position above\n"
-        "                // it, and deleting it left that value written and never read, which this\n"
-        "                // module compiles as an error.\n"
-        "                let aorusBurnsWhilePlaying = UserDefaults.standard.bool(forKey: \"aorusgram_one_time_voice_burn\")\n"
+        "                // The ring stays in the source behind that default, rather than being cut\n"
+        "                // out: it is the only reader of the playback position above it, and\n"
+        "                // deleting it left that value written and never read, which this module\n"
+        "                // compiles as an error.\n"
         "                (self.waveformView?.componentView as? AudioWaveformComponent.View)?.enableScrubbing = !(isViewOnceMessage && aorusBurnsWhilePlaying)\n"
         "                \n"
         "                if isViewOnceMessage && aorusBurnsWhilePlaying && playbackStatus == .playing {\n"
@@ -8637,7 +8653,27 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
     )
     if text.count(old) != 1:
         raise RuntimeError(f"OneTimeVoice: playback anchor not unique ({text.count(old)})")
-    node.write_text(text.replace(old, new, 1), encoding="utf-8")
+    text = text.replace(old, new, 1)
+
+    # The second animation: instead of a plain duration a one-time recording gets an
+    # animated counter that ticks the remaining seconds away digit by digit. It reads as
+    # the message being spent, which is exactly what is no longer happening.
+    old_count = (
+        "            if isViewOnceMessage {\n"
+        "                var segments: [AnimatedCountLabelNode.Segment] = []\n"
+    )
+    new_count = (
+        "            // AorusGram: the ordinary duration label, not the counter that ticks a\n"
+        "            // one-time recording away. Same flag as the ring above, so both halves of\n"
+        "            // the one-time playback treatment move together.\n"
+        "            if isViewOnceMessage && aorusBurnsWhilePlaying {\n"
+        "                var segments: [AnimatedCountLabelNode.Segment] = []\n"
+    )
+    if text.count(old_count) != 1:
+        raise RuntimeError(f"OneTimeVoice: countdown anchor not unique ({text.count(old_count)})")
+    text = text.replace(old_count, new_count, 1)
+
+    node.write_text(text, encoding="utf-8")
     print("OneTimeVoice: one-time playback made ordinary")
 
 

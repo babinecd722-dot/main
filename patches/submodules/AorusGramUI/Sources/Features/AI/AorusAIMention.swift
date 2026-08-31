@@ -53,24 +53,22 @@ enum AorusAIMentionRenderer {
         return letters.isEmpty ? ["#"] : letters
     }
 
-    /// Builds the attachment that reserves the circle's space on the line.
+    /// The avatar, drawn into the attachment itself.
     ///
-    /// It draws nothing: the avatar is a real `AvatarNode` positioned over this glyph by
-    /// `AorusAIMentionTextView`. Telegram's avatars are asynchronous, animated and
-    /// theme-aware, and flattening one into a static attachment image would give up all
-    /// three. A 1×1 clear image is supplied because TextKit lays out an attachment with
-    /// no contents at zero width whatever its `bounds` say.
-    private static func attachment(font: UIFont) -> NSTextAttachment {
+    /// An earlier version reserved an empty box on the line and floated a real `AvatarNode`
+    /// over it, positioned from the layout manager's glyph geometry. That is where the
+    /// circle sitting a few points below the name came from: an attachment glyph's reported
+    /// origin is not the text baseline, so every pill was placed against the wrong datum.
+    /// Handing TextKit a picture removes the question — it aligns the image itself, exactly
+    /// the way it aligns a glyph, and there is no geometry left to get wrong.
+    private static func attachment(font: UIFont, image: UIImage) -> NSTextAttachment {
         let size = avatarSize(for: font)
         let attachment = NSTextAttachment()
-        attachment.image = clearPixel
+        attachment.image = image
+        // Centred on the cap band, which is the band the eye reads a name in.
         attachment.bounds = CGRect(x: 0.0, y: (font.capHeight - size) / 2.0, width: size, height: size)
         return attachment
     }
-
-    private static let clearPixel: UIImage = {
-        return UIGraphicsImageRenderer(size: CGSize(width: 1.0, height: 1.0)).image { _ in }
-    }()
 
     /// The gap between the circle and the name. A thin space, so the pill reads as one
     /// object without the name touching the ring.
@@ -78,8 +76,10 @@ enum AorusAIMentionRenderer {
 
     private static func pill(for mention: AorusAIMention, font: UIFont, accent: UIColor, link: Bool) -> NSAttributedString {
         let nameFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+        let size = avatarSize(for: font)
+        let image = AorusAIMentionAvatarCache.shared.image(for: mention, diameter: size, ring: accent)
         let value = NSMutableAttributedString()
-        value.append(NSAttributedString(attachment: attachment(font: font)))
+        value.append(NSAttributedString(attachment: attachment(font: font, image: image)))
         value.append(NSAttributedString(string: gap + mention.displayName))
         var attributes: [NSAttributedString.Key: Any] = [
             .foregroundColor: accent,
@@ -279,86 +279,152 @@ enum AorusAIMentionRenderer {
     }
 }
 
-/// The avatar drawn over one pill: Telegram's own `AvatarNode` inside a ringed circle.
-final class AorusAIMentionAvatarView: UIView {
-    /// Index of the attachment glyph this circle belongs to.
-    var characterIndex: Int = -1
+/// The pictures the pills are drawn with.
+///
+/// A pill is built synchronously — it is one run inside an attributed string that has to
+/// exist the moment the text does — while a peer's photo arrives whenever the network and
+/// the media box get to it. So every mention is drawn immediately with a monogram, the real
+/// photo is fetched once per peer and size, and the views holding pills are told to swap
+/// the picture in when it lands. Keyed by peer, diameter and ring colour, because the same
+/// person appears at one size in an answer and another in a quote.
+final class AorusAIMentionAvatarCache {
+    static let shared = AorusAIMentionAvatarCache()
 
-    private let avatarNode = AvatarNode(font: UIFont.systemFont(ofSize: 8.0, weight: .semibold))
-    private let disposable = MetaDisposable()
-    private var appliedPeerId: Int64?
-    private var appliedPeer: EnginePeer?
-    private weak var appliedContext: AccountContext?
-    private var appliedTheme: PresentationTheme?
+    /// Posted when a photo has been drawn, so text already on screen can pick it up.
+    static let changedNotification = Notification.Name("aorusgram.ai.mentionAvatar")
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        clipsToBounds = true
-        addSubview(avatarNode.view)
+    private struct Key: Hashable {
+        var peerId: Int64
+        var diameter: Int
+        var ring: Int
     }
 
-    required init?(coder: NSCoder) { fatalError() }
+    private var images: [Key: UIImage] = [:]
+    private var pending: Set<Key> = []
+    private var disposables: [Key: Disposable] = [:]
+    private weak var context: AccountContext?
+    private static let limit = 256
 
-    deinit {
-        disposable.dispose()
+    private init() {}
+
+    /// The account the photos are read through. Set by whichever screen draws first; the
+    /// cache holds it weakly, so it never keeps a logged-out account alive.
+    func use(context: AccountContext) {
+        self.context = context
     }
 
-    func configure(context: AccountContext, theme: PresentationTheme, mention: AorusAIMention, ring: UIColor) {
-        layer.borderColor = ring.cgColor
-        layer.borderWidth = 1.0 + UIScreenPixel
-        appliedContext = context
-        appliedTheme = theme
-        guard appliedPeerId != mention.peerId else { return }
-        appliedPeerId = mention.peerId
-        appliedPeer = nil
-        // Telegram's own gradient monogram is shown while the peer is being read, so the
-        // circle is never an empty hole.
-        avatarNode.setCustomLetters(AorusAIMentionRenderer.letters(for: mention.displayName))
+    /// The picture for one mention right now: the real photo when it has been drawn, and
+    /// the monogram until then. Never nil, so a pill is never an empty hole.
+    func image(for mention: AorusAIMention, diameter: CGFloat, ring: UIColor) -> UIImage {
+        let key = Key(peerId: mention.peerId, diameter: Int(diameter.rounded()), ring: Int(ring.aorusRGBAKey))
+        if let image = images[key] {
+            return image
+        }
+        request(key: key, mention: mention, diameter: diameter, ring: ring)
+        return AorusAIMentionAvatarCache.monogram(
+            letters: AorusAIMentionRenderer.letters(for: mention.displayName),
+            diameter: diameter,
+            ring: ring
+        )
+    }
+
+    private func request(key: Key, mention: AorusAIMention, diameter: CGFloat, ring: UIColor) {
+        guard let context, !pending.contains(key) else { return }
+        pending.insert(key)
         let peerId = PeerId(mention.peerId)
-        disposable.set((context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
-        |> deliverOnMainQueue).start(next: { [weak self] peer in
-            guard let self, let peer, self.appliedPeerId == mention.peerId else { return }
-            self.appliedPeer = peer
-            self.applyPeer()
-        }))
+        let inner = diameter - AorusAIMentionAvatarCache.ringWidth * 2.0
+        let signal = context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+        |> mapToSignal { peer -> Signal<UIImage?, NoError> in
+            guard let peer else { return .single(nil) }
+            return peerAvatarCompleteImage(
+                account: context.account,
+                peer: peer,
+                size: CGSize(width: inner, height: inner)
+            )
+        }
+        |> deliverOnMainQueue
+        disposables[key] = signal.start(next: { [weak self] photo in
+            guard let self else { return }
+            self.pending.remove(key)
+            self.disposables.removeValue(forKey: key)?.dispose()
+            guard let photo else { return }
+            self.store(key: key, image: AorusAIMentionAvatarCache.ringed(photo: photo, diameter: diameter, ring: ring))
+            NotificationCenter.default.post(name: AorusAIMentionAvatarCache.changedNotification, object: nil)
+        })
     }
 
-    private func applyPeer() {
-        guard let peer = appliedPeer, let context = appliedContext, let theme = appliedTheme else { return }
-        let size = avatarNode.bounds.size
-        guard size.width > 0.0 else { return }
-        avatarNode.setPeer(context: context, theme: theme, peer: peer, clipStyle: .round, synchronousLoad: false, displayDimensions: size)
-        avatarNode.updateSize(size: size)
+    private func store(key: Key, image: UIImage) {
+        if images.count >= AorusAIMentionAvatarCache.limit {
+            images.removeAll(keepingCapacity: true)
+        }
+        images[key] = image
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        guard bounds.height > 0.0 else { return }
-        layer.cornerRadius = bounds.height / 2.0
-        let inset = layer.borderWidth
-        let inner = bounds.insetBy(dx: inset, dy: inset)
-        guard inner.width > 0.0, inner.height > 0.0 else { return }
-        guard avatarNode.frame != inner else { return }
-        avatarNode.frame = inner
-        avatarNode.updateSize(size: inner.size)
-        // `setPeer` measures against the size the node had when it was called, so a pill
-        // whose peer arrived before the first layout pass has to be told again.
-        applyPeer()
+    static let ringWidth: CGFloat = 1.5
+
+    /// The photo inside its ring.
+    private static func ringed(photo: UIImage, diameter: CGFloat, ring: UIColor) -> UIImage {
+        let size = CGSize(width: diameter, height: diameter)
+        return UIGraphicsImageRenderer(size: size).image { rendererContext in
+            let inset = ringWidth
+            let inner = CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
+            // The clip is scoped rather than reset, so the ring below is stroked against a
+            // clean state whatever the renderer handed us.
+            rendererContext.cgContext.saveGState()
+            UIBezierPath(ovalIn: inner).addClip()
+            photo.draw(in: inner)
+            rendererContext.cgContext.restoreGState()
+            let stroke = UIBezierPath(ovalIn: CGRect(origin: .zero, size: size).insetBy(dx: inset / 2.0, dy: inset / 2.0))
+            stroke.lineWidth = inset
+            ring.setStroke()
+            stroke.stroke()
+        }
+    }
+
+    /// One or two letters on a tint of the ring colour, drawn while the photo is on its
+    /// way and kept for peers who have no photo at all.
+    private static func monogram(letters: [String], diameter: CGFloat, ring: UIColor) -> UIImage {
+        let size = CGSize(width: diameter, height: diameter)
+        let text = letters.joined()
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            let inset = ringWidth
+            let inner = CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
+            ring.withAlphaComponent(0.18).setFill()
+            UIBezierPath(ovalIn: inner).fill()
+            let stroke = UIBezierPath(ovalIn: CGRect(origin: .zero, size: size).insetBy(dx: inset / 2.0, dy: inset / 2.0))
+            stroke.lineWidth = inset
+            ring.setStroke()
+            stroke.stroke()
+            let font = UIFont.systemFont(ofSize: max(7.0, diameter * 0.42), weight: .semibold)
+            let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ring]
+            let bounds = (text as NSString).size(withAttributes: attributes)
+            (text as NSString).draw(
+                at: CGPoint(x: (size.width - bounds.width) / 2.0, y: (size.height - bounds.height) / 2.0),
+                withAttributes: attributes
+            )
+        }
     }
 }
 
-/// A text view that draws the avatars of the pills inside it.
+private extension UIColor {
+    /// A cheap identity for a colour, so two pills asking for the same ring share a picture.
+    var aorusRGBAKey: Int {
+        var red: CGFloat = 0.0
+        var green: CGFloat = 0.0
+        var blue: CGFloat = 0.0
+        var alpha: CGFloat = 0.0
+        guard getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return 0 }
+        return (Int(red * 255.0) << 24) | (Int(green * 255.0) << 16) | (Int(blue * 255.0) << 8) | Int(alpha * 255.0)
+    }
+}
+
+/// A text view whose pills pick up their photos when those arrive.
 ///
 /// TextKit 1 is requested explicitly through the designated initializer: on iOS 16 and
 /// later `UITextView` defaults to TextKit 2, where `layoutManager` exists only as a
 /// compatibility shim that silently migrates the view the first time it is touched.
-/// Asking for the layout manager up front makes the geometry these positions are read
-/// from the same on every OS version.
 class AorusAIMentionTextView: UITextView {
-    private var avatarViews: [AorusAIMentionAvatarView] = []
-    private weak var mentionContext: AccountContext?
-    private var mentionTheme: PresentationTheme?
+    private var avatarObserver: NSObjectProtocol?
 
     /// Builds one with its own TextKit 1 stack.
     ///
@@ -377,99 +443,46 @@ class AorusAIMentionTextView: UITextView {
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
         super.init(frame: frame, textContainer: textContainer)
+        avatarObserver = NotificationCenter.default.addObserver(
+            forName: AorusAIMentionAvatarCache.changedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refreshMentionImages()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit {
+        if let avatarObserver {
+            NotificationCenter.default.removeObserver(avatarObserver)
+        }
+    }
+
     func configureMentions(context: AccountContext, theme: PresentationTheme) {
-        mentionContext = context
-        mentionTheme = theme
-        rebuildMentionAvatars()
+        AorusAIMentionAvatarCache.shared.use(context: context)
+        refreshMentionImages()
     }
 
-    /// Call after every assignment to `attributedText`.
-    func rebuildMentionAvatars() {
-        guard let context = mentionContext, let theme = mentionTheme else {
-            removeAllMentionAvatars()
-            return
-        }
-        let value = attributedText ?? NSAttributedString()
-        var descriptors: [(index: Int, mention: AorusAIMention)] = []
-        if value.length > 0 {
-            value.enumerateAttribute(.aorusAIMention, in: NSRange(location: 0, length: value.length), options: []) { attribute, range, _ in
-                guard let box = attribute as? AorusAIMentionBox else { return }
-                descriptors.append((range.location, box.mention))
-            }
-        }
-        guard !descriptors.isEmpty else {
-            removeAllMentionAvatars()
-            return
-        }
-        while avatarViews.count > descriptors.count {
-            avatarViews.removeLast().removeFromSuperview()
-        }
-        while avatarViews.count < descriptors.count {
-            let view = AorusAIMentionAvatarView()
-            addSubview(view)
-            avatarViews.append(view)
-        }
-        let ring = AorusAIMentionRenderer.accentColor(theme)
-        for (index, descriptor) in descriptors.enumerated() {
-            let view = avatarViews[index]
-            view.characterIndex = descriptor.index
-            view.configure(context: context, theme: theme, mention: descriptor.mention, ring: ring)
-        }
-        setNeedsLayout()
-    }
-
-    private func removeAllMentionAvatars() {
-        guard !avatarViews.isEmpty else { return }
-        avatarViews.forEach { $0.removeFromSuperview() }
-        avatarViews.removeAll()
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        positionMentionAvatars()
-    }
-
-    private func positionMentionAvatars() {
-        guard !avatarViews.isEmpty else { return }
-        let storageLength = textStorage.length
-        layoutManager.ensureLayout(for: textContainer)
-        for view in avatarViews {
-            let index = view.characterIndex
-            guard index >= 0, index < storageLength,
-                  let attachment = textStorage.attribute(.attachment, at: index, effectiveRange: nil) as? NSTextAttachment else {
-                view.isHidden = true
-                continue
-            }
-            let glyphRange = layoutManager.glyphRange(forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
-            guard glyphRange.length > 0 else {
-                view.isHidden = true
-                continue
-            }
-            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
-            let location = layoutManager.location(forGlyphAt: glyphRange.location)
-            let bounds = attachment.bounds
-            guard bounds.width > 0.0, bounds.height > 0.0 else {
-                view.isHidden = true
-                continue
-            }
-            // TextKit places an attachment relative to the baseline: its `bounds.origin.y`
-            // is how far the bottom edge sits above it.
-            let x = lineRect.minX + location.x + textContainerInset.left
-            let baseline = lineRect.minY + location.y + textContainerInset.top
-            let top = baseline - bounds.origin.y - bounds.height
-            let frame = CGRect(x: floor(x), y: floor(top), width: bounds.width, height: bounds.height)
-            guard frame.origin.x.isFinite, frame.origin.y.isFinite else {
-                view.isHidden = true
-                continue
-            }
-            view.isHidden = false
-            if view.frame != frame {
-                view.frame = frame
-            }
+    /// Swaps a newly drawn photo into the pills already on screen.
+    ///
+    /// The attachment is edited in place and only its glyph is invalidated, so a photo
+    /// landing mid-answer does not relayout the text or disturb the caret.
+    func refreshMentionImages() {
+        let storage = textStorage
+        guard storage.length > 0 else { return }
+        let full = NSRange(location: 0, length: storage.length)
+        storage.enumerateAttribute(.aorusAIMention, in: full, options: []) { value, range, _ in
+            guard let box = value as? AorusAIMentionBox, range.length > 0 else { return }
+            guard let attachment = storage.attribute(.attachment, at: range.location, effectiveRange: nil) as? NSTextAttachment else { return }
+            let diameter = attachment.bounds.height
+            guard diameter > 0.0 else { return }
+            let ring = (storage.attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? UIColor) ?? .systemBlue
+            let image = AorusAIMentionAvatarCache.shared.image(for: box.mention, diameter: diameter, ring: ring)
+            guard attachment.image !== image else { return }
+            attachment.image = image
+            layoutManager.invalidateDisplay(forCharacterRange: NSRange(location: range.location, length: 1))
         }
     }
 
