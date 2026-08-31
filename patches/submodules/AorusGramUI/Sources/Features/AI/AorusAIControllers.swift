@@ -2977,6 +2977,7 @@ private final class AorusAIComposerView: UIView {
     let textView = AorusAIMentionTextView.make()
     private let container = UIView()
     private let glassView = UIVisualEffectView()
+    private let containerGlass = GlassBackgroundView(frame: CGRect())
     private let placeholder = UILabel()
     private let referenceView = UIView()
     private let referenceLine = UIView()
@@ -3106,12 +3107,14 @@ private final class AorusAIComposerView: UIView {
         backgroundColor = palette.plainBackground
         glassView.effect = aorusAIGlassEffect(palette: palette)
         glassView.backgroundColor = aorusAIGlassTint(palette: palette)
+        // The input is a pane of Telegram's own glass, the same component the navigation
+        // capsules are made of, rather than a blur with a border drawn to look like one.
         container.backgroundColor = .clear
         container.layer.cornerRadius = 24
         container.layer.cornerCurve = .continuous
         container.clipsToBounds = true
-        container.layer.borderWidth = UIScreenPixel
-        container.layer.borderColor = aorusAIGlassBorder(palette: palette).cgColor
+        container.layer.borderWidth = 0.0
+        glassView.isHidden = true
         textView.textColor = palette.label
         textView.tintColor = palette.accent
         textView.keyboardAppearance = palette.isDark ? .dark : .light
@@ -3139,6 +3142,19 @@ private final class AorusAIComposerView: UIView {
         let textInset: CGFloat = 16
         container.frame = CGRect(x: side, y: 0, width: bounds.width - side * 2, height: max(0, bounds.height - 8))
         glassView.frame = container.bounds
+        if containerGlass.superview !== container {
+            containerGlass.isUserInteractionEnabled = false
+            container.insertSubview(containerGlass, at: 0)
+        }
+        containerGlass.frame = container.bounds
+        containerGlass.update(
+            size: container.bounds.size,
+            cornerRadius: 24.0,
+            isDark: theme?.overallDarkAppearance ?? true,
+            tintColor: GlassBackgroundView.TintColor(kind: .panel),
+            isInteractive: false,
+            transition: .immediate
+        )
         let buttonSize = AorusAIComposerView.actionButtonSize
         let buttonY = container.bounds.height - buttonSize - 8
         sendButton.frame = CGRect(x: container.bounds.width - buttonSize - 12, y: buttonY, width: buttonSize, height: buttonSize)
@@ -3153,7 +3169,7 @@ private final class AorusAIComposerView: UIView {
         referenceClose.frame = CGRect(x: referenceView.bounds.width - 27, y: 3, width: 26, height: 26)
         let indicatorTop: CGFloat = refHeight == 0 ? 8 : 38
         let inputRight = dictationButton.frame.minX - 8
-        dictationIndicator.frame = CGRect(x: textInset, y: indicatorTop, width: max(0, inputRight - textInset), height: AorusAIComposerView.dictationRowHeight - 4)
+        dictationIndicator.frame = CGRect(x: textInset, y: indicatorTop, width: max(0, inputRight - textInset), height: AorusAIComposerView.dictationRowHeight - 6)
         let inputTop = indicatorTop + (isDictating ? AorusAIComposerView.dictationRowHeight : 0)
         textView.frame = CGRect(x: textInset, y: inputTop, width: max(0, inputRight - textInset), height: max(0, container.bounds.height - inputTop - 8))
         placeholder.frame = CGRect(x: 0, y: 2, width: max(0, textView.bounds.width), height: 21)
@@ -3162,7 +3178,7 @@ private final class AorusAIComposerView: UIView {
     private static let actionButtonSize: CGFloat = 32
     private static let dictationButtonSize: CGFloat = 26
     /// The thin live row a running dictation adds above the text.
-    private static let dictationRowHeight: CGFloat = 24
+    private static let dictationRowHeight: CGFloat = 28
 
     func requiredHeight(width: CGFloat) -> CGFloat {
         // 12pt page inset on each side, then the card's own 16pt text inset on each side.
@@ -3357,16 +3373,23 @@ private final class AorusAIDictationIndicatorView: UIView {
     private var startedAt = Date()
     private var timer: Foundation.Timer?
 
+    private let pill = UIView()
+
     override init(frame: CGRect) {
         super.init(frame: frame)
+        // A tinted capsule, so a run in progress reads as one live object rather than as a
+        // dot, a number and some marks that happen to sit next to each other.
+        pill.layer.cornerCurve = .continuous
+        pill.isUserInteractionEnabled = false
+        addSubview(pill)
         dot.layer.cornerRadius = 3.0
-        addSubview(dot)
+        pill.addSubview(dot)
         timeLabel.font = aorusAIMonoFont(size: 12.0, weight: .medium)
         timeLabel.text = "0:00"
-        addSubview(timeLabel)
+        pill.addSubview(timeLabel)
         bars.forEach { bar in
             bar.layer.cornerRadius = AorusAIDictationIndicatorView.barWidth / 2.0
-            addSubview(bar)
+            pill.addSubview(bar)
         }
         isAccessibilityElement = true
         accessibilityLabel = aorusAILocalized("Идёт запись", "Recording")
@@ -3379,8 +3402,9 @@ private final class AorusAIDictationIndicatorView: UIView {
     }
 
     func configure(palette: AorusAIPalette) {
+        pill.backgroundColor = palette.accentSoft
         dot.backgroundColor = palette.accent
-        timeLabel.textColor = palette.secondary
+        timeLabel.textColor = palette.accent
         bars.forEach { $0.backgroundColor = palette.accent }
     }
 
@@ -3426,9 +3450,14 @@ private final class AorusAIDictationIndicatorView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         let height = bounds.height
-        dot.frame = CGRect(x: 0.0, y: floor((height - 6.0) / 2.0), width: 6.0, height: 6.0)
         let timeWidth = ceil(timeLabel.sizeThatFits(CGSize(width: bounds.width, height: height)).width)
-        timeLabel.frame = CGRect(x: 12.0, y: 0.0, width: timeWidth, height: height)
+        let barsWidth = Self.barWidth * CGFloat(Self.barCount) + Self.barSpacing * CGFloat(Self.barCount - 1)
+        // The capsule hugs its contents: 10 lead-in, dot, 8, time, 8, bars, 12 trailing.
+        let pillWidth = min(bounds.width, 10.0 + 6.0 + 8.0 + timeWidth + 8.0 + barsWidth + 12.0)
+        pill.frame = CGRect(x: 0.0, y: 0.0, width: pillWidth, height: height)
+        pill.layer.cornerRadius = height / 2.0
+        dot.frame = CGRect(x: 10.0, y: floor((height - 6.0) / 2.0), width: 6.0, height: 6.0)
+        timeLabel.frame = CGRect(x: 24.0, y: 0.0, width: timeWidth, height: height)
         layoutBars()
     }
 
@@ -3458,6 +3487,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
 
     private let contentStack = UIStackView()
     private let bubble = UIVisualEffectView()
+    private let bubbleGlass = GlassBackgroundView(frame: CGRect())
     private let bodyStack = UIStackView()
     private let statusLabel = UILabel()
     private let assistantActions = UIStackView()
@@ -3581,6 +3611,19 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     override func layoutSubviews() {
         super.layoutSubviews()
         positionStreamCaret()
+        // The pane is sized here rather than at configure time: the bubble hugs its text
+        // and only knows how wide it is once the stack has laid out.
+        if !bubbleGlass.isHidden, bubble.bounds.width > 0.0, bubble.bounds.height > 0.0 {
+            bubbleGlass.frame = bubble.bounds
+            bubbleGlass.update(
+                size: bubble.bounds.size,
+                cornerRadius: 20.0,
+                isDark: configuredTheme?.overallDarkAppearance ?? true,
+                tintColor: GlassBackgroundView.TintColor(kind: .panel),
+                isInteractive: false,
+                transition: .immediate
+            )
+        }
     }
 
     /// Keeps the blinking dot on the last glyph of the answer while it grows.
@@ -3741,11 +3784,21 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             : bubble.widthAnchor.constraint(equalTo: contentStack.widthAnchor)
         bubbleWidthConstraint.isActive = true
         self.bubbleWidthConstraint = bubbleWidthConstraint
-        // The user's own turn is a plain filled bubble, like an outgoing message. It had a
-        // blur and an outline, which over an opaque table view bought nothing but a render
-        // pass and a line around every question.
+        // The user's own turn is a pane of the same glass the input is made of, so a
+        // question and the field it was typed in are visibly the same material. The
+        // assistant's turn stays bare text: two panes facing each other would make the
+        // thread a column of boxes.
         bubble.effect = nil
-        bubble.backgroundColor = isUser ? palette.fillStrong : .clear
+        bubble.backgroundColor = .clear
+        if isUser {
+            if bubbleGlass.superview !== bubble.contentView {
+                bubbleGlass.isUserInteractionEnabled = false
+                bubble.contentView.insertSubview(bubbleGlass, at: 0)
+            }
+            bubbleGlass.isHidden = false
+        } else {
+            bubbleGlass.isHidden = true
+        }
         bubble.layer.cornerRadius = isUser ? 20.0 : 0.0
         bubble.layer.cornerCurve = .continuous
         bubble.clipsToBounds = isUser
