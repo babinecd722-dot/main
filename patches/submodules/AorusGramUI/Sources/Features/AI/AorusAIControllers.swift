@@ -596,6 +596,12 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         tableView.tableHeaderView = listHeader
         tableView.tableFooterView = UIView(frame: .zero)
         emptyView.configure(palette: palette)
+        // A suggestion opens a new conversation with itself already in the input, so the
+        // person lands on a cursor after the part they still have to write rather than on
+        // an empty field they have to think at.
+        emptyView.onStarter = { [weak self] starter in
+            self?.createConversation(draft: starter.prompt)
+        }
         tableView.backgroundView = emptyView
         self.displayNode.view.addSubview(tableView)
 
@@ -668,7 +674,12 @@ private final class AorusAIConversationListController: ViewController, UITableVi
     }
 
     @objc private func createConversation() {
-        let conversation = AorusAIConversation()
+        createConversation(draft: "")
+    }
+
+    private func createConversation(draft: String) {
+        var conversation = AorusAIConversation()
+        conversation.draft = draft
         AorusAIStore.shared.upsert(conversation, accountId: accountId)
         (self.navigationController as? NavigationController)?.pushViewController(AorusAIChatController(context: context, conversation: conversation))
     }
@@ -995,51 +1006,183 @@ private final class AorusAIConversationCell: UITableViewCell {
     }
 }
 
+/// One suggestion on the empty list: a real first thing to ask.
+private final class AorusAIStarterRowView: UIControl {
+    private let iconView = UIImageView()
+    private let titleLabel = UILabel()
+    private let separator = UIView()
+    private let highlight = UIView()
+
+    static let height: CGFloat = 52.0
+    private static let inset: CGFloat = 16.0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        highlight.alpha = 0.0
+        highlight.isUserInteractionEnabled = false
+        addSubview(highlight)
+        iconView.contentMode = .center
+        titleLabel.font = .systemFont(ofSize: 16.0)
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
+        [iconView, titleLabel, separator].forEach { addSubview($0) }
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(symbol: String, title: String, isLast: Bool, palette: AorusAIPalette) {
+        iconView.image = UIImage(systemName: symbol)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 16.0, weight: .medium))
+        iconView.tintColor = palette.accent
+        titleLabel.text = title
+        titleLabel.textColor = palette.label
+        highlight.backgroundColor = palette.fill
+        separator.backgroundColor = palette.separator
+        separator.isHidden = isLast
+        accessibilityLabel = title
+        setNeedsLayout()
+    }
+
+    override var isHighlighted: Bool {
+        didSet { highlight.alpha = isHighlighted ? 1.0 : 0.0 }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        highlight.frame = bounds
+        let inset = Self.inset
+        iconView.frame = CGRect(x: inset, y: 0.0, width: 24.0, height: bounds.height)
+        let titleX = inset + 24.0 + 12.0
+        titleLabel.frame = CGRect(x: titleX, y: 0.0, width: max(0.0, bounds.width - titleX - inset), height: bounds.height)
+        separator.frame = CGRect(x: titleX, y: bounds.height - UIScreenPixel, width: max(0.0, bounds.width - titleX), height: UIScreenPixel)
+    }
+}
+
+/// The list before there is anything in it.
+///
+/// An icon over two lines of encouragement is the shape every empty state takes and it
+/// leaves the person exactly where they were — with a blank screen and a compose button
+/// somewhere else. This one does the screen's job instead: it offers the three things
+/// AorusAI is actually for, each of which starts a conversation already asking. They are
+/// the tools it has — reading a chat, looking someone up, producing a file — so the list
+/// is a description of the product rather than decoration.
+///
+/// Searching is a different empty: there the person knows what they wanted, so the
+/// suggestions step aside and it says only that nothing matched.
 private final class AorusAIConversationListEmptyView: UIView {
+    struct Starter {
+        var symbol: String
+        var title: String
+        var prompt: String
+    }
+
+    static let starters: [Starter] = [
+        Starter(
+            symbol: "text.viewfinder",
+            title: aorusAILocalized("Пересказать переписку", "Summarize a chat"),
+            prompt: aorusAILocalized("Кратко перескажи мою переписку с ", "Briefly summarize my chat with ")
+        ),
+        Starter(
+            symbol: "person.text.rectangle",
+            title: aorusAILocalized("Рассказать о человеке", "Look someone up"),
+            prompt: aorusAILocalized("Расскажи про ", "Tell me about ")
+        ),
+        Starter(
+            symbol: "doc.badge.plus",
+            title: aorusAILocalized("Сделать документ", "Make a document"),
+            prompt: aorusAILocalized("Сделай презентацию про ", "Make a presentation about ")
+        )
+    ]
+
     private let iconView = UIImageView()
     private let titleLabel = UILabel()
     private let detailLabel = UILabel()
+    private let card = UIView()
+    private var rows: [AorusAIStarterRowView] = []
+    var onStarter: ((Starter) -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         iconView.contentMode = .scaleAspectFit
         titleLabel.font = aorusAITitleFont(size: 20.0, weight: .semibold)
         titleLabel.textAlignment = .center
-        titleLabel.text = aorusAILocalized("Начните новый диалог", "Start a new chat")
-        detailLabel.font = .systemFont(ofSize: 14)
+        titleLabel.text = aorusAILocalized("С чего начнём?", "Where shall we start?")
+        detailLabel.font = .systemFont(ofSize: 14.0)
         detailLabel.textAlignment = .center
         detailLabel.numberOfLines = 0
-        detailLabel.text = aorusAILocalized("Задайте вопрос или поручите AorusAI работу с файлами", "Ask a question or let AorusAI work with files")
-        [iconView, titleLabel, detailLabel].forEach { addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
-        NSLayoutConstraint.activate([
-            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -35),
-            iconView.widthAnchor.constraint(equalToConstant: 40), iconView.heightAnchor.constraint(equalToConstant: 40),
-            titleLabel.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: 14),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 30), titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -30),
-            detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 7),
-            detailLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40), detailLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40)
-        ])
+        detailLabel.text = aorusAILocalized("Выберите или просто напишите своё", "Pick one, or just write your own")
+        [iconView, titleLabel, detailLabel, card].forEach { addSubview($0) }
+        card.layer.cornerRadius = 14.0
+        card.layer.cornerCurve = .continuous
+        card.clipsToBounds = true
+        for (index, starter) in Self.starters.enumerated() {
+            let row = AorusAIStarterRowView()
+            row.tag = index
+            row.addTarget(self, action: #selector(starterTapped(_:)), for: .touchUpInside)
+            card.addSubview(row)
+            rows.append(row)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(palette: AorusAIPalette) {
         backgroundColor = palette.background
-        iconView.image = UIImage(systemName: "bubble.left.and.bubble.right.fill")?.withRenderingMode(.alwaysTemplate)
         iconView.tintColor = palette.accent
         titleLabel.textColor = palette.label
         detailLabel.textColor = palette.secondary
+        card.backgroundColor = palette.elevated
+        for (index, row) in rows.enumerated() {
+            row.configure(
+                symbol: Self.starters[index].symbol,
+                title: Self.starters[index].title,
+                isLast: index == rows.count - 1,
+                palette: palette
+            )
+        }
+        setSearching(false)
     }
 
     func setSearching(_ searching: Bool) {
         titleLabel.text = searching
             ? aorusAILocalized("Ничего не найдено", "No results")
-            : aorusAILocalized("Начните новый диалог", "Start a new chat")
+            : aorusAILocalized("С чего начнём?", "Where shall we start?")
         detailLabel.text = searching
             ? aorusAILocalized("Попробуйте изменить запрос", "Try a different search")
-            : aorusAILocalized("Задайте вопрос или поручите AorusAI работу с файлами", "Ask a question or let AorusAI work with files")
-        iconView.image = UIImage(systemName: searching ? "magnifyingglass" : "bubble.left.and.bubble.right.fill")?.withRenderingMode(.alwaysTemplate)
+            : aorusAILocalized("Выберите или просто напишите своё", "Pick one, or just write your own")
+        iconView.image = UIImage(systemName: searching ? "magnifyingglass" : "sparkles")?.withRenderingMode(.alwaysTemplate)
+        card.isHidden = searching
+        setNeedsLayout()
+    }
+
+    @objc private func starterTapped(_ sender: AorusAIStarterRowView) {
+        let index = sender.tag
+        guard index >= 0, index < Self.starters.count else { return }
+        onStarter?(Self.starters[index])
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let side: CGFloat = 24.0
+        let width = max(0.0, bounds.width - side * 2.0)
+        let cardHeight = card.isHidden ? 0.0 : AorusAIStarterRowView.height * CGFloat(rows.count)
+        let titleHeight = ceil(titleLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+        let detailHeight = ceil(detailLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+        let block = 44.0 + 14.0 + titleHeight + 6.0 + detailHeight + (card.isHidden ? 0.0 : 22.0 + cardHeight)
+        // Sat a little above centre: an empty state pinned to the exact middle reads as
+        // low on the screen once the greeting above it is counted.
+        var y = max(24.0, floor((bounds.height - block) / 2.0) - 24.0)
+        iconView.frame = CGRect(x: floor((bounds.width - 44.0) / 2.0), y: y, width: 44.0, height: 44.0)
+        y += 44.0 + 14.0
+        titleLabel.frame = CGRect(x: side, y: y, width: width, height: titleHeight)
+        y += titleHeight + 6.0
+        detailLabel.frame = CGRect(x: side, y: y, width: width, height: detailHeight)
+        y += detailHeight + 22.0
+        card.frame = CGRect(x: side, y: y, width: width, height: cardHeight)
+        for (index, row) in rows.enumerated() {
+            row.frame = CGRect(x: 0.0, y: AorusAIStarterRowView.height * CGFloat(index), width: width, height: AorusAIStarterRowView.height)
+        }
     }
 }
 
@@ -1962,44 +2105,30 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             deferUserPrompt { [weak self] in self?.presentPermission(request) }
             return
         }
-        let handle = request.username.map { "@\($0)" } ?? ""
-        // This dialog is the only thing between the model and a private conversation, so
-        // none of the words that decide what the user is agreeing to come from the server.
-        // The heading names the chat this device would actually read, and every button
-        // states the number of messages that choice really shares — derived from what the
-        // client will do, not from the label the payload asked for. A payload that titled
-        // itself "Разрешить уведомления?" and labelled its button "Отмена" would otherwise
-        // hand over a whole chat.
-        var message = aorusAILocalized(
-            "AorusAI получит только выбранный тобой объём сообщений для этого запроса.",
-            "AorusAI will only receive the amount of messages you choose for this request."
-        )
-        if let text = request.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
-            message += "\n\n" + String(text.prefix(300))
-        }
-        let sheet = UIAlertController(
-            title: handle.isEmpty
-                ? aorusAILocalized("Посмотреть переписку?", "Look at the chat?")
-                : aorusAILocalized("Посмотреть переписку с \(handle)?", "Look at the chat with \(handle)?"),
-            message: message,
-            preferredStyle: .actionSheet
-        )
-        // A payload that named no amounts used to leave a dialog whose only answer was
-        // "no", which is not the same thing as being asked how much to share. The client
-        // offers its own steps instead — it knows exactly what each of them will read.
+        // The words that decide what is being agreed to are the client's, never the
+        // payload's: each choice states the number of messages it really shares, derived
+        // from what the executor will do. A payload that titled itself "Разрешить
+        // уведомления?" and labelled its button "Отмена" would otherwise hand over a chat.
+        //
+        // A payload that named no amounts gets the client's own steps rather than a dialog
+        // whose only answer is "no", which is not the same thing as being asked.
         let options = request.options.isEmpty ? Self.historyOptions(preferred: nil) : request.options
-        for option in options {
-            sheet.addAction(UIAlertAction(title: Self.optionTitle(option), style: .default, handler: { [weak self] _ in
+        let controller = AorusAIShareScopeController(
+            context: context,
+            theme: presentationData.theme,
+            username: request.username,
+            explanation: request.text,
+            options: options,
+            onSelect: { [weak self] option in
                 self?.select(option: option, for: request)
-            }))
-        }
-        // Cancel is added even when `allow_cancel` is false: an action sheet is
-        // dismissible by tapping outside anyway, and a dismissal that answered nothing
-        // would strand the turn forever.
-        sheet.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel, handler: { [weak self] _ in
-            self?.denyPermission(request)
-        }))
-        aorusAIPresentActionSheet(sheet, from: self)
+            },
+            // Dismissing by tapping outside answers too: a sheet that closed without an
+            // answer would strand the turn forever.
+            onCancel: { [weak self] in
+                self?.denyPermission(request)
+            }
+        )
+        present(controller, animated: true)
     }
 
     /// Turns a bare `tool.request` for the chat history into the question the client would
@@ -2027,7 +2156,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         if let preferred {
             limits.append(min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, preferred)))
         }
-        for value in [20, defaultHistoryLimit, AorusAIRequestLimits.chatHistoryMessageCount] where !limits.contains(value) {
+        for value in [20, AorusAIChatDefaults.historyLimit, AorusAIRequestLimits.chatHistoryMessageCount] where !limits.contains(value) {
             limits.append(value)
         }
         var options = limits.map { AorusAIPermissionOption(id: String($0), label: "", limit: $0, mode: nil) }
@@ -2038,37 +2167,6 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             mode: AorusAIPermissionOption.periodMode
         ))
         return options
-    }
-
-    /// What one permission button will actually do, in the client's own words.
-    ///
-    /// An option that carries neither a limit nor a known mode still shares a chat — the
-    /// executor's own default of 50 messages — so it is labelled with that number rather
-    /// than with whatever the payload wanted written on the button.
-    private static func optionTitle(_ option: AorusAIPermissionOption) -> String {
-        if option.isPeriod {
-            return aorusAILocalized("Выбрать период", "Choose a period")
-        }
-        let count = min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, option.limit ?? Self.defaultHistoryLimit))
-        return aorusAILocalized(
-            "Передать \(count) \(Self.russianMessageWord(count))",
-            count == 1 ? "Share 1 message" : "Share \(count) messages"
-        )
-    }
-
-    /// The messages a permission option shares when it names no number of its own. It is
-    /// the same value `executeHistoryTool` falls back to, so the button cannot promise one
-    /// amount and hand over another.
-    private static let defaultHistoryLimit = 50
-
-    private static func russianMessageWord(_ count: Int) -> String {
-        let tail = count % 100
-        if tail >= 11 && tail <= 14 { return "сообщений" }
-        switch count % 10 {
-        case 1: return "сообщение"
-        case 2, 3, 4: return "сообщения"
-        default: return "сообщений"
-        }
     }
 
     private func select(option: AorusAIPermissionOption, for request: AorusAIPermissionRequest) {
@@ -2116,7 +2214,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             submit(toolResult: .failure(tool: request.tool, requestId: request.requestId, username: request.username, reason: "missing_username"))
             return
         }
-        let requested = min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, limit ?? Self.defaultHistoryLimit))
+        let requested = min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, limit ?? AorusAIChatDefaults.historyLimit))
         let context = self.context
         let strings = presentationData.strings
         let nameOrder = presentationData.nameDisplayOrder
@@ -4721,6 +4819,387 @@ private enum AorusAIFormat {
         case .artifactDownloadFailed: return aorusAILocalized("Не удалось скачать файл", "The file could not be downloaded")
         case .cancelled: return aorusAILocalized("Остановлено", "Stopped")
         case .http: return aorusAILocalized("Не удалось выполнить запрос. Попробуйте ещё раз.", "The request could not be completed. Please try again.")
+        }
+    }
+}
+
+/// The numbers the consent surface and the executor have to agree on.
+///
+/// They are one declaration because the sheet promises an amount and the executor hands
+/// one over: if a button could say fifty while the reader took a different default, the
+/// promise on screen would be a lie. `optionTitle` is the same sentence spoken aloud for
+/// VoiceOver, so the spoken and the drawn answer never diverge either.
+enum AorusAIChatDefaults {
+    /// What a permission option shares when it names no number of its own.
+    static let historyLimit = 50
+
+    static func messageCount(for option: AorusAIPermissionOption) -> Int {
+        return min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, option.limit ?? historyLimit))
+    }
+
+    /// What one choice will actually do, in the client's own words.
+    static func optionTitle(_ option: AorusAIPermissionOption) -> String {
+        if option.isPeriod {
+            return aorusAILocalized("Выбрать период", "Choose a period")
+        }
+        let count = messageCount(for: option)
+        return aorusAILocalized(
+            "Передать \(count) \(aorusAIMessageWord(count))",
+            count == 1 ? "Share 1 message" : "Share \(count) messages"
+        )
+    }
+}
+
+/// Russian needs three forms of "message" and the count decides which one.
+func aorusAIMessageWord(_ count: Int) -> String {
+    let tail = count % 100
+    if tail >= 11 && tail <= 14 { return "сообщений" }
+    switch count % 10 {
+    case 1: return "сообщение"
+    case 2, 3, 4: return "сообщения"
+    default: return "сообщений"
+    }
+}
+
+/// One choice on the sheet: a count of messages, or the date range.
+private final class AorusAIScopeRowView: UIControl {
+    private let countLabel = UILabel()
+    private let iconView = UIImageView()
+    private let titleLabel = UILabel()
+    private let noteLabel = UILabel()
+    private let separator = UIView()
+    private let highlight = UIView()
+
+    /// The figures sit in a column of their own so the choices read as the scale they
+    /// are. 40pt holds three digits at this size.
+    private static let countColumn: CGFloat = 40.0
+    private static let inset: CGFloat = 16.0
+    static let height: CGFloat = 54.0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        highlight.alpha = 0.0
+        highlight.isUserInteractionEnabled = false
+        addSubview(highlight)
+        // Tabular figures: 20 and 200 have to line up, or the column stops being a scale.
+        countLabel.font = aorusAIMonoFont(size: 19.0, weight: .semibold)
+        countLabel.textAlignment = .right
+        iconView.contentMode = .center
+        titleLabel.font = .systemFont(ofSize: 16.0)
+        noteLabel.font = .systemFont(ofSize: 13.0)
+        noteLabel.textAlignment = .right
+        [countLabel, iconView, titleLabel, noteLabel, separator].forEach { addSubview($0) }
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(count: Int?, title: String, note: String?, isLast: Bool, palette: AorusAIPalette, tint: UIColor) {
+        highlight.backgroundColor = palette.fill
+        if let count {
+            countLabel.text = "\(count)"
+            countLabel.textColor = tint
+            countLabel.isHidden = false
+            iconView.isHidden = true
+        } else {
+            countLabel.isHidden = true
+            iconView.isHidden = false
+            iconView.image = UIImage(systemName: "calendar")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 17.0, weight: .medium))
+            iconView.tintColor = tint
+        }
+        titleLabel.text = title
+        titleLabel.textColor = palette.label
+        noteLabel.text = note
+        noteLabel.textColor = tint
+        noteLabel.isHidden = (note ?? "").isEmpty
+        separator.backgroundColor = palette.separator
+        separator.isHidden = isLast
+        setNeedsLayout()
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            highlight.alpha = isHighlighted ? 1.0 : 0.0
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        highlight.frame = bounds
+        let inset = Self.inset
+        countLabel.frame = CGRect(x: inset, y: 0.0, width: Self.countColumn, height: bounds.height)
+        iconView.frame = countLabel.frame
+        let titleX = inset + Self.countColumn + 12.0
+        let noteWidth = noteLabel.isHidden ? 0.0 : ceil(noteLabel.sizeThatFits(CGSize(width: bounds.width, height: bounds.height)).width)
+        noteLabel.frame = CGRect(x: bounds.width - inset - noteWidth, y: 0.0, width: noteWidth, height: bounds.height)
+        let titleRight = noteLabel.isHidden ? (bounds.width - inset) : (noteLabel.frame.minX - 8.0)
+        titleLabel.frame = CGRect(x: titleX, y: 0.0, width: max(0.0, titleRight - titleX), height: bounds.height)
+        separator.frame = CGRect(x: titleX, y: bounds.height - UIScreenPixel, width: max(0.0, bounds.width - titleX), height: UIScreenPixel)
+    }
+}
+
+/// Choosing how much of a conversation AorusAI may read.
+///
+/// This replaces a stock action sheet whose every row said the same word followed by a
+/// different number, in the same colour, in the order the payload happened to list them.
+/// The one thing the person is deciding here is *how much*, so that is what the surface
+/// is built around: the peer at the top so there is no doubt whose chat it is, the
+/// choices ordered by how much they hand over, and the figures in a column of tabular
+/// digits so the difference between twenty and two hundred is visible rather than read.
+/// The largest option is the only one that carries the destructive colour, because it is
+/// the only one that hands over everything the client is willing to send. Choosing a date
+/// range is set apart at the end: it is a different kind of answer, not a bigger number.
+private final class AorusAIShareScopeController: UIViewController {
+    private let context: AccountContext
+    private let palette: AorusAIPalette
+    private let theme: PresentationTheme
+    private let username: String?
+    private let explanation: String?
+    private let options: [AorusAIPermissionOption]
+    private let onSelect: (AorusAIPermissionOption) -> Void
+    private let onCancel: () -> Void
+    private var didAnswer = false
+
+    private let dimView = UIView()
+    private let card = UIView()
+    private let grabber = UIView()
+    private let avatarNode = AvatarNode(font: UIFont.systemFont(ofSize: 15.0, weight: .semibold))
+    private let titleLabel = UILabel()
+    private let peerLabel = UILabel()
+    private let bodyLabel = UILabel()
+    private let rowsContainer = UIView()
+    private var rows: [AorusAIScopeRowView] = []
+    private let cancelButton = UIButton(type: .system)
+    private let peerDisposable = MetaDisposable()
+    private var didAnimateIn = false
+
+    init(
+        context: AccountContext,
+        theme: PresentationTheme,
+        username: String?,
+        explanation: String?,
+        options: [AorusAIPermissionOption],
+        onSelect: @escaping (AorusAIPermissionOption) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.context = context
+        self.theme = theme
+        self.palette = AorusAIPalette.resolve(theme)
+        self.username = username
+        self.explanation = explanation
+        self.options = options
+        self.onSelect = onSelect
+        self.onCancel = onCancel
+        super.init(nibName: nil, bundle: nil)
+        self.modalPresentationStyle = .overFullScreen
+        self.modalTransitionStyle = .crossDissolve
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        peerDisposable.dispose()
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+
+        dimView.backgroundColor = UIColor(white: 0.0, alpha: 0.4)
+        dimView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(cancelTapped)))
+        view.addSubview(dimView)
+
+        card.backgroundColor = palette.elevated
+        card.layer.cornerRadius = 20.0
+        card.layer.cornerCurve = .continuous
+        card.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        view.addSubview(card)
+
+        grabber.backgroundColor = palette.separator
+        grabber.layer.cornerRadius = 2.5
+        card.addSubview(grabber)
+
+        card.addSubview(avatarNode.view)
+        avatarNode.setCustomLetters(AorusAIMentionRenderer.letters(for: username ?? "#"))
+
+        titleLabel.text = aorusAILocalized("Сколько показать AorusAI", "How much to show AorusAI")
+        titleLabel.font = .systemFont(ofSize: 20.0, weight: .semibold)
+        titleLabel.textColor = palette.label
+        titleLabel.numberOfLines = 2
+        card.addSubview(titleLabel)
+
+        peerLabel.text = username.map { "@\($0)" }
+        peerLabel.font = .systemFont(ofSize: 14.0)
+        peerLabel.textColor = palette.secondary
+        card.addSubview(peerLabel)
+
+        var body = aorusAILocalized(
+            "Будут прочитаны только последние сообщения этой переписки — столько, сколько вы выберете. Ничего не уходит, пока вы не выбрали.",
+            "Only the most recent messages of this chat are read — as many as you choose. Nothing is sent until you choose."
+        )
+        if let explanation = explanation?.trimmingCharacters(in: .whitespacesAndNewlines), !explanation.isEmpty {
+            body += "\n\n" + String(explanation.prefix(300))
+        }
+        bodyLabel.text = body
+        bodyLabel.font = .systemFont(ofSize: 15.0)
+        bodyLabel.textColor = palette.secondary
+        bodyLabel.numberOfLines = 0
+        card.addSubview(bodyLabel)
+
+        rowsContainer.backgroundColor = palette.fill
+        rowsContainer.layer.cornerRadius = 14.0
+        rowsContainer.layer.cornerCurve = .continuous
+        rowsContainer.clipsToBounds = true
+        card.addSubview(rowsContainer)
+        buildRows()
+
+        cancelButton.setTitle(aorusAILocalized("Не делиться", "Don't share"), for: .normal)
+        cancelButton.titleLabel?.font = .systemFont(ofSize: 17.0, weight: .medium)
+        cancelButton.setTitleColor(palette.label, for: .normal)
+        cancelButton.backgroundColor = palette.fill
+        cancelButton.layer.cornerRadius = 14.0
+        cancelButton.layer.cornerCurve = .continuous
+        cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+        card.addSubview(cancelButton)
+
+        resolvePeer()
+    }
+
+    /// The options are shown smallest first, whatever order the payload listed them in:
+    /// the row above always hands over less than the row below.
+    private func buildRows() {
+        let counted = options.filter { !$0.isPeriod }.sorted { ($0.limit ?? 0) < ($1.limit ?? 0) }
+        let periods = options.filter { $0.isPeriod }
+        let ordered = counted + periods
+        let ceilingLimit = counted.compactMap({ $0.limit }).max()
+        for (index, option) in ordered.enumerated() {
+            let row = AorusAIScopeRowView()
+            let isLast = index == ordered.count - 1
+            if option.isPeriod {
+                row.configure(
+                    count: nil,
+                    title: aorusAILocalized("Выбрать период", "Choose a period"),
+                    note: nil,
+                    isLast: isLast,
+                    palette: palette,
+                    tint: palette.accent
+                )
+            } else {
+                let count = AorusAIChatDefaults.messageCount(for: option)
+                let isCeiling = count == ceilingLimit && ordered.count > 1
+                row.configure(
+                    count: count,
+                    title: aorusAILocalized(
+                        "последних \(aorusAIMessageWord(count))",
+                        count == 1 ? "most recent message" : "most recent messages"
+                    ),
+                    // Only the largest is marked, and only because it is the largest.
+                    note: isCeiling ? aorusAILocalized("максимум", "maximum") : nil,
+                    isLast: isLast,
+                    palette: palette,
+                    tint: isCeiling ? theme.list.itemDestructiveColor : palette.accent
+                )
+            }
+            row.accessibilityLabel = AorusAIChatDefaults.optionTitle(option)
+            row.addTarget(self, action: #selector(rowTapped(_:)), for: .touchUpInside)
+            rowsContainer.addSubview(row)
+            rows.append(row)
+        }
+    }
+
+    private func resolvePeer() {
+        guard let username, !username.isEmpty else { return }
+        if let cached = AorusAIMentionStore.shared.lookup(username) {
+            peerLabel.text = cached.displayName
+            avatarNode.setCustomLetters(AorusAIMentionRenderer.letters(for: cached.displayName))
+        }
+        peerDisposable.set((context.engine.peers.resolvePeerByName(name: username, referrer: nil)
+        |> deliverOnMainQueue).start(next: { [weak self] result in
+            guard let self, case let .result(peer) = result, let peer else { return }
+            let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+            let name = peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
+            self.peerLabel.text = name
+            let size = self.avatarNode.bounds.size
+            if size.width > 0.0 {
+                self.avatarNode.setPeer(context: self.context, theme: self.theme, peer: peer, clipStyle: .round, synchronousLoad: false, displayDimensions: size)
+                self.avatarNode.updateSize(size: size)
+            }
+            self.view.setNeedsLayout()
+        }))
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        dimView.frame = view.bounds
+
+        let width = view.bounds.width
+        let side: CGFloat = 20.0
+        let contentWidth = max(0.0, width - side * 2.0)
+        let bottomInset = view.safeAreaInsets.bottom
+
+        let avatarSize: CGFloat = 40.0
+        let headerTop: CGFloat = 22.0
+        let titleX = side + avatarSize + 12.0
+        let titleWidth = max(0.0, width - titleX - side)
+        let titleHeight = ceil(titleLabel.sizeThatFits(CGSize(width: titleWidth, height: .greatestFiniteMagnitude)).height)
+        let peerHeight: CGFloat = (peerLabel.text ?? "").isEmpty ? 0.0 : 18.0
+        let headerHeight = max(avatarSize, titleHeight + (peerHeight > 0.0 ? peerHeight + 2.0 : 0.0))
+
+        let bodyTop = headerTop + headerHeight + 14.0
+        let bodyHeight = ceil(bodyLabel.sizeThatFits(CGSize(width: contentWidth, height: .greatestFiniteMagnitude)).height)
+        let rowsTop = bodyTop + bodyHeight + 18.0
+        let rowsHeight = AorusAIScopeRowView.height * CGFloat(rows.count)
+        let cancelTop = rowsTop + rowsHeight + 12.0
+        let cancelHeight: CGFloat = 50.0
+        let cardHeight = cancelTop + cancelHeight + 12.0 + bottomInset
+
+        // 40pt of overhang below the screen so a spring that overshoots never shows a gap.
+        card.frame = CGRect(x: 0.0, y: view.bounds.height - cardHeight, width: width, height: cardHeight + 40.0)
+        grabber.frame = CGRect(x: floor((width - 36.0) / 2.0), y: 8.0, width: 36.0, height: 5.0)
+
+        let avatarFrame = CGRect(x: side, y: headerTop, width: avatarSize, height: avatarSize)
+        if avatarNode.frame != avatarFrame {
+            avatarNode.frame = avatarFrame
+            avatarNode.updateSize(size: avatarFrame.size)
+        }
+        titleLabel.frame = CGRect(x: titleX, y: headerTop, width: titleWidth, height: titleHeight)
+        peerLabel.frame = CGRect(x: titleX, y: titleLabel.frame.maxY + 2.0, width: titleWidth, height: peerHeight)
+        bodyLabel.frame = CGRect(x: side, y: bodyTop, width: contentWidth, height: bodyHeight)
+        rowsContainer.frame = CGRect(x: side, y: rowsTop, width: contentWidth, height: rowsHeight)
+        for (index, row) in rows.enumerated() {
+            row.frame = CGRect(x: 0.0, y: AorusAIScopeRowView.height * CGFloat(index), width: contentWidth, height: AorusAIScopeRowView.height)
+        }
+        cancelButton.frame = CGRect(x: side, y: cancelTop, width: contentWidth, height: cancelHeight)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard !didAnimateIn else { return }
+        didAnimateIn = true
+        card.transform = CGAffineTransform(translationX: 0.0, y: card.bounds.height)
+        UIView.animate(withDuration: 0.34, delay: 0.0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0.0, options: [.curveEaseOut]) {
+            self.card.transform = .identity
+        }
+    }
+
+    @objc private func rowTapped(_ sender: AorusAIScopeRowView) {
+        guard let index = rows.firstIndex(of: sender), !didAnswer else { return }
+        let counted = options.filter { !$0.isPeriod }.sorted { ($0.limit ?? 0) < ($1.limit ?? 0) }
+        let ordered = counted + options.filter { $0.isPeriod }
+        guard index < ordered.count else { return }
+        didAnswer = true
+        let option = ordered[index]
+        dismiss(animated: true) { [weak self] in
+            self?.onSelect(option)
+        }
+    }
+
+    @objc private func cancelTapped() {
+        guard !didAnswer else { return }
+        didAnswer = true
+        dismiss(animated: true) { [weak self] in
+            self?.onCancel()
         }
     }
 }

@@ -680,14 +680,18 @@ def main() -> int:
 
     # Consent. The words that decide what is being agreed to are the client's, and the
     # silent profile lookup is limited to handles the conversation actually names.
-    if "Self.optionTitle(option)" not in ai_controllers:
-        fail(errors, "AorusAI: permission buttons must state what they share, not the server's label")
-    if "private static func optionTitle(" not in ai_controllers:
-        fail(errors, "AorusAI: the client-authoritative permission button title is missing")
-    if "option.limit ?? Self.defaultHistoryLimit" not in ai_controllers:
-        fail(errors, "AorusAI: a permission button must name the same default the executor uses")
-    if "limit ?? Self.defaultHistoryLimit" not in ai_controllers:
+    if "AorusAIShareScopeController(" not in ai_controllers:
+        fail(errors, "AorusAI: the chat-history consent must be the client's own sheet")
+    if "AorusAIChatDefaults.optionTitle(option)" not in ai_controllers:
+        fail(errors, "AorusAI: consent choices must state what they share, not the server's label")
+    if "static func optionTitle(" not in ai_controllers:
+        fail(errors, "AorusAI: the client-authoritative choice title is missing")
+    if "option.limit ?? historyLimit" not in ai_controllers:
+        fail(errors, "AorusAI: a consent choice must name the same default the executor uses")
+    if "limit ?? AorusAIChatDefaults.historyLimit" not in ai_controllers:
         fail(errors, "AorusAI: the history executor must use the documented default limit")
+    if "AorusAIChatDefaults.messageCount(for: option)" not in ai_controllers:
+        fail(errors, "AorusAI: the drawn count and the shared count must come from one place")
     if "request.requiresUserApproval || !conversationMentions(request.username)" not in ai_controllers:
         fail(errors, "AorusAI: a silent profile lookup must be limited to handles the conversation names")
     if "private func conversationMentions(" not in ai_controllers:
