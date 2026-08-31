@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import AVFoundation
 import Speech
 
@@ -41,6 +42,9 @@ final class AorusAIDictation {
     private var finishHandler: (() -> Void)?
     private var runIdentifier = 0
     private var isStarting = false
+    /// When the last microphone level was handed to the UI, so the audio thread does not
+    /// start forty animations a second. Written only from the audio tap.
+    private var lastLevelReport: Double = 0.0
 
     private(set) var isRunning = false
     var isActive: Bool { self.isStarting || self.isRunning }
@@ -77,8 +81,6 @@ final class AorusAIDictation {
         }
     }
 
-    /// Starts streaming. `onText` receives the transcription of this run every time it
-    /// grows, `onFinish` is called exactly once when the run ends for any reason.
     /// The loudness of the microphone right now, 0…1.
     ///
     /// Taken from the same buffer the recogniser is fed, so the indicator on screen moves
@@ -102,6 +104,9 @@ final class AorusAIDictation {
         return CGFloat(min(1.0, max(0.0, normalized)))
     }
 
+    /// Starts streaming. `onText` receives the transcription of this run every time it
+    /// grows, `onLevel` the microphone's loudness while it runs, and `onFinish` is called
+    /// exactly once when the run ends for any reason.
     func start(
         locale: Locale,
         onText: @escaping (String) -> Void,
@@ -173,8 +178,14 @@ final class AorusAIDictation {
             input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
                 request.append(buffer)
                 guard let level = AorusAIDictation.level(of: buffer) else { return }
+                // A 1024-frame buffer at 44.1 kHz arrives about forty times a second, and
+                // each one would otherwise start its own animation on the main thread. The
+                // indicator is four bars; sixteen samples a second already look continuous.
+                let now = CFAbsoluteTimeGetCurrent()
+                guard let self, now - self.lastLevelReport >= 0.06 else { return }
+                self.lastLevelReport = now
                 // The tap runs on the audio thread; everything it feeds is on screen.
-                DispatchQueue.main.async {
+                DispatchQueue.main.async { [weak self] in
                     guard let self, self.isRunning, self.runIdentifier == expectedRunIdentifier else { return }
                     onLevel(level)
                 }
