@@ -39,6 +39,10 @@ swift_library(
         "//submodules/AnimatedStickerNode:AnimatedStickerNode",
         "//submodules/AvatarNode:AvatarNode",
         "//submodules/LocalizedPeerData:LocalizedPeerData",
+        # The navigation-bar capsule AorusAI's title sits in is Telegram's own, the same
+        # one the back button and a chat title use. It is a leaf component over Display and
+        # ComponentFlow, so it reaches nothing that could close a cycle back into here.
+        "//submodules/TelegramUI/Components/GlassBackgroundComponent",
         "//submodules/TelegramUI/Components/ItemListDatePickerItem:ItemListDatePickerItem",
         "//submodules/UndoUI:UndoUI",
     ],

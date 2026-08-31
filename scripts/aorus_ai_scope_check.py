@@ -129,7 +129,8 @@ def check_build_dependencies(root: Path, ui: Path, errors: list) -> None:
         for module in sorted(set(IMPORT.findall(text))):
             if module in SYSTEM_MODULES or module == "AorusGramUI":
                 continue
-            if f":{module}\"" in build_text or f"//submodules/{module}\"" in build_text:
+            # Either spelling: "//submodules/X:X" or a path ending in the module name.
+            if f":{module}\"" in build_text or f"/{module}\"" in build_text:
                 continue
             errors.append(
                 f"{source.relative_to(root)} imports {module}, which AorusGramUI/BUILD does not depend on"

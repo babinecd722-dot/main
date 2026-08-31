@@ -12,6 +12,8 @@ import AorusGram
 import UndoUI
 import AvatarNode
 import LocalizedPeerData
+import ComponentFlow
+import GlassBackgroundComponent
 
 // AorusAI owns a large, self-contained vocabulary. Route it through the shared AorusGram
 // language resolver so Russian stays first-class and every other Telegram language follows
@@ -3831,27 +3833,34 @@ private final class AorusAITypingIndicatorView: UIView {
 
 /// A compact native glass title capsule. The current generation state stays visible on a
 /// quiet second line and crossfades without resizing the navigation bar.
+/// The title of the thread, in Telegram's own navigation capsule.
+///
+/// `GlassBackgroundView` is the exact view the back button and a chat title sit in — it
+/// drives `UIGlassEffect` on iOS 26 and the legacy glass below it — so this pill is the
+/// same material, radius and behaviour as the one next to it rather than a `UIBlurEffect`
+/// with a border drawn to look like one. Over an opaque page that hand-made version read
+/// as a grey slab with a name on it, which is exactly what it was.
 private final class AorusAINavigationTitleView: UIView {
-    private let glassView = UIVisualEffectView()
+    private static let height: CGFloat = 40.0
+    private static let horizontalPadding: CGFloat = 14.0
+
+    private let glassView = GlassBackgroundView(frame: CGRect())
     private let titleLabel = UILabel()
     private let statusLabel = UILabel()
+    private var isDarkAppearance = false
 
     init(theme: PresentationTheme) {
         super.init(frame: .zero)
         glassView.isUserInteractionEnabled = false
-        glassView.layer.cornerRadius = 20.0
-        glassView.layer.cornerCurve = .continuous
-        glassView.clipsToBounds = true
-        glassView.layer.borderWidth = UIScreenPixel
         titleLabel.text = "AorusAI"
-        titleLabel.font = .systemFont(ofSize: 14.0, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 15.0, weight: .semibold)
         titleLabel.textAlignment = .center
-        statusLabel.font = .systemFont(ofSize: 10.5, weight: .regular)
+        statusLabel.font = .systemFont(ofSize: 11.0, weight: .regular)
         statusLabel.textAlignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
         addSubview(glassView)
-        glassView.contentView.addSubview(titleLabel)
-        glassView.contentView.addSubview(statusLabel)
+        addSubview(titleLabel)
+        addSubview(statusLabel)
         isAccessibilityElement = true
         accessibilityLabel = "AorusAI"
         update(theme: theme)
@@ -3860,35 +3869,62 @@ private final class AorusAINavigationTitleView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     func update(theme: PresentationTheme) {
-        let palette = AorusAIPalette.resolve(theme)
-        glassView.effect = aorusAIGlassEffect(palette: palette)
-        glassView.backgroundColor = aorusAIGlassTint(palette: palette)
-        glassView.layer.borderColor = aorusAIGlassBorder(palette: palette).cgColor
-        titleLabel.textColor = palette.label
-        statusLabel.textColor = palette.secondary
+        isDarkAppearance = theme.overallDarkAppearance
+        titleLabel.textColor = theme.rootController.navigationBar.primaryTextColor
+        statusLabel.textColor = AorusAIPalette.resolve(theme).secondary
+        setNeedsLayout()
     }
 
     func setStatus(_ text: String?, active _: Bool) {
         let value = text?.trimmingCharacters(in: .whitespacesAndNewlines)
         accessibilityValue = (value?.isEmpty == false) ? value : nil
-        let update = {
+        guard statusLabel.text != value else { return }
+        UIView.transition(with: statusLabel, duration: 0.18, options: [.transitionCrossDissolve, .beginFromCurrentState], animations: {
             self.statusLabel.text = value
-        }
-        if statusLabel.text != value {
-            UIView.transition(with: statusLabel, duration: 0.18, options: [.transitionCrossDissolve, .beginFromCurrentState], animations: update)
-        } else {
-            update()
-        }
+        })
+        // The capsule hugs its text, so a longer status has to widen it.
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
-    override var intrinsicContentSize: CGSize { CGSize(width: 174.0, height: 40.0) }
+    /// The pill hugs its widest line rather than standing at a fixed width, the way a chat
+    /// title does.
+    override var intrinsicContentSize: CGSize {
+        let titleWidth = ceil(titleLabel.sizeThatFits(CGSize(width: 260.0, height: Self.height)).width)
+        let statusWidth = ceil(statusLabel.sizeThatFits(CGSize(width: 260.0, height: Self.height)).width)
+        let width = min(240.0, max(120.0, max(titleWidth, statusWidth) + Self.horizontalPadding * 2.0))
+        return CGSize(width: width, height: Self.height)
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let frame = CGRect(x: max(0, floor((bounds.width - 174.0) / 2.0)), y: max(0, floor((bounds.height - 40.0) / 2.0)), width: min(174.0, bounds.width), height: min(40.0, bounds.height))
+        let size = CGSize(width: min(intrinsicContentSize.width, bounds.width), height: min(Self.height, bounds.height))
+        guard size.width > 0.0, size.height > 0.0 else { return }
+        let frame = CGRect(
+            x: floor((bounds.width - size.width) / 2.0),
+            y: floor((bounds.height - size.height) / 2.0),
+            width: size.width,
+            height: size.height
+        )
         glassView.frame = frame
-        titleLabel.frame = CGRect(x: 14.0, y: 4.0, width: max(0, frame.width - 28.0), height: 18.0)
-        statusLabel.frame = CGRect(x: 14.0, y: 21.0, width: max(0, frame.width - 28.0), height: 14.0)
+        glassView.update(
+            size: size,
+            cornerRadius: size.height / 2.0,
+            isDark: isDarkAppearance,
+            tintColor: GlassBackgroundView.TintColor(kind: .panel),
+            isInteractive: false,
+            transition: .immediate
+        )
+        let hasStatus = !(statusLabel.text ?? "").isEmpty
+        let textWidth = max(0.0, frame.width - Self.horizontalPadding * 2.0)
+        if hasStatus {
+            titleLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 4.0, width: textWidth, height: 18.0)
+            statusLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 21.0, width: textWidth, height: 14.0)
+        } else {
+            titleLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY, width: textWidth, height: frame.height)
+            statusLabel.frame = .zero
+        }
+        statusLabel.isHidden = !hasStatus
     }
 }
 
