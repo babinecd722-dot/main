@@ -79,9 +79,33 @@ final class AorusAIDictation {
 
     /// Starts streaming. `onText` receives the transcription of this run every time it
     /// grows, `onFinish` is called exactly once when the run ends for any reason.
+    /// The loudness of the microphone right now, 0…1.
+    ///
+    /// Taken from the same buffer the recogniser is fed, so the indicator on screen moves
+    /// with the voice instead of running a canned animation that looks the same whether
+    /// the user is speaking or not.
+    private static func level(of buffer: AVAudioPCMBuffer) -> CGFloat? {
+        guard let channel = buffer.floatChannelData?[0] else { return nil }
+        let count = Int(buffer.frameLength)
+        guard count > 0 else { return nil }
+        var sum: Float = 0.0
+        for index in 0 ..< count {
+            let sample = channel[index]
+            sum += sample * sample
+        }
+        let rms = sqrtf(sum / Float(count))
+        // −50 dBFS is about the room tone of a quiet room held at arm's length; 0 is
+        // clipping. Anything below the floor reads as silence rather than as a bar that
+        // never quite settles.
+        let decibels = 20.0 * log10f(max(rms, 1e-7))
+        let normalized = (decibels + 50.0) / 50.0
+        return CGFloat(min(1.0, max(0.0, normalized)))
+    }
+
     func start(
         locale: Locale,
         onText: @escaping (String) -> Void,
+        onLevel: @escaping (CGFloat) -> Void,
         onFailure: @escaping (Failure) -> Void,
         onFinish: @escaping () -> Void
     ) {
@@ -146,8 +170,14 @@ final class AorusAIDictation {
                 self.finishRun()
                 return
             }
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
                 request.append(buffer)
+                guard let level = AorusAIDictation.level(of: buffer) else { return }
+                // The tap runs on the audio thread; everything it feeds is on screen.
+                DispatchQueue.main.async {
+                    guard let self, self.isRunning, self.runIdentifier == expectedRunIdentifier else { return }
+                    onLevel(level)
+                }
             }
             self.isTapInstalled = true
             self.engine.prepare()

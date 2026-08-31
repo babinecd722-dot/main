@@ -26,8 +26,12 @@ import LocalizedPeerData
 /// fills are defined and is therefore correct in a theme nobody has written yet.
 struct AorusAIPalette {
     var isDark: Bool
-    /// Page background.
+    /// Page background for a screen made of cards — the conversation list.
     var background: UIColor
+    /// Page background for a screen that is a run of content, not a grouped table — the
+    /// message thread. Telegram's plain background, so the thread is white or black rather
+    /// than the grey a grouped list sits on.
+    var plainBackground: UIColor
     /// Cards, grouped rows, the composer, the sheet.
     var elevated: UIColor
     /// Quotes, chips, the search field.
@@ -51,6 +55,7 @@ struct AorusAIPalette {
         return AorusAIPalette(
             isDark: isDark,
             background: list.blocksBackgroundColor,
+            plainBackground: list.plainBackgroundColor,
             elevated: list.itemBlocksBackgroundColor,
             // The system defines its secondary fills as the label colour at a low alpha
             // rather than as colours of their own, which is what makes them land correctly

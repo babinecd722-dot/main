@@ -528,10 +528,31 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         self.palette = AorusAIPalette.resolve(presentationData.theme)
         self.accountId = context.account.id.int64
         let palette = self.palette
-        // Telegram's own navigation bar, unmodified: the blur, the separator and the
-        // button colours every other screen in the app has. A hand-built bar was what made
-        // this screen read as a different application pasted into Telegram.
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
+        // No bar of its own: the background, the blur and the separator are all cleared, so
+        // what is left is exactly what a chat shows — Telegram's own liquid-glass capsules
+        // around the back button and the title, drawn by `NavigationBarImpl` for every
+        // screen, floating over the page. A painted bar is what read as a grey slab sitting
+        // on top of the screen; the colours of the buttons and the text still come from the
+        // theme, so nothing about them is invented here.
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(
+            theme: NavigationBarTheme(
+                overallDarkAppearance: presentationData.theme.overallDarkAppearance,
+                buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
+                disabledButtonColor: palette.tertiary,
+                primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
+                backgroundColor: .clear,
+                opaqueBackgroundColor: .clear,
+                enableBackgroundBlur: false,
+                separatorColor: .clear,
+                badgeBackgroundColor: palette.accent,
+                badgeStrokeColor: palette.accent,
+                badgeTextColor: palette.onAccent,
+                accentButtonColor: presentationData.theme.rootController.navigationBar.accentTextColor,
+                accentDisabledButtonColor: palette.tertiary,
+                accentForegroundColor: palette.onAccent
+            ),
+            strings: NavigationBarPresentationData(presentationData: presentationData).strings
+        ))
         self.title = "AorusAI"
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         // Telegram's navigation bar draws only `image` and `title` of a bar button item, so a
@@ -1147,8 +1168,26 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.initialPrompt = initialPrompt
         self.initialRequest = initialRequest
         self.pendingReference = reference
-        // The same unmodified Telegram bar as the conversation list.
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData))
+        // The same transparent bar as the conversation list: only the native capsules.
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(
+            theme: NavigationBarTheme(
+                overallDarkAppearance: presentationData.theme.overallDarkAppearance,
+                buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
+                disabledButtonColor: palette.tertiary,
+                primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
+                backgroundColor: .clear,
+                opaqueBackgroundColor: .clear,
+                enableBackgroundBlur: false,
+                separatorColor: .clear,
+                badgeBackgroundColor: palette.accent,
+                badgeStrokeColor: palette.accent,
+                badgeTextColor: palette.onAccent,
+                accentButtonColor: presentationData.theme.rootController.navigationBar.accentTextColor,
+                accentDisabledButtonColor: palette.tertiary,
+                accentForegroundColor: palette.onAccent
+            ),
+            strings: NavigationBarPresentationData(presentationData: presentationData).strings
+        ))
         // `title` stays unset because Telegram's navigation bar draws either the string or
         // the custom view, never both.
         let titleView = AorusAINavigationTitleView(theme: presentationData.theme)
@@ -1182,8 +1221,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     override func loadDisplayNode() {
         self.displayNode = ViewControllerTracingNode()
-        self.displayNode.backgroundColor = palette.background
-        tableView.backgroundColor = palette.background
+        self.displayNode.backgroundColor = palette.plainBackground
+        tableView.backgroundColor = palette.plainBackground
         tableView.separatorStyle = .none
         tableView.keyboardDismissMode = .interactive
         tableView.estimatedRowHeight = 100
@@ -1795,6 +1834,15 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     private func execute(toolRequest request: AorusAIToolRequest) {
         turnState = .awaitingTool(request)
         setTurnStatus(Self.toolStatusLabel(for: request))
+        // The backend may ask for a conversation either way round: as a `permission.request`
+        // carrying its own options, or as a plain `tool.request`. Both have to arrive at the
+        // same question. Answering "unsupported_tool" here is what left the model to talk
+        // about a chat it had never been given, with the user never asked how much of it to
+        // share — the amount is the whole point of the dialog.
+        if request.tool == AorusAITool.chatHistory {
+            presentPermission(Self.historyPermission(from: request))
+            return
+        }
         guard request.tool == AorusAITool.profileGet else {
             // A tool this build does not implement is reported truthfully rather than
             // guessed at, so the model knows it never ran and cannot invent its output.
@@ -1934,17 +1982,13 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             message: message,
             preferredStyle: .actionSheet
         )
-        for option in request.options {
+        // A payload that named no amounts used to leave a dialog whose only answer was
+        // "no", which is not the same thing as being asked how much to share. The client
+        // offers its own steps instead — it knows exactly what each of them will read.
+        let options = request.options.isEmpty ? Self.historyOptions(preferred: nil) : request.options
+        for option in options {
             sheet.addAction(UIAlertAction(title: Self.optionTitle(option), style: .default, handler: { [weak self] _ in
                 self?.select(option: option, for: request)
-            }))
-        }
-        if request.options.isEmpty {
-            // A payload without options would leave a dialog the user cannot answer, so
-            // the only safe reading of it is "nothing was offered": decline and let the
-            // model continue with the data it already has.
-            sheet.addAction(UIAlertAction(title: aorusAILocalized("Не передавать переписку", "Do not share the chat"), style: .default, handler: { [weak self] _ in
-                self?.denyPermission(request)
             }))
         }
         // Cancel is added even when `allow_cancel` is false: an action sheet is
@@ -1954,6 +1998,44 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             self?.denyPermission(request)
         }))
         aorusAIPresentActionSheet(sheet, from: self)
+    }
+
+    /// Turns a bare `tool.request` for the chat history into the question the client would
+    /// have asked anyway, with its own amounts.
+    private static func historyPermission(from request: AorusAIToolRequest) -> AorusAIPermissionRequest {
+        return AorusAIPermissionRequest(
+            requestId: request.requestId,
+            tool: AorusAITool.chatHistory,
+            title: nil,
+            text: request.label,
+            username: request.username,
+            options: historyOptions(preferred: request.limit),
+            allowCancel: true
+        )
+    }
+
+    /// The amounts offered when the payload named none.
+    ///
+    /// The number the backend asked for comes first when it sent one, then the standard
+    /// steps, then the date range. Without this a `permission.request` that arrived with an
+    /// empty `options` array left the user a dialog whose only answer was "no" — which is
+    /// not the same thing as being asked how much to share.
+    private static func historyOptions(preferred: Int?) -> [AorusAIPermissionOption] {
+        var limits: [Int] = []
+        if let preferred {
+            limits.append(min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, preferred)))
+        }
+        for value in [20, defaultHistoryLimit, AorusAIRequestLimits.chatHistoryMessageCount] where !limits.contains(value) {
+            limits.append(value)
+        }
+        var options = limits.map { AorusAIPermissionOption(id: String($0), label: "", limit: $0, mode: nil) }
+        options.append(AorusAIPermissionOption(
+            id: AorusAIPermissionOption.periodMode,
+            label: "",
+            limit: nil,
+            mode: AorusAIPermissionOption.periodMode
+        ))
+        return options
     }
 
     /// What one permission button will actually do, in the client's own words.
@@ -2201,26 +2283,39 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         composer.isDictating = true
         updateComposer()
         dictation.start(locale: locale, onText: { [weak self] text in
-            self?.dictationSpokenText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let self else { return }
+            self.dictationSpokenText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Written into the input on every partial result, the way the system's own
+            // dictation does. The user watches their words arrive instead of talking at a
+            // hidden field and finding out afterwards whether anything was heard.
+            self.composer.text = self.dictationDraft()
+            self.textViewDidChangeSilently()
+        }, onLevel: { [weak self] level in
+            self?.composer.updateDictationLevel(level)
         }, onFailure: { [weak self] failure in
             self?.composer.isDictating = false
             self?.updateComposer()
             self?.presentError(failure.message)
         }, onFinish: { [weak self] in
             guard let self else { return }
-            let base = self.dictationBaseText.trimmingCharacters(in: .whitespacesAndNewlines)
-            let spoken = self.dictationSpokenText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !spoken.isEmpty {
-                self.composer.text = base.isEmpty ? spoken : base + " " + spoken
-            } else {
-                self.composer.text = self.dictationBaseText
-            }
+            self.composer.text = self.dictationDraft()
             self.textViewDidChangeSilently()
             self.composer.isDictating = false
             self.dictationBaseText = self.composer.text
             self.dictationSpokenText = ""
             self.updateComposer()
         })
+    }
+
+    /// What the input holds while dictating: whatever was already typed, then what has
+    /// been recognised so far. Built from the two parts every time rather than appended
+    /// to, so a correction the recogniser makes to an earlier word replaces it instead of
+    /// being added after it.
+    private func dictationDraft() -> String {
+        let base = dictationBaseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let spoken = dictationSpokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if spoken.isEmpty { return dictationBaseText }
+        return base.isEmpty ? spoken : base + " " + spoken
     }
 
     /// Applies the same side effects as typing without re-entering the delegate.
@@ -2786,7 +2881,7 @@ private final class AorusAIComposerView: UIView {
     private let referenceClose = UIButton(type: .system)
     private let sendButton = UIButton(type: .system)
     private let dictationButton = UIButton(type: .system)
-    private let dictationWaveform = AorusAIWaveformView()
+    private let dictationIndicator = AorusAIDictationIndicatorView()
     var onSend: (() -> Void)?
     var onDismissReference: (() -> Void)?
     var onOpenPeer: ((PeerId) -> Void)?
@@ -2847,19 +2942,27 @@ private final class AorusAIComposerView: UIView {
     var isDictating = false {
         didSet {
             refreshDictationButton()
-            dictationWaveform.isHidden = !isDictating
-            textView.isHidden = isDictating
+            dictationIndicator.isHidden = !isDictating
+            dictationIndicator.setActive(isDictating)
+            // The input stays on screen and keeps filling with the words as they are
+            // recognised. Hiding it was the whole reason dictation felt like it had gone
+            // somewhere else and might not be listening.
             placeholder.isHidden = isDictating || !text.isEmpty
-            dictationWaveform.setAnimating(isDictating)
             setNeedsLayout()
         }
+    }
+
+    /// One microphone sample from the running dictation.
+    func updateDictationLevel(_ level: CGFloat) {
+        guard isDictating else { return }
+        dictationIndicator.update(level: level)
     }
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(container)
         glassView.isUserInteractionEnabled = false
         container.addSubview(glassView)
-        [referenceView, dictationWaveform, dictationButton, textView, sendButton].forEach { container.addSubview($0) }
+        [referenceView, dictationIndicator, dictationButton, textView, sendButton].forEach { container.addSubview($0) }
         referenceView.addSubview(referenceLine)
         referenceView.addSubview(referenceLabel)
         referenceView.addSubview(referenceClose)
@@ -2879,7 +2982,7 @@ private final class AorusAIComposerView: UIView {
         sendButton.accessibilityLabel = aorusAILocalized("Отправить", "Send")
         dictationButton.addTarget(self, action: #selector(dictate), for: .touchUpInside)
         dictationButton.accessibilityLabel = aorusAILocalized("Диктовать", "Dictate")
-        dictationWaveform.isHidden = true
+        dictationIndicator.isHidden = true
         referenceView.isHidden = true
     }
 
@@ -2889,7 +2992,7 @@ private final class AorusAIComposerView: UIView {
         self.context = context
         self.theme = theme
         let palette = AorusAIPalette.resolve(theme)
-        backgroundColor = palette.background
+        backgroundColor = palette.plainBackground
         glassView.effect = aorusAIGlassEffect(palette: palette)
         glassView.backgroundColor = aorusAIGlassTint(palette: palette)
         container.backgroundColor = .clear
@@ -2906,7 +3009,7 @@ private final class AorusAIComposerView: UIView {
         referenceView.backgroundColor = .clear
         referenceLine.backgroundColor = palette.accent
         referenceClose.tintColor = palette.tertiary
-        dictationWaveform.configure(accent: palette.secondary)
+        dictationIndicator.configure(palette: palette)
         refreshReferenceLabel()
         textView.configureMentions(context: context, theme: theme)
         // The theme decides the base colour every run is drawn in, so the last render is
@@ -2937,22 +3040,26 @@ private final class AorusAIComposerView: UIView {
         referenceLine.layer.cornerRadius = 1
         referenceLabel.frame = CGRect(x: 9, y: 5, width: max(0, referenceView.bounds.width - 39), height: max(0, refHeight - 10))
         referenceClose.frame = CGRect(x: referenceView.bounds.width - 27, y: 3, width: 26, height: 26)
-        let inputTop: CGFloat = refHeight == 0 ? 8 : 38
+        let indicatorTop: CGFloat = refHeight == 0 ? 8 : 38
         let inputRight = dictationButton.frame.minX - 8
+        dictationIndicator.frame = CGRect(x: textInset, y: indicatorTop, width: max(0, inputRight - textInset), height: AorusAIComposerView.dictationRowHeight - 4)
+        let inputTop = indicatorTop + (isDictating ? AorusAIComposerView.dictationRowHeight : 0)
         textView.frame = CGRect(x: textInset, y: inputTop, width: max(0, inputRight - textInset), height: max(0, container.bounds.height - inputTop - 8))
-        dictationWaveform.frame = CGRect(x: textInset, y: inputTop + 4, width: max(0, inputRight - textInset), height: max(20, container.bounds.height - inputTop - 16))
         placeholder.frame = CGRect(x: 0, y: 2, width: max(0, textView.bounds.width), height: 21)
     }
 
     private static let actionButtonSize: CGFloat = 32
     private static let dictationButtonSize: CGFloat = 26
+    /// The thin live row a running dictation adds above the text.
+    private static let dictationRowHeight: CGFloat = 24
 
     func requiredHeight(width: CGFloat) -> CGFloat {
         // 12pt page inset on each side, then the card's own 16pt text inset on each side.
         let available = max(100, width - 24 - 32)
         let measured = textView.sizeThatFits(CGSize(width: available, height: 132)).height
-        let extras: CGFloat = reference == nil ? 0 : 34
-        let containerHeight = min(184, max(56 + extras, ceil(measured) + 16 + extras))
+        var extras: CGFloat = reference == nil ? 0 : 34
+        if isDictating { extras += AorusAIComposerView.dictationRowHeight }
+        let containerHeight = min(184 + AorusAIComposerView.dictationRowHeight, max(56 + extras, ceil(measured) + 16 + extras))
         return containerHeight + 8
     }
 
@@ -2977,9 +3084,15 @@ private final class AorusAIComposerView: UIView {
 
     private func refreshDictationButton() {
         let palette = theme.map { AorusAIPalette.resolve($0) }
-        let name = isDictating ? "waveform" : "mic"
-        dictationButton.setImage(UIImage(systemName: name)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 13, weight: .medium)), for: .normal)
-        dictationButton.tintColor = isDictating ? palette?.accent : palette?.secondary
+        // A running dictation turns the microphone into a filled stop button. A second
+        // waveform glyph next to the live row said nothing about how to end the run.
+        let name = isDictating ? "stop.fill" : "mic"
+        let size: CGFloat = isDictating ? 11.0 : 13.0
+        dictationButton.setImage(UIImage(systemName: name)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: size, weight: .semibold)), for: .normal)
+        dictationButton.tintColor = isDictating ? (palette?.onAccent ?? .white) : palette?.secondary
+        dictationButton.backgroundColor = isDictating ? palette?.accent : .clear
+        dictationButton.layer.cornerRadius = AorusAIComposerView.dictationButtonSize / 2.0
+        dictationButton.layer.cornerCurve = .circular
         dictationButton.accessibilityLabel = isDictating ? aorusAILocalized("Остановить диктовку", "Stop dictation") : aorusAILocalized("Диктовать", "Dictate")
     }
 
@@ -3114,152 +3227,112 @@ private final class AorusAIComposerView: UIView {
     @objc private func dictate() { onDictation?() }
 }
 
-/// Compact dictation controls above the composer. Recognition stays in the existing
-/// production pipeline; no intermediate transcript is rendered, and the final result is
-/// committed to the draft only after the user confirms it.
-private final class AorusAIDictationOverlayView: UIView {
-    private let contentView = UIView()
-    private let bottomPanel = UIView()
-    private let glassView = UIVisualEffectView()
-    private let cancelButton = UIButton(type: .system)
-    private let finishButton = UIButton(type: .system)
-    private let waveform = AorusAIWaveformView()
-    var onCancel: (() -> Void)?
-    var onFinish: (() -> Void)?
+/// The live state of a dictation run, shown as its own thin row above the input.
+///
+/// Four bars driven by the microphone's actual loudness and the elapsed time, and nothing
+/// else: the words themselves go straight into the input as they are recognised, which is
+/// what the user is really watching. What stood here before hid the input, drew twenty
+/// bars of a fixed canned animation that moved identically whether or not anyone was
+/// speaking, and showed the result only once the run had ended.
+private final class AorusAIDictationIndicatorView: UIView {
+    private static let barCount = 4
+    private static let barWidth: CGFloat = 3.0
+    private static let barSpacing: CGFloat = 3.0
+
+    private let dot = UIView()
+    private let timeLabel = UILabel()
+    private let bars: [UIView] = (0 ..< AorusAIDictationIndicatorView.barCount).map { _ in UIView() }
+    private var levels: [CGFloat] = Array(repeating: 0.0, count: AorusAIDictationIndicatorView.barCount)
+    private var startedAt = Date()
+    private var timer: Foundation.Timer?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        isHidden = true
-        alpha = 0
-        bottomPanel.layer.cornerCurve = .continuous
-        cancelButton.setImage(UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)), for: .normal)
-        cancelButton.accessibilityLabel = aorusAILocalized("Отменить диктовку", "Cancel dictation")
-        cancelButton.addTarget(self, action: #selector(cancel), for: .touchUpInside)
-        finishButton.setImage(UIImage(systemName: "checkmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 15, weight: .bold)), for: .normal)
-        finishButton.accessibilityLabel = aorusAILocalized("Завершить диктовку", "Finish dictation")
-        finishButton.addTarget(self, action: #selector(finish), for: .touchUpInside)
-        addSubview(contentView)
-        contentView.addSubview(bottomPanel)
-        glassView.isUserInteractionEnabled = false
-        bottomPanel.addSubview(glassView)
-        [cancelButton, waveform, finishButton].forEach { bottomPanel.addSubview($0) }
+        dot.layer.cornerRadius = 3.0
+        addSubview(dot)
+        timeLabel.font = aorusAIMonoFont(size: 12.0, weight: .medium)
+        timeLabel.text = "0:00"
+        addSubview(timeLabel)
+        bars.forEach { bar in
+            bar.layer.cornerRadius = AorusAIDictationIndicatorView.barWidth / 2.0
+            addSubview(bar)
+        }
+        isAccessibilityElement = true
+        accessibilityLabel = aorusAILocalized("Идёт запись", "Recording")
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func configure(theme: PresentationTheme) {
-        let palette = AorusAIPalette.resolve(theme)
-        backgroundColor = .clear
-        contentView.backgroundColor = .clear
-        glassView.effect = UIBlurEffect(style: palette.isDark ? .systemThinMaterialDark : .systemThinMaterialLight)
-        glassView.backgroundColor = palette.elevated.withAlphaComponent(0.22)
-        bottomPanel.backgroundColor = .clear
-        bottomPanel.clipsToBounds = true
-        bottomPanel.layer.borderWidth = UIScreenPixel
-        bottomPanel.layer.borderColor = palette.separator.cgColor
-        cancelButton.tintColor = palette.secondary
-        cancelButton.backgroundColor = palette.fill
-        finishButton.tintColor = palette.onAccent
-        finishButton.backgroundColor = palette.accent
-        waveform.configure(accent: palette.accent)
+    deinit {
+        timer?.invalidate()
     }
 
-    func present() {
-        isHidden = false
-        transform = CGAffineTransform(translationX: 0, y: 18)
-        waveform.setAnimating(true)
-        UIView.animate(withDuration: 0.28, delay: 0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0.2, options: [.beginFromCurrentState, .curveEaseOut]) {
-            self.alpha = 1
-            self.transform = .identity
-        }
+    func configure(palette: AorusAIPalette) {
+        dot.backgroundColor = palette.accent
+        timeLabel.textColor = palette.secondary
+        bars.forEach { $0.backgroundColor = palette.accent }
     }
 
-    func dismiss(animated: Bool) {
-        waveform.setAnimating(false)
-        let changes = {
-            self.alpha = 0
-            self.transform = CGAffineTransform(translationX: 0, y: 10)
-        }
-        let completion: (Bool) -> Void = { _ in
-            self.isHidden = true
-            self.transform = .identity
-        }
-        if animated {
-            UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .curveEaseIn], animations: changes, completion: completion)
-        } else {
-            changes()
-            completion(true)
-        }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        contentView.frame = bounds
-        let safeBottom = safeAreaInsets.bottom
-        let panelHeight: CGFloat = 64
-        bottomPanel.frame = CGRect(x: 18, y: max(12, bounds.height - safeBottom - panelHeight - 14), width: max(0, bounds.width - 36), height: panelHeight)
-        bottomPanel.layer.cornerRadius = panelHeight / 2
-        glassView.frame = bottomPanel.bounds
-        let closeSize: CGFloat = 40
-        cancelButton.frame = CGRect(x: 10, y: floor((panelHeight - closeSize) / 2), width: closeSize, height: closeSize)
-        cancelButton.layer.cornerRadius = closeSize / 2
-        let stopSize: CGFloat = 42
-        finishButton.frame = CGRect(x: bottomPanel.bounds.width - stopSize - 9, y: floor((panelHeight - stopSize) / 2), width: stopSize, height: stopSize)
-        finishButton.layer.cornerRadius = stopSize / 2
-        let waveformX = cancelButton.frame.maxX + 12
-        waveform.frame = CGRect(x: waveformX, y: 12, width: max(0, finishButton.frame.minX - 12 - waveformX), height: panelHeight - 24)
-    }
-
-    @objc private func cancel() { onCancel?() }
-    @objc private func finish() { onFinish?() }
-}
-
-/// The design's waveform: twenty 3pt accent bars with fixed heights, animated with a
-/// staggered delay so it reads as a live meter instead of a random jitter.
-private final class AorusAIWaveformView: UIView {
-    private static let barHeights: [CGFloat] = [10, 22, 14, 30, 18, 34, 12, 26, 16, 30, 20, 12, 28, 18, 24, 14, 32, 16, 22, 10]
-    private let bars: [UIView] = AorusAIWaveformView.barHeights.map { _ in UIView() }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        bars.forEach { addSubview($0) }
-        isAccessibilityElement = false
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    func configure(accent: UIColor) {
-        bars.forEach { $0.backgroundColor = accent }
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        let spacing: CGFloat = 3
-        let barWidth: CGFloat = 3
-        let totalWidth = barWidth * CGFloat(bars.count) + spacing * CGFloat(bars.count - 1)
-        let originX = max(0, floor((bounds.width - totalWidth) / 2))
-        for (index, bar) in bars.enumerated() {
-            let height = min(AorusAIWaveformView.barHeights[index], bounds.height)
-            bar.frame = CGRect(x: originX + CGFloat(index) * (barWidth + spacing), y: floor((bounds.height - height) / 2), width: barWidth, height: height)
-            bar.layer.cornerRadius = barWidth / 2
-        }
-    }
-
-    func setAnimating(_ animating: Bool) {
-        guard animating else {
-            bars.forEach { $0.layer.removeAnimation(forKey: "aorusWave") }
+    func setActive(_ active: Bool) {
+        timer?.invalidate()
+        timer = nil
+        dot.layer.removeAnimation(forKey: "aorusPulse")
+        guard active else {
+            levels = Array(repeating: 0.0, count: Self.barCount)
+            setNeedsLayout()
             return
         }
+        startedAt = Date()
+        refreshTime()
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 1.0
+        pulse.toValue = 0.25
+        pulse.duration = 0.6
+        pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        dot.layer.add(pulse, forKey: "aorusPulse")
+        timer = Foundation.Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            self?.refreshTime()
+        }
+    }
+
+    /// One new sample. The bars scroll left, so the row reads as a moving level rather
+    /// than four independent meters.
+    func update(level: CGFloat) {
+        levels.removeFirst()
+        levels.append(min(1.0, max(0.0, level)))
+        UIView.animate(withDuration: 0.09, delay: 0.0, options: [.beginFromCurrentState, .curveLinear]) {
+            self.layoutBars()
+        }
+    }
+
+    private func refreshTime() {
+        let elapsed = max(0, Int(Date().timeIntervalSince(startedAt)))
+        timeLabel.text = String(format: "%d:%02d", elapsed / 60, elapsed % 60)
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let height = bounds.height
+        dot.frame = CGRect(x: 0.0, y: floor((height - 6.0) / 2.0), width: 6.0, height: 6.0)
+        let timeWidth = ceil(timeLabel.sizeThatFits(CGSize(width: bounds.width, height: height)).width)
+        timeLabel.frame = CGRect(x: 12.0, y: 0.0, width: timeWidth, height: height)
+        layoutBars()
+    }
+
+    private func layoutBars() {
+        let height = bounds.height
+        let originX = timeLabel.frame.maxX + 8.0
         for (index, bar) in bars.enumerated() {
-            guard bar.layer.animation(forKey: "aorusWave") == nil else { continue }
-            let animation = CAKeyframeAnimation(keyPath: "transform.scale.y")
-            animation.values = [0.4, 1.0, 0.55, 1.0, 0.4]
-            animation.keyTimes = [0, 0.25, 0.5, 0.75, 1]
-            animation.duration = 1.1
-            animation.beginTime = CACurrentMediaTime() + Double(index % 7) * 0.09
-            animation.repeatCount = .infinity
-            animation.isRemovedOnCompletion = false
-            bar.layer.add(animation, forKey: "aorusWave")
+            // A floor of 3pt, so a silent moment is a row of dots rather than nothing.
+            let barHeight = max(3.0, floor(levels[index] * (height - 4.0)))
+            bar.frame = CGRect(
+                x: originX + CGFloat(index) * (Self.barWidth + Self.barSpacing),
+                y: floor((height - barHeight) / 2.0),
+                width: Self.barWidth,
+                height: barHeight
+            )
         }
     }
 }
@@ -3540,8 +3613,8 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
 
     func configure(message: AorusAIMessage, context: AccountContext, theme: PresentationTheme, canRetry: Bool, loadingArtifactIds: Set<String>) {
         let palette = AorusAIPalette.resolve(theme)
-        backgroundColor = palette.background
-        contentView.backgroundColor = palette.background
+        backgroundColor = palette.plainBackground
+        contentView.backgroundColor = palette.plainBackground
         bodyStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         referenceCard?.removeFromSuperview()
         referenceCard = nil
