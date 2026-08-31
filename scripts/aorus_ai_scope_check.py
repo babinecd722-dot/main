@@ -112,6 +112,67 @@ SYSTEM_MODULES = {
 IMPORT = re.compile(r"^\s*import\s+(?:struct\s+|class\s+|enum\s+|func\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*$", re.MULTILINE)
 
 
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+LINE_COMMENT = re.compile(r"//[^\n]*")
+STRING_LITERAL = re.compile(r'"(?:[^"\\\n]|\\.)*"')
+TYPE_DECL = re.compile(
+    r"\b(?:final\s+|public\s+|private\s+|internal\s+|fileprivate\s+|open\s+)*"
+    r"(?:class|struct|enum|extension|actor)\s+[A-Za-z_][A-Za-z0-9_]*"
+)
+BARE_SELECTOR = re.compile(r"#selector\(([A-Za-z_][A-Za-z0-9_]*)\)")
+
+
+def _scrubbed(text: str) -> str:
+    """Source with comments and string literals removed, so brace counting is honest."""
+    text = BLOCK_COMMENT.sub(" ", text)
+    text = LINE_COMMENT.sub(" ", text)
+    return STRING_LITERAL.sub('""', text)
+
+
+def _type_bodies(code: str) -> list:
+    """The body of each top-level type, found by matching braces from its declaration."""
+    bodies = []
+    depth = 0
+    pending = None
+    for index, character in enumerate(code):
+        if character == "{":
+            if depth == 0:
+                head = code[max(0, index - 300):index]
+                declaration = None
+                for declaration in TYPE_DECL.finditer(head):
+                    pass
+                pending = (index + 1) if declaration is not None else None
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0 and pending is not None:
+                bodies.append(code[pending:index])
+                pending = None
+    return bodies
+
+
+def check_selector_ambiguity(root: Path, ui: Path, errors: list) -> None:
+    """A bare `#selector(name)` must name exactly one method of its type.
+
+    `#selector` addresses a method by its selector alone. Give a type a second method with
+    the same base name — an overload taking an argument is enough — and the reference stops
+    compiling with "ambiguous use of", which `swiftc -frontend -parse` cannot see because
+    it resolves no names. That is an hour into the build for a mechanical mistake, so it is
+    caught mechanically. Counting is scoped to the enclosing type, because two different
+    classes each having their own `retry()` is ordinary and correct.
+    """
+    for source in sorted(ui.rglob("*.swift")):
+        code = _scrubbed(source.read_text(encoding="utf-8"))
+        for body in _type_bodies(code):
+            for name in sorted(set(BARE_SELECTOR.findall(body))):
+                candidates = len(re.findall(rf"\bfunc {re.escape(name)}\s*\(", body))
+                if candidates > 1:
+                    errors.append(
+                        f"{source.relative_to(root)}: #selector({name}) has {candidates} "
+                        f"candidates in one type — give the other one a different name"
+                    )
+
+
 def check_build_dependencies(root: Path, ui: Path, errors: list) -> None:
     """Every module the sources import must be a dependency of the Bazel target.
 
@@ -164,6 +225,7 @@ def main() -> int:
             errors.append(f"{relative} uses {', '.join(used)} without `import AorusGram`")
 
     check_build_dependencies(root, ui, errors)
+    check_selector_ambiguity(root, ui, errors)
 
     for error in errors:
         print(f"AorusAI scope check: {error}", file=sys.stderr)

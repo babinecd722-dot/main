@@ -600,7 +600,7 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         // person lands on a cursor after the part they still have to write rather than on
         // an empty field they have to think at.
         emptyView.onStarter = { [weak self] starter in
-            self?.createConversation(draft: starter.prompt)
+            self?.openNewConversation(draft: starter.prompt)
         }
         tableView.backgroundView = emptyView
         self.displayNode.view.addSubview(tableView)
@@ -674,10 +674,13 @@ private final class AorusAIConversationListController: ViewController, UITableVi
     }
 
     @objc private func createConversation() {
-        createConversation(draft: "")
+        openNewConversation(draft: "")
     }
 
-    private func createConversation(draft: String) {
+    /// Deliberately not an overload of `createConversation`: `#selector` names a method by
+    /// its selector alone, so a second candidate with the same base name leaves it with no
+    /// way to choose and the compose button stops compiling.
+    private func openNewConversation(draft: String) {
         var conversation = AorusAIConversation()
         conversation.draft = draft
         AorusAIStore.shared.upsert(conversation, accountId: accountId)
@@ -1116,7 +1119,7 @@ private final class AorusAIConversationListEmptyView: UIView {
         card.layer.cornerRadius = 14.0
         card.layer.cornerCurve = .continuous
         card.clipsToBounds = true
-        for (index, starter) in Self.starters.enumerated() {
+        for index in Self.starters.indices {
             let row = AorusAIStarterRowView()
             row.tag = index
             row.addTarget(self, action: #selector(starterTapped(_:)), for: .touchUpInside)

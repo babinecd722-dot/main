@@ -42,7 +42,7 @@ public func aorusAIPresentMessageActions(
             controller.sheetPresentationController?.prefersScrollingExpandsWhenScrolledToEdge = true
         }
         controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
-        let presenter = (navigationController.topViewController as? UIViewController)
+        let presenter = navigationController.topViewController
             ?? navigationController.view.window?.rootViewController
         presenter?.present(controller, animated: true)
     }
