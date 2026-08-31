@@ -553,8 +553,8 @@ private func miscEntries(state: MiscState, theme: PresentationTheme, strings: Pr
     entries.append(.interfaceV2Header(theme, aorusL("ИНТЕРФЕЙС", "INTERFACE")))
     entries.append(.interfaceV2(theme, "Interface 2.0", state.interfaceV2))
     entries.append(.interfaceV2Info(theme, aorusL(
-        "Списки, карточки и меню становятся стеклянными, а вкладки в профиле берут цвет аватарки.",
-        "Lists, cards and menus turn to glass, and profile tabs take the colour of the avatar."
+        "Стеклянный интерфейс.",
+        "Glass interface."
     )))
 
     return entries
@@ -864,12 +864,12 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         },
         setInterfaceV2: { value in
             AorusInterfaceV2.setEnabled(value)
-            // Screens already on the stack keep the header and theme they were built with,
-            // so say that plainly instead of leaving a half-changed app to be puzzled over.
-            AorusGlassToast.present(text: aorusL(
-                "Перезапустите приложение, чтобы применить",
-                "Restart the app to apply"
-            ))
+            // Screens already on the stack keep the header and theme they were built with, so
+            // the change only fully lands after a relaunch. The same pill every other
+            // restart-requiring toggle in the fork uses -- text plus a button that actually
+            // performs the restart -- instead of a toast that states the requirement and then
+            // leaves the user to work out how to meet it.
+            aorusPresentRestartNotice(context: context, controller: weakController)
             updateState { current in
                 var next = current
                 next.interfaceV2 = value

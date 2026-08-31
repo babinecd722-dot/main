@@ -264,7 +264,14 @@ def _patch_round_action_buttons(tg: Path) -> None:
         "        // AorusGram: Interface 2.0 lays the row out as centred circles instead of\n"
         "        // rectangles stretched edge to edge.\n"
         "        let aorusRoundButtons = !buttonKeys.isEmpty && UserDefaults.standard.bool(forKey: \"aorusgram_interface_v2\")\n"
-        "        let aorusRoundButtonDiameter: CGFloat = 64.0\n"
+        "        // 64pt is the design's diameter and the cap, not the answer: a profile with five\n"
+        "        // buttons -- message, call, mute, search, more -- needs 352pt of row on a screen\n"
+        "        // that may only have 288pt of it, and the fixed diameter is what made those\n"
+        "        // profiles overflow their own header. Shrunk to fit instead, down to a floor that\n"
+        "        // still holds a 40pt icon and a tappable target.\n"
+        "        let aorusButtonCount = CGFloat(max(1, buttonKeys.count))\n"
+        "        let aorusRoundButtonFit = (width - buttonSideInset * 2.0 - (aorusButtonCount - 1.0) * buttonSpacing) / aorusButtonCount\n"
+        "        let aorusRoundButtonDiameter: CGFloat = max(44.0, min(64.0, floor(aorusRoundButtonFit)))\n"
         "        let buttonWidth = aorusRoundButtons ? aorusRoundButtonDiameter : ((width - buttonSideInset * 2.0 + buttonSpacing) / CGFloat(buttonKeys.count) - buttonSpacing)\n"
         "        let buttonSize = CGSize(width: buttonWidth, height: aorusRoundButtons ? aorusRoundButtonDiameter : 58.0)\n"
         "        let aorusRowWidth = CGFloat(buttonKeys.count) * buttonSize.width + CGFloat(max(0, buttonKeys.count - 1)) * buttonSpacing\n"
@@ -291,12 +298,22 @@ def _patch_music_capsule(tg: Path) -> None:
     if "aorusMusicCapsule" in text:
         print("MusicCapsule: already patched")
         return
+    if "import GlassBackgroundComponent\n" not in text:
+        text = _replace_once(
+            text,
+            "import UIKit\n",
+            "import UIKit\nimport GlassBackgroundComponent\n",
+            "music capsule glass import",
+        )
 
     text = _replace_once(
         text,
         "    let aorusAnimatedProfileBackgroundView = AorusAnimatedProfileBackgroundView()\n",
         "    let aorusAnimatedProfileBackgroundView = AorusAnimatedProfileBackgroundView()\n"
-        "    let aorusMusicCapsule = UIView()\n",
+        "    // A pane of the system glass material, not a translucent white pill: the capsule sits\n"
+        "    // over the avatar, and a flat white fill there is the fake glass Interface 2.0 exists\n"
+        "    // to get rid of.\n"
+        "    let aorusMusicCapsule = GlassBackgroundView(frame: CGRect())\n",
         "music capsule property",
     )
     # Zero minimum width: the component then reports the width its content actually needs,
@@ -323,14 +340,40 @@ def _patch_music_capsule(tg: Path) -> None:
         "                    // travels with the same additive transitions the row already uses.\n"
         "                    if self.aorusMusicCapsule.superview == nil {\n"
         "                        self.aorusMusicCapsule.isUserInteractionEnabled = false\n"
-        "                        self.aorusMusicCapsule.layer.cornerCurve = .continuous\n"
         "                        self.regularContentNode.view.addSubview(self.aorusMusicCapsule)\n"
         "                    }\n"
-        "                    self.aorusMusicCapsule.backgroundColor = UIColor(white: 1.0, alpha: 0.16)\n"
-        "                    let aorusCapsuleFrame = musicFrame.insetBy(dx: -12.0, dy: -7.0)\n"
-        "                    self.aorusMusicCapsule.layer.cornerRadius = aorusCapsuleFrame.height * 0.5\n"
-        "                    musicTransition.updateFrame(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
-        "                    self.aorusMusicCapsule.alpha = 1.0\n"
+        "                    // A small pill, per the mockup: the row inside it is 16pt of 11pt type,\n"
+        "                    // and 3pt of padding is what turns that into a capsule rather than into\n"
+        "                    // the 38pt banner the first version drew across the bottom of the header.\n"
+        "                    let aorusCapsuleFrame = musicFrame.insetBy(dx: -12.0, dy: -3.0)\n"
+        "                    // Additive when the row is additive, and never the plain path while the\n"
+        "                    // row takes the additive one. That mismatch is what made the capsule\n"
+        "                    // slide out from under its own text on every scroll frame -- the row's\n"
+        "                    // frame was being animated from its centre while the pill jumped\n"
+        "                    // straight to the new one.\n"
+        "                    if additive {\n"
+        "                        musicTransition.updateFrameAdditiveToCenter(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
+        "                    } else {\n"
+        "                        musicTransition.updateFrame(view: self.aorusMusicCapsule, frame: aorusCapsuleFrame)\n"
+        "                    }\n"
+        "                    self.aorusMusicCapsule.update(\n"
+        "                        size: aorusCapsuleFrame.size,\n"
+        "                        cornerRadius: aorusCapsuleFrame.height * 0.5,\n"
+        "                        isDark: true,\n"
+        "                        tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
+        "                        isInteractive: false,\n"
+        "                        isVisible: true,\n"
+        "                        transition: .immediate\n"
+        "                    )\n"
+        "                    // The row's own alpha, to the point of using the same two branches and\n"
+        "                    // the same curve. Pinned at 1.0 the glass stayed behind as a bare\n"
+        "                    // lozenge once the header collapsed the text out from inside it, which\n"
+        "                    // is the artefact that showed while scrolling.\n"
+        "                    if let _ = self.navigationTransition {\n"
+        "                        transition.updateAlpha(layer: self.aorusMusicCapsule.layer, alpha: 1.0 - transitionFraction)\n"
+        "                    } else {\n"
+        "                        ContainedViewLayoutTransition.animated(duration: 0.2, curve: .easeInOut).updateAlpha(layer: self.aorusMusicCapsule.layer, alpha: backgroundBannerAlpha)\n"
+        "                    }\n"
         "                } else if self.aorusMusicCapsule.superview != nil {\n"
         "                    self.aorusMusicCapsule.removeFromSuperview()\n"
         "                }\n"
@@ -346,6 +389,20 @@ def _patch_music_capsule(tg: Path) -> None:
         "        if let currentSavedMusic {\n",
         "music capsule flag",
     )
+    # The peer stops sharing a track, or the header is reused for one that never did: the row is
+    # torn down here and the capsule has to go with it, or the glass stays on screen with nothing
+    # inside it.
+    text = _replace_once(
+        text,
+        "        } else {\n"
+        "            if let musicBackground = self.musicBackground {\n",
+        "        } else {\n"
+        "            if self.aorusMusicCapsule.superview != nil {\n"
+        "                self.aorusMusicCapsule.removeFromSuperview()\n"
+        "            }\n"
+        "            if let musicBackground = self.musicBackground {\n",
+        "music capsule teardown",
+    )
     path.write_text(text, encoding="utf-8")
     print("MusicCapsule: patched PeerInfoHeaderNode")
 
@@ -356,7 +413,12 @@ def _patch_call_type_sheet(tg: Path) -> None:
     Interface 2.0 shows one phone button where the stock header shows separate Call and
     Video buttons, so the choice has to happen somewhere. It happens in the sheet iOS users
     already expect from a phone button, and both answers go back through Telegram's own
-    button actions — the call is placed by exactly the code that placed it before.
+    button actions -- the call is placed by exactly the code that placed it before.
+
+    Each answer carries the glyph its own header button carries, at the leading edge with the
+    title beside it (see `_patch_action_sheet_icon_rows`), so the two rows are told apart before
+    they are read. The pane behind them is the system material Interface 2.0 puts under every
+    sheet in the client, which is why there is no background of our own here.
     """
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
     if not path.is_file():
@@ -390,11 +452,11 @@ def _patch_call_type_sheet(tg: Path) -> None:
         "        let sheet = ActionSheetController(presentationData: presentationData)\n"
         "        sheet.setItemGroups([\n"
         "            ActionSheetItemGroup(items: [\n"
-        "                ActionSheetButtonItem(title: aorusL(\"Аудиозвонок\", \"Audio Call\"), color: .accent, action: { [weak self, weak sheet] in\n"
+        "                ActionSheetButtonItem(title: aorusL(\"Аудиозвонок\", \"Audio Call\"), color: .accent, aorusIcon: UIImage(bundleImageName: \"Peer Info/ButtonCall\"), action: { [weak self, weak sheet] in\n"
         "                    sheet?.dismissAnimated()\n"
         "                    self?.performButtonAction?(.call, nil, nil)\n"
         "                }),\n"
-        "                ActionSheetButtonItem(title: aorusL(\"Видеозвонок\", \"Video Call\"), color: .accent, action: { [weak self, weak sheet] in\n"
+        "                ActionSheetButtonItem(title: aorusL(\"Видеозвонок\", \"Video Call\"), color: .accent, aorusIcon: UIImage(bundleImageName: \"Peer Info/ButtonVideo\"), action: { [weak self, weak sheet] in\n"
         "                    sheet?.dismissAnimated()\n"
         "                    self?.performButtonAction?(.videoCall, nil, nil)\n"
         "                })\n"
@@ -417,10 +479,10 @@ def _patch_call_type_sheet(tg: Path) -> None:
 
 
 def _patch_profile_tabs_tint(tg: Path) -> None:
-    """Let the profile tab bar paint its selected tab with the avatar's colour.
+    """Let the profile tab bar paint its labels white while Interface 2.0 is on.
 
     Telegram's tab bar is already the glass capsule Interface 2.0 wants, so it is kept and
-    tinted rather than replaced — substituting a simpler control would cost tab reordering,
+    recoloured rather than replaced — substituting a simpler control would cost tab reordering,
     context menus, badges, gift icons and the dozen-odd pane kinds it knows how to title.
     Both the regular and the selected copy of a tab are rendered from the same ItemComponent
     with the same colour, the selection being drawn by a lens moving across them; this makes
@@ -485,9 +547,16 @@ def _patch_profile_tabs_tint(tg: Path) -> None:
         text,
         "                    .foregroundColor: component.theme.chat.inputPanel.panelControlColor\n"
         "                ], range: NSRange(location: 0, length: titleString.length))\n",
-        "                    // AorusGram: the selected tab takes the avatar's colour under\n"
-        "                    // Interface 2.0, and the stock colour whenever it is off.\n"
-        "                    .foregroundColor: (component.isSelected ? component.aorusSelectedAccent : nil) ?? component.theme.chat.inputPanel.panelControlColor\n"
+        "                    // AorusGram: the page's own ink under Interface 2.0, and the stock\n"
+        "                    // colour whenever it is off. Ink rather than the avatar's colour on\n"
+        "                    // purpose: the glass under these labels takes its look from the photo\n"
+        "                    // already, and tinting the text as well is what made the first version\n"
+        "                    // read as a coloured skin instead of as glass. The writing side sends\n"
+        "                    // white over a dark page and near-black over a pale one, so a profile\n"
+        "                    // whose photo ends in white paper still has readable tabs.\n"
+        "                    .foregroundColor: component.aorusSelectedAccent.flatMap { accent in\n"
+        "                        return component.isSelected ? accent : accent.withAlphaComponent(0.5)\n"
+        "                    } ?? component.theme.chat.inputPanel.panelControlColor\n"
         "                ], range: NSRange(location: 0, length: titleString.length))\n",
         "tabs accent colour",
     )
@@ -549,15 +618,126 @@ def _patch_profile_list_glass(tg: Path) -> None:
     screen = _replace_once(
         screen,
         "    private func updateBackgroundColor() {\n",
+        "    // AorusGram: the avatar itself, mirrored, stretched behind the entire screen.\n"
+        "    //\n"
+        "    // Telegram's expanded avatar is taller than the square photo, and the strip below it is\n"
+        "    // the picture mirrored -- a replicator layer drawing a flipped copy, blurred at the join\n"
+        "    // under a gradient that reaches 0.32 black. This carries that mirror the rest of the way\n"
+        "    // instead of inventing a second effect: the whole photo, flipped, darkened by the same\n"
+        "    // amount and blurred with Telegram's own kernel, then stretched over the screen. Linear\n"
+        "    // filtering does the rest, for the price of a texture of thirty-six kilobytes.\n"
+        "    //\n"
+        "    // Found by tag rather than held in a property: this file is patched, and a stored\n"
+        "    // property means an initialiser to patch as well. It is inserted at the very back, so\n"
+        "    // the header, the list, the tabs and the panes all keep drawing over it. The tag is the\n"
+        "    // tint's own, because the members pane looks this very view up to lay its own copy of\n"
+        "    // the picture over exactly the same rectangle -- one rectangle drawn twice is the only\n"
+        "    // arrangement with no seam in it, and two spellings of a tag is a seam waiting to be.\n"
+        "    //\n"
+        "    // The frame is reassigned on every call, not left to the autoresizing mask alone: this\n"
+        "    // runs from containerLayoutUpdated, and the first call can land while the node still has\n"
+        "    // empty bounds, where a proportional mask keeps a zero-sized view zero-sized forever.\n"
+        "    private func aorusUpdatePageBackdrop(image: UIImage?) {\n"
+        "        let aorusBackdropTag = AorusGlassProfileTint.backdropTag\n"
+        "        var backdrop = self.view.subviews.first(where: { $0.tag == aorusBackdropTag }) as? UIImageView\n"
+        "        guard let image else {\n"
+        "            backdrop?.removeFromSuperview()\n"
+        "            return\n"
+        "        }\n"
+        "        if backdrop == nil {\n"
+        "            let imageView = UIImageView()\n"
+        "            imageView.tag = aorusBackdropTag\n"
+        "            imageView.isUserInteractionEnabled = false\n"
+        "            imageView.contentMode = .scaleToFill\n"
+        "            imageView.layer.magnificationFilter = .linear\n"
+        "            imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]\n"
+        "            self.view.insertSubview(imageView, at: 0)\n"
+        "            backdrop = imageView\n"
+        "        }\n"
+        "        if let backdrop, backdrop.frame != self.view.bounds {\n"
+        "            backdrop.frame = self.view.bounds\n"
+        "        }\n"
+        "        if backdrop?.image !== image {\n"
+        "            backdrop?.image = image\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    // AorusGram: claim the page slot for this profile, and answer with its own page colour.\n"
+        "    //\n"
+        "    // Everything drawn over a glass profile -- the header's labels and icons, the tab strip,\n"
+        "    // the separators inside a section -- takes its ink from one shared slot, because the\n"
+        "    // modules that need it sit below the one that samples the avatar and cannot import it.\n"
+        "    // One slot, and the colour is per peer, so the profile being laid out claims it at the\n"
+        "    // top of every pass. That is what makes a push between two profiles land on the right\n"
+        "    // ink instead of the two overwriting each other frame by frame.\n"
+        "    //\n"
+        "    // A peer with no photo publishes the page it actually gets: the theme's own background.\n"
+        "    // Its placeholder is a pane of glass, which has no colour to sample, so nothing is ever\n"
+        "    // stored for it -- and leaving the previous profile's pale colour in the slot is exactly\n"
+        "    // how a profile came out with near-black text and icons on a near-black page.\n"
+        "    //\n"
+        "    // Settings publishes too, and publishes the theme's background. It is not painted in an\n"
+        "    // avatar's colour -- it is the reader's own list of options, not a profile -- but the slot\n"
+        "    // is global, and a screen that stays silent is drawn in whatever the last profile left\n"
+        "    // there. That is the whole of the report about Settings: rows in white text and rows in\n"
+        "    // black text on one screen, differing by which profile had been opened before it, because\n"
+        "    // its sections read the profile ink while everything else read the theme's.\n"
+        "    @discardableResult\n"
+        "    private func aorusUpdatePageColor() -> UIColor? {\n"
+        "        guard AorusInterfaceV2.isEnabled else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        guard !self.isSettings else {\n"
+        "            AorusGlassProfileTint.publishPageColor(self.presentationData.theme.list.blocksBackgroundColor)\n"
+        "            return nil\n"
+        "        }\n"
+        "        let aorusPageColor = AorusGlassProfileTint.pageBackgroundColor(for: self.peerId.id._internalGetInt64Value())\n"
+        "        AorusGlassProfileTint.publishPageColor(aorusPageColor ?? self.presentationData.theme.list.blocksBackgroundColor)\n"
+        "        return aorusPageColor\n"
+        "    }\n"
+        "\n"
         "    private func updateBackgroundColor() {\n"
         "        // AorusGram: the page carries the avatar's colours the whole way down, so the\n"
         "        // list below the header continues the profile instead of meeting a flat\n"
-        "        // background partway through it.\n"
-        "        if AorusInterfaceV2.isEnabled, let aorusPageColor = AorusGlassProfileTint.pageBackgroundColor {\n"
+        "        // background partway through it. Asked for by peer id, not read from one shared\n"
+        "        // slot: during a push two profiles lay out on every frame of the animation, and a\n"
+        "        // single slot would let each overwrite the other's colour.\n"
+        "        if let aorusPageColor = self.aorusUpdatePageColor() {\n"
         "            self.backgroundColor = aorusPageColor\n"
+        "            self.aorusUpdatePageBackdrop(image: AorusGlassProfileTint.pageBackgroundImage(for: self.peerId.id._internalGetInt64Value()))\n"
         "            return\n"
-        "        }\n",
+        "        }\n"
+        "        self.aorusUpdatePageBackdrop(image: nil)\n",
         "screen background colour",
+    )
+    # The slot has to be claimed before the header reads it, and the header lays out ahead of
+    # updateBackgroundColor in both passes that reach it -- containerLayoutUpdated draws the header
+    # and never calls it, updateNavigation draws the header and then calls it. Published from the top
+    # of both, so the ink a profile is drawn with is its own on the very first frame rather than one
+    # frame behind, which on a push is the outgoing profile's.
+    screen = _replace_once(
+        screen,
+        "    func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ContainedViewLayoutTransition, additive: Bool = false) {\n"
+        "        self.validLayout = (layout, navigationHeight)\n",
+        "    func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ContainedViewLayoutTransition, additive: Bool = false) {\n"
+        "        self.validLayout = (layout, navigationHeight)\n"
+        "        \n"
+        "        // AorusGram: before anything on this screen is drawn, so it is drawn in this\n"
+        "        // profile's ink and not in whatever the last one left in the slot.\n"
+        "        self.aorusUpdatePageColor()\n",
+        "page ink before layout",
+    )
+    screen = _replace_once(
+        screen,
+        "    fileprivate func updateNavigation(transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) {\n"
+        "        let offsetY = self.scrollNode.view.contentOffset.y\n",
+        "    fileprivate func updateNavigation(transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) {\n"
+        "        // AorusGram: as in containerLayoutUpdated -- this pass redraws the header too, and\n"
+        "        // does it before updateBackgroundColor at the end of it.\n"
+        "        self.aorusUpdatePageColor()\n"
+        "        \n"
+        "        let offsetY = self.scrollNode.view.contentOffset.y\n",
+        "page ink before navigation",
     )
     screen_path.write_text(screen, encoding="utf-8")
     print("GlassProfileList: patched screen background")
@@ -1104,6 +1284,9 @@ def _patch_settings_shortcut_routes(tg: Path) -> None:
             "                            updatedPresentationData: updatedPresentationData,\n"
             "                            focusOnItemTag: .aorusAnimatedBackground\n"
             "                        )\n"
+            "                    },\n"
+            "                    connectionSettings: {\n"
+            "                        return proxySettingsController(context: context)\n"
             "                    }\n"
             "                )\n"
             "            ))\n"
@@ -1167,7 +1350,6 @@ def _patch_build(tg: Path) -> None:
 
 def patch_profile_personalization(tg: Path) -> None:
     _patch_profile_header(tg)
-    # After the header patch: the glass property is anchored on the one it inserts.
     _patch_expanded_avatar_default(tg)
     _patch_round_action_buttons(tg)
     _patch_music_capsule(tg)

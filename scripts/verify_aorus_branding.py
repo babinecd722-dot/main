@@ -695,6 +695,11 @@ def main() -> None:
             "public static func transfer(reference: StarGiftReference",
             "public static func updateCollectionOrder(collectionId: Int32",
             "public static func isWorn(reference: StarGiftReference)",
+            # The badges around the avatar in the settings preview read this one, and they cache
+            # what it returns until changedNotification fires -- so the switch has to be checked
+            # inside it, or switching fake gifts off leaves them pinned to the profile.
+            "public static func pinnedProfileWrappers() -> [ProfileGiftsContext.State.StarGift] {\n"
+            "        guard isEnabled else {",
         )
         if any(marker not in fake_store_text for marker in required_store_markers):
             err.append("FakeStars: local balance/gift persistence pipeline is incomplete")
@@ -714,6 +719,35 @@ def main() -> None:
             err.append("FakeGifts: pinning a hidden local gift does not restore profile visibility")
         if "senderPeer.id.toInt64() == renderedSenderPeerId" not in fake_store_text or "fromPeer: senderPeer" not in fake_store_text:
             err.append("FakeGifts: non-anonymous local purchases do not resolve their sender peer")
+        # A collectible bought with local Stars has to deliver the same card a real purchase does:
+        # into the recipient's chat, or into Saved Messages when the buyer gifts themselves.
+        # Returning early here is what left the purchase as a bare toast.
+        if "action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true" not in fake_store_text:
+            err.append("FakeGifts: a local collectible purchase does not deliver its gift card")
+        # Wearing a local gift writes an emoji-status override, and the switch that hides the gifts
+        # has to take that override back off the name. The badge is a field on the peer and nothing
+        # re-reads the override between server syncs, so without the reconcile a worn fake kept
+        # showing as «Носится» with the gifts switched off, until some unrelated sync came along.
+        premium_registry = tg / "submodules" / "TelegramCore" / "Sources" / "Utils" / "AorusGramPremium.swift"
+        premium_text = premium_registry.read_text(encoding="utf-8")
+        required_premium_markers = (
+            "if !AorusFakeGiftsStore.isEnabled, AorusFakeGiftsStore.wornGift() != nil {",
+            "public static func reconcileEmojiStatus(account: Account)",
+            # The override exactly as it sits on disk, so a status the account really has can be
+            # told apart from ours and is left alone when ours is taken off.
+            "private static func storedEmojiStatus(_ rawId: Int64)",
+            "public static func observeFakeGiftsSwitch(account: Account)",
+            "AorusFakeGiftsStore.changedNotification",
+        )
+        if any(marker not in premium_text for marker in required_premium_markers):
+            err.append(
+                "FakeGifts: Utils/AorusGramPremium.swift does not follow the local gifts switch out of the emoji status"
+            )
+        account_context_text = (tg / "submodules" / "TelegramUI" / "Sources" / "AccountContext.swift").read_text(
+            encoding="utf-8"
+        )
+        if "AorusGramPremium.observeFakeGiftsSwitch(account: account)" not in account_context_text:
+            err.append("FakeGifts: AccountContext.swift does not observe the local gifts switch for the signed-in account")
         fake_gift_view = (
             tg
             / "submodules"
@@ -790,8 +824,6 @@ def main() -> None:
             err.append("FakeGifts: long-press Wear action does not reflect or clear the local worn state")
         if "case let .slug(slug)" not in fake_store_text:
             err.append("FakeGifts: collectible slug references cannot resolve to local gifts")
-        if "if case .unique = gift { return }" not in fake_store_text:
-            err.append("FakeGifts: collectible purchases inject a non-native directed chat message")
         if 'dict["transferStars"] = 0' not in fake_store_text:
             err.append("FakeGifts: local collectibles do not expose Telegram's native Transfer button")
         if (
@@ -1232,7 +1264,11 @@ def main() -> None:
             '"runXrayFromJson"',
             '"packetEncoding": "xudp"',
             '"security": "reality"',
-            'publishRequirement(required: authorizationAllowsTunnel)',
+            # The requirement Telegram reads is the route's decision, not the licence's: an
+            # authorized account whose direct route works must not be redirected at all. The
+            # authorization is still a gate, one step earlier -- the route refuses to escalate
+            # without it -- so what is published here is the route and nothing else.
+            "publishRequirement(required: AorusHybridRoute.shared.tunnelIsRequired)",
             '"required": required',
             "AorusSessionMetrics.metricFlag",
             "waitForCoreAndLocalSocks(",
@@ -1266,9 +1302,42 @@ def main() -> None:
             "let activeEndpoint = self.activeEndpoint",
             "nextRanked.contains(activeEndpoint)",
             "previousCredential == profile.credential",
+            # Selection speed. One preflight budget cannot both sweep candidates cheaply and
+            # wait out a slow radio, so there are three, and only the endpoints that ran out
+            # of time earn the patient retry. Collapsing them back to one figure is how a
+            # blocked bridge became half a minute of a client that looks offline.
+            "preflightFastTimeout",
+            "preflightPatientTimeout",
+            "preflightConfirmTimeout",
+            "case slowRemotePath",
+            "for endpoint in slowEndpoints",
+            "localPortIsAvailable(localPort)",
+            # A watchdog failover has to be able to move: without this the core defends the
+            # endpoint it was called about, because its own preflight still passes.
+            "reselectEndpoint: Bool = false",
+            "!reselectEndpoint,",
         ):
             if marker not in reality_manager_text:
                 err.append(f"RealityProxy: core invariant is missing {marker}")
+        for marker in (
+            # Start on the signed order, measure afterwards. Ranking before the first apply()
+            # leaves Telegram with no route for the whole sweep, which is the cold start that
+            # never receives a login code.
+            "provisionalOrder(profile.validEndpoints)",
+            "defendActive: false",
+            "rememberGoodEndpoint(endpoint)",
+            "reselectEndpoint: reselectEndpoint",
+            "reprobeCurrentProfile(reselectEndpoint: true)",
+            # Nothing to fail over to is the state this watchdog exists for, not a reason to
+            # give up on it.
+            "AorusRealityManager.shared.ensureRunning()",
+        ):
+            if marker not in reality_proxy_text:
+                err.append(f"RealityProxy: recovery invariant is missing {marker}")
+        provisional_index = reality_proxy_text.find("apply(profile: profile, rankedEndpoints: provisional)")
+        sweep_index = reality_proxy_text.find("rankEndpoints(profile.validEndpoints, defendActive: false)")
+        if provisional_index < 0 or sweep_index < 0 or sweep_index < provisional_index:
+            err.append("RealityProxy: endpoint ranking runs before Telegram is given a route")
         keep_start = reality_manager_text.find("if previousCredential == profile.credential")
         keep_end = reality_manager_text.find('self.recordDiagnostic(stage: "profile_applied")', keep_start)
         keep_block = reality_manager_text[keep_start:keep_end]
@@ -2628,62 +2697,6 @@ def main() -> None:
             if marker not in pinning_text:
                 err.append(f"AorusPinnedSessionDelegate: fail-closed pinning is missing {marker}")
 
-    # AorusAI. The sources have to have landed in the tree, the settings row and the
-    # message-menu hand-off have to have been integrated, and the screen has to be drawn
-    # in the user's own theme rather than in a palette of its own.
-    ai_dir = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI"
-    ai_controllers = ai_dir / "AorusAIControllers.swift"
-    ai_design = ai_dir / "AorusAIDesign.swift"
-    ai_mention = ai_dir / "AorusAIMention.swift"
-    for path in (ai_controllers, ai_design, ai_mention):
-        if not path.is_file():
-            err.append(f"AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/{path.name}")
-    if ai_design.is_file():
-        design_text = ai_design.read_text(encoding="utf-8")
-        # A literal colour here is a colour that ignores the theme the user chose.
-        strays = [
-            value
-            for value in re.findall(r"UIColor\(rgb: 0x[0-9A-Fa-f]+\)", design_text)
-        ]
-        if strays:
-            err.append(f"AorusAI: the palette must come from the theme, found {strays[0]}")
-        if "list.itemAccentColor" not in design_text:
-            err.append("AorusAI: the accent must be the theme's own itemAccentColor")
-    if ai_controllers.is_file():
-        controllers_text = ai_controllers.read_text(encoding="utf-8")
-        for exported in (
-            "public func aorusAIConversationListController(",
-            "public func aorusAIMessageMenuTitle()",
-            "public func aorusAIMessageMenuIconName()",
-        ):
-            if exported not in controllers_text:
-                err.append(f"AorusAI: export missing — {exported}")
-        # Display's NavigationController traps in `present`, so a UIKit modal raised from a
-        # menu action has to go through the helper that finds a real presenter.
-        if re.search(r"navigationController\.present\(", controllers_text):
-            err.append("AorusAI: a UIKit modal is presented on the navigation controller (Display traps there)")
-        if "AorusAIMentionRenderer.map(entities:" not in controllers_text:
-            err.append("AorusAI: message bodies no longer draw their mentions inline")
-    ai_menu_host = tg / "submodules" / "TelegramUI" / "Sources" / "ChatInterfaceStateContextMenus.swift"
-    if not ai_menu_host.is_file():
-        err.append("AorusAI: missing ChatInterfaceStateContextMenus.swift")
-    else:
-        ai_menu_text = ai_menu_host.read_text(encoding="utf-8")
-        if "// AorusGram: AorusAI message action v7" not in ai_menu_text:
-            err.append("AorusAI: the message menu hand-off was not integrated")
-        for legacy in ("v1", "v2", "v3", "v4", "v5", "v6"):
-            if f"// AorusGram: AorusAI message action {legacy}" in ai_menu_text:
-                err.append(f"AorusAI: legacy message action ({legacy}) is still present")
-        if ai_menu_text.count("aorusAIPresentMessageActions(") != 1:
-            err.append("AorusAI: the message menu row must present the sheet exactly once")
-    ai_settings_items = (
-        tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "Sources" / "PeerInfoSettingsItems.swift"
-    )
-    if ai_settings_items.is_file():
-        settings_text = ai_settings_items.read_text(encoding="utf-8")
-        if "interaction.openSettings(.aorusAI)" not in settings_text:
-            err.append("AorusAI: the settings row was not integrated")
-
     glass_components = tg / "submodules" / "AorusGramUI" / "Sources" / "UI" / "GlassMorphism" / "GlassMorphismComponents.swift"
     if not glass_components.is_file():
         err.append("GlassEffects: component implementation is missing")
@@ -2693,6 +2706,682 @@ def main() -> None:
         err.append("GlassEffects: switch is not connected to glass components")
     elif "@AppStorage" in glass_components.read_text(encoding="utf-8"):
         err.append("GlassEffects: AppStorage is unavailable at the iOS 13 deployment target")
+
+    # Interface 2.0. Each patch already raises when its anchor moves, so what is checked here is
+    # the other failure: a pass that reported success against a file the build does not compile,
+    # or an "already present" short-circuit hiding a half-applied edit from a previous run.
+    interface_v2_expectations = (
+        (
+            "submodules/TelegramPresentationData/Sources/PresentationTheme.swift",
+            (
+                "aorusGlassListTheme",
+                "aorusGlassProfileTheme",
+                "AorusGlassThemeCache",
+                "blockMarker",
+                # The cache holds its source themes, and asks the theme itself whether it has been
+                # derived by looking for the marker fill. It used to remember them by
+                # ObjectIdentifier alone, and an object identifier is an address: a screen that
+                # mints a theme per state emission (the chat-folder editor does, through
+                # withModalBlocksBackground) could put a fresh, underived theme at the address of a
+                # derived one that had just been freed, whereupon it was handed back untouched --
+                # no marker, nothing for the pane finder to find, and every block on that screen
+                # came out as a flat rectangle with no glass behind it.
+                "private final class Entry",
+                "entry.source === theme",
+                "AorusGlassPane.isBlockMarker(theme.list.itemBlocksBackgroundColor)",
+                # Two markers, not one: the sentinel carries the page's own ink at 1/255 of an alpha
+                # rather than a hue of its own. A marker with a hue is invisible only while nothing
+                # touches it, and upstream derives a new colour from the card colour in eighty-odd
+                # places -- most of them keep the hue and raise the alpha, which is how a magenta
+                # marker became a solid rectangle over an administrator's default-granted rights.
+                "blockMarkerLight",
+                "func isBlockMarker",
+                # …and the wash itself, restated so a disabled row dims without going opaque over
+                # the material it is meant to be sitting on.
+                "func rowWash",
+                # The inset a block takes when it has to read as a card rather than a band. Shared,
+                # because the editing header's rows are laid out from it and so is the pane behind
+                # them: the two disagreeing by a point shows as glass sticking out past the text.
+                "blockSideInset",
+                # The page ink: one source for the name, the status, the header glyphs and the
+                # selected tab, so a pale photo cannot leave white text on a white page.
+                "profilePageKey",
+                "profilePageInk",
+                "profilePageScrim",
+                # A badge is a pill the row fills and a string the theme colours, and the derived
+                # theme moves the first without moving the second: the accent became the pane's ink
+                # so accent *text* would stay legible, which left the unread count beside an account
+                # in Settings drawn white on a white pill.
+                "aorusBadgeForegroundColor",
+                # The profile's personal-channel row is a real ChatListItem, so its greys come from
+                # theme.chatList and not theme.list -- it needs its own derivation.
+                "theme.chatList.withUpdated",
+            ),
+        ),
+        # cornersImage returns nil under Interface 2.0. Those wedges are an opaque overlay painted
+        # in the page colour, not a mask, so over glass they are exactly the black corners the
+        # blocks used to show.
+        (
+            "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesItemList.swift",
+            ("aorusNoCornerWedges",),
+        ),
+        ("submodules/ItemListUI/Sources/ItemListItem.swift", ("theme.aorusGlassListTheme",)),
+        # The three rows that draw a badge out of the list theme. All three ask the theme for a
+        # foreground that suits the fill instead of taking the check foreground unconditionally.
+        (
+            "submodules/ItemListPeerItem/Sources/ItemListPeerItem.swift",
+            ("aorusBadgeForegroundColor(over: item.presentationData.theme.list.itemAccentColor)",),
+        ),
+        (
+            "submodules/ItemListUI/Sources/Items/ItemListDisclosureItem.swift",
+            ("aorusBadgeForegroundColor(over: badgeColor)",),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/ListItems/PeerInfoScreenDisclosureItem.swift",
+            ("aorusBadgeForegroundColor(over: item.label.badgeColor)",),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenItemSectionContainerNode.swift",
+            ("aorusGlassBackgroundView", "import GlassBackgroundComponent"),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift",
+            (
+                "aorusCentredHeader",
+                "publishAvatarTint",
+                # Taken from the size the avatar list was actually laid out with, because the row of
+                # the photo the page has to match is worked out from it. Hardcoding the 98 a phone in
+                # portrait computes made the page a container-shape away from the header on any other.
+                "self.aorusMirroredTail = expandedAvatarListSize.height",
+                # And the structural guarantee beside it: the page's own row over the bottom of
+                # Telegram's blur block, faded up from nothing across its height, so the block's last
+                # line and the page's first are one set of pixels rather than two computations of it.
+                "aorusUpdateHeaderFade",
+                "aorusHidesButtonsBlur",
+                "aorusScrollingHeader",
+                "aorusOverlayPalette",
+                # The palette that actually runs: the photo is permanently expanded under
+                # Interface 2.0, so the expandedAvatar* branch is the one every profile with a
+                # picture takes, and it has to be inked like the other two.
+                "aorusOverlayInk",
+                # The photo stands still and the capsule under it is the small one, lifted clear of
+                # the join between the picture and the page.
+                "aorusStaticAvatar",
+                "aorusCompactMusic",
+                # The pill is placed against the bottom of the button row, not the bottom of the
+                # photo: an action button pushes that row down by its own height, and a pill measured
+                # off the header's edge went under the buttons on exactly those profiles.
+                "aorusButtonsBottom",
+                "aorusMusicPillTop",
+                "insetBy(dx: -12.0, dy: -3.0)",
+                # The pill takes the row's own frame path and the row's own alpha. Pinned at 1.0 and
+                # moved non-additively it slid out from under its text and stayed behind as a bare
+                # lozenge, which is what "becomes an artefact while scrolling" was.
+                "updateFrameAdditiveToCenter(view: self.aorusMusicCapsule",
+                "updateAlpha(layer: self.aorusMusicCapsule.layer, alpha: backgroundBannerAlpha)",
+                "// AorusGram: Interface 2.0 opens the photo at full width",
+                # The rating shield sits on the page next to the name, where the accent-coloured
+                # one it draws by default disappears into whatever the avatar happened to be.
+                "aorusWhiteShield",
+                # One phone button stands where the stock header shows Call and Video, so the tap
+                # has to ask which one. Both answers go back through performButtonAction, which is
+                # the same code the two stock buttons ran.
+                "aorusPresentCallTypeSheet",
+            ),
+        ),
+        # The members tab of a group or channel. It paints its own background and fades the list
+        # into it, both in the theme's own colours, which is the black the tab showed while the
+        # page around it carried the avatar's.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/Panes/PeerInfoMembersPane.swift",
+            (
+                "aorusUpdateGlass",
+                "aorusPageFillView",
+                "aorusGlassProfileTheme",
+                "import GlassBackgroundComponent",
+                # The pane draws the screen's own backdrop rectangle, found by tag, so page and tab
+                # stretch one image over one frame and cannot meet in a seam.
+                "aorusPageBackdrop",
+                # And it is told when the avatar changed: its update memoises its parameters, none
+                # of which a swipe between avatars touches, so without this the tab kept the
+                # previous avatar's backdrop until the list was scrolled.
+                "AorusGlassProfileTint.pageDidChangeNotification",
+                "aorusPageDidChange",
+            ),
+        ),
+        # The groups tab of a bot or a user. Same band and same fade as the members tab, plus one
+        # thing that tab does not have: its rows are ItemListPeerItems in the plain style, and a
+        # plain row paints the list's own background colour over the card unless it is told not to.
+        # That fill is the black rectangle the tab showed under a tinted page.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/Panes/PeerInfoGroupsInCommonPaneNode.swift",
+            (
+                "displayBackground: !AorusGlassPane.isEnabled",
+                "systemStyle: AorusGlassPane.isEnabled ? .glass : .legacy",
+                "aorusUpdateGlass",
+                "aorusPageFillView",
+                "aorusGlassProfileTheme",
+                "import GlassBackgroundComponent",
+                "aorusPageBackdrop",
+                "AorusGlassProfileTint.pageDidChangeNotification",
+                "aorusPageDidChange",
+                # The rows are merged by stable id, so the ink has to be part of what makes a row
+                # equal to itself -- otherwise flipping the page's ink rebuilds nothing.
+                "aorusPageIsDark",
+            ),
+        ),
+        # "Similar channels" / "Similar bots" -- the same plain-style rows as the groups tab, and so
+        # the same black band over the page, but with no card of its own to keep: upstream lets these
+        # rows run edge to edge over the pane, and under Interface 2.0 the pane shows the page.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/Panes/PeerInfoRecommendedPeersPane.swift",
+            (
+                "displayBackground: !AorusGlassPane.isEnabled",
+                "systemStyle: AorusGlassPane.isEnabled ? .glass : .legacy",
+                "import AorusGramUI",
+                "aorusGlassProfileTheme",
+                "AorusGlassProfileTint.pageDidChangeNotification",
+                "aorusPageDidChange",
+                # The entry holds the theme it was built with and compares it by identity, so the
+                # derived theme has to reach the promise the rows are built from, not just the layout.
+                "aorusPresentationData",
+            ),
+        ),
+        # Editing a profile keeps the page behind the header, and the name fields were the last
+        # block on it still painted as an opaque card: upstream fills them with the list's block
+        # colour and rounds them through cornersImage, which Interface 2.0 returns nil for.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderEditingContentNode.swift",
+            (
+                "aorusFieldsGlassView",
+                "aorusGlassProfileTheme",
+                "import GlassBackgroundComponent",
+                "AorusGlassPane.blockSideInset",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderSingleLineTextFieldNode.swift",
+            ("AorusGlassPane.blockSideInset",),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderMultiLineTextFieldNode.swift",
+            ("AorusGlassPane.blockSideInset",),
+        ),
+        (
+            "submodules/TelegramUI/Components/MultiScaleTextNode/Sources/MultiScaleTextNode.swift",
+            ("aorusTextOriginX",),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift",
+            ("aorusGlassBackground", "import GlassBackgroundComponent", "AorusGlassPane.profilePageInk"),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift",
+            (
+                "aorusPublishAvatarTint",
+                # The photo stays open when a tab is tapped, which is eight separate collapse sites
+                # all asking one shared test. Spelled out in full so that renaming the test without
+                # updating the sites fails here.
+                "aorusKeepsAvatarExpandedNow",
+                # The page is the photo's own lower half stretched behind the whole screen, not one
+                # flat colour: a colour alone met the picture in a visible line.
+                "aorusUpdatePageBackdrop",
+                "AorusGlassProfileTint.pageBackgroundImage",
+                # One slot holds the ink for every module that draws over the page and cannot import
+                # the sampler. The profile being laid out claims it at the top of both layout
+                # passes; leaving the previous peer's colour there is how a profile came out
+                # near-black on near-black.
+                "aorusUpdatePageColor",
+                "AorusGlassProfileTint.publishPageColor",
+            ),
+        ),
+        (
+            "submodules/AvatarNode/Sources/AvatarNode.swift",
+            ("aorusPlaceholderColors", "aorusLetterColor", "aorusHasGlassBackdrop"),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoAvatarTransformContainerNode.swift",
+            ("aorusUpdateGlassPlaceholder", "aorusHasGlassBackdrop", "import GlassBackgroundComponent"),
+        ),
+        (
+            "submodules/Display/Source/ActionSheetTheme.swift",
+            ("aorusGlassSheet",),
+        ),
+        (
+            "submodules/Display/Source/ActionSheetItemGroupNode.swift",
+            ("UIGlassEffect(style: .regular)",),
+        ),
+        # A sheet row can carry a glyph at its leading edge with the title beside it. The call-type
+        # sheet is the only caller, and without the row the two answers are two lines of text.
+        (
+            "submodules/Display/Source/ActionSheetButtonItem.swift",
+            ("aorusIcon", "aorusIconNode"),
+        ),
+        # The music player opened from a profile. Four opaque fills (the list, the two side strips
+        # and the header) plus the controls panel are all replaced by one pane spanning the sheet,
+        # so a fill left behind here is an opaque slab over the glass.
+        (
+            "submodules/TelegramUI/Sources/OverlayAudioPlayerControllerNode.swift",
+            (
+                "aorusPlayerBackgroundView",
+                "aorusUpdatePlayerGlass",
+                "import GlassBackgroundComponent",
+                "aorusListFill",
+                "aorusFrameFill",
+            ),
+        ),
+        # The panel under the transport controls draws its own fill and shadow in two generators;
+        # both have to decline to draw. The "Add to Profile" button takes the page's own ink.
+        (
+            "submodules/TelegramUI/Sources/OverlayAudioPlayerControlsNode.swift",
+            ("aorusPlayerInk", "aorusButtonInk", "self.scrubberNode.aorusWaveStyle"),
+        ),
+        # The playback position reads as a wave rather than a bar: both copies are drawn at the
+        # laid-out width and pinned to the same edge, so the crests line up and clipping the played
+        # copy horizontally still reads as progress.
+        (
+            "submodules/MediaPlayer/Sources/MediaPlayerScrubbingNode.swift",
+            ("public var aorusWaveStyle", "aorusWaveImage", "aorusUpdateWave"),
+        ),
+        (
+            "submodules/UndoUI/Sources/UndoOverlayControllerNode.swift",
+            ("aorusGlassToast", "import GlassBackgroundComponent"),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoData.swift",
+            ("aorusForcedButtons",),
+        ),
+        (
+            "submodules/ItemListUI/Sources/ItemListControllerNode.swift",
+            (
+                "aorusUpdateListGlass",
+                "aorusGlassPanes",
+                "AorusGlassPane.isBlockMarker(color)",
+                "import GlassBackgroundComponent",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNavigationButtonContainerNode.swift",
+            ("aorusPlainNavGlass",),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoPaneContainerNode.swift",
+            ("aorusPlainPanes", "kind: aorusPlainPanes ? .clear : .panel"),
+        ),
+        # The newer half of Settings lays its sections out with components rather than with
+        # ItemListItems, so it never passes through ItemListControllerNode. Without this the gifts,
+        # stars and business screens keep flat cards while everything around them is glass.
+        (
+            "submodules/TelegramUI/Components/ListSectionComponent/Sources/ListSectionComponent.swift",
+            ("aorusUsesGlass", "aorusGlassView", "import GlassBackgroundComponent"),
+        ),
+        # The band under the profile tabs. This pane paints its own opaque background and fades
+        # the list into it, both in the theme's blocks colour, which is the black the gifts tab
+        # used to show under a tinted page.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift",
+            ("aorusContinuesPage",),
+        ),
+        # The header calls this with photo:/photoCount:, so a stale copy of the table here would
+        # only surface as a missing-argument error deep inside a CI compile.
+        (
+            "submodules/AorusGramUI/Sources/UI/GlassMorphism/AorusGlassProfileTint.swift",
+            (
+                "photoCount: Int",
+                "sampledColors",
+                "pageKey",
+                # The page is the band Telegram itself blurs under the header buttons, stretched
+                # behind the whole screen: the one number that places that band on the photo -- the
+                # mirrored strip below the square picture, which is what says which row of it the
+                # bottom edge of the header shows -- the band around that row, and the weight that
+                # keeps the average on the row itself rather than a third of the way off it. The
+                # block's own height is deliberately not among them: every gradient it is drawn with
+                # is at its extreme along that bottom edge whatever its height, and a version that
+                # reached `shadowHeight - tail` into the picture averaged ninety points of it and
+                # landed the page a visible step away from the row it joins.
+                "mirroredTail",
+                "bandRange(tail:",
+                "bandDepth",
+                "seamRow",
+                "bottomBandSample",
+                "bandShadow",
+                # The tab panes draw the same rectangle the screen does, and find it by tag rather
+                # than by walking a fixed number of superviews.
+                "backdropTag",
+                # A swipe between avatars changes none of the parameters a pane's update memoises,
+                # so the panes are told the page changed instead of discovering it on the next
+                # scroll -- which is how the Members tab kept the previous avatar's backdrop.
+                "pageDidChangeNotification",
+                # The stretched backdrop, and the flag that keeps it from being sampled off the
+                # round centre-cropped fallback avatar.
+                "pageBackgroundImage",
+                "isFullPhoto",
+                # A peer with no photo has no band to sample, so the colour its letter avatar is
+                # drawn from is published instead. Without this the page stays black and the whole
+                # profile disappears into it.
+                "publishPageColor",
+                # The band is blurred with the block's own fifteen-point gaussian, converted from
+                # points into the sample's pixels -- spending them as pixels is a kernel half the
+                # width of the sample, which is the flat wash that was reported as "too blurred".
+                # The gaussian is this file's own, because ImageBlur's `radius` is the width of a box
+                # it convolves three times against a clamped edge: the wrong unit and the wrong edge
+                # policy, and handing it a sigma cost two and a half times the blur asked for, which
+                # measured as two and a quarter times the block's contrast at the join. Flattened
+                # afterwards into a buffer of our own, so the stretched copy has neither alpha to let
+                # the black behind it through nor rows left for the screen and the panes to draw at
+                # two different heights.
+                "nativeBlurRadius",
+                "sampleBlurSigma(width:",
+                "horizontallyBlurred(",
+                "flattenedRow(of image:",
+                # The vertical weight is half a gaussian and not a tent: the block's bottom edge is
+                # both where the page joins and where its kernel is renormalised, so its last line
+                # averages rows from inside the block only. A symmetric tent spent half its weight
+                # on rows the join never shows.
+                "bandSigma",
+                # The structural half of the fix -- the page's own row laid over the bottom of the
+                # block and faded up from nothing, so the join has no two sides to disagree. Without
+                # it every residual error in the model above is a step at one line.
+                "AorusProfileHeaderFadeView",
+                # A gallery item is given its picture twice -- chatAvatarGalleryPhoto emits the
+                # stripped thumbnail, blurred nearly flat, and only later the full-size photo over
+                # it -- and both fill the node opaquely, so nothing here can tell them apart from
+                # one reading. The band is therefore read until two readings agree, which is the
+                # difference between a page painted from the real photo and the permanent step at
+                # the join that was reported three times.
+                "sampleAndSettle",
+                "settledKeys",
+                "settleReads",
+                "currentKeys[key.peerId] == key",
+            ),
+        ),
+        # The chat's navigation bar keeps the pane behind the back button and loses the two that
+        # Interface 2.0 has no use for: the one behind the name and status, and the one behind the
+        # avatar or the ghost-mode badge that replaces it.
+        (
+            "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleView.swift",
+            ("aorusHidesTitleGlass", "isVisible: !aorusHidesTitleGlass"),
+        ),
+        # The title view a chat actually installs is ChatNavigationBarTitleView, whose pane belongs
+        # to the ChatTitleComponent inside it -- the file above is the older view. Hiding only that
+        # one is why the capsule under the name outlived the build that took the avatar's away.
+        # Here the pane owns the two lines of text, so it is dropped through the component's own
+        # no-background branch rather than hidden with them still inside it.
+        (
+            "submodules/TelegramUI/Components/ChatTitleView/Sources/ChatTitleComponent.swift",
+            ("aorusHidesTitlePill", "let displayBackground: Bool = !aorusHidesTitlePill"),
+        ),
+        (
+            "submodules/TelegramUI/Components/NavigationBarImpl/Sources/NavigationBarImpl.swift",
+            (
+                "aorusHidesCustomButtonGlass",
+                "singleCustomNode != nil",
+                # isVisible and not isHidden: the bar button is a subview of this container's own
+                # contentView, so hiding the container took the avatar and the ghost badge with it.
+                "isVisible: !aorusHidesCustomButtonGlass",
+            ),
+        ),
+        # The avatar/ghost item carries a pill of its own inside the bar's right-hand pane, so both
+        # have to go or the capsule survives the one that was hidden.
+        (
+            "submodules/TelegramUI/Sources/ChatController.swift",
+            ("aorusHidesNavCapsule",),
+        ),
+        # The menu a *tap* on a username opens is the older ContextMenuNode, which paints a flat
+        # grey rectangle unless it is told it is blurred. Both files, because the flag and the
+        # material it selects live one in each.
+        (
+            "submodules/Display/Source/ContextMenuContainerNode.swift",
+            ("aorusGlassMenu", "UIGlassEffect(style: .regular)"),
+        ),
+        (
+            "submodules/TelegramUI/Components/ContextMenuScreen/Sources/ContextMenuNode.swift",
+            (
+                "aorusBlurredMenu",
+                "ContextMenuContainerNode(isBlurred: aorusBlurredMenu",
+                # A rasterized fade would flatten the material into a grey slab.
+                "if !self.blurred {",
+            ),
+        ),
+        # And in a profile the old menu is not shown at all: what a tap on a username opens sits
+        # inches from the long-press menu on the same row, so it is presented through the same
+        # controller. All five branches, or the one left behind is the one that gets tapped.
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenOpenPeerInfoContextMenu.swift",
+            (
+                "aorusPresentTapMenu",
+                "AorusTapMenuLocationSource",
+                "import ContextUI",
+                "!self.aorusPresentTapMenu(actions: actions",
+                "self?.aorusPresentTapMenu(actions: actions",
+                "!self.aorusPresentTapMenu(actions: aorusTapActions",
+            ),
+        ),
+        # The connection section on Telegram's own Proxy screen. Its rows are added by anchor
+        # surgery into a file we do not ship a copy of, so this is the only place that can tell a
+        # half-applied edit from a clean one: the section reaching the screen without the state
+        # signal behind it would draw two switches that forget themselves on the next redraw.
+        (
+            "submodules/SettingsUI/Sources/Data and Storage/ProxyListSettingsController.swift",
+            (
+                "import AorusGramUI",
+                "case aorusConnection",
+                "aorusConnectionSwitchItem",
+                "aorusConnectionFooterItem",
+                # The entries builder is fed the live state, and the switches write through the
+                # preference store rather than into a local copy of it.
+                "aorusState: AorusConnectionSectionState",
+                "aorusConnectionSectionState()",
+                "aorusConnectionSetBypassEnabled(value)",
+                "aorusConnectionSetStableCallsEnabled(value)",
+                # The support chat opens on the main stack. This screen is a modal container and
+                # anything pushed after it joins that container, so the screen leaves the stack
+                # first or the chat opens inside the sheet.
+                "navigationController?.filterController(strongController, animated: true)",
+                "aorusOpenConnectionSupportChat(context: context",
+                # The КОНФИГУРАЦИИ block. One entry case carries every row of it, so a
+                # half-applied patch shows up as a missing case rather than as a screen that draws
+                # the header and nothing under it.
+                "case aorusUserVPNToggle",
+                "case aorusUserVPNServers",
+                "case aorusUserVPN(PresentationTheme, AorusUserVPNRow)",
+                "aorusUserVPNState: AorusUserVPNSectionState",
+                "aorusUserVPNRows(state: aorusUserVPNState",
+                "aorusUserVPNRowItem(",
+                # The "+" row is a SettingsUI-internal item, so it is built here and handed in.
+                "systemStyle: .glass, title: text, icon: .add, sectionId: self.section, editing: false",
+                # Tapping a configuration pushes its own screen; the "+" row reads the clipboard.
+                "aorusUserVPNSettingsController(context: context, configId: configId)",
+                "aorusUserVPNImportFromClipboard(context: context",
+            ),
+        ),
+        # And the section's own implementation, which is copied rather than patched.
+        (
+            "submodules/AorusGramUI/Sources/Features/Network/AorusConnectionSection.swift",
+            (
+                "aorusgram_support",
+                # The two switches are the hybrid route's input, not a display of its output: the
+                # bypass one re-evaluates the route immediately instead of waiting for the next
+                # connection failure to notice the preference changed.
+                "AorusConnectionPreferences.shared.bypassEnabled",
+                'AorusHybridRoute.shared.evaluate(reason: "user_bypass_toggle", force: true)',
+                # The indicator sits in the row's leading gutter, aligned with the title rather than
+                # centred on the whole row, and while a route is being found it turns the way
+                # Telegram's own indefinite indicator does -- so the row reads as a native one at
+                # every stage. Drawn into a bitmap, not an SF Symbol: the icon ends up as a layer's
+                # contents, where a symbol's tint is lost and it renders black.
+                "aorusIconAlignsWithTitle: true",
+                "aorusIconSpins: indicator == .connecting",
+                "let cutoutAngle: CGFloat = CGFloat.pi * 30.0 / 180.0",
+                # Direct working means the tunnel was stood down on purpose, and the row has to say
+                # so: a cross and "приостановлен", not a check and not a spinner that never ends.
+                "case .suspended:",
+                # The other half of the two-tunnel exclusion. The user's own VPN yields to this
+                # switch because this switch is the one that was just touched.
+                "AorusUserVPNManager.shared.bypassDidTurnOn()",
+                # A signal, so the row follows the route rather than the moment it was built.
+                "|> distinctUntilChanged",
+            ),
+        ),
+        # The user's own VLESS lane: the rows of the КОНФИГУРАЦИИ blocks, which are copied
+        # rather than patched. The Proxy screen only knows there is a list of rows to draw, so
+        # everything that decides what a row *is* has to be here.
+        (
+            "submodules/AorusGramUI/Sources/Features/Network/AorusUserVPNSection.swift",
+            (
+                "aorusUserVPNSectionState()",
+                "AorusUserVPNManager.shared.setEnabled(value)",
+                # A configuration with no servers cannot be switched on, and the switch says so
+                # instead of flipping back by itself a moment later.
+                "activatedWhileDisabled",
+                # The "+" row belongs to SettingsUI, so it arrives as a closure.
+                "buildAddRow: (String) -> ListViewItem",
+                # Import is a clipboard read, an alert on failure and a pill on success -- never a
+                # silent no-op, which is what a paste that missed looks like otherwise.
+                "aorusUserVPNImportFromClipboard(",
+                "UIPasteboard.general",
+                # Selecting a server is a checkmark on the right, swiping one removes it.
+                "ItemListCheckboxItem(",
+                "|> distinctUntilChanged",
+            ),
+        ),
+        # And the per-configuration screen behind the name row.
+        (
+            "submodules/AorusGramUI/Sources/Features/Network/AorusUserVPNSettingsController.swift",
+            (
+                "public func aorusUserVPNSettingsController(",
+                # Calls are UDP: the calls switch is the reason the UDP one exists.
+                "manager.setCallsEnabled(configId: configId, value: value)",
+                "manager.setUdpEnabled(configId: configId, value: value)",
+                "manager.refreshSubscription(configId: configId)",
+                # Renaming writes through the store, never an empty string, and the screen leaves
+                # the stack the way a pushed screen does: it pops, it does not dismiss the sheet
+                # that contains it.
+                "manager.rename(configId: configId, name:",
+                "navigationController.setViewControllers(filtered, animated: true)",
+            ),
+        ),
+    )
+    # AorusGram's own screens build rows out of ListViewItem subclasses that take a
+    # PresentationTheme directly, so they never pass through the ItemListPresentationData
+    # initializer the glass theme is injected into. Every one of them has to ask for the derived
+    # theme by hand, and a new screen that forgets to is a grey card sitting on a pane of glass --
+    # which is exactly how the broken sliders got shipped once.
+    for name in (
+        "AorusGramController.swift",
+        "AorusAntiSpamController.swift",
+        "AorusQuickRepliesController.swift",
+        "AorusFontPickerController.swift",
+        "AorusMasksController.swift",
+        "AorusDeviceSpoofController.swift",
+        "AccountBackupController.swift",
+        "Features/Network/AorusUserVPNSettingsController.swift",
+    ):
+        source = tg / "submodules/AorusGramUI/Sources" / name
+        if not source.is_file():
+            err.append(f"InterfaceV2: AorusGramUI/{name} is missing")
+        elif "aorusGlassListTheme" not in source.read_text(encoding="utf-8"):
+            err.append(f"InterfaceV2: AorusGramUI/{name} does not use the glass list theme")
+
+    # Session backup ships as two screens: a SwiftUI port that draws its own opaque cards, and an
+    # ItemList in .blocks style that gets real glass for free from ItemListControllerNode. The port
+    # cannot be turned into glass without rewriting it, so under Interface 2.0 the factory has to
+    # pick the list -- and with the switch off it has to keep picking the port.
+    backup_controller = tg / "submodules/AorusGramUI/Sources/AccountBackupController.swift"
+    backup_text = backup_controller.read_text(encoding="utf-8") if backup_controller.is_file() else ""
+    if backup_controller.is_file():
+        if "!AorusInterfaceV2.isEnabled" not in backup_text:
+            err.append("InterfaceV2: the backup screen still opens its opaque SwiftUI port")
+        if "accountBackupControllerLegacy" not in backup_text:
+            err.append("InterfaceV2: the backup screen has no glass list to fall back to")
+        if ".header(theme)" not in backup_text:
+            err.append("InterfaceV2: the backup screen has no illustration header")
+
+    backup_header = tg / "submodules/AorusGramUI/Sources/AorusBackupHeaderItem.swift"
+    if not backup_header.is_file():
+        err.append("InterfaceV2: AorusBackupHeaderItem.swift is missing")
+    else:
+        backup_header_text = backup_header.read_text(encoding="utf-8")
+        # The .tgs has to actually be in the bundle: a missing one costs no build error and no
+        # crash, it just leaves a blank 128pt gap where the illustration should be.
+        for animation in re.findall(r'animationName: "([^"]+)"', backup_text):
+            if not (tg / "Telegram" / "Telegram-iOS" / "Resources" / f"{animation}.tgs").is_file():
+                err.append(f"InterfaceV2: backup header animation {animation}.tgs is not bundled")
+        for marker in ("AnimatedStickerNodeSource", "still(.start)", "play(firstFrame: false"):
+            if marker not in backup_header_text:
+                err.append(f"InterfaceV2: backup header is missing {marker}")
+
+    # A row that cannot be tapped is dimmed by painting the card's own colour over it at a raised
+    # alpha. Under glass the card is the marker, and `withAlphaComponent` keeps a hue and replaces
+    # only its alpha, so that expression paints a slab of the marker over the material: magenta
+    # once, which is the pink rectangle that appeared over an administrator's default-granted
+    # rights, and ink now, which is the right colour and still too much of it. Every such site has
+    # to go through AorusGlassPane.rowWash, and the scan below is the part that matters, since an
+    # upstream bump adding a tenth site would otherwise bring the slab back with nothing to catch it.
+    row_wash_sites = (
+        ("submodules/ItemListUI/Sources/Items/ItemListSwitchItem.swift", "itemBackgroundColor.withAlphaComponent(0.6)"),
+        ("submodules/ItemListUI/Sources/Items/ItemListExpandableSwitchItem.swift", "itemBackgroundColor.withAlphaComponent(0.6)"),
+        ("submodules/PeerInfoUI/Sources/ItemListReactionItem.swift", "itemBackgroundColor.withAlphaComponent(0.6)"),
+        ("submodules/ItemListPeerItem/Sources/ItemListPeerItem.swift", "itemBlocksBackgroundColor.withAlphaComponent(0.5)"),
+        ("submodules/ItemListStickerPackItem/Sources/ItemListStickerPackItem.swift", "itemBlocksBackgroundColor.withAlphaComponent(0.5)"),
+        ("submodules/PeerInfoUI/Sources/PeerAutoremoveTimeoutItem.swift", "itemBlocksBackgroundColor.withAlphaComponent(0.4)"),
+        ("submodules/SettingsUI/Sources/Text Size/TextSizeSelectionItem.swift", "itemBlocksBackgroundColor.withAlphaComponent(0.4)"),
+        ("submodules/SettingsUI/Sources/Themes/ThemeSettingsFontSizeItem.swift", "itemBlocksBackgroundColor.withAlphaComponent(0.4)"),
+        ("submodules/ListMessageItem/Sources/ListMessageFileItemNode.swift", "itemBlocksBackgroundColor.withAlphaComponent(0.6)"),
+    )
+    for relative_path, stale in row_wash_sites:
+        target = tg / relative_path
+        if not target.is_file():
+            err.append(f"InterfaceV2: {relative_path} is missing")
+            continue
+        target_text = target.read_text(encoding="utf-8")
+        if "AorusGlassPane.rowWash" not in target_text:
+            err.append(f"InterfaceV2: {relative_path} still washes a disabled row with the card colour")
+        if stale in target_text:
+            err.append(f"InterfaceV2: {relative_path} still contains {stale}")
+
+    overlay_wash = re.compile(
+        r"(?:\w*[Dd]isabledOverlayNode|\w*[Rr]estrictionNode)\??\.backgroundColor\s*=\s*[^\n]*"
+        r"(?:itemBlocksBackgroundColor|itemModalBlocksBackgroundColor|itemBackgroundColor)\s*\.\s*withAlphaComponent"
+    )
+    for swift_file in sorted((tg / "submodules").rglob("*.swift")):
+        match = overlay_wash.search(swift_file.read_text(encoding="utf-8", errors="replace"))
+        if match:
+            relative_path = swift_file.relative_to(tg)
+            err.append(f"InterfaceV2: {relative_path} washes a disabled row with the card colour: {match.group(0).strip()}")
+
+    # The transparency slider in the profile's Personal Colors section is a Component rather than a
+    # row, and the section it sits in already draws one pane for all of its items, so this one has
+    # to paint nothing at all instead of asking for the derived theme.
+    opacity_component = tg / "submodules/AorusGramUI/Sources/Features/UI/AorusAnimatedProfileBackground.swift"
+    if not opacity_component.is_file():
+        err.append("InterfaceV2: AorusAnimatedProfileBackground.swift is missing")
+    elif "AorusInterfaceV2.isEnabled ? UIColor.clear" not in opacity_component.read_text(encoding="utf-8"):
+        err.append("InterfaceV2: the profile transparency slider still paints an opaque card")
+
+    for relative_path, markers in interface_v2_expectations:
+        target = tg / relative_path
+        if not target.is_file():
+            err.append(f"InterfaceV2: {relative_path} is missing")
+            continue
+        target_text = target.read_text(encoding="utf-8")
+        for marker in markers:
+            if marker not in target_text:
+                err.append(f"InterfaceV2: {relative_path} is missing {marker}")
+
+    undo_build = tg / "submodules" / "UndoUI" / "BUILD"
+    if not undo_build.is_file():
+        err.append("InterfaceV2: UndoUI BUILD is missing")
+    elif "//submodules/TelegramUI/Components/GlassBackgroundComponent" not in undo_build.read_text(encoding="utf-8"):
+        err.append("InterfaceV2: UndoUI cannot see GlassBackgroundComponent")
+
+    # Upstream already declares this edge, which is why no pass adds it; checked here so that an
+    # upstream bump dropping it fails on this line instead of a hundred lines into swiftc.
+    item_list_build = tg / "submodules" / "ItemListUI" / "BUILD"
+    if not item_list_build.is_file():
+        err.append("InterfaceV2: ItemListUI BUILD is missing")
+    elif "//submodules/TelegramUI/Components/GlassBackgroundComponent" not in item_list_build.read_text(encoding="utf-8"):
+        err.append("InterfaceV2: ItemListUI cannot see GlassBackgroundComponent")
 
     if formatting_toolbar.is_file():
         toolbar_text = formatting_toolbar.read_text(encoding="utf-8")
@@ -2734,6 +3423,150 @@ def main() -> None:
             err.append(f"DocumentPicker: premium file-size check remains in {document_size_gate_file.name}")
         if "let (accountPeer, limits, premiumLimits) = result" in document_size_gate_text:
             err.append(f"DocumentPicker: removed file-size gate left unused limit bindings in {document_size_gate_file.name}")
+
+    # AorusAI: the request contract, the module boundary and the nested message menu
+    # are all load-bearing and all silently breakable, so pin them here.
+    ai_core_dir = tg / "submodules" / "AorusGram" / "Sources" / "Features" / "AI"
+    ai_ui = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI" / "AorusAIControllers.swift"
+    ai_design = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI" / "AorusAIDesign.swift"
+    ai_design_text = ai_design.read_text(encoding="utf-8") if ai_design.is_file() else ""
+    ai_context_menu = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI" / "AorusAIMessageContextMenu.swift"
+    ai_context_menu_text = ai_context_menu.read_text(encoding="utf-8") if ai_context_menu.is_file() else ""
+    ai_models = ai_core_dir / "AorusAIModels.swift"
+    ai_client = ai_core_dir / "AorusAIClient.swift"
+
+    if not ai_models.is_file():
+        err.append("AorusAI: missing submodules/AorusGram/Sources/Features/AI/AorusAIModels.swift")
+    else:
+        models_text = ai_models.read_text(encoding="utf-8")
+        # §2 of the backend contract: the body is exactly {model, stream, messages}.
+        for required_key in ('public var model: String', 'public var stream: Bool', 'public var messages: [Message]'):
+            if required_key not in models_text:
+                err.append(f"AorusAI: agent payload lost {required_key}")
+        if "AorusAIAgentPayload(history:" not in models_text and "init(history:" not in models_text:
+            err.append("AorusAI: agent payload lost its history-budgeting initializer")
+
+    if not ai_client.is_file():
+        err.append("AorusAI: missing submodules/AorusGram/Sources/Features/AI/AorusAIClient.swift")
+
+    for ai_core_file in sorted(ai_core_dir.glob("*.swift")) if ai_core_dir.is_dir() else []:
+        core_text = ai_core_file.read_text(encoding="utf-8")
+        # aorusL lives in AorusGramUI; the core files are typechecked standalone in the
+        # preflight above, so a call here breaks CI before Bazel even starts.
+        if "aorusL(" in core_text or "aorusAILocalized(" in core_text:
+            err.append(f"AorusAI: {ai_core_file.name} calls the AorusGramUI localizer from the core module")
+        # Invented request fields were the original structural defect: the backend
+        # documents no conversation_id / protocol / input / history keys.
+        for forbidden_key in ('"conversation_id"', '"protocol"', '"input"', '"history"'):
+            if forbidden_key in core_text:
+                err.append(f"AorusAI: {ai_core_file.name} still serializes {forbidden_key}")
+
+    for ai_source in ([ai_ui, ai_design, ai_context_menu] + (sorted(ai_core_dir.glob("*.swift")) if ai_core_dir.is_dir() else [])):
+        if not ai_source.is_file():
+            continue
+        if "debugDisplayTitle" in ai_source.read_text(encoding="utf-8"):
+            err.append(f"AorusAI: {ai_source.name} shows a debug peer description to the user")
+
+    if not ai_ui.is_file():
+        err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIControllers.swift")
+    else:
+        ai_ui_text = ai_ui.read_text(encoding="utf-8")
+        for exported in ("public func aorusAIMessageMenuTitle()", "public func aorusAIMessageMenuIconName()", "public func aorusAIPresentMessageActions("):
+            if exported not in ai_ui_text + ai_design_text + ai_context_menu_text:
+                err.append(f"AorusAI: message menu export missing — {exported}")
+        # Presenting on a NavigationController is preconditionFailure() in Display, and
+        # the reported crash was exactly that. Every UIKit modal raised from a menu
+        # action has to go through the window's root controller instead.
+        if "navigationController.present(" in ai_ui_text or "navigationController.present(" in ai_design_text:
+            err.append("AorusAI: a UIKit modal is presented on the navigation controller (Display traps there)")
+
+    if not ai_design.is_file():
+        err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIDesign.swift")
+    else:
+        # The bespoke sheet is gone: the message actions are a native context menu level.
+        for removed in (
+            "AorusAIActionSheetController",
+            "aorusAIPresentMessageActions(",
+        ):
+            if removed in ai_design_text:
+                err.append(f"AorusAI: the replaced action sheet is still present — {removed}")
+        # A literal colour here is a colour that ignores the theme the user chose.
+        strays = re.findall(r"UIColor\(rgb: 0x[0-9A-Fa-f]+\)", ai_design_text)
+        if strays:
+            err.append(f"AorusAI: the palette must come from the theme, found {strays[0]}")
+        if "list.itemAccentColor" not in ai_design_text:
+            err.append("AorusAI: the accent must be the theme's own itemAccentColor")
+
+    # Handles are drawn as people, inline, wherever they appear.
+    ai_mention = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI" / "AorusAIMention.swift"
+    if not ai_mention.is_file():
+        err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIMention.swift")
+    if ai_ui.is_file() and "AorusAIMentionRenderer.map(entities:" not in ai_ui_text:
+        err.append("AorusAI: message bodies no longer draw their mentions inline")
+
+    if not ai_context_menu.is_file():
+        err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIMessageContextMenu.swift")
+    else:
+        # One native page sheet owns all categories. It must switch content in place;
+        # ContextUI push levels are forbidden because they overlap on compact hosts.
+        for marker in (
+            "UISegmentedControl",
+            "UITableViewDataSource",
+            "UIVisualEffectView",
+            "sheetPresentationController?.detents",
+            "AorusAIMessageMenu.run(",
+        ):
+            if marker not in ai_context_menu_text:
+                err.append(f"AorusAI: single-sheet message actions lost {marker}")
+        if "pushItems(" in ai_context_menu_text:
+            err.append("AorusAI: message actions brought back overlapping ContextUI push levels")
+
+    ai_ui_build = tg / "submodules" / "AorusGramUI" / "BUILD"
+    if ai_ui_build.is_file():
+        ai_ui_build_text = ai_ui_build.read_text(encoding="utf-8")
+        if "//submodules/LocalizedPeerData:LocalizedPeerData" not in ai_ui_build_text:
+            err.append("AorusAI: AorusGramUI BUILD is missing LocalizedPeerData (peer display titles)")
+        # The native menu items are ContextUI types; without the dep the module does not
+        # compile, and the failure is 50 minutes into the build.
+        if "//submodules/ContextUI:ContextUI" not in ai_ui_build_text:
+            err.append("AorusAI: AorusGramUI BUILD is missing ContextUI (the native message menu)")
+
+    ai_menu_host = tg / "submodules" / "TelegramUI" / "Sources" / "ChatInterfaceStateContextMenus.swift"
+    if not ai_menu_host.is_file():
+        err.append("AorusAI: missing ChatInterfaceStateContextMenus.swift")
+    else:
+        ai_menu_text = ai_menu_host.read_text(encoding="utf-8")
+        if "// AorusGram: AorusAI message action v7" not in ai_menu_text:
+            err.append("AorusAI: single-sheet message menu hand-off (v7) was not integrated")
+        for legacy in ("v1", "v2", "v3", "v4", "v5", "v6"):
+            if f"// AorusGram: AorusAI message action {legacy}" in ai_menu_text:
+                err.append(f"AorusAI: legacy message action ({legacy}) is still present")
+        for removed in ("aorusAIOpenMessageActions", "aorusAIMessageMenuSections()"):
+            if removed in ai_menu_text:
+                err.append(f"AorusAI: message menu still calls the removed {removed}")
+        # The generated block, bounded by its sentinel and the native anchor it precedes.
+        # Everything below is asserted inside it: the file's own native menu code also
+        # pushes levels, and those must not be touched.
+        ai_menu_index = ai_menu_text.find("// AorusGram: AorusAI message action v7")
+        if ai_menu_index >= 0:
+            ai_menu_end = ai_menu_text.find("if !isReplyThreadHead, (!data.messageActions.options", ai_menu_index)
+            ai_menu_block = ai_menu_text[ai_menu_index:ai_menu_end if ai_menu_end > ai_menu_index else ai_menu_index + 6000]
+            # The old menu must be fully gone before the sheet appears. This exact order is
+            # what prevents the two extracted panels shown in the regression screenshot.
+            if "c?.dismiss(completion:" not in ai_menu_block:
+                err.append("AorusAI: message menu row does not dismiss ContextUI before presenting the sheet")
+            if ai_menu_block.count("aorusAIPresentMessageActions(") != 1:
+                err.append("AorusAI: message menu row does not present the single sheet exactly once")
+            if "pushItems(" in ai_menu_block:
+                err.append("AorusAI: message menu row still pushes an overlapping ContextUI level")
+            # Icons have to be native bundle assets tinted like every other row; SF Symbols
+            # went through withTintColor and rendered black inside the menu.
+            if "UIImage(systemName:" in ai_menu_block or "withTintColor" in ai_menu_block:
+                err.append("AorusAI: message menu icons must be tinted bundle images, not SF Symbols")
+            if "generateTintedImage(image: UIImage(bundleImageName:" not in ai_menu_block:
+                err.append("AorusAI: message menu icons are not tinted through generateTintedImage")
+            if "aorusAIMessageMenuIconName()" not in ai_menu_block:
+                err.append("AorusAI: message menu row does not use the native AorusAI bundle icon")
 
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"

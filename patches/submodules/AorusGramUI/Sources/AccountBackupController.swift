@@ -12,9 +12,22 @@ import Postbox
 
 // Render an SF Symbol into a pre-tinted image for the action rows (the reference
 // Keychain-backup screen shows a key / restore / trash glyph next to each action).
+//
+// Drawn into a bitmap here, with the colour already in the pixels, rather than handed over as
+// `withTintColor`: that is a tint applied when the image is *rendered*, and the row's icon node is
+// layer-backed and displays without processing -- it puts the image's own CGImage straight into
+// layer contents, so the tint never runs. Which is why every glyph on this screen came out black
+// whatever colour it was asked for.
 private func aorusBackupActionIcon(_ systemName: String, color: UIColor) -> UIImage? {
     let cfg = UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)
-    return UIImage(systemName: systemName, withConfiguration: cfg)?.withTintColor(color, renderingMode: .alwaysOriginal)
+    guard let symbol = UIImage(systemName: systemName, withConfiguration: cfg) else {
+        return nil
+    }
+    let format = UIGraphicsImageRendererFormat()
+    format.opaque = false
+    return UIGraphicsImageRenderer(size: symbol.size, format: format).image { _ in
+        symbol.withTintColor(color, renderingMode: .alwaysOriginal).draw(in: CGRect(origin: .zero, size: symbol.size))
+    }
 }
 
 // Downscale a captured avatar to a small PNG so it fits comfortably in the Keychain.
@@ -64,6 +77,7 @@ private func aorusFormatUserId(_ userId: Int64) -> String {
 // MARK: - Sections
 
 private enum BackupSection: Int32 {
+    case header
     case actions
     case info
     case status
@@ -154,6 +168,8 @@ private final class BackupArguments {
 // MARK: - Entries
 
 private enum BackupEntry: ItemListNodeEntry {
+    case header(PresentationTheme)
+
     case backupAction(PresentationTheme, String, Bool)
     case restoreAction(PresentationTheme, String, Bool)
     case deleteAction(PresentationTheme, String, Bool)
@@ -168,6 +184,8 @@ private enum BackupEntry: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch self {
+        case .header:
+            return BackupSection.header.rawValue
         case .backupAction, .restoreAction, .deleteAction:
             return BackupSection.actions.rawValue
         case .info:
@@ -181,13 +199,14 @@ private enum BackupEntry: ItemListNodeEntry {
 
     var stableId: Int32 {
         switch self {
-        case .backupAction:   return 0
-        case .restoreAction:  return 1
-        case .deleteAction:   return 2
-        case .info:           return 3
-        case .statusHeader:   return 4
-        case .status:         return 5
-        case .sessionsHeader: return 6
+        case .header:          return 0
+        case .backupAction:    return 1
+        case .restoreAction:   return 2
+        case .deleteAction:    return 3
+        case .info:            return 4
+        case .statusHeader:    return 5
+        case .status:          return 6
+        case .sessionsHeader:  return 7
         case let .session(_, index, _): return 100 + index
         }
     }
@@ -198,6 +217,8 @@ private enum BackupEntry: ItemListNodeEntry {
 
     static func == (lhs: BackupEntry, rhs: BackupEntry) -> Bool {
         switch lhs {
+        case let .header(lt):
+            if case let .header(rt) = rhs { return lt === rt }
         case let .backupAction(lt, ls, lv):
             if case let .backupAction(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .restoreAction(lt, ls, lv):
@@ -221,6 +242,8 @@ private enum BackupEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let args = arguments as! BackupArguments
         switch self {
+        case let .header(theme):
+            return AorusBackupHeaderItem(theme: theme, animationName: "Passcode", sectionId: section)
         case let .backupAction(theme, title, enabled):
             let iconColor = enabled ? theme.list.itemAccentColor : theme.list.itemDisabledTextColor
             return ItemListPeerActionItem(presentationData: presentationData, icon: aorusBackupActionIcon("key.fill", color: iconColor), title: title, alwaysPlain: false, hasSeparator: true, sectionId: section, height: .peerList, color: enabled ? .accent : .disabled, action: { if enabled { args.backup() } })
@@ -250,6 +273,10 @@ private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: B
     let mgr = AccountBackupManager.shared
     let hasBackup = mgr.hasBackup()
     var entries: [BackupEntry] = []
+
+    // The illustration every native settings screen opens with, in its own section so the first
+    // rounded block starts below it rather than around it.
+    entries.append(.header(theme))
 
     entries.append(.backupAction(theme, l10n.backupAction, !state.busy))
     entries.append(.restoreAction(theme, l10n.restoreAction, hasBackup && !state.busy))
@@ -304,9 +331,17 @@ private func backupEntries(state: BackupState, theme: PresentationTheme, l10n: B
 // MARK: - Public factory
 
 public func accountBackupController(context: AccountContext) -> ViewController {
-    // Primary: the pixel-faithful SwiftUI port of Swiftgram's screen. The ItemList
-    // implementation below stays as an iOS 12 fallback.
-    if #available(iOS 13.0, *) {
+    // Two screens, and the switch picks between them.
+    //
+    // Interface 2.0 asks for this one to be made of the same material as every other list in the
+    // app, and the implementation below already is: an ItemListController in .blocks style, whose
+    // rows carry the derived theme and get backed by one sheet of real glass per section, the same
+    // way Settings does. The SwiftUI port draws its own opaque cards, which is the one thing that
+    // cannot be turned into glass without rewriting it, so 2.0 takes the list.
+    //
+    // With the switch off it is the other way round: the port is the pixel-faithful copy of
+    // Swiftgram's screen and stays the default, with the list as the iOS 12 fallback.
+    if #available(iOS 13.0, *), !AorusInterfaceV2.isEnabled {
         return AorusSessionBackupHostController(context: context)
     }
     return accountBackupControllerLegacy(context: context)
@@ -469,7 +504,10 @@ private func accountBackupControllerLegacy(context: AccountContext) -> ViewContr
         |> map { state -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let l10n = BackupL10n(lang: AorusLang.resolve(presentationData.strings.baseLanguageCode))
-            let entries = backupEntries(state: state, theme: presentationData.theme, l10n: l10n)
+            // The derived theme: the action icons below are tinted from theme.list directly rather
+            // than from the ItemListPresentationData the rows carry, so they would keep the stock
+            // accent blue while their own labels turned to ink.
+            let entries = backupEntries(state: state, theme: presentationData.theme.aorusGlassListTheme, l10n: l10n)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text(l10n.title),

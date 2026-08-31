@@ -46,7 +46,7 @@ enum SubscriptionConfig {
     // Max clock skew (seconds) tolerated for the signed response timestamp.
     static let responseMaxSkew: TimeInterval = 300
 
-    // TLS SPKI pins (base64 of SHA256 over DER SubjectPublicKeyInfo). The protected
+    // TLS SPKI pins (base64 of SHA256 over DER SubjectPublicKeyInfo). Both protected
     // API hosts currently use the same verified Let's Encrypt chain. The leaf pin is
     // the strict match; the CA pins keep routine certificate renewal from taking the
     // client offline. Standard hostname and trust validation still runs first.
@@ -56,19 +56,15 @@ enum SubscriptionConfig {
     static let pinnedSPKIHashesByHost: [String: [String]] = [
         "license.aorusgram.com": protectedAPISPKIPins,
         "api.aorusgram.com": protectedAPISPKIPins,
-        // Every AorusAI request carries the prompt, and — once the user approves it —
-        // a slice of a real Telegram conversation. That is the most sensitive payload
-        // this client sends anywhere, so the host is pinned like the licence API and
-        // not left on plain system trust.
         "ai.aorusgram.com": aiAPISPKIPins
     ]
 
     // ai.aorusgram.com has its own leaf key, while using the same verified
     // Let's Encrypt chain as the other protected Aorus endpoints.
     private static let aiAPISPKIPins: [String] = [
-        "Z/Olfhfs1OaJN2JjMhd4P2+AzcWrz5oY3PUQbx+RUno=", // ai.aorusgram.com leaf
-        "s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=", // Let's Encrypt YE2
-        "sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w="  // ISRG Root YE
+        "Z/Olfhfs1OaJN2JjMhd4P2+AzcWrz5oY3PUQbx+RUno=",
+        "s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y=",
+        "sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w="
     ]
 
     private static let protectedAPISPKIPins: [String] = [

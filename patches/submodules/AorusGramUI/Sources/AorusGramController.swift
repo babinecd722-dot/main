@@ -364,6 +364,7 @@ private final class AorusArguments {
     let setRAMCleanInterval: (Int) -> Void
     let setCacheInterval: (Int) -> Void
     let openProxyDiagnostics: () -> Void // AORUS-DIAG
+    let openConnectionSettings: () -> Void // AORUS-CONN
     let openAppBadgePicker: () -> Void
     let openFont: () -> Void
 
@@ -381,6 +382,7 @@ private final class AorusArguments {
          setRAMCleanInterval: @escaping (Int) -> Void,
          setCacheInterval: @escaping (Int) -> Void,
          openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
+         openConnectionSettings: @escaping () -> Void, // AORUS-CONN
          openAppBadgePicker: @escaping () -> Void,
          openFont: @escaping () -> Void) {
         self.set = set
@@ -397,6 +399,7 @@ private final class AorusArguments {
         self.setRAMCleanInterval = setRAMCleanInterval
         self.setCacheInterval = setCacheInterval
         self.openProxyDiagnostics = openProxyDiagnostics // AORUS-DIAG
+        self.openConnectionSettings = openConnectionSettings // AORUS-CONN
         self.openAppBadgePicker = openAppBadgePicker
         self.openFont = openFont
     }
@@ -496,6 +499,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case subscription(PresentationTheme, String)
     case officialChannel(PresentationTheme, String)
     case proxyDiagnostics(PresentationTheme, String) // AORUS-DIAG
+    case connectionSettings(PresentationTheme, String) // AORUS-CONN
 
     var section: ItemListSectionId {
         switch self {
@@ -536,7 +540,7 @@ private enum AorusEntry: ItemListNodeEntry {
             return AorusSection.misc.rawValue
         case .aorusCodeHeader, .aorusCodeEnabled:
             return AorusSection.aorusCode.rawValue
-        case .subscription, .officialChannel, .proxyDiagnostics: // AORUS-DIAG
+        case .subscription, .officialChannel, .proxyDiagnostics, .connectionSettings: // AORUS-DIAG
             return AorusSection.channel.rawValue
         }
     }
@@ -621,6 +625,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case .aorusCodeEnabled:     return 101
         case .subscription:         return 106
         case .officialChannel:      return 107
+        case .connectionSettings:   return 116 // AORUS-CONN — above the diagnostics row
         case .proxyDiagnostics:     return 117 // AORUS-DIAG
         }
     }
@@ -789,6 +794,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .officialChannel(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .proxyDiagnostics(lt, ls): // AORUS-DIAG
             if case let .proxyDiagnostics(rt, rs) = rhs { return lt === rt && ls == rs } // AORUS-DIAG
+        case let .connectionSettings(lt, ls): // AORUS-CONN
+            if case let .connectionSettings(rt, rs) = rhs { return lt === rt && ls == rs } // AORUS-CONN
         }
         return false
     }
@@ -958,6 +965,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openChannel)
         case let .proxyDiagnostics(_, title): // AORUS-DIAG
             return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openProxyDiagnostics) // AORUS-DIAG
+        case let .connectionSettings(_, title): // AORUS-CONN
+            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: args.openConnectionSettings) // AORUS-CONN
         }
     }
 }
@@ -1070,6 +1079,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
 
         .subscription(theme, l10n.subscription),
         .officialChannel(theme, l10n.officialChannel),
+        .connectionSettings(theme, l10n.connectionSettings), // AORUS-CONN
         .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
     ]
 
@@ -1456,6 +1466,17 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             nav.modalPresentationStyle = .fullScreen
             controller.present(nav, animated: true)
         },
+        openConnectionSettings: { // AORUS-CONN
+            // Telegram's own Proxy screen, pushed onto the same stack it is pushed onto from
+            // Data and Storage. It is a real Display.ViewController, so unlike the diagnostics
+            // page above it needs no UIKit modal — the screen itself is built by SettingsUI and
+            // handed in as a route, because SettingsUI depends on this module and not the reverse.
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController else {
+                return
+            }
+            navigationController.pushViewController(shortcutRoutes.connectionSettings())
+        },
         openAppBadgePicker: {
             guard let controller = weakController else { return }
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
@@ -1506,7 +1527,12 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
         |> deliverOnMainQueue
         |> map { state, presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
             let l10n = AorusL10n(presentationData.strings.baseLanguageCode)
-            let entries = aorusEntries(state: state, theme: presentationData.theme, l10n: l10n)
+            // The derived theme, not the raw one. Every row Telegram itself draws reaches it
+            // through ItemListPresentationData's convenience init; the rows in this file are our
+            // own ListViewItems and take a PresentationTheme directly, so they have to ask for it
+            // here. Handed the raw theme they paint an opaque card -- which is what put a grey
+            // block behind the interval sliders on top of the pane of glass behind the section.
+            let entries = aorusEntries(state: state, theme: presentationData.theme.aorusGlassListTheme, l10n: l10n)
             let controllerState = ItemListControllerState(
                 presentationData: ItemListPresentationData(presentationData),
                 title: .text("AorusGram"),

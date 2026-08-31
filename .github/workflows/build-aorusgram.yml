@@ -34,7 +34,7 @@ jobs:
         run: python3 aorusgram/scripts/release_security_check.py aorusgram
 
       # The AorusGramUI sources can only be parsed below, never typechecked: they name
-      # Display, AvatarNode and the rest of Telegram, which do not exist until Bazel runs.
+      # Display, ContextUI and the rest of Telegram, which do not exist until Bazel runs.
       # Parsing resolves no names, so a type used without its module imported only failed
       # an hour into the build. This resolves the one module boundary we own.
       - name: AorusAI module scope preflight

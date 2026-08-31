@@ -19,6 +19,7 @@ from aorus_call_proxy_udp import (
 )
 
 from profile_personalization_patch import patch_profile_personalization
+from interface_v2_patch import patch_interface_v2
 
 # ---------------------------------------------------------------------------
 # Security: opaque per-deployment keys — replace the grep-able "aorusgram_*"
@@ -4761,6 +4762,8 @@ def patch_info_plist_file_sharing(tg: Path) -> None:
 # keeps Telegram on a deliberately closed loopback port until libXray is ready. This
 # is fail-closed: provisioning or core failures cannot silently reopen a direct route.
 # Without a subscription the marker is false and Telegram retains its direct path.
+# The user's own imported VLESS configuration publishes the same two markers from the same
+# process, so it needs nothing here beyond not being judged by the hybrid lane's switches.
 _AORUS_PROXY_SNIPPET = (
     "({ () -> MTSocksProxySettings? in\n"
     "                // App extensions do not own the in-process libXray core. Do not\n"
@@ -4770,6 +4773,22 @@ _AORUS_PROXY_SNIPPET = (
     "                    return MTSocksProxySettings(ip: \"127.0.0.1\", port: 38190, username: nil, password: nil, secret: nil)\n"
     "                }\n"
     "                let aorusCurrentPid = ProcessInfo.processInfo.processIdentifier\n"
+    "                // The user imported their own VLESS configuration and switched it on. That\n"
+    "                // lane owns the core instead of the hybrid one, and the switches below are\n"
+    "                // the hybrid lane's — reading them here would send MTProto around the only\n"
+    "                // inbound this client has. The mirror is written to a single predicate:\n"
+    "                // enabled AND pointed at a server, so it is never true with nothing behind it.\n"
+    "                let aorusUserVPN = aorusStore.bool(forKey: \"aorusgram_uservpn_enabled\")\n"
+    "                // The user switched the built-in bypass off, so this client never\n"
+    "                // redirects MTProto: it is stock Telegram on whatever proxy the user\n"
+    "                // configured. The flag is mirrored out of the keychain on first access in\n"
+    "                // every process, so its absence means \"not answered yet\" and keeps the\n"
+    "                // fail-closed default below.\n"
+    "                if !aorusUserVPN,\n"
+    "                   aorusStore.object(forKey: \"aorusgram_connection_bypass_enabled\") != nil,\n"
+    "                   !aorusStore.bool(forKey: \"aorusgram_connection_bypass_enabled\") {\n"
+    "                    return nil\n"
+    "                }\n"
     "                let aorusRequirement = aorusStore.dictionary(forKey: \"b4f013e2-54e9-4e4d-b2e1-30edc1e5b7ca\")\n"
     "                let aorusRequirementPid = aorusRequirement?[\"pid\"] as? NSNumber\n"
     "                let aorusRequired = aorusRequirementPid?.int32Value == aorusCurrentPid\n"
@@ -8033,6 +8052,16 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
     initial_after_branch_new = (
         "        }\n"
         "        \n"
+        "        // AorusGram: capture the (reference, accent) pair the wallpaper picker WRITES\n"
+        "        // under — uploadCustomWallpaper() and WallpaperGalleryController both key\n"
+        "        // themeSpecificChatWallpapers by `settings.theme` (or the auto-night theme).\n"
+        "        // This has to happen BEFORE the stock-off override rewrites effectiveTheme to\n"
+        "        // .builtin(.night): otherwise the read key stops matching the write key and\n"
+        "        // every wallpaper the user picked vanishes on a cold start.\n"
+        "        let aorusWallpaperReference = effectiveTheme\n"
+        "        let aorusWallpaperAccent = themeSettings.themeSpecificAccentColors[aorusWallpaperReference.index]\n"
+        "        let aorusSelectedWallpaper = themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: aorusWallpaperReference, accentColor: aorusWallpaperAccent)] ?? themeSettings.themeSpecificChatWallpapers[aorusWallpaperReference.index]\n"
+        "        \n"
         "        let aorusUseStockOffTheme = aorusStockOffThemeEnabled(settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered)\n"
         "        if aorusUseStockOffTheme {\n"
         "            effectiveTheme = .builtin(.night)\n"
@@ -8061,8 +8090,11 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
         "        }\n"
     )
     initial_wallpaper_new = (
-        "        var effectiveChatWallpaper: TelegramWallpaper = (themeSettings.themeSpecificChatWallpapers[coloredThemeIndex(reference: effectiveTheme, accentColor: effectiveColors)] ?? themeSettings.themeSpecificChatWallpapers[effectiveTheme.index]) ?? theme.chat.defaultWallpaper\n"
-        "        if aorusUseStockOffTheme {\n"
+        "        // Read the wallpaper under the WRITE key, not under the stock-off theme.\n"
+        "        // When stock-off is inactive this is byte-for-byte the upstream expression\n"
+        "        // (effectiveTheme == aorusWallpaperReference there).\n"
+        "        var effectiveChatWallpaper: TelegramWallpaper = aorusSelectedWallpaper ?? theme.chat.defaultWallpaper\n"
+        "        if aorusUseStockOffTheme && aorusSelectedWallpaper == nil {\n"
         "            switch effectiveChatWallpaper {\n"
         "                case .builtin, .color, .gradient:\n"
         "                    effectiveChatWallpaper = theme.chat.defaultWallpaper\n"
@@ -8077,7 +8109,7 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
         "            effectiveChatWallpaper = defaultBuiltinWallpaper(data: .legacy, colors: legacyBuiltinWallpaperGradientColors.map(\\.rgb))\n"
         "        }\n"
     )
-    if "if aorusUseStockOffTheme {\n            switch effectiveChatWallpaper" not in t:
+    if "if aorusUseStockOffTheme && aorusSelectedWallpaper == nil {\n            switch effectiveChatWallpaper" not in t:
         if initial_wallpaper not in t:
             print("AorusStockOffTheme: WARNING initial wallpaper anchor not found")
             return
@@ -8089,6 +8121,10 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
     )
     new_effective = (
         "                        let aorusUseStockOffTheme = aorusStockOffThemeEnabled(settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered)\n"
+        "                        // themeSpecificWallpaper is read under exactly the key the wallpaper\n"
+        "                        // picker writes, so a non-nil value means \"the user picked this\".\n"
+        "                        // Nothing in AorusGram may override an explicit choice.\n"
+        "                        let aorusUserSelectedWallpaper = themeSpecificWallpaper != nil\n"
         "                        if aorusUseStockOffTheme {\n"
         "                            effectiveTheme = .builtin(.night)\n"
         "                            effectiveColors = nil\n"
@@ -8118,7 +8154,7 @@ def patch_aorus_stock_off_theme(tg: Path) -> None:
         t = t.replace(old_theme, new_theme, 1)
 
     old_wallpaper = "                        if autoNightModeTriggered && !switchedToNightModeWallpaper {\n"
-    new_wallpaper = "                        if (autoNightModeTriggered || aorusUseStockOffTheme) && !switchedToNightModeWallpaper {\n"
+    new_wallpaper = "                        if (autoNightModeTriggered || (aorusUseStockOffTheme && !aorusUserSelectedWallpaper)) && !switchedToNightModeWallpaper {\n"
     if new_wallpaper not in t:
         if old_wallpaper not in t:
             print("AorusStockOffTheme: WARNING wallpaper branch anchor not found")
@@ -8681,7 +8717,28 @@ def patch_local_premium(tg: Path) -> None:
         "              let status = try? JSONDecoder().decode(PeerEmojiStatus.self, from: data) else {\n"
         "            return nil\n"
         "        }\n"
+        "        // A status worn off a local gift is only as real as the local gifts are. With the\n"
+        "        // switch off the gift is no longer on the profile, so the badge it put next to the\n"
+        "        // name cannot stay either: what is left is whatever the account really has, which on\n"
+        "        // a premium account is the plain star. Which of the two kinds this persisted status\n"
+        "        // is, the store knows — it marks the gift it is wearing and clears that mark the\n"
+        "        // moment a real gift or a plain emoji takes the status over.\n"
+        "        if !AorusFakeGiftsStore.isEnabled, AorusFakeGiftsStore.wornGift() != nil {\n"
+        "            return nil\n"
+        "        }\n"
         "        return status\n"
+        "    }\n"
+        "\n"
+        "    // The override exactly as it sits on disk, with neither switch consulted — that is,\n"
+        "    // what the badge next to the name is showing, if it is showing ours at all. Used to\n"
+        "    // tell our own override apart from a status the account really has before taking one\n"
+        "    // off, so a real status is never mistaken for ours and wiped.\n"
+        "    private static func storedEmojiStatus(_ rawId: Int64) -> PeerEmojiStatus? {\n"
+        "        let key = emojiStatusKey(rawId)\n"
+        "        guard let data = UserDefaults.standard.data(forKey: key) ?? keychainGet(account: key) else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        return try? JSONDecoder().decode(PeerEmojiStatus.self, from: data)\n"
         "    }\n"
         "\n"
         "    // Server-sync hook: keep a persisted worn fake gift instead of the server value.\n"
@@ -8703,6 +8760,73 @@ def patch_local_premium(tg: Path) -> None:
         "                })\n"
         "            }\n"
         "        }).startStandalone()\n"
+        "    }\n"
+        "\n"
+        "    // The local gifts switch has to be able to take a worn gift out of the badge next to\n"
+        "    // the name, and to put it back. That badge is a field on the peer, and nothing re-reads\n"
+        "    // the local override between server syncs, so the switch moving is the moment to write\n"
+        "    // it — otherwise a worn fake gift keeps showing as «Носится» with the gifts switched\n"
+        "    // off, until some unrelated sync happens to refresh the own user.\n"
+        "    public static func reconcileEmojiStatus(account: Account) {\n"
+        "        let rawId = account.peerId.id._internalGetInt64Value()\n"
+        "        // Only a status this fork put there is ours to move. A worn local gift is the one\n"
+        "        // thing that says the override belongs to a fake gift rather than to a real one:\n"
+        "        // wearing a real gift or a plain emoji clears the worn mark.\n"
+        "        guard let stored = storedEmojiStatus(rawId), AorusFakeGiftsStore.wornGift() != nil else {\n"
+        "            return\n"
+        "        }\n"
+        "        // nil with the switch off — the native premium star, exactly what taking a real\n"
+        "        // gift off leaves behind.\n"
+        "        let target = persistedEmojiStatus(rawId)\n"
+        "        let _ = (account.postbox.transaction { transaction -> Void in\n"
+        "            guard let peer = transaction.getPeer(account.peerId) as? TelegramUser else {\n"
+        "                return\n"
+        "            }\n"
+        "            if target == nil, peer.emojiStatus != stored {\n"
+        "                // Taking ours off, but the badge is no longer ours to take off: the account\n"
+        "                // picked up a real status in the meantime. Leave it alone.\n"
+        "                return\n"
+        "            }\n"
+        "            if peer.emojiStatus == target {\n"
+        "                return\n"
+        "            }\n"
+        "            updatePeersCustom(transaction: transaction, peers: [peer.withUpdatedEmojiStatus(target)], update: { _, updatedPeer in\n"
+        "                updatedPeer\n"
+        "            })\n"
+        "        }).startStandalone()\n"
+        "    }\n"
+        "\n"
+        "    // One watcher per account, replaced rather than stacked on a re-login, holding the\n"
+        "    // account weakly: the session owns the account, not this.\n"
+        "    private final class FakeGiftsSwitchWatcher {\n"
+        "        private weak var account: Account?\n"
+        "        private var token: NSObjectProtocol?\n"
+        "\n"
+        "        init(account: Account) {\n"
+        "            self.account = account\n"
+        "            self.token = NotificationCenter.default.addObserver(forName: AorusFakeGiftsStore.changedNotification, object: nil, queue: OperationQueue.main) { [weak self] _ in\n"
+        "                guard let self, let account = self.account else {\n"
+        "                    return\n"
+        "                }\n"
+        "                AorusGramPremium.reconcileEmojiStatus(account: account)\n"
+        "            }\n"
+        "        }\n"
+        "\n"
+        "        deinit {\n"
+        "            if let token = self.token {\n"
+        "                NotificationCenter.default.removeObserver(token)\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private static var fakeGiftsSwitchWatchers: [Int64: FakeGiftsSwitchWatcher] = [:]\n"
+        "\n"
+        "    // Follow the local gifts switch for as long as this account is signed in. Every path\n"
+        "    // that flips it — the settings toggle and «Добавить в профиль» in a gift — posts the\n"
+        "    // same notification, so one watcher covers them all.\n"
+        "    public static func observeFakeGiftsSwitch(account: Account) {\n"
+        "        let rawId = account.peerId.id._internalGetInt64Value()\n"
+        "        fakeGiftsSwitchWatchers[rawId] = FakeGiftsSwitchWatcher(account: account)\n"
         "    }\n"
         "\n"
         "    // MARK: - Profile appearance (name/profile color + background emoji) persistence\n"
@@ -8847,6 +8971,7 @@ def patch_local_premium(tg: Path) -> None:
                 "        AorusGramPremium.registerCurrentAccount(account.peerId.id._internalGetInt64Value()) // AorusGram local premium\n"
                 "        AorusGramPremium.restoreEmojiStatus(account: account) // AorusGram: restore worn fake gift\n"
                 "        AorusGramPremium.restoreAppearance(account: account) // AorusGram: restore profile colors\n"
+                "        AorusGramPremium.observeFakeGiftsSwitch(account: account) // AorusGram: follow the local gifts switch\n"
                 "        self.isPremium = AorusGramPremium.isEnabled\n",
                 1,
             )
@@ -9801,14 +9926,15 @@ public enum AorusFakeGiftsStore {
             hideName: hideName
         )
         AorusFakeStarsStore.recordPurchase(accountPeerId: accountPeerId, recipientPeerId: recipientPeerId, amount: stars, gift: gift, premiumMonths: nil, text: text)
-        // A native collectible purchase is represented by the owned gift and Stars
-        // transaction. Telegram does not synthesize a directed chat gift message here.
-        if case .unique = gift { return }
+        // Every local purchase delivers the very same gift card Telegram builds for a real
+        // one: a collectible posts messageActionStarGiftUnique, an ordinary gift posts
+        // messageActionStarGift. Buying for yourself addresses Saved Messages, because a
+        // message whose peer is the account is exactly that chat.
         let ownedGift = giftWithOwner(gift, ownerPeerId: recipientPeerId.toInt64())
         let action: TelegramMediaActionType
         switch ownedGift {
         case .unique:
-            return
+            action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: CurrencyAmount(amount: StarsAmount(value: stars, nanos: 0), currency: .stars), canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
         case .generic:
             action = .starGift(gift: ownedGift, convertStars: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
         }
@@ -10035,7 +10161,17 @@ public enum AorusFakeGiftsStore {
     }
 
     // Only the gifts pinned to top, in pin order — drives the badges around the avatar.
+    //
+    // Gated on the switch here rather than at the call site, unlike the other own-profile
+    // getters: this one is read by the profile cover, which caches what it gets and rebuilds
+    // only when changedNotification fires. Gating it inside the store is what makes the badges
+    // leave the settings preview and Мой профиль the moment fake gifts are switched off, and
+    // come back when they are switched on — setEnabled posts that notification either way.
+    // Own gifts only (ownerPeerId == 0), so a fake sent to somebody else is unaffected.
     public static func pinnedProfileWrappers() -> [ProfileGiftsContext.State.StarGift] {
+        guard isEnabled else {
+            return []
+        }
         return all().filter { $0.showInProfile && $0.ownerPeerId == 0 && $0.pinnedToTop }.sorted { $0.pinnedOrder < $1.pinnedOrder }.compactMap { wrapper(for: $0) }
     }
 
@@ -14758,7 +14894,12 @@ final class AorusGhostAvatarNavigationNode: ASDisplayNode {
         if let glassView = self.glassView {
             glassView.frame = CGRect(origin: .zero, size: size)
             let aorusGlassOn = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
-            glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: self.ghostVisible && aorusGlassOn, transition: .immediate)
+            // Interface 2.0 shows the avatar and the ghost badge bare: this node carries a pill of
+            // its own on top of the navigation bar's right-hand pane, so hiding only that one would
+            // leave this capsule behind them. The back button's pane is a different view and keeps
+            // its own tablet.
+            let aorusHidesNavCapsule = UserDefaults.standard.bool(forKey: "aorusgram_interface_v2")
+            glassView.update(size: size, cornerRadius: size.height / 2.0, isDark: self.isDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: .panel), isInteractive: true, isVisible: self.ghostVisible && aorusGlassOn && !aorusHidesNavCapsule, transition: .immediate)
         }
         if self.ghostVisible {
             self.ghostButtonNode.frame = CGRect(x: 6.0, y: 5.0, width: 34.0, height: 34.0)
@@ -16475,11 +16616,32 @@ _AORUS_AMOLED_HELPER = (
     "    return aorusApplyInterfaceV2Theme(PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: theme.actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview))\n"
     "}\n"
     "\n"
-    "func aorusAmoledWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool) -> TelegramWallpaper {\n"
-    "    if aorusAmoledEnabled() && dark {\n"
-    "        return .color(0x000000)\n"
+    "// AorusGram: true when the user has explicitly picked a chat wallpaper for the\n"
+    "// theme the wallpaper picker writes under. Mirrors the write key used by\n"
+    "// uploadCustomWallpaper() and WallpaperGalleryController exactly (colored index\n"
+    "// first, plain theme index second), so an explicit choice is never mistaken for\n"
+    "// \"nothing set\". AMOLED must not paint over a wallpaper the user just chose.\n"
+    "func aorusHasUserChosenWallpaper(settings: PresentationThemeSettings, autoNightModeTriggered: Bool) -> Bool {\n"
+    "    let reference: PresentationThemeReference = autoNightModeTriggered ? settings.automaticThemeSwitchSetting.theme : settings.theme\n"
+    "    let accentColor = settings.themeSpecificAccentColors[reference.index]\n"
+    "    if settings.themeSpecificChatWallpapers[coloredThemeIndex(reference: reference, accentColor: accentColor)] != nil {\n"
+    "        return true\n"
     "    }\n"
-    "    return wallpaper\n"
+    "    return settings.themeSpecificChatWallpapers[reference.index] != nil\n"
+    "}\n"
+    "\n"
+    "func aorusAmoledWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool, settings: PresentationThemeSettings, autoNightModeTriggered: Bool) -> TelegramWallpaper {\n"
+    "    guard aorusAmoledEnabled(), dark else {\n"
+    "        return wallpaper\n"
+    "    }\n"
+    "    // AMOLED only supplies a background where the theme's default would otherwise\n"
+    "    // show. A wallpaper the user picked wins — otherwise the wallpaper grid could\n"
+    "    // never show a selection (it compares against presentationData.chatWallpaper)\n"
+    "    // and tapping a photo would appear to do nothing at all.\n"
+    "    if aorusHasUserChosenWallpaper(settings: settings, autoNightModeTriggered: autoNightModeTriggered) {\n"
+    "        return wallpaper\n"
+    "    }\n"
+    "    return .color(0x000000)\n"
     "}\n"
     "\n"
     "// Re-emits whenever the AMOLED flag flips, so the presentation pipeline re-runs\n"
@@ -16537,11 +16699,11 @@ def patch_amoled_theme(tg: Path) -> None:
     # Apply to the initial snapshot (currentPresentationDataAndSettings).
     init_old = "theme: theme, autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: effectiveChatWallpaper,"
     init_new = ("theme: aorusApplyAmoledTheme(theme), autoNightModeTriggered: autoNightModeTriggered, "
-                "chatWallpaper: aorusAmoledWallpaper(effectiveChatWallpaper, dark: theme.overallDarkAppearance),")
+                "chatWallpaper: aorusAmoledWallpaper(effectiveChatWallpaper, dark: theme.overallDarkAppearance, settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered),")
     # Apply to the live signal (updatedPresentationData).
     live_old = "theme: themeValue, autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: effectiveChatWallpaper,"
     live_new = ("theme: aorusApplyAmoledTheme(themeValue), autoNightModeTriggered: autoNightModeTriggered, "
-                "chatWallpaper: aorusAmoledWallpaper(effectiveChatWallpaper, dark: themeValue.overallDarkAppearance),")
+                "chatWallpaper: aorusAmoledWallpaper(effectiveChatWallpaper, dark: themeValue.overallDarkAppearance, settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered),")
     n = 0
     if init_old in t:
         t = t.replace(init_old, init_new, 1); n += 1
@@ -21832,11 +21994,16 @@ extension WallpaperBackgroundNodeImpl {
             aorusGifBaseWallpaper = nil
             return
         }
+        // Track the GLOBAL chat wallpaper, never this node's own one. A chat can carry
+        // a per-peer wallpaper or a theme-gift background, and reading that as "the user
+        // picked something else" would silently delete an active GIF just by opening
+        // such a chat.
+        let globalWallpaper = self.context.sharedContext.currentPresentationData.with({ $0 }).chatWallpaper
         if aorusGifBaseWallpaper == nil {
             // First time the real chat renders with the GIF active: remember the base
             // wallpaper sitting underneath, so we can detect a later user-initiated change.
-            aorusGifBaseWallpaper = wallpaper
-        } else if let base = aorusGifBaseWallpaper, base != wallpaper {
+            aorusGifBaseWallpaper = globalWallpaper
+        } else if let base = aorusGifBaseWallpaper, base != globalWallpaper {
             AorusGifWallpaperHost.clearStore()
             aorusGifBaseWallpaper = nil
             if let size = self.validLayout?.0 {
@@ -24935,6 +25102,10 @@ def main() -> None:
     patch_phone_spoof_profile_display(tg)
     patch_phone_spoof_profile_header(tg)
     patch_profile_personalization(tg)
+    # After the personalization pass, never before it: the glass behind an action button is
+    # cornered from the round-button flag that pass inserts, and the section pane goes in behind
+    # nodes that pass has to have pointed at a clear fill first.
+    patch_interface_v2(tg)
     patch_chat_title_anti_spoof_status(tg)
     patch_client_spoof_app_version(tg)
     patch_app_delegate_import_aorusgram(tg)
