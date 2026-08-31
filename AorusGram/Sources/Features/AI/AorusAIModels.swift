@@ -402,12 +402,16 @@ public struct AorusAIToolResult: Equatable, Encodable {
         limit: Int?,
         fromDate: Int64? = nil,
         toDate: Int64? = nil,
-        messages: [(sender: String, text: String)]
+        messages: [(sender: String, text: String, caption: String?)]
     ) -> AorusAIToolResult {
         let clamped = messages.suffix(AorusAIRequestLimits.chatHistoryMessageCount).map { message in
+            // `text` and `caption` are both dropped when empty by `object(fields:)`, so a
+            // voice message travels as `{ "sender_name": …, "caption": "голосовое 0:12" }`
+            // and a photo with a caption carries both.
             AorusAIJSONValue.object(fields: [
                 ("sender_name", .string(String(message.sender.prefix(96)))),
-                ("text", .string(String(message.text.prefix(AorusAIRequestLimits.chatHistoryMessageCharacters))))
+                ("text", .string(String(message.text.prefix(AorusAIRequestLimits.chatHistoryMessageCharacters)))),
+                ("caption", message.caption.map { .string(String($0.prefix(96))) })
             ])
         }
         // `messages` stays even when it is empty: "the chat has nothing to read" is a
@@ -658,6 +662,9 @@ public enum AorusAIEvent: Equatable {
     case responseStarted
     case responseDelta(String)
     case artifactReady(AorusAIArtifact)
+    /// A whole chat-completion answer: the turn's text and the files it produced. The
+    /// production answer for an artifact turn is this, not a stream of `artifact.ready`.
+    case completion(text: String?, artifacts: [AorusAIArtifact])
     case toolRequest(AorusAIToolRequest)
     case toolResult(tool: String, ok: Bool, label: String?)
     case permissionRequest(AorusAIPermissionRequest)

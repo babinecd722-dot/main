@@ -293,8 +293,14 @@ private func aorusAIPresentHistoryCount(context: AccountContext, navigationContr
     let presentationData = context.sharedContext.currentPresentationData.with { $0 }
     let limit = AorusAIRequestLimits.chatHistoryMessageCount
     let sheet = ActionSheetController(presentationData: presentationData)
+    // The rows state what they share rather than showing a bare number: this is now the
+    // only dialog in the flow, so it is the one that has to say what is being agreed to.
     var choices: [ActionSheetButtonItem] = [20, 50, 100, limit].map { count in
-        ActionSheetButtonItem(title: "\(count)", color: .accent, action: { [weak sheet] in
+        let title = aorusAILocalized(
+            "Последние \(count) \(aorusAIMessageWord(count))",
+            count == 1 ? "The last message" : "The last \(count) messages"
+        )
+        return ActionSheetButtonItem(title: title, color: .accent, action: { [weak sheet] in
             sheet?.dismissAnimated()
             aorusAIPrepareHistoryAnalysis(context: context, navigationController: navigationController, reference: reference, count: count)
         })
@@ -359,6 +365,75 @@ private struct AorusAITranscript {
 /// a transcript the user sees in full before confirming, and sends it inline with the
 /// prompt. The agent-driven path is `aorusAIChatHistoryLines` below, which answers a
 /// server `permission.request` with `aorus_tool_results` instead.
+/// What a message without text actually is, in one short phrase.
+///
+/// A chat is not a wall of text: it is voices, photos, files and round videos, and a
+/// transcript that silently drops every one of them hands the model a conversation that
+/// did not happen — and, in a chat of voice messages, hands it nothing at all. Each is
+/// named for what it is, with its duration where that is the whole content.
+private func aorusAIMediaCaption(_ message: Message) -> String? {
+    for media in message.media {
+        if let file = media as? TelegramMediaFile {
+            var seconds: Int?
+            for attribute in file.attributes {
+                if case let .Audio(_, duration, _, _, _) = attribute {
+                    seconds = duration
+                }
+            }
+            let length = seconds.map { " " + stringForDuration(Int32($0)) } ?? ""
+            if file.isVoice {
+                return aorusAILocalized("голосовое\(length)", "voice message\(length)")
+            }
+            if file.isInstantVideo {
+                return aorusAILocalized("видеосообщение\(length)", "video message\(length)")
+            }
+            if file.isSticker || file.isAnimatedSticker || file.isVideoSticker {
+                return aorusAILocalized("стикер", "sticker")
+            }
+            if file.isMusic {
+                let name = file.fileName.map { " " + $0 } ?? ""
+                return aorusAILocalized("аудио\(name)", "audio\(name)")
+            }
+            if file.isAnimated {
+                return aorusAILocalized("GIF", "GIF")
+            }
+            if file.isVideo {
+                return aorusAILocalized("видео\(length)", "video\(length)")
+            }
+            let name = file.fileName.map { " " + $0 } ?? ""
+            return aorusAILocalized("файл\(name)", "file\(name)")
+        }
+        if media is TelegramMediaImage {
+            return aorusAILocalized("фото", "photo")
+        }
+        if media is TelegramMediaMap {
+            return aorusAILocalized("геопозиция", "location")
+        }
+        if media is TelegramMediaContact {
+            return aorusAILocalized("контакт", "contact")
+        }
+        if media is TelegramMediaPoll {
+            return aorusAILocalized("опрос", "poll")
+        }
+        // A service message — someone joined, the title changed — is not part of the
+        // conversation and is left out rather than described.
+        if media is TelegramMediaAction {
+            return nil
+        }
+    }
+    return nil
+}
+
+/// Who said it. An outgoing message is "Я", not the account's own display name: the model
+/// is being asked about the user's conversation, and "Я" is how the user refers to
+/// themselves in it.
+private func aorusAIHistorySender(_ message: Message, strings: PresentationStrings, nameOrder: PresentationPersonNameOrder, unknown: String) -> String {
+    if !message.flags.contains(.Incoming) {
+        return aorusAILocalized("Я", "Me")
+    }
+    return message.author.flatMap { EnginePeer($0).displayTitle(strings: strings, displayOrder: nameOrder) } ?? unknown
+}
+
 private func aorusAIChatTranscript(context: AccountContext, peerId: PeerId, namespace: Int32, count: Int) -> Signal<AorusAITranscript, NoError> {
     let limit = min(AorusAIRequestLimits.chatHistoryMessageCount, max(1, count))
     let presentationData = context.sharedContext.currentPresentationData.with { $0 }
@@ -371,10 +446,20 @@ private func aorusAIChatTranscript(context: AccountContext, peerId: PeerId, name
         transaction.scanTopMessages(peerId: peerId, namespace: namespace, limit: limit) { message in
             guard lines.count < limit else { return false }
             let body = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !body.isEmpty else { return true }
-            let author = message.author.flatMap { EnginePeer($0).displayTitle(strings: strings, displayOrder: nameOrder) } ?? unknownAuthor
-            let clamped = body.count > perMessage ? String(body.prefix(perMessage)) + "…" : body
-            lines.append("\(author): \(clamped)")
+            let caption = aorusAIMediaCaption(message)
+            // A message is skipped only when it is neither text nor recognisable media.
+            // Dropping every voice and photo is what made a chat of voice messages come
+            // out as a transcript of nothing.
+            guard !body.isEmpty || caption != nil else { return true }
+            let author = aorusAIHistorySender(message, strings: strings, nameOrder: nameOrder, unknown: unknownAuthor)
+            let content: String
+            if body.isEmpty {
+                content = "[\(caption ?? "")]"
+            } else {
+                let clamped = body.count > perMessage ? String(body.prefix(perMessage)) + "…" : body
+                content = caption.map { "[\($0)] \(clamped)" } ?? clamped
+            }
+            lines.append("\(author): \(content)")
             return true
         }
         let ordered = Array(lines.reversed())
@@ -386,6 +471,8 @@ private func aorusAIChatTranscript(context: AccountContext, peerId: PeerId, name
 private struct AorusAIHistoryLine {
     var sender: String
     var text: String
+    /// What the message is when it carries no text: `голосовое 0:12`, `фото`, `файл x.pdf`.
+    var caption: String?
 }
 
 /// The device-side implementation of the `telegram.chat.history` tool.
@@ -423,10 +510,11 @@ private func aorusAIChatHistoryLines(
                 return false
             }
             let body = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !body.isEmpty else { return true }
-            let author = message.author.flatMap { EnginePeer($0).displayTitle(strings: strings, displayOrder: nameOrder) } ?? unknownAuthor
+            let caption = aorusAIMediaCaption(message)
+            guard !body.isEmpty || caption != nil else { return true }
+            let author = aorusAIHistorySender(message, strings: strings, nameOrder: nameOrder, unknown: unknownAuthor)
             let clamped = body.count > perMessage ? String(body.prefix(perMessage)) + "…" : body
-            lines.append(AorusAIHistoryLine(sender: author, text: clamped))
+            lines.append(AorusAIHistoryLine(sender: author, text: clamped, caption: caption))
             return true
         }
         return Array(lines.reversed())
@@ -452,30 +540,22 @@ private func aorusAIPrepareHistoryAnalysis(context: AccountContext, navigationCo
             aorusAIPresent(empty, from: navigationController)
             return
         }
-        let confirmation = UIAlertController(
-            title: aorusAILocalized("Передать переписку AorusAI?", "Share the chat with AorusAI?"),
-            message: aorusAILocalized(
-                "Будет передано \(transcript.messageCount) из последних \(requested) сообщений — \(transcript.text.count) символов. Ничего не уходит с устройства до подтверждения.",
-                "\(transcript.messageCount) of the latest \(requested) messages — \(transcript.text.count) characters — will be shared. Nothing leaves the device until you confirm."
-            ),
-            preferredStyle: .alert
+        // No second dialog. The amount was chosen a moment ago, in a sheet that said what
+        // each choice shares; asking again for the same thing is not more consent, it is
+        // the same consent collected twice.
+        let visiblePrompt = aorusAILocalized(
+            "Проанализируй последние \(transcript.messageCount) сообщений этой переписки.",
+            "Analyze the last \(transcript.messageCount) messages of this chat."
         )
-        confirmation.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
-        confirmation.addAction(UIAlertAction(title: aorusAILocalized("Передать", "Share"), style: .default, handler: { _ in
-            let visiblePrompt = aorusAILocalized(
-                "Проанализируй последние \(transcript.messageCount) сообщений этой переписки.",
-                "Analyze the last \(transcript.messageCount) messages of this chat."
-            )
-            let header = aorusAILocalized("Переписка:", "Chat transcript:")
-            navigationController.pushViewController(AorusAIChatController(
-                context: context,
-                conversation: AorusAIConversation(),
-                initialPrompt: visiblePrompt,
-                initialRequest: visiblePrompt + "\n\n" + header + "\n" + transcript.text,
-                reference: reference
-            ))
-        }))
-        aorusAIPresent(confirmation, from: navigationController)
+        let header = aorusAILocalized("Переписка:", "Chat transcript:")
+        navigationController.pushViewController(AorusAIChatController(
+            context: context,
+            conversation: AorusAIConversation(),
+            initialPrompt: visiblePrompt,
+            initialRequest: visiblePrompt + "\n\n" + header + "\n" + transcript.text,
+            reference: reference,
+            approvedHistory: (peerId: reference.peerId, limit: transcript.messageCount)
+        ))
     })
 }
 
@@ -1305,7 +1385,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// `initialPrompt` is what the user sees in the conversation. `initialRequest`
     /// is what is actually sent when the two differ — a chat analysis shows a short
     /// instruction but transports the confirmed transcript with it.
-    init(context: AccountContext, conversation: AorusAIConversation, initialPrompt: String? = nil, initialRequest: String? = nil, reference: AorusAIReferencedMessage? = nil) {
+    /// A conversation opened from the message menu arrives with the amount the user has
+    /// just chosen for that exact chat. Its single use answers the backend's first request
+    /// for that chat's history without asking again — the same consent, not a new one — and
+    /// a request naming any other chat still gets the sheet.
+    private var approvedHistory: (peerId: Int64, limit: Int)?
+
+    init(context: AccountContext, conversation: AorusAIConversation, initialPrompt: String? = nil, initialRequest: String? = nil, reference: AorusAIReferencedMessage? = nil, approvedHistory: (peerId: Int64, limit: Int)? = nil) {
+        self.approvedHistory = approvedHistory
         self.context = context
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.presentationData = presentationData
@@ -1388,6 +1475,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         composer.textView.delegate = self
         composer.onSend = { [weak self] in self?.sendOrStop() }
         composer.onDictation = { [weak self] in self?.toggleDictation() }
+        composer.onCancelDictation = { [weak self] in self?.cancelDictation() }
         composer.onDismissReference = { [weak self] in self?.pendingReference = nil; self?.composer.reference = nil }
         composer.text = conversation.draft
         composer.reference = pendingReference
@@ -1779,6 +1867,18 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                !conversation.messages[index].artifacts.contains(where: { $0.artifactId == artifact.artifactId }) {
                 conversation.messages[index].artifacts.append(artifact)
             }
+        case let .completion(text, artifacts):
+            // A whole answer at once, which is what a turn that produced files replies
+            // with. The text replaces rather than appends: nothing was streamed before it.
+            if let text, !text.isEmpty {
+                conversation.messages[index].rawText = String(text.prefix(AorusAIRequestLimits.responseCharacters))
+            }
+            for artifact in artifacts {
+                guard conversation.messages[index].artifacts.count < AorusAIRequestLimits.responseArtifactCount else { break }
+                guard !conversation.messages[index].artifacts.contains(where: { $0.artifactId == artifact.artifactId }) else { continue }
+                conversation.messages[index].artifacts.append(artifact)
+            }
+            conversation.messages[index].statusLabel = nil
         case let .toolRequest(request):
             // §13: the tool is only executed once the immediate stream has closed with
             // `done(awaiting_tool)`, so a modal can never appear over a live socket.
@@ -2108,6 +2208,24 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             deferUserPrompt { [weak self] in self?.presentPermission(request) }
             return
         }
+        // A chat the user approved in the message menu a moment ago is not asked about
+        // again. The approval is checked against the peer the request actually names, so
+        // it can only answer for that one chat, and it is spent on first use.
+        if let approved = approvedHistory, let username = request.username, !username.isEmpty {
+            approvedHistory = nil
+            let expectedPeerId = approved.peerId
+            let limit = approved.limit
+            let _ = (context.engine.peers.resolvePeerByName(name: username, referrer: nil)
+            |> deliverOnMainQueue).start(next: { [weak self] result in
+                guard let self else { return }
+                if case let .result(peer) = result, let peer, peer.id.toInt64() == expectedPeerId {
+                    self.executeHistoryTool(request: request, limit: limit, fromDate: nil, toDate: nil)
+                } else {
+                    self.presentPermission(request)
+                }
+            })
+            return
+        }
         // The words that decide what is being agreed to are the client's, never the
         // payload's: each choice states the number of messages it really shares, derived
         // from what the executor will do. A payload that titled itself "Разрешить
@@ -2260,7 +2378,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 limit: requested,
                 fromDate: fromDate,
                 toDate: toDate,
-                messages: lines.map { (sender: $0.sender, text: $0.text) }
+                messages: lines.map { (sender: $0.sender, text: $0.text, caption: $0.caption) }
             ))
         }))
     }
@@ -2372,6 +2490,18 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     // MARK: - Dictation
+
+    /// Ends the run and throws away what it heard, putting the input back exactly as it
+    /// was before the microphone opened.
+    private func cancelDictation() {
+        guard dictation.isActive else { return }
+        dictationSpokenText = ""
+        dictation.stop()
+        composer.text = dictationBaseText
+        textViewDidChangeSilently()
+        composer.isDictating = false
+        updateComposer()
+    }
 
     private func toggleDictation() {
         if dictation.isActive {
@@ -2986,11 +3116,13 @@ private final class AorusAIComposerView: UIView {
     private let sendButton = UIButton(type: .system)
     private let dictationButton = UIButton(type: .system)
     private let dictationIndicator = AorusAIDictationIndicatorView()
+    private let dictationCancel = UIButton(type: .system)
     var onSend: (() -> Void)?
     var onDismissReference: (() -> Void)?
     var onOpenPeer: ((PeerId) -> Void)?
     var onHeightChanged: (() -> Void)?
     var onDictation: (() -> Void)?
+    var onCancelDictation: (() -> Void)?
     private var theme: PresentationTheme?
     private var context: AccountContext?
     /// Mentions the controller has resolved to real peers. Setting them redraws the pills
@@ -3055,6 +3187,7 @@ private final class AorusAIComposerView: UIView {
         didSet {
             refreshDictationButton()
             dictationIndicator.isHidden = !isDictating
+            dictationCancel.isHidden = !isDictating
             dictationIndicator.setActive(isDictating)
             // The input stays on screen and keeps filling with the words as they are
             // recognised. Hiding it was the whole reason dictation felt like it had gone
@@ -3074,7 +3207,7 @@ private final class AorusAIComposerView: UIView {
         addSubview(container)
         glassView.isUserInteractionEnabled = false
         container.addSubview(glassView)
-        [referenceView, dictationIndicator, dictationButton, textView, sendButton].forEach { container.addSubview($0) }
+        [referenceView, dictationIndicator, dictationCancel, dictationButton, textView, sendButton].forEach { container.addSubview($0) }
         referenceView.addSubview(referenceLine)
         referenceView.addSubview(referenceLabel)
         referenceView.addSubview(referenceClose)
@@ -3094,6 +3227,12 @@ private final class AorusAIComposerView: UIView {
         sendButton.accessibilityLabel = aorusAILocalized("Отправить", "Send")
         dictationButton.addTarget(self, action: #selector(dictate), for: .touchUpInside)
         dictationButton.accessibilityLabel = aorusAILocalized("Диктовать", "Dictate")
+        // A run has to be abandonable. Stopping commits what was heard, which is right;
+        // there was no way at all to decide it heard the wrong thing.
+        dictationCancel.setImage(UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 12.0, weight: .semibold)), for: .normal)
+        dictationCancel.addTarget(self, action: #selector(cancelDictation), for: .touchUpInside)
+        dictationCancel.accessibilityLabel = aorusAILocalized("Отменить диктовку", "Cancel dictation")
+        dictationCancel.isHidden = true
         dictationIndicator.isHidden = true
         referenceView.isHidden = true
     }
@@ -3124,6 +3263,7 @@ private final class AorusAIComposerView: UIView {
         referenceLine.backgroundColor = palette.accent
         referenceClose.tintColor = palette.tertiary
         dictationIndicator.configure(palette: palette)
+        dictationCancel.tintColor = palette.secondary
         refreshReferenceLabel()
         textView.configureMentions(context: context, theme: theme)
         // The theme decides the base colour every run is drawn in, so the last render is
@@ -3169,7 +3309,9 @@ private final class AorusAIComposerView: UIView {
         referenceClose.frame = CGRect(x: referenceView.bounds.width - 27, y: 3, width: 26, height: 26)
         let indicatorTop: CGFloat = refHeight == 0 ? 8 : 38
         let inputRight = dictationButton.frame.minX - 8
-        dictationIndicator.frame = CGRect(x: textInset, y: indicatorTop, width: max(0, inputRight - textInset), height: AorusAIComposerView.dictationRowHeight - 6)
+        let cancelSize: CGFloat = 24.0
+        dictationCancel.frame = CGRect(x: max(0, inputRight - cancelSize), y: indicatorTop, width: cancelSize, height: AorusAIComposerView.dictationRowHeight - 6)
+        dictationIndicator.frame = CGRect(x: textInset, y: indicatorTop, width: max(0, dictationCancel.frame.minX - 8.0 - textInset), height: AorusAIComposerView.dictationRowHeight - 6)
         let inputTop = indicatorTop + (isDictating ? AorusAIComposerView.dictationRowHeight : 0)
         textView.frame = CGRect(x: textInset, y: inputTop, width: max(0, inputRight - textInset), height: max(0, container.bounds.height - inputTop - 8))
         placeholder.frame = CGRect(x: 0, y: 2, width: max(0, textView.bounds.width), height: 21)
@@ -3352,6 +3494,7 @@ private final class AorusAIComposerView: UIView {
     @objc private func closeReference() { onDismissReference?() }
     @objc private func send() { onSend?() }
     @objc private func dictate() { onDictation?() }
+    @objc private func cancelDictation() { onCancelDictation?() }
 }
 
 /// The live state of a dictation run, shown as its own thin row above the input.

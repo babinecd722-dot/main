@@ -486,6 +486,9 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
     private var task: URLSessionDataTask?
     private var responseStatus: Int?
     private var errorBody = Data()
+    /// True when the answer is one chat completion rather than an event stream.
+    private var isPlainJSONResponse = false
+    private var jsonBody = Data()
     private var receivedSuccessfulDone = false
     private var completed = false
 
@@ -528,15 +531,19 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         responseStatus = (response as? HTTPURLResponse)?.statusCode
-        if let http = response as? HTTPURLResponse,
-           (200..<300).contains(http.statusCode),
-           let mime = http.mimeType?.lowercased(),
-           mime != "text/event-stream" && mime != "application/octet-stream" {
-            completionHandler(.cancel)
-            finish(.failure(.malformedResponse))
-        } else {
-            completionHandler(.allow)
+        // A turn that produced files answers with an ordinary chat completion rather than
+        // an event stream. Refusing that content type is what made every artifact request
+        // end as "couldn't open file" — the answer was cancelled before it was read.
+        if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+            let mime = http.mimeType?.lowercased() ?? "text/event-stream"
+            isPlainJSONResponse = mime.hasPrefix("application/json")
+            if mime != "text/event-stream", mime != "application/octet-stream", !isPlainJSONResponse {
+                completionHandler(.cancel)
+                finish(.failure(.malformedResponse))
+                return
+            }
         }
+        completionHandler(.allow)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
@@ -544,11 +551,23 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
             if errorBody.count < 64 * 1024 { errorBody.append(data) }
             return
         }
+        guard !isPlainJSONResponse else {
+            // One object, not a stream of events: it is buffered whole and read once the
+            // body has arrived. Bounded by the same ceiling the parser uses.
+            if jsonBody.count < AorusAISSEParser.maximumEventBytes { jsonBody.append(data) }
+            return
+        }
         emit(parser.append(data))
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if error == nil { emit(parser.finish()) }
+        if error == nil {
+            if isPlainJSONResponse {
+                emitCompletionBody()
+            } else {
+                emit(parser.finish())
+            }
+        }
         let result: Result<Void, AorusAIClientError>
         if let error {
             result = .failure(AorusAIClient.mapTransportError(error))
@@ -562,6 +581,21 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
             result = .failure(.serverUnavailable)
         }
         finish(result)
+    }
+
+    /// Reads a buffered chat-completion answer as the turn it is: its text, its files, and
+    /// a successful end.
+    private func emitCompletionBody() {
+        guard let object = try? JSONSerialization.jsonObject(with: jsonBody) as? [String: Any] else {
+            return
+        }
+        let decoded = AorusAIArtifactFlow.decodeCompletion(object)
+        guard decoded.text != nil || !decoded.artifacts.isEmpty else { return }
+        receivedSuccessfulDone = true
+        DispatchQueue.main.async {
+            self.eventHandler(.completion(text: decoded.text, artifacts: decoded.artifacts))
+            self.eventHandler(.done(ok: true, state: nil))
+        }
     }
 
     private func emit(_ events: [AorusAISSEParser.Event]) {
@@ -594,6 +628,14 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
     private static func parse(_ raw: AorusAISSEParser.Event) -> AorusAIEvent? {
         guard let object = try? JSONSerialization.jsonObject(with: raw.data) as? [String: Any] else {
             return raw.name == "message" ? nil : .unknown(name: raw.name)
+        }
+        // A payload carrying `aorus_artifacts` is a completion whatever the event is
+        // called — including the unnamed `data:` a backend sends with no `event:` line.
+        if object["aorus_artifacts"] != nil {
+            let decoded = AorusAIArtifactFlow.decodeCompletion(object)
+            if decoded.text != nil || !decoded.artifacts.isEmpty {
+                return .completion(text: decoded.text, artifacts: decoded.artifacts)
+            }
         }
         switch raw.name {
         case "agent.start":

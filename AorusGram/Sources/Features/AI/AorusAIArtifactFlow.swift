@@ -23,8 +23,18 @@ public enum AorusAIArtifactFlow {
         guard let rawFilename = source["filename"] as? String else { return nil }
         let filename = safeFilename(rawFilename)
         guard !filename.isEmpty else { return nil }
-        let download = source["download"] as? [String: Any]
-        let path = sanitizedPath(download?["path"] as? String, artifactId: artifactId) ?? canonicalPath(artifactId: artifactId)
+        // `download` is a string in the production payload — a URL or a server-relative
+        // path — and was read here as an object with a `path` inside it, so it was always
+        // nil and every artifact fell back to a canonical path the vault does not serve.
+        // The older object shape is still accepted.
+        let download = source["download"]
+        var rawPath: String?
+        if let text = download as? String {
+            rawPath = relativePath(from: text)
+        } else if let object = download as? [String: Any] {
+            rawPath = (object["path"] as? String).flatMap { relativePath(from: $0) }
+        }
+        let path = sanitizedPath(rawPath, artifactId: artifactId) ?? canonicalPath(artifactId: artifactId)
         let size = int64(source["size"]) ?? 0
         let format = (source["format"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             ?? URL(fileURLWithPath: filename).pathExtension
@@ -35,8 +45,8 @@ public enum AorusAIArtifactFlow {
             size: max(0, size),
             format: String(format.prefix(16)),
             downloadPath: path,
-            expiresAt: int64(source["expires_at"]),
-            downloadExpiresAt: int64(download?["expires_at"])
+            expiresAt: timestamp(source["expires_at"]),
+            downloadExpiresAt: timestamp((download as? [String: Any])?["expires_at"])
         )
     }
 
@@ -74,6 +84,66 @@ public enum AorusAIArtifactFlow {
               url.host?.lowercased() == base.host?.lowercased(),
               url.query == nil else { return nil }
         return url
+    }
+
+    /// The server-relative part of a download reference.
+    ///
+    /// The payload may name the file by absolute URL or by path. An absolute URL is only
+    /// accepted when it is on our own host over https — anything else is a redirect to
+    /// somewhere this client will not follow.
+    public static func relativePath(from value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard trimmed.lowercased().hasPrefix("http") else { return trimmed }
+        guard let url = URL(string: trimmed),
+              url.scheme?.lowercased() == "https",
+              url.host?.lowercased() == base.host?.lowercased() else { return nil }
+        return url.path
+    }
+
+    /// `expires_at` is an ISO-8601 string in the production payload and was a number
+    /// before it. Both are read; anything else is simply absent, which means "no expiry
+    /// the client knows about" rather than "expired".
+    public static func timestamp(_ value: Any?) -> Int64? {
+        if let number = int64(value) {
+            return number
+        }
+        guard let text = value as? String, !text.isEmpty else { return nil }
+        if let seconds = Int64(text) {
+            return seconds
+        }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: text) {
+            return Int64(date.timeIntervalSince1970)
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        if let date = formatter.date(from: text) {
+            return Int64(date.timeIntervalSince1970)
+        }
+        return nil
+    }
+
+    /// Every artifact carried by a chat-completion response.
+    ///
+    /// The production answer for a turn that produced files is an ordinary completion with
+    /// an `aorus_artifacts` array beside `choices`, not a stream of `artifact.ready`
+    /// events. Both shapes reach the same decoder.
+    public static func decodeCompletion(_ object: [String: Any]) -> (text: String?, artifacts: [AorusAIArtifact]) {
+        var artifacts: [AorusAIArtifact] = []
+        for raw in (object["aorus_artifacts"] as? [[String: Any]]) ?? [] {
+            guard let artifact = decode(raw) else { continue }
+            guard !artifacts.contains(where: { $0.artifactId == artifact.artifactId }) else { continue }
+            artifacts.append(artifact)
+        }
+        var text: String?
+        if let choices = object["choices"] as? [[String: Any]],
+           let message = choices.first?["message"] as? [String: Any],
+           let content = message["content"] as? String,
+           !content.isEmpty {
+            text = content
+        }
+        return (text, artifacts)
     }
 
     public static func canonicalPath(artifactId: String) -> String {

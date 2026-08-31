@@ -8587,7 +8587,10 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
         return
     text = node.read_text(encoding="utf-8")
     if "AorusGram: one-time playback" in text:
+        # Not a bare return: the playback route lives in another file, and skipping it
+        # because this one is already done would leave the two halves out of step.
         print("OneTimeVoice: playback appearance already ordinary")
+        patch_one_time_voice_route(tg)
         return
     # The flag is declared beside `isViewOnceMessage` itself, because both halves of the
     # one-time treatment — the ring and the counter — read it from different scopes.
@@ -8711,6 +8714,47 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
 
     node.write_text(text, encoding="utf-8")
     print("OneTimeVoice: one-time playback made ordinary")
+    patch_one_time_voice_route(tg)
+
+
+def patch_one_time_voice_route(tg: Path) -> None:
+    """Play a one-time voice in the chat instead of in an overlay.
+
+    Tapping a one-time voice does not play it in the chat at all: it opens a
+    ContextController in the global overlay with an extracted source, which lifts the
+    bubble out and puts the whole conversation behind a blur, with "close and delete"
+    under it — and refuses to play at all while the screen is being recorded. Left out
+    of that route it plays exactly where every other voice message does, behind the
+    same default as the ring and the counter.
+    """
+    controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+    if not controller.is_file():
+        print("OneTimeVoice: ChatController.swift not found — skip")
+        return
+    text = controller.read_text(encoding="utf-8")
+    if "aorusgram_one_time_voice_burn" in text:
+        print("OneTimeVoice: playback route already ordinary")
+        return
+    old_route = (
+        "                        if (file.isVoice || file.isInstantVideo) && message.minAutoremoveOrClearTimeout == viewOnceTimeout {\n"
+        "                            self.openViewOnceMediaMessage(EngineMessage(message))\n"
+        "                            return false\n"
+        "                        }\n"
+    )
+    new_route = (
+        "                        // AorusGram: a one-time voice plays in the chat like any other.\n"
+        "                        // This route is what puts the conversation behind a blur, lifts the\n"
+        "                        // bubble into an overlay with \"close and delete\" under it, and\n"
+        "                        // refuses to play while the screen is being recorded.\n"
+        "                        if (file.isVoice || file.isInstantVideo) && message.minAutoremoveOrClearTimeout == viewOnceTimeout && UserDefaults.standard.bool(forKey: \"aorusgram_one_time_voice_burn\") {\n"
+        "                            self.openViewOnceMediaMessage(EngineMessage(message))\n"
+        "                            return false\n"
+        "                        }\n"
+    )
+    if text.count(old_route) != 1:
+        raise RuntimeError(f"OneTimeVoice: playback route anchor not unique ({text.count(old_route)})")
+    controller.write_text(text.replace(old_route, new_route, 1), encoding="utf-8")
+    print("OneTimeVoice: one-time voice plays in the chat, not in an overlay")
 
 
 def patch_view_once_no_consume(tg: Path) -> None:
