@@ -880,6 +880,114 @@ def patch_deleted_message_quote_reply(tg: Path) -> None:
     print("DeletedQuoteReply: injected send-time quote for deleted-message replies (native bar, clean composer)")
 
 
+def patch_forward_preserved_deleted(tg: Path) -> None:
+    """Let a message the sender deleted still be forwarded.
+
+    A deleted incoming message is kept in the postbox under its original cloud id, carrying
+    the invisible marker suffix. Forwarding sends that id to the server, which no longer has
+    the message: the forward resolves to nothing and the user sees a chat where their
+    forward simply never arrives.
+
+    Upstream already has the route for this. `forwardedMessageToBeReuploaded` turns a
+    `.forward` into a `.message` rebuilt from the local copy whenever the source never
+    reached the cloud, and a preserved deleted message is the same situation from the
+    server's point of view. So it joins that branch, the media travels with it — otherwise
+    a deleted photo would arrive as an empty message — and the invisible marker is taken
+    off the text, because the copy the recipient gets is not a deleted message.
+
+    The reply attribute is dropped for the same reason: it points at a message id in the
+    chat the copy came from, which means nothing in the chat it is going to.
+    """
+    path = tg / "submodules/TelegramCore/Sources/PendingMessages/EnqueueMessage.swift"
+    if not path.is_file():
+        print("ForwardDeleted: EnqueueMessage.swift not found — skip")
+        return
+    text = path.read_text(encoding="utf-8")
+    if "aorusPreservedDeleted" in text:
+        print("ForwardDeleted: already patched")
+        return
+
+    old_decision = (
+        "private func forwardedMessageToBeReuploaded(transaction: Transaction, id: MessageId) -> Message? {\n"
+        "    if let message = transaction.getMessage(id) {\n"
+        "        if message.id.namespace != Namespaces.Message.Cloud {\n"
+        "            return message\n"
+        "        } else {\n"
+        "            return nil\n"
+        "        }\n"
+        "    } else {\n"
+        "        return nil\n"
+        "    }\n"
+        "}\n"
+    )
+    new_decision = (
+        "private func aorusPreservedDeleted(_ message: Message) -> Bool {\n"
+        "    // AorusGram: the invisible suffix a preserved deleted message carries.\n"
+        "    return message.text.hasSuffix(\"\\u{2063}\\u{2064}\")\n"
+        "}\n"
+        "\n"
+        "private func forwardedMessageToBeReuploaded(transaction: Transaction, id: MessageId) -> Message? {\n"
+        "    if let message = transaction.getMessage(id) {\n"
+        "        if message.id.namespace != Namespaces.Message.Cloud {\n"
+        "            return message\n"
+        "        }\n"
+        "        // AorusGram: a message the sender deleted is kept locally under its original\n"
+        "        // cloud id, but the server has nothing left to copy — forwarding by that id\n"
+        "        // quietly produces nothing at all. It is re-uploaded from the local copy\n"
+        "        // instead, which is the route upstream already takes for a source that never\n"
+        "        // reached the cloud.\n"
+        "        if aorusPreservedDeleted(message) {\n"
+        "            return message\n"
+        "        }\n"
+        "        return nil\n"
+        "    } else {\n"
+        "        return nil\n"
+        "    }\n"
+        "}\n"
+    )
+    if text.count(old_decision) != 1:
+        raise RuntimeError(f"ForwardDeleted: reupload decision anchor not unique ({text.count(old_decision)})")
+    text = text.replace(old_decision, new_decision, 1)
+
+    old_branch = (
+        "                if let sourceMessage = forwardedMessageToBeReuploaded(transaction: transaction, id: sourceId) {\n"
+        "                    var mediaReference: AnyMediaReference?\n"
+        "                    if sourceMessage.id.peerId.namespace == Namespaces.Peer.SecretChat {\n"
+        "                        if let media = sourceMessage.media.first {\n"
+        "                            mediaReference = .standalone(media: media)\n"
+        "                        }\n"
+        "                    }\n"
+        "                    updatedMessages.append((transformedMedia, .message(text: sourceMessage.text, attributes: sourceMessage.attributes,"
+    )
+    new_branch = (
+        "                if let sourceMessage = forwardedMessageToBeReuploaded(transaction: transaction, id: sourceId) {\n"
+        "                    var mediaReference: AnyMediaReference?\n"
+        "                    var aorusText = sourceMessage.text\n"
+        "                    var aorusAttributes = sourceMessage.attributes\n"
+        "                    if sourceMessage.id.peerId.namespace == Namespaces.Peer.SecretChat {\n"
+        "                        if let media = sourceMessage.media.first {\n"
+        "                            mediaReference = .standalone(media: media)\n"
+        "                        }\n"
+        "                    } else if aorusPreservedDeleted(sourceMessage) {\n"
+        "                        // AorusGram: the copy the recipient gets is an ordinary message, so\n"
+        "                        // the marker comes off; the media travels with it, or a deleted photo\n"
+        "                        // would arrive as an empty message; and the reply attribute is dropped\n"
+        "                        // because it names a message in the chat this was copied from.\n"
+        "                        aorusText = String(aorusText.dropLast(2))\n"
+        "                        aorusAttributes = aorusAttributes.filter { !($0 is ReplyMessageAttribute) }\n"
+        "                        if let media = sourceMessage.media.first {\n"
+        "                            mediaReference = .standalone(media: media)\n"
+        "                        }\n"
+        "                    }\n"
+        "                    updatedMessages.append((transformedMedia, .message(text: aorusText, attributes: aorusAttributes,"
+    )
+    if text.count(old_branch) != 1:
+        raise RuntimeError(f"ForwardDeleted: reupload branch anchor not unique ({text.count(old_branch)})")
+    text = text.replace(old_branch, new_branch, 1)
+    path.write_text(text, encoding="utf-8")
+    print("ForwardDeleted: preserved deleted messages are forwarded as a re-uploaded copy")
+
+
 def patch_deleted_messages_interception(tg: Path) -> None:
     """Post NotificationCenter event before postbox.deleteMessages() in TelegramCore.
 
@@ -8408,6 +8516,115 @@ def patch_intro_default_dark(tg: Path) -> None:
         print("IntroDark: defaultPresentationData -> Aorus stock-off theme")
     else:
         print("IntroDark: WARNING defaultPresentationData theme anchor not found — skipped")
+
+
+def patch_one_time_voice_bypass(tg: Path) -> None:
+    """Listen to a one-time voice message without spending it.
+
+    A one-time voice still *looks* one-time: the badge and the "1" in place of the play
+    button are drawn from the message's own autoremove attribute, and nothing here touches
+    that. What changes is what happens when it is played.
+
+    Two things make a one-time recording behave unlike an ordinary one. The bubble swaps
+    the pause button for a ring that burns down as the audio plays and locks the waveform
+    so it cannot be scrubbed; and the moment it is played the client reports it consumed,
+    which is what tells the server to destroy it. The first is cosmetic and is simply not
+    used; the second is skipped for voice and round video only, at the single engine entry
+    point every caller goes through, so every other kind of consumable content — an
+    ordinary voice message's listened receipt included — is reported exactly as before.
+    """
+    engine = tg / "submodules/TelegramCore/Sources/TelegramEngine/Messages/TelegramEngineMessages.swift"
+    if not engine.is_file():
+        print("OneTimeVoice: TelegramEngineMessages.swift not found — skip")
+    else:
+        text = engine.read_text(encoding="utf-8")
+        if "aorusIsOneTimeVoice" in text:
+            print("OneTimeVoice: consumption already gated")
+        else:
+            old = (
+                "        public func markMessageContentAsConsumedInteractively(messageId: MessageId) -> Signal<Void, NoError> {\n"
+                "            return _internal_markMessageContentAsConsumedInteractively(postbox: self.account.postbox, messageId: messageId)\n"
+                "        }\n"
+            )
+            new = (
+                "        public func markMessageContentAsConsumedInteractively(messageId: MessageId) -> Signal<Void, NoError> {\n"
+                "            // AorusGram: a one-time voice or round video is never reported as listened.\n"
+                "            // Consuming it is exactly what tells the server to destroy it, so skipping\n"
+                "            // that leaves the recording in the chat, playable again. Its appearance is\n"
+                "            // untouched — the badge comes from the attribute, which still says one-time.\n"
+                "            // Everything else consumable is reported as before.\n"
+                "            let aorusPostbox = self.account.postbox\n"
+                "            return aorusPostbox.transaction { transaction -> Bool in\n"
+                "                guard let message = transaction.getMessage(messageId) else {\n"
+                "                    return false\n"
+                "                }\n"
+                "                guard message.minAutoremoveOrClearTimeout == viewOnceTimeout else {\n"
+                "                    return false\n"
+                "                }\n"
+                "                for media in message.media {\n"
+                "                    if let file = media as? TelegramMediaFile, file.isVoice || file.isInstantVideo {\n"
+                "                        return true\n"
+                "                    }\n"
+                "                }\n"
+                "                return false\n"
+                "            }\n"
+                "            |> mapToSignal { aorusIsOneTimeVoice -> Signal<Void, NoError> in\n"
+                "                if aorusIsOneTimeVoice {\n"
+                "                    return .complete()\n"
+                "                }\n"
+                "                return _internal_markMessageContentAsConsumedInteractively(postbox: aorusPostbox, messageId: messageId)\n"
+                "            }\n"
+                "        }\n"
+            )
+            if text.count(old) != 1:
+                raise RuntimeError(f"OneTimeVoice: consumption anchor not unique ({text.count(old)})")
+            engine.write_text(text.replace(old, new, 1), encoding="utf-8")
+            print("OneTimeVoice: consumption skipped for one-time voice and round video")
+
+    node = tg / "submodules/TelegramUI/Components/Chat/ChatMessageInteractiveFileNode/Sources/ChatMessageInteractiveFileNode.swift"
+    if not node.is_file():
+        print("OneTimeVoice: ChatMessageInteractiveFileNode.swift not found — skip")
+        return
+    text = node.read_text(encoding="utf-8")
+    if "AorusGram: one-time playback" in text:
+        print("OneTimeVoice: playback appearance already ordinary")
+        return
+    old = (
+        "                (self.waveformView?.componentView as? AudioWaveformComponent.View)?.enableScrubbing = !isViewOnceMessage\n"
+        "                \n"
+        "                if isViewOnceMessage && playbackStatus == .playing {\n"
+        "                    state = .secretTimeout(position: playbackState.position, duration: playbackState.duration, generationTimestamp: playbackState.generationTimestamp, appearance: .init(inset: 1.0 + UIScreenPixel, lineWidth: 2.0 - UIScreenPixel))\n"
+        "                    if incoming {\n"
+        "                        self.consumableContentNode.isHidden = true\n"
+        "                    }\n"
+        "                } else {\n"
+        "                    switch playbackStatus {\n"
+        "                    case .playing:\n"
+        "                        state = .pause\n"
+        "                    case .paused:\n"
+        "                        state = .play\n"
+        "                    }\n"
+        "                }\n"
+    )
+    new = (
+        "                // AorusGram: one-time playback. Before it is played the message keeps its\n"
+        "                // one-time appearance — the badge and the \"1\" in place of the play button are\n"
+        "                // drawn further down from the attribute and are untouched. Playing it behaves\n"
+        "                // like an ordinary voice message: a pause button rather than a ring burning the\n"
+        "                // recording away, and a waveform that can be scrubbed. It is not reported as\n"
+        "                // consumed either, so it does not vanish when it ends.\n"
+        "                (self.waveformView?.componentView as? AudioWaveformComponent.View)?.enableScrubbing = true\n"
+        "                switch playbackStatus {\n"
+        "                case .playing:\n"
+        "                    state = .pause\n"
+        "                case .paused:\n"
+        "                    state = .play\n"
+        "                }\n"
+    )
+    if text.count(old) != 1:
+        raise RuntimeError(f"OneTimeVoice: playback anchor not unique ({text.count(old)})")
+    node.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print("OneTimeVoice: one-time playback made ordinary")
 
 
 def patch_view_once_no_consume(tg: Path) -> None:
@@ -17206,14 +17423,20 @@ def patch_action_confirmation(tg: Path) -> None:
         "        // so declining leaves it intact to send deliberately or discard, and accepting\n"
         "        // sends it through exactly the route the preview's own send button uses.\n"
         "        var aorusIsSendAction = false\n"
-        "        if case .send = action {\n"
+        "        var aorusViewOnce = false\n"
+        "        // The payload matters: `.send` carries whether the user armed the one-time\n"
+        "        // toggle, and matching the case without binding it -- which is what stood here --\n"
+        "        // dropped that flag on the floor. The recording then went out as an ordinary\n"
+        "        // voice message, every time, on the release-to-send path.\n"
+        "        if case let .send(viewOnce) = action {\n"
         "            aorusIsSendAction = true\n"
+        "            aorusViewOnce = viewOnce\n"
         "        }\n"
         "        if aorusIsSendAction, aorusActionConfirmationIsEnabled() {\n"
         "            let aorusIsVideo = self.videoRecorderValue != nil\n"
         "            self.aorusPerformDismissMediaRecorder(.preview)\n"
         "            aorusConfirmRecordedMessage(self.context, isVideo: aorusIsVideo, parentController: self) { [weak self] in\n"
-        "                self?.aorusSendRecordedMessageWhenReady()\n"
+        "                self?.aorusSendRecordedMessageWhenReady(viewOnce: aorusViewOnce)\n"
         "            }\n"
         "            return\n"
         "        }\n"
@@ -17223,16 +17446,16 @@ def patch_action_confirmation(tg: Path) -> None:
         "    // Moving to .preview stops the recorder and stores the draft through a signal, so the\n"
         "    // draft is not there yet when the prompt appears. Confirming therefore waits for it\n"
         "    // rather than sending into a nil draft, which would silently drop the recording.\n"
-        "    func aorusSendRecordedMessageWhenReady(_ attempt: Int = 0) {\n"
+        "    func aorusSendRecordedMessageWhenReady(viewOnce: Bool, attempt: Int = 0) {\n"
         "        if self.presentationInterfaceState.interfaceState.mediaDraftState != nil {\n"
-        "            self.aorusPerformSendMediaRecording()\n"
+        "            self.aorusPerformSendMediaRecording(viewOnce: viewOnce)\n"
         "            return\n"
         "        }\n"
         "        guard attempt < 20 else {\n"
         "            return\n"
         "        }\n"
         "        Queue.mainQueue().after(0.1) { [weak self] in\n"
-        "            self?.aorusSendRecordedMessageWhenReady(attempt + 1)\n"
+        "            self?.aorusSendRecordedMessageWhenReady(viewOnce: viewOnce, attempt: attempt + 1)\n"
         "        }\n"
         "    }\n"
         "\n"
@@ -25058,6 +25281,7 @@ def main() -> None:
     patch_video_message_rear_camera(tg)
     patch_device_microphone(tg)
     patch_deleted_messages_interception(tg)
+    patch_forward_preserved_deleted(tg)
     patch_deleted_message_quote_reply(tg)
     patch_anti_spoof_delete_preflight(tg)
     patch_block_ads(tg)
@@ -25171,6 +25395,7 @@ def main() -> None:
     patch_view_once_save_button(tg)
     patch_view_once_direct_save_button(tg)
     patch_view_once_no_consume(tg)
+    patch_one_time_voice_bypass(tg)
     patch_license_key_provider(tg)
     patch_proxy_key_provider(tg)
     patch_chat_context_menu_media_metadata(tg)
