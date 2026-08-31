@@ -8673,6 +8673,42 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
         raise RuntimeError(f"OneTimeVoice: countdown anchor not unique ({text.count(old_count)})")
     text = text.replace(old_count, new_count, 1)
 
+    # The third and fourth: the status control zooms in when a one-time recording appears
+    # and zooms away when it ends. An ordinary voice message does neither, and the point of
+    # this is that a one-time one is listened to like an ordinary one.
+    old_zoom_in = (
+        "            if isViewOnceMessage {\n"
+        "                streamingStatusNode.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2, timingFunction: CAMediaTimingFunctionName.linear.rawValue)\n"
+        "                streamingStatusNode.layer.animateAlpha(from: 0.1, to: 1.0, duration: 0.2, timingFunction: CAMediaTimingFunctionName.linear.rawValue)\n"
+        "            }\n"
+    )
+    new_zoom_in = (
+        "            // AorusGram: no zoom-in for a one-time recording — it appears the way any\n"
+        "            // other voice message does.\n"
+        "            if isViewOnceMessage && aorusBurnsWhilePlaying {\n"
+        "                streamingStatusNode.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2, timingFunction: CAMediaTimingFunctionName.linear.rawValue)\n"
+        "                streamingStatusNode.layer.animateAlpha(from: 0.1, to: 1.0, duration: 0.2, timingFunction: CAMediaTimingFunctionName.linear.rawValue)\n"
+        "            }\n"
+    )
+    if text.count(old_zoom_in) != 1:
+        raise RuntimeError(f"OneTimeVoice: zoom-in anchor not unique ({text.count(old_zoom_in)})")
+    text = text.replace(old_zoom_in, new_zoom_in, 1)
+
+    old_zoom_out = (
+        "                if isViewOnceMessage {\n"
+        "                    streamingStatusNode.layer.animateScale(from: 1.0, to: 0.1, duration: 0.2, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)\n"
+        "                }\n"
+    )
+    new_zoom_out = (
+        "                // AorusGram: and none on the way out either.\n"
+        "                if isViewOnceMessage && aorusBurnsWhilePlaying {\n"
+        "                    streamingStatusNode.layer.animateScale(from: 1.0, to: 0.1, duration: 0.2, timingFunction: CAMediaTimingFunctionName.linear.rawValue, removeOnCompletion: false)\n"
+        "                }\n"
+    )
+    if text.count(old_zoom_out) != 1:
+        raise RuntimeError(f"OneTimeVoice: zoom-out anchor not unique ({text.count(old_zoom_out)})")
+    text = text.replace(old_zoom_out, new_zoom_out, 1)
+
     node.write_text(text, encoding="utf-8")
     print("OneTimeVoice: one-time playback made ordinary")
 

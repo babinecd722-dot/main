@@ -99,7 +99,11 @@ public enum AorusAIArtifactFlow {
             if component == artifactId[...] { return true }
             guard component.hasPrefix(artifactId), component.count > artifactId.count else { return false }
             let suffix = component.dropFirst(artifactId.count)
-            return suffix.first == "." && suffix.dropFirst().allSatisfy { $0.isLetter || $0.isNumber }
+            guard suffix.first == "." else { return false }
+            // A non-empty extension: `allSatisfy` answers true for nothing at all, which
+            // let a bare trailing dot through as though it were one.
+            let fileExtension = suffix.dropFirst()
+            return !fileExtension.isEmpty && fileExtension.allSatisfy { $0.isLetter || $0.isNumber }
         }
         guard addressesArtifact else { return nil }
         return raw
