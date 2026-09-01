@@ -81,16 +81,21 @@ public enum AorusAIArtifactFlow {
         guard let path = signingPath(for: artifact),
               let url = URL(string: path, relativeTo: base)?.absoluteURL,
               url.scheme == "https",
-              url.host?.lowercased() == base.host?.lowercased(),
-              url.query == nil else { return nil }
+              url.host?.lowercased() == base.host?.lowercased() else { return nil }
         return url
     }
 
-    /// The server-relative part of a download reference.
+    /// The server-relative part of a download reference, query included.
     ///
     /// The payload may name the file by absolute URL or by path. An absolute URL is only
     /// accepted when it is on our own host over https — anything else is a redirect to
     /// somewhere this client will not follow.
+    ///
+    /// The query is kept. A vault hands out links that carry their own grant in the query
+    /// string — which is exactly what `download.expires_at` describes — and dropping it
+    /// turned every one of those into a request the vault answers with a refusal. It is
+    /// still our own host, over https, with no traversal in it; what the client refuses to
+    /// do is follow the link somewhere else, not carry the server's own parameters back.
     public static func relativePath(from value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -98,7 +103,8 @@ public enum AorusAIArtifactFlow {
         guard let url = URL(string: trimmed),
               url.scheme?.lowercased() == "https",
               url.host?.lowercased() == base.host?.lowercased() else { return nil }
-        return url.path
+        guard let query = url.query, !query.isEmpty else { return url.path }
+        return url.path + "?" + query
     }
 
     /// `expires_at` is an ISO-8601 string in the production payload and was a number
@@ -150,32 +156,37 @@ public enum AorusAIArtifactFlow {
         return "/download/" + artifactId
     }
 
-    /// Accepts a server-relative path and nothing else: no scheme, no host, no
-    /// traversal, no query — the token belongs to the gateway, never to the client.
+    /// Accepts a server-relative reference on our own host and nothing else: no scheme, no
+    /// host, no traversal, no fragment. A query is allowed and kept, because a vault link
+    /// carries its grant there; everything that could redirect the request elsewhere is
+    /// still refused.
     public static func sanitizedPath(_ value: String?, artifactId: String) -> String? {
         guard isSafeArtifactId(artifactId) else { return nil }
-        guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty, raw.count <= 512 else { return nil }
+        guard let raw = value?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty, raw.count <= 1024 else { return nil }
         guard raw.hasPrefix("/"), !raw.hasPrefix("//") else { return nil }
-        guard !raw.contains(".."), !raw.contains("?"), !raw.contains("#"), !raw.contains(":"),
-              !raw.contains("\\"), !raw.contains("\r"), !raw.contains("\n"), !raw.contains(" ") else { return nil }
-        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-_.~")
-        guard raw.unicodeScalars.allSatisfy(allowed.contains) else { return nil }
-        // The path must address this very artifact: a valid-looking path pointing at some
-        // other object is a server bug at best. The component may carry the file's own
-        // extension — `/download/<id>.pptx` is the same object as `/download/<id>` — and
-        // refusing that was enough to send the client to a canonical path the vault does
-        // not serve, which came back as "the file is no longer available".
-        let addressesArtifact = raw.split(separator: "/").contains { component in
-            if component == artifactId[...] { return true }
-            guard component.hasPrefix(artifactId), component.count > artifactId.count else { return false }
-            let suffix = component.dropFirst(artifactId.count)
-            guard suffix.first == "." else { return false }
-            // A non-empty extension: `allSatisfy` answers true for nothing at all, which
-            // let a bare trailing dot through as though it were one.
-            let fileExtension = suffix.dropFirst()
-            return !fileExtension.isEmpty && fileExtension.allSatisfy { $0.isLetter || $0.isNumber }
+        guard !raw.contains(".."), !raw.contains("#"), !raw.contains("\\"),
+              !raw.contains("\r"), !raw.contains("\n"), !raw.contains(" ") else { return nil }
+        let separator = raw.firstIndex(of: "?")
+        let path = separator.map { String(raw[raw.startIndex ..< $0]) } ?? raw
+        let query = separator.map { String(raw[raw.index(after: $0)...]) }
+        // A colon in the path is what would let `/a:b` be read as a scheme; in a query it
+        // is an ordinary value character, so the two halves have their own alphabets.
+        let pathAllowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-_.~")
+        guard !path.isEmpty, path.unicodeScalars.allSatisfy(pathAllowed.contains) else { return nil }
+        if let query {
+            guard !query.isEmpty, !query.contains("?") else { return nil }
+            let queryAllowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~/=&%+,:")
+            guard query.unicodeScalars.allSatisfy(queryAllowed.contains) else { return nil }
         }
-        guard addressesArtifact else { return nil }
+        // What is left is the guarantee that matters: a plain, traversal-free reference on
+        // our own host, requested with this device's own signature.
+        //
+        // It used to also demand that the path contain the artifact's id as a component.
+        // A vault names its files however it likes — `/v1/vault/2026/08/report.pptx` is a
+        // perfectly ordinary answer — and every path that did not happen to embed the id
+        // was refused and quietly replaced by a canonical guess the vault does not serve.
+        // The check was worth little in any case: the same payload supplies both the id
+        // and the path, so a server willing to lie about one can lie about the other.
         return raw
     }
 

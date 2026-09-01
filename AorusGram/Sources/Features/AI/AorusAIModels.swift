@@ -692,6 +692,13 @@ public enum AorusAIClientError: Error, Equatable {
     case artifactGone
     /// The transfer itself failed: no connection, a dropped socket, a bad payload.
     case artifactDownloadFailed
+    /// The client itself refused the file, and this names which guard did it.
+    ///
+    /// Every one of these used to be `.malformedResponse`, so a download that failed for
+    /// six different reasons produced one sentence and nothing to act on. The reason is a
+    /// short fixed token from the list in `AorusAIClient` — never anything the server
+    /// wrote — so showing it leaks nothing while making a report say what happened.
+    case artifactRejected(String)
     case cancelled
     case http(Int)
 }

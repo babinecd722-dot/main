@@ -8712,6 +8712,29 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
         raise RuntimeError(f"OneTimeVoice: zoom-out anchor not unique ({text.count(old_zoom_out)})")
     text = text.replace(old_zoom_out, new_zoom_out, 1)
 
+    # The waveform is told separately that this is a one-time message, and that is what
+    # takes the ordinary playing animation away: no progress fill, no scrubbing, the bars
+    # stay in their unplayed state for the whole recording. It is a different scope from
+    # the flag above, so the flag is declared there too.
+    old_layout_flag = (
+        "                let isViewOnceMessage = isVoice && arguments.message.minAutoremoveOrClearTimeout == viewOnceTimeout\n"
+    )
+    new_layout_flag = (
+        "                let isViewOnceMessage = isVoice && arguments.message.minAutoremoveOrClearTimeout == viewOnceTimeout\n"
+        "                // AorusGram: see the playback branch below — a one-time recording is\n"
+        "                // listened to like any other, and the waveform has to be told so.\n"
+        "                let aorusBurnsWhilePlaying = UserDefaults.standard.bool(forKey: \"aorusgram_one_time_voice_burn\")\n"
+    )
+    if text.count(old_layout_flag) != 1:
+        raise RuntimeError(f"OneTimeVoice: layout flag anchor not unique ({text.count(old_layout_flag)})")
+    text = text.replace(old_layout_flag, new_layout_flag, 1)
+
+    old_waveform = "                                        isViewOnceMessage: isViewOnceMessage,\n"
+    new_waveform = "                                        isViewOnceMessage: isViewOnceMessage && aorusBurnsWhilePlaying,\n"
+    if text.count(old_waveform) != 1:
+        raise RuntimeError(f"OneTimeVoice: waveform anchor not unique ({text.count(old_waveform)})")
+    text = text.replace(old_waveform, new_waveform, 1)
+
     node.write_text(text, encoding="utf-8")
     print("OneTimeVoice: one-time playback made ordinary")
     patch_one_time_voice_route(tg)

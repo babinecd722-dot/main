@@ -145,15 +145,19 @@ public final class AorusAIClient {
         _ artifact: AorusAIArtifact,
         completion: @escaping (Result<AorusAIArtifactProbe, AorusAIClientError>) -> Void
     ) {
-        guard let path = Self.artifactPath(for: artifact) else {
-            completion(.failure(artifact.isExpired ? .artifactExpired : .malformedResponse))
+        let path: String
+        switch Self.artifactPath(for: artifact) {
+        case let .ok(value):
+            path = value
+        case let .refused(reason):
+            completion(.failure(artifact.isExpired ? .artifactExpired : .artifactRejected(reason)))
             return
         }
         requestQueue.async { [weak self] in
             guard let self else { return }
             guard let request = self.signedRequest(method: "HEAD", path: path, body: Data(), contentType: nil, accept: "*/*") else {
                 DispatchQueue.main.async {
-                    completion(.failure(LicenseKeyProvider.isProvisioned ? .malformedResponse : .notProvisioned))
+                    completion(.failure(LicenseKeyProvider.isProvisioned ? .artifactRejected("signature") : .notProvisioned))
                 }
                 return
             }
@@ -200,8 +204,12 @@ public final class AorusAIClient {
         completion: @escaping (Result<URL, AorusAIClientError>) -> Void
     ) -> AorusAIDownloadHandle {
         let handle = AorusAIDownloadHandle()
-        guard let path = Self.artifactPath(for: artifact) else {
-            completion(.failure(artifact.isExpired ? .artifactExpired : .malformedResponse))
+        let path: String
+        switch Self.artifactPath(for: artifact) {
+        case let .ok(value):
+            path = value
+        case let .refused(reason):
+            completion(.failure(artifact.isExpired ? .artifactExpired : .artifactRejected(reason)))
             return handle
         }
         requestQueue.async { [weak self] in
@@ -209,7 +217,7 @@ public final class AorusAIClient {
             let accept = AorusAIArtifactFlow.safeMIME(artifact.mime) ?? "application/octet-stream"
             guard var request = self.signedRequest(method: "GET", path: path, body: Data(), contentType: nil, accept: accept) else {
                 DispatchQueue.main.async {
-                    completion(.failure(LicenseKeyProvider.isProvisioned ? .malformedResponse : .notProvisioned))
+                    completion(.failure(LicenseKeyProvider.isProvisioned ? .artifactRejected("signature") : .notProvisioned))
                 }
                 return
             }
@@ -221,13 +229,20 @@ public final class AorusAIClient {
         return handle
     }
 
-    /// The one relative path this artifact may be fetched from, or nil when the
-    /// artifact is expired, its id unsafe, or its stored path not ours.
-    private static func artifactPath(for artifact: AorusAIArtifact) -> String? {
-        guard !artifact.isExpired else { return nil }
-        guard artifact.size >= 0, artifact.size <= 512 * 1024 * 1024 else { return nil }
-        guard AorusAIArtifactFlow.downloadURL(for: artifact) != nil else { return nil }
-        return AorusAIArtifactFlow.signingPath(for: artifact)
+    /// Either the one relative path this artifact may be fetched from, or the name of the
+    /// guard that refused it. The reason travels back to the card so a failure says which
+    /// check ran out instead of all of them arriving as one blank sentence.
+    private enum ArtifactPathOutcome {
+        case ok(String)
+        case refused(String)
+    }
+
+    private static func artifactPath(for artifact: AorusAIArtifact) -> ArtifactPathOutcome {
+        guard !artifact.isExpired else { return .refused("expired") }
+        guard artifact.size >= 0, artifact.size <= 512 * 1024 * 1024 else { return .refused("size") }
+        guard let path = AorusAIArtifactFlow.signingPath(for: artifact) else { return .refused("path") }
+        guard AorusAIArtifactFlow.downloadURL(for: artifact) != nil else { return .refused("url") }
+        return .ok(path)
     }
 
     /// `Content-Disposition` wins over the stored filename, exactly as the spec asks,
@@ -288,11 +303,11 @@ public final class AorusAIClient {
             // and every one of those failures reached the user as "couldn't open file".
             if let responseMIME = http.mimeType?.lowercased(),
                responseMIME.hasPrefix("text/html") || responseMIME.hasPrefix("application/xhtml") {
-                DispatchQueue.main.async { completion(.failure(.malformedResponse)) }
+                DispatchQueue.main.async { completion(.failure(.artifactRejected("html"))) }
                 return
             }
             if http.expectedContentLength > 512 * 1024 * 1024 {
-                DispatchQueue.main.async { completion(.failure(.malformedResponse)) }
+                DispatchQueue.main.async { completion(.failure(.artifactRejected("length"))) }
                 return
             }
             let safeName = Self.filename(from: http, fallback: artifact.filename)
@@ -310,17 +325,19 @@ public final class AorusAIClient {
                 // which is what actually guards against a short file; what is left to check
                 // is that the file is plausible.
                 let hasExpectedPayload = isPartial || artifact.size == 0 || actualSize > 0
-                guard actualSize >= 0,
-                      actualSize <= 512 * 1024 * 1024,
-                      hasExpectedPayload else {
-                    DispatchQueue.main.async { completion(.failure(.malformedResponse)) }
+                guard actualSize >= 0, actualSize <= 512 * 1024 * 1024 else {
+                    DispatchQueue.main.async { completion(.failure(.artifactRejected("file-size"))) }
+                    return
+                }
+                guard hasExpectedPayload else {
+                    DispatchQueue.main.async { completion(.failure(.artifactRejected("empty"))) }
                     return
                 }
                 try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
                 try FileManager.default.moveItem(at: temporaryURL, to: target)
                 DispatchQueue.main.async { completion(.success(target)) }
             } catch {
-                DispatchQueue.main.async { completion(.failure(.artifactDownloadFailed)) }
+                DispatchQueue.main.async { completion(.failure(.artifactRejected("save"))) }
             }
         }
         handle.installCancellation { [weak task] in

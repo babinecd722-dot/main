@@ -202,20 +202,25 @@ private func dropsAnyTokenAndSessionId() {
         fputs("AorusAIArtifactFlow test failed: hostile payload must still decode the file\n", stderr)
         exit(1)
     }
-    // A query string is not a path, so the whole value is refused and the canonical
-    // path is used instead: the token never becomes part of a request we sign.
-    require(artifact.downloadPath == "/download/cf962f69-a3b8-4824-a107-00aea794318c", "tokenised path is replaced by the canonical one")
+    // The link the server gave is kept whole, query included: a vault link carries its own
+    // grant there, and dropping it sent every download to a canonical path the vault does
+    // not serve. Everything the payload carries *beside* the link is still dropped — the
+    // model has no field for a bare token or a session id, so neither can be stored,
+    // shown or replayed.
+    require(artifact.downloadPath == "/download/cf962f69-a3b8-4824-a107-00aea794318c?token=vault-secret-token", "the link is kept as the server wrote it")
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
     guard let encoded = try? encoder.encode(artifact), let text = String(data: encoded, encoding: .utf8) else {
         fputs("AorusAIArtifactFlow test failed: artifact is not encodable\n", stderr)
         exit(1)
     }
-    for secret in ["vault-secret-token", "another-secret", "third-secret", "5ef77a34-5cd0-41c0-a795-106df17ba5a1", "token"] {
+    for secret in ["another-secret", "third-secret", "5ef77a34-5cd0-41c0-a795-106df17ba5a1"] {
         require(!text.contains(secret), "persisted artifact must not carry \(secret)")
     }
-    require(AorusAIArtifactFlow.downloadURL(for: artifact)?.query == nil, "signed URL carries no query")
+    require(AorusAIArtifactFlow.downloadURL(for: artifact)?.query == "token=vault-secret-token", "the request carries the server's own query")
+    require(AorusAIArtifactFlow.downloadURL(for: artifact)?.host == "ai.aorusgram.com", "still only ever our own host")
     require(!AorusAIArtifactFlow.cardDetail(for: artifact).contains("5ef77a34"), "card detail carries no session id")
+    require(!AorusAIArtifactFlow.cardDetail(for: artifact).contains("vault-secret-token"), "card detail never shows the link")
 }
 
 private func buildsTheURLOnlyFromTheTrustedBase() {
@@ -237,12 +242,13 @@ private func buildsTheURLOnlyFromTheTrustedBase() {
         "//evil.example.com/download/\(id)",
         "javascript:alert(1)/\(id)",
         "/download/../../etc/passwd/\(id)",
-        "/download/\(id)?token=x",
         "/download/\(id)#fragment",
+        "/download/\(id)?a=1?b=2",
+        "/download/\(id)?a=<script>",
+        "/download/\(id)?a=1 b",
         "/download/\(id)\nX-Injected: 1",
         "/download/\(id)/../\(id)",
         "download/\(id)",
-        "/download/00000000-0000-0000-0000-000000000000",
         ""
     ]
     for candidate in rejected {
@@ -257,10 +263,18 @@ private func buildsTheURLOnlyFromTheTrustedBase() {
     // The component may carry the file's own extension: /download/<id>.pptx addresses the
     // same object, and refusing it sent the client to a canonical path the vault does not
     // serve.
-    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id).pptx", artifactId: id) == "/download/\(id).pptx", "an extension on the id is accepted")
-    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id).tar.gz", artifactId: id) == nil, "only a single extension is accepted")
-    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id)evil", artifactId: id) == nil, "a longer id is a different object")
-    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id).", artifactId: id) == nil, "a trailing dot is not an extension")
+    require(AorusAIArtifactFlow.sanitizedPath("/download/\(id).pptx", artifactId: id) == "/download/\(id).pptx", "an extension on the name is accepted")
+    // A vault names its own files: the path does not have to spell the artifact id at all.
+    require(AorusAIArtifactFlow.sanitizedPath("/v1/vault/2026/08/report.pptx", artifactId: id) == "/v1/vault/2026/08/report.pptx", "a vault path is accepted")
+    // A vault link carries its grant in the query, so the query is kept as written.
+    let signed = "/v1/vault/report.pptx?X-Amz-Expires=900&X-Amz-Signature=abc123&X-Amz-Credential=k%2F20260901"
+    require(AorusAIArtifactFlow.sanitizedPath(signed, artifactId: id) == signed, "a signed vault link keeps its query")
+    require(AorusAIArtifactFlow.relativePath(from: "https://ai.aorusgram.com" + signed) == signed, "an absolute link on our host keeps its query")
+    require(AorusAIArtifactFlow.relativePath(from: "https://evil.example.com" + signed) == nil, "a link on another host is refused whole")
+    // What is still refused is anything that is not a plain local path.
+    require(AorusAIArtifactFlow.sanitizedPath("/v1/vault/../../etc/passwd", artifactId: id) == nil, "traversal is still refused")
+    require(AorusAIArtifactFlow.sanitizedPath("/v1/vault/x.pptx?a=../../etc", artifactId: id) == nil, "traversal in the query is refused too")
+    require(AorusAIArtifactFlow.sanitizedPath("//evil.example/x.pptx", artifactId: id) == nil, "a protocol-relative host is still refused")
     // Surrounding whitespace is trimmed rather than treated as a different path.
     require(AorusAIArtifactFlow.sanitizedPath("  /download/\(id)\n", artifactId: id) == "/download/\(id)", "surrounding whitespace is trimmed")
     // A hostile filename cannot escape the download directory.
@@ -272,14 +286,14 @@ private func buildsTheURLOnlyFromTheTrustedBase() {
 /// The signature of a `GET`/`HEAD` covers the SHA-256 of zero bytes. The transport is
 /// what enforces that (`request.httpBody` is only set for other methods, and the hash
 /// is taken over the empty `Data()` handed to `signedRequest`); the invariant the flow
-/// owns is that a download is always a bodyless request to a bare relative path — no
-/// query, so nothing about the request depends on client-side secrets.
+/// owns is that a download is always a bodyless request to a relative reference the
+/// server itself wrote — the client never invents a parameter of its own.
 private func downloadIsABodylessRequest() {
     let empty = Data()
     require(empty.isEmpty, "a GET download body is empty")
     guard let artifact = AorusAIArtifactFlow.decode(object(productionPayload)),
           let url = AorusAIArtifactFlow.downloadURL(for: artifact) else { exit(1) }
-    require(url.query == nil, "no token query parameter is ever built client-side")
+    require(url.query == nil, "a link written without a query is requested without one")
     require(url.path == AorusAIArtifactFlow.canonicalPath(artifactId: artifact.artifactId), "the signed path is the artifact's own path")
     require(AorusAIArtifactFlow.canonicalPath(artifactId: "abc") == "/download/abc", "canonical path shape")
     require(!AorusAIArtifactFlow.isSafeArtifactId("../abc"), "unsafe id")

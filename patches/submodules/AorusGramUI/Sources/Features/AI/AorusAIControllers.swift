@@ -740,6 +740,7 @@ private final class AorusAIConversationListController: ViewController, UITableVi
             listHeader.layoutIfNeeded()
             tableView.tableHeaderView = listHeader
         }
+        emptyView.topInset = headerHeight
     }
 
     private func reload() {
@@ -1184,25 +1185,30 @@ private final class AorusAIConversationListEmptyView: UIView {
         )
     ]
 
-    private let iconView = UIImageView()
-    private let titleLabel = UILabel()
-    private let detailLabel = UILabel()
+    private let noResultsLabel = UILabel()
     private let card = UIView()
     private var rows: [AorusAIStarterRowView] = []
     var onStarter: ((Starter) -> Void)?
+    private var isSearching = false
+    /// A table's background view spans the whole table, header included, so the greeting
+    /// drawn above the list would otherwise sit on top of the card. This is that greeting's
+    /// height, and the card starts below it.
+    var topInset: CGFloat = 0.0 {
+        didSet {
+            guard abs(oldValue - topInset) > 0.5 else { return }
+            setNeedsLayout()
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        iconView.contentMode = .scaleAspectFit
-        titleLabel.font = aorusAITitleFont(size: 20.0, weight: .semibold)
-        titleLabel.textAlignment = .center
-        titleLabel.text = aorusAILocalized("С чего начнём?", "Where shall we start?")
-        detailLabel.font = .systemFont(ofSize: 14.0)
-        detailLabel.textAlignment = .center
-        detailLabel.numberOfLines = 0
-        detailLabel.text = aorusAILocalized("Выберите или просто напишите своё", "Pick one, or just write your own")
-        [iconView, titleLabel, detailLabel, card].forEach { addSubview($0) }
-        card.layer.cornerRadius = 14.0
+        noResultsLabel.font = .systemFont(ofSize: 15.0)
+        noResultsLabel.textAlignment = .center
+        noResultsLabel.numberOfLines = 2
+        noResultsLabel.text = aorusAILocalized("Ничего не найдено", "No results")
+        noResultsLabel.isHidden = true
+        [noResultsLabel, card].forEach { addSubview($0) }
+        card.layer.cornerRadius = 18.0
         card.layer.cornerCurve = .continuous
         card.clipsToBounds = true
         for index in Self.starters.indices {
@@ -1218,9 +1224,7 @@ private final class AorusAIConversationListEmptyView: UIView {
 
     func configure(palette: AorusAIPalette) {
         backgroundColor = palette.background
-        iconView.tintColor = palette.accent
-        titleLabel.textColor = palette.label
-        detailLabel.textColor = palette.secondary
+        noResultsLabel.textColor = palette.tertiary
         card.backgroundColor = palette.elevated
         for (index, row) in rows.enumerated() {
             row.configure(
@@ -1230,17 +1234,12 @@ private final class AorusAIConversationListEmptyView: UIView {
                 palette: palette
             )
         }
-        setSearching(false)
+        setSearching(isSearching)
     }
 
     func setSearching(_ searching: Bool) {
-        titleLabel.text = searching
-            ? aorusAILocalized("Ничего не найдено", "No results")
-            : aorusAILocalized("С чего начнём?", "Where shall we start?")
-        detailLabel.text = searching
-            ? aorusAILocalized("Попробуйте изменить запрос", "Try a different search")
-            : aorusAILocalized("Выберите или просто напишите своё", "Pick one, or just write your own")
-        iconView.image = UIImage(systemName: searching ? "magnifyingglass" : "sparkles")?.withRenderingMode(.alwaysTemplate)
+        isSearching = searching
+        noResultsLabel.isHidden = !searching
         card.isHidden = searching
         setNeedsLayout()
     }
@@ -1253,22 +1252,19 @@ private final class AorusAIConversationListEmptyView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let side: CGFloat = 24.0
+        let side: CGFloat = 16.0
         let width = max(0.0, bounds.width - side * 2.0)
-        let cardHeight = card.isHidden ? 0.0 : AorusAIStarterRowView.height * CGFloat(rows.count)
-        let titleHeight = ceil(titleLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
-        let detailHeight = ceil(detailLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
-        let block = 44.0 + 14.0 + titleHeight + 6.0 + detailHeight + (card.isHidden ? 0.0 : 22.0 + cardHeight)
-        // Sat a little above centre: an empty state pinned to the exact middle reads as
-        // low on the screen once the greeting above it is counted.
-        var y = max(24.0, floor((bounds.height - block) / 2.0) - 24.0)
-        iconView.frame = CGRect(x: floor((bounds.width - 44.0) / 2.0), y: y, width: 44.0, height: 44.0)
-        y += 44.0 + 14.0
-        titleLabel.frame = CGRect(x: side, y: y, width: width, height: titleHeight)
-        y += titleHeight + 6.0
-        detailLabel.frame = CGRect(x: side, y: y, width: width, height: detailHeight)
-        y += detailHeight + 22.0
-        card.frame = CGRect(x: side, y: y, width: width, height: cardHeight)
+        if isSearching {
+            let height = ceil(noResultsLabel.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height)
+            noResultsLabel.frame = CGRect(x: side, y: max(topInset + 24.0, floor((bounds.height - height) / 2.0) - 40.0), width: width, height: height)
+            card.frame = CGRect(x: side, y: topInset, width: width, height: 0.0)
+            return
+        }
+        // The card sits directly under the greeting the list header already draws, at the
+        // top of the free space rather than floating in the middle of it: the screen reads
+        // as "here is what to do first", not as a poster.
+        let cardHeight = AorusAIStarterRowView.height * CGFloat(rows.count)
+        card.frame = CGRect(x: side, y: topInset + 12.0, width: width, height: cardHeight)
         for (index, row) in rows.enumerated() {
             row.frame = CGRect(x: 0.0, y: AorusAIStarterRowView.height * CGFloat(index), width: width, height: AorusAIStarterRowView.height)
         }
@@ -1383,6 +1379,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// only the spoken part instead of the whole draft.
     private var dictationBaseText = ""
     private var dictationSpokenText = ""
+    /// Set when the user abandons a run. `stop()` only asks the recogniser to end, and the
+    /// final result it delivers afterwards would otherwise arrive as new spoken text and be
+    /// written into the input the user just decided not to dictate into.
+    private var dictationCancelled = false
     private var headerView: AorusAINavigationTitleView?
 
     private let tableView = UITableView(frame: .zero, style: .plain)
@@ -2501,11 +2501,12 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// was before the microphone opened.
     private func cancelDictation() {
         guard dictation.isActive else { return }
+        dictationCancelled = true
         dictationSpokenText = ""
         dictation.stop()
+        composer.isDictating = false
         composer.text = dictationBaseText
         textViewDidChangeSilently()
-        composer.isDictating = false
         updateComposer()
     }
 
@@ -2518,38 +2519,48 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.displayNode.view.endEditing(true)
         dictationBaseText = composer.text
         dictationSpokenText = ""
+        dictationCancelled = false
         let locale = AorusAIDictation.locale(for: presentationData.strings.baseLanguageCode)
         composer.isDictating = true
         updateComposer()
         dictation.start(locale: locale, onText: { [weak self] text in
-            guard let self else { return }
+            guard let self, !self.dictationCancelled else { return }
+            // Kept, not shown. While the microphone is open the panel is the wave, and the
+            // words go into the input in one piece when the run is finished — which is the
+            // whole gesture the user asked for: speak, tap done, read what you said.
             self.dictationSpokenText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            // Written into the input on every partial result, the way the system's own
-            // dictation does. The user watches their words arrive instead of talking at a
-            // hidden field and finding out afterwards whether anything was heard.
-            self.composer.text = self.dictationDraft()
-            self.textViewDidChangeSilently()
         }, onLevel: { [weak self] level in
             self?.composer.updateDictationLevel(level)
         }, onFailure: { [weak self] failure in
-            self?.composer.isDictating = false
-            self?.updateComposer()
-            self?.presentError(failure.message)
+            guard let self, !self.dictationCancelled else { return }
+            self.dictationSpokenText = ""
+            self.composer.isDictating = false
+            self.updateComposer()
+            self.presentError(failure.message)
         }, onFinish: { [weak self] in
             guard let self else { return }
+            // The run the user abandoned has already put the input back; the recogniser's
+            // last word arrives after that and must not be typed into it.
+            guard !self.dictationCancelled else {
+                self.dictationCancelled = false
+                return
+            }
+            // The panel goes back to being a text field first, so the words are typed into
+            // a field that is already on screen rather than appearing under the wave.
+            self.composer.isDictating = false
             self.composer.text = self.dictationDraft()
             self.textViewDidChangeSilently()
-            self.composer.isDictating = false
             self.dictationBaseText = self.composer.text
             self.dictationSpokenText = ""
+            self.composer.textView.becomeFirstResponder()
             self.updateComposer()
         })
     }
 
-    /// What the input holds while dictating: whatever was already typed, then what has
-    /// been recognised so far. Built from the two parts every time rather than appended
-    /// to, so a correction the recogniser makes to an earlier word replaces it instead of
-    /// being added after it.
+    /// What the input is given when the run ends: whatever was already typed, then
+    /// everything that was recognised. Built from the two parts rather than appended to, so
+    /// a correction the recogniser makes to an earlier word replaces it instead of being
+    /// added after it.
     private func dictationDraft() -> String {
         let base = dictationBaseText.trimmingCharacters(in: .whitespacesAndNewlines)
         let spoken = dictationSpokenText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3121,8 +3132,9 @@ private final class AorusAIComposerView: UIView {
     private let referenceClose = UIButton(type: .system)
     private let sendButton = UIButton(type: .system)
     private let dictationButton = UIButton(type: .system)
-    private let dictationIndicator = AorusAIDictationIndicatorView()
+    private let dictationWave = AorusAIDictationWaveView()
     private let dictationCancel = UIButton(type: .system)
+    private let dictationDone = UIButton(type: .system)
     var onSend: (() -> Void)?
     var onDismissReference: (() -> Void)?
     var onOpenPeer: ((PeerId) -> Void)?
@@ -3189,16 +3201,25 @@ private final class AorusAIComposerView: UIView {
     }
     var isGenerating = false { didSet { refreshButton() } }
     var canSend = false { didSet { refreshButton() } }
+    /// While this is on, the panel is the wave and nothing else: the text, both round
+    /// buttons and the placeholder step aside for it, and what was heard is written into
+    /// the input at the end of the run.
     var isDictating = false {
         didSet {
+            guard oldValue != isDictating else { return }
             refreshDictationButton()
-            dictationIndicator.isHidden = !isDictating
+            dictationWave.isHidden = !isDictating
             dictationCancel.isHidden = !isDictating
-            dictationIndicator.setActive(isDictating)
-            // The input stays on screen and keeps filling with the words as they are
-            // recognised. Hiding it was the whole reason dictation felt like it had gone
-            // somewhere else and might not be listening.
+            dictationDone.isHidden = !isDictating
+            textView.isHidden = isDictating
+            sendButton.isHidden = isDictating
+            dictationButton.isHidden = isDictating
+            dictationWave.setActive(isDictating)
             placeholder.isHidden = isDictating || !text.isEmpty
+            if isDictating {
+                textView.resignFirstResponder()
+            }
+            onHeightChanged?()
             setNeedsLayout()
         }
     }
@@ -3206,14 +3227,14 @@ private final class AorusAIComposerView: UIView {
     /// One microphone sample from the running dictation.
     func updateDictationLevel(_ level: CGFloat) {
         guard isDictating else { return }
-        dictationIndicator.update(level: level)
+        dictationWave.update(level: level)
     }
     override init(frame: CGRect) {
         super.init(frame: frame)
         addSubview(container)
         glassView.isUserInteractionEnabled = false
         container.addSubview(glassView)
-        [referenceView, dictationIndicator, dictationCancel, dictationButton, textView, sendButton].forEach { container.addSubview($0) }
+        [referenceView, dictationWave, dictationCancel, dictationDone, dictationButton, textView, sendButton].forEach { container.addSubview($0) }
         referenceView.addSubview(referenceLine)
         referenceView.addSubview(referenceLabel)
         referenceView.addSubview(referenceClose)
@@ -3224,6 +3245,10 @@ private final class AorusAIComposerView: UIView {
         textView.backgroundColor = .clear
         textView.isScrollEnabled = true
         textView.textContainerInset = UIEdgeInsets(top: 2, left: 0, bottom: 2, right: 0)
+        // The default 5pt fragment padding indents the first glyph but not the placeholder
+        // label, which is laid out at x: 0 — so the caret sat on top of the "С" of
+        // "Спросите". Both now start at the same x.
+        textView.textContainer.lineFragmentPadding = 0
         referenceLabel.font = .systemFont(ofSize: 12)
         referenceLabel.numberOfLines = 1
         referenceLabel.lineBreakMode = .byTruncatingTail
@@ -3233,13 +3258,19 @@ private final class AorusAIComposerView: UIView {
         sendButton.accessibilityLabel = aorusAILocalized("Отправить", "Send")
         dictationButton.addTarget(self, action: #selector(dictate), for: .touchUpInside)
         dictationButton.accessibilityLabel = aorusAILocalized("Диктовать", "Dictate")
-        // A run has to be abandonable. Stopping commits what was heard, which is right;
+        // A run has to be abandonable. Finishing commits what was heard, which is right;
         // there was no way at all to decide it heard the wrong thing.
-        dictationCancel.setImage(UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 12.0, weight: .semibold)), for: .normal)
+        dictationCancel.setImage(UIImage(systemName: "xmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .semibold)), for: .normal)
         dictationCancel.addTarget(self, action: #selector(cancelDictation), for: .touchUpInside)
         dictationCancel.accessibilityLabel = aorusAILocalized("Отменить диктовку", "Cancel dictation")
         dictationCancel.isHidden = true
-        dictationIndicator.isHidden = true
+        // The one thing to press while the wave is running: it ends the run and puts what
+        // was said into the input.
+        dictationDone.setImage(UIImage(systemName: "checkmark")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 16.0, weight: .bold)), for: .normal)
+        dictationDone.addTarget(self, action: #selector(dictate), for: .touchUpInside)
+        dictationDone.accessibilityLabel = aorusAILocalized("Закончить диктовку", "Finish dictation")
+        dictationDone.isHidden = true
+        dictationWave.isHidden = true
         referenceView.isHidden = true
     }
 
@@ -3268,8 +3299,11 @@ private final class AorusAIComposerView: UIView {
         referenceView.backgroundColor = .clear
         referenceLine.backgroundColor = palette.accent
         referenceClose.tintColor = palette.tertiary
-        dictationIndicator.configure(palette: palette)
+        dictationWave.configure(palette: palette)
         dictationCancel.tintColor = palette.secondary
+        dictationCancel.backgroundColor = palette.fill
+        dictationDone.tintColor = palette.onAccent
+        dictationDone.backgroundColor = palette.accent
         refreshReferenceLabel()
         textView.configureMentions(context: context, theme: theme)
         // The theme decides the base colour every run is drawn in, so the last render is
@@ -3313,28 +3347,53 @@ private final class AorusAIComposerView: UIView {
         referenceLine.layer.cornerRadius = 1
         referenceLabel.frame = CGRect(x: 9, y: 5, width: max(0, referenceView.bounds.width - 39), height: max(0, refHeight - 10))
         referenceClose.frame = CGRect(x: referenceView.bounds.width - 27, y: 3, width: 26, height: 26)
-        let indicatorTop: CGFloat = refHeight == 0 ? 8 : 38
+        let inputTop: CGFloat = refHeight == 0 ? 8 : 38
+        // The dictation row owns the whole panel below the quote: a round cancel on the
+        // left, the wave across everything between, and the accent "done" on the right.
+        let waveTop = inputTop
+        let cancelSize = AorusAIComposerView.dictationCancelSize
+        let doneSize = AorusAIComposerView.dictationDoneSize
+        let waveHeight = AorusAIComposerView.dictationPanelHeight - 16.0
+        dictationCancel.frame = CGRect(x: 12.0, y: waveTop + floor((waveHeight - cancelSize) / 2.0), width: cancelSize, height: cancelSize)
+        dictationCancel.layer.cornerRadius = cancelSize / 2.0
+        dictationDone.frame = CGRect(
+            x: max(0, container.bounds.width - doneSize - 12.0),
+            y: waveTop + floor((waveHeight - doneSize) / 2.0),
+            width: doneSize,
+            height: doneSize
+        )
+        dictationDone.layer.cornerRadius = doneSize / 2.0
+        let waveLeft = dictationCancel.frame.maxX + 12.0
+        dictationWave.frame = CGRect(
+            x: waveLeft,
+            y: waveTop,
+            width: max(0, dictationDone.frame.minX - 12.0 - waveLeft),
+            height: waveHeight
+        )
         let inputRight = dictationButton.frame.minX - 8
-        let cancelSize: CGFloat = 24.0
-        dictationCancel.frame = CGRect(x: max(0, inputRight - cancelSize), y: indicatorTop, width: cancelSize, height: AorusAIComposerView.dictationRowHeight - 6)
-        dictationIndicator.frame = CGRect(x: textInset, y: indicatorTop, width: max(0, dictationCancel.frame.minX - 8.0 - textInset), height: AorusAIComposerView.dictationRowHeight - 6)
-        let inputTop = indicatorTop + (isDictating ? AorusAIComposerView.dictationRowHeight : 0)
         textView.frame = CGRect(x: textInset, y: inputTop, width: max(0, inputRight - textInset), height: max(0, container.bounds.height - inputTop - 8))
         placeholder.frame = CGRect(x: 0, y: 2, width: max(0, textView.bounds.width), height: 21)
     }
 
     private static let actionButtonSize: CGFloat = 32
     private static let dictationButtonSize: CGFloat = 26
-    /// The thin live row a running dictation adds above the text.
-    private static let dictationRowHeight: CGFloat = 28
+    private static let dictationCancelSize: CGFloat = 34.0
+    private static let dictationDoneSize: CGFloat = 40.0
+    /// What the panel becomes while dictating: one tall row, the wave and its two buttons.
+    private static let dictationPanelHeight: CGFloat = 68.0
 
     func requiredHeight(width: CGFloat) -> CGFloat {
+        var extras: CGFloat = reference == nil ? 0 : 34
+        if isDictating {
+            // Fixed while the microphone is open: the text is not on screen to measure, and
+            // a panel that changed height as words arrived would make the wave jump.
+            extras += AorusAIComposerView.dictationPanelHeight
+            return extras + 8
+        }
         // 12pt page inset on each side, then the card's own 16pt text inset on each side.
         let available = max(100, width - 24 - 32)
         let measured = textView.sizeThatFits(CGSize(width: available, height: 132)).height
-        var extras: CGFloat = reference == nil ? 0 : 34
-        if isDictating { extras += AorusAIComposerView.dictationRowHeight }
-        let containerHeight = min(184 + AorusAIComposerView.dictationRowHeight, max(56 + extras, ceil(measured) + 16 + extras))
+        let containerHeight = min(184, max(56 + extras, ceil(measured) + 16 + extras))
         return containerHeight + 8
     }
 
@@ -3359,16 +3418,14 @@ private final class AorusAIComposerView: UIView {
 
     private func refreshDictationButton() {
         let palette = theme.map { AorusAIPalette.resolve($0) }
-        // A running dictation turns the microphone into a filled stop button. A second
-        // waveform glyph next to the live row said nothing about how to end the run.
-        let name = isDictating ? "stop.fill" : "mic"
-        let size: CGFloat = isDictating ? 11.0 : 13.0
-        dictationButton.setImage(UIImage(systemName: name)?.withConfiguration(UIImage.SymbolConfiguration(pointSize: size, weight: .semibold)), for: .normal)
-        dictationButton.tintColor = isDictating ? (palette?.onAccent ?? .white) : palette?.secondary
-        dictationButton.backgroundColor = isDictating ? palette?.accent : .clear
+        // Only ever the microphone: a running dictation replaces the whole row with the
+        // wave and its own done button, so this one is not on screen to have a second state.
+        dictationButton.setImage(UIImage(systemName: "mic")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)), for: .normal)
+        dictationButton.tintColor = palette?.secondary
+        dictationButton.backgroundColor = .clear
         dictationButton.layer.cornerRadius = AorusAIComposerView.dictationButtonSize / 2.0
         dictationButton.layer.cornerCurve = .circular
-        dictationButton.accessibilityLabel = isDictating ? aorusAILocalized("Остановить диктовку", "Stop dictation") : aorusAILocalized("Диктовать", "Dictate")
+        dictationButton.accessibilityLabel = aorusAILocalized("Диктовать", "Dictate")
     }
 
     private static let inputFont = UIFont.systemFont(ofSize: 16.0)
@@ -3503,42 +3560,88 @@ private final class AorusAIComposerView: UIView {
     @objc private func cancelDictation() { onCancelDictation?() }
 }
 
-/// The live state of a dictation run, shown as its own thin row above the input.
+/// A running dictation, drawn as one large spectral wave across the whole input panel.
 ///
-/// Four bars driven by the microphone's actual loudness and the elapsed time, and nothing
-/// else: the words themselves go straight into the input as they are recognised, which is
-/// what the user is really watching. What stood here before hid the input, drew twenty
-/// bars of a fixed canned animation that moved identically whether or not anyone was
-/// speaking, and showed the result only once the run had ended.
-private final class AorusAIDictationIndicatorView: UIView {
-    private static let barCount = 4
-    private static let barWidth: CGFloat = 3.0
-    private static let barSpacing: CGFloat = 3.0
+/// The wave is the only thing on screen while the microphone is open: no timer, no dot, no
+/// meter beside it. Three ribbons of different frequency ride the same phase, their height
+/// follows the microphone's actual loudness, and a colour band drifts through them
+/// continuously, so speaking louder makes the wave taller and silence leaves it breathing
+/// rather than dead. The words are not shown as they are recognised — they are put into
+/// the input when the run is finished, which is the whole gesture: speak, tap done, read
+/// what you said.
+private final class AorusAIDictationWaveView: UIView {
+    /// One ribbon of the wave: its own frequency, its share of the amplitude, and how
+    /// opaque it is. The three together read as depth rather than as three lines.
+    private struct Ribbon {
+        let frequency: CGFloat
+        let amplitude: CGFloat
+        let alpha: CGFloat
+        let speed: CGFloat
+    }
 
-    private let dot = UIView()
-    private let timeLabel = UILabel()
-    private let bars: [UIView] = (0 ..< AorusAIDictationIndicatorView.barCount).map { _ in UIView() }
-    private var levels: [CGFloat] = Array(repeating: 0.0, count: AorusAIDictationIndicatorView.barCount)
-    private var startedAt = Date()
-    private var timer: Foundation.Timer?
+    private static let ribbons: [Ribbon] = [
+        Ribbon(frequency: 1.35, amplitude: 1.0, alpha: 1.0, speed: 1.0),
+        Ribbon(frequency: 2.10, amplitude: 0.66, alpha: 0.5, speed: -0.62),
+        Ribbon(frequency: 3.05, amplitude: 0.42, alpha: 0.28, speed: 1.55)
+    ]
 
-    private let pill = UIView()
+    /// Seven hues, enough of a sweep to read as a spectrum.
+    private static let spectrum: [UIColor] = [
+        UIColor(red: 0.36, green: 0.51, blue: 1.00, alpha: 1.0),
+        UIColor(red: 0.55, green: 0.36, blue: 1.00, alpha: 1.0),
+        UIColor(red: 0.95, green: 0.35, blue: 0.79, alpha: 1.0),
+        UIColor(red: 1.00, green: 0.52, blue: 0.35, alpha: 1.0),
+        UIColor(red: 0.99, green: 0.80, blue: 0.31, alpha: 1.0),
+        UIColor(red: 0.31, green: 0.85, blue: 0.62, alpha: 1.0),
+        UIColor(red: 0.24, green: 0.78, blue: 0.96, alpha: 1.0)
+    ]
+
+    /// The strip the drift animation slides: the seven hues twice over, closed with the
+    /// first one again. Fifteen evenly spaced stops means stop *i* and stop *i + 7* sit
+    /// exactly half the strip apart and carry the same colour — so the strip is periodic
+    /// with a period of one view width, and the animation's jump back to the start is
+    /// invisible. Listing the sweep once and hoping would put a visible seam in it every
+    /// few seconds.
+    private static let stripColors: [CGColor] = (spectrum + spectrum + [spectrum[0]]).map { $0.cgColor }
+
+    /// One drawn ribbon: a colour strip clipped to the wave's stroke. Each is its own pair
+    /// so the three can carry different opacities — a mask is all-or-nothing, so layering
+    /// them is the only way to get the faint outer swings.
+    private struct RibbonLayers {
+        /// Clipped to the wave's stroke and fixed to the view: the colour strip inside it
+        /// is what travels, so the wave stays put while the spectrum runs through it.
+        var host: CALayer
+        var gradient: CAGradientLayer
+        var mask: CAShapeLayer
+    }
+
+    private var ribbonLayers: [RibbonLayers] = []
+    private var displayLink: CADisplayLink?
+    private var phase: CGFloat = 0.0
+    /// The last sample the recogniser reported, and the value actually drawn. Drawing
+    /// chases the sample instead of jumping to it, so a consonant does not make the wave
+    /// snap.
+    private var targetLevel: CGFloat = 0.0
+    private var drawnLevel: CGFloat = 0.0
+    private var breath: CGFloat = 0.0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        // A tinted capsule, so a run in progress reads as one live object rather than as a
-        // dot, a number and some marks that happen to sit next to each other.
-        pill.layer.cornerCurve = .continuous
-        pill.isUserInteractionEnabled = false
-        addSubview(pill)
-        dot.layer.cornerRadius = 3.0
-        pill.addSubview(dot)
-        timeLabel.font = aorusAIMonoFont(size: 12.0, weight: .medium)
-        timeLabel.text = "0:00"
-        pill.addSubview(timeLabel)
-        bars.forEach { bar in
-            bar.layer.cornerRadius = AorusAIDictationIndicatorView.barWidth / 2.0
-            pill.addSubview(bar)
+        isUserInteractionEnabled = false
+        for ribbon in Self.ribbons {
+            let host = CALayer()
+            host.opacity = Float(ribbon.alpha)
+            let gradient = CAGradientLayer()
+            gradient.startPoint = CGPoint(x: 0.0, y: 0.5)
+            gradient.endPoint = CGPoint(x: 1.0, y: 0.5)
+            gradient.colors = Self.stripColors
+            host.addSublayer(gradient)
+            let mask = CAShapeLayer()
+            mask.fillColor = UIColor.black.cgColor
+            mask.fillRule = .nonZero
+            host.mask = mask
+            layer.addSublayer(host)
+            ribbonLayers.append(RibbonLayers(host: host, gradient: gradient, mask: mask))
         }
         isAccessibilityElement = true
         accessibilityLabel = aorusAILocalized("Идёт запись", "Recording")
@@ -3547,82 +3650,124 @@ private final class AorusAIDictationIndicatorView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     deinit {
-        timer?.invalidate()
+        displayLink?.invalidate()
     }
 
+    /// Nothing here is themed: the point of the wave is that it is the one saturated thing
+    /// in the panel. The hook stays so the composer can configure it like every other part.
     func configure(palette: AorusAIPalette) {
-        pill.backgroundColor = palette.accentSoft
-        dot.backgroundColor = palette.accent
-        timeLabel.textColor = palette.accent
-        bars.forEach { $0.backgroundColor = palette.accent }
     }
 
     func setActive(_ active: Bool) {
-        timer?.invalidate()
-        timer = nil
-        dot.layer.removeAnimation(forKey: "aorusPulse")
+        displayLink?.invalidate()
+        displayLink = nil
+        ribbonLayers.forEach { $0.gradient.removeAnimation(forKey: "aorusDrift") }
         guard active else {
-            levels = Array(repeating: 0.0, count: Self.barCount)
-            setNeedsLayout()
+            targetLevel = 0.0
+            drawnLevel = 0.0
+            phase = 0.0
+            ribbonLayers.forEach { $0.mask.path = nil }
             return
         }
-        startedAt = Date()
-        refreshTime()
-        let pulse = CABasicAnimation(keyPath: "opacity")
-        pulse.fromValue = 1.0
-        pulse.toValue = 0.25
-        pulse.duration = 0.6
-        pulse.autoreverses = true
-        pulse.repeatCount = .infinity
-        dot.layer.add(pulse, forKey: "aorusPulse")
-        timer = Foundation.Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
-            self?.refreshTime()
-        }
+        let link = CADisplayLink(target: self, selector: #selector(step))
+        link.add(to: .main, forMode: .common)
+        displayLink = link
+        startDrift()
+        redraw()
     }
 
-    /// One new sample. The bars scroll left, so the row reads as a moving level rather
-    /// than four independent meters.
+    /// One microphone sample, 0…1.
     func update(level: CGFloat) {
-        levels.removeFirst()
-        levels.append(min(1.0, max(0.0, level)))
-        UIView.animate(withDuration: 0.09, delay: 0.0, options: [.beginFromCurrentState, .curveLinear]) {
-            self.layoutBars()
+        targetLevel = min(1.0, max(0.0, level))
+    }
+
+    /// The colour band slides one full view width and repeats, which is why the spectrum
+    /// ends on the colour it starts with: the jump back is invisible. Each ribbon drifts at
+    /// its own rate, so the three never line up into one flat sweep.
+    private func startDrift() {
+        guard bounds.width > 1.0 else { return }
+        for (index, ribbon) in ribbonLayers.enumerated() {
+            let drift = CABasicAnimation(keyPath: "position.x")
+            drift.fromValue = ribbon.gradient.position.x
+            drift.toValue = ribbon.gradient.position.x - bounds.width
+            drift.duration = 3.4 + Double(index) * 0.9
+            drift.repeatCount = .infinity
+            drift.isRemovedOnCompletion = false
+            ribbon.gradient.add(drift, forKey: "aorusDrift")
         }
     }
 
-    private func refreshTime() {
-        let elapsed = max(0, Int(Date().timeIntervalSince(startedAt)))
-        timeLabel.text = String(format: "%d:%02d", elapsed / 60, elapsed % 60)
-        setNeedsLayout()
+    @objc private func step() {
+        phase += 0.075
+        breath += 0.021
+        // A floor that rises and falls on its own, so an open microphone in a quiet room
+        // still looks like it is listening.
+        let idle = 0.16 + 0.05 * sin(breath)
+        let target = max(idle, targetLevel)
+        drawnLevel += (target - drawnLevel) * 0.18
+        redraw()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let height = bounds.height
-        let timeWidth = ceil(timeLabel.sizeThatFits(CGSize(width: bounds.width, height: height)).width)
-        let barsWidth = Self.barWidth * CGFloat(Self.barCount) + Self.barSpacing * CGFloat(Self.barCount - 1)
-        // The capsule hugs its contents: 10 lead-in, dot, 8, time, 8, bars, 12 trailing.
-        let pillWidth = min(bounds.width, 10.0 + 6.0 + 8.0 + timeWidth + 8.0 + barsWidth + 12.0)
-        pill.frame = CGRect(x: 0.0, y: 0.0, width: pillWidth, height: height)
-        pill.layer.cornerRadius = height / 2.0
-        dot.frame = CGRect(x: 10.0, y: floor((height - 6.0) / 2.0), width: 6.0, height: 6.0)
-        timeLabel.frame = CGRect(x: 24.0, y: 0.0, width: timeWidth, height: height)
-        layoutBars()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for ribbon in ribbonLayers {
+            ribbon.host.frame = bounds
+            ribbon.mask.frame = bounds
+            // Twice the width, so the strip still covers the view at the far end of its
+            // travel.
+            ribbon.gradient.frame = CGRect(x: 0.0, y: 0.0, width: bounds.width * 2.0, height: bounds.height)
+        }
+        CATransaction.commit()
+        if displayLink != nil {
+            ribbonLayers.forEach { $0.gradient.removeAnimation(forKey: "aorusDrift") }
+            startDrift()
+            redraw()
+        }
     }
 
-    private func layoutBars() {
+    private func redraw() {
+        let width = bounds.width
         let height = bounds.height
-        let originX = timeLabel.frame.maxX + 8.0
-        for (index, bar) in bars.enumerated() {
-            // A floor of 3pt, so a silent moment is a row of dots rather than nothing.
-            let barHeight = max(3.0, floor(levels[index] * (height - 4.0)))
-            bar.frame = CGRect(
-                x: originX + CGFloat(index) * (Self.barWidth + Self.barSpacing),
-                y: floor((height - barHeight) / 2.0),
-                width: Self.barWidth,
-                height: barHeight
+        guard width > 1.0, height > 1.0, ribbonLayers.count == Self.ribbons.count else { return }
+        let middle = height / 2.0
+        // 6pt of air top and bottom, so the tallest peak still sits inside the panel.
+        let span = max(2.0, middle - 6.0)
+        let stepWidth: CGFloat = 2.0
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (index, ribbon) in Self.ribbons.enumerated() {
+            let amplitude = span * ribbon.amplitude * drawnLevel
+            let thickness = max(2.0, 4.0 * ribbon.alpha)
+            let line = UIBezierPath()
+            var x: CGFloat = 0.0
+            var first = true
+            while x <= width {
+                // The envelope pins both ends to the centre line, so the wave enters and
+                // leaves the panel as a point rather than being cut off mid-swing.
+                let t = x / width
+                let envelope = min(1.0, sin(CGFloat.pi * t) * 1.35)
+                let y = middle + sin(t * ribbon.frequency * .pi * 4.0 + phase * ribbon.speed) * amplitude * envelope
+                if first {
+                    line.move(to: CGPoint(x: x, y: y))
+                    first = false
+                } else {
+                    line.addLine(to: CGPoint(x: x, y: y))
+                }
+                x += stepWidth
+            }
+            // The mask has to be an area, not a line: a stroked copy of the curve is what
+            // lets the colour strip show through as a rounded band.
+            let stroked = line.cgPath.copy(
+                strokingWithWidth: thickness,
+                lineCap: .round,
+                lineJoin: .round,
+                miterLimit: 1.0
             )
+            ribbonLayers[index].mask.path = stroked
         }
+        CATransaction.commit()
     }
 }
 
@@ -5009,6 +5154,7 @@ private enum AorusAIFormat {
         case .artifactNotOwned: return "artifact_not_owned"
         case .artifactGone: return "artifact_gone"
         case .artifactDownloadFailed: return "artifact_download_failed"
+        case let .artifactRejected(reason): return "artifact_rejected_" + reason
         case .cancelled: return "cancelled"
         case .http: return "http"
         }
@@ -5030,6 +5176,9 @@ private enum AorusAIFormat {
         case .artifactNotOwned: return aorusAILocalized("Файл недоступен для этого устройства", "This file is not available for this device")
         case .artifactGone: return aorusAILocalized("Файл больше недоступен", "The file is no longer available")
         case .artifactDownloadFailed: return aorusAILocalized("Не удалось скачать файл", "The file could not be downloaded")
+        // The token names the guard that refused, so a report says what happened instead
+        // of repeating the same blank sentence for six different causes.
+        case let .artifactRejected(reason): return aorusAILocalized("Не удалось скачать файл (\(reason))", "The file could not be downloaded (\(reason))")
         case .cancelled: return aorusAILocalized("Остановлено", "Stopped")
         // The status is named: without it every gateway refusal reached the user, and
         // the next bug report, as one indistinguishable sentence.
