@@ -8724,6 +8724,17 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
         "                // AorusGram: see the playback branch below — a one-time recording is\n"
         "                // listened to like any other, and the waveform has to be told so.\n"
         "                let aorusBurnsWhilePlaying = UserDefaults.standard.bool(forKey: \"aorusgram_one_time_voice_burn\")\n"
+        "                // The bypass deliberately never consumes the recording, so its\n"
+        "                // ConsumableContentMessageAttribute stays unread for good. Upstream\n"
+        "                // reads that in two places: it draws the blue unread dot, and — the\n"
+        "                // part that matters — it makes the waveform's background colour equal\n"
+        "                // its foreground, so the played and unplayed halves are the same\n"
+        "                // colour and playback shows no progress whatsoever. A one-time voice\n"
+        "                // therefore looked identical while playing and while idle. Dropping\n"
+        "                // the icon here puts both back to what an ordinary voice does.\n"
+        "                if isViewOnceMessage && !aorusBurnsWhilePlaying {\n"
+        "                    consumableContentIcon = nil\n"
+        "                }\n"
     )
     if text.count(old_layout_flag) != 1:
         raise RuntimeError(f"OneTimeVoice: layout flag anchor not unique ({text.count(old_layout_flag)})")
