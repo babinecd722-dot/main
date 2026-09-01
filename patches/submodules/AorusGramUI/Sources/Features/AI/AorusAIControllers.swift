@@ -380,7 +380,13 @@ private func aorusAIMediaCaption(_ message: Message) -> String? {
                     seconds = duration
                 }
             }
-            let length = seconds.map { " " + stringForDuration(Int32($0)) } ?? ""
+            // Formatted here rather than through `stringForDuration`: that lives in
+            // TelegramStringFormatting, which this module neither imports nor depends on,
+            // and a `m:ss` string is not worth a module boundary.
+            let length = seconds.map { total -> String in
+                let clamped = max(0, total)
+                return String(format: " %d:%02d", clamped / 60, clamped % 60)
+            } ?? ""
             if file.isVoice {
                 return aorusAILocalized("голосовое\(length)", "voice message\(length)")
             }

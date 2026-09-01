@@ -151,6 +151,43 @@ def _type_bodies(code: str) -> list:
     return bodies
 
 
+# Free functions upstream provides, and the module each one needs. `-frontend -parse`
+# resolves no names, and the AorusGram-name rule above only knows about our own core
+# module, so reaching for one of these without its import compiles locally and dies in
+# Bazel — which is exactly what `stringForDuration` did. The map is small and grows when
+# something is reached for; it does not try to know every symbol Telegram exports.
+UPSTREAM_FUNCTIONS = {
+    "stringForDuration": "TelegramStringFormatting",
+    "stringForMessageTimestamp": "TelegramStringFormatting",
+    "stringForRelativeTimestamp": "TelegramStringFormatting",
+    "stringForFullDate": "TelegramStringFormatting",
+    "dataSizeString": "TelegramStringFormatting",
+    "generateTintedImage": "Display",
+    "generateImage": "Display",
+    "peerAvatarCompleteImage": "AvatarNode",
+    "peerAvatarImage": "AvatarNode",
+    "drawPeerAvatarLetters": "AvatarNode",
+    "avatarPlaceholderFont": "AvatarNode",
+    "chatInputStateStringWithAppliedEntities": "TextFormat",
+    "stringWithAppliedEntities": "TextFormat",
+}
+
+
+def check_upstream_functions(root: Path, ui: Path, errors: list) -> None:
+    """A free function from another module needs that module imported."""
+    for source in sorted(ui.rglob("*.swift")):
+        text = source.read_text(encoding="utf-8")
+        imports = set(IMPORT.findall(text))
+        code = COMMENT.sub(" ", text)
+        for name, module in sorted(UPSTREAM_FUNCTIONS.items()):
+            if module in imports:
+                continue
+            if re.search(rf"(?<![\w.]){re.escape(name)}\s*\(", code):
+                errors.append(
+                    f"{source.relative_to(root)} calls {name}(), which needs `import {module}`"
+                )
+
+
 def check_selector_ambiguity(root: Path, ui: Path, errors: list) -> None:
     """A bare `#selector(name)` must name exactly one method of its type.
 
@@ -226,6 +263,7 @@ def main() -> int:
 
     check_build_dependencies(root, ui, errors)
     check_selector_ambiguity(root, ui, errors)
+    check_upstream_functions(root, ui, errors)
 
     for error in errors:
         print(f"AorusAI scope check: {error}", file=sys.stderr)
