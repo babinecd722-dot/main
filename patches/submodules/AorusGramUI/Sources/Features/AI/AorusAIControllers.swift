@@ -1409,9 +1409,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.initialPrompt = initialPrompt
         self.initialRequest = initialRequest
         self.pendingReference = reference
-        // The same bar as the conversation list and as a chat: no background of its own, no
-        // blur, no separator. Telegram draws the back button; the title view below draws a
-        // name and a status and nothing behind them.
+        // The same transparent bar as the conversation list: only the native capsules.
         super.init(navigationBarPresentationData: NavigationBarPresentationData(
             theme: NavigationBarTheme(
                 overallDarkAppearance: presentationData.theme.overallDarkAppearance,
@@ -1468,6 +1466,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         tableView.backgroundColor = palette.plainBackground
         tableView.separatorStyle = .none
         tableView.keyboardDismissMode = .interactive
+        // The list runs the full height of the screen and is inset instead, so messages
+        // pass under the navigation capsules the way they do in a chat. Cut off at the bar
+        // the strip above it was an empty band of page colour — the "black header".
+        tableView.contentInsetAdjustmentBehavior = .never
         tableView.estimatedRowHeight = 100
         tableView.rowHeight = UITableView.automaticDimension
         tableView.dataSource = self
@@ -1613,15 +1615,29 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     private func applyLayout(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        // Read before anything moves: both the frame and the insets are about to change, and
+        // the question is where the reader was, not where they end up.
+        let wasAtBottom = isScrolledToBottom()
         let top = self.navigationLayout(layout: layout).navigationFrame.maxY
         let bottomInset = max(layout.intrinsicInsets.bottom, keyboardHeight)
         let composerHeight = composer.requiredHeight(width: layout.size.width)
         let composerFrame = CGRect(x: 0, y: layout.size.height - bottomInset - composerHeight, width: layout.size.width, height: composerHeight)
         transition.updateFrame(view: composer, frame: composerFrame)
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: max(0, composerFrame.minY - top)))
+        // The list starts at the very top of the screen and is inset by the bar rather than
+        // starting under it. That is the whole difference between this and a chat: there the
+        // messages slide beneath the floating capsules, here they used to stop at a hard
+        // edge and leave a flat band of page colour above it.
+        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: max(0, composerFrame.minY)))
+        tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: 8.0, right: 0.0)
         // A read-modify-write on `scrollIndicatorInsets` goes through a getter the SDK
         // deprecated in iOS 13, so assign the vertical insets directly instead.
-        tableView.verticalScrollIndicatorInsets = UIEdgeInsets(top: 0.0, left: 0.0, bottom: 8.0, right: 0.0)
+        tableView.verticalScrollIndicatorInsets = UIEdgeInsets(top: top, left: 0.0, bottom: 8.0, right: 0.0)
+        // Changing the top inset moves the content under the reader. A list that was at the
+        // newest message stays there — which is where a chat always is when the keyboard
+        // opens or the composer grows.
+        if wasAtBottom {
+            scrollToBottom(animated: false)
+        }
     }
 
     @objc private func keyboardChanged(_ note: Notification) {
@@ -2909,6 +2925,15 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         tableView.scrollToRow(at: IndexPath(row: conversation.messages.count - 1, section: 0), at: .bottom, animated: animated)
     }
 
+    /// Whether the newest message is on screen, within a row's worth of slack.
+    ///
+    /// Asked before the insets change and acted on after, so re-anchoring the list never
+    /// yanks a reader who had deliberately scrolled up.
+    private func isScrolledToBottom() -> Bool {
+        let maximum = tableView.contentSize.height + tableView.contentInset.bottom - tableView.bounds.height
+        return tableView.contentOffset.y >= maximum - 60.0
+    }
+
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { conversation.messages.count }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -3562,30 +3587,25 @@ private final class AorusAIComposerView: UIView {
     @objc private func cancelDictation() { onCancelDictation?() }
 }
 
-/// A running dictation, drawn as one large spectral wave across the whole input panel.
+/// A running dictation, drawn as the sound itself across the whole input panel.
 ///
-/// The wave is the only thing on screen while the microphone is open: no timer, no dot, no
-/// meter beside it. Three ribbons of different frequency ride the same phase, their height
-/// follows the microphone's actual loudness, and a colour band drifts through them
-/// continuously, so speaking louder makes the wave taller and silence leaves it breathing
-/// rather than dead. The words are not shown as they are recognised — they are put into
-/// the input when the run is finished, which is the whole gesture: speak, tap done, read
-/// what you said.
+/// Every bar is one microphone sample frozen at the moment it was taken, and the strip
+/// scrolls left, so what is on screen is literally the shape of what was just said
+/// travelling away — the same thing Telegram draws while a voice message is recording, and
+/// the same thing Voice Memos draws. Silence is a row of dots; a word throws the bars to
+/// full height. A drawn curve whose amplitude follows a level looks the same whether or not
+/// anyone is speaking, which is exactly what was wrong with the one that stood here.
+///
+/// The colour is a spectrum strip drifting behind the bars and showing through them, so the
+/// whole run shimmers without anything about the motion being decorative: the heights are
+/// the microphone, and only the hue is decoration.
 private final class AorusAIDictationWaveView: UIView {
-    /// One ribbon of the wave: its own frequency, its share of the amplitude, and how
-    /// opaque it is. The three together read as depth rather than as three lines.
-    private struct Ribbon {
-        let frequency: CGFloat
-        let amplitude: CGFloat
-        let alpha: CGFloat
-        let speed: CGFloat
-    }
-
-    private static let ribbons: [Ribbon] = [
-        Ribbon(frequency: 1.35, amplitude: 1.0, alpha: 1.0, speed: 1.0),
-        Ribbon(frequency: 2.10, amplitude: 0.66, alpha: 0.5, speed: -0.62),
-        Ribbon(frequency: 3.05, amplitude: 0.42, alpha: 0.28, speed: 1.55)
-    ]
+    private static let barWidth: CGFloat = 3.5
+    private static let barSpacing: CGFloat = 3.0
+    private static let pitch: CGFloat = AorusAIDictationWaveView.barWidth + AorusAIDictationWaveView.barSpacing
+    /// The height of a bar that heard nothing: a dot, so an open microphone in a silent
+    /// room reads as listening rather than as a broken view.
+    private static let silentHalfHeight: CGFloat = 1.75
 
     /// Seven hues, enough of a sweep to read as a spectrum.
     private static let spectrum: [UIColor] = [
@@ -3600,51 +3620,35 @@ private final class AorusAIDictationWaveView: UIView {
 
     /// The strip the drift animation slides: the seven hues twice over, closed with the
     /// first one again. Fifteen evenly spaced stops means stop *i* and stop *i + 7* sit
-    /// exactly half the strip apart and carry the same colour — so the strip is periodic
-    /// with a period of one view width, and the animation's jump back to the start is
-    /// invisible. Listing the sweep once and hoping would put a visible seam in it every
-    /// few seconds.
+    /// exactly half the strip apart and carry the same colour, so the strip is periodic with
+    /// a period of one view width and the animation's jump back to the start is invisible.
     private static let stripColors: [CGColor] = (spectrum + spectrum + [spectrum[0]]).map { $0.cgColor }
 
-    /// One drawn ribbon: a colour strip clipped to the wave's stroke. Each is its own pair
-    /// so the three can carry different opacities — a mask is all-or-nothing, so layering
-    /// them is the only way to get the faint outer swings.
-    private struct RibbonLayers {
-        /// Clipped to the wave's stroke and fixed to the view: the colour strip inside it
-        /// is what travels, so the wave stays put while the spectrum runs through it.
-        var host: CALayer
-        var gradient: CAGradientLayer
-        var mask: CAShapeLayer
-    }
-
-    private var ribbonLayers: [RibbonLayers] = []
+    private let gradientHost = CALayer()
+    private let gradient = CAGradientLayer()
+    private let maskLayer = CAShapeLayer()
     private var displayLink: CADisplayLink?
-    private var phase: CGFloat = 0.0
-    /// The last sample the recogniser reported, and the value actually drawn. Drawing
-    /// chases the sample instead of jumping to it, so a consonant does not make the wave
-    /// snap.
-    private var targetLevel: CGFloat = 0.0
-    private var drawnLevel: CGFloat = 0.0
-    private var breath: CGFloat = 0.0
+
+    /// One entry per bar, oldest first, newest at the right edge of the view.
+    private var samples: [CGFloat] = []
+    private var capacity = 0
+    /// When the newest sample arrived, and the running average gap between arrivals. The
+    /// strip is slid by the fraction of a gap that has passed, so it glides continuously
+    /// instead of stepping once per sample.
+    private var lastSampleAt: CFAbsoluteTime = 0.0
+    private var sampleInterval: CFAbsoluteTime = 0.06
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
-        for ribbon in Self.ribbons {
-            let host = CALayer()
-            host.opacity = Float(ribbon.alpha)
-            let gradient = CAGradientLayer()
-            gradient.startPoint = CGPoint(x: 0.0, y: 0.5)
-            gradient.endPoint = CGPoint(x: 1.0, y: 0.5)
-            gradient.colors = Self.stripColors
-            host.addSublayer(gradient)
-            let mask = CAShapeLayer()
-            mask.fillColor = UIColor.black.cgColor
-            mask.fillRule = .nonZero
-            host.mask = mask
-            layer.addSublayer(host)
-            ribbonLayers.append(RibbonLayers(host: host, gradient: gradient, mask: mask))
-        }
+        gradient.startPoint = CGPoint(x: 0.0, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1.0, y: 0.5)
+        gradient.colors = Self.stripColors
+        gradientHost.addSublayer(gradient)
+        maskLayer.fillColor = UIColor.black.cgColor
+        maskLayer.fillRule = .nonZero
+        gradientHost.mask = maskLayer
+        layer.addSublayer(gradientHost)
         isAccessibilityElement = true
         accessibilityLabel = aorusAILocalized("Идёт запись", "Recording")
     }
@@ -3655,7 +3659,7 @@ private final class AorusAIDictationWaveView: UIView {
         displayLink?.invalidate()
     }
 
-    /// Nothing here is themed: the point of the wave is that it is the one saturated thing
+    /// Nothing here is themed: the point of the strip is that it is the one saturated thing
     /// in the panel. The hook stays so the composer can configure it like every other part.
     func configure(palette: AorusAIPalette) {
     }
@@ -3663,14 +3667,18 @@ private final class AorusAIDictationWaveView: UIView {
     func setActive(_ active: Bool) {
         displayLink?.invalidate()
         displayLink = nil
-        ribbonLayers.forEach { $0.gradient.removeAnimation(forKey: "aorusDrift") }
+        gradient.removeAnimation(forKey: "aorusDrift")
         guard active else {
-            targetLevel = 0.0
-            drawnLevel = 0.0
-            phase = 0.0
-            ribbonLayers.forEach { $0.mask.path = nil }
+            samples.removeAll()
+            lastSampleAt = 0.0
+            maskLayer.path = nil
             return
         }
+        // A full strip of silent dots to begin with, so the panel is a waiting microphone
+        // rather than an empty box that fills up over the first two seconds.
+        samples = Array(repeating: 0.0, count: max(1, capacity))
+        sampleInterval = 0.06
+        lastSampleAt = CFAbsoluteTimeGetCurrent()
         let link = CADisplayLink(target: self, selector: #selector(step))
         link.add(to: .main, forMode: .common)
         displayLink = link
@@ -3678,35 +3686,55 @@ private final class AorusAIDictationWaveView: UIView {
         redraw()
     }
 
-    /// One microphone sample, 0…1.
+    /// One microphone sample, 0…1 as the recogniser measured it.
     func update(level: CGFloat) {
-        targetLevel = min(1.0, max(0.0, level))
-    }
-
-    /// The colour band slides one full view width and repeats, which is why the spectrum
-    /// ends on the colour it starts with: the jump back is invisible. Each ribbon drifts at
-    /// its own rate, so the three never line up into one flat sweep.
-    private func startDrift() {
-        guard bounds.width > 1.0 else { return }
-        for (index, ribbon) in ribbonLayers.enumerated() {
-            let drift = CABasicAnimation(keyPath: "position.x")
-            drift.fromValue = ribbon.gradient.position.x
-            drift.toValue = ribbon.gradient.position.x - bounds.width
-            drift.duration = 3.4 + Double(index) * 0.9
-            drift.repeatCount = .infinity
-            drift.isRemovedOnCompletion = false
-            ribbon.gradient.add(drift, forKey: "aorusDrift")
+        let now = CFAbsoluteTimeGetCurrent()
+        if lastSampleAt > 0.0 {
+            let gap = now - lastSampleAt
+            // A plausible gap only: the first sample after a stall must not stretch the
+            // glide to seconds, and a duplicated timestamp must not collapse it to zero.
+            if gap > 0.01, gap < 0.5 {
+                sampleInterval = sampleInterval * 0.8 + gap * 0.2
+            }
+        }
+        lastSampleAt = now
+        samples.append(Self.shaped(level))
+        let limit = max(1, capacity)
+        if samples.count > limit {
+            samples.removeFirst(samples.count - limit)
         }
     }
 
+    /// What a raw level becomes on screen.
+    ///
+    /// The recogniser hands over `(dBFS + 50) / 50`, which puts the room tone of a quiet
+    /// room around 0.2 and ordinary speech between 0.45 and 0.8 — drawn as-is, that is a
+    /// strip which is never still and never full, and the difference between silence and a
+    /// word is a fifth of the height. The floor is subtracted so silence is actually zero,
+    /// what is left is stretched over the whole range, and the square root lifts quiet
+    /// speech: a word now goes to the top of the panel and a pause drops to the dots.
+    private static func shaped(_ level: CGFloat) -> CGFloat {
+        let floorLevel: CGFloat = 0.18
+        let span: CGFloat = 0.62
+        let above = (min(1.0, max(0.0, level)) - floorLevel) / span
+        guard above > 0.0 else { return 0.0 }
+        return min(1.0, above).squareRoot()
+    }
+
+    /// The colour band slides one full view width and repeats. The strip is periodic over
+    /// exactly that distance, so the jump back to the start is invisible.
+    private func startDrift() {
+        guard bounds.width > 1.0 else { return }
+        let drift = CABasicAnimation(keyPath: "position.x")
+        drift.fromValue = gradient.position.x
+        drift.toValue = gradient.position.x - bounds.width
+        drift.duration = 5.0
+        drift.repeatCount = .infinity
+        drift.isRemovedOnCompletion = false
+        gradient.add(drift, forKey: "aorusDrift")
+    }
+
     @objc private func step() {
-        phase += 0.075
-        breath += 0.021
-        // A floor that rises and falls on its own, so an open microphone in a quiet room
-        // still looks like it is listening.
-        let idle = 0.16 + 0.05 * sin(breath)
-        let target = max(idle, targetLevel)
-        drawnLevel += (target - drawnLevel) * 0.18
         redraw()
     }
 
@@ -3714,16 +3742,22 @@ private final class AorusAIDictationWaveView: UIView {
         super.layoutSubviews()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for ribbon in ribbonLayers {
-            ribbon.host.frame = bounds
-            ribbon.mask.frame = bounds
-            // Twice the width, so the strip still covers the view at the far end of its
-            // travel.
-            ribbon.gradient.frame = CGRect(x: 0.0, y: 0.0, width: bounds.width * 2.0, height: bounds.height)
-        }
+        gradientHost.frame = bounds
+        maskLayer.frame = bounds
+        // Twice the width, so the colour strip still covers the view at the far end of its
+        // travel.
+        gradient.frame = CGRect(x: 0.0, y: 0.0, width: bounds.width * 2.0, height: bounds.height)
         CATransaction.commit()
+        // One spare bar on each side: one is sliding out on the left, one is sliding in on
+        // the right.
+        capacity = max(1, Int(bounds.width / Self.pitch) + 2)
+        if samples.count > capacity {
+            samples.removeFirst(samples.count - capacity)
+        } else if displayLink != nil, samples.count < capacity {
+            samples.insert(contentsOf: Array(repeating: 0.0, count: capacity - samples.count), at: 0)
+        }
         if displayLink != nil {
-            ribbonLayers.forEach { $0.gradient.removeAnimation(forKey: "aorusDrift") }
+            gradient.removeAnimation(forKey: "aorusDrift")
             startDrift()
             redraw()
         }
@@ -3732,43 +3766,29 @@ private final class AorusAIDictationWaveView: UIView {
     private func redraw() {
         let width = bounds.width
         let height = bounds.height
-        guard width > 1.0, height > 1.0, ribbonLayers.count == Self.ribbons.count else { return }
+        guard width > 1.0, height > 1.0, !samples.isEmpty else { return }
         let middle = height / 2.0
-        // 6pt of air top and bottom, so the tallest peak still sits inside the panel.
-        let span = max(2.0, middle - 6.0)
-        let stepWidth: CGFloat = 2.0
+        // 3pt of air top and bottom, so the loudest bar still sits inside the panel.
+        let maximumHalf = max(Self.silentHalfHeight, middle - 3.0)
+        // How far into the current sample's slot the strip has travelled. Clamped, so a
+        // stalled microphone leaves the last frame standing rather than sliding away.
+        let elapsed = lastSampleAt > 0.0 ? CFAbsoluteTimeGetCurrent() - lastSampleAt : 0.0
+        let progress = min(1.0, max(0.0, CGFloat(elapsed / max(0.01, sampleInterval))))
+        let shift = progress * Self.pitch
+        let path = UIBezierPath()
+        for (index, sample) in samples.enumerated() {
+            // The newest sample is drawn at the right edge and every older one a pitch
+            // further left, so the strip moves in one direction and never reorders.
+            let stepsFromNewest = CGFloat(samples.count - 1 - index)
+            let x = width - Self.barWidth - stepsFromNewest * Self.pitch - shift
+            guard x + Self.barWidth > 0.0, x < width else { continue }
+            let half = max(Self.silentHalfHeight, sample * maximumHalf)
+            let bar = CGRect(x: x, y: middle - half, width: Self.barWidth, height: half * 2.0)
+            path.append(UIBezierPath(roundedRect: bar, cornerRadius: Self.barWidth / 2.0))
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (index, ribbon) in Self.ribbons.enumerated() {
-            let amplitude = span * ribbon.amplitude * drawnLevel
-            let thickness = max(2.0, 4.0 * ribbon.alpha)
-            let line = UIBezierPath()
-            var x: CGFloat = 0.0
-            var first = true
-            while x <= width {
-                // The envelope pins both ends to the centre line, so the wave enters and
-                // leaves the panel as a point rather than being cut off mid-swing.
-                let t = x / width
-                let envelope = min(1.0, sin(CGFloat.pi * t) * 1.35)
-                let y = middle + sin(t * ribbon.frequency * .pi * 4.0 + phase * ribbon.speed) * amplitude * envelope
-                if first {
-                    line.move(to: CGPoint(x: x, y: y))
-                    first = false
-                } else {
-                    line.addLine(to: CGPoint(x: x, y: y))
-                }
-                x += stepWidth
-            }
-            // The mask has to be an area, not a line: a stroked copy of the curve is what
-            // lets the colour strip show through as a rounded band.
-            let stroked = line.cgPath.copy(
-                strokingWithWidth: thickness,
-                lineCap: .round,
-                lineJoin: .round,
-                miterLimit: 1.0
-            )
-            ribbonLayers[index].mask.path = stroked
-        }
+        maskLayer.path = path.cgPath
         CATransaction.commit()
     }
 }
@@ -4289,32 +4309,34 @@ private final class AorusAITypingIndicatorView: UIView {
     }
 }
 
-/// The title of the thread, drawn exactly the way a Telegram chat draws one: the name in
-/// the navigation bar's own text colour, and the current state under it in the secondary
-/// colour, on nothing at all.
+/// A compact native glass title capsule. The current generation state stays visible on a
+/// quiet second line and crossfades without resizing the navigation bar.
+/// The title of the thread, in Telegram's own navigation capsule.
 ///
-/// It used to sit in a `GlassBackgroundView` capsule. A chat title is in one too — but a
-/// chat has a wallpaper behind it, and this screen has a plain page, so the same material
-/// over it resolved to a dark slab with a name on it: the "black header". The bar itself
-/// carries no background and no blur either, so what is left is a name and a status over
-/// the page, which is what a chat header actually looks like.
+/// `GlassBackgroundView` is the exact view the back button and a chat title sit in — it
+/// drives `UIGlassEffect` on iOS 26 and the legacy glass below it — so this pill is the
+/// same material, radius and behaviour as the one next to it rather than a `UIBlurEffect`
+/// with a border drawn to look like one. Over an opaque page that hand-made version read
+/// as a grey slab with a name on it, which is exactly what it was.
 private final class AorusAINavigationTitleView: UIView {
     private static let height: CGFloat = 40.0
-    private static let horizontalPadding: CGFloat = 8.0
+    private static let horizontalPadding: CGFloat = 14.0
 
+    private let glassView = GlassBackgroundView(frame: CGRect())
     private let titleLabel = UILabel()
     private let statusLabel = UILabel()
+    private var isDarkAppearance = false
 
     init(theme: PresentationTheme) {
         super.init(frame: .zero)
+        glassView.isUserInteractionEnabled = false
         titleLabel.text = "AorusAI"
-        // 17pt semibold over 13pt regular: the two sizes a chat's own title node uses for
-        // the peer's name and the "был(а) недавно" line under it.
-        titleLabel.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 15.0, weight: .semibold)
         titleLabel.textAlignment = .center
-        statusLabel.font = .systemFont(ofSize: 13.0, weight: .regular)
+        statusLabel.font = .systemFont(ofSize: 11.0, weight: .regular)
         statusLabel.textAlignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
+        addSubview(glassView)
         addSubview(titleLabel)
         addSubview(statusLabel)
         isAccessibilityElement = true
@@ -4325,8 +4347,9 @@ private final class AorusAINavigationTitleView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     func update(theme: PresentationTheme) {
+        isDarkAppearance = theme.overallDarkAppearance
         titleLabel.textColor = theme.rootController.navigationBar.primaryTextColor
-        statusLabel.textColor = theme.rootController.navigationBar.secondaryTextColor
+        statusLabel.textColor = AorusAIPalette.resolve(theme).secondary
         setNeedsLayout()
     }
 
@@ -4337,32 +4360,46 @@ private final class AorusAINavigationTitleView: UIView {
         UIView.transition(with: statusLabel, duration: 0.18, options: [.transitionCrossDissolve, .beginFromCurrentState], animations: {
             self.statusLabel.text = value
         })
+        // The capsule hugs its text, so a longer status has to widen it.
         invalidateIntrinsicContentSize()
         setNeedsLayout()
     }
 
-    /// Sized to its widest line, the way a chat title is: the navigation bar centres it
-    /// between the buttons and clips it if the two of them leave too little room.
+    /// The pill hugs its widest line rather than standing at a fixed width, the way a chat
+    /// title does.
     override var intrinsicContentSize: CGSize {
         let titleWidth = ceil(titleLabel.sizeThatFits(CGSize(width: 260.0, height: Self.height)).width)
         let statusWidth = ceil(statusLabel.sizeThatFits(CGSize(width: 260.0, height: Self.height)).width)
-        let width = min(260.0, max(80.0, max(titleWidth, statusWidth) + Self.horizontalPadding * 2.0))
+        let width = min(240.0, max(120.0, max(titleWidth, statusWidth) + Self.horizontalPadding * 2.0))
         return CGSize(width: width, height: Self.height)
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard bounds.width > 0.0, bounds.height > 0.0 else { return }
+        let size = CGSize(width: min(intrinsicContentSize.width, bounds.width), height: min(Self.height, bounds.height))
+        guard size.width > 0.0, size.height > 0.0 else { return }
+        let frame = CGRect(
+            x: floor((bounds.width - size.width) / 2.0),
+            y: floor((bounds.height - size.height) / 2.0),
+            width: size.width,
+            height: size.height
+        )
+        glassView.frame = frame
+        glassView.update(
+            size: size,
+            cornerRadius: size.height / 2.0,
+            isDark: isDarkAppearance,
+            tintColor: GlassBackgroundView.TintColor(kind: .panel),
+            isInteractive: false,
+            transition: .immediate
+        )
         let hasStatus = !(statusLabel.text ?? "").isEmpty
-        let width = bounds.width
+        let textWidth = max(0.0, frame.width - Self.horizontalPadding * 2.0)
         if hasStatus {
-            // The pair is centred as a block, so the name does not shift up and down as the
-            // status appears and goes away.
-            let top = floor((bounds.height - 38.0) / 2.0)
-            titleLabel.frame = CGRect(x: 0.0, y: top, width: width, height: 21.0)
-            statusLabel.frame = CGRect(x: 0.0, y: top + 21.0, width: width, height: 17.0)
+            titleLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 4.0, width: textWidth, height: 18.0)
+            statusLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY + 21.0, width: textWidth, height: 14.0)
         } else {
-            titleLabel.frame = CGRect(x: 0.0, y: 0.0, width: width, height: bounds.height)
+            titleLabel.frame = CGRect(x: frame.minX + Self.horizontalPadding, y: frame.minY, width: textWidth, height: frame.height)
             statusLabel.frame = .zero
         }
         statusLabel.isHidden = !hasStatus
