@@ -8587,10 +8587,12 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
         return
     text = node.read_text(encoding="utf-8")
     if "AorusGram: one-time playback" in text:
-        # Not a bare return: the playback route lives in another file, and skipping it
-        # because this one is already done would leave the two halves out of step.
+        # Not a bare return: the playback route and the playlist location live in other
+        # files, and skipping them because this one is already done would leave the parts
+        # out of step.
         print("OneTimeVoice: playback appearance already ordinary")
         patch_one_time_voice_route(tg)
+        patch_one_time_voice_playlist(tg)
         return
     # The flag is declared beside `isViewOnceMessage` itself, because both halves of the
     # one-time treatment — the ring and the counter — read it from different scopes.
@@ -8749,6 +8751,58 @@ def patch_one_time_voice_bypass(tg: Path) -> None:
     node.write_text(text, encoding="utf-8")
     print("OneTimeVoice: one-time playback made ordinary")
     patch_one_time_voice_route(tg)
+    patch_one_time_voice_playlist(tg)
+
+
+def patch_one_time_voice_playlist(tg: Path) -> None:
+    """Play a one-time voice from its own playlist, so the bubble knows it is playing.
+
+    This is what kept the play button showing a triangle and the "1" badge for the whole
+    of playback: the bubble does not watch the player, it asks
+    `filteredPlaylistState(playlistId:itemId:)` whether the item the player currently holds
+    is *this* message. Only when that matches does its status become `.playbackStatus`,
+    which is what turns the button into a pause and lets the waveform fill.
+
+    Upstream's own view-once route hands `openChatMessage` an explicit
+    `playlistLocation: .singleMessage(id)` — and it has to, because a one-time message is
+    deliberately filtered out of the tagged voice history:
+
+        let filteredEntries = view.entries.filter { entry in
+            if entry.message.minAutoremoveOrClearTimeout == viewOnceTimeout { return false }
+            ...
+
+    Taking that route away to play the recording in the chat also took the explicit
+    location away, so the tap fell through to the generic voice path and built a playlist
+    over `.messages(tagMask: .voiceOrInstantVideo)` — a view the message is not in. The
+    audio played, but the player's current item was never this message, so the bubble was
+    told nothing and drew the unplayed state throughout.
+
+    Sending a one-time voice down the `.singleMessage` branch gives it the same playlist
+    upstream would have given it. It is a no-op for the stock path: when a caller supplies
+    `playlistLocation` both branches use it and both resolve `playerType` to `.voice`.
+    """
+    opener = tg / "submodules/TelegramUI/Sources/OpenChatMessage.swift"
+    if not opener.is_file():
+        print("OneTimeVoice: OpenChatMessage.swift not found — skip")
+        return
+    text = opener.read_text(encoding="utf-8")
+    if "viewOnceTimeout" in text:
+        print("OneTimeVoice: playlist location already single-message")
+        return
+    old = (
+        "                if (file.isVoice || file.isInstantVideo) && params.message.tags.contains(.voiceOrInstantVideo) {\n"
+    )
+    new = (
+        "                // AorusGram: a one-time recording is filtered out of the tagged voice\n"
+        "                // history, so a playlist built over that view never holds it and the\n"
+        "                // bubble is never told it is playing. It gets its own single-message\n"
+        "                // playlist below, which is what upstream's view-once route passes in.\n"
+        "                if (file.isVoice || file.isInstantVideo) && params.message.tags.contains(.voiceOrInstantVideo) && params.message.minAutoremoveOrClearTimeout != viewOnceTimeout {\n"
+    )
+    if text.count(old) != 1:
+        raise RuntimeError(f"OneTimeVoice: playlist anchor not unique ({text.count(old)})")
+    opener.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print("OneTimeVoice: one-time voice plays from its own playlist")
 
 
 def patch_one_time_voice_route(tg: Path) -> None:
