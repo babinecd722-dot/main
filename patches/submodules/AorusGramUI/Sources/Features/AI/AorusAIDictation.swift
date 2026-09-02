@@ -105,16 +105,24 @@ final class AorusAIDictation {
         let count = Int(buffer.frameLength)
         guard count > 0 else { return nil }
         var sum: Float = 0.0
+        var peak: Float = 0.0
         for index in 0 ..< count {
             let sample = channel[index]
             sum += sample * sample
+            peak = max(peak, abs(sample))
         }
         let rms = sqrtf(sum / Float(count))
-        // −50 dBFS is about the room tone of a quiet room held at arm's length; 0 is
-        // clipping. Anything below the floor reads as silence rather than as a bar that
-        // never quite settles.
-        let decibels = 20.0 * log10f(max(rms, 1e-7))
-        let normalized = (decibels + 50.0) / 50.0
+        // Peak, weighted with the RMS — not the RMS alone.
+        //
+        // The RMS of a 1024-frame window of speech sits far below its peak: the window
+        // catches the gaps between syllables as well as the syllables, so ordinary talking
+        // measured about −40 dBFS and, against a −50 dB floor, moved the meter by a fifth of
+        // its range. That is why the wave looked like a flat line. What the ear calls "loud"
+        // tracks the peak, so the peak leads and the RMS fills in behind it.
+        let combined = max(peak, rms * 4.0)
+        // −45 dBFS is the room tone of a quiet room; 0 is clipping.
+        let decibels = 20.0 * log10f(max(combined, 1e-7))
+        let normalized = (decibels + 45.0) / 45.0
         return CGFloat(min(1.0, max(0.0, normalized)))
     }
 

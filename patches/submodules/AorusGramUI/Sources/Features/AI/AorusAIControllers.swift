@@ -1387,11 +1387,6 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let composer = AorusAIComposerView()
-    /// The blurred strip the messages pass under, ending level with the bottom of the title
-    /// capsule — where a chat's does. It is a real material rather than the navigation bar's
-    /// own background colour, which is 90% opaque in a dark theme and would only have
-    /// repainted the flat band it replaced.
-    private let headerBlurView = UIVisualEffectView()
 
     /// `initialPrompt` is what the user sees in the conversation. `initialRequest`
     /// is what is actually sent when the two differ — a chat analysis shows a short
@@ -1421,11 +1416,15 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
                 disabledButtonColor: palette.tertiary,
                 primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
-                // The bar paints nothing itself. Its own `blurredBackgroundColor` is 90%
-                // opaque in a dark theme, so switching it on does not blur anything — it just
-                // repaints the black band in a slightly different black, which is the one
-                // thing this must not become. The strip above the list is a real material
-                // instead, installed below, so what is behind it is genuinely blurred.
+                // The bar paints nothing full width, and neither does anything else.
+                //
+                // Two attempts at a strip across the top were wrong for the same reason.
+                // The bar's own `blurredBackgroundColor` is 90% opaque in a dark theme, so
+                // turning it on repaints the black band in a slightly different black. A
+                // `UIVisualEffectView` over the list is worse: a material has nothing to
+                // sample but a flat page, so it resolves to grey — the grey slab this screen
+                // has been trying to get rid of. In a chat there is no strip at all; the
+                // blur is the capsules, which is why it ends exactly where they do.
                 backgroundColor: .clear,
                 opaqueBackgroundColor: .clear,
                 enableBackgroundBlur: false,
@@ -1486,11 +1485,6 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         tableView.delegate = self
         tableView.register(AorusAIMessageCell.self, forCellReuseIdentifier: "message")
         self.displayNode.view.addSubview(tableView)
-        // Over the list and under the navigation bar, so it blurs the messages sliding
-        // beneath it and never touches the capsules drawn above.
-        headerBlurView.effect = aorusAIHeaderBlurEffect(palette: palette)
-        headerBlurView.isUserInteractionEnabled = false
-        self.displayNode.view.addSubview(headerBlurView)
         composer.configure(context: context, theme: presentationData.theme)
         composer.onOpenPeer = { [weak self] peerId in self?.openPeer(peerId) }
         composer.onHeightChanged = { [weak self] in
@@ -1649,9 +1643,6 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // messages slide beneath the floating capsules, here they used to stop at a hard
         // edge and leave a flat band of page colour above it.
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: max(0, composerFrame.minY)))
-        // Exactly the navigation bar's own height, so the blur ends level with the bottom of
-        // the title capsule rather than fading out somewhere of its own choosing.
-        transition.updateFrame(view: headerBlurView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: top))
         tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: 8.0, right: 0.0)
         // A read-modify-write on `scrollIndicatorInsets` goes through a getter the SDK
         // deprecated in iOS 13, so assign the vertical insets directly instead.
@@ -3700,9 +3691,15 @@ private final class AorusAIDisplayLinkProxy: NSObject {
 /// A spectrum drifts behind the ribbon and shows through it, so the run shimmers. The hue
 /// is the only decorative part; every height on screen came from the microphone.
 private final class AorusAIDictationWaveView: UIView {
-    /// How far apart on screen two consecutive microphone samples sit. Wider makes the
-    /// wave broader and slower; this is about two and a quarter seconds across a phone.
-    private static let samplePitch: CGFloat = 7.0
+    /// How far apart two consecutive columns sit. Wider makes the wave broader.
+    private static let samplePitch: CGFloat = 6.0
+    /// How fast the strip travels, in points per second. At this pitch that is about twenty
+    /// columns a second — faster than the microphone reports, so the shape is smooth rather
+    /// than stepped, and steady whatever the audio thread does.
+    private static let scrollSpeed: CGFloat = 120.0
+    /// A ceiling on the columns one frame may lay down, so a stalled main thread cannot make
+    /// the next frame do unbounded work.
+    private static let maximumColumnsPerFrame = 8
     /// Half the thickness of the ribbon where nothing was heard, so a silent microphone is
     /// a thin line rather than an empty box.
     private static let silentHalfHeight: CGFloat = 1.25
@@ -3732,14 +3729,27 @@ private final class AorusAIDictationWaveView: UIView {
     private let maskLayer = CAShapeLayer()
     private var displayLink: CADisplayLink?
 
-    /// One entry per sample, oldest first; the newest is at the right edge of the view.
+    /// One column per step of travel, oldest first; the newest is at the right edge.
     private var samples: [CGFloat] = []
     private var capacity = 0
-    /// When the newest sample arrived, and the running average gap between arrivals. The
-    /// wave is slid by the fraction of a gap that has passed, so it travels continuously
-    /// instead of stepping sixteen times a second.
-    private var lastSampleAt: CFAbsoluteTime = 0.0
-    private var sampleInterval: CFAbsoluteTime = 0.06
+    /// The last loudness the microphone reported, and the value actually being drawn.
+    ///
+    /// The drawn one chases the reported one every frame — quickly upward, slowly down — so
+    /// the wave answers a syllable immediately and falls away smoothly rather than flicking
+    /// between two heights.
+    private var targetLevel: CGFloat = 0.0
+    private var drawnLevel: CGFloat = 0.0
+    /// How far the strip has travelled since the last column was laid down, and when the
+    /// last frame was drawn.
+    ///
+    /// Travel is driven by *time*, not by the arrival of microphone samples. Tying it to
+    /// arrivals meant the wave advanced only when a buffer came in and then sat still
+    /// between them: it drew in bursts, with a visible lag, and stopped altogether whenever
+    /// the audio thread was late. Now the strip moves at a constant speed whatever the
+    /// microphone is doing, and each new column simply records the loudness at the moment it
+    /// was laid down.
+    private var scrollOffset: CGFloat = 0.0
+    private var lastFrameAt: CFAbsoluteTime = 0.0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -3773,15 +3783,20 @@ private final class AorusAIDictationWaveView: UIView {
         gradient.removeAnimation(forKey: "aorusDrift")
         guard active else {
             samples.removeAll()
-            lastSampleAt = 0.0
+            targetLevel = 0.0
+            drawnLevel = 0.0
+            scrollOffset = 0.0
+            lastFrameAt = 0.0
             maskLayer.path = nil
             return
         }
         // A flat line to begin with, so the panel is a waiting microphone rather than an
         // empty box that fills up over the first two seconds.
         samples = Array(repeating: 0.0, count: max(2, capacity))
-        sampleInterval = 0.06
-        lastSampleAt = CFAbsoluteTimeGetCurrent()
+        targetLevel = 0.0
+        drawnLevel = 0.0
+        scrollOffset = 0.0
+        lastFrameAt = CFAbsoluteTimeGetCurrent()
         // Weakly, through the proxy: a link started here and never stopped would otherwise
         // keep this view alive and redrawing for the rest of the process.
         let link = CADisplayLink(target: AorusAIDisplayLinkProxy(target: self), selector: #selector(AorusAIDisplayLinkProxy.step(_:)))
@@ -3791,23 +3806,13 @@ private final class AorusAIDictationWaveView: UIView {
         redraw()
     }
 
-    /// One microphone sample, 0…1 as the recogniser measured it.
+    /// One microphone reading, 0…1 as the recogniser measured it.
+    ///
+    /// It is recorded, not drawn: the frame loop decides when a column is laid down. That is
+    /// what keeps the wave moving at a steady speed however irregularly the audio thread
+    /// delivers.
     func update(level: CGFloat) {
-        let now = CFAbsoluteTimeGetCurrent()
-        if lastSampleAt > 0.0 {
-            let gap = now - lastSampleAt
-            // A plausible gap only: the first sample after a stall must not stretch the
-            // glide to seconds, and a duplicated timestamp must not collapse it to zero.
-            if gap > 0.01, gap < 0.5 {
-                sampleInterval = sampleInterval * 0.8 + gap * 0.2
-            }
-        }
-        lastSampleAt = now
-        samples.append(Self.shaped(level))
-        let limit = max(2, capacity)
-        if samples.count > limit {
-            samples.removeFirst(samples.count - limit)
-        }
+        targetLevel = Self.shaped(level)
     }
 
     /// What a raw level becomes on screen.
@@ -3840,7 +3845,36 @@ private final class AorusAIDictationWaveView: UIView {
     }
 
     /// One frame. Called by the proxy, which is what the link actually points at.
+    ///
+    /// Advances the strip by the time that has passed, lays down a column every time it has
+    /// travelled one step, and redraws.
     fileprivate func step() {
+        let now = CFAbsoluteTimeGetCurrent()
+        let delta = lastFrameAt > 0.0 ? min(0.1, max(0.0, now - lastFrameAt)) : 0.0
+        lastFrameAt = now
+
+        // Rises almost at once, falls away over about a fifth of a second. A meter that
+        // fell as fast as it rose flickered on every gap between syllables.
+        let rate: CGFloat = targetLevel > drawnLevel ? 0.55 : 0.12
+        drawnLevel += (targetLevel - drawnLevel) * rate
+
+        scrollOffset += Self.scrollSpeed * CGFloat(delta)
+        var laid = 0
+        while scrollOffset >= Self.samplePitch, laid < Self.maximumColumnsPerFrame {
+            scrollOffset -= Self.samplePitch
+            samples.append(drawnLevel)
+            laid += 1
+        }
+        if laid == Self.maximumColumnsPerFrame {
+            // A frame that was starved for a long time — the app was in the background, or
+            // the main thread stalled. Rather than laying down a hundred identical columns,
+            // drop the remainder.
+            scrollOffset = 0.0
+        }
+        let limit = max(2, capacity)
+        if samples.count > limit {
+            samples.removeFirst(samples.count - limit)
+        }
         redraw()
     }
 
@@ -3892,11 +3926,8 @@ private final class AorusAIDictationWaveView: UIView {
         let middle = height / 2.0
         // 3pt of air top and bottom, so the loudest moment still sits inside the panel.
         let maximumHalf = max(Self.silentHalfHeight, middle - 3.0)
-        // How far into the current sample's slot the wave has travelled. Clamped, so a
-        // stalled microphone leaves the last frame standing rather than sliding away.
-        let elapsed = lastSampleAt > 0.0 ? CFAbsoluteTimeGetCurrent() - lastSampleAt : 0.0
-        let progress = min(1.0, max(0.0, CGFloat(elapsed / max(0.01, sampleInterval))))
-        let shift = progress * Self.samplePitch
+        // How far the strip has travelled past the newest column.
+        let shift = min(Self.samplePitch, max(0.0, scrollOffset))
 
         let stepWidth: CGFloat = 1.0
         var top: [CGPoint] = []
