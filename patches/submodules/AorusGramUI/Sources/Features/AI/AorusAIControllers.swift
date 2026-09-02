@@ -616,30 +616,14 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         self.palette = AorusAIPalette.resolve(presentationData.theme)
         self.accountId = context.account.id.int64
         let palette = self.palette
-        // No bar of its own: the background, the blur and the separator are all cleared, so
-        // what is left is exactly what a chat shows — Telegram's own liquid-glass capsules
-        // around the back button and the title, drawn by `NavigationBarImpl` for every
-        // screen, floating over the page. A painted bar is what read as a grey slab sitting
-        // on top of the screen; the colours of the buttons and the text still come from the
-        // theme, so nothing about them is invented here.
+        // The same stock glass bar as the conversation screen, from Telegram's own
+        // convenience initialiser rather than assembled by hand: the buttons come from the
+        // input-panel control colour, the bar paints no background and no separator, and the
+        // scroll-edge effect is the page colour over a progressive blur, so a row scrolling
+        // up dissolves under the capsules instead of meeting a hard edge.
         super.init(navigationBarPresentationData: NavigationBarPresentationData(
-            theme: NavigationBarTheme(
-                overallDarkAppearance: presentationData.theme.overallDarkAppearance,
-                buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
-                disabledButtonColor: palette.tertiary,
-                primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
-                backgroundColor: .clear,
-                opaqueBackgroundColor: .clear,
-                enableBackgroundBlur: false,
-                separatorColor: .clear,
-                badgeBackgroundColor: palette.accent,
-                badgeStrokeColor: palette.accent,
-                badgeTextColor: palette.onAccent,
-                accentButtonColor: presentationData.theme.rootController.navigationBar.accentTextColor,
-                accentDisabledButtonColor: palette.tertiary,
-                accentForegroundColor: palette.onAccent
-            ),
-            strings: NavigationBarPresentationData(presentationData: presentationData).strings
+            presentationData: presentationData,
+            style: .glass
         ))
         self.title = "AorusAI"
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
@@ -1409,64 +1393,30 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.initialPrompt = initialPrompt
         self.initialRequest = initialRequest
         self.pendingReference = reference
-        // A chat's navigation bar, built the way ChatController builds one.
+        // The stock glass navigation bar, built by Telegram's own convenience initialiser.
+        //
+        // Everything here used to be assembled by hand, and every attempt to get the top of
+        // the screen right was a guess at one of its arguments. `ComponentsThemes` already
+        // does it, and for `style: .glass` it does more than pass colours through:
+        //
+        //   if case .glass = style {
+        //       buttonColor = rootControllerTheme.chat.inputPanel.panelControlColor
+        //       ...
+        //       if edgeEffectColor == nil { edgeEffectColor = rootControllerTheme.list.plainBackgroundColor }
+        //   }
+        //
+        // So a glass bar takes its button colour from the input panel, not from the legacy
+        // navigation-bar colour, and its scroll-edge effect is the page colour, opaque, drawn
+        // by `EdgeEffectView` at 0.75 over a real progressive blur. That is the recipe every
+        // glass screen in the app uses — the call list, compose, contact selection, checkout,
+        // the calendar — and `ItemListUI` passes the same colour explicitly.
+        //
+        // A chat is the exception, not the rule: `ChatController` passes `.clear`, which
+        // switches the edge effect off, because it has a wallpaper behind its capsules and
+        // does not need it. This screen is a flat page, so it takes the rule.
         super.init(navigationBarPresentationData: NavigationBarPresentationData(
-            theme: NavigationBarTheme(
-                overallDarkAppearance: presentationData.theme.overallDarkAppearance,
-                buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
-                disabledButtonColor: palette.tertiary,
-                primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
-                // Nothing paints full width. Under `.glass` below the bar does not add its
-                // background node at all, so these are belt and braces — but they also record
-                // why two earlier attempts at a strip were wrong. The bar's own
-                // `blurredBackgroundColor` is 90% opaque in a dark theme, so turning it on
-                // repaints the black band in a slightly different black; and a
-                // `UIVisualEffectView` over the list is worse, because a material with only a
-                // flat page to sample resolves to grey — the slab this screen keeps trying to
-                // lose.
-                backgroundColor: .clear,
-                opaqueBackgroundColor: .clear,
-                enableBackgroundBlur: false,
-                separatorColor: .clear,
-                badgeBackgroundColor: palette.accent,
-                badgeStrokeColor: palette.accent,
-                badgeTextColor: palette.onAccent,
-                // Turns the bar's scroll-edge effect on, and asks it for blur without fill.
-                //
-                // `EdgeEffectView` is two things stacked: a `VariableBlurView` — a real
-                // progressive backdrop blur over the top 64pt — and, above it, a plain
-                // rectangle of this colour masked by the same gradient. `NavigationBarImpl`
-                // does not pass an alpha, so that rectangle is drawn at 0.75. An opaque
-                // colour here therefore paints a fade; that is the fill, not the blur, and it
-                // is what a solid band looks like.
-                //
-                // The alpha is the only lever this side of the bar, so the colour is given a
-                // low one: 0.75 × 0.14 ≈ a tenth of the page colour, enough to keep the very
-                // top from showing a hard edge and nothing like a band. The blur is untouched
-                // by it and does all the visible work — text scrolling up is blurred away
-                // under the capsules instead of running into them.
-                //
-                // Zero alpha is not an option: `NavigationBarImpl` reads it as "hide the edge
-                // effect entirely", which is what ChatController asks for. A chat can, because
-                // it has a wallpaper behind its capsules; this screen is a flat page, and a
-                // blur of a flat colour is that same flat colour.
-                edgeEffectColor: palette.plainBackground.withAlphaComponent(0.14),
-                accentButtonColor: presentationData.theme.rootController.navigationBar.accentTextColor,
-                accentDisabledButtonColor: palette.tertiary,
-                accentForegroundColor: palette.onAccent,
-                // The two arguments that make this bar a chat's bar.
-                //
-                // Under `.glass` NavigationBarImpl stops adding its background node and its
-                // separator entirely, and puts the left and right button groups inside real
-                // `GlassBackgroundView` capsules — 44pt tall, corner radius half of that —
-                // which is where the blur in a chat actually lives and why it ends exactly
-                // where the capsule ends. It does *not* give the title view one: the title
-                // is added as a plain subview and only ever has a frame set on it, so the
-                // capsule around "AorusAI" stays ours, built from the same component.
-                style: .glass,
-                glassStyle: .default
-            ),
-            strings: NavigationBarPresentationData(presentationData: presentationData).strings
+            presentationData: presentationData,
+            style: .glass
         ))
         // `title` stays unset because Telegram's navigation bar draws either the string or
         // the custom view, never both.
