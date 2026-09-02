@@ -2920,6 +2920,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     private func reloadMessage(id: UUID) {
         guard let row = conversation.messages.firstIndex(where: { $0.id == id }) else { return }
+        // Same rule as `scrollToBottom`: a row the table has not been told about cannot be
+        // reloaded, it raises. A skipped update here is harmless — the caller that adds the
+        // row reloads the table straight afterwards.
+        guard tableView.numberOfSections > 0, row < tableView.numberOfRows(inSection: 0) else { return }
         let indexPath = IndexPath(row: row, section: 0)
         let message = conversation.messages[row]
         let canRetry = message.role == .assistant
@@ -2939,8 +2943,18 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     private func scrollToBottom(animated: Bool) {
-        guard !conversation.messages.isEmpty else { return }
-        tableView.scrollToRow(at: IndexPath(row: conversation.messages.count - 1, section: 0), at: .bottom, animated: animated)
+        // The table's own row count, never the conversation's.
+        //
+        // `send()` appends the two new messages to the model and only reloads the table
+        // several lines later. In between it clears the composer, and clearing the composer
+        // reports a height change, which runs a layout pass — which now re-anchors the list.
+        // Addressing the last *message* there asks the table to scroll to a row it has not
+        // been told about yet, and that is not a no-op: UIKit raises immediately, so every
+        // single send crashed the app. Asking the table what it holds cannot outrun it.
+        guard tableView.numberOfSections > 0 else { return }
+        let rows = tableView.numberOfRows(inSection: 0)
+        guard rows > 0 else { return }
+        tableView.scrollToRow(at: IndexPath(row: rows - 1, section: 0), at: .bottom, animated: animated)
     }
 
     /// Whether the newest message is on screen, within a row's worth of slack.
