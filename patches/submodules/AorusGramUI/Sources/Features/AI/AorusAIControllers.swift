@@ -14,6 +14,7 @@ import AvatarNode
 import LocalizedPeerData
 import ComponentFlow
 import GlassBackgroundComponent
+import EdgeEffect
 
 // AorusAI owns a large, self-contained vocabulary. Route it through the shared AorusGram
 // language resolver so Russian stays first-class and every other Telegram language follows
@@ -1371,6 +1372,18 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let composer = AorusAIComposerView()
+    /// The blur the messages pass into at the top of the screen.
+    ///
+    /// This is `EdgeEffectView` — the exact component Telegram's own scroll-edge blur is made
+    /// of, the one a glass navigation bar builds internally. It is instantiated here instead
+    /// of being left to the bar because the bar's copy never showed on this screen and I
+    /// could not see why; driven from here its geometry and its arguments are known.
+    ///
+    /// It is asked for `blur: true` with `alpha: 0.0`, and the alpha is the point. The view is
+    /// a progressive backdrop blur with a flat rectangle of `content` drawn over it, and that
+    /// rectangle is the fill: the navigation bar leaves it at the 0.75 default, which is what
+    /// paints a fade. At zero there is no fill at all — only the blur.
+    private let topBlurView = EdgeEffectView(frame: CGRect())
 
     /// `initialPrompt` is what the user sees in the conversation. `initialRequest`
     /// is what is actually sent when the two differ — a chat analysis shows a short
@@ -1465,6 +1478,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         tableView.delegate = self
         tableView.register(AorusAIMessageCell.self, forCellReuseIdentifier: "message")
         self.displayNode.view.addSubview(tableView)
+        topBlurView.isUserInteractionEnabled = false
+        self.displayNode.view.addSubview(topBlurView)
         composer.configure(context: context, theme: presentationData.theme)
         composer.onOpenPeer = { [weak self] peerId in self?.openPeer(peerId) }
         composer.onHeightChanged = { [weak self] in
@@ -1623,6 +1638,19 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // messages slide beneath the floating capsules, here they used to stop at a hard
         // edge and leave a flat band of page colour above it.
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: max(0, composerFrame.minY)))
+        // Ends level with the bottom of the capsules — `top` is the navigation bar's own
+        // height — and the blur gradient runs over the whole of it, densest at the very top.
+        let topBlurFrame = CGRect(x: 0.0, y: 0.0, width: layout.size.width, height: top)
+        transition.updateFrame(view: topBlurView, frame: topBlurFrame)
+        topBlurView.update(
+            content: palette.plainBackground,
+            blur: true,
+            alpha: 0.0,
+            rect: CGRect(origin: CGPoint(), size: topBlurFrame.size),
+            edge: .top,
+            edgeSize: topBlurFrame.height,
+            transition: .immediate
+        )
         tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: 8.0, right: 0.0)
         // A read-modify-write on `scrollIndicatorInsets` goes through a getter the SDK
         // deprecated in iOS 13, so assign the vertical insets directly instead.
