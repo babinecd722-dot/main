@@ -2886,8 +2886,17 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             pendingPersistWork?.cancel()
             pendingPersistWork = nil
         } else {
+            // A save is not cheap: the store keeps one encrypted file per account, so every
+            // one of these decrypts and decodes every conversation, re-encodes them all and
+            // writes the whole file again. The render pass asks for one about eighteen times
+            // a second while an answer streams, and at 0.35s that was three full rewrites a
+            // second for the length of the answer — invisible on a short history and a real
+            // drain on a long one. A live turn is given a much longer leash instead. Nothing
+            // is risked by it: the text lives in memory, and every way a turn can end forces
+            // a save, as do leaving the screen and going to the background.
+            let interval: TimeInterval = isTurnLive ? 2.5 : 0.35
             let elapsed = Date().timeIntervalSince(lastPersist)
-            if elapsed < 0.35 {
+            if elapsed < interval {
                 guard pendingPersistWork == nil else { return }
                 let work = DispatchWorkItem { [weak self] in
                     guard let self else { return }
@@ -2895,7 +2904,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                     self.persist(force: true)
                 }
                 pendingPersistWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + (0.35 - elapsed), execute: work)
+                DispatchQueue.main.asyncAfter(deadline: .now() + (interval - elapsed), execute: work)
                 return
             }
         }
@@ -3619,6 +3628,35 @@ private final class AorusAIComposerView: UIView {
     @objc private func cancelDictation() { onCancelDictation?() }
 }
 
+/// Holds a display link's target weakly.
+///
+/// `CADisplayLink(target:selector:)` retains its target for as long as the link is valid,
+/// so a view that starts one and is then torn down without invalidating it is kept alive by
+/// the link — and the link goes on firing sixty times a second, into a view nobody can see,
+/// for the rest of the process. Closing the screen mid-dictation is exactly that path: the
+/// controller lets go of the composer, and nothing is left to call `setActive(false)`.
+///
+/// Pointing the link at this proxy instead means the target can always be collected, and
+/// the first tick after it is gone invalidates the link.
+/// `NSObject` because a display-link selector has to be `@objc`, and only an
+/// ObjC-compatible class may declare one.
+private final class AorusAIDisplayLinkProxy: NSObject {
+    weak var target: AorusAIDictationWaveView?
+
+    init(target: AorusAIDictationWaveView) {
+        self.target = target
+        super.init()
+    }
+
+    @objc func step(_ link: CADisplayLink) {
+        guard let target else {
+            link.invalidate()
+            return
+        }
+        target.step()
+    }
+}
+
 /// A running dictation, drawn as one continuous wave of the sound itself.
 ///
 /// The shape is not decoration and it is not a row of bars. The microphone's loudness is
@@ -3715,7 +3753,9 @@ private final class AorusAIDictationWaveView: UIView {
         samples = Array(repeating: 0.0, count: max(2, capacity))
         sampleInterval = 0.06
         lastSampleAt = CFAbsoluteTimeGetCurrent()
-        let link = CADisplayLink(target: self, selector: #selector(step))
+        // Weakly, through the proxy: a link started here and never stopped would otherwise
+        // keep this view alive and redrawing for the rest of the process.
+        let link = CADisplayLink(target: AorusAIDisplayLinkProxy(target: self), selector: #selector(AorusAIDisplayLinkProxy.step(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
         startDrift()
@@ -3770,7 +3810,8 @@ private final class AorusAIDictationWaveView: UIView {
         gradient.add(drift, forKey: "aorusDrift")
     }
 
-    @objc private func step() {
+    /// One frame. Called by the proxy, which is what the link actually points at.
+    fileprivate func step() {
         redraw()
     }
 
