@@ -1387,6 +1387,11 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
 
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let composer = AorusAIComposerView()
+    /// The blurred strip the messages pass under, ending level with the bottom of the title
+    /// capsule — where a chat's does. It is a real material rather than the navigation bar's
+    /// own background colour, which is 90% opaque in a dark theme and would only have
+    /// repainted the flat band it replaced.
+    private let headerBlurView = UIVisualEffectView()
 
     /// `initialPrompt` is what the user sees in the conversation. `initialRequest`
     /// is what is actually sent when the two differ — a chat analysis shows a short
@@ -1416,14 +1421,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
                 disabledButtonColor: palette.tertiary,
                 primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
-                // The theme's own translucent bar colour with the blur on, which is what a
-                // chat uses. It was cleared before, and with the list stopping below the bar
-                // there was nothing to blur anyway; now that messages pass underneath, the
-                // blur is what makes the top of the screen read as a chat rather than as a
-                // hole. The separator stays clear: a chat draws no hairline under it.
-                backgroundColor: presentationData.theme.rootController.navigationBar.blurredBackgroundColor,
-                opaqueBackgroundColor: presentationData.theme.rootController.navigationBar.opaqueBackgroundColor,
-                enableBackgroundBlur: true,
+                // The bar paints nothing itself. Its own `blurredBackgroundColor` is 90%
+                // opaque in a dark theme, so switching it on does not blur anything — it just
+                // repaints the black band in a slightly different black, which is the one
+                // thing this must not become. The strip above the list is a real material
+                // instead, installed below, so what is behind it is genuinely blurred.
+                backgroundColor: .clear,
+                opaqueBackgroundColor: .clear,
+                enableBackgroundBlur: false,
                 separatorColor: .clear,
                 badgeBackgroundColor: palette.accent,
                 badgeStrokeColor: palette.accent,
@@ -1481,6 +1486,11 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         tableView.delegate = self
         tableView.register(AorusAIMessageCell.self, forCellReuseIdentifier: "message")
         self.displayNode.view.addSubview(tableView)
+        // Over the list and under the navigation bar, so it blurs the messages sliding
+        // beneath it and never touches the capsules drawn above.
+        headerBlurView.effect = aorusAIHeaderBlurEffect(palette: palette)
+        headerBlurView.isUserInteractionEnabled = false
+        self.displayNode.view.addSubview(headerBlurView)
         composer.configure(context: context, theme: presentationData.theme)
         composer.onOpenPeer = { [weak self] peerId in self?.openPeer(peerId) }
         composer.onHeightChanged = { [weak self] in
@@ -1633,6 +1643,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // messages slide beneath the floating capsules, here they used to stop at a hard
         // edge and leave a flat band of page colour above it.
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: max(0, composerFrame.minY)))
+        // Exactly the navigation bar's own height, so the blur ends level with the bottom of
+        // the title capsule rather than fading out somewhere of its own choosing.
+        transition.updateFrame(view: headerBlurView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: top))
         tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: 8.0, right: 0.0)
         // A read-modify-write on `scrollIndicatorInsets` goes through a getter the SDK
         // deprecated in iOS 13, so assign the vertical insets directly instead.

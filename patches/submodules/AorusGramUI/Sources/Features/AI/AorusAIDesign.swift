@@ -83,6 +83,17 @@ func aorusAIGlassEffect(palette: AorusAIPalette) -> UIBlurEffect {
     return UIBlurEffect(style: palette.isDark ? .systemUltraThinMaterialDark : .systemUltraThinMaterialLight)
 }
 
+/// The strip a chat's messages scroll under at the top of the screen.
+///
+/// A step thicker than the surface material above: this one has to *read* as a blur from
+/// across the room, because a message sliding under it is the only thing that says the list
+/// continues past the header. Still a material and never a colour — the navigation bar's own
+/// `blurredBackgroundColor` is 90% opaque in a dark theme, which is a painted band, not a
+/// blur, and a painted band across the top is exactly what this screen must not have.
+func aorusAIHeaderBlurEffect(palette: AorusAIPalette) -> UIBlurEffect {
+    return UIBlurEffect(style: palette.isDark ? .systemThinMaterialDark : .systemThinMaterialLight)
+}
+
 func aorusAIGlassTint(palette: AorusAIPalette, strong: Bool = false) -> UIColor {
     if palette.isDark {
         return UIColor.white.withAlphaComponent(strong ? 0.085 : 0.045)
