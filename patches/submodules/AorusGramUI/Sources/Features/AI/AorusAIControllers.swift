@@ -1416,9 +1416,14 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
                 disabledButtonColor: palette.tertiary,
                 primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
-                backgroundColor: .clear,
-                opaqueBackgroundColor: .clear,
-                enableBackgroundBlur: false,
+                // The theme's own translucent bar colour with the blur on, which is what a
+                // chat uses. It was cleared before, and with the list stopping below the bar
+                // there was nothing to blur anyway; now that messages pass underneath, the
+                // blur is what makes the top of the screen read as a chat rather than as a
+                // hole. The separator stays clear: a chat draws no hairline under it.
+                backgroundColor: presentationData.theme.rootController.navigationBar.blurredBackgroundColor,
+                opaqueBackgroundColor: presentationData.theme.rootController.navigationBar.opaqueBackgroundColor,
+                enableBackgroundBlur: true,
                 separatorColor: .clear,
                 badgeBackgroundColor: palette.accent,
                 badgeStrokeColor: palette.accent,
@@ -3587,25 +3592,29 @@ private final class AorusAIComposerView: UIView {
     @objc private func cancelDictation() { onCancelDictation?() }
 }
 
-/// A running dictation, drawn as the sound itself across the whole input panel.
+/// A running dictation, drawn as one continuous wave of the sound itself.
 ///
-/// Every bar is one microphone sample frozen at the moment it was taken, and the strip
-/// scrolls left, so what is on screen is literally the shape of what was just said
-/// travelling away — the same thing Telegram draws while a voice message is recording, and
-/// the same thing Voice Memos draws. Silence is a row of dots; a word throws the bars to
-/// full height. A drawn curve whose amplitude follows a level looks the same whether or not
-/// anyone is speaking, which is exactly what was wrong with the one that stood here.
+/// The shape is not decoration and it is not a row of bars. The microphone's loudness is
+/// sampled about sixteen times a second, and the ribbon's half-height at any point on the
+/// screen *is* the sample taken at the moment that point entered the panel — so the wave
+/// swells where a word was said and narrows to a thin line through a pause, and the whole
+/// shape travels left as the run goes on. Speaking louder makes it taller immediately;
+/// stopping flattens it immediately. Between samples the height is interpolated with a
+/// raised cosine, which is what turns the sample points into a smooth curve rather than the
+/// staircase a bar meter draws.
 ///
-/// The colour is a spectrum strip drifting behind the bars and showing through them, so the
-/// whole run shimmers without anything about the motion being decorative: the heights are
-/// the microphone, and only the hue is decoration.
+/// A spectrum drifts behind the ribbon and shows through it, so the run shimmers. The hue
+/// is the only decorative part; every height on screen came from the microphone.
 private final class AorusAIDictationWaveView: UIView {
-    private static let barWidth: CGFloat = 3.5
-    private static let barSpacing: CGFloat = 3.0
-    private static let pitch: CGFloat = AorusAIDictationWaveView.barWidth + AorusAIDictationWaveView.barSpacing
-    /// The height of a bar that heard nothing: a dot, so an open microphone in a silent
-    /// room reads as listening rather than as a broken view.
-    private static let silentHalfHeight: CGFloat = 1.75
+    /// How far apart on screen two consecutive microphone samples sit. Wider makes the
+    /// wave broader and slower; this is about two and a quarter seconds across a phone.
+    private static let samplePitch: CGFloat = 7.0
+    /// Half the thickness of the ribbon where nothing was heard, so a silent microphone is
+    /// a thin line rather than an empty box.
+    private static let silentHalfHeight: CGFloat = 1.25
+    /// How much of each end the ribbon tapers over, so it enters and leaves the panel as a
+    /// point instead of being sliced off mid-swell.
+    private static let taper: CGFloat = 14.0
 
     /// Seven hues, enough of a sweep to read as a spectrum.
     private static let spectrum: [UIColor] = [
@@ -3629,12 +3638,12 @@ private final class AorusAIDictationWaveView: UIView {
     private let maskLayer = CAShapeLayer()
     private var displayLink: CADisplayLink?
 
-    /// One entry per bar, oldest first, newest at the right edge of the view.
+    /// One entry per sample, oldest first; the newest is at the right edge of the view.
     private var samples: [CGFloat] = []
     private var capacity = 0
     /// When the newest sample arrived, and the running average gap between arrivals. The
-    /// strip is slid by the fraction of a gap that has passed, so it glides continuously
-    /// instead of stepping once per sample.
+    /// wave is slid by the fraction of a gap that has passed, so it travels continuously
+    /// instead of stepping sixteen times a second.
     private var lastSampleAt: CFAbsoluteTime = 0.0
     private var sampleInterval: CFAbsoluteTime = 0.06
 
@@ -3659,7 +3668,7 @@ private final class AorusAIDictationWaveView: UIView {
         displayLink?.invalidate()
     }
 
-    /// Nothing here is themed: the point of the strip is that it is the one saturated thing
+    /// Nothing here is themed: the point of the wave is that it is the one saturated thing
     /// in the panel. The hook stays so the composer can configure it like every other part.
     func configure(palette: AorusAIPalette) {
     }
@@ -3674,9 +3683,9 @@ private final class AorusAIDictationWaveView: UIView {
             maskLayer.path = nil
             return
         }
-        // A full strip of silent dots to begin with, so the panel is a waiting microphone
-        // rather than an empty box that fills up over the first two seconds.
-        samples = Array(repeating: 0.0, count: max(1, capacity))
+        // A flat line to begin with, so the panel is a waiting microphone rather than an
+        // empty box that fills up over the first two seconds.
+        samples = Array(repeating: 0.0, count: max(2, capacity))
         sampleInterval = 0.06
         lastSampleAt = CFAbsoluteTimeGetCurrent()
         let link = CADisplayLink(target: self, selector: #selector(step))
@@ -3699,7 +3708,7 @@ private final class AorusAIDictationWaveView: UIView {
         }
         lastSampleAt = now
         samples.append(Self.shaped(level))
-        let limit = max(1, capacity)
+        let limit = max(2, capacity)
         if samples.count > limit {
             samples.removeFirst(samples.count - limit)
         }
@@ -3708,14 +3717,14 @@ private final class AorusAIDictationWaveView: UIView {
     /// What a raw level becomes on screen.
     ///
     /// The recogniser hands over `(dBFS + 50) / 50`, which puts the room tone of a quiet
-    /// room around 0.2 and ordinary speech between 0.45 and 0.8 — drawn as-is, that is a
-    /// strip which is never still and never full, and the difference between silence and a
-    /// word is a fifth of the height. The floor is subtracted so silence is actually zero,
-    /// what is left is stretched over the whole range, and the square root lifts quiet
-    /// speech: a word now goes to the top of the panel and a pause drops to the dots.
+    /// room around 0.2 and ordinary speech between 0.45 and 0.8 — drawn as-is, the wave is
+    /// never still and never full, and the difference between silence and a word is a fifth
+    /// of the height. The floor is subtracted so silence reaches zero, what is left is
+    /// stretched over the whole range, and the square root lifts quiet speech: a word now
+    /// uses the whole panel and a pause drops to the line.
     private static func shaped(_ level: CGFloat) -> CGFloat {
-        let floorLevel: CGFloat = 0.18
-        let span: CGFloat = 0.62
+        let floorLevel: CGFloat = 0.16
+        let span: CGFloat = 0.60
         let above = (min(1.0, max(0.0, level)) - floorLevel) / span
         guard above > 0.0 else { return 0.0 }
         return min(1.0, above).squareRoot()
@@ -3748,9 +3757,8 @@ private final class AorusAIDictationWaveView: UIView {
         // travel.
         gradient.frame = CGRect(x: 0.0, y: 0.0, width: bounds.width * 2.0, height: bounds.height)
         CATransaction.commit()
-        // One spare bar on each side: one is sliding out on the left, one is sliding in on
-        // the right.
-        capacity = max(1, Int(bounds.width / Self.pitch) + 2)
+        // Two spare samples: one is sliding out on the left, one is sliding in on the right.
+        capacity = max(2, Int(bounds.width / Self.samplePitch) + 2)
         if samples.count > capacity {
             samples.removeFirst(samples.count - capacity)
         } else if displayLink != nil, samples.count < capacity {
@@ -3763,29 +3771,66 @@ private final class AorusAIDictationWaveView: UIView {
         }
     }
 
+    /// The wave's half-height at a point, in sample units from the newest sample.
+    ///
+    /// A raised cosine between the two samples the point falls between. Linear
+    /// interpolation would leave a visible corner at every sample and read as a chain of
+    /// facets; this joins them into one curve with no corners at all.
+    private func halfHeight(atSampleOffset offset: CGFloat) -> CGFloat {
+        guard samples.count >= 2 else { return samples.first ?? 0.0 }
+        let position = CGFloat(samples.count - 1) - offset
+        if position <= 0.0 { return samples[0] }
+        if position >= CGFloat(samples.count - 1) { return samples[samples.count - 1] }
+        let lower = Int(position)
+        let upper = min(samples.count - 1, lower + 1)
+        let t = position - CGFloat(lower)
+        let smooth = (1.0 - cos(t * .pi)) / 2.0
+        return samples[lower] + (samples[upper] - samples[lower]) * smooth
+    }
+
     private func redraw() {
         let width = bounds.width
         let height = bounds.height
-        guard width > 1.0, height > 1.0, !samples.isEmpty else { return }
+        guard width > 1.0, height > 1.0, samples.count >= 2 else { return }
         let middle = height / 2.0
-        // 3pt of air top and bottom, so the loudest bar still sits inside the panel.
+        // 3pt of air top and bottom, so the loudest moment still sits inside the panel.
         let maximumHalf = max(Self.silentHalfHeight, middle - 3.0)
-        // How far into the current sample's slot the strip has travelled. Clamped, so a
+        // How far into the current sample's slot the wave has travelled. Clamped, so a
         // stalled microphone leaves the last frame standing rather than sliding away.
         let elapsed = lastSampleAt > 0.0 ? CFAbsoluteTimeGetCurrent() - lastSampleAt : 0.0
         let progress = min(1.0, max(0.0, CGFloat(elapsed / max(0.01, sampleInterval))))
-        let shift = progress * Self.pitch
-        let path = UIBezierPath()
-        for (index, sample) in samples.enumerated() {
-            // The newest sample is drawn at the right edge and every older one a pitch
-            // further left, so the strip moves in one direction and never reorders.
-            let stepsFromNewest = CGFloat(samples.count - 1 - index)
-            let x = width - Self.barWidth - stepsFromNewest * Self.pitch - shift
-            guard x + Self.barWidth > 0.0, x < width else { continue }
-            let half = max(Self.silentHalfHeight, sample * maximumHalf)
-            let bar = CGRect(x: x, y: middle - half, width: Self.barWidth, height: half * 2.0)
-            path.append(UIBezierPath(roundedRect: bar, cornerRadius: Self.barWidth / 2.0))
+        let shift = progress * Self.samplePitch
+
+        let stepWidth: CGFloat = 1.0
+        var top: [CGPoint] = []
+        var bottom: [CGPoint] = []
+        var x: CGFloat = 0.0
+        while x <= width {
+            // Distance from the right edge in sample units: the newest sample is drawn at
+            // the right edge, and the wave slides left between arrivals.
+            let offset = (width - x - shift) / Self.samplePitch
+            var value = halfHeight(atSampleOffset: offset)
+            // Taper both ends to nothing so the ribbon has points, not cut edges.
+            let fromLeft = x / Self.taper
+            let fromRight = (width - x) / Self.taper
+            value *= min(1.0, max(0.0, min(fromLeft, fromRight)))
+            let half = max(Self.silentHalfHeight, value * maximumHalf)
+            top.append(CGPoint(x: x, y: middle - half))
+            bottom.append(CGPoint(x: x, y: middle + half))
+            x += stepWidth
         }
+        guard top.count >= 2 else { return }
+
+        let path = UIBezierPath()
+        path.move(to: top[0])
+        for point in top.dropFirst() {
+            path.addLine(to: point)
+        }
+        for point in bottom.reversed() {
+            path.addLine(to: point)
+        }
+        path.close()
+
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         maskLayer.path = path.cgPath
