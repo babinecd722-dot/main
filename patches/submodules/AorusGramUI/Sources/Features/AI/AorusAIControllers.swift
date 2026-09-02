@@ -1431,20 +1431,26 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 badgeBackgroundColor: palette.accent,
                 badgeStrokeColor: palette.accent,
                 badgeTextColor: palette.onAccent,
-                // The page's own colour, which turns the bar's scroll-edge effect on.
+                // Turns the bar's scroll-edge effect on, and asks it for blur without fill.
                 //
-                // ChatController passes `.clear` here, and `.clear` has zero alpha, which
-                // `NavigationBarImpl` reads as "hide the edge effect entirely". A chat can
-                // afford that: it has a wallpaper, so its capsules have something to blur and
-                // the top of the screen reads as glass on its own. This screen is a flat
-                // page, and a blur of a flat colour is that flat colour — which is why every
-                // attempt at a visible blur up here has failed.
+                // `EdgeEffectView` is two things stacked: a `VariableBlurView` — a real
+                // progressive backdrop blur over the top 64pt — and, above it, a plain
+                // rectangle of this colour masked by the same gradient. `NavigationBarImpl`
+                // does not pass an alpha, so that rectangle is drawn at 0.75. An opaque
+                // colour here therefore paints a fade; that is the fill, not the blur, and it
+                // is what a solid band looks like.
                 //
-                // The edge effect is the part that does work without a wallpaper: it is a
-                // variable blur over the top 64pt fading into this colour, so a message
-                // scrolling up dissolves under the capsules instead of sliding behind a hard
-                // edge. Built from the page colour, it cannot become a grey band.
-                edgeEffectColor: palette.plainBackground,
+                // The alpha is the only lever this side of the bar, so the colour is given a
+                // low one: 0.75 × 0.14 ≈ a tenth of the page colour, enough to keep the very
+                // top from showing a hard edge and nothing like a band. The blur is untouched
+                // by it and does all the visible work — text scrolling up is blurred away
+                // under the capsules instead of running into them.
+                //
+                // Zero alpha is not an option: `NavigationBarImpl` reads it as "hide the edge
+                // effect entirely", which is what ChatController asks for. A chat can, because
+                // it has a wallpaper behind its capsules; this screen is a flat page, and a
+                // blur of a flat colour is that same flat colour.
+                edgeEffectColor: palette.plainBackground.withAlphaComponent(0.14),
                 accentButtonColor: presentationData.theme.rootController.navigationBar.accentTextColor,
                 accentDisabledButtonColor: palette.tertiary,
                 accentForegroundColor: palette.onAccent,
