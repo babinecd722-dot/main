@@ -1409,22 +1409,21 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         self.initialPrompt = initialPrompt
         self.initialRequest = initialRequest
         self.pendingReference = reference
-        // The same transparent bar as the conversation list: only the native capsules.
+        // A chat's navigation bar, built the way ChatController builds one.
         super.init(navigationBarPresentationData: NavigationBarPresentationData(
             theme: NavigationBarTheme(
                 overallDarkAppearance: presentationData.theme.overallDarkAppearance,
                 buttonColor: presentationData.theme.rootController.navigationBar.buttonColor,
                 disabledButtonColor: palette.tertiary,
                 primaryTextColor: presentationData.theme.rootController.navigationBar.primaryTextColor,
-                // The bar paints nothing full width, and neither does anything else.
-                //
-                // Two attempts at a strip across the top were wrong for the same reason.
-                // The bar's own `blurredBackgroundColor` is 90% opaque in a dark theme, so
-                // turning it on repaints the black band in a slightly different black. A
-                // `UIVisualEffectView` over the list is worse: a material has nothing to
-                // sample but a flat page, so it resolves to grey — the grey slab this screen
-                // has been trying to get rid of. In a chat there is no strip at all; the
-                // blur is the capsules, which is why it ends exactly where they do.
+                // Nothing paints full width. Under `.glass` below the bar does not add its
+                // background node at all, so these are belt and braces — but they also record
+                // why two earlier attempts at a strip were wrong. The bar's own
+                // `blurredBackgroundColor` is 90% opaque in a dark theme, so turning it on
+                // repaints the black band in a slightly different black; and a
+                // `UIVisualEffectView` over the list is worse, because a material with only a
+                // flat page to sample resolves to grey — the slab this screen keeps trying to
+                // lose.
                 backgroundColor: .clear,
                 opaqueBackgroundColor: .clear,
                 enableBackgroundBlur: false,
@@ -1432,9 +1431,24 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 badgeBackgroundColor: palette.accent,
                 badgeStrokeColor: palette.accent,
                 badgeTextColor: palette.onAccent,
+                // Transparent, which hides the bar's top edge-blur — the same value
+                // ChatController passes. A chat suppresses it too, because the blur people
+                // see up there is not a strip: it is the capsules.
+                edgeEffectColor: .clear,
                 accentButtonColor: presentationData.theme.rootController.navigationBar.accentTextColor,
                 accentDisabledButtonColor: palette.tertiary,
-                accentForegroundColor: palette.onAccent
+                accentForegroundColor: palette.onAccent,
+                // The two arguments that make this bar a chat's bar.
+                //
+                // Under `.glass` NavigationBarImpl stops adding its background node and its
+                // separator entirely, and puts the left and right button groups inside real
+                // `GlassBackgroundView` capsules — 44pt tall, corner radius half of that —
+                // which is where the blur in a chat actually lives and why it ends exactly
+                // where the capsule ends. It does *not* give the title view one: the title
+                // is added as a plain subview and only ever has a frame set on it, so the
+                // capsule around "AorusAI" stays ours, built from the same component.
+                style: .glass,
+                glassStyle: .default
             ),
             strings: NavigationBarPresentationData(presentationData: presentationData).strings
         ))
