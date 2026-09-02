@@ -102,8 +102,18 @@ public final class AorusAIClient {
             return nil
         }
         let handle = AorusAIStreamHandle()
-        requestQueue.async { [weak self, weak handle] in
-            guard let self, let handle else { return }
+        // The handle is captured strongly, and released when this block ends.
+        //
+        // It used to be weak, which made a caller that dropped the returned handle before
+        // this block ran fall out of `guard let handle else { return }` — no request, no
+        // error, and `completion` never called at all. A screen waiting on that completion
+        // waits forever, which is the exact failure this file works hardest elsewhere to
+        // avoid. Every exit below now calls `completion` exactly once.
+        requestQueue.async { [weak self] in
+            guard let self else {
+                DispatchQueue.main.async { completion(.failure(.cancelled)) }
+                return
+            }
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .millisecondsSince1970
             encoder.outputFormatting = [.sortedKeys]
@@ -444,13 +454,25 @@ public final class AorusAIClient {
         return raw
     }
 
+    /// The one date the server is allowed to set on the client.
+    ///
+    /// It has to be finite and it has to be a plausible instant, because a `Date` built from
+    /// it is stored in the conversation and the conversation is encoded with
+    /// `.millisecondsSince1970` — which multiplies the interval out as a `Double` and, for a
+    /// non-finite one, throws. `JSONEncoder` throwing means `write` returns false, and since
+    /// the whole store is one document, *every* conversation would stop being saved from
+    /// then on. `Double("nan")` and `Double("inf")` both parse, so `{"reset_at":"nan"}` was
+    /// all it took. The sibling `secondsFromNumber` above always clamped; this one did not.
     fileprivate static func dateFromMilliseconds(_ value: Any?) -> Date? {
         let raw: Double?
         if let number = value as? NSNumber { raw = number.doubleValue }
         else if let string = value as? String { raw = Double(string) }
         else { raw = nil }
-        guard let raw else { return nil }
-        return Date(timeIntervalSince1970: raw > 10_000_000_000 ? raw / 1000 : raw)
+        guard let raw, raw.isFinite, raw > 0 else { return nil }
+        let seconds = raw > 10_000_000_000 ? raw / 1000 : raw
+        // Nothing before 2001 or past 2100 is a quota reset.
+        guard seconds > 978_307_200, seconds < 4_102_444_800 else { return nil }
+        return Date(timeIntervalSince1970: seconds)
     }
 
     /// Artifact-specific status mapping. The vault answers with a plain status and no
@@ -706,12 +728,22 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
             let tool = (object["tool"] as? String) ?? AorusAITool.chatHistory
             let arguments = object["arguments"] as? [String: Any]
             var options: [AorusAIPermissionOption] = []
-            for rawOption in (object["options"] as? [[String: Any]]) ?? [] {
-                guard let label = rawOption["label"] as? String, !label.isEmpty else { continue }
+            // Clamped in count and in length. Each option becomes a row of real views on the
+            // main thread, and the event body is allowed to be four megabytes — which is room
+            // for two hundred thousand of them. A sheet is a handful of choices or it is not a
+            // question anyone can answer.
+            for rawOption in ((object["options"] as? [[String: Any]]) ?? []).prefix(AorusAIRequestLimits.permissionOptionCount) {
+                guard let rawLabel = rawOption["label"] as? String, !rawLabel.isEmpty else { continue }
+                let label = String(rawLabel.prefix(AorusAIRequestLimits.permissionOptionCharacters))
                 let limit = (rawOption["limit"] as? NSNumber)?.intValue
-                let mode = rawOption["mode"] as? String
-                let id = (rawOption["id"] as? String) ?? limit.map({ String($0) }) ?? mode ?? label
-                options.append(AorusAIPermissionOption(id: id, label: label, limit: limit, mode: mode))
+                let mode = (rawOption["mode"] as? String).map { String($0.prefix(AorusAIRequestLimits.permissionOptionCharacters)) }
+                let rawId = (rawOption["id"] as? String) ?? limit.map({ String($0) }) ?? mode ?? label
+                options.append(AorusAIPermissionOption(
+                    id: String(rawId.prefix(AorusAIRequestLimits.permissionOptionCharacters)),
+                    label: label,
+                    limit: limit,
+                    mode: mode
+                ))
             }
             return .permissionRequest(AorusAIPermissionRequest(
                 requestId: requestId,

@@ -451,6 +451,11 @@ public enum AorusAIRequestLimits {
     /// Files one turn may attach. `artifact.ready` is server-driven and repeats are
     /// already ignored, but distinct ids are not bounded by anything else.
     public static let responseArtifactCount = 24
+    /// Choices a permission sheet may offer. Each one is a row of real views built on the
+    /// main thread, and the payload that carries them is allowed to be megabytes.
+    public static let permissionOptionCount = 8
+    /// Clamp on every string inside one of those choices.
+    public static let permissionOptionCharacters = 120
 }
 
 /// The production body of `POST /v1/aorus/agent`.

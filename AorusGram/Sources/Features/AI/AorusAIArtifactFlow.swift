@@ -137,9 +137,19 @@ public enum AorusAIArtifactFlow {
     /// events. Both shapes reach the same decoder.
     public static func decodeCompletion(_ object: [String: Any]) -> (text: String?, artifacts: [AorusAIArtifact]) {
         var artifacts: [AorusAIArtifact] = []
+        // Bounded here, not only where the cards are built.
+        //
+        // The ceiling existed but lived in the view layer, so a four-megabyte
+        // `aorus_artifacts` array — about forty thousand distinct entries — was decoded in
+        // full before anything dropped it, and the duplicate check was a linear scan, which
+        // makes that eight hundred million string comparisons. This runs on the URLSession
+        // delegate queue, so it stalls the whole stream while it happens. A set for the
+        // check, and a stop once the turn has all the files it may show.
+        var seen = Set<String>()
         for raw in (object["aorus_artifacts"] as? [[String: Any]]) ?? [] {
+            guard artifacts.count < AorusAIRequestLimits.responseArtifactCount else { break }
             guard let artifact = decode(raw) else { continue }
-            guard !artifacts.contains(where: { $0.artifactId == artifact.artifactId }) else { continue }
+            guard seen.insert(artifact.artifactId).inserted else { continue }
             artifacts.append(artifact)
         }
         var text: String?

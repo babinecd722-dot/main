@@ -81,9 +81,12 @@ enum AorusAIMentionRenderer {
         let value = NSMutableAttributedString()
         value.append(NSAttributedString(attachment: attachment(font: font, image: image)))
         value.append(NSAttributedString(string: gap + mention.displayName))
+        // The box carries the pill's own length, so text that later merges into this run —
+        // anything typed straight after it inherits the attribute — is not mistaken for part
+        // of the pill when the source text is rebuilt.
         var attributes: [NSAttributedString.Key: Any] = [
             .foregroundColor: accent,
-            .aorusAIMention: AorusAIMentionBox(mention)
+            .aorusAIMention: AorusAIMentionBox(mention, renderedLength: value.length)
         ]
         if link, let url = URL(string: "aorus-peer://\(mention.peerId)") {
             attributes[.link] = url
@@ -300,8 +303,15 @@ final class AorusAIMentionAvatarCache {
     }
 
     private var images: [Key: UIImage] = [:]
+    /// Monograms are cached too, so a miss returns the *same* instance every time. Without
+    /// this, every pill whose photo had not arrived was re-rendered from scratch on every
+    /// change notification, and the identity check that is supposed to skip an unchanged
+    /// attachment never matched.
+    private var monograms: [Key: UIImage] = [:]
     private var pending: Set<Key> = []
     private var disposables: [Key: Disposable] = [:]
+    /// Order of use, oldest first, for eviction.
+    private var order: [Key] = []
     private weak var context: AccountContext?
     private static let limit = 256
 
@@ -318,14 +328,23 @@ final class AorusAIMentionAvatarCache {
     func image(for mention: AorusAIMention, diameter: CGFloat, ring: UIColor) -> UIImage {
         let key = Key(peerId: mention.peerId, diameter: Int(diameter.rounded()), ring: Int(ring.aorusRGBAKey))
         if let image = images[key] {
+            touch(key)
             return image
         }
         request(key: key, mention: mention, diameter: diameter, ring: ring)
-        return AorusAIMentionAvatarCache.monogram(
+        if let cached = monograms[key] {
+            return cached
+        }
+        let drawn = AorusAIMentionAvatarCache.monogram(
             letters: AorusAIMentionRenderer.letters(for: mention.displayName),
             diameter: diameter,
             ring: ring
         )
+        if monograms.count >= AorusAIMentionAvatarCache.limit {
+            monograms.removeAll(keepingCapacity: true)
+        }
+        monograms[key] = drawn
+        return drawn
     }
 
     private func request(key: Key, mention: AorusAIMention, diameter: CGFloat, ring: UIColor) {
@@ -333,9 +352,13 @@ final class AorusAIMentionAvatarCache {
         pending.insert(key)
         let peerId = PeerId(mention.peerId)
         let inner = diameter - AorusAIMentionAvatarCache.ringWidth * 2.0
+        // The context is captured weakly inside the signal as well as outside it. This object
+        // lives for the whole process and keeps the disposable, so a strong capture here made
+        // an in-flight fetch hold the account, its postbox and its network stack alive after a
+        // logout — the exact thing the weak property above is there to prevent.
         let signal = context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
-        |> mapToSignal { peer -> Signal<UIImage?, NoError> in
-            guard let peer else { return .single(nil) }
+        |> mapToSignal { [weak context] peer -> Signal<UIImage?, NoError> in
+            guard let peer, let context else { return .single(nil) }
             return peerAvatarCompleteImage(
                 account: context.account,
                 peer: peer,
@@ -343,21 +366,48 @@ final class AorusAIMentionAvatarCache {
             )
         }
         |> deliverOnMainQueue
-        disposables[key] = signal.start(next: { [weak self] photo in
+        // `pending` is cleared on completion as well as on a value. A signal that finishes
+        // without emitting — a peer the account does not know, a disposed upstream — used to
+        // leave the key marked pending for the life of the process, and every later request
+        // for that person returned early: the pill kept its monogram for good.
+        let disposable = signal.start(next: { [weak self] photo in
             guard let self else { return }
             self.pending.remove(key)
-            self.disposables.removeValue(forKey: key)?.dispose()
             guard let photo else { return }
             self.store(key: key, image: AorusAIMentionAvatarCache.ringed(photo: photo, diameter: diameter, ring: ring))
             NotificationCenter.default.post(name: AorusAIMentionAvatarCache.changedNotification, object: nil)
+        }, completed: { [weak self] in
+            self?.pending.remove(key)
         })
+        // Assigned after `start`, never during it: a signal that delivers synchronously would
+        // otherwise have its entry overwritten by this line and leak the finished disposable.
+        disposables[key]?.dispose()
+        disposables[key] = disposable
     }
 
+    /// Marks a key as most recently used.
+    private func touch(_ key: Key) {
+        if let index = order.firstIndex(of: key) {
+            order.remove(at: index)
+        }
+        order.append(key)
+    }
+
+    /// Least-recently-used eviction, a quarter of the cache at a time.
+    ///
+    /// It used to empty the whole dictionary on overflow and then post a change
+    /// notification, so crossing 256 people made every avatar on screen pop back to a letter
+    /// at once and then trickle in again.
     private func store(key: Key, image: UIImage) {
         if images.count >= AorusAIMentionAvatarCache.limit {
-            images.removeAll(keepingCapacity: true)
+            let drop = max(1, AorusAIMentionAvatarCache.limit / 4)
+            for stale in order.prefix(drop) {
+                images.removeValue(forKey: stale)
+            }
+            order.removeFirst(min(drop, order.count))
         }
         images[key] = image
+        touch(key)
     }
 
     static let ringWidth: CGFloat = 1.5

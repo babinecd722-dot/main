@@ -29,12 +29,32 @@ private func heartbeatMultilineAndMultipleEvents() {
     require(events[1].name == "done", "second event name")
 }
 
-private func eofAndColonlessFields() {
+/// An event the stream never terminated is discarded, not delivered.
+///
+/// The specification says an incomplete event — one with no blank line after it — is
+/// dropped, and the reason matters here: a server that writes `event: done` and
+/// `data: {"ok":true}` and then closes the socket has not finished the turn. Dispatching
+/// that fragment made the transport see a successful `done` and report a truncated answer to
+/// the user as a complete one.
+private func unterminatedEventIsDiscardedAtEOF() {
     let parser = AorusAISSEParser()
     let first = parser.append(Data("event\ndata: {}".utf8))
-    require(first.isEmpty, "unterminated event waits for EOF")
-    let final = parser.finish()
-    require(final == [AorusAISSEParser.Event(name: "message", data: Data("{}".utf8))], "EOF and colonless field")
+    require(first.isEmpty, "unterminated event waits for the blank line")
+    require(parser.finish().isEmpty, "and is dropped at EOF rather than delivered")
+
+    // A truncated `done` specifically: this is the one that used to be reported as success.
+    let truncated = AorusAISSEParser()
+    require(truncated.append(Data("event: done\ndata: {\"ok\":true}\n".utf8)).isEmpty, "no blank line, no event")
+    require(truncated.finish().isEmpty, "a truncated done is not a done")
+
+    // A properly terminated event before the truncated one still arrives.
+    let mixed = AorusAISSEParser()
+    let delivered = mixed.append(Data("event: status\ndata: {\"a\":1}\n\nevent: done\ndata: {\"ok\":true}".utf8))
+    require(delivered == [AorusAISSEParser.Event(name: "status", data: Data("{\"a\":1}".utf8))], "the completed event is delivered")
+    require(mixed.finish().isEmpty, "the trailing fragment is not")
+
+    // The parser is reusable afterwards.
+    require(mixed.append(Data("event: x\ndata: 1\n\n".utf8)).count == 1, "the parser still works after a discard")
 }
 
 /// A peer that never sends a newline must not be able to grow the parser's buffer until
@@ -80,7 +100,7 @@ private enum AorusAISSEParserTests {
     static func main() {
         fragmentedUTF8AndCRLF()
         heartbeatMultilineAndMultipleEvents()
-        eofAndColonlessFields()
+        unterminatedEventIsDiscardedAtEOF()
         overlongLineIsDiscardedAndStreamRecovers()
         overlongEventIsDroppedWholeAndStreamRecovers()
         eventNameIsClamped()

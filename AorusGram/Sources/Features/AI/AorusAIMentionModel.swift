@@ -30,14 +30,24 @@ public struct AorusAIMention: Equatable {
 ///
 /// Deliberately without an `isEqual(_:)` override: `NSAttributedString` merges adjacent
 /// runs whose attribute values compare equal, and identity comparison is what keeps two
-/// mentions written back to back — `@durov@durov` — as two runs instead of one, which is
-/// the difference between rebuilding the source text correctly and silently dropping a
+/// mentions written one after another — `@durov @durov` — as two runs instead of one, which
+/// is the difference between rebuilding the source text correctly and silently dropping a
 /// handle.
 public final class AorusAIMentionBox: NSObject {
     public let mention: AorusAIMention
+    /// How many UTF-16 units the pill occupied when it was drawn.
+    ///
+    /// A run carrying this box is not necessarily still just the pill. `UITextView` re-reads
+    /// `typingAttributes` from the character before the caret whenever the selection moves,
+    /// so text typed straight after a pill inherits this very attribute and merges into its
+    /// run — and rebuilding the source from the run as a whole then replaced the typed
+    /// characters with the handle and threw them away. The length says where the pill ends
+    /// and the user's own text begins.
+    public let renderedLength: Int
 
-    public init(_ mention: AorusAIMention) {
+    public init(_ mention: AorusAIMention, renderedLength: Int) {
         self.mention = mention
+        self.renderedLength = max(0, renderedLength)
     }
 }
 
@@ -56,10 +66,20 @@ extension NSAttributedString {
         let source = string as NSString
         var result = ""
         enumerateAttribute(.aorusAIMention, in: NSRange(location: 0, length: length), options: []) { value, range, _ in
-            if let box = value as? AorusAIMentionBox {
-                result += box.mention.sourceText
-            } else {
+            guard let box = value as? AorusAIMentionBox else {
                 result += source.substring(with: range)
+                return
+            }
+            // `enumerateAttribute` hands back maximal runs of one attribute value, and a run
+            // carrying a pill's box can be longer than the pill: anything typed straight
+            // after it inherits the attribute from `typingAttributes` and merges in. Only the
+            // pill's own units collapse to the handle; whatever follows is the user's text
+            // and is taken verbatim. Emitting the handle for the whole run is what silently
+            // dropped it from the message that was sent.
+            let pill = min(box.renderedLength, range.length)
+            result += box.mention.sourceText
+            if range.length > pill {
+                result += source.substring(with: NSRange(location: range.location + pill, length: range.length - pill))
             }
         }
         return result
@@ -88,7 +108,11 @@ public enum AorusAIMentionScanner {
             // Not after a word character, so an e-mail address is not read as a mention,
             // and not after another @.
             #"(?<![\w@])@([A-Za-z0-9_]{4,32})(?![A-Za-z0-9_])"#,
-            #"(?<![\w@/.])(?:https?://)?t\.me/(?:s/)?([A-Za-z0-9_]{4,32})(?:/\d+)?(?![A-Za-z0-9_])"#
+            // The reserved paths are excluded by name. `t.me/joinchat/AAAA` is an invite
+            // link, not a person, and reading it as one turned the link into a pill of a
+            // user called "joinchat" followed by a loose `/AAAA`. Same for sticker packs,
+            // themes, proxies and the rest of Telegram's own routes.
+            #"(?<![\w@/.])(?:https?://)?t\.me/(?:s/)?(?!(?:joinchat|addstickers|addemoji|addtheme|setlanguage|proxy|socks|share|confirmphone|login|invoice|giftcode|boost|contact|bg|c|iv)(?![A-Za-z0-9_]))([A-Za-z0-9_]{4,32})(?:/\d+)?(?![A-Za-z0-9_])"#
         ]
         return patterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
     }()

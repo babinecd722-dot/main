@@ -14,7 +14,16 @@ import Security
 //     | openssl x509 -pubkey -noout \
 //     | openssl pkey -pubin -outform der \
 //     | openssl dgst -sha256 -binary | openssl enc -base64
-final class AorusPinnedSessionDelegate: NSObject, URLSessionDelegate {
+// `URLSessionTaskDelegate` is declared, not just `URLSessionDelegate`, and this matters:
+// `willPerformHTTPRedirection` belongs to the task protocol. A method only reaches the Objective-C runtime when it satisfies a requirement of
+// a protocol the class actually conforms to, and URLSession dispatches that callback through
+// `respondsToSelector:`. Conforming to `URLSessionDelegate` alone therefore left the redirect
+// method invisible: URLSession fell back to its default behaviour and followed redirects
+// automatically. The signed requests carry `X-Aorus-Device` and `X-Aorus-Sign`, which are not
+// in the set URLSession strips across origins, so one 302 would have handed a device
+// fingerprint and a valid signature to whatever host the redirect named. Pinning itself was
+// never affected — `didReceive challenge` is a `URLSessionDelegate` requirement and always ran.
+final class AorusPinnedSessionDelegate: NSObject, URLSessionDelegate, URLSessionTaskDelegate {
     static let shared = AorusPinnedSessionDelegate()
 
     func urlSession(_ session: URLSession,

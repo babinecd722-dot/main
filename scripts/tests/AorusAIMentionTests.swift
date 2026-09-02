@@ -50,11 +50,45 @@ private func sourceTextSurvivesRendering() {
     let value = NSMutableAttributedString(string: "расскажи про ", attributes: base)
     let mention = AorusAIMention(sourceText: "@durov", username: "durov", peerId: 777, displayName: "Pavel Durov")
     let pill = NSMutableAttributedString(string: "\u{FFFC}\u{2009}Pavel Durov")
-    pill.addAttribute(.aorusAIMention, value: AorusAIMentionBox(mention), range: NSRange(location: 0, length: pill.length))
+    pill.addAttribute(.aorusAIMention, value: AorusAIMentionBox(mention, renderedLength: pill.length), range: NSRange(location: 0, length: pill.length))
     value.append(pill)
     value.append(NSAttributedString(string: " срочно", attributes: base))
     require(value.aorusAIPlainText == "расскажи про @durov срочно", "the source handle is recovered")
     require(value.string != value.aorusAIPlainText, "the drawing and the source really do differ")
+}
+
+/// Text typed straight after a pill inherits the pill's attributes and merges into its run.
+///
+/// `UITextView` re-reads `typingAttributes` from the character before the caret on every
+/// selection change, so this is what an ordinary keystroke after a resolved handle produces —
+/// and rebuilding the source from the run as a whole replaced those characters with the
+/// handle and dropped them from the message that was sent.
+private func textTypedAfterAPillIsNotSwallowed() {
+    let mention = AorusAIMention(sourceText: "@durov", username: "durov", peerId: 777, displayName: "Pavel Durov")
+    let pill = NSMutableAttributedString(string: "\u{FFFC}\u{2009}Pavel Durov")
+    let box = AorusAIMentionBox(mention, renderedLength: pill.length)
+    pill.addAttribute(.aorusAIMention, value: box, range: NSRange(location: 0, length: pill.length))
+    // The same box instance on the appended text is exactly what UIKit does: the run merges.
+    let typed = NSMutableAttributedString(string: " и что?")
+    typed.addAttribute(.aorusAIMention, value: box, range: NSRange(location: 0, length: typed.length))
+    pill.append(typed)
+    require(pill.aorusAIPlainText == "@durov и что?", "the typed text survives: \(pill.aorusAIPlainText)")
+
+    // Two characters typed one at a time, which is how it actually happens.
+    let letters = NSMutableAttributedString(string: "\u{FFFC}\u{2009}Pavel Durov")
+    let second = AorusAIMentionBox(mention, renderedLength: letters.length)
+    letters.addAttribute(.aorusAIMention, value: second, range: NSRange(location: 0, length: letters.length))
+    for character in ["!", "?"] {
+        let one = NSMutableAttributedString(string: character)
+        one.addAttribute(.aorusAIMention, value: second, range: NSRange(location: 0, length: 1))
+        letters.append(one)
+    }
+    require(letters.aorusAIPlainText == "@durov!?", "every keystroke survives: \(letters.aorusAIPlainText)")
+
+    // A run shorter than the recorded pill — a partially deleted pill — must not read past it.
+    let clipped = NSMutableAttributedString(string: "AB")
+    clipped.addAttribute(.aorusAIMention, value: AorusAIMentionBox(mention, renderedLength: 99), range: NSRange(location: 0, length: 2))
+    require(clipped.aorusAIPlainText == "@durov", "a clipped run still collapses to the handle")
 }
 
 /// Two mentions written back to back must stay two runs. If the boxes compared equal,
@@ -63,8 +97,8 @@ private func adjacentMentionsDoNotMerge() {
     let first = AorusAIMention(sourceText: "@durov", username: "durov", peerId: 1, displayName: "Pavel")
     let second = AorusAIMention(sourceText: "@durov", username: "durov", peerId: 1, displayName: "Pavel")
     let value = NSMutableAttributedString(string: "AB")
-    value.addAttribute(.aorusAIMention, value: AorusAIMentionBox(first), range: NSRange(location: 0, length: 1))
-    value.addAttribute(.aorusAIMention, value: AorusAIMentionBox(second), range: NSRange(location: 1, length: 1))
+    value.addAttribute(.aorusAIMention, value: AorusAIMentionBox(first, renderedLength: 1), range: NSRange(location: 0, length: 1))
+    value.addAttribute(.aorusAIMention, value: AorusAIMentionBox(second, renderedLength: 1), range: NSRange(location: 1, length: 1))
     require(value.aorusAIPlainText == "@durov@durov", "both handles are recovered")
 }
 
@@ -95,6 +129,7 @@ private enum AorusAIMentionTests {
         overlappingSpellingsAreNotDoubleCounted()
         nonMentionsAreIgnored()
         sourceTextSurvivesRendering()
+        textTypedAfterAPillIsNotSwallowed()
         adjacentMentionsDoNotMerge()
         plainTextWithoutMentionsIsUnchanged()
         storeRemembersAndRejectsNonsense()

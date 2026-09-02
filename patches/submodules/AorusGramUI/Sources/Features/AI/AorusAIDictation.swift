@@ -45,6 +45,20 @@ final class AorusAIDictation {
     /// When the last microphone level was handed to the UI, so the audio thread does not
     /// start forty animations a second. Written only from the audio tap.
     private var lastLevelReport: Double = 0.0
+    /// Whether *this* instance activated the shared audio session.
+    ///
+    /// `tearDown` used to deactivate it unconditionally, and `tearDown` runs from `deinit`.
+    /// Every AI conversation controller owns one of these, so closing a conversation in
+    /// which the microphone was never touched deactivated the session out from under
+    /// whatever was playing — a voice message, a video, music.
+    private var didActivateSession = false
+    /// Set the moment the run is asked to stop, and read by the audio tap. Feeding an
+    /// `SFSpeechAudioBufferRecognitionRequest` after `endAudio()` is a documented contract
+    /// violation, and the render thread can deliver one more buffer after the main thread
+    /// has ended the request.
+    private var hasEndedAudio = false
+    /// Audio-session observers, held for the life of one run.
+    private var observers: [NSObjectProtocol] = []
 
     private(set) var isRunning = false
     var isActive: Bool { self.isStarting || self.isRunning }
@@ -160,6 +174,7 @@ final class AorusAIDictation {
                     try session.setCategory(.record, mode: .measurement)
                 }
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
+                self.didActivateSession = true
             } catch {
                 self.tearDown()
                 onFailure(.engine)
@@ -175,14 +190,20 @@ final class AorusAIDictation {
                 self.finishRun()
                 return
             }
+            self.hasEndedAudio = false
             input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                // The request is captured strongly here, so clearing `self.request` does not
+                // stop this block. `stop()` removes the tap before ending the audio, but a
+                // buffer already in flight on the render thread can still arrive: appending
+                // to an ended request raises an Objective-C exception Swift cannot catch.
+                guard let self, !self.hasEndedAudio else { return }
                 request.append(buffer)
                 guard let level = AorusAIDictation.level(of: buffer) else { return }
                 // A 1024-frame buffer at 44.1 kHz arrives about forty times a second, and
                 // each one would otherwise start its own animation on the main thread. The
                 // indicator is four bars; sixteen samples a second already look continuous.
                 let now = CFAbsoluteTimeGetCurrent()
-                guard let self, now - self.lastLevelReport >= 0.06 else { return }
+                guard now - self.lastLevelReport >= 0.06 else { return }
                 self.lastLevelReport = now
                 // The tap runs on the audio thread; everything it feeds is on screen.
                 DispatchQueue.main.async { [weak self] in
@@ -203,6 +224,7 @@ final class AorusAIDictation {
 
             self.isStarting = false
             self.isRunning = true
+            self.observeInterruptions(runIdentifier: expectedRunIdentifier, onFailure: onFailure)
             self.task = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 // `recognitionTask(with:resultHandler:)` makes no promise about its queue and
                 // everything below writes to the composer, so hop to the main one first.
@@ -237,6 +259,52 @@ final class AorusAIDictation {
         }
     }
 
+    /// Watches for the two things that silently kill a running microphone.
+    ///
+    /// An incoming call interrupts the audio session; unplugging headphones or a Bluetooth
+    /// device changes the engine's configuration. In both cases the tap simply stops firing:
+    /// nothing throws, no callback arrives, and the run stays "live" forever with the wave on
+    /// screen, the header saying it is listening, and the send button out of reach. There was
+    /// no watchdog either, because the only one is armed by `stop()`. The run is ended here
+    /// instead, with the same failure the microphone reports when it cannot be opened.
+    private func observeInterruptions(runIdentifier expected: Int, onFailure: @escaping (Failure) -> Void) {
+        // Only the reasons that genuinely end the recording. A route change fires for
+        // ordinary things — including activating the session at the start of this very run —
+        // so only "the device we were recording from is gone" counts, and an interruption
+        // only when it begins.
+        let handler: (Notification) -> Void = { [weak self] note in
+            guard let self, self.runIdentifier == expected, self.isRunning, !self.hasEndedAudio else { return }
+            switch note.name {
+            case AVAudioSession.interruptionNotification:
+                let raw = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.uintValue
+                guard raw == AVAudioSession.InterruptionType.began.rawValue else { return }
+            case AVAudioSession.routeChangeNotification:
+                let raw = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.uintValue
+                guard raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue else { return }
+            default:
+                break
+            }
+            let recognizedNothing = self.transcript.isEmpty
+            self.tearDown()
+            if recognizedNothing {
+                onFailure(.engine)
+            }
+            self.finishRun()
+        }
+        for name in [
+            AVAudioSession.interruptionNotification,
+            AVAudioSession.routeChangeNotification,
+            AVAudioSession.mediaServicesWereResetNotification
+        ] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main, using: handler))
+        }
+    }
+
+    private func removeObservers() {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+    }
+
     /// Ends the run at most once, whichever of the recognizer, the user or the watchdog
     /// gets there first.
     private func finishRun() {
@@ -262,8 +330,27 @@ final class AorusAIDictation {
             self.finishRun()
             return
         }
+        // A second stop while the first is still waiting for its final result must do
+        // nothing. `endAudio()` on an already-ended request is a contract violation, and the
+        // old code reached it through the microphone button, which stays tappable until the
+        // run actually closes.
+        guard !self.hasEndedAudio else { return }
+        // The microphone is released here, not three seconds later when the final result
+        // arrives. The tap comes off first so no buffer can reach an ended request, then the
+        // audio stops, and only the recogniser is left running to deliver what it heard. It
+        // used to leave the tap installed, the engine paused and the session recording for
+        // the whole of that wait — the orange microphone indicator stayed lit and a second
+        // tap on the button ended the audio twice.
+        self.hasEndedAudio = true
+        if self.isTapInstalled {
+            self.engine.inputNode.removeTap(onBus: 0)
+            self.isTapInstalled = false
+        }
+        // `isRunning` deliberately stays set: the recognition callback checks it, and the
+        // whole point of the wait is to receive the final transcription.
         self.request?.endAudio()
-        self.engine.pause()
+        self.engine.stop()
+        self.deactivateSessionIfNeeded()
         // `endAudio()` normally draws a final result out of the recognizer, and that is
         // what ends the run. If it never arrives — a dropped connection, a task the system
         // cancelled — the overlay would stay up over the chat forever, so close the run
@@ -276,7 +363,19 @@ final class AorusAIDictation {
         }
     }
 
+    /// Gives the shared audio session back, and only if this instance took it.
+    ///
+    /// The session is app-wide. Deactivating one this object never activated stops whatever
+    /// else is playing — and `tearDown` runs from `deinit`, so simply opening and closing an
+    /// AI conversation used to be enough to cut off a voice message in another chat.
+    private func deactivateSessionIfNeeded() {
+        guard self.didActivateSession else { return }
+        self.didActivateSession = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
     private func tearDown() {
+        self.removeObservers()
         if self.isTapInstalled {
             self.engine.inputNode.removeTap(onBus: 0)
             self.isTapInstalled = false
@@ -290,6 +389,7 @@ final class AorusAIDictation {
         self.recognizer = nil
         self.isStarting = false
         self.isRunning = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        self.hasEndedAudio = false
+        self.deactivateSessionIfNeeded()
     }
 }

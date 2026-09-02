@@ -1547,6 +1547,12 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // controller leaves the stack and its `deinit` cancels the stream.
         lastKnownWindow = self.view.window ?? lastKnownWindow
         lastNavigationController = (self.navigationController as? NavigationController) ?? lastNavigationController
+        // The microphone does not stay open behind a screen the user has left. Nothing else
+        // closed it: the only other stop is on entering the background, and a running turn
+        // deliberately keeps this controller alive past the pop, so `deinit` could be
+        // arbitrarily far away. Cancelled rather than finished — words spoken at a screen
+        // that is going away should not type themselves into the draft.
+        if dictation.isActive { cancelDictation() }
         if isTurnLive { holdForBackgroundTurn() }
     }
 
@@ -1728,6 +1734,18 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
         guard textView === composer.textView else { return true }
         return composer.handleTextChange(in: range, replacement: text)
+    }
+
+    /// Keeps the pill's attributes from becoming the attributes of what is typed next.
+    ///
+    /// `UITextView` re-reads `typingAttributes` from the character before the caret on every
+    /// selection change, and after a pill is rendered the caret sits right after one. Without
+    /// this, the next characters typed carry the pill's colour, its semibold name font and —
+    /// the part that mattered — its mention attribute, so they merged into the pill's run and
+    /// were rebuilt as part of the handle instead of as themselves.
+    func textViewDidChangeSelection(_ textView: UITextView) {
+        guard textView === composer.textView else { return }
+        composer.resetTypingAttributes()
     }
 
     // The composer carries no brand row: the header already says AorusAI, and a second
@@ -3501,6 +3519,17 @@ private final class AorusAIComposerView: UIView {
     private func baseTextAttributes() -> [NSAttributedString.Key: Any] {
         let color = theme.map { AorusAIPalette.resolve($0).label } ?? UIColor.label
         return [.font: AorusAIComposerView.inputFont, .foregroundColor: color]
+    }
+
+    /// Puts `typingAttributes` back to plain body text.
+    ///
+    /// Called whenever the selection moves, because that is exactly when `UITextView`
+    /// replaces them with the attributes of the character before the caret — which, right
+    /// after a pill, are the pill's. Assigning only when they differ keeps this off the hot
+    /// path of ordinary typing.
+    func resetTypingAttributes() {
+        guard textView.typingAttributes[.aorusAIMention] != nil else { return }
+        textView.typingAttributes = baseTextAttributes()
     }
 
     /// What the pills currently drawn in the input describe. Comparing against it is what

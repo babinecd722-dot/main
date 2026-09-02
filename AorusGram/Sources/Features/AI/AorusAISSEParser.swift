@@ -54,21 +54,24 @@ public final class AorusAISSEParser {
         return events
     }
 
+    /// Ends the stream.
+    ///
+    /// Whatever is still buffered was not terminated by a blank line, so by the
+    /// specification it is an incomplete event and must be discarded. It used to be
+    /// dispatched instead, which meant a server that wrote `event: done` / `data: {"ok":true}`
+    /// and then closed the socket without the terminating blank line produced a `done(ok:
+    /// true)` — and a truncated answer was reported to the user as a finished one. Only
+    /// events that were completed *during* the stream survive; the trailing fragment is
+    /// dropped, and a stream that ends mid-event ends without a `done`, which the transport
+    /// correctly reports as a failure.
     public func finish() -> [Event] {
-        var events: [Event] = []
-        if !buffer.isEmpty {
-            var line = buffer
-            buffer.removeAll(keepingCapacity: false)
-            if line.last == 0x0d { line.removeLast() }
-            if isDiscardingLine {
-                isDiscardingLine = false
-                isDiscardingEvent = true
-            } else {
-                consume(line: line, into: &events)
-            }
-        }
-        dispatch(into: &events)
-        return events
+        buffer.removeAll(keepingCapacity: false)
+        dataLines.removeAll(keepingCapacity: false)
+        dataBytes = 0
+        eventName = "message"
+        isDiscardingLine = false
+        isDiscardingEvent = false
+        return []
     }
 
     private func consume(line: Data, into events: inout [Event]) {
