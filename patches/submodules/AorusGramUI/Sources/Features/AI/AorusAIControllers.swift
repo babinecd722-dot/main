@@ -1431,10 +1431,20 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 badgeBackgroundColor: palette.accent,
                 badgeStrokeColor: palette.accent,
                 badgeTextColor: palette.onAccent,
-                // Transparent, which hides the bar's top edge-blur — the same value
-                // ChatController passes. A chat suppresses it too, because the blur people
-                // see up there is not a strip: it is the capsules.
-                edgeEffectColor: .clear,
+                // The page's own colour, which turns the bar's scroll-edge effect on.
+                //
+                // ChatController passes `.clear` here, and `.clear` has zero alpha, which
+                // `NavigationBarImpl` reads as "hide the edge effect entirely". A chat can
+                // afford that: it has a wallpaper, so its capsules have something to blur and
+                // the top of the screen reads as glass on its own. This screen is a flat
+                // page, and a blur of a flat colour is that flat colour — which is why every
+                // attempt at a visible blur up here has failed.
+                //
+                // The edge effect is the part that does work without a wallpaper: it is a
+                // variable blur over the top 64pt fading into this colour, so a message
+                // scrolling up dissolves under the capsules instead of sliding behind a hard
+                // edge. Built from the page colour, it cannot become a grey band.
+                edgeEffectColor: palette.plainBackground,
                 accentButtonColor: presentationData.theme.rootController.navigationBar.accentTextColor,
                 accentDisabledButtonColor: palette.tertiary,
                 accentForegroundColor: palette.onAccent,
@@ -2966,6 +2976,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // text into the live views and let the table re-measure the height.
         if let cell = tableView.cellForRow(at: indexPath) as? AorusAIMessageCell,
            cell.applyIncremental(message: message, theme: presentationData.theme, canRetry: canRetry, loadingArtifactIds: loadingArtifactIds) {
+            // Laid out before the table asks for the height, not after. `endUpdates` reads
+            // whatever the cell currently reports, so a stack that has not re-measured hands
+            // back the previous answer's height and the new text is clipped inside it.
+            cell.contentView.layoutIfNeeded()
             tableView.beginUpdates()
             tableView.endUpdates()
         } else {
@@ -3089,10 +3103,12 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// survive that, which is exactly what used to leave a card spinning forever with no
     /// way out. Keeping the cancel handle here turns the second tap into a real stop.
     private func toggleArtifact(_ artifact: AorusAIArtifact) {
-        if artifact.isExpired {
-            presentError(AorusAIFormat.errorText(.artifactExpired))
-            return
-        }
+        // No local expiry check. The vault decides whether a link is still alive, and it says
+        // so with a 410 or a 404 — which is already handled below and is what marks the card
+        // expired. Refusing here meant the request was never made at all: an `expires_at` the
+        // client read as past killed the file on the device with no way to find out
+        // otherwise, and a device clock that is merely wrong did the same. Asking costs one
+        // request and gives a truthful answer.
         let id = artifact.artifactId
         if loadingArtifactIds.contains(id) {
             artifactDownloads.removeValue(forKey: id)?.cancel()
@@ -4212,10 +4228,20 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
             case let (.text(view), .text(source)):
                 view.attributedText = AorusAIMarkdown.attributed(source, color: configuredTextColor, accent: configuredAccent, mentions: mentions)
                 view.refreshMentionImages()
+                // A non-scrolling UITextView does not reliably re-publish its intrinsic
+                // height when its attributed text is replaced. Inside a stack view that means
+                // the row keeps the height of the *first* delta: the answer went on arriving,
+                // the text view stayed one line tall, and the rest of the sentence was
+                // clipped — which is what made a finished answer look unfinished. Any later
+                // full layout pass fixed it, which is why typing a single character made the
+                // whole message appear at once.
+                view.invalidateIntrinsicContentSize()
             case let (.code(card), .code(language, code)):
                 card.configure(language: language, code: code, theme: theme)
+                card.invalidateIntrinsicContentSize()
             case let (.quote(card), .quote(source)):
                 card.configure(text: source, theme: theme, textColor: configuredTextColor, accentOnColor: false, mentions: mentions)
+                card.invalidateIntrinsicContentSize()
             default:
                 return false
             }
@@ -4227,6 +4253,10 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         retryButton.isHidden = !(message.state == .failed && canRetry)
         applyNotice(message: message, theme: theme, canRetry: canRetry)
         applyStreamCaret(message: message, palette: AorusAIPalette.resolve(theme))
+        // The stack has to be measured again before the table asks the cell how tall it is;
+        // otherwise it answers with the height it had before this text arrived.
+        contentStack.setNeedsLayout()
+        contentView.setNeedsLayout()
         return true
     }
 

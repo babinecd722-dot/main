@@ -94,6 +94,49 @@ private func decodesProductionPayload() {
     }
 }
 
+/// The exact payload the backend documents today, including the object form of
+/// `download` and an `expires_at` that has already passed.
+///
+/// A past expiry must not stop anything on the client: the vault decides whether a link is
+/// still good and says so with a 410. The client used to refuse before sending a single
+/// byte, so an artifact whose stated lifetime was wrong — or a device whose clock was —
+/// could never be downloaded at all.
+private func decodesTheDocumentedPayloadAndDoesNotRefuseAPastExpiry() {
+    let source = """
+    {
+      "artifact_id": "xxxxxxxx",
+      "filename": "буква_a.txt",
+      "mime": "text/plain",
+      "size": 2,
+      "format": "txt",
+      "expires_at": 1770000000000,
+      "download": { "path": "/download/xxxxxxxx" },
+      "session_id": "session-uuid"
+    }
+    """
+    guard let artifact = AorusAIArtifactFlow.decode(object(source)) else {
+        fputs("AorusAIArtifactFlow test failed: the documented payload did not decode\n", stderr)
+        exit(1)
+    }
+    require(artifact.artifactId == "xxxxxxxx", "id")
+    require(artifact.filename == "буква_a.txt", "a non-ASCII filename survives")
+    require(artifact.mime == "text/plain", "mime")
+    require(artifact.size == 2, "size")
+    require(artifact.format == "txt", "format")
+    // The object form of `download` is read, and the path is kept exactly as written.
+    require(artifact.downloadPath == "/download/xxxxxxxx", "the download object's path is used")
+    require(AorusAIArtifactFlow.signingPath(for: artifact) == "/download/xxxxxxxx", "and is signable")
+    require(
+        AorusAIArtifactFlow.downloadURL(for: artifact)?.absoluteString == "https://ai.aorusgram.com/download/xxxxxxxx",
+        "which resolves to GET /download/{artifact_id} on our own host"
+    )
+    // This is the part that mattered: the stated lifetime is in the past, and none of the
+    // above is allowed to depend on it.
+    require(artifact.isExpired, "the fixture's expiry really is in the past")
+    require(AorusAIArtifactFlow.signingPath(for: artifact) != nil, "an expired artifact is still signable")
+    require(AorusAIArtifactFlow.downloadURL(for: artifact) != nil, "and still has a URL to ask")
+}
+
 private func attachesToTheActiveAssistantTurn() {
     let firstAssistant = AorusAIMessage(role: .assistant, rawText: "старый ответ")
     let user = AorusAIMessage(role: .user, rawText: "Создай презентацию")
@@ -397,6 +440,7 @@ private func describesTheCard() {
 private enum AorusAIArtifactFlowTests {
     static func main() {
         decodesProductionPayload()
+        decodesTheDocumentedPayloadAndDoesNotRefuseAPastExpiry()
         attachesToTheActiveAssistantTurn()
         survivesTheEventsThatFollow()
         supportsMultipleArtifacts()

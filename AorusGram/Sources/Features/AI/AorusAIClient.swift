@@ -247,8 +247,14 @@ public final class AorusAIClient {
         case refused(String)
     }
 
+    /// Deliberately without an expiry check.
+    ///
+    /// Whether a link is still good is the vault's answer, not ours: it replies 410 when it
+    /// is not, and that is what marks the artifact expired. Deciding it here compared a
+    /// server-supplied timestamp against this device's clock and, when it came out past,
+    /// refused before a single byte left — so an artifact whose `expires_at` was wrong, or a
+    /// device whose clock was, could never be downloaded at all.
     private static func artifactPath(for artifact: AorusAIArtifact) -> ArtifactPathOutcome {
-        guard !artifact.isExpired else { return .refused("expired") }
         guard artifact.size >= 0, artifact.size <= 512 * 1024 * 1024 else { return .refused("size") }
         guard let path = AorusAIArtifactFlow.signingPath(for: artifact) else { return .refused("path") }
         guard AorusAIArtifactFlow.downloadURL(for: artifact) != nil else { return .refused("url") }
