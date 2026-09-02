@@ -1638,17 +1638,34 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // messages slide beneath the floating capsules, here they used to stop at a hard
         // edge and leave a flat band of page colour above it.
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: 0, width: layout.size.width, height: max(0, composerFrame.minY)))
-        // Ends level with the bottom of the capsules — `top` is the navigation bar's own
-        // height — and the blur gradient runs over the whole of it, densest at the very top.
-        let topBlurFrame = CGRect(x: 0.0, y: 0.0, width: layout.size.width, height: top)
+        // The same four numbers NavigationBarImpl computes for its own edge effect, so this
+        // is the app's treatment and not an approximation of it:
+        //
+        //     edgeEffectHeight = barHeight + 24
+        //     frame            = (0, -20, width, 20 + edgeEffectHeight)
+        //     edgeSize         = min(64, edgeEffectHeight)
+        //
+        // The `edgeSize` cap is the part that matters and the part I had wrong. It becomes
+        // `constantHeight = edgeSize - 4` inside the blur, which is the depth at which the
+        // blur is at full strength; the rest of the view is its falloff. Passing the whole
+        // height, as this did, left a four-point falloff on a hundred-point view — a wall of
+        // blur with a hard edge along the bottom. Capped at 64 the blur is solid for sixty
+        // points and dissolves over the seventy below, which is what a scroll edge looks
+        // like everywhere else in the app.
+        let edgeEffectHeight = top + 24.0
+        let topBlurFrame = CGRect(x: 0.0, y: -20.0, width: layout.size.width, height: 20.0 + edgeEffectHeight)
         transition.updateFrame(view: topBlurView, frame: topBlurFrame)
         topBlurView.update(
             content: palette.plainBackground,
             blur: true,
-            alpha: 0.0,
+            // 0.75 is the value NavigationBarImpl leaves at its default, and it is the
+            // darkening: the page's own colour through the edge gradient, so a line of text
+            // fades into the page as it rises instead of staying bright under the capsules.
+            // It cannot read as a band — the colour is the one already behind it.
+            alpha: 0.75,
             rect: CGRect(origin: CGPoint(), size: topBlurFrame.size),
             edge: .top,
-            edgeSize: topBlurFrame.height,
+            edgeSize: min(64.0, edgeEffectHeight),
             transition: .immediate
         )
         tableView.contentInset = UIEdgeInsets(top: top + 8.0, left: 0.0, bottom: 8.0, right: 0.0)

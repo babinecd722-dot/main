@@ -165,7 +165,8 @@ public final class AorusAIClient {
         }
         requestQueue.async { [weak self] in
             guard let self else { return }
-            guard let request = self.signedRequest(method: "HEAD", path: path, body: Data(), contentType: nil, accept: "*/*") else {
+            // Same route as the download, so the same headers.
+            guard let request = self.signedRequest(method: "HEAD", path: path, body: Data(), contentType: "application/json", accept: nil) else {
                 DispatchQueue.main.async {
                     completion(.failure(LicenseKeyProvider.isProvisioned ? .artifactRejected("signature") : .notProvisioned))
                 }
@@ -224,8 +225,11 @@ public final class AorusAIClient {
         }
         requestQueue.async { [weak self] in
             guard let self else { return }
-            let accept = AorusAIArtifactFlow.safeMIME(artifact.mime) ?? "application/octet-stream"
-            guard var request = self.signedRequest(method: "GET", path: path, body: Data(), contentType: nil, accept: accept) else {
+            // `Content-Type: application/json` and no `Accept`, which is what the vault
+            // expects on this route — the same headers the agent endpoint is called with.
+            // Asking for the artifact's own MIME in `Accept` was the client's invention and
+            // is not part of the contract.
+            guard var request = self.signedRequest(method: "GET", path: path, body: Data(), contentType: "application/json", accept: nil) else {
                 DispatchQueue.main.async {
                     completion(.failure(LicenseKeyProvider.isProvisioned ? .artifactRejected("signature") : .notProvisioned))
                 }
