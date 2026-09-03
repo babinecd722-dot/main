@@ -3509,10 +3509,17 @@ def main() -> None:
     else:
         # One native page sheet owns all categories. It must switch content in place;
         # ContextUI push levels are forbidden because they overlap on compact hosts.
+        #
+        # `UIVisualEffectView` used to be on this list. It was standing in for "a native
+        # sheet with a material behind it", but the material of a page sheet is drawn by
+        # UIKit — the only effect view in the file was a property that was never added to
+        # the hierarchy, so the marker was guarding dead code and failed the build the
+        # moment that code was removed. `modalPresentationStyle = .pageSheet` asserts the
+        # same thing about the real construction.
         for marker in (
             "UISegmentedControl",
             "UITableViewDataSource",
-            "UIVisualEffectView",
+            "modalPresentationStyle = .pageSheet",
             "sheetPresentationController?.detents",
             "AorusAIMessageMenu.run(",
         ):
