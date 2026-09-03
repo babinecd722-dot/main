@@ -36,8 +36,6 @@ struct AorusAIPalette {
     var elevated: UIColor
     /// Quotes, chips, the search field.
     var fill: UIColor
-    /// The user's own bubble.
-    var fillStrong: UIColor
     var separator: UIColor
     var label: UIColor
     var secondary: UIColor
@@ -62,7 +60,6 @@ struct AorusAIPalette {
             // on any background. Same here, so a custom theme gets a fill that belongs to
             // it instead of a grey borrowed from the stock one.
             fill: label.withAlphaComponent(isDark ? 0.10 : 0.055),
-            fillStrong: label.withAlphaComponent(isDark ? 0.16 : 0.085),
             separator: list.itemBlocksSeparatorColor,
             label: label,
             secondary: list.itemSecondaryTextColor,
@@ -73,21 +70,6 @@ struct AorusAIPalette {
             // selected check, the badge — so an answer sheet here does the same.
             onAccent: UIColor.white
         )
-    }
-}
-
-/// Shared material recipe for every AorusAI surface. A blur view with an opaque grey
-/// `backgroundColor` is visually just a grey card, so tint and border stay translucent
-/// and the material remains visible over Telegram's live content.
-func aorusAIGlassEffect(palette: AorusAIPalette) -> UIBlurEffect {
-    return UIBlurEffect(style: palette.isDark ? .systemUltraThinMaterialDark : .systemUltraThinMaterialLight)
-}
-
-func aorusAIGlassTint(palette: AorusAIPalette, strong: Bool = false) -> UIColor {
-    if palette.isDark {
-        return UIColor.white.withAlphaComponent(strong ? 0.085 : 0.045)
-    } else {
-        return UIColor.white.withAlphaComponent(strong ? 0.42 : 0.28)
     }
 }
 

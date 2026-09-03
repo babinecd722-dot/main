@@ -57,7 +57,6 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
     private let groups: [AorusAIMessageMenu.Group]
     private let languageCode: String
 
-    private let materialView = UIVisualEffectView()
     private let headerView = UIView()
     private let titleLabel = UILabel()
     private let closeButton = UIButton(type: .system)
@@ -88,7 +87,6 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         // sampled the sheet's own opaque background. The page colour of the rest of
         // AorusAI is used instead, so the sheet belongs to the same screen family.
         view.backgroundColor = palette.background
-        materialView.isHidden = true
 
         titleLabel.text = aorusAILocalized("ИИ-компаньон", "AI Companion")
         titleLabel.font = .systemFont(ofSize: 20.0, weight: .bold)
@@ -141,7 +139,6 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        materialView.frame = view.bounds
         let safe = view.safeAreaInsets
         let width = view.bounds.width
         headerView.frame = CGRect(x: 0.0, y: safe.top + 4.0, width: width, height: 48.0)
