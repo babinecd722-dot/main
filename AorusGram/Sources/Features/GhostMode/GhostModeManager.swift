@@ -103,12 +103,10 @@ private extension NSObject {
             if let body = request.value(forKey: "body") {
                 let className = NSStringFromClass(type(of: body as AnyObject))
                 if kGhostBlockedKeywords.contains(where: { className.contains($0) }) {
-                    print("[GhostMode] blocked by class name: \(className)")
                     return
                 }
                 let desc = String(describing: body)
                 if kGhostBlockedKeywords.contains(where: { desc.contains($0) }) {
-                    print("[GhostMode] blocked by description: \(desc.prefix(80))")
                     return
                 }
             }
@@ -120,7 +118,6 @@ private extension NSObject {
             if let bytes = Self._aorusGhost_extractBytes(from: request), bytes.count >= 4 {
                 let c = bytes.withUnsafeBytes { $0.load(as: UInt32.self) }
                 if kGhostBlockedConstructors.contains(c) {
-                    print(String(format: "[GhostMode] blocked by constructor ID: 0x%08x", c))
                     return
                 }
             }
@@ -160,7 +157,6 @@ private extension NSObject {
 final class GhostModeSwizzler {
     static func apply() {
         guard let cls = NSClassFromString("MTRequestMessageService") else {
-            print("[GhostMode] MTRequestMessageService not found — MTProto layer swizzle skipped")
             return
         }
         let original   = NSSelectorFromString("addRequest:")
@@ -178,7 +174,6 @@ final class GhostModeSwizzler {
         if added {
             guard let installed = class_getInstanceMethod(cls, replacement) else { return }
             method_exchangeImplementations(origMethod, installed)
-            print("[GhostMode] MTRequestMessageService.addRequest swizzled — presence/typing/read blocked")
         } else {
             method_exchangeImplementations(origMethod, repMethod)
         }

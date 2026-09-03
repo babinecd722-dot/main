@@ -630,15 +630,21 @@ private final class AorusAIConversationListController: ViewController, UITableVi
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         // Telegram's navigation bar draws only `image` and `title` of a bar button item, so a
         // system item such as `.add` renders as an empty tap area — which is why the button
-        // looked missing. The compose glyph is the one the chat list itself uses, retinted
-        // to the AorusAI palette.
+        // looked missing. The compose glyph is the one the chat list itself uses.
+        //
+        // Tinted with the colour the bar gives its own buttons, not with the palette's
+        // secondary. A glass bar takes that from `chat.inputPanel.panelControlColor`
+        // (ComponentsThemes), which is what the back chevron in the conversation is drawn in;
+        // `palette.secondary` is the list's secondary *text* colour, and next to a white
+        // chevron it read as a greyed-out, disabled button.
+        let composeColor = presentationData.theme.chat.inputPanel.panelControlColor
         let composeImage = generateTintedImage(
             image: PresentationResourcesRootController.navigationComposeIcon(presentationData.theme)
                 ?? UIImage(systemName: "square.and.pencil"),
-            color: palette.secondary
+            color: composeColor
         )
         let composeItem = UIBarButtonItem(image: composeImage, style: .plain, target: self, action: #selector(createConversation))
-        composeItem.tintColor = palette.secondary
+        composeItem.tintColor = composeColor
         composeItem.accessibilityLabel = aorusAILocalized("Новый диалог", "New chat")
         self.navigationItem.rightBarButtonItem = composeItem
     }

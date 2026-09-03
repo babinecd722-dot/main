@@ -34,7 +34,6 @@ public final class ClientSpoofManager: NSObject {
 
     public static func applySwizzle() {
         guard let cls = NSClassFromString("MTApiEnvironment") else {
-            print("[AorusSpoof] MTApiEnvironment not found — runtime spoof skipped")
             return
         }
         swizzleSelector(
@@ -47,7 +46,6 @@ public final class ClientSpoofManager: NSObject {
             original: NSSelectorFromString("langPack"),
             replacement: #selector(spoofed_langPack)
         )
-        print("[AorusSpoof] MTApiEnvironment patched — client presents as Telegram \(officialAppVersion)")
     }
 
     private static func swizzleSelector(cls: AnyClass, original: Selector, replacement: Selector) {
