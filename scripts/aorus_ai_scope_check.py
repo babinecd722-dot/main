@@ -210,6 +210,26 @@ def check_selector_ambiguity(root: Path, ui: Path, errors: list) -> None:
                     )
 
 
+def check_duplicate_deinit(root: Path, ui: Path, errors: list) -> None:
+    """A type may declare `deinit` once.
+
+    Two of them is `invalid redeclaration of 'deinit'`, which `-frontend -parse` accepts
+    happily — it is a redeclaration, not a syntax error — and Bazel rejects forty minutes
+    in. It happened by adding a cleanup to a type that already had one, which is exactly how
+    it will happen again. Counting is scoped to the enclosing type, because every view in
+    these files having its own `deinit` is ordinary and correct.
+    """
+    for source in sorted(ui.rglob("*.swift")):
+        code = _scrubbed(source.read_text(encoding="utf-8"))
+        for body in _type_bodies(code):
+            count = len(re.findall(r"\bdeinit\b", body))
+            if count > 1:
+                errors.append(
+                    f"{source.relative_to(root)}: one type declares deinit {count} times — "
+                    f"Swift allows one, merge them"
+                )
+
+
 def check_build_dependencies(root: Path, ui: Path, errors: list) -> None:
     """Every module the sources import must be a dependency of the Bazel target.
 
@@ -264,6 +284,7 @@ def main() -> int:
     check_build_dependencies(root, ui, errors)
     check_selector_ambiguity(root, ui, errors)
     check_upstream_functions(root, ui, errors)
+    check_duplicate_deinit(root, ui, errors)
 
     for error in errors:
         print(f"AorusAI scope check: {error}", file=sys.stderr)

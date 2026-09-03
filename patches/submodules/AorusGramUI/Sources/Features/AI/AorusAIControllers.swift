@@ -5678,6 +5678,7 @@ private final class AorusAIShareScopeController: UIViewController {
     /// keeps a strong reference to the whole controller for the life of the process, with a
     /// floating capsule to match. Deallocating counts as declining.
     deinit {
+        peerDisposable.dispose()
         guard !didAnswer else { return }
         didAnswer = true
         onCancel()
@@ -5719,10 +5720,6 @@ private final class AorusAIShareScopeController: UIViewController {
     }
 
     required init?(coder: NSCoder) { fatalError() }
-
-    deinit {
-        peerDisposable.dispose()
-    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
