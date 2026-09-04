@@ -2374,7 +2374,11 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
                 self?.denyPermission(request)
             }
         )
-        present(controller, animated: true)
+        // Presented without UIKit's own transition on purpose. `.crossDissolve` would spend a
+        // third of a second fading in a view that is deliberately empty at that moment — the
+        // card is off-screen and the dim is clear — and only then would the sheet's own
+        // animation start. Presenting instantly lets that animation *be* the appearance.
+        present(controller, animated: false)
     }
 
     /// Turns a bare `tool.request` for the chat history into the question the client would
@@ -5696,6 +5700,8 @@ private final class AorusAIShareScopeController: UIViewController {
     private let cancelButton = UIButton(type: .system)
     private let peerDisposable = MetaDisposable()
     private var didAnimateIn = false
+    /// How far below its resting place the card sits, honoured by `viewDidLayoutSubviews`.
+    private var cardOffset: CGFloat = 0.0
 
     init(
         context: AccountContext,
@@ -5716,7 +5722,8 @@ private final class AorusAIShareScopeController: UIViewController {
         self.onCancel = onCancel
         super.init(nibName: nil, bundle: nil)
         self.modalPresentationStyle = .overFullScreen
-        self.modalTransitionStyle = .crossDissolve
+        // No `modalTransitionStyle`: this sheet is presented and dismissed un-animated and
+        // animates itself, so UIKit's transition would only add a beat before or after it.
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -5876,7 +5883,11 @@ private final class AorusAIShareScopeController: UIViewController {
         let cardHeight = cancelTop + cancelHeight + 12.0 + bottomInset
 
         // 40pt of overhang below the screen so a spring that overshoots never shows a gap.
-        card.frame = CGRect(x: 0.0, y: view.bounds.height - cardHeight, width: width, height: cardHeight + 40.0)
+        // `cardOffset` is how far below its resting place the card currently sits, and it is
+        // part of the layout rather than a transform: this method assigns `card.frame` on
+        // every pass, and assigning a frame to a transformed view resolves it in the
+        // transformed space — the card would land somewhere else entirely.
+        card.frame = CGRect(x: 0.0, y: view.bounds.height - cardHeight + cardOffset, width: width, height: cardHeight + 40.0)
         grabber.frame = CGRect(x: floor((width - 36.0) / 2.0), y: 8.0, width: 36.0, height: 5.0)
 
         let avatarFrame = CGRect(x: side, y: headerTop, width: avatarSize, height: avatarSize)
@@ -5894,13 +5905,58 @@ private final class AorusAIShareScopeController: UIViewController {
         cancelButton.frame = CGRect(x: side, y: cancelTop, width: contentWidth, height: cancelHeight)
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        guard !didAnimateIn else { return }
+        // The start state belongs *before* the sheet is on screen. It used to be set in
+        // `viewDidAppear`, which runs after the presentation has finished — so the card
+        // faded in at its resting place, then jumped a full height downwards and slid back
+        // up. That is the double, jerky appearance. The screen's height is used rather than
+        // the card's because it needs no layout to be known and is always enough to be clear
+        // of the bottom edge.
+        let travel = view.bounds.height > 0.0 ? view.bounds.height : UIScreen.main.bounds.height
+        prepareForPresentation(offset: travel)
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         guard !didAnimateIn else { return }
         didAnimateIn = true
-        card.transform = CGAffineTransform(translationX: 0.0, y: card.bounds.height)
-        UIView.animate(withDuration: 0.34, delay: 0.0, usingSpringWithDamping: 0.88, initialSpringVelocity: 0.0, options: [.curveEaseOut]) {
-            self.card.transform = .identity
+        animateIn()
+    }
+
+    /// Puts the sheet in its off-screen state and lays it out there.
+    private func prepareForPresentation(offset: CGFloat) {
+        cardOffset = offset
+        dimView.alpha = 0.0
+        view.layoutIfNeeded()
+    }
+
+    /// The entrance in reverse, and only then the dismissal — so the sheet leaves the way it
+    /// arrived instead of cross-fading in place. `answer` runs after it is gone, which is the
+    /// contract every caller already relied on.
+    private func animateOut(_ answer: @escaping () -> Void) {
+        cardOffset = view.bounds.height
+        view.setNeedsLayout()
+        UIView.animate(withDuration: 0.26, delay: 0.0, options: [.curveEaseIn]) {
+            self.dimView.alpha = 0.0
+            self.view.layoutIfNeeded()
+        } completion: { [weak self] _ in
+            guard let self else {
+                answer()
+                return
+            }
+            self.dismiss(animated: false, completion: answer)
+        }
+    }
+
+    /// One beat: the dim comes up while the card springs into place.
+    private func animateIn() {
+        cardOffset = 0.0
+        view.setNeedsLayout()
+        UIView.animate(withDuration: 0.42, delay: 0.0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0.0, options: [.curveEaseOut, .allowUserInteraction]) {
+            self.dimView.alpha = 1.0
+            self.view.layoutIfNeeded()
         }
     }
 
@@ -5915,17 +5971,13 @@ private final class AorusAIShareScopeController: UIViewController {
         guard index < ordered.count else { return }
         didAnswer = true
         let option = ordered[index]
-        dismiss(animated: true) { [weak self] in
-            self?.onSelect(option)
-        }
+        animateOut { [weak self] in self?.onSelect(option) }
     }
 
     @objc private func cancelTapped() {
         guard !didAnswer else { return }
         didAnswer = true
-        dismiss(animated: true) { [weak self] in
-            self?.onCancel()
-        }
+        animateOut { [weak self] in self?.onCancel() }
     }
 }
 
