@@ -230,6 +230,63 @@ def check_duplicate_deinit(root: Path, ui: Path, errors: list) -> None:
                 )
 
 
+LOCAL_DECL = re.compile(r"^[ \t]*(?:let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|:)")
+CASE_LABEL = re.compile(r"^[ \t]*(?:case\b|default\s*:)")
+
+
+def check_duplicate_locals(root: Path, ui: Path, errors: list) -> None:
+    """A name may be bound once per brace scope.
+
+    `invalid redeclaration of 'x'` is the same shape of failure as the duplicate `deinit`
+    above: a redeclaration, not a syntax error, so `-frontend -parse` accepts it and Bazel
+    rejects it half an hour in. It happened by hoisting a `let` to the top of a function
+    and leaving the original line where it was — which is how a hoist goes wrong every
+    time, since the second binding still reads correctly on its own.
+
+    Only bindings that start their own line are counted, so `if let`, `guard let`,
+    `for ... in`, `case let` and closure parameters are all left alone; those introduce
+    scopes of their own and shadowing across them is ordinary Swift. A `case` or `default`
+    label starts a fresh set inside the current braces, because a switch's cases are
+    separate scopes without separate braces. What is left is exactly the plain body
+    binding, which is the one a hoist duplicates.
+
+    Two exclusions, both found by running this over the tree. `let _ = …` binds nothing
+    and may appear any number of times. And a line following one that ends in a comma is
+    the second clause of a multi-line condition — `if let data = …,` then `let records =
+    …` — which starts with `let` at the beginning of a line but belongs to the `if`.
+    """
+    for source in sorted(ui.rglob("*.swift")):
+        code = _scrubbed(source.read_text(encoding="utf-8"))
+        # One set of bound names per open brace. Shadowing a name from an enclosing scope
+        # is legal and common (`let source = self.source`), so only the innermost set is
+        # ever consulted.
+        scopes = [set()]
+        previous = ""
+        for number, line in enumerate(code.splitlines(), start=1):
+            if CASE_LABEL.match(line):
+                scopes[-1] = set()
+            match = LOCAL_DECL.match(line)
+            if match is not None and match.group(1) != "_" and not previous.endswith(","):
+                name = match.group(1)
+                if name in scopes[-1]:
+                    errors.append(
+                        f"{source.relative_to(root)}:{number}: '{name}' is declared twice in "
+                        f"one scope — Swift rejects the second binding"
+                    )
+                else:
+                    scopes[-1].add(name)
+            opened = line.count("{")
+            closed = line.count("}")
+            for _ in range(opened):
+                scopes.append(set())
+            for _ in range(closed):
+                if len(scopes) > 1:
+                    scopes.pop()
+            stripped = line.strip()
+            if stripped:
+                previous = stripped
+
+
 def check_build_dependencies(root: Path, ui: Path, errors: list) -> None:
     """Every module the sources import must be a dependency of the Bazel target.
 
@@ -285,6 +342,7 @@ def main() -> int:
     check_selector_ambiguity(root, ui, errors)
     check_upstream_functions(root, ui, errors)
     check_duplicate_deinit(root, ui, errors)
+    check_duplicate_locals(root, ui, errors)
 
     for error in errors:
         print(f"AorusAI scope check: {error}", file=sys.stderr)

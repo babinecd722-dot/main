@@ -3766,7 +3766,9 @@ private final class AorusAIComposerView: UIView {
         )
         textView.attributedText = rendered.text
         textView.typingAttributes = base
-        let caretSource = max(0, sourceLength - tail)
+        // `caretSource` is the one computed above, before the rebuild — the same value this
+        // line used to recompute here, now needed earlier because it is what decides
+        // whether the last handle is still being typed.
         let caret = min(rendered.text.length, Self.renderedOffset(forSource: caretSource, placements: rendered.placements))
         textView.selectedRange = NSRange(location: caret, length: 0)
         textView.refreshMentionImages()
