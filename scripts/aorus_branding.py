@@ -12676,6 +12676,36 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
     The recipient's own gift-privacy prune and the channel prune are lifted for the same
     reason — with the purchase local, nothing reaches the recipient to be refused — so the
     picker shows the complete catalogue rather than the subset that peer accepts.
+
+    Once a retired gift actually buys, the parts of the interface that describe it as
+    unbuyable are wrong rather than merely decorative, so they go with it:
+
+      * the red "Sold Out" ribbon and the dimmed artwork in the picker — the gift falls
+        through to the ordinary "Limited" ribbon it would have carried while on sale;
+      * the "0 of 150 000 remaining" bar on the setup screen, which is the same statement
+        in another shape. Skipping the block leaves exactly the layout an unlimited gift
+        already produces, since an unlimited gift never enters it.
+
+    Auction gifts are the other half. They are not sold out — they are sold through a
+    bidding flow the server runs, which a local purchase has no part in. Three things
+    route them into it: the picker replaces the price on the card with a "Join auction"
+    label, `openGift` pushes the auction screens instead of the setup screen, and the
+    setup screen subscribes to a `GiftAuctionContext` whose presence alone turns the send
+    button into a countdown and the proceed action into a bid. All three are gated, and
+    with the context left unsubscribed the setup screen is the plain one: a price button
+    that spends fake Stars.
+
+    Gifts still on sale through resale are deliberately untouched in all of this — resale
+    has a working upstream flow of its own, so the green ribbon, the resale price and the
+    store route stay exactly as they are.
+
+    Two things are done about what this costs, and both are about work this patch itself
+    adds rather than a lag anyone has profiled. The flag is read once per layout pass and
+    not once per gift — `isEnabled` is two or three `UserDefaults` lookups, and the guards
+    it feeds sit in the picker's per-visible-item branches, which run for every card on
+    screen on every scroll frame. And the item walk now stops at the bottom of the visible
+    window: upstream walks the whole list every pass, which was affordable while the list
+    was the subset the recipient accepts and is not once it is the entire history.
     """
     options = tg / "submodules/TelegramUI/Components/Gifts/GiftOptionsScreen/Sources/GiftOptionsScreen.swift"
     if not options.is_file():
@@ -12727,6 +12757,74 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
                 "                // AorusGram: and the same for the channel prune.\n"
                 "                if !AorusFakeStarsStore.isEnabled, peerId.namespace == Namespaces.Peer.CloudChannel {\n",
             ),
+            (
+                "auction route",
+                "                    if gift.flags.contains(.isAuction) && !((gift.availability?.resale ?? 0) > 0) {\n"
+                "                        guard let giftAuctionsManager = component.context.giftAuctionsManager else {\n",
+                "                    // AorusGram: an auction is the server running a bidding round.\n"
+                "                    // A local purchase takes no part in one, so under fake Stars the\n"
+                "                    // gift skips the auction screens and opens the ordinary setup\n"
+                "                    // screen in the `else` below — the same one every other gift here\n"
+                "                    // opens. A gift with an active resale keeps the upstream route,\n"
+                "                    // which already works.\n"
+                "                    if !AorusFakeStarsStore.isEnabled, gift.flags.contains(.isAuction) && !((gift.availability?.resale ?? 0) > 0) {\n"
+                "                        guard let giftAuctionsManager = component.context.giftAuctionsManager else {\n",
+            ),
+            (
+                "layout flag",
+                "            let visibleBounds = self.scrollView.bounds.insetBy(dx: 0.0, dy: -10.0)\n",
+                "            let visibleBounds = self.scrollView.bounds.insetBy(dx: 0.0, dy: -10.0)\n"
+                "            // AorusGram: read once per layout pass. The two branches below run for\n"
+                "            // every card on screen on every scroll frame, and `isEnabled` is a\n"
+                "            // UserDefaults lookup — cheap once, not cheap a few hundred times a\n"
+                "            // second.\n"
+                "            let aorusLocalGifts = AorusFakeStarsStore.isEnabled\n",
+            ),
+            (
+                "visible window break",
+                "                for gift in starGifts {\n"
+                "                    var isVisible = false\n"
+                "                    if visibleBounds.intersects(itemFrame) {\n",
+                "                for gift in starGifts {\n"
+                "                    // AorusGram: the grid is laid out top to bottom, so once a row\n"
+                "                    // starts below the visible window every row after it does too.\n"
+                "                    // Upstream walks the whole catalogue on every layout pass and\n"
+                "                    // every scroll frame regardless, which was affordable while the\n"
+                "                    // list was the pruned subset the recipient accepts. It is not\n"
+                "                    // that list any more — the guards above hand the picker the\n"
+                "                    // entire history — so the walk stops where the screen does.\n"
+                "                    if itemFrame.minY > visibleBounds.maxY {\n"
+                "                        break\n"
+                "                    }\n"
+                "                    var isVisible = false\n"
+                "                    if visibleBounds.intersects(itemFrame) {\n",
+            ),
+            (
+                "sold-out ribbon",
+                "                        case let .generic(gift):\n"
+                "                            if let _ = gift.soldOut {\n",
+                "                        case let .generic(gift):\n"
+                "                            // AorusGram: a retired gift buys locally, so \"Sold Out\" is\n"
+                "                            // no longer true of it. Falling through to the branch below\n"
+                "                            // gives it the ordinary \"Limited\" ribbon it carried while it\n"
+                "                            // was on sale, and leaves `isSoldOut` false so the artwork is\n"
+                "                            // drawn at full strength rather than dimmed. Resale gifts are\n"
+                "                            // excluded: their green ribbon and resale route work already.\n"
+                "                            if !aorusLocalGifts || (gift.availability?.resale ?? 0) > 0, let _ = gift.soldOut {\n",
+            ),
+            (
+                "auction price label",
+                "                        case let .generic(gift):\n"
+                "                            if gift.flags.contains(.isAuction) {\n"
+                "                                var action = environment.strings.Gift_Options_Gift_JoinAuction\n",
+                "                        case let .generic(gift):\n"
+                "                            // AorusGram: with the auction route gone, the card showing\n"
+                "                            // \"Join auction\" where its price belongs would lead nowhere.\n"
+                "                            // It falls through to the plain price, which is what the\n"
+                "                            // setup screen now charges.\n"
+                "                            if !aorusLocalGifts, gift.flags.contains(.isAuction) {\n"
+                "                                var action = environment.strings.Gift_Options_Gift_JoinAuction\n",
+            ),
         ]
         for name, old, new in replacements:
             if text.count(old) != 1:
@@ -12740,25 +12838,49 @@ def patch_fake_stars_all_gifts(tg: Path) -> None:
         raise RuntimeError("FakeStarsAllGifts: GiftSetupScreen.swift is missing")
     stext = setup.read_text(encoding="utf-8")
     if "// AorusGram: a sold-out gift can still be sent locally" in stext:
-        print("FakeStarsAllGifts: GiftSetupScreen send button already patched")
+        print("FakeStarsAllGifts: GiftSetupScreen already patched")
         return
-    old_button = (
-        "                if let availability = starGift.availability, availability.remains == 0 {\n"
-        "                    buttonIsEnabled = false\n"
-        "                }\n"
-    )
-    new_button = (
-        "                // AorusGram: a sold-out gift can still be sent locally. Gate 2 of the\n"
-        "                // three; the payment itself is replaced further down when the store is\n"
-        "                // enabled, so the button now leads somewhere that works.\n"
-        "                if !AorusFakeStarsStore.isEnabled, let availability = starGift.availability, availability.remains == 0 {\n"
-        "                    buttonIsEnabled = false\n"
-        "                }\n"
-    )
-    if stext.count(old_button) != 1:
-        raise RuntimeError(f"FakeStarsAllGifts: send-button anchor not unique ({stext.count(old_button)})")
-    setup.write_text(stext.replace(old_button, new_button, 1), encoding="utf-8")
-    print("FakeStarsAllGifts: patched GiftSetupScreen send button")
+    setup_replacements = [
+        (
+            "send button",
+            "                if let availability = starGift.availability, availability.remains == 0 {\n"
+            "                    buttonIsEnabled = false\n"
+            "                }\n",
+            "                // AorusGram: a sold-out gift can still be sent locally. Gate 2 of the\n"
+            "                // three; the payment itself is replaced further down when the store is\n"
+            "                // enabled, so the button now leads somewhere that works.\n"
+            "                if !AorusFakeStarsStore.isEnabled, let availability = starGift.availability, availability.remains == 0 {\n"
+            "                    buttonIsEnabled = false\n"
+            "                }\n",
+        ),
+        (
+            "auction context",
+            "                if case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction), let giftAuctionsManager = component.context.giftAuctionsManager {\n",
+            "                // AorusGram: this subscription is what makes the screen an auction\n"
+            "                // screen. `giftAuction` being non-nil turns the send button into a\n"
+            "                // round countdown and the proceed action into a bid, and\n"
+            "                // `giftAuctionState` overrides the remaining count. Left unsubscribed\n"
+            "                // under fake Stars, the screen is the plain one: a price button that\n"
+            "                // spends the local balance.\n"
+            "                if !AorusFakeStarsStore.isEnabled, case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction), let giftAuctionsManager = component.context.giftAuctionsManager {\n",
+        ),
+        (
+            "availability bar",
+            "            if case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {\n",
+            "            // AorusGram: \"0 of 150 000 remaining\" is the sold-out claim in another\n"
+            "            // shape, and it is not true of a gift that is about to buy. Skipping the\n"
+            "            // block is exactly the layout an unlimited gift produces — one never\n"
+            "            // enters it — so nothing below needs adjusting. It also takes the auction\n"
+            "            // footer, which lives inside it and would have nothing to open.\n"
+            "            if !AorusFakeStarsStore.isEnabled, case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {\n",
+        ),
+    ]
+    for name, old, new in setup_replacements:
+        if stext.count(old) != 1:
+            raise RuntimeError(f"FakeStarsAllGifts: {name} anchor not unique ({stext.count(old)})")
+        stext = stext.replace(old, new, 1)
+    setup.write_text(stext, encoding="utf-8")
+    print("FakeStarsAllGifts: patched GiftSetupScreen (send button, auction context, availability bar)")
 
 
 def patch_stars_purchase_redirects(tg: Path) -> None:

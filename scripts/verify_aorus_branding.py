@@ -886,14 +886,34 @@ def main() -> None:
         if "AorusGram: every gift is buyable locally" not in gift_options_text:
             err.append("FakeStars: sold-out gifts are still diverted to the read-only card")
         guards = gift_options_text.count("!AorusFakeStarsStore.isEnabled")
-        if guards != 5:
-            err.append(f"FakeStars: gift picker has {guards} local-store guards, expected 5")
+        if guards != 6:
+            err.append(f"FakeStars: gift picker has {guards} local-store guards, expected 6")
+        # The two per-visible-item branches read a hoisted local instead of the store, so
+        # a card being drawn on a scroll frame costs no UserDefaults lookup. They are
+        # counted separately from the guards above for that reason: a future edit that
+        # "simplifies" them back to `AorusFakeStarsStore.isEnabled` would still pass the
+        # count above while putting the lookup back into the scroll path.
+        if "let aorusLocalGifts = AorusFakeStarsStore.isEnabled" not in gift_options_text:
+            err.append("FakeStars: the picker no longer hoists the local-store flag per layout pass")
+        if gift_options_text.count("!aorusLocalGifts") != 2:
+            err.append("FakeStars: the sold-out ribbon and the auction price label are not both gated")
+        # With the prunes lifted the picker holds the whole catalogue, so the item walk has
+        # to stop at the bottom of the screen instead of running the list every frame.
+        if "if itemFrame.minY > visibleBounds.maxY {" not in gift_options_text:
+            err.append("FakeStars: the gift grid walks the whole catalogue on every layout pass")
     if gift_setup.is_file():
         gift_setup_text = gift_setup.read_text(encoding="utf-8")
         if "AorusGram: a sold-out gift can still be sent locally" not in gift_setup_text:
             err.append("FakeStars: the send button is still disabled for a sold-out gift")
         if "if !AorusFakeStarsStore.isEnabled, let availability = starGift.availability" not in gift_setup_text:
             err.append("FakeStars: the send button's sold-out guard is not tied to the local store")
+        # The remaining-count bar states the sold-out claim in another shape, and the
+        # auction context is what turns this screen into a bidding screen at all — the
+        # send button alone is not enough to make a retired or auction gift buyable.
+        if "if !AorusFakeStarsStore.isEnabled, case let .starGift(starGift, _) = component.subject, let availability = starGift.availability {" not in gift_setup_text:
+            err.append("FakeStars: the setup screen still shows the remaining-count bar")
+        if "if !AorusFakeStarsStore.isEnabled, case let .starGift(gift, _) = component.subject, gift.flags.contains(.isAuction)" not in gift_setup_text:
+            err.append("FakeStars: the setup screen still subscribes to the auction context")
 
     fake_gifts_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftsController.swift"
     fake_gift_manage_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftManageController.swift"
@@ -3533,6 +3553,26 @@ def main() -> None:
         err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIMention.swift")
     if ai_ui.is_file() and "AorusAIMentionRenderer.map(entities:" not in ai_ui_text:
         err.append("AorusAI: message bodies no longer draw their mentions inline")
+    if ai_mention.is_file():
+        ai_mention_text = ai_mention.read_text(encoding="utf-8")
+        # Two rules the composer's input depends on, and they pull against each other:
+        # a handle still being written must stay letters so a longer name can be finished,
+        # and a finished pill must go in one press of backspace. Both are easy to lose to
+        # a "simplification" that keeps the screen looking identical until someone types.
+        if "static func handleBeingTyped(" not in ai_mention_text:
+            err.append("AorusAI: a handle being typed is no longer held back from becoming a pill")
+        if "override func deleteBackward()" not in ai_mention_text or "onDeleteBackward" not in ai_mention_text:
+            err.append("AorusAI: a mention pill no longer deletes in one press")
+        if "func mentionRun(endingAt" not in ai_mention_text:
+            err.append("AorusAI: the pill-under-the-caret lookup is gone")
+    if ai_ui.is_file():
+        for marker, message in (
+            ("private func updateTypingHandle(", "AorusAI: the composer no longer tracks the handle being typed"),
+            ("private func deleteMentionBeforeCaret(", "AorusAI: the composer no longer deletes a pill whole"),
+            ("func refreshMentionStyling(", "AorusAI: moving the caret no longer finishes a handle"),
+        ):
+            if marker not in ai_ui_text:
+                err.append(message)
 
     if not ai_context_menu.is_file():
         err.append("AorusAI: missing submodules/AorusGramUI/Sources/Features/AI/AorusAIMessageContextMenu.swift")

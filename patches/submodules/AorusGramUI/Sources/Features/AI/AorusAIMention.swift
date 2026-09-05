@@ -108,23 +108,31 @@ enum AorusAIMentionRenderer {
 
     /// Builds the display text of `source` from scratch. Used by the composer, which owns
     /// its plain text and needs the source↔display mapping to keep the caret still.
+    ///
+    /// `plain` names one handle that must be left as the characters it is made of, however
+    /// well it resolves. The composer passes the handle the user is in the middle of
+    /// typing: `@durov` is a real person the moment those six characters exist, and
+    /// replacing it with a pill right then is what made `@durovnews` impossible to type —
+    /// the name was gone before the rest of it could be written.
     static func render(
         source: String,
         resolved: [String: AorusAIMention],
         base: [NSAttributedString.Key: Any],
         font: UIFont,
         accent: UIColor,
-        link: Bool
+        link: Bool,
+        plain: NSRange? = nil
     ) -> (text: NSMutableAttributedString, placements: [Placement]) {
         let value = NSMutableAttributedString()
         var placements: [Placement] = []
         let nsSource = source as NSString
         var cursor = 0
         for match in AorusAIMentionScanner.matches(in: source) {
+            if let plain, NSEqualRanges(plain, match.range) { continue }
             guard let mention = resolved[match.username.lowercased()] else { continue }
             if match.range.location > cursor {
-                let plain = NSRange(location: cursor, length: match.range.location - cursor)
-                value.append(NSAttributedString(string: nsSource.substring(with: plain), attributes: base))
+                let gap = NSRange(location: cursor, length: match.range.location - cursor)
+                value.append(NSAttributedString(string: nsSource.substring(with: gap), attributes: base))
             }
             let renderedLocation = value.length
             let sourceText = nsSource.substring(with: match.range)
@@ -138,8 +146,8 @@ enum AorusAIMentionRenderer {
             cursor = NSMaxRange(match.range)
         }
         if cursor < nsSource.length {
-            let plain = NSRange(location: cursor, length: nsSource.length - cursor)
-            value.append(NSAttributedString(string: nsSource.substring(with: plain), attributes: base))
+            let tail = NSRange(location: cursor, length: nsSource.length - cursor)
+            value.append(NSAttributedString(string: nsSource.substring(with: tail), attributes: base))
         }
         return (value, placements)
     }
@@ -271,14 +279,44 @@ enum AorusAIMentionRenderer {
     /// against the last one it drew and rebuilds only when the pills themselves change —
     /// typing an ordinary character must never rewrite the input's attributed text under
     /// the user's caret.
-    static func signature(source: String, resolved: [String: AorusAIMention]) -> String {
+    ///
+    /// `plain` takes part in it: a handle held back because it is being typed and the same
+    /// handle drawn as its person are two different pictures of the same text, so moving
+    /// the caret off the end of a handle has to count as a change even though not one
+    /// character moved.
+    static func signature(source: String, resolved: [String: AorusAIMention], plain: NSRange? = nil) -> String {
         var parts: [String] = []
         let nsSource = source as NSString
         for match in AorusAIMentionScanner.matches(in: source) {
+            if let plain, NSEqualRanges(plain, match.range) { continue }
             guard let mention = resolved[match.username.lowercased()] else { continue }
             parts.append("\(mention.peerId)/\(nsSource.substring(with: match.range))/\(mention.displayName)")
         }
+        if let plain {
+            parts.append("typing@\(plain.location),\(plain.length)")
+        }
         return parts.joined(separator: "|")
+    }
+
+    /// The handle the caret is still inside, if there is one.
+    ///
+    /// "Still inside" is deliberately narrow: the caret has to sit at the very end of the
+    /// handle *and* the handle has to run to the end of the text. Both together are the
+    /// one state that means the user has not finished writing it — anywhere else, the
+    /// handle is followed by something they have already typed, so it is finished and is
+    /// drawn as the person.
+    ///
+    /// Parking the caret behind a finished pill therefore leaves it a pill, which is what
+    /// makes a single backspace able to delete the whole person: a pill that dissolved
+    /// back into its letters as soon as the caret arrived would only ever lose its last
+    /// letter.
+    static func handleBeingTyped(source: String, caret: Int) -> NSRange? {
+        let length = (source as NSString).length
+        guard caret == length, length > 0 else { return nil }
+        for match in AorusAIMentionScanner.matches(in: source) where NSMaxRange(match.range) == length {
+            return match.range
+        }
+        return nil
     }
 }
 
@@ -513,6 +551,48 @@ class AorusAIMentionTextView: UITextView {
     func configureMentions(context: AccountContext, theme: PresentationTheme) {
         AorusAIMentionAvatarCache.shared.use(context: context)
         refreshMentionImages()
+    }
+
+    /// Asked before the system deletes anything backwards. Returning true means the pill
+    /// under the caret was taken out whole and UIKit must not act again.
+    var onDeleteBackward: (() -> Bool)?
+
+    /// One tap of the backspace key removes the whole person.
+    ///
+    /// This has to be caught here rather than in
+    /// `textView(_:shouldChangeTextIn:replacementText:)`, which already knows how to widen
+    /// an edit to cover a pill: a pill begins with a text attachment, and UIKit's own
+    /// backspace handling for a run containing one selects it first and deletes it on the
+    /// *second* press — a selection change, not a text change, so the delegate is never
+    /// consulted and the widening never runs. Overriding the key itself is what makes the
+    /// first press the only one needed.
+    ///
+    /// Only a bare caret standing immediately after a pill is claimed. A real selection,
+    /// or a caret with ordinary text behind it, is left to `super`, which still goes
+    /// through the delegate.
+    override func deleteBackward() {
+        if onDeleteBackward?() == true {
+            return
+        }
+        super.deleteBackward()
+    }
+
+    /// The pill that ends exactly at `caret`, or nil if the caret is not standing right
+    /// behind one.
+    ///
+    /// The run carrying the attribute is not always the pill alone: characters typed
+    /// straight after a pill inherit its attributes and merge into the run, which is why
+    /// the box records the pill's own drawn length. Those characters are the user's own
+    /// text and backspace must take them one at a time, so the run is trimmed to the pill
+    /// and claimed only when the caret is at the pill's own end.
+    func mentionRun(endingAt caret: Int) -> NSRange? {
+        guard caret > 0, caret <= textStorage.length else { return nil }
+        var effective = NSRange(location: 0, length: 0)
+        guard let box = textStorage.attribute(.aorusAIMention, at: caret - 1, effectiveRange: &effective) as? AorusAIMentionBox else { return nil }
+        guard effective.length > 0, box.renderedLength > 0 else { return nil }
+        let run = NSRange(location: effective.location, length: min(effective.length, box.renderedLength))
+        guard NSMaxRange(run) == caret else { return nil }
+        return run
     }
 
     /// Swaps a newly drawn photo into the pills already on screen.

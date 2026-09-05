@@ -36,6 +36,18 @@ struct AorusAIPalette {
     var elevated: UIColor
     /// Quotes, chips, the search field.
     var fill: UIColor
+    /// A bare control's own surface.
+    ///
+    /// `fill` is a low alpha because almost everywhere it is used, the contrast comes from
+    /// what is drawn on top of it: a row carrying a figure, a title, a note and a hairline
+    /// reads as a panel at a tenth of the label colour. A button is nothing but its surface
+    /// and one line of text in the same colour as the rest of the card, and at that alpha
+    /// it stopped reading as a button at all — the title looked like a centred caption.
+    /// Twice the alpha, which is still a neutral fill and still derived from the theme.
+    var controlFill: UIColor
+    /// The same surface under a finger. The rows next to it darken on touch by drawing
+    /// `fill` over themselves a second time; this is that, resolved.
+    var controlFillHighlighted: UIColor
     var separator: UIColor
     var label: UIColor
     var secondary: UIColor
@@ -60,6 +72,8 @@ struct AorusAIPalette {
             // on any background. Same here, so a custom theme gets a fill that belongs to
             // it instead of a grey borrowed from the stock one.
             fill: label.withAlphaComponent(isDark ? 0.10 : 0.055),
+            controlFill: label.withAlphaComponent(isDark ? 0.20 : 0.11),
+            controlFillHighlighted: label.withAlphaComponent(isDark ? 0.30 : 0.165),
             separator: list.itemBlocksSeparatorColor,
             label: label,
             secondary: list.itemSecondaryTextColor,

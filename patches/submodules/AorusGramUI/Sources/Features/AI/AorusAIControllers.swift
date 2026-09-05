@@ -1762,6 +1762,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     func textViewDidChangeSelection(_ textView: UITextView) {
         guard textView === composer.textView else { return }
         composer.resetTypingAttributes()
+        // Moving the caret off the end of a half-written handle is what finishes it, and
+        // no text changed to say so. The composer's signature check makes every other
+        // caret move — which is nearly all of them — cost nothing.
+        composer.refreshMentionStyling()
     }
 
     // The composer carries no brand row: the header already says AorusAI, and a second
@@ -3352,6 +3356,11 @@ private final class AorusAIComposerView: UIView {
         get { textView.attributedText?.aorusAIPlainText ?? "" }
         set {
             renderedMentionSignature = nil
+            // Text the user did not type: a restored draft, or the input being emptied
+            // after a send. Nothing is half-written in it, so a handle at its end is
+            // finished and is drawn as the person straight away.
+            typingHandle = nil
+            lastStyledSource = newValue
             textView.attributedText = NSAttributedString(string: newValue, attributes: baseTextAttributes())
             textView.refreshMentionImages()
             placeholder.isHidden = isDictating || !newValue.isEmpty
@@ -3442,6 +3451,9 @@ private final class AorusAIComposerView: UIView {
         // label, which is laid out at x: 0 — so the caret sat on top of the "С" of
         // "Спросите". Both now start at the same x.
         textView.textContainer.lineFragmentPadding = 0
+        textView.onDeleteBackward = { [weak self] in
+            return self?.deleteMentionBeforeCaret() ?? false
+        }
         referenceLabel.font = .systemFont(ofSize: 12)
         referenceLabel.numberOfLines = 1
         referenceLabel.lineBreakMode = .byTruncatingTail
@@ -3639,10 +3651,81 @@ private final class AorusAIComposerView: UIView {
         textView.typingAttributes = baseTextAttributes()
     }
 
+    /// Re-decides which handles are pills after the caret has moved on its own.
+    ///
+    /// Typing already routes through `entities`, but moving the caret does not change the
+    /// text at all — and it is what finishes a handle: leaving the end of `@durov` means
+    /// the user is done writing it, so it becomes the person. The signature guard makes
+    /// this free on every caret move that changes nothing.
+    func refreshMentionStyling() {
+        applyMentionStyling()
+    }
+
+    /// Deletes the pill standing immediately before the caret, whole, in one press.
+    ///
+    /// Returns false for anything else — a selection, a caret with ordinary characters
+    /// behind it — so the system's own backspace runs and the delegate's edit widening
+    /// still covers the cases it was written for.
+    private func deleteMentionBeforeCaret() -> Bool {
+        let selection = textView.selectedRange
+        guard selection.length == 0 else { return false }
+        guard let run = textView.mentionRun(endingAt: selection.location) else { return false }
+        let storage = textView.textStorage
+        guard NSMaxRange(run) <= storage.length else { return false }
+        storage.beginEditing()
+        storage.deleteCharacters(in: run)
+        storage.endEditing()
+        // Cleared before the selection moves, not after: assigning `selectedRange` calls
+        // the delegate synchronously, which comes back through `refreshMentionStyling`,
+        // and that pass has to already know the drawn text is stale.
+        renderedMentionSignature = nil
+        textView.selectedRange = NSRange(location: run.location, length: 0)
+        textView.typingAttributes = baseTextAttributes()
+        textView.refreshMentionImages()
+        textView.delegate?.textViewDidChange?(textView)
+        return true
+    }
+
     /// What the pills currently drawn in the input describe. Comparing against it is what
     /// keeps an ordinary keystroke from rewriting the whole attributed text — and moving
     /// the caret — when nothing about the mentions has changed.
     private var renderedMentionSignature: String?
+
+    /// The handle the user is in the middle of writing, held back from becoming a pill.
+    /// See `updateTypingHandle`.
+    private var typingHandle: NSRange?
+    /// The source text the last styling pass saw, which is how a pass caused by an edit is
+    /// told apart from one caused by the caret moving on its own.
+    private var lastStyledSource: String?
+
+    /// Decides whether the handle at the end of the input is still being written.
+    ///
+    /// Two requirements, and the second is the one that matters. A handle only counts if
+    /// the caret is at its end *and* it runs to the end of the text — anything typed after
+    /// it means the user finished it. And the state is only entered by an **edit**: a pass
+    /// that ran because the text changed. A caret that merely arrives at the end of a
+    /// finished pill leaves it a pill.
+    ///
+    /// That second requirement is what lets both of these be true at once. Typing
+    /// `@durovnews` never loses the name to a pill for `@durov` halfway through, because
+    /// every keystroke is an edit at the end of the handle. And tapping behind a finished
+    /// `@durov` and pressing backspace once deletes the person, because arriving there
+    /// changed nothing and the pill is still a pill.
+    ///
+    /// Shrinking counts as editing too: backspacing through `@durovnews` must not stop at
+    /// `@durov` and suddenly draw a person the user is in the middle of deleting.
+    private func updateTypingHandle(source: String, caret: Int) -> NSRange? {
+        let previous = lastStyledSource
+        lastStyledSource = source
+        guard let trailing = AorusAIMentionRenderer.handleBeingTyped(source: source, caret: caret) else {
+            typingHandle = nil
+            return nil
+        }
+        if previous != source || typingHandle != nil {
+            typingHandle = trailing
+        }
+        return typingHandle
+    }
 
     /// Draws every resolved handle in the input as its person.
     ///
@@ -3658,13 +3741,19 @@ private final class AorusAIComposerView: UIView {
         textView.typingAttributes = base
         let source = self.text
         let resolved = AorusAIMentionRenderer.map(from: entities)
-        let signature = AorusAIMentionRenderer.signature(source: source, resolved: resolved)
-        guard signature != renderedMentionSignature else { return }
-        renderedMentionSignature = signature
 
+        // Where the caret is in the text the user actually wrote, which is what decides
+        // whether the last handle is finished or still being typed. It has to be computed
+        // before the rebuild: afterwards the displayed text is a different length.
         let sourceLength = (source as NSString).length
         let selection = textView.selectedRange
         let tail = max(0, sourceLength - Self.sourceOffset(forRendered: selection.location, placements: currentPlacements()))
+        let caretSource = max(0, sourceLength - tail)
+        let beingTyped = updateTypingHandle(source: source, caret: caretSource)
+
+        let signature = AorusAIMentionRenderer.signature(source: source, resolved: resolved, plain: beingTyped)
+        guard signature != renderedMentionSignature else { return }
+        renderedMentionSignature = signature
 
         let rendered = AorusAIMentionRenderer.render(
             source: source,
@@ -3672,7 +3761,8 @@ private final class AorusAIComposerView: UIView {
             base: base,
             font: AorusAIComposerView.inputFont,
             accent: palette.accent,
-            link: false
+            link: false,
+            plain: beingTyped
         )
         textView.attributedText = rendered.text
         textView.typingAttributes = base
@@ -5571,6 +5661,28 @@ func aorusAIMessageWord(_ count: Int) -> String {
     }
 }
 
+/// A filled button that answers to being pressed.
+///
+/// `UIButton` dims only its *title* on touch, which on a surface of its own reads as
+/// nothing happening: the panel the finger is on stays exactly as it was. The rows above
+/// this button darken their whole surface, so it does the same.
+private final class AorusAIFilledButton: UIButton {
+    private var fill: UIColor = .clear
+    private var fillHighlighted: UIColor = .clear
+
+    func configure(fill: UIColor, highlighted: UIColor) {
+        self.fill = fill
+        self.fillHighlighted = highlighted
+        backgroundColor = isHighlighted ? highlighted : fill
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            backgroundColor = isHighlighted ? fillHighlighted : fill
+        }
+    }
+}
+
 /// One choice on the sheet: a count of messages, or the date range.
 private final class AorusAIScopeRowView: UIControl {
     private let countLabel = UILabel()
@@ -5697,7 +5809,9 @@ private final class AorusAIShareScopeController: UIViewController {
     private let bodyLabel = UILabel()
     private let rowsContainer = UIView()
     private var rows: [AorusAIScopeRowView] = []
-    private let cancelButton = UIButton(type: .system)
+    // `init(frame:)` rather than `init(type:)`: `+buttonWithType:` is a factory that decides
+    // the class it returns, and the subclass is the whole point of this one.
+    private let cancelButton = AorusAIFilledButton()
     private let peerDisposable = MetaDisposable()
     private var didAnimateIn = false
     /// How far below its resting place the card sits, honoured by `viewDidLayoutSubviews`.
@@ -5781,11 +5895,15 @@ private final class AorusAIShareScopeController: UIViewController {
         buildRows()
 
         cancelButton.setTitle(aorusAILocalized("Не делиться", "Don't share"), for: .normal)
-        cancelButton.titleLabel?.font = .systemFont(ofSize: 17.0, weight: .medium)
+        cancelButton.titleLabel?.font = .systemFont(ofSize: 17.0, weight: .semibold)
         cancelButton.setTitleColor(palette.label, for: .normal)
-        cancelButton.backgroundColor = palette.fill
+        // Its own surface rather than the panel fill the rows sit on: those rows carry
+        // figures, titles and hairlines that make the panel legible, and a button carrying
+        // one line of label-coloured text on the same fill read as no button at all.
+        cancelButton.configure(fill: palette.controlFill, highlighted: palette.controlFillHighlighted)
         cancelButton.layer.cornerRadius = 14.0
         cancelButton.layer.cornerCurve = .continuous
+        cancelButton.clipsToBounds = true
         cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
         card.addSubview(cancelButton)
 

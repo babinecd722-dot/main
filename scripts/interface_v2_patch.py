@@ -2313,7 +2313,17 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
     ///
     /// Two levels deep is enough for every item in the app: the background node is a direct child of
     /// the item node, and the one exception is an item that wraps its row in a container.
-    private func aorusCollectCardRects(_ node: ASDisplayNode, depth: Int, into rects: inout [CGRect]) {
+    ///
+    /// `clip` is the row that owns these nodes, and every rect is cut to it. A card belongs to a
+    /// row and cannot be taller than one, but the marker is a colour and not every node wearing it
+    /// is a card: `DatePickerTheme` hands `itemBlocksBackgroundColor` to the calendar's own interior
+    /// -- the node itself and the three panels inside it -- and a `DatePickerNode` is laid out at
+    /// its full expanded height whether the row is expanded or not. Uncut, that one content node
+    /// claimed some four hundred points of card inside a fifty-two point row, and the pane behind
+    /// the date block was drawn to match: the block stretched far past its own row. Cutting to the
+    /// row leaves the deliberate overhang intact -- a card overlaps its neighbours by a hairline so
+    /// the runs join, which is a fraction of a point against the four allowed here.
+    private func aorusCollectCardRects(_ node: ASDisplayNode, depth: Int, clip: CGRect, into rects: inout [CGRect]) {
         guard let subnodes = node.subnodes else {
             return
         }
@@ -2321,12 +2331,12 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
             if let color = subnode.backgroundColor, AorusGlassPane.isBlockMarker(color) {
                 // Through the layer tree rather than the node tree, because the list is drawn in a
                 // rotated coordinate space and a layer conversion is what accounts for that.
-                let rect = subnode.layer.convert(subnode.bounds, to: self.layer)
-                if rect.height > 1.0 {
+                let rect = subnode.layer.convert(subnode.bounds, to: self.layer).intersection(clip)
+                if !rect.isNull, rect.height > 1.0 {
                     rects.append(rect)
                 }
             } else if depth > 0 {
-                self.aorusCollectCardRects(subnode, depth: depth - 1, into: &rects)
+                self.aorusCollectCardRects(subnode, depth: depth - 1, clip: clip, into: &rects)
             }
         }
     }
@@ -2354,7 +2364,18 @@ _LIST_GLASS_SWIFT = '''    // MARK: - AorusGram Interface 2.0
 
         var rects: [CGRect] = []
         self.listNode.forEachItemNode { itemNode in
-            self.aorusCollectCardRects(itemNode, depth: 2, into: &rects)
+            // The row's *content*, not its bounds: a list item node's bounds carry its
+            // section insets as well -- thirty-five points of page above a section and
+            // below it -- and a card is only ever as tall as the content. Four points of
+            // slack on each side is room for the hairline a card deliberately overhangs by
+            // so that two rows of one section join into one run, and for nothing else.
+            var content = itemNode.bounds
+            if let listItemNode = itemNode as? ListViewItemNode {
+                content.origin.y += listItemNode.insets.top
+                content.size.height -= listItemNode.insets.top + listItemNode.insets.bottom
+            }
+            let clip = itemNode.layer.convert(content.insetBy(dx: 0.0, dy: -4.0), to: self.layer)
+            self.aorusCollectCardRects(itemNode, depth: 2, clip: clip, into: &rects)
         }
         rects.sort(by: { $0.minY < $1.minY })
 
