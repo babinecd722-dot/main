@@ -3546,6 +3546,16 @@ def main() -> None:
             err.append(f"AorusAI: the palette must come from the theme, found {strays[0]}")
         if "list.itemAccentColor" not in ai_design_text:
             err.append("AorusAI: the accent must be the theme's own itemAccentColor")
+        # A card has to be opaque. Interface 2.0 hands `itemBlocksBackgroundColor` out as a
+        # 1/255 marker for the settings lists to find their cards by, and nothing draws
+        # glass behind an AorusAI surface — taken at face value it made every card
+        # invisible and let the composer show through the share sheet.
+        if "AorusAIPalette.opaque(list.itemBlocksBackgroundColor" not in ai_design_text:
+            err.append("AorusAI: the card colour is used without checking that it is opaque")
+        # And a bare control's plate is a mixed colour, not a wash: over a card that is
+        # itself translucent, a wash has no defined result.
+        if "static func mix(" not in ai_design_text or "controlFill: AorusAIPalette.mix(" not in ai_design_text:
+            err.append("AorusAI: the control plate is no longer an opaque mixed colour")
 
     # Handles are drawn as people, inline, wherever they appear.
     ai_mention = tg / "submodules" / "AorusGramUI" / "Sources" / "Features" / "AI" / "AorusAIMention.swift"
@@ -3570,6 +3580,10 @@ def main() -> None:
             ("private func updateTypingHandle(", "AorusAI: the composer no longer tracks the handle being typed"),
             ("private func deleteMentionBeforeCaret(", "AorusAI: the composer no longer deletes a pill whole"),
             ("func refreshMentionStyling(", "AorusAI: moving the caret no longer finishes a handle"),
+            # The share sheet's avatar. `resolvePeerByName` answers synchronously for a peer
+            # already in the database — inside `viewDidLoad`, where the avatar has no size
+            # yet — so the photo has to be asked for from the layout pass instead.
+            ("private func updateAvatarImage(size:", "AorusAI: the share sheet asks for its avatar photo before it has a size"),
         ):
             if marker not in ai_ui_text:
                 err.append(message)

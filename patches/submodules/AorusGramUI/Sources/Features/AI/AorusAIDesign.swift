@@ -36,17 +36,22 @@ struct AorusAIPalette {
     var elevated: UIColor
     /// Quotes, chips, the search field.
     var fill: UIColor
-    /// A bare control's own surface.
+    /// A bare control's own surface — **opaque**.
     ///
     /// `fill` is a low alpha because almost everywhere it is used, the contrast comes from
     /// what is drawn on top of it: a row carrying a figure, a title, a note and a hairline
     /// reads as a panel at a tenth of the label colour. A button is nothing but its surface
     /// and one line of text in the same colour as the rest of the card, and at that alpha
-    /// it stopped reading as a button at all — the title looked like a centred caption.
-    /// Twice the alpha, which is still a neutral fill and still derived from the theme.
+    /// it does not read as a button at all — the title looks like a centred caption.
+    ///
+    /// Raising the alpha was not enough, so this is not an alpha. It is the ink already
+    /// mixed into the card colour and handed over at full opacity, which is how the system
+    /// defines its own grouped surfaces: `secondarySystemGroupedBackground` is a colour,
+    /// not a wash. A translucent fill also has no defined result over a card that is itself
+    /// translucent — under Interface 2.0 the card colour is a near-invisible marker — and
+    /// mixing first removes that question entirely.
     var controlFill: UIColor
-    /// The same surface under a finger. The rows next to it darken on touch by drawing
-    /// `fill` over themselves a second time; this is that, resolved.
+    /// The same surface under a finger, mixed the same way and also opaque.
     var controlFillHighlighted: UIColor
     var separator: UIColor
     var label: UIColor
@@ -62,18 +67,37 @@ struct AorusAIPalette {
         let list = theme.list
         let isDark = theme.overallDarkAppearance
         let label = list.itemPrimaryTextColor
+        // The card colour has to be opaque, and `itemBlocksBackgroundColor` is not always
+        // one. Interface 2.0 replaces it with a marker at 1/255 alpha — the settings lists
+        // read that marker back to find their cards and draw a pane of real glass behind
+        // each one. Nothing draws glass behind these surfaces, so taking the marker at face
+        // value left every AorusAI card invisible: the share sheet's card vanished, and the
+        // translucent things standing on it — the row panel, the "Don't share" button —
+        // showed the composer straight through them.
+        //
+        // `actionSheet.opaqueItemBackgroundColor` is the theme's own answer to "an opaque
+        // panel over content", which is exactly what these are, and Interface 2.0 leaves it
+        // alone. On every ordinary theme the block colour is already opaque and this is not
+        // reached, so nothing about them changes.
+        let elevated = AorusAIPalette.opaque(list.itemBlocksBackgroundColor, fallback: theme.actionSheet.opaqueItemBackgroundColor)
         return AorusAIPalette(
             isDark: isDark,
             background: list.blocksBackgroundColor,
             plainBackground: list.plainBackgroundColor,
-            elevated: list.itemBlocksBackgroundColor,
+            elevated: elevated,
             // The system defines its secondary fills as the label colour at a low alpha
             // rather than as colours of their own, which is what makes them land correctly
             // on any background. Same here, so a custom theme gets a fill that belongs to
             // it instead of a grey borrowed from the stock one.
             fill: label.withAlphaComponent(isDark ? 0.10 : 0.055),
-            controlFill: label.withAlphaComponent(isDark ? 0.20 : 0.11),
-            controlFillHighlighted: label.withAlphaComponent(isDark ? 0.30 : 0.165),
+            // Three to four times the ink of `fill`, which is what it takes for a surface
+            // carrying nothing but one line of label-coloured text to read as a button.
+            // Measured against the stock themes: on Night a #606061 plate on a #1C1C1D
+            // card, 2.7:1 against it where the old fill managed 1.4:1; on Day a #CCCCCC
+            // plate on white at 1.6:1. The light theme takes more ink for the same effect
+            // because a pale surface loses contrast faster than a dark one.
+            controlFill: AorusAIPalette.mix(label, into: elevated, amount: isDark ? 0.30 : 0.20),
+            controlFillHighlighted: AorusAIPalette.mix(label, into: elevated, amount: isDark ? 0.42 : 0.32),
             separator: list.itemBlocksSeparatorColor,
             label: label,
             secondary: list.itemSecondaryTextColor,
@@ -83,6 +107,39 @@ struct AorusAIPalette {
             // Telegram draws white on its accent everywhere — the compose button, the
             // selected check, the badge — so an answer sheet here does the same.
             onAccent: UIColor.white
+        )
+    }
+
+    /// `color` if it is opaque, `fallback` if it is not.
+    ///
+    /// "Not quite opaque" is treated as not opaque: the marker this exists for sits at
+    /// 1/255, and there is no legitimate card colour between that and solid.
+    static func opaque(_ color: UIColor, fallback: UIColor) -> UIColor {
+        return color.cgColor.alpha >= 0.99 ? color : fallback
+    }
+
+    /// `ink` mixed into `base` by `amount`, returned at full opacity.
+    ///
+    /// The point of mixing rather than layering is that the answer is a colour: it does not
+    /// depend on what happens to be painted underneath, and it cannot be "transparent"
+    /// however the surrounding surfaces are drawn. Mixing into the card's own shade is also
+    /// what keeps the result a member of the user's theme rather than a grey chosen here.
+    ///
+    /// A colour that cannot be read as RGB — a pattern colour, which no theme uses for
+    /// these two — falls back to the ink at that alpha, which is what this used to be.
+    static func mix(_ ink: UIColor, into base: UIColor, amount: CGFloat) -> UIColor {
+        var inkRed: CGFloat = 0.0, inkGreen: CGFloat = 0.0, inkBlue: CGFloat = 0.0, inkAlpha: CGFloat = 0.0
+        var baseRed: CGFloat = 0.0, baseGreen: CGFloat = 0.0, baseBlue: CGFloat = 0.0, baseAlpha: CGFloat = 0.0
+        guard ink.getRed(&inkRed, green: &inkGreen, blue: &inkBlue, alpha: &inkAlpha),
+              base.getRed(&baseRed, green: &baseGreen, blue: &baseBlue, alpha: &baseAlpha) else {
+            return ink.withAlphaComponent(amount)
+        }
+        let weight = max(0.0, min(1.0, amount))
+        return UIColor(
+            red: inkRed * weight + baseRed * (1.0 - weight),
+            green: inkGreen * weight + baseGreen * (1.0 - weight),
+            blue: inkBlue * weight + baseBlue * (1.0 - weight),
+            alpha: 1.0
         )
     }
 }

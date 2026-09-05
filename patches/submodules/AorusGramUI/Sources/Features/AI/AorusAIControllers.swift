@@ -5968,13 +5968,35 @@ private final class AorusAIShareScopeController: UIViewController {
             let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
             let name = peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
             self.peerLabel.text = name
-            let size = self.avatarNode.bounds.size
-            if size.width > 0.0 {
-                self.avatarNode.setPeer(context: self.context, theme: self.theme, peer: peer, clipStyle: .round, synchronousLoad: false, displayDimensions: size)
-                self.avatarNode.updateSize(size: size)
-            }
+            // The peer is kept and the photo is asked for from the layout pass, not here.
+            // This resolve is started from `viewDidLoad`, and for anyone already in the
+            // database it answers *synchronously* on the main queue — inside `viewDidLoad`,
+            // where the avatar has no size yet. Asking for a photo at zero points did
+            // nothing and was never asked for again, so the sheet kept the monogram for
+            // every peer the app already knew, which is most of them.
+            self.resolvedPeer = peer
             self.view.setNeedsLayout()
         }))
+    }
+
+    /// The peer this sheet is about, once it has resolved.
+    private var resolvedPeer: EnginePeer?
+    /// The peer and size the avatar's photo was last requested for, so a layout pass that
+    /// changes nothing does not re-request it.
+    private var appliedAvatar: (peerId: EnginePeer.Id, size: CGSize)?
+
+    /// Draws the resolved peer's photo at the size the layout just gave the avatar.
+    ///
+    /// Called from every layout pass rather than from the resolve, because the size is only
+    /// known here and the resolve can land before the first pass.
+    private func updateAvatarImage(size: CGSize) {
+        guard size.width > 0.0, let peer = resolvedPeer else { return }
+        if let applied = appliedAvatar, applied.peerId == peer.id, applied.size == size {
+            return
+        }
+        appliedAvatar = (peer.id, size)
+        avatarNode.setPeer(context: context, theme: theme, peer: peer, clipStyle: .round, synchronousLoad: false, displayDimensions: size)
+        avatarNode.updateSize(size: size)
     }
 
     override func viewDidLayoutSubviews() {
@@ -6015,6 +6037,9 @@ private final class AorusAIShareScopeController: UIViewController {
             avatarNode.frame = avatarFrame
             avatarNode.updateSize(size: avatarFrame.size)
         }
+        // Unconditionally, not only when the frame changed: the peer usually resolves after
+        // the frame has settled, and that pass is the one that has to ask for the photo.
+        updateAvatarImage(size: avatarFrame.size)
         titleLabel.frame = CGRect(x: titleX, y: headerTop, width: titleWidth, height: titleHeight)
         peerLabel.frame = CGRect(x: titleX, y: titleLabel.frame.maxY + 2.0, width: titleWidth, height: peerHeight)
         bodyLabel.frame = CGRect(x: side, y: bodyTop, width: contentWidth, height: bodyHeight)
