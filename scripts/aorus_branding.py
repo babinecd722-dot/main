@@ -12650,6 +12650,117 @@ def patch_fake_stars_purchases(tg: Path) -> None:
         print("FakeStarsPurchases: collectible purchase already patched")
 
 
+def patch_fake_stars_all_gifts(tg: Path) -> None:
+    """With fake Stars on, every gift in the catalogue can be bought locally.
+
+    The catalogue already contains the whole history. `payments.getStarGifts` keeps
+    returning retired gifts — that is why `StarGift.Gift` carries a `SoldOut` struct with
+    the first and last sale dates, why the picker draws a red "Sold Out" ribbon, and why
+    there is a dedicated read-only card for them. They are listed in the default tab
+    already; nothing hides them.
+
+    What stops them is not the list, it is three gates:
+
+      1. `openGift` sends a gift with `availability.remains == 0` — or an exhausted
+         per-user limit, or any gift at all when the recipient is a channel — to the
+         read-only `GiftViewScreen(.soldOutGift)` instead of `GiftSetupScreen`.
+      2. `GiftSetupScreen` then disables its own send button for the same condition.
+      3. The server answers `STARGIFT_USAGE_LIMITED`.
+
+    The third gate is why this is tied to fake Stars rather than offered unconditionally:
+    `patch_fake_stars_purchases` already replaces the whole payment signal with a local
+    one when the store is enabled, so the request that would be refused is never made.
+    With fake Stars off, all three gates stand exactly as upstream wrote them and a
+    sold-out gift behaves as it always did.
+
+    The recipient's own gift-privacy prune and the channel prune are lifted for the same
+    reason — with the purchase local, nothing reaches the recipient to be refused — so the
+    picker shows the complete catalogue rather than the subset that peer accepts.
+    """
+    options = tg / "submodules/TelegramUI/Components/Gifts/GiftOptionsScreen/Sources/GiftOptionsScreen.swift"
+    if not options.is_file():
+        raise RuntimeError("FakeStarsAllGifts: GiftOptionsScreen.swift is missing")
+    text = options.read_text(encoding="utf-8")
+    marker = "// AorusGram: every gift is buyable locally"
+    if marker in text:
+        print("FakeStarsAllGifts: GiftOptionsScreen already patched")
+    else:
+        replacements = [
+            (
+                "openGift route",
+                "                        if let availability = gift.availability, availability.remains == 0 || gift.perUserLimit?.remains == 0 || component.peerId.namespace == Namespaces.Peer.CloudChannel {\n",
+                "                        // AorusGram: every gift is buyable locally when fake Stars\n"
+                "                        // are on. Upstream diverts a sold-out gift — and anything\n"
+                "                        // sent to a channel — to a read-only card, because the\n"
+                "                        // server would refuse the purchase. With the store enabled\n"
+                "                        // the purchase never reaches the server, so the gift goes\n"
+                "                        // to the ordinary setup screen like any other.\n"
+                "                        if !AorusFakeStarsStore.isEnabled, let availability = gift.availability, availability.remains == 0 || gift.perUserLimit?.remains == 0 || component.peerId.namespace == Namespaces.Peer.CloudChannel {\n",
+            ),
+            (
+                "per-user limit",
+                "                    if let perUserLimit = gift.perUserLimit, perUserLimit.remains == 0 && (gift.availability?.resale ?? 0) == 0 {\n",
+                "                    // AorusGram: a per-account ceiling is the server counting what\n"
+                "                    // this account already bought. Nothing is bought there under\n"
+                "                    // fake Stars, so there is nothing for it to count.\n"
+                "                    if !AorusFakeStarsStore.isEnabled, let perUserLimit = gift.perUserLimit, perUserLimit.remains == 0 && (gift.availability?.resale ?? 0) == 0 {\n",
+            ),
+            (
+                "premium gate",
+                "                    if gift.flags.contains(.requiresPremium) && !component.context.isPremium && !((gift.availability?.resale ?? 0) > 0) {\n",
+                "                    // AorusGram: same reasoning as the ceiling above.\n"
+                "                    if !AorusFakeStarsStore.isEnabled, gift.flags.contains(.requiresPremium) && !component.context.isPremium && !((gift.availability?.resale ?? 0) > 0) {\n",
+            ),
+            (
+                "privacy prune",
+                "                if let disallowedGifts = self.disallowedGifts, !disallowedGifts.isEmpty {\n",
+                "                // AorusGram: the recipient's gift privacy decides what *they* will\n"
+                "                // accept. A local purchase never reaches them, so under fake Stars\n"
+                "                // the picker shows the whole catalogue instead of their subset.\n"
+                "                if !AorusFakeStarsStore.isEnabled, let disallowedGifts = self.disallowedGifts, !disallowedGifts.isEmpty {\n",
+            ),
+            (
+                "channel prune",
+                "                var filteredStarGifts = starGifts\n"
+                "                if peerId.namespace == Namespaces.Peer.CloudChannel {\n",
+                "                var filteredStarGifts = starGifts\n"
+                "                // AorusGram: and the same for the channel prune.\n"
+                "                if !AorusFakeStarsStore.isEnabled, peerId.namespace == Namespaces.Peer.CloudChannel {\n",
+            ),
+        ]
+        for name, old, new in replacements:
+            if text.count(old) != 1:
+                raise RuntimeError(f"FakeStarsAllGifts: {name} anchor not unique ({text.count(old)})")
+            text = text.replace(old, new, 1)
+        options.write_text(text, encoding="utf-8")
+        print("FakeStarsAllGifts: patched GiftOptionsScreen (sold-out gifts open the setup screen)")
+
+    setup = tg / "submodules/TelegramUI/Components/Gifts/GiftSetupScreen/Sources/GiftSetupScreen.swift"
+    if not setup.is_file():
+        raise RuntimeError("FakeStarsAllGifts: GiftSetupScreen.swift is missing")
+    stext = setup.read_text(encoding="utf-8")
+    if "// AorusGram: a sold-out gift can still be sent locally" in stext:
+        print("FakeStarsAllGifts: GiftSetupScreen send button already patched")
+        return
+    old_button = (
+        "                if let availability = starGift.availability, availability.remains == 0 {\n"
+        "                    buttonIsEnabled = false\n"
+        "                }\n"
+    )
+    new_button = (
+        "                // AorusGram: a sold-out gift can still be sent locally. Gate 2 of the\n"
+        "                // three; the payment itself is replaced further down when the store is\n"
+        "                // enabled, so the button now leads somewhere that works.\n"
+        "                if !AorusFakeStarsStore.isEnabled, let availability = starGift.availability, availability.remains == 0 {\n"
+        "                    buttonIsEnabled = false\n"
+        "                }\n"
+    )
+    if stext.count(old_button) != 1:
+        raise RuntimeError(f"FakeStarsAllGifts: send-button anchor not unique ({stext.count(old_button)})")
+    setup.write_text(stext.replace(old_button, new_button, 1), encoding="utf-8")
+    print("FakeStarsAllGifts: patched GiftSetupScreen send button")
+
+
 def patch_stars_purchase_redirects(tg: Path) -> None:
     """Replace unavailable fork IAP Stars packages with Fragment / PremiumBot routes."""
     f = tg / "submodules/TelegramUI/Components/Stars/StarsPurchaseScreen/Sources/StarsPurchaseScreen.swift"
@@ -25569,6 +25680,7 @@ def main() -> None:
     patch_fake_stars(tg)
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)
+    patch_fake_stars_all_gifts(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)

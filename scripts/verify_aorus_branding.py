@@ -870,6 +870,31 @@ def main() -> None:
     if not gift_buy.is_file() or "AorusGram: local-only collectible purchase" not in gift_buy.read_text(encoding="utf-8"):
         err.append("FakeStars: native collectible purchase hook is missing")
 
+    # Sold-out gifts are buyable, and only with the local store on.
+    #
+    # Upstream has three gates: the picker routes a sold-out gift to a read-only card, the
+    # setup screen disables its own send button, and the server refuses with
+    # STARGIFT_USAGE_LIMITED. The first two are lifted here, and every one of them has to
+    # stay behind `!AorusFakeStarsStore.isEnabled` — the third gate is real, so without the
+    # local purchase replacing the request, lifting the first two would only walk the user
+    # into a server error. Counting the guards catches a future edit that drops one.
+    gift_options = tg / "submodules" / "TelegramUI" / "Components" / "Gifts" / "GiftOptionsScreen" / "Sources" / "GiftOptionsScreen.swift"
+    if not gift_options.is_file():
+        err.append("FakeStars: GiftOptionsScreen.swift is missing")
+    else:
+        gift_options_text = gift_options.read_text(encoding="utf-8")
+        if "AorusGram: every gift is buyable locally" not in gift_options_text:
+            err.append("FakeStars: sold-out gifts are still diverted to the read-only card")
+        guards = gift_options_text.count("!AorusFakeStarsStore.isEnabled")
+        if guards != 5:
+            err.append(f"FakeStars: gift picker has {guards} local-store guards, expected 5")
+    if gift_setup.is_file():
+        gift_setup_text = gift_setup.read_text(encoding="utf-8")
+        if "AorusGram: a sold-out gift can still be sent locally" not in gift_setup_text:
+            err.append("FakeStars: the send button is still disabled for a sold-out gift")
+        if "if !AorusFakeStarsStore.isEnabled, let availability = starGift.availability" not in gift_setup_text:
+            err.append("FakeStars: the send button's sold-out guard is not tied to the local store")
+
     fake_gifts_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftsController.swift"
     fake_gift_manage_controller = tg / "submodules" / "AorusGramUI" / "Sources" / "AorusFakeGiftManageController.swift"
     fake_gifts_controller_text = fake_gifts_controller.read_text(encoding="utf-8") if fake_gifts_controller.is_file() else ""
