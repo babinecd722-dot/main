@@ -11,10 +11,14 @@ import AppBundle
 
 // Every stock Telegram settings screen opens with a centred looping illustration
 // above the first block (Devices, Auto-Delete, Passcode …). This is that header,
-// built exactly like the upstream ones — GlobalAutoremoveHeaderItem for the
-// animation-only layout, RecentSessionsHeaderItem for the playback handshake
-// (autoplay + .still(.start) + a delayed play, so the first frame is on screen
-// before the animation starts).
+// built like GlobalAutoremoveHeaderItem: an animation-only layout that loops.
+//
+// It used to copy the Devices screen's playback handshake instead: show the first
+// frame, then start the animation once, after a delay. That is right there, where
+// the QR illustration is meant to run through and stop, and wrong here — the duck
+// played once and then sat frozen on its last frame. A header illustration on a
+// settings screen loops, so this one asks for a looping playback mode and lets
+// visibility start it, which is what every looping stock header does.
 //
 // The sticker source is resolved locally instead of importing
 // TelegramAnimatedStickerNode: AnimatedStickerNodeLocalFileSource does nothing
@@ -112,7 +116,11 @@ final class AorusBackupHeaderItemNode: ListViewItemNode, ItemListItemNode {
 
     func asyncLayout() -> (_ item: AorusBackupHeaderItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
         return { item, params, neighbors in
-            let topInset: CGFloat = 128.0
+            // 180 rather than the 110–128 the stock headers use. This screen has one
+            // illustration and a short list under it, so the header carries the screen;
+            // at the stock size it read as an afterthought floating above the first row.
+            let iconSide: CGFloat = 180.0
+            let topInset: CGFloat = iconSide
 
             let contentSize = CGSize(width: params.width, height: topInset)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
@@ -124,16 +132,19 @@ final class AorusBackupHeaderItemNode: ListViewItemNode, ItemListItemNode {
                     return
                 }
                 if strongSelf.item == nil {
-                    strongSelf.animationNode.autoplay = true
-                    strongSelf.animationNode.setup(source: AorusHeaderTgsSource(name: item.animationName), width: 256, height: 256, playbackMode: .still(.start), mode: .direct(cachePathPrefix: nil))
+                    // Rendered at twice the drawn size, which is the ratio every stock
+                    // header uses (110→220, 128→256): the frames are rasterised once at
+                    // that resolution and a retina screen has no more to ask for.
+                    let renderSide = Int(iconSide * 2.0)
+                    strongSelf.animationNode.setup(source: AorusHeaderTgsSource(name: item.animationName), width: renderSide, height: renderSide, playbackMode: .loop, mode: .direct(cachePathPrefix: nil))
                     strongSelf.animationNode.visibility = true
-                    Queue.mainQueue().after(0.3) {
-                        strongSelf.animationNode.play(firstFrame: false, fromIndex: nil)
-                    }
                 }
                 strongSelf.item = item
 
-                let iconSize = CGSize(width: 128.0, height: 128.0)
+                let iconSize = CGSize(width: iconSide, height: iconSide)
+                // Ten points above the row, exactly as the stock headers sit: the group
+                // inset above this item is what the illustration overlaps into, so the gap
+                // to the first row below stays the one the list itself defines.
                 strongSelf.animationNode.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - iconSize.width) / 2.0), y: -10.0), size: iconSize)
                 strongSelf.animationNode.updateLayout(size: iconSize)
             })

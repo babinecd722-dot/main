@@ -3307,7 +3307,12 @@ def main() -> None:
         for animation in re.findall(r'animationName: "([^"]+)"', backup_text):
             if not (tg / "Telegram" / "Telegram-iOS" / "Resources" / f"{animation}.tgs").is_file():
                 err.append(f"InterfaceV2: backup header animation {animation}.tgs is not bundled")
-        for marker in ("AnimatedStickerNodeSource", "still(.start)", "play(firstFrame: false"):
+        # These used to be `still(.start)` and `play(firstFrame: false` — the handshake that
+        # plays an illustration once and leaves it on its last frame. That is right for the
+        # Devices screen, which is where it was copied from, and wrong for a settings header:
+        # the duck ran through and froze. The markers now assert the looping construction, so
+        # a future edit that quietly goes back to a one-shot is caught here.
+        for marker in ("AnimatedStickerNodeSource", "playbackMode: .loop", "visibility = true"):
             if marker not in backup_header_text:
                 err.append(f"InterfaceV2: backup header is missing {marker}")
 
