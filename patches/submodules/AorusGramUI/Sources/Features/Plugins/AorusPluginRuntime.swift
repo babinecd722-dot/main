@@ -57,6 +57,22 @@ enum AorusPluginEntitlement {
     }
 }
 
+/// One row a plugin asked for in somebody's profile, in terms the profile screen can read
+/// without depending on the plugin model.
+public struct AorusPluginProfileRow {
+    public let pluginId: String
+    public let buttonId: String
+    public let title: String
+    public let destructive: Bool
+
+    public init(pluginId: String, buttonId: String, title: String, destructive: Bool) {
+        self.pluginId = pluginId
+        self.buttonId = buttonId
+        self.title = title
+        self.destructive = destructive
+    }
+}
+
 public final class AorusPluginRuntimeManager {
     public static let shared = AorusPluginRuntimeManager()
 
@@ -397,6 +413,39 @@ public final class AorusPluginRuntimeManager {
         return nativeButtons.keys.sorted().flatMap { pluginId in
             (nativeButtons[pluginId] ?? []).filter { $0.place == place }.map { (pluginId, $0) }
         }.sorted { $0.button.order < $1.button.order }
+    }
+
+    /// The rows running plugins have put in somebody's profile, grouped by the heading they
+    /// asked for.
+    ///
+    /// Answered as plain values rather than as the model type, because the profile screen is
+    /// its own Bazel module and depends on AorusGramUI but not on AorusGram — handing it a
+    /// `AorusPluginNativeButton` would mean a new dependency edge for a struct with four
+    /// fields in it.
+    ///
+    /// Rows with no heading come first, then the headings in the order a plugin's rows first
+    /// mention them, so a section does not move because a plugin somewhere else started.
+    public func pluginProfileSections() -> [(title: String?, rows: [AorusPluginProfileRow])] {
+        let buttons = pluginNativeButtons(.profileAction)
+        var order: [String] = []
+        var grouped: [String: [AorusPluginProfileRow]] = [:]
+        for item in buttons {
+            let key = item.button.section ?? ""
+            if grouped[key] == nil {
+                grouped[key] = []
+                order.append(key)
+            }
+            grouped[key]?.append(AorusPluginProfileRow(
+                pluginId: item.pluginId,
+                buttonId: item.button.id,
+                title: item.button.title,
+                destructive: item.button.destructive
+            ))
+        }
+        return order.sorted { left, right in
+            if left.isEmpty != right.isEmpty { return left.isEmpty }
+            return false
+        }.map { key in (title: key.isEmpty ? nil : key, rows: grouped[key] ?? []) }
     }
 
     public func dispatchNativeButtonAction(pluginId: String, buttonId: String, payload: [String: Any] = [:]) {

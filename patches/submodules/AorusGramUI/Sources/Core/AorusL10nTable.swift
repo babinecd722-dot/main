@@ -53,6 +53,8 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Notifications": "Notifiche",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Consente di mostrare notifiche dall'app, anche quando è chiusa. Ogni notifica è firmata con il nome del plugin, e il plugin non può né vedere né toccare le notifiche di Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ancora niente. Qui appare tutto ciò che il plugin scrive con console e tutto ciò che l'app segnala su di esso.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Il codice è cambiato, quindi il plugin è stato disattivato e le sue autorizzazioni revocate.",
         "Running": "In esecuzione",
@@ -823,6 +825,8 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Notifications": "Powiadomienia",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Pozwala wyświetlać powiadomienia z aplikacji, również gdy jest zamknięta. Każde powiadomienie jest podpisane nazwą wtyczki, a wtyczka nie widzi powiadomień Telegrama ani ich nie zmienia.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Na razie pusto. Pojawi się tu wszystko, co wtyczka pisze przez console, i wszystko, co aplikacja o niej zgłasza.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kod się zmienił, więc wtyczka została wyłączona, a przyznane uprawnienia cofnięte.",
         "Running": "Działa",
@@ -1593,6 +1597,8 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Notifications": "Meldingen",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Staat toe meldingen vanuit de app te tonen, ook wanneer die gesloten is. Elke melding is ondertekend met de naam van de plug-in, en de plug-in kan de meldingen van Telegram niet zien of aanraken.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Nog niets. Hier verschijnt alles wat de plug-in via console schrijft en alles wat de app erover meldt.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "De code is gewijzigd, dus de plug-in is uitgeschakeld en de verleende machtigingen zijn ingetrokken.",
         "Running": "Actief",
@@ -2363,6 +2369,8 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Notifications": "Notificacions",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permet mostrar notificacions des de l'aplicació, fins i tot quan està tancada. Cada notificació va signada amb el nom del connector, i el connector no pot veure ni tocar les notificacions del Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Encara no hi ha res. Aquí apareix tot el que el complement escriu amb console i tot el que l'app n'informa.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "El codi ha canviat, així que el complement s'ha desactivat i els permisos concedits s'han revocat.",
         "Running": "En execució",
@@ -3133,6 +3141,8 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Notifications": "Notifikasi",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Mengizinkan menampilkan notifikasi dari aplikasi, termasuk saat aplikasi tertutup. Setiap notifikasi ditandatangani dengan nama plugin, dan plugin tidak dapat melihat atau menyentuh notifikasi Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Belum ada apa pun. Semua yang ditulis plugin lewat console dan semua yang dilaporkan aplikasi tentangnya muncul di sini.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kode berubah, jadi plugin dimatikan dan izin yang diberikan dicabut.",
         "Running": "Berjalan",
@@ -3903,6 +3913,8 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Notifications": "Pemberitahuan",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Membenarkan paparan pemberitahuan daripada aplikasi, termasuk semasa ia ditutup. Setiap pemberitahuan ditandatangani dengan nama pemalam, dan pemalam tidak dapat melihat atau menyentuh pemberitahuan Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Belum ada apa-apa. Semua yang ditulis pemalam melalui console dan semua yang dilaporkan aplikasi tentangnya muncul di sini.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kod telah berubah, jadi pemalam dimatikan dan kebenaran yang diberikan ditarik balik.",
         "Running": "Berjalan",
@@ -4673,6 +4685,8 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Notifications": "Апавяшчэнні",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Дазваляе паказваць апавяшчэнні ад праграмы, у тым ліку калі яна закрыта. Кожнае апавяшчэнне падпісана назвай плагіна, і плагін не бачыць апавяшчэнні Telegram і не змяняе іх.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Пакуль пуста. Тут з'явіцца ўсё, што ўбудова піша праз console, і ўсё, што праграма паведамляе пра яе.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Код змяніўся, таму ўбудова выключана, а выдадзеныя дазволы адкліканыя.",
         "Running": "Працуе",
@@ -5443,6 +5457,8 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Notifications": "Bildirishnomalar",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Ilovadan bildirishnomalar koʻrsatishga ruxsat beradi, ilova yopiq boʻlganda ham. Har bir bildirishnoma plagin nomi bilan imzolanadi, plagin esa Telegram bildirishnomalarini na koʻradi, na oʻzgartiradi.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Hozircha bo'sh. Plagin console orqali yozgan va ilova u haqida xabar qilgan hamma narsa shu yerda ko'rinadi.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kod o'zgardi, shuning uchun plagin o'chirildi va berilgan ruxsatlar bekor qilindi.",
         "Running": "Ishlayapti",
@@ -6213,6 +6229,8 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Notifications": "알림",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "앱이 닫혀 있을 때를 포함해 앱에서 알림을 표시할 수 있습니다. 모든 알림에는 플러그인 이름이 표시되며, 플러그인은 텔레그램 자체 알림을 보거나 건드릴 수 없습니다.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "아직 아무것도 없습니다. 플러그인이 console로 남기는 모든 것과 앱이 플러그인에 대해 알리는 모든 것이 여기에 나타납니다.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "코드가 바뀌어 플러그인이 꺼지고 부여된 권한이 취소되었습니다.",
         "Running": "실행 중",
@@ -6983,6 +7001,8 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Notifications": "الإشعارات",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "يسمح بعرض إشعارات من التطبيق، بما في ذلك أثناء إغلاقه. كل إشعار موقّع باسم الإضافة، ولا يمكن للإضافة رؤية إشعارات تيليجرام أو المساس بها.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "لا شيء بعد. يظهر هنا كل ما تكتبه الإضافة عبر console وكل ما يبلّغ عنه التطبيق بشأنها.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "تغيّر الكود، لذلك أُوقفت الإضافة وسُحبت الأذونات الممنوحة لها.",
         "Running": "قيد التشغيل",
@@ -7753,6 +7773,8 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Notifications": "اعلان‌ها",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "اجازه می‌دهد اعلان‌هایی از برنامه نمایش داده شود، حتی وقتی برنامه بسته است. هر اعلان با نام افزونه امضا می‌شود و افزونه نمی‌تواند اعلان‌های تلگرام را ببیند یا تغییر دهد.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "هنوز چیزی نیست. هر چه افزونه با console می‌نویسد و هر چه برنامه درباره آن گزارش می‌دهد اینجا دیده می‌شود.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "کد تغییر کرد، بنابراین افزونه خاموش شد و دسترسی‌های داده‌شده لغو شدند.",
         "Running": "در حال اجرا",
@@ -8523,6 +8545,8 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Notifications": "Хабарландырулар",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Қолданба жабық кезде де одан хабарландырулар көрсетуге рұқсат береді. Әрбір хабарландыру плагин атымен қол қойылады, ал плагин Telegram хабарландыруларын көрмейді және оларға тимейді.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Әзірге бос. Плагин console арқылы жазатынның бәрі және қолданба ол туралы хабарлайтынның бәрі осында шығады.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Код өзгерді, сондықтан плагин өшірілді және берілген рұқсаттар қайтарып алынды.",
         "Running": "Жұмыс істеп тұр",
@@ -9293,6 +9317,8 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Notifications": "通知",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "允许应用显示通知，包括应用关闭时。每条通知都会署上插件名称，插件既看不到也无法改动 Telegram 自己的通知。",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "还没有内容。插件通过 console 写下的一切，以及应用关于它的一切报告，都会出现在这里。",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "代码已更改，因此插件已关闭，已授予的权限也被收回。",
         "Running": "运行中",
@@ -10064,6 +10090,8 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Notifications": "通知",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "允許應用程式顯示通知，包括應用程式關閉時。每則通知都會署上外掛名稱，外掛既看不到也無法更動 Telegram 自己的通知。",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "還沒有內容。外掛程式透過 console 寫下的一切，以及應用程式關於它的一切回報，都會出現在這裡。",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "程式碼已變更，因此外掛程式已關閉，已授予的權限也被收回。",
         "Running": "執行中",
@@ -10834,6 +10862,8 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Notifications": "通知",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "アプリが閉じているときも含めて、アプリから通知を表示できるようにします。通知にはプラグイン名が必ず付き、プラグインは Telegram 自身の通知を見ることも触ることもできません。",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "まだ何もありません。プラグインが console に書いたものと、アプリがそれについて報告したものがここに表示されます。",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "コードが変わったため、プラグインは停止され、与えられていた権限は取り消されました。",
         "Running": "実行中",
@@ -11604,6 +11634,8 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Notifications": "Ilmoitukset",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Sallii ilmoitusten näyttämisen sovelluksesta, myös silloin kun se on suljettu. Jokainen ilmoitus on allekirjoitettu liitännäisen nimellä, eikä liitännäinen näe tai koske Telegramin omiin ilmoituksiin.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ei vielä mitään. Tähän tulee kaikki, mitä laajennus kirjoittaa consolella, ja kaikki, mitä sovellus siitä raportoi.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Koodi muuttui, joten laajennus kytkettiin pois ja sille myönnetyt oikeudet peruttiin.",
         "Running": "Käynnissä",
@@ -12374,6 +12406,8 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Notifications": "התראות",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "מאפשר להציג התראות מהאפליקציה, גם כשהיא סגורה. כל התראה חתומה בשם התוסף, והתוסף אינו רואה את ההתראות של טלגרם ואינו נוגע בהן.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "עדיין אין כלום. כאן יופיע כל מה שהתוסף כותב דרך console וכל מה שהאפליקציה מדווחת עליו.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "הקוד השתנה, ולכן התוסף כובה וההרשאות שניתנו לו בוטלו.",
         "Running": "פועל",
@@ -13144,6 +13178,8 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Notifications": "Obavijesti",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Omogućuje prikaz obavijesti iz aplikacije, uključujući i dok je zatvorena. Svaka je obavijest potpisana imenom dodatka, a dodatak ne vidi Telegramove obavijesti niti ih dira.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Još ništa. Ovdje se pojavljuje sve što dodatak piše putem console i sve što aplikacija o njemu javlja.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kod se promijenio, pa je dodatak isključen, a dodijeljena dopuštenja opozvana.",
         "Running": "Radi",
@@ -13914,6 +13950,8 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Notifications": "Обавештења",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Омогућава приказ обавештења из апликације, и док је затворена. Свако обавештење потписано је именом додатка, а додатак не види Telegram-ова обавештења нити их дира.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Још ништа. Овде се појављује све што додатак пише преко console и све што апликација о њему пријављује.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Код се променио, па је додатак искључен, а додељене дозволе опозване.",
         "Running": "Ради",
@@ -14684,6 +14722,8 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Notifications": "Oznámení",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Umožňuje zobrazovat oznámení z aplikace, i když je zavřená. Každé oznámení je podepsáno názvem pluginu a plugin nevidí oznámení Telegramu ani se jich nedotkne.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Zatím nic. Objeví se tu vše, co plugin píše přes console, a vše, co o něm hlásí aplikace.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kód se změnil, plugin byl proto vypnut a udělená oprávnění odebrána.",
         "Running": "Běží",
@@ -15454,6 +15494,8 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Notifications": "Upozornenia",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Umožňuje zobrazovať upozornenia z aplikácie, aj keď je zatvorená. Každé upozornenie je podpísané názvom pluginu a plugin nevidí upozornenia Telegramu ani sa ich nedotkne.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Zatiaľ nič. Objaví sa tu všetko, čo doplnok píše cez console, a všetko, čo o ňom hlási aplikácia.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kód sa zmenil, doplnok bol preto vypnutý a udelené povolenia odobrané.",
         "Running": "Beží",
@@ -16224,6 +16266,8 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Notifications": "Notificări",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permite afișarea notificărilor din aplicație, inclusiv când este închisă. Fiecare notificare este semnată cu numele pluginului, iar pluginul nu vede și nu atinge notificările Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Încă nimic. Aici apare tot ce scrie pluginul prin console și tot ce raportează aplicația despre el.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Codul s-a schimbat, așa că pluginul a fost oprit, iar permisiunile acordate au fost retrase.",
         "Running": "În execuție",
@@ -16994,6 +17038,8 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Notifications": "Értesítések",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Engedélyezi értesítések megjelenítését az alkalmazásból, akkor is, ha az be van zárva. Minden értesítés a bővítmény nevével van aláírva, és a bővítmény nem látja és nem érinti a Telegram saját értesítéseit.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Még semmi. Itt jelenik meg minden, amit a bővítmény a console-lal ír, és minden, amit az alkalmazás jelent róla.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "A kód megváltozott, ezért a bővítmény kikapcsolt, és a megadott engedélyeket visszavontuk.",
         "Running": "Fut",
@@ -17764,6 +17810,8 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Notifications": "Varsler",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Lar appen vise varsler, også når den er lukket. Hvert varsel er signert med navnet på programtillegget, og programtillegget kan verken se eller røre Telegrams egne varsler.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ingenting ennå. Her vises alt programtillegget skriver via console, og alt appen melder om det.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Koden er endret, så programtillegget ble slått av og tillatelsene det hadde ble trukket tilbake.",
         "Running": "Kjører",
@@ -18534,6 +18582,8 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Notifications": "Aviseringar",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Tillåter att aviseringar visas från appen, även när den är stängd. Varje avisering är signerad med tilläggets namn, och tillägget kan varken se eller röra Telegrams egna aviseringar.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Inget än. Här visas allt som tillägget skriver via console och allt som appen rapporterar om det.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Koden ändrades, så tillägget stängdes av och behörigheterna det hade återkallades.",
         "Running": "Körs",
@@ -19304,6 +19354,8 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Notifications": "Thông báo",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Cho phép hiển thị thông báo từ ứng dụng, kể cả khi ứng dụng đã đóng. Mỗi thông báo đều được ký bằng tên tiện ích, và tiện ích không thấy cũng không động đến thông báo của Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Chưa có gì. Mọi thứ tiện ích ghi qua console và mọi thứ ứng dụng báo về nó sẽ xuất hiện ở đây.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Mã đã thay đổi nên tiện ích bị tắt và các quyền đã cấp bị thu hồi.",
         "Running": "Đang chạy",
@@ -20074,6 +20126,8 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Notifications": "Сповіщення",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Дозволяє показувати сповіщення від застосунку, зокрема коли він закритий. Кожне сповіщення підписане назвою плагіна, і плагін не бачить сповіщень Telegram та не чіпає їх.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Поки порожньо. Тут з'явиться все, що плагін пише через console, і все, що застосунок повідомляє про нього.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Код змінився, тому плагін вимкнено, а видані дозволи відкликано.",
         "Running": "Працює",
@@ -20853,6 +20907,8 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Notifications": "Notificaciones",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permite mostrar notificaciones desde la aplicación, incluso mientras está cerrada. Cada notificación va firmada con el nombre del complemento, y el complemento no puede ver ni tocar las notificaciones de Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Aún no hay nada. Aquí aparece todo lo que el complemento escribe con console y todo lo que la app informa sobre él.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "El código cambió, así que el complemento se desactivó y se revocaron sus permisos.",
         "Running": "Activo",
@@ -21632,6 +21688,8 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Notifications": "Notificações",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permite mostrar notificações a partir da aplicação, mesmo quando está fechada. Cada notificação é assinada com o nome do plugin, e o plugin não vê nem mexe nas notificações do Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ainda não há nada. Aqui aparece tudo o que o plugin escreve pelo console e tudo o que o app informa sobre ele.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "O código mudou, então o plugin foi desativado e as permissões dele foram revogadas.",
         "Running": "Em execução",
@@ -22411,6 +22469,8 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Notifications": "Benachrichtigungen",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Erlaubt es, Benachrichtigungen aus der App anzuzeigen, auch wenn sie geschlossen ist. Jede Benachrichtigung trägt den Namen des Plugins, und das Plugin sieht Telegrams eigene Benachrichtigungen weder, noch rührt es sie an.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Noch nichts. Hier erscheint alles, was die Erweiterung über console schreibt, und alles, was die App über sie meldet.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Der Code hat sich geändert, deshalb wurde die Erweiterung abgeschaltet und ihre Berechtigungen entzogen.",
         "Running": "Läuft",
@@ -23190,6 +23250,8 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Notifications": "Notifications",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permet d'afficher des notifications depuis l'application, y compris lorsqu'elle est fermée. Chaque notification est signée du nom de l'extension, et l'extension ne voit ni ne touche les notifications de Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Rien pour l'instant. Tout ce que l'extension écrit via console, et tout ce que l'app en rapporte, apparaît ici.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Le code a changé, l'extension a donc été désactivée et ses autorisations révoquées.",
         "Running": "En cours",
@@ -23969,6 +24031,8 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Notifications": "Bildirimler",
+        "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Uygulama kapalıyken de dahil olmak üzere uygulamadan bildirim göstermeye izin verir. Her bildirim eklentinin adıyla imzalanır ve eklenti Telegram'ın kendi bildirimlerini ne görür ne de onlara dokunur.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Henüz bir şey yok. Eklentinin console ile yazdığı ve uygulamanın onun hakkında bildirdiği her şey burada görünür.",
         "The code changed, so the plugin was switched off and the permissions it had were revoked.": "Kod değişti, bu yüzden eklenti kapatıldı ve verilen izinler geri alındı.",
         "Running": "Çalışıyor",

@@ -18385,6 +18385,92 @@ static NSString * _Nullable aorusStringOverrideFor(NSString * _Nonnull key) {
 '''
 
 
+AORUS_PROFILE_SECTION_SWIFT = '''    // AorusGram: rows running plugins have put in this profile.
+    //
+    // Appended after Telegram's own sections rather than mixed into them: a plugin should not
+    // be able to put a row between two of Telegram's, where somebody reading down the screen
+    // would take it for part of the app. Built here every time the profile is, so a plugin
+    // that stopped contributes nothing on the next draw and one that just started appears
+    // without the screen having to be told.
+    let aorusPluginProfilePeerId = data.peer?.id.toInt64()
+    for aorusPluginSection in AorusPluginRuntimeManager.shared.pluginProfileSections() {
+        var aorusPluginItems: [PeerInfoScreenItem] = []
+        if let aorusPluginTitle = aorusPluginSection.title {
+            aorusPluginItems.append(PeerInfoScreenHeaderItem(id: "aorusPluginHeader", text: aorusPluginTitle))
+        }
+        for aorusPluginRow in aorusPluginSection.rows {
+            let aorusPluginId = aorusPluginRow.pluginId
+            let aorusPluginButtonId = aorusPluginRow.buttonId
+            aorusPluginItems.append(PeerInfoScreenActionItem(
+                id: "aorusPlugin-" + aorusPluginId + "-" + aorusPluginButtonId,
+                text: aorusPluginRow.title,
+                color: aorusPluginRow.destructive ? .destructive : .accent,
+                action: {
+                    var aorusPluginPayload: [String: Any] = ["source": "profile"]
+                    if let aorusPluginProfilePeerId {
+                        aorusPluginPayload["peerId"] = String(aorusPluginProfilePeerId)
+                    }
+                    AorusPluginRuntimeManager.shared.dispatchNativeButtonAction(
+                        pluginId: aorusPluginId,
+                        buttonId: aorusPluginButtonId,
+                        payload: aorusPluginPayload
+                    )
+                }
+            ))
+        }
+        if !aorusPluginItems.isEmpty {
+            result.append(("aorusPluginProfile-" + (aorusPluginSection.title ?? ""), aorusPluginItems))
+        }
+    }
+
+'''
+
+
+def patch_plugin_profile_section(tg: Path) -> None:
+    """Put a plugin's rows in somebody's profile.
+
+    `infoItems` assembles Telegram's own sections into `result` and returns it, so the plugin
+    rows are appended to that list rather than inserted into `items`, whose keys are an
+    exhaustive enum of the screen's own sections. Appending also decides where they land: at
+    the bottom, under their own heading, where a row cannot be mistaken for one of Telegram's.
+
+    The rows arrive as plain values from `AorusPluginRuntimeManager`, because this screen is
+    its own Bazel module that depends on AorusGramUI and not on AorusGram.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoProfileItems.swift"
+    if not path.is_file():
+        raise SystemExit("ProfileSection: PeerInfoProfileItems.swift not found")
+    source = path.read_text(encoding="utf-8")
+    if "aorusPluginProfilePeerId" in source:
+        print("ProfileSection: already patched")
+        return
+    if "import AorusGramUI\n" not in source:
+        raise SystemExit("ProfileSection: AorusGramUI is not imported by PeerInfoProfileItems")
+    anchor = (
+        "    var result: [(AnyHashable, [PeerInfoScreenItem])] = []\n"
+        "    for section in InfoSection.allCases {\n"
+        "        if let sectionItems = items[section], !sectionItems.isEmpty {\n"
+        "            result.append((section, sectionItems))\n"
+        "        }\n"
+        "    }\n"
+        "    return result\n"
+    )
+    if source.count(anchor) != 1:
+        raise SystemExit("ProfileSection: infoItems result anchor not found")
+    replacement = (
+        "    var result: [(AnyHashable, [PeerInfoScreenItem])] = []\n"
+        "    for section in InfoSection.allCases {\n"
+        "        if let sectionItems = items[section], !sectionItems.isEmpty {\n"
+        "            result.append((section, sectionItems))\n"
+        "        }\n"
+        "    }\n"
+        + AORUS_PROFILE_SECTION_SWIFT
+        + "    return result\n"
+    )
+    path.write_text(source.replace(anchor, replacement, 1), encoding="utf-8")
+    print("ProfileSection: plugin rows added to the profile screen")
+
+
 def patch_plugin_string_overrides(tg: Path) -> None:
     """Let a plugin replace a word the app draws.
 
@@ -27192,6 +27278,7 @@ def main() -> None:
     patch_plugin_chat_surface(tg)
     patch_plugin_header_badge(tg)
     patch_plugin_string_overrides(tg)
+    patch_plugin_profile_section(tg)
     patch_plugin_chat_list_button(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)

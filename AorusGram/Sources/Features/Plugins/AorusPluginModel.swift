@@ -235,6 +235,8 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             (.customUI, [
                 "aorus.ui.definePages", "aorus.ui.createPage", "aorus.ui.openPage", "aorus.ui.presentPage",
                 "aorus.ui.addFloatingButton", "aorus.ui.addChatPanel",
+                "aorus.ui.addInputAccessory", "aorus.ui.addChatListHeaderButton",
+                "aorus.ui.setChatHeaderBadge", "aorus.profile.addAction", "aorus.profile.addSection",
             ]),
             (.settingsIntegration, ["aorus.integrations.settings.register"]),
             (.contextMenu, ["aorus.integrations.contextMenu.register", "aorus.ui.addMessageContextAction"]),
@@ -783,9 +785,19 @@ extension AorusPluginOverlay.Position {
 public struct AorusPluginNativeButton: Codable, Equatable {
     public enum Place: String, Codable {
         case chatListHeader
+        /// A row in somebody's profile, under a heading of the plugin's choosing.
+        case profileAction
     }
 
-    public static let maximumPerPlugin = 2
+    /// How many a plugin may put in one place. Two in the chat list header, because that row
+    /// holds Telegram's own controls and a third word pushes one of them off the screen; a
+    /// profile scrolls, so it can hold a short list without hiding anything.
+    public static func maximumPerPlugin(_ place: Place) -> Int {
+        switch place {
+        case .chatListHeader: return 2
+        case .profileAction: return 8
+        }
+    }
 
     public var id: String
     public var place: Place
@@ -795,8 +807,14 @@ public struct AorusPluginNativeButton: Codable, Equatable {
     /// `leading` or `trailing`.
     public var placement: String
     public var order: Int
+    /// The heading this row sits under, for the places that have headings. Rows that name
+    /// the same section are drawn together under it.
+    public var section: String?
+    /// Drawn the way Telegram draws "Delete" and "Block", for a row that does something
+    /// somebody cannot take back.
+    public var destructive: Bool
 
-    public init(id: String, place: Place, title: String, icon: String? = nil, color: String? = nil, placement: String = "trailing", order: Int = 0) {
+    public init(id: String, place: Place, title: String, icon: String? = nil, color: String? = nil, placement: String = "trailing", order: Int = 0, section: String? = nil, destructive: Bool = false) {
         self.id = id
         self.place = place
         self.title = title
@@ -804,6 +822,8 @@ public struct AorusPluginNativeButton: Codable, Equatable {
         self.color = color
         self.placement = placement
         self.order = order
+        self.section = section
+        self.destructive = destructive
     }
 
     public static func validated(from data: Data) -> [AorusPluginNativeButton]? {
@@ -811,14 +831,21 @@ public struct AorusPluginNativeButton: Codable, Equatable {
               let items = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else { return nil }
         var result: [AorusPluginNativeButton] = []
         var ids = Set<String>()
+        var perPlace: [Place: Int] = [:]
         for item in items {
-            guard result.count < maximumPerPlugin else { break }
             guard let id = item["id"] as? String, AorusPluginIdentifier.isValid(id), ids.insert(id).inserted,
                   let rawPlace = item["place"] as? String, let place = Place(rawValue: rawPlace) else { continue }
-            let title = String((item["title"] as? String ?? "").prefix(24)).trimmingCharacters(in: .whitespacesAndNewlines)
+            // Counted per place rather than across all of them, so a plugin filling a profile
+            // does not thereby lose its button in the chat list.
+            let used = perPlace[place] ?? 0
+            guard used < maximumPerPlugin(place) else { continue }
+            let titleLimit = place == .profileAction ? 48 : 24
+            let title = String((item["title"] as? String ?? "").prefix(titleLimit)).trimmingCharacters(in: .whitespacesAndNewlines)
             let icon = (item["icon"] as? String).flatMap { AorusPluginOverlay.normalizedSymbol($0) }
-            // A button with nothing on it is a gap in a row of Telegram's own controls.
-            if title.isEmpty, icon == nil { continue }
+            // A button with nothing on it is a gap in a row of Telegram's own controls, and
+            // a profile row is drawn as a word, so one without a word is nothing at all.
+            if title.isEmpty, icon == nil || place == .profileAction { continue }
+            perPlace[place] = used + 1
             let placement = (item["placement"] as? String) == "leading" ? "leading" : "trailing"
             let order = (item["order"] as? NSNumber).map { min(99, max(0, $0.intValue)) } ?? 0
             result.append(AorusPluginNativeButton(
@@ -828,7 +855,9 @@ public struct AorusPluginNativeButton: Codable, Equatable {
                 icon: icon,
                 color: (item["color"] as? String).flatMap { AorusPluginOverlay.normalizedColor($0) },
                 placement: placement,
-                order: order
+                order: order,
+                section: (item["section"] as? String).map { String($0.prefix(48)).trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 },
+                destructive: (item["destructive"] as? NSNumber)?.boolValue ?? false
             ))
         }
         return result

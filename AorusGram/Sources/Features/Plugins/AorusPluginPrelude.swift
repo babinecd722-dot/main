@@ -1636,6 +1636,53 @@ public enum AorusPluginPrelude {
             // hears about otherwise. Every identifier here is the plugin's own — the app
             // namespaces them — so a plugin can cancel and list what it posted and nothing
             // else, including Telegram's own notifications.
+            // Rows in somebody's profile, under a heading the plugin chooses. The document
+            // names `addSection` and `addAction` separately and they are the same thing at
+            // different granularity: a section is the rows plus the heading they share.
+            profile: freeze({
+                addAction: function (config, handler) {
+                    var value = optionalObject(config, 'config');
+                    if (typeof value.title !== 'string' || value.title.length === 0) {
+                        throw typeError('config.title is required');
+                    }
+                    return addNativeButton('profileAction', value, handler);
+                },
+                removeAction: removeNativeButton,
+                addSection: function (config, handler) {
+                    var value = optionalObject(config, 'config');
+                    var title = typeof value.title === 'string' ? value.title : '';
+                    var actions = Array.isArray(value.actions) ? value.actions : [];
+                    if (actions.length === 0) { throw typeError('config.actions must not be empty'); }
+                    var ids = [];
+                    // All or nothing: half a section is worse than none, because the half that
+                    // arrived is the half nobody can explain.
+                    try {
+                        for (var i = 0; i < actions.length; i++) {
+                            var action = optionalObject(actions[i], 'action');
+                            if (typeof action.title !== 'string' || action.title.length === 0) {
+                                throw typeError('every action needs a title');
+                            }
+                            ids.push(addNativeButton('profileAction', {
+                                title: action.title,
+                                section: title,
+                                order: typeof action.order === 'number' ? action.order : i,
+                                destructive: !!action.destructive
+                            }, typeof action.handler === 'function' ? action.handler : handler));
+                        }
+                    } catch (error) {
+                        for (var j = 0; j < ids.length; j++) { removeNativeButton(ids[j]); }
+                        throw error;
+                    }
+                    return function () {
+                        for (var k = 0; k < ids.length; k++) { removeNativeButton(ids[k]); }
+                    };
+                },
+                actions: function () {
+                    return freeze(nativeButtons.filter(function (button) {
+                        return button.place === 'profileAction';
+                    }).map(function (button) { return JSON.parse(JSON.stringify(button)); }));
+                }
+            }),
             notifications: freeze({
                 post: function (options) {
                     var opts = typeof options === 'string' ? { body: options } : optionalObject(options, 'options');
