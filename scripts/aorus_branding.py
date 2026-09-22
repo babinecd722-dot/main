@@ -18471,6 +18471,91 @@ def patch_plugin_profile_section(tg: Path) -> None:
     print("ProfileSection: plugin rows added to the profile screen")
 
 
+def patch_plugin_hook_sites(tg: Path) -> None:
+    """Let a plugin get between the app and what it was about to do.
+
+    Every hook site is a closure the chat controller hands to something else, so the hook is
+    installed by replacing the closure rather than by patching inside its body. Those bodies
+    are hundreds of lines long and change between Telegram releases; an anchor in the middle
+    of one is a patch that stops matching without anybody noticing. Four `let`s become `var`s
+    and the wrapping happens in one place.
+    """
+    interaction = tg / "submodules/TelegramUI/Components/ChatControllerInteraction/Sources/ChatControllerInteraction.swift"
+    if not interaction.is_file():
+        raise SystemExit("HookSites: ChatControllerInteraction.swift not found")
+    source = interaction.read_text(encoding="utf-8")
+    hooked = [
+        "public let openMessage: (EngineRawMessage, OpenMessageParams) -> Bool",
+        "public let openPeer: (EnginePeer, ChatControllerInteractionNavigateToPeer, MessageReference?, OpenPeerSource) -> Void",
+        "public let openMessageContextMenu: (EngineRawMessage, Bool, ASDisplayNode, CGRect, UIGestureRecognizer?, CGPoint?) -> Void",
+        "public let updateMessageReaction: (EngineRawMessage, ChatControllerInteractionReaction, Bool, ContextExtractedContentContainingView?) -> Void",
+    ]
+    if all(declaration.replace("public let", "public var") in source for declaration in hooked):
+        print("HookSites: ChatControllerInteraction already patched")
+    else:
+        for declaration in hooked:
+            if source.count(declaration) != 1:
+                raise SystemExit("HookSites: anchor not found — " + declaration[:60])
+            source = source.replace(declaration, declaration.replace("public let", "public var"), 1)
+        interaction.write_text(source, encoding="utf-8")
+        print("HookSites: four interaction closures are replaceable")
+
+    panel = tg / "submodules/ChatPresentationInterfaceState/Sources/ChatPanelInterfaceInteraction.swift"
+    if not panel.is_file():
+        raise SystemExit("HookSites: ChatPanelInterfaceInteraction.swift not found")
+    source = panel.read_text(encoding="utf-8")
+    declaration = "public let setupEditMessage: (EngineMessage.Id?, @escaping (ContainedViewLayoutTransition) -> Void) -> Void"
+    if declaration.replace("public let", "public var") in source:
+        print("HookSites: ChatPanelInterfaceInteraction already patched")
+    else:
+        if source.count(declaration) != 1:
+            raise SystemExit("HookSites: setupEditMessage anchor not found")
+        panel.write_text(
+            source.replace(declaration, declaration.replace("public let", "public var"), 1),
+            encoding="utf-8",
+        )
+        print("HookSites: setupEditMessage is replaceable")
+
+    controller = tg / "submodules/TelegramUI/Sources/ChatController.swift"
+    source = controller.read_text(encoding="utf-8")
+    if "aorusPluginInstallHooks(controllerInteraction)" not in source:
+        anchor = "        self.controllerInteraction = controllerInteraction\n"
+        if source.count(anchor) != 1:
+            raise SystemExit("HookSites: controllerInteraction assignment anchor not found")
+        controller.write_text(
+            source.replace(
+                anchor,
+                "        // AorusGram: route these through the plugin hook chain, once, where the\n"
+                "        // interaction is built. A site nobody hooked calls straight through.\n"
+                "        aorusPluginInstallHooks(controllerInteraction)\n" + anchor,
+                1,
+            ),
+            encoding="utf-8",
+        )
+        print("HookSites: chat interaction hooks installed")
+    else:
+        print("HookSites: chat interaction hooks already installed")
+
+    load = tg / "submodules/TelegramUI/Sources/Chat/ChatControllerLoadDisplayNode.swift"
+    source = load.read_text(encoding="utf-8")
+    if "aorusPluginInstallPanelHooks(interfaceInteraction)" not in source:
+        anchor = "        self.interfaceInteraction = interfaceInteraction\n"
+        if source.count(anchor) != 1:
+            raise SystemExit("HookSites: interfaceInteraction assignment anchor not found")
+        load.write_text(
+            source.replace(
+                anchor,
+                "        // AorusGram: the one hook site that lives on the panel interaction.\n"
+                "        aorusPluginInstallPanelHooks(interfaceInteraction)\n" + anchor,
+                1,
+            ),
+            encoding="utf-8",
+        )
+        print("HookSites: panel interaction hook installed")
+    else:
+        print("HookSites: panel interaction hook already installed")
+
+
 def patch_plugin_string_overrides(tg: Path) -> None:
     """Let a plugin replace a word the app draws.
 
@@ -27279,6 +27364,7 @@ def main() -> None:
     patch_plugin_header_badge(tg)
     patch_plugin_string_overrides(tg)
     patch_plugin_profile_section(tg)
+    patch_plugin_hook_sites(tg)
     patch_plugin_chat_list_button(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)

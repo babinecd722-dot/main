@@ -92,6 +92,7 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginShareFile(_ pluginId: String, path: URL, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginBroadcast(_ pluginId: String, topic: String, json: String)
     func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void)
+    func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void)
     var pluginAppState: [String: Any] { get }
     var pluginDeviceInfo: [String: Any] { get }
     var pluginInterfaceLanguage: String { get }
@@ -136,6 +137,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onShareFile: ((String, URL) -> Void)?
     public var onBroadcast: ((String, String, String) -> Void)?
     public var onNotify: ((String, String, String, String, String, Double) -> [String: Any]?)?
+    public var onRuntimeCall: ((String, String, [String: Any]) -> [String: Any]?)?
     // The open chat. Nothing is open unless a test says so, which is also true on a device
     // between chats, so the default answer here is the same one the app gives.
     public var onCurrentChat: ((String) -> [String: Any]?)?
@@ -229,6 +231,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         completion(.success(onNotify?(pluginId, action, notificationId, title, body, after) ?? ["ok": NSNumber(value: true)]))
+    }
+    open func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        completion(.success(onRuntimeCall?(pluginId, action, payload) ?? ["ok": NSNumber(value: true)]))
     }
     open func pluginMedia(_ pluginId: String, action: String, peerId: Int64, namespace: Int32, messageId: Int32, directory: URL?, completion: @escaping (Result<[String: Any]?, Error>) -> Void) {
         completion(.success(onMedia?(pluginId, action, peerId, namespace, messageId)))
@@ -835,6 +840,31 @@ public final class AorusPluginSandbox {
             for (key, value) in values where previous[key] != value {
                 self.deliver(event: "settings.changed", payload: ["pluginId": self.manifest.id, "key": key, "value": value.anyValue])
             }
+        }
+    }
+
+    /// Runs this plugin's handlers for one hook site and answers what they decided.
+    ///
+    /// Unlike the outgoing hook, this never blocks the caller. These sites are reached on
+    /// the main thread in the middle of handling a tap, and a plugin's queue can be waiting
+    /// on the main thread itself — waiting for an answer there is a deadlock with somebody
+    /// holding a phone at the other end of it. The caller gets the answer when it arrives,
+    /// or gives up on its own deadline and proceeds.
+    public func evaluateHook(mode: String, payload: [String: Any], completion: @escaping ([String: Any]?) -> Void) {
+        let json = (try? JSONSerialization.data(withJSONObject: payload))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        queue.async {
+            var answer: [String: Any]?
+            if let dispatcher = self.dispatcher, self.context != nil {
+                self.pendingException = nil
+                if let result = dispatcher.invokeMethod("runHook", withArguments: [mode, json]),
+                   result.isString,
+                   let data = result.toString()?.data(using: .utf8),
+                   let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+                    answer = parsed
+                }
+            }
+            completion(answer)
         }
     }
 
@@ -1582,6 +1612,17 @@ public final class AorusPluginSandbox {
                 return
             }
             host.pluginNotify(pluginId, action: action, notificationId: notificationId, title: title, body: body, after: after) { [weak self] result in
+                self?.settle(id, with: result.map { value -> Any? in value as Any })
+            }
+        // Reaching into the app itself. The two grants are split by what the call does
+        // rather than by which namespace it is in: reading the screen and watching what the
+        // app does is one thing to be asked about, and changing either is another.
+        case "hook.define", "tree.query", "tree.mutate",
+             "objc.cls", "objc.inst", "objc.call", "objc.get", "objc.set", "objc.ivar":
+            let writes = kind == "tree.mutate" || kind.hasPrefix("objc.")
+                || (kind == "hook.define" && (payload["mode"] as? String) == "replace")
+            guard require(writes ? .appInternalsWrite : .appInternals, id: id) else { return }
+            host.pluginRuntimeCall(pluginId, action: kind, payload: payload) { [weak self] result in
                 self?.settle(id, with: result.map { value -> Any? in value as Any })
             }
         case "files.pick":

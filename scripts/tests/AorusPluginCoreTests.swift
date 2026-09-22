@@ -1481,6 +1481,43 @@ do {
     )
 }
 
+// What a plugin may never name through the Objective-C runtime, whatever it was granted.
+// This is the one list in the plugin system where a miss is an account rather than a bug,
+// so it is checked directly rather than only through a call that happens to use it.
+for denied in [
+    "MTProtoKeychain", "Postbox", "TGKeychain", "AuthKeyBox", "ED25519Signer",
+    "AESEncryptor", "SecretChatState", "NSFileManager", "NSUserDefaults",
+    "AorusRealityManager", "AorusLicenseStore", "DeviceFingerprint",
+] {
+    expect(AorusPluginObjCDenylist.isDenied(denied), "\(denied) is denied")
+    expect(!AorusPluginObjCDenylist.isAllowedClass(denied), "\(denied) is not a class a plugin may name")
+}
+for denied in [
+    "authKey", "setSecret:", "decryptData:", "performSelector:", "swizzleMethod",
+    "objc_setAssociatedObject", "class_addMethod", "setImplementation:",
+    "writeToFile:atomically:", "terminateWithSuccess", "randomBytes",
+] {
+    expect(!AorusPluginObjCDenylist.isAllowedSelector(denied), "selector \(denied) is refused")
+}
+// The denylist wins over the allowlist, which is the order these two rules have to be
+// applied in: `NSFileManager` passes the prefix and must still be refused.
+expect(!AorusPluginObjCDenylist.isAllowedClass("NSFileManager"), "a denied name is refused even with an allowed prefix")
+// And a class nobody allowed is refused whether or not it is denied by name.
+for outside in ["TelegramCore", "ChatControllerImpl", "MyClass", "", String(repeating: "U", count: 200)] {
+    expect(!AorusPluginObjCDenylist.isAllowedClass(outside), "\(outside.prefix(16)) is outside the allowlist")
+}
+for allowed in ["UIView", "UILabel", "NSString", "CALayer", "AorusPluginOverlayHost"] {
+    expect(AorusPluginObjCDenylist.isAllowedClass(allowed), "\(allowed) is a class a plugin may name")
+}
+for allowed in ["superview", "text", "alpha", "isHidden", "setText:", "addSubview:"] {
+    expect(AorusPluginObjCDenylist.isAllowedSelector(allowed), "selector \(allowed) is allowed")
+}
+// A selector is letters, numbers, colons and underscores. Anything else is a way to smuggle
+// something past a name check.
+for malformed in ["set Text:", "text;drop", "a/b", "a.b", "init()"] {
+    expect(!AorusPluginObjCDenylist.isAllowedSelector(malformed), "malformed selector \(malformed) is refused")
+}
+
 if failures == 0 {
     print("Aorus plugin core tests: OK")
 } else {

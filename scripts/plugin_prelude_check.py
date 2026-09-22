@@ -60,13 +60,21 @@ def swift_string(text: str) -> str:
     return "".join(out)
 
 
+def swift_list(source: str, name: str) -> list[str]:
+    """A `public static let <name>: [String] = [...]` declaration, as its strings."""
+    match = re.search(
+        r'public static let %s: \[String\] = \[(.*?)\n    \]' % re.escape(name), source, re.S
+    )
+    if not match:
+        raise SystemExit("prelude: could not find the %s list" % name)
+    return re.findall(r'"([^"]+)"', match.group(1))
+
+
 def extract(root: Path) -> tuple[str, list[str], str]:
     source = (root / PRELUDE).read_text(encoding="utf-8")
 
-    events = re.search(r'public static let events: \[String\] = \[(.*?)\n    \]', source, re.S)
-    if not events:
-        raise SystemExit("prelude: could not find the events list")
-    names = re.findall(r'"([^"]+)"', events.group(1))
+    names = swift_list(source, "events")
+    hook_sites = swift_list(source, "hookSites")
 
     version = re.search(r'public static let apiVersion = "([^"]+)"', source)
     if not version:
@@ -77,11 +85,14 @@ def extract(root: Path) -> tuple[str, list[str], str]:
         raise SystemExit("prelude: could not find the source literal")
     text = body.group(1)
 
-    # The two interpolations the literal actually uses.
-    text = text.replace(
-        r'\(events.map { "'"'"'\($0)'"'"'" }.joined(separator: ", "))',
-        ", ".join("'%s'" % name for name in names),
-    )
+    # The interpolations the literal actually uses, each a list of names joined the same
+    # way. Built here rather than written out, because the escaping in that template is
+    # exactly the kind of thing that silently stops matching.
+    for template, values in (
+        ('\\(events.map { "\'\\($0)\'" }.joined(separator: ", "))', names),
+        ('\\(hookSites.map { "\'\\($0)\'" }.joined(separator: ", "))', hook_sites),
+    ):
+        text = text.replace(template, ", ".join("'%s'" % value for value in values))
     text = text.replace(r"\(apiVersion)", version.group(1))
     if "\\(" in text:
         remaining = sorted(set(re.findall(r"\\\([^)]*\)", text)))
@@ -427,6 +438,53 @@ aorus.chat.current().then(function (value) {
     // never, and says how late it is.
     const late = [];
     aorus.schedule.at('overdue', Date.now() - 60000, function (event) { late.push(event); });
+
+    // Hooks, the view tree and the runtime. What is checked here is what a plugin can get
+    // wrong before anything crosses; what it may reach once it has crossed is the denylist,
+    // which the Swift tests check directly.
+    check('hook is missing', typeof aorus.hook === 'object');
+    check('hook.list is empty', aorus.hook.list().length === 5);
+    check('hook.list does not name the sites', aorus.hook.list().indexOf('chat.openPeer') !== -1);
+    throws('hook.before accepted a site that does not exist', () => aorus.hook.before('chat.nope', function () {}));
+    throws('hook.before accepted no handler', () => aorus.hook.before('chat.openPeer'));
+    const hookId = aorus.hook.before('chat.openPeer', function () {});
+    check('hook.before did not register with the app', lastRequest('hook.define').site === 'chat.openPeer');
+    check('hook.before did not say which mode', lastRequest('hook.define').mode === 'before');
+    check('hook.off did not remove', aorus.hook.off(hookId) === true);
+    check('removing twice claims it removed something', aorus.hook.off(hookId) === false);
+    check('the last hook leaving did not tell the app', lastRequest('hook.define').enabled === false);
+    aorus.hook.replace('chat.openPeer', function () {});
+    check('hook.replace did not say which mode', lastRequest('hook.define').mode === 'replace');
+
+    // The chain the app will run, exercised through the dispatcher the way the app runs it.
+    const chainSeen = [];
+    aorus.hook.before('chat.openMessage', function (event) { chainSeen.push('first:' + event.messageId); });
+    aorus.hook.before('chat.openMessage', function () { chainSeen.push('second'); return { cancel: true }; });
+    const verdict = JSON.parse(globalThis.__dispatcher.runHook('before', JSON.stringify({ site: 'chat.openMessage', messageId: 7 })));
+    check('a hook handler did not run', chainSeen[0] === 'first:7');
+    check('hooks did not run in the order they were added', chainSeen[1] === 'second');
+    check('a cancelling handler did not cancel', verdict.cancel === true);
+    // A handler that throws is reported and counts as having said nothing, rather than
+    // taking the rest of the chain down with it.
+    aorus.hook.before('chat.startEdit', function () { throw new Error('boom'); });
+    aorus.hook.before('chat.startEdit', function () { chainSeen.push('after the throw'); });
+    const survived = JSON.parse(globalThis.__dispatcher.runHook('before', JSON.stringify({ site: 'chat.startEdit' })));
+    check('a throwing handler stopped the chain', chainSeen.indexOf('after the throw') !== -1);
+    check('a throwing handler cancelled the action', survived.cancel === undefined);
+
+    aorus.tree.query('UILabel');
+    check('tree.query lost its selector', lastRequest('tree.query').selector === 'UILabel');
+    aorus.tree.mutate('AvatarNode', { cornerRadius: 0 });
+    check('tree.mutate lost its patch', lastRequest('tree.mutate').patch.cornerRadius === 0);
+    throws('tree.query accepted a non-string', () => aorus.tree.query(5));
+
+    aorus.objc.cls('UIApplication');
+    check('objc.cls lost the class name', lastRequest('objc.cls').className === 'UIApplication');
+    aorus.objc.call({ handle: 'objc-1' }, 'superview', []);
+    check('objc.call lost the receiver', lastRequest('objc.call').receiver === 'objc-1');
+    throws('objc.call accepted three arguments', () => aorus.objc.call({ handle: 'objc-1' }, 'a:b:c:', [1, 2, 3]));
+    throws('objc.call accepted a receiver that is not a handle', () => aorus.objc.call(42, 'superview', []));
+    throws('objc.get accepted a receiver that is not a handle', () => aorus.objc.get(null, 'text'));
 
     // Notifications. What crosses matters more than usual here, because on the other side
     // it wakes somebody up.

@@ -146,6 +146,13 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
     case composer
     case pluginMessaging
     case notifications
+    /// Watching what the app does and reading its live view tree. Observing only.
+    case appInternals
+    /// Changing what the app does: replacing an action, mutating the view tree, calling
+    /// into the Objective-C runtime. Separate from observing because the failure modes are
+    /// not the same kind of thing — one is a plugin that knows too much, the other is a
+    /// plugin that can make the app do something its author never wrote.
+    case appInternalsWrite
 
     /// What each permission looks like in a plugin's source. The consent sheet is built
     /// from this, so a capability with no needle here is one the person is never asked
@@ -271,6 +278,8 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             // `dialogs`: a toast is seen by a person already looking at the screen, and this
             // is a plugin waking somebody up.
             (.notifications, ["aorus.notifications."]),
+            (.appInternals, ["aorus.hook.before", "aorus.hook.after", "aorus.hook.list", "aorus.tree.query"]),
+            (.appInternalsWrite, ["aorus.hook.replace", "aorus.tree.mutate", "aorus.objc."]),
             (.pluginMessaging, [
                 "aorus.plugins.emit", "aorus.plugins.on",
                 "aorus.on('pluginMessage",

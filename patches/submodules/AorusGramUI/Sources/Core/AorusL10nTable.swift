@@ -53,6 +53,10 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Observe the app": "Osservare l'app",
+        "Change what the app does": "Cambiare il comportamento dell'app",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Consente al plugin di vedere cosa fa l'app: tocchi su messaggi e profili, menu che si aprono, reazioni, e di leggere l'albero dello schermo. Solo lettura: non può cambiare nulla.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Consente al plugin di cambiare il comportamento dell'app: annullare e sostituire le sue azioni, cambiare le proprietà degli elementi sullo schermo e chiamare metodi del runtime. È il permesso più ampio qui: un plugin con questo può far fare all'app qualcosa che nessuno ha scritto. Chiavi, MTProto, Postbox e il portachiavi restano sempre chiusi.",
         "Notifications": "Notifiche",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Consente di mostrare notifiche dall'app, anche quando è chiusa. Ogni notifica è firmata con il nome del plugin, e il plugin non può né vedere né toccare le notifiche di Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ancora niente. Qui appare tutto ciò che il plugin scrive con console e tutto ciò che l'app segnala su di esso.",
@@ -825,6 +829,10 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Observe the app": "Obserwowanie aplikacji",
+        "Change what the app does": "Zmiana zachowania aplikacji",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Pozwala wtyczce widzieć, co robi aplikacja: dotknięcia wiadomości i profili, otwierane menu, reakcje, oraz czytać drzewo ekranu. Tylko odczyt: nic nie może zmienić.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Pozwala wtyczce zmieniać zachowanie aplikacji: anulować i podmieniać jej działania, zmieniać właściwości elementów na ekranie i wywoływać metody środowiska uruchomieniowego. To najszersze uprawnienie tutaj: wtyczka z nim może sprawić, że aplikacja zrobi coś, czego nikt nie napisał. Klucze, MTProto, Postbox i pęk kluczy są zawsze zamknięte.",
         "Notifications": "Powiadomienia",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Pozwala wyświetlać powiadomienia z aplikacji, również gdy jest zamknięta. Każde powiadomienie jest podpisane nazwą wtyczki, a wtyczka nie widzi powiadomień Telegrama ani ich nie zmienia.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Na razie pusto. Pojawi się tu wszystko, co wtyczka pisze przez console, i wszystko, co aplikacja o niej zgłasza.",
@@ -1597,6 +1605,10 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Observe the app": "De app observeren",
+        "Change what the app does": "Gedrag van de app wijzigen",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Laat de plug-in zien wat de app doet: tikken op berichten en profielen, menu's die opengaan, reacties, en de schermboom lezen. Alleen lezen: veranderen kan niet.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Laat de plug-in het gedrag van de app wijzigen: acties annuleren en vervangen, eigenschappen van dingen op het scherm veranderen en methodes van de runtime aanroepen. Dit is de breedste toestemming hier: een plug-in hiermee kan de app iets laten doen dat niemand geschreven heeft. Sleutels, MTProto, Postbox en de sleutelhanger blijven altijd gesloten.",
         "Notifications": "Meldingen",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Staat toe meldingen vanuit de app te tonen, ook wanneer die gesloten is. Elke melding is ondertekend met de naam van de plug-in, en de plug-in kan de meldingen van Telegram niet zien of aanraken.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Nog niets. Hier verschijnt alles wat de plug-in via console schrijft en alles wat de app erover meldt.",
@@ -2369,6 +2381,10 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Observe the app": "Observar l'aplicació",
+        "Change what the app does": "Canviar el comportament de l'aplicació",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permet al connector veure què fa l'aplicació: tocs en missatges i perfils, menús que s'obren, reaccions, i llegir l'arbre de la pantalla. Només lectura: no pot canviar res.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Permet al connector canviar el comportament de l'aplicació: cancel·lar i substituir les seves accions, canviar propietats dels elements de la pantalla i cridar mètodes del temps d'execució. És el permís més ampli d'aquí: un connector amb això pot fer que l'aplicació faci alguna cosa que ningú no ha escrit. Claus, MTProto, Postbox i el clauer queden sempre tancats.",
         "Notifications": "Notificacions",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permet mostrar notificacions des de l'aplicació, fins i tot quan està tancada. Cada notificació va signada amb el nom del connector, i el connector no pot veure ni tocar les notificacions del Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Encara no hi ha res. Aquí apareix tot el que el complement escriu amb console i tot el que l'app n'informa.",
@@ -3141,6 +3157,10 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Observe the app": "Mengamati aplikasi",
+        "Change what the app does": "Mengubah perilaku aplikasi",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Mengizinkan plugin melihat apa yang dilakukan aplikasi: ketukan pada pesan dan profil, menu yang terbuka, reaksi, serta membaca pohon layar. Hanya membaca: tidak dapat mengubah apa pun.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Mengizinkan plugin mengubah perilaku aplikasi: membatalkan dan mengganti tindakannya, mengubah properti elemen di layar, dan memanggil metode runtime. Ini izin terluas di sini: plugin dengan izin ini dapat membuat aplikasi melakukan sesuatu yang tidak ditulis siapa pun. Kunci, MTProto, Postbox, dan keychain selalu tertutup.",
         "Notifications": "Notifikasi",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Mengizinkan menampilkan notifikasi dari aplikasi, termasuk saat aplikasi tertutup. Setiap notifikasi ditandatangani dengan nama plugin, dan plugin tidak dapat melihat atau menyentuh notifikasi Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Belum ada apa pun. Semua yang ditulis plugin lewat console dan semua yang dilaporkan aplikasi tentangnya muncul di sini.",
@@ -3913,6 +3933,10 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Observe the app": "Memerhati aplikasi",
+        "Change what the app does": "Mengubah kelakuan aplikasi",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Membenarkan pemalam melihat apa yang dilakukan aplikasi: ketikan pada mesej dan profil, menu yang dibuka, reaksi, serta membaca pokok skrin. Baca sahaja: tiada apa yang boleh diubah.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Membenarkan pemalam mengubah kelakuan aplikasi: membatalkan dan menggantikan tindakannya, mengubah sifat elemen pada skrin dan memanggil kaedah masa jalan. Ini kebenaran terluas di sini: pemalam dengannya boleh membuat aplikasi melakukan sesuatu yang tiada sesiapa tulis. Kunci, MTProto, Postbox dan keychain sentiasa tertutup.",
         "Notifications": "Pemberitahuan",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Membenarkan paparan pemberitahuan daripada aplikasi, termasuk semasa ia ditutup. Setiap pemberitahuan ditandatangani dengan nama pemalam, dan pemalam tidak dapat melihat atau menyentuh pemberitahuan Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Belum ada apa-apa. Semua yang ditulis pemalam melalui console dan semua yang dilaporkan aplikasi tentangnya muncul di sini.",
@@ -4685,6 +4709,10 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Observe the app": "Назіранне за праграмай",
+        "Change what the app does": "Змена паводзін праграмы",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Дазваляе плагіну бачыць, што робіць праграма: дотыкі да паведамленняў і профіляў, адкрыццё меню, рэакцыі, а таксама чытаць дрэва экрана. Толькі чытанне: змяніць нічога нельга.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Дазваляе плагіну змяняць паводзіны праграмы: адмяняць і падмяняць яе дзеянні, змяняць уласцівасці элементаў на экране і выклікаць метады асяроддзя выканання. Гэта самы шырокі дазвол тут: плагін з ім можа прымусіць праграму зрабіць тое, чаго ў ёй не напісана. Ключы, MTProto, Postbox і сховішча пароляў закрытыя заўсёды.",
         "Notifications": "Апавяшчэнні",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Дазваляе паказваць апавяшчэнні ад праграмы, у тым ліку калі яна закрыта. Кожнае апавяшчэнне падпісана назвай плагіна, і плагін не бачыць апавяшчэнні Telegram і не змяняе іх.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Пакуль пуста. Тут з'явіцца ўсё, што ўбудова піша праз console, і ўсё, што праграма паведамляе пра яе.",
@@ -5457,6 +5485,10 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Observe the app": "Ilovani kuzatish",
+        "Change what the app does": "Ilova xatti-harakatini oʻzgartirish",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Plaginga ilova nima qilayotganini koʻrishga ruxsat beradi: xabarlar va profillarga bosishlar, ochilayotgan menyular, reaksiyalar, shuningdek ekran daraxtini oʻqish. Faqat oʻqish: hech narsani oʻzgartirib boʻlmaydi.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Plaginga ilova xatti-harakatini oʻzgartirishga ruxsat beradi: uning amallarini bekor qilish va almashtirish, ekrandagi elementlar xossalarini oʻzgartirish va ish vaqti metodlarini chaqirish. Bu yerdagi eng keng ruxsat: u bilan plagin ilovaga hech kim yozmagan narsani qildira oladi. Kalitlar, MTProto, Postbox va kalitlar ombori doimo yopiq.",
         "Notifications": "Bildirishnomalar",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Ilovadan bildirishnomalar koʻrsatishga ruxsat beradi, ilova yopiq boʻlganda ham. Har bir bildirishnoma plagin nomi bilan imzolanadi, plagin esa Telegram bildirishnomalarini na koʻradi, na oʻzgartiradi.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Hozircha bo'sh. Plagin console orqali yozgan va ilova u haqida xabar qilgan hamma narsa shu yerda ko'rinadi.",
@@ -6229,6 +6261,10 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Observe the app": "앱 관찰",
+        "Change what the app does": "앱 동작 변경",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "플러그인이 앱의 동작을 볼 수 있게 합니다: 메시지와 프로필 탭, 열리는 메뉴, 반응, 그리고 화면 트리 읽기. 읽기 전용이며 아무것도 바꿀 수 없습니다.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "플러그인이 앱의 동작을 바꿀 수 있게 합니다: 앱의 동작을 취소하거나 대체하고, 화면 요소의 속성을 바꾸고, 런타임 메서드를 호출합니다. 여기서 가장 넓은 권한이며, 이 권한을 가진 플러그인은 아무도 작성하지 않은 동작을 앱이 하게 만들 수 있습니다. 키, MTProto, Postbox, 키체인은 항상 차단됩니다.",
         "Notifications": "알림",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "앱이 닫혀 있을 때를 포함해 앱에서 알림을 표시할 수 있습니다. 모든 알림에는 플러그인 이름이 표시되며, 플러그인은 텔레그램 자체 알림을 보거나 건드릴 수 없습니다.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "아직 아무것도 없습니다. 플러그인이 console로 남기는 모든 것과 앱이 플러그인에 대해 알리는 모든 것이 여기에 나타납니다.",
@@ -7001,6 +7037,10 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Observe the app": "مراقبة التطبيق",
+        "Change what the app does": "تغيير سلوك التطبيق",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "يسمح للإضافة برؤية ما يفعله التطبيق: النقر على الرسائل والملفات الشخصية، فتح القوائم، التفاعلات، وقراءة شجرة الشاشة. قراءة فقط: لا يمكنها تغيير أي شيء.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "يسمح للإضافة بتغيير سلوك التطبيق: إلغاء إجراءاته واستبدالها، وتغيير خصائص العناصر على الشاشة، واستدعاء دوال بيئة التشغيل. هذا أوسع إذن هنا: إضافة تملكه تستطيع جعل التطبيق يفعل ما لم يكتبه أحد. المفاتيح وMTProto وPostbox ومخزن كلمات المرور مغلقة دائماً.",
         "Notifications": "الإشعارات",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "يسمح بعرض إشعارات من التطبيق، بما في ذلك أثناء إغلاقه. كل إشعار موقّع باسم الإضافة، ولا يمكن للإضافة رؤية إشعارات تيليجرام أو المساس بها.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "لا شيء بعد. يظهر هنا كل ما تكتبه الإضافة عبر console وكل ما يبلّغ عنه التطبيق بشأنها.",
@@ -7773,6 +7813,10 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Observe the app": "مشاهده برنامه",
+        "Change what the app does": "تغییر رفتار برنامه",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "به افزونه اجازه می‌دهد ببیند برنامه چه می‌کند: ضربه روی پیام‌ها و نمایه‌ها، باز شدن منوها، واکنش‌ها، و خواندن درخت صفحه. فقط خواندن: چیزی را نمی‌تواند تغییر دهد.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "به افزونه اجازه می‌دهد رفتار برنامه را تغییر دهد: لغو و جایگزینی کارهای آن، تغییر ویژگی‌های عناصر روی صفحه و فراخوانی متدهای زمان اجرا. گسترده‌ترین مجوز اینجاست: افزونه‌ای با آن می‌تواند برنامه را وادار کند کاری کند که کسی ننوشته است. کلیدها، MTProto، Postbox و انبار کلیدها همیشه بسته‌اند.",
         "Notifications": "اعلان‌ها",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "اجازه می‌دهد اعلان‌هایی از برنامه نمایش داده شود، حتی وقتی برنامه بسته است. هر اعلان با نام افزونه امضا می‌شود و افزونه نمی‌تواند اعلان‌های تلگرام را ببیند یا تغییر دهد.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "هنوز چیزی نیست. هر چه افزونه با console می‌نویسد و هر چه برنامه درباره آن گزارش می‌دهد اینجا دیده می‌شود.",
@@ -8545,6 +8589,10 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Observe the app": "Қолданбаны бақылау",
+        "Change what the app does": "Қолданба әрекетін өзгерту",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Плагинге қолданба не істеп жатқанын көруге рұқсат береді: хабарлар мен профильдерге түрту, ашылатын мәзірлер, реакциялар, сондай-ақ экран ағашын оқу. Тек оқу: ештеңені өзгерте алмайды.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Плагинге қолданба әрекетін өзгертуге рұқсат береді: оның әрекеттерін болдырмау және ауыстыру, экрандағы элементтердің қасиеттерін өзгерту және орындалу ортасының әдістерін шақыру. Бұл мұндағы ең кең рұқсат: онымен плагин қолданбаға ешкім жазбаған нәрсені істете алады. Кілттер, MTProto, Postbox және құпиясөз қоймасы әрқашан жабық.",
         "Notifications": "Хабарландырулар",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Қолданба жабық кезде де одан хабарландырулар көрсетуге рұқсат береді. Әрбір хабарландыру плагин атымен қол қойылады, ал плагин Telegram хабарландыруларын көрмейді және оларға тимейді.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Әзірге бос. Плагин console арқылы жазатынның бәрі және қолданба ол туралы хабарлайтынның бәрі осында шығады.",
@@ -9317,6 +9365,10 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Observe the app": "观察应用",
+        "Change what the app does": "改变应用行为",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "允许插件看到应用在做什么：点按消息和资料、打开菜单、反应，以及读取屏幕树。只读，什么都改不了。",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "允许插件改变应用的行为：取消和替换它的动作、改变屏幕上元素的属性、调用运行时方法。这是这里最宽的权限：拿到它的插件能让应用做出谁也没写过的事。密钥、MTProto、Postbox 和钥匙串始终封闭。",
         "Notifications": "通知",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "允许应用显示通知，包括应用关闭时。每条通知都会署上插件名称，插件既看不到也无法改动 Telegram 自己的通知。",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "还没有内容。插件通过 console 写下的一切，以及应用关于它的一切报告，都会出现在这里。",
@@ -10090,6 +10142,10 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Observe the app": "觀察應用程式",
+        "Change what the app does": "改變應用程式行為",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "允許外掛看到應用程式在做什麼：點按訊息和個人資料、開啟選單、反應，以及讀取畫面樹。唯讀，什麼都改不了。",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "允許外掛改變應用程式的行為：取消和替換它的動作、改變畫面上元素的屬性、呼叫執行階段方法。這是這裡最寬的權限：拿到它的外掛能讓應用程式做出誰也沒寫過的事。金鑰、MTProto、Postbox 和鑰匙圈始終封閉。",
         "Notifications": "通知",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "允許應用程式顯示通知，包括應用程式關閉時。每則通知都會署上外掛名稱，外掛既看不到也無法更動 Telegram 自己的通知。",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "還沒有內容。外掛程式透過 console 寫下的一切，以及應用程式關於它的一切回報，都會出現在這裡。",
@@ -10862,6 +10918,10 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Observe the app": "アプリの観察",
+        "Change what the app does": "アプリの動作の変更",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "プラグインがアプリの動作を見られるようにします。メッセージやプロフィールのタップ、開くメニュー、リアクション、そして画面ツリーの読み取り。読み取りのみで、何も変更できません。",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "プラグインがアプリの動作を変えられるようにします。アプリの動作を取り消したり置き換えたり、画面上の要素のプロパティを変えたり、ランタイムのメソッドを呼んだりできます。ここで最も広い権限で、これを持つプラグインは誰も書いていない動作をアプリにさせられます。鍵、MTProto、Postbox、キーチェーンは常に閉じています。",
         "Notifications": "通知",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "アプリが閉じているときも含めて、アプリから通知を表示できるようにします。通知にはプラグイン名が必ず付き、プラグインは Telegram 自身の通知を見ることも触ることもできません。",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "まだ何もありません。プラグインが console に書いたものと、アプリがそれについて報告したものがここに表示されます。",
@@ -11634,6 +11694,10 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Observe the app": "Sovelluksen tarkkailu",
+        "Change what the app does": "Sovelluksen toiminnan muuttaminen",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Sallii liitännäisen nähdä, mitä sovellus tekee: viestien ja profiilien napautukset, avautuvat valikot, reaktiot, sekä lukea näkymäpuun. Vain luku: mitään ei voi muuttaa.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Sallii liitännäisen muuttaa sovelluksen toimintaa: peruuttaa ja korvata sen toimintoja, muuttaa näytöllä olevien asioiden ominaisuuksia ja kutsua ajonaikaisia metodeja. Tämä on laajin oikeus täällä: tämän saanut liitännäinen voi saada sovelluksen tekemään jotain, mitä kukaan ei ole kirjoittanut. Avaimet, MTProto, Postbox ja avainnippu ovat aina suljettuja.",
         "Notifications": "Ilmoitukset",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Sallii ilmoitusten näyttämisen sovelluksesta, myös silloin kun se on suljettu. Jokainen ilmoitus on allekirjoitettu liitännäisen nimellä, eikä liitännäinen näe tai koske Telegramin omiin ilmoituksiin.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ei vielä mitään. Tähän tulee kaikki, mitä laajennus kirjoittaa consolella, ja kaikki, mitä sovellus siitä raportoi.",
@@ -12406,6 +12470,10 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Observe the app": "מעקב אחר האפליקציה",
+        "Change what the app does": "שינוי התנהגות האפליקציה",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "מאפשר לתוסף לראות מה האפליקציה עושה: הקשות על הודעות ופרופילים, תפריטים שנפתחים, תגובות, וגם לקרוא את עץ המסך. קריאה בלבד: אי אפשר לשנות דבר.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "מאפשר לתוסף לשנות את התנהגות האפליקציה: לבטל ולהחליף את פעולותיה, לשנות מאפיינים של דברים על המסך ולקרוא למתודות של סביבת הריצה. זו ההרשאה הרחבה ביותר כאן: תוסף שקיבל אותה יכול לגרום לאפליקציה לעשות משהו שאיש לא כתב. מפתחות, MTProto, Postbox ומחסן הסיסמאות סגורים תמיד.",
         "Notifications": "התראות",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "מאפשר להציג התראות מהאפליקציה, גם כשהיא סגורה. כל התראה חתומה בשם התוסף, והתוסף אינו רואה את ההתראות של טלגרם ואינו נוגע בהן.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "עדיין אין כלום. כאן יופיע כל מה שהתוסף כותב דרך console וכל מה שהאפליקציה מדווחת עליו.",
@@ -13178,6 +13246,10 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Observe the app": "Promatranje aplikacije",
+        "Change what the app does": "Promjena ponašanja aplikacije",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Omogućuje dodatku vidjeti što aplikacija radi: dodire na poruke i profile, otvaranje izbornika, reakcije, te čitati stablo zaslona. Samo čitanje: ništa se ne može promijeniti.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Omogućuje dodatku mijenjati ponašanje aplikacije: otkazivati i zamjenjivati njezine radnje, mijenjati svojstva elemenata na zaslonu i pozivati metode izvršnog okruženja. Ovo je najšira dozvola ovdje: dodatak s njom može natjerati aplikaciju da učini nešto što nitko nije napisao. Ključevi, MTProto, Postbox i spremnik lozinki uvijek su zatvoreni.",
         "Notifications": "Obavijesti",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Omogućuje prikaz obavijesti iz aplikacije, uključujući i dok je zatvorena. Svaka je obavijest potpisana imenom dodatka, a dodatak ne vidi Telegramove obavijesti niti ih dira.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Još ništa. Ovdje se pojavljuje sve što dodatak piše putem console i sve što aplikacija o njemu javlja.",
@@ -13950,6 +14022,10 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Observe the app": "Праћење апликације",
+        "Change what the app does": "Промена понашања апликације",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Омогућава додатку да види шта апликација ради: додире на поруке и профиле, отварање менија, реакције, као и да чита стабло екрана. Само читање: ништа се не може променити.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Омогућава додатку да мења понашање апликације: да отказује и замењује њене радње, мења својства елемената на екрану и позива методе извршног окружења. Ово је најшира дозвола овде: додатак с њом може натерати апликацију да уради нешто што нико није написао. Кључеви, MTProto, Postbox и складиште лозинки увек су затворени.",
         "Notifications": "Обавештења",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Омогућава приказ обавештења из апликације, и док је затворена. Свако обавештење потписано је именом додатка, а додатак не види Telegram-ова обавештења нити их дира.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Још ништа. Овде се појављује све што додатак пише преко console и све што апликација о њему пријављује.",
@@ -14722,6 +14798,10 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Observe the app": "Sledování aplikace",
+        "Change what the app does": "Změna chování aplikace",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Umožňuje pluginu vidět, co aplikace dělá: klepnutí na zprávy a profily, otevírání nabídek, reakce, a číst strom obrazovky. Pouze čtení: nic nelze změnit.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Umožňuje pluginu měnit chování aplikace: rušit a nahrazovat její akce, měnit vlastnosti prvků na obrazovce a volat metody běhového prostředí. Je to nejširší oprávnění zde: plugin s ním může přimět aplikaci udělat něco, co nikdo nenapsal. Klíče, MTProto, Postbox a klíčenka jsou vždy uzavřeny.",
         "Notifications": "Oznámení",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Umožňuje zobrazovat oznámení z aplikace, i když je zavřená. Každé oznámení je podepsáno názvem pluginu a plugin nevidí oznámení Telegramu ani se jich nedotkne.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Zatím nic. Objeví se tu vše, co plugin píše přes console, a vše, co o něm hlásí aplikace.",
@@ -15494,6 +15574,10 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Observe the app": "Sledovanie aplikácie",
+        "Change what the app does": "Zmena správania aplikácie",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Umožňuje pluginu vidieť, čo aplikácia robí: ťuknutia na správy a profily, otváranie ponúk, reakcie, a čítať strom obrazovky. Iba čítanie: nič sa nedá zmeniť.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Umožňuje pluginu meniť správanie aplikácie: rušiť a nahrádzať jej akcie, meniť vlastnosti prvkov na obrazovke a volať metódy behového prostredia. Je to najširšie oprávnenie tu: plugin s ním môže prinútiť aplikáciu urobiť niečo, čo nikto nenapísal. Kľúče, MTProto, Postbox a kľúčenka sú vždy uzavreté.",
         "Notifications": "Upozornenia",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Umožňuje zobrazovať upozornenia z aplikácie, aj keď je zatvorená. Každé upozornenie je podpísané názvom pluginu a plugin nevidí upozornenia Telegramu ani sa ich nedotkne.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Zatiaľ nič. Objaví sa tu všetko, čo doplnok píše cez console, a všetko, čo o ňom hlási aplikácia.",
@@ -16266,6 +16350,10 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Observe the app": "Observarea aplicației",
+        "Change what the app does": "Schimbarea comportamentului aplicației",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permite pluginului să vadă ce face aplicația: atingeri pe mesaje și profiluri, meniuri care se deschid, reacții, și să citească arborele ecranului. Doar citire: nu poate schimba nimic.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Permite pluginului să schimbe comportamentul aplicației: să anuleze și să înlocuiască acțiunile ei, să schimbe proprietăți ale elementelor de pe ecran și să apeleze metode ale mediului de execuție. Este cea mai largă permisiune de aici: un plugin cu ea poate face aplicația să facă ceva ce nimeni nu a scris. Cheile, MTProto, Postbox și inelul de chei rămân mereu închise.",
         "Notifications": "Notificări",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permite afișarea notificărilor din aplicație, inclusiv când este închisă. Fiecare notificare este semnată cu numele pluginului, iar pluginul nu vede și nu atinge notificările Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Încă nimic. Aici apare tot ce scrie pluginul prin console și tot ce raportează aplicația despre el.",
@@ -17038,6 +17126,10 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Observe the app": "Az alkalmazás figyelése",
+        "Change what the app does": "Az alkalmazás viselkedésének módosítása",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Lehetővé teszi, hogy a bővítmény lássa, mit csinál az alkalmazás: üzenetek és profilok megérintését, menük megnyílását, reakciókat, és olvassa a képernyőfát. Csak olvasás: semmit sem változtathat meg.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Lehetővé teszi, hogy a bővítmény megváltoztassa az alkalmazás viselkedését: megszakítsa és lecserélje a műveleteit, módosítsa a képernyőn lévő elemek tulajdonságait és futásidejű metódusokat hívjon. Ez a legszélesebb jogosultság itt: az ezzel rendelkező bővítmény olyat is megtehet az alkalmazással, amit senki nem írt meg. A kulcsok, az MTProto, a Postbox és a kulcstartó mindig zárva maradnak.",
         "Notifications": "Értesítések",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Engedélyezi értesítések megjelenítését az alkalmazásból, akkor is, ha az be van zárva. Minden értesítés a bővítmény nevével van aláírva, és a bővítmény nem látja és nem érinti a Telegram saját értesítéseit.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Még semmi. Itt jelenik meg minden, amit a bővítmény a console-lal ír, és minden, amit az alkalmazás jelent róla.",
@@ -17810,6 +17902,10 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Observe the app": "Observere appen",
+        "Change what the app does": "Endre appens oppførsel",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Lar programtillegget se hva appen gjør: trykk på meldinger og profiler, menyer som åpnes, reaksjoner, og lese skjermtreet. Kun lesing: ingenting kan endres.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Lar programtillegget endre hva appen gjør: avbryte og erstatte handlingene dens, endre egenskaper på ting på skjermen og kalle metoder i kjøretidsmiljøet. Dette er den videste tillatelsen her: et programtillegg med den kan få appen til å gjøre noe ingen har skrevet. Nøkler, MTProto, Postbox og nøkkelringen er alltid stengt.",
         "Notifications": "Varsler",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Lar appen vise varsler, også når den er lukket. Hvert varsel er signert med navnet på programtillegget, og programtillegget kan verken se eller røre Telegrams egne varsler.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ingenting ennå. Her vises alt programtillegget skriver via console, og alt appen melder om det.",
@@ -18582,6 +18678,10 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Observe the app": "Observera appen",
+        "Change what the app does": "Ändra appens beteende",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Låter tillägget se vad appen gör: tryck på meddelanden och profiler, menyer som öppnas, reaktioner, och läsa skärmträdet. Endast läsning: ingenting kan ändras.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Låter tillägget ändra vad appen gör: avbryta och ersätta dess handlingar, ändra egenskaper på saker på skärmen och anropa metoder i körtidsmiljön. Detta är den bredaste behörigheten här: ett tillägg med den kan få appen att göra något ingen har skrivit. Nycklar, MTProto, Postbox och nyckelringen är alltid stängda.",
         "Notifications": "Aviseringar",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Tillåter att aviseringar visas från appen, även när den är stängd. Varje avisering är signerad med tilläggets namn, och tillägget kan varken se eller röra Telegrams egna aviseringar.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Inget än. Här visas allt som tillägget skriver via console och allt som appen rapporterar om det.",
@@ -19354,6 +19454,10 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Observe the app": "Quan sát ứng dụng",
+        "Change what the app does": "Thay đổi hành vi ứng dụng",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Cho phép tiện ích thấy ứng dụng đang làm gì: chạm vào tin nhắn và hồ sơ, menu mở ra, biểu cảm, và đọc cây màn hình. Chỉ đọc: không thể thay đổi gì.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Cho phép tiện ích thay đổi hành vi của ứng dụng: huỷ và thay thế các hành động của nó, thay đổi thuộc tính của các phần tử trên màn hình và gọi phương thức của môi trường chạy. Đây là quyền rộng nhất ở đây: tiện ích có quyền này có thể khiến ứng dụng làm điều không ai viết ra. Khoá, MTProto, Postbox và kho khoá luôn đóng.",
         "Notifications": "Thông báo",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Cho phép hiển thị thông báo từ ứng dụng, kể cả khi ứng dụng đã đóng. Mỗi thông báo đều được ký bằng tên tiện ích, và tiện ích không thấy cũng không động đến thông báo của Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Chưa có gì. Mọi thứ tiện ích ghi qua console và mọi thứ ứng dụng báo về nó sẽ xuất hiện ở đây.",
@@ -20126,6 +20230,10 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Observe the app": "Спостереження за застосунком",
+        "Change what the app does": "Зміна поведінки застосунку",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Дозволяє плагіну бачити, що робить застосунок: дотики до повідомлень і профілів, відкриття меню, реакції, а також читати дерево екрана. Лише читання: змінити нічого не можна.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Дозволяє плагіну змінювати поведінку застосунку: скасовувати й підміняти його дії, змінювати властивості елементів на екрані та викликати методи середовища виконання. Це найширший дозвіл тут: плагін із ним може змусити застосунок зробити те, чого в ньому не написано. Ключі, MTProto, Postbox і сховище паролів закриті завжди.",
         "Notifications": "Сповіщення",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Дозволяє показувати сповіщення від застосунку, зокрема коли він закритий. Кожне сповіщення підписане назвою плагіна, і плагін не бачить сповіщень Telegram та не чіпає їх.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Поки порожньо. Тут з'явиться все, що плагін пише через console, і все, що застосунок повідомляє про нього.",
@@ -20907,6 +21015,10 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Observe the app": "Observar la aplicación",
+        "Change what the app does": "Cambiar el comportamiento de la aplicación",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permite al complemento ver qué hace la aplicación: toques en mensajes y perfiles, menús que se abren, reacciones, y leer el árbol de la pantalla. Solo lectura: no puede cambiar nada.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Permite al complemento cambiar el comportamiento de la aplicación: cancelar y sustituir sus acciones, cambiar propiedades de los elementos en pantalla y llamar a métodos del entorno de ejecución. Es el permiso más amplio de aquí: un complemento con él puede hacer que la aplicación haga algo que nadie escribió. Las claves, MTProto, Postbox y el llavero quedan siempre cerrados.",
         "Notifications": "Notificaciones",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permite mostrar notificaciones desde la aplicación, incluso mientras está cerrada. Cada notificación va firmada con el nombre del complemento, y el complemento no puede ver ni tocar las notificaciones de Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Aún no hay nada. Aquí aparece todo lo que el complemento escribe con console y todo lo que la app informa sobre él.",
@@ -21688,6 +21800,10 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Observe the app": "Observar a aplicação",
+        "Change what the app does": "Alterar o comportamento da aplicação",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permite ao plugin ver o que a aplicação faz: toques em mensagens e perfis, menus que abrem, reações, e ler a árvore do ecrã. Apenas leitura: não pode alterar nada.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Permite ao plugin alterar o comportamento da aplicação: cancelar e substituir as suas ações, alterar propriedades dos elementos no ecrã e chamar métodos do tempo de execução. É a permissão mais ampla aqui: um plugin com ela pode fazer a aplicação fazer algo que ninguém escreveu. Chaves, MTProto, Postbox e o porta-chaves ficam sempre fechados.",
         "Notifications": "Notificações",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permite mostrar notificações a partir da aplicação, mesmo quando está fechada. Cada notificação é assinada com o nome do plugin, e o plugin não vê nem mexe nas notificações do Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Ainda não há nada. Aqui aparece tudo o que o plugin escreve pelo console e tudo o que o app informa sobre ele.",
@@ -22469,6 +22585,10 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Observe the app": "Die App beobachten",
+        "Change what the app does": "Das Verhalten der App ändern",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Erlaubt dem Plugin zu sehen, was die App tut: Tippen auf Nachrichten und Profile, sich öffnende Menüs, Reaktionen, und den Bildschirmbaum zu lesen. Nur lesend: es kann nichts ändern.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Erlaubt dem Plugin, das Verhalten der App zu ändern: ihre Aktionen abzubrechen und zu ersetzen, Eigenschaften von Dingen auf dem Bildschirm zu ändern und Methoden der Laufzeitumgebung aufzurufen. Das ist die weiteste Berechtigung hier: ein Plugin damit kann die App etwas tun lassen, das niemand geschrieben hat. Schlüssel, MTProto, Postbox und der Schlüsselbund bleiben immer verschlossen.",
         "Notifications": "Benachrichtigungen",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Erlaubt es, Benachrichtigungen aus der App anzuzeigen, auch wenn sie geschlossen ist. Jede Benachrichtigung trägt den Namen des Plugins, und das Plugin sieht Telegrams eigene Benachrichtigungen weder, noch rührt es sie an.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Noch nichts. Hier erscheint alles, was die Erweiterung über console schreibt, und alles, was die App über sie meldet.",
@@ -23250,6 +23370,10 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Observe the app": "Observer l'application",
+        "Change what the app does": "Changer le comportement de l'application",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permet à l'extension de voir ce que fait l'application : appuis sur les messages et les profils, menus qui s'ouvrent, réactions, et de lire l'arbre de l'écran. Lecture seule : elle ne peut rien changer.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Permet à l'extension de changer le comportement de l'application : annuler et remplacer ses actions, changer les propriétés des éléments à l'écran et appeler des méthodes de l'environnement d'exécution. C'est la permission la plus large ici : une extension qui l'a peut faire faire à l'application quelque chose que personne n'a écrit. Les clés, MTProto, Postbox et le trousseau restent toujours fermés.",
         "Notifications": "Notifications",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Permet d'afficher des notifications depuis l'application, y compris lorsqu'elle est fermée. Chaque notification est signée du nom de l'extension, et l'extension ne voit ni ne touche les notifications de Telegram.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Rien pour l'instant. Tout ce que l'extension écrit via console, et tout ce que l'app en rapporte, apparaît ici.",
@@ -24031,6 +24155,10 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Observe the app": "Uygulamayı gözlemleme",
+        "Change what the app does": "Uygulamanın davranışını değiştirme",
+        "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Eklentinin uygulamanın ne yaptığını görmesine izin verir: mesajlara ve profillere dokunuşlar, açılan menüler, tepkiler ve ekran ağacını okuma. Yalnızca okuma: hiçbir şeyi değiştiremez.",
+        "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.": "Eklentinin uygulamanın davranışını değiştirmesine izin verir: eylemlerini iptal etmek ve değiştirmek, ekrandaki öğelerin özelliklerini değiştirmek ve çalışma zamanı metotlarını çağırmak. Buradaki en geniş izin budur: bu izne sahip bir eklenti, uygulamaya kimsenin yazmadığı bir şeyi yaptırabilir. Anahtarlar, MTProto, Postbox ve anahtar zinciri her zaman kapalıdır.",
         "Notifications": "Bildirimler",
         "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.": "Uygulama kapalıyken de dahil olmak üzere uygulamadan bildirim göstermeye izin verir. Her bildirim eklentinin adıyla imzalanır ve eklenti Telegram'ın kendi bildirimlerini ne görür ne de onlara dokunur.",
         "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.": "Henüz bir şey yok. Eklentinin console ile yazdığı ve uygulamanın onun hakkında bildirdiği her şey burada görünür.",

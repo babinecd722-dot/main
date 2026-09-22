@@ -191,6 +191,7 @@ public final class AorusPluginRuntimeManager {
         nativeButtons[id] = nil
         stringOverrides[id] = nil
         lock.unlock()
+        AorusPluginHookBroker.shared.removePlugin(id)
         publishIntegrationsChanged()
         publishOverlaysChanged()
         // Same reason as the badge below: a word this plugin put into somebody's interface
@@ -391,6 +392,51 @@ public final class AorusPluginRuntimeManager {
     /// and delivering it back turns every `emit` inside a handler into a loop. Delivery is
     /// gated on the receiver's own grant as well as the sender's, so a plugin that was
     /// never asked about plugin messaging is not in the conversation.
+    /// Every plugin that hooked this site, asked at once and given a deadline.
+    ///
+    /// One slow plugin must not hold up somebody\'s tap for the others, and a broken one
+    /// must not hold it up at all — which is what the deadline is for. The completion runs
+    /// once, on the main queue, whichever way it got there.
+    func askHooks(pluginIds: [String], mode: String, payload: [String: Any], completion: @escaping ([[String: Any]]) -> Void) {
+        lock.lock()
+        let targets = pluginIds.compactMap { sandboxes[$0] }
+        lock.unlock()
+        let allowed = targets.filter { sandbox in
+            let needed: AorusPluginPermission = mode == "replace" ? .appInternalsWrite : .appInternals
+            return isPermissionGranted(needed, pluginId: sandbox.manifest.id)
+        }
+        guard !allowed.isEmpty else {
+            DispatchQueue.main.async { completion([]) }
+            return
+        }
+        let state = NSLock()
+        var answers: [[String: Any]] = []
+        var remaining = allowed.count
+        var settled = false
+        func finish() {
+            state.lock()
+            if settled { state.unlock(); return }
+            settled = true
+            let collected = answers
+            state.unlock()
+            if Thread.isMainThread { completion(collected) } else { DispatchQueue.main.async { completion(collected) } }
+        }
+        for sandbox in allowed {
+            sandbox.evaluateHook(mode: mode, payload: payload) { answer in
+                state.lock()
+                if let answer { answers.append(answer) }
+                remaining -= 1
+                let done = remaining == 0
+                state.unlock()
+                if done { finish() }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + AorusPluginRuntimeManager.hookDeadline) { finish() }
+    }
+
+    /// Long enough for a plugin to answer, short enough that nobody sees it.
+    static let hookDeadline: Double = 0.15
+
     fileprivate func deliverPluginMessage(from pluginId: String, topic: String, json: String) {
         lock.lock()
         let recipients = sandboxes.filter { $0.key != pluginId }.map { $0.value }
@@ -1640,6 +1686,43 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                     return item
                 }
                 DispatchQueue.main.async { completion(.success(["notifications": Array(mine)])) }
+            }
+        }
+    }
+
+    /// Hooks, the view tree and the Objective-C runtime, all of which are about views and
+    /// about what happens when somebody taps something — so all of it runs on the main
+    /// thread. The plugin asked asynchronously and is answered asynchronously; nothing here
+    /// makes anybody wait.
+    func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        let writes = action == "tree.mutate" || action.hasPrefix("objc.")
+            || (action == "hook.define" && (payload["mode"] as? String) == "replace")
+        let required: AorusPluginPermission = writes ? .appInternalsWrite : .appInternals
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(required, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Permission is not granted")))
+            return
+        }
+        DispatchQueue.main.async {
+            switch action {
+            case "tree.query":
+                completion(.success(["nodes": AorusPluginViewTree.query(selector: payload["selector"] as? String ?? "")]))
+            case "tree.mutate":
+                let count = AorusPluginViewTree.mutate(
+                    selector: payload["selector"] as? String ?? "",
+                    patch: (payload["patch"] as? [String: Any]) ?? [:]
+                )
+                completion(.success(["count": NSNumber(value: count)]))
+            case "hook.define":
+                AorusPluginHookBroker.shared.define(
+                    pluginId: pluginId,
+                    site: payload["site"] as? String ?? "",
+                    mode: payload["mode"] as? String ?? "before",
+                    enabled: (payload["enabled"] as? NSNumber)?.boolValue ?? true
+                )
+                completion(.success(["sites": AorusPluginPrelude.hookSites]))
+            default:
+                completion(AorusPluginObjCBridge.perform(action: action, payload: payload))
             }
         }
     }

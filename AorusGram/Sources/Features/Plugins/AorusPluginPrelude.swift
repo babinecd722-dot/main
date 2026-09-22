@@ -24,12 +24,24 @@ public enum AorusPluginPrelude {
         "chatOpened", "chatClosed", "inputChanged", "overlayAction", "pluginMessage", "nativeButtonAction",
     ]
 
+    /// The places a plugin can get between the app and what it was about to do. Declared
+    /// here because both sides need the same list: the prelude answers `hook.list()` from
+    /// it, and the broker refuses a site that is not in it.
+    public static let hookSites: [String] = [
+        "chat.openMessage",
+        "chat.startEdit",
+        "chat.openPeer",
+        "chat.openMessageContextMenu",
+        "chat.updateMessageReaction",
+    ]
+
     public static let source: String = """
     (function (host) {
         'use strict';
 
         var freeze = Object.freeze;
         var KNOWN_EVENTS = [\(events.map { "'\($0)'" }.joined(separator: ", "))];
+        var HOOK_SITES = [\(hookSites.map { "'\($0)'" }.joined(separator: ", "))];
         var MAX_TIMERS = 64;
         var MAX_LOG_CHARS = 4096;
 
@@ -869,6 +881,129 @@ public enum AorusPluginPrelude {
             }
         }
 
+        // ---- hooks --------------------------------------------------------------------
+
+        // Getting between the app and what it was about to do. `before` can cancel, `replace`
+        // takes over, `after` is for what happens once it is done.
+        var hookHandlers = { before: {}, after: {}, replace: {} };
+        var hookIds = {};
+        var hookSequence = 0;
+
+        function defineHook(mode, site, handler) {
+            requireString(site, 'site');
+            requireFunction(handler, 'handler');
+            if (HOOK_SITES.indexOf(site) === -1) { throw typeError('Unknown hook site: ' + site); }
+            var table = hookHandlers[mode];
+            if (!table.hasOwnProperty(site)) { table[site] = []; }
+            table[site].push(handler);
+            hookSequence += 1;
+            var id = mode + '-' + hookSequence;
+            hookIds[id] = { mode: mode, site: site, handler: handler };
+            // The app is told which sites this plugin cares about, so a site nobody hooked
+            // costs the app nothing at all.
+            request('hook.define', { site: site, mode: mode, enabled: true }).then(undefined, function (error) {
+                reportError('Hook on ' + site + ' was refused', error);
+            });
+            return id;
+        }
+
+        function removeHook(id) {
+            requireString(id, 'id');
+            var entry = hookIds[id];
+            if (!entry) { return false; }
+            delete hookIds[id];
+            var list = hookHandlers[entry.mode][entry.site] || [];
+            for (var i = list.length - 1; i >= 0; i--) {
+                if (list[i] === entry.handler) { list.splice(i, 1); }
+            }
+            if (list.length === 0) {
+                request('hook.define', { site: entry.site, mode: entry.mode, enabled: false })
+                    .then(undefined, function () {});
+            }
+            return true;
+        }
+
+        // Called by the app, on this plugin\'s queue, with the site and its arguments. The
+        // answer is the whole chain\'s verdict for this plugin: whether it wants the action
+        // cancelled. A handler that throws is reported and counts as having said nothing.
+        function runHook(mode, json) {
+            var event = parseJSON(json, {});
+            var table = hookHandlers[mode] || {};
+            var list = table[event.site] || [];
+            var verdict = {};
+            for (var i = 0; i < list.length; i++) {
+                try {
+                    var answer = list[i](freeze(event));
+                    if (answer && typeof answer === 'object' && answer.cancel) { verdict.cancel = true; }
+                } catch (error) {
+                    reportError('Hook handler for ' + event.site + ' failed', error);
+                }
+            }
+            return JSON.stringify(verdict);
+        }
+
+        var hookApi = freeze({
+            before: function (site, handler) { return defineHook('before', site, handler); },
+            after: function (site, handler) { return defineHook('after', site, handler); },
+            replace: function (site, handler) { return defineHook('replace', site, handler); },
+            off: function (id) { return removeHook(id); },
+            list: function () { return HOOK_SITES.slice(); }
+        });
+
+        // ---- the view tree and the runtime ----------------------------------------------
+
+        var treeApi = freeze({
+            query: function (selector) {
+                return request('tree.query', { selector: requireString(selector, 'selector') })
+                    .then(function (answer) { return (answer && answer.nodes) || []; });
+            },
+            mutate: function (selector, patch) {
+                return request('tree.mutate', {
+                    selector: requireString(selector, 'selector'),
+                    patch: optionalObject(patch, 'patch')
+                }).then(function (answer) { return (answer && answer.count) || 0; });
+            }
+        });
+
+        // Objective-C. An object is a handle the app gave out, never an address: a plugin
+        // that could name an address could send a message to one that is not an object.
+        function objcHandle(value, name) {
+            if (value !== null && typeof value === 'object' && typeof value.handle === 'string') { return value.handle; }
+            if (typeof value === 'string') { return value; }
+            throw typeError(name + ' must be an object this plugin was given');
+        }
+
+        var objcApi = freeze({
+            cls: function (className) { return request('objc.cls', { className: requireString(className, 'className') }); },
+            inst: function (className) { return request('objc.inst', { className: requireString(className, 'className') }); },
+            call: function (receiver, selector, args) {
+                var list = args === undefined || args === null ? [] : args;
+                if (!Array.isArray(list)) { throw typeError('args must be an array'); }
+                if (list.length > 2) { throw new RangeError('at most two arguments'); }
+                return request('objc.call', {
+                    receiver: objcHandle(receiver, 'receiver'),
+                    selector: requireString(selector, 'selector'),
+                    args: list.map(function (item) {
+                        if (item !== null && typeof item === 'object' && typeof item.handle === 'string') { return item.handle; }
+                        return item;
+                    })
+                });
+            },
+            get: function (object, property) {
+                return request('objc.get', { object: objcHandle(object, 'object'), name: requireString(property, 'property') });
+            },
+            set: function (object, property, value) {
+                return request('objc.set', {
+                    object: objcHandle(object, 'object'),
+                    name: requireString(property, 'property'),
+                    value: (value !== null && typeof value === 'object' && typeof value.handle === 'string') ? value.handle : value
+                });
+            },
+            ivar: function (object, name) {
+                return request('objc.ivar', { object: objcHandle(object, 'object'), name: requireString(name, 'name') });
+            }
+        });
+
         // ---- schedules ----------------------------------------------------------------
 
         // Work that outlives the plugin's context.
@@ -1631,6 +1766,9 @@ public enum AorusPluginPrelude {
             // leaves the plugin at all.
             schedule: scheduleApi,
             i18n: i18nApi,
+            hook: hookApi,
+            tree: treeApi,
+            objc: objcApi,
             // Telling somebody something when they are not looking at the screen. The other
             // half of `schedule`: work that happens while the app is closed is work nobody
             // hears about otherwise. Every identifier here is the plugin's own — the app
@@ -2077,6 +2215,7 @@ public enum AorusPluginPrelude {
         host.registerDispatcher(freeze({
             dispatch: function (event, payload) { emit(event, payload === undefined ? undefined : freeze(payload)); },
             runOutgoing: runOutgoing,
+            runHook: runHook,
             timerFire: timerFire,
             resolve: function (id, json) { settle(id, false, parseJSON(json, undefined)); },
             reject: function (id, message) { settle(id, true, message); },

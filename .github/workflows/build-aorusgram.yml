@@ -215,6 +215,7 @@ jobs:
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSandbox.swift \
             aorusgram/AorusGram/Sources/Features/UI/AorusStringOverrides.swift \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginObjCDenylist.swift \
             aorusgram/scripts/tests/AorusPluginCoreTests.swift \
             -o /tmp/aorus-ai-preflight/plugin-core-tests
           /tmp/aorus-ai-preflight/plugin-core-tests
