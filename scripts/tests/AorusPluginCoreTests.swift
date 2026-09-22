@@ -1371,6 +1371,47 @@ do {
     expect(false, "writing within the limits succeeds")
 }
 
+// The table of words plugins replaced crosses into the generated string lookup as a
+// notification, and is mirrored into defaults so a table published in a previous launch is
+// in place before the first string is drawn. Both halves are checked: what a listener is
+// handed, and what survives to be read back.
+do {
+    let defaults = UserDefaults.standard
+    let previous = defaults.dictionary(forKey: AorusStringOverrides.defaultsKey) as? [String: String]
+    defer {
+        if let previous {
+            defaults.set(previous, forKey: AorusStringOverrides.defaultsKey)
+        } else {
+            defaults.removeObject(forKey: AorusStringOverrides.defaultsKey)
+        }
+    }
+    var delivered: [[String: String]] = []
+    let observer = NotificationCenter.default.addObserver(
+        forName: AorusStringOverrides.didChangeNotification,
+        object: nil,
+        queue: nil
+    ) { note in
+        delivered.append((note.userInfo?[AorusStringOverrides.userInfoKey] as? [String: String]) ?? [:])
+    }
+    defer { NotificationCenter.default.removeObserver(observer) }
+
+    AorusStringOverrides.publish(["Conversation_Title": "Чаты"])
+    expect(AorusStringOverrides.current() == ["Conversation_Title": "Чаты"], "an override is readable after publishing")
+    expect(delivered.last == ["Conversation_Title": "Чаты"], "the whole table reaches a listener")
+
+    // Removing one override is publishing the rest, so the table is always what is in force
+    // rather than a diff nobody can reconstruct.
+    AorusStringOverrides.publish(["Conversation_Title": "Чаты", "Settings_Title": "Настройки"])
+    expect(AorusStringOverrides.current().count == 2, "publishing again replaces the whole table")
+    AorusStringOverrides.publish([:])
+    expect(AorusStringOverrides.current().isEmpty, "publishing nothing leaves nothing in force")
+    expect(delivered.last?.isEmpty == true, "a listener is told the table is empty rather than left with the old one")
+    expect(
+        defaults.dictionary(forKey: AorusStringOverrides.defaultsKey) == nil,
+        "an empty table removes the mirror instead of storing an empty one"
+    )
+}
+
 if failures == 0 {
     print("Aorus plugin core tests: OK")
 } else {

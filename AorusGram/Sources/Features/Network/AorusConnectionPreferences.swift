@@ -31,6 +31,10 @@ public final class AorusConnectionPreferences {
     private struct Stored: Codable, Equatable {
         var bypass: Bool
         var stableCalls: Bool
+        /// Absent in anything written before this switch existed, which is every install
+        /// that has the previous build: decoding it as `nil` and reading it as on keeps
+        /// those on the behaviour they already have.
+        var autoSwitch: Bool?
     }
 
     private let lock = NSLock()
@@ -39,7 +43,7 @@ public final class AorusConnectionPreferences {
     private init() {
         // Both default to on: that is the behaviour every existing install already has, and a
         // fresh install has nothing to migrate.
-        let loaded = Self.readKeychain() ?? Stored(bypass: true, stableCalls: true)
+        let loaded = Self.readKeychain() ?? Stored(bypass: true, stableCalls: true, autoSwitch: true)
         self.cached = loaded
         Self.writeMirror(loaded)
     }
@@ -59,12 +63,24 @@ public final class AorusConnectionPreferences {
         return self.cached.stableCalls
     }
 
+    /// Whether the client may move itself onto a different server when the one it is on
+    /// stops carrying Telegram. Off means it rebuilds the route it was given instead.
+    public var autoSwitchEnabled: Bool {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return self.cached.autoSwitch ?? true
+    }
+
     public func setBypassEnabled(_ value: Bool) {
         self.update { stored in stored.bypass = value }
     }
 
     public func setStableCallsEnabled(_ value: Bool) {
         self.update { stored in stored.stableCalls = value }
+    }
+
+    public func setAutoSwitchEnabled(_ value: Bool) {
+        self.update { stored in stored.autoSwitch = value }
     }
 
     private func update(_ transform: (inout Stored) -> Void) {

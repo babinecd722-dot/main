@@ -69,6 +69,7 @@ public final class AorusPluginRuntimeManager {
     private var contextActions: [String: [AorusPluginContextAction]] = [:]
     private var overlays: [String: [AorusPluginOverlay]] = [:]
     private var nativeButtons: [String: [AorusPluginNativeButton]] = [:]
+    private var stringOverrides: [String: [String: String]] = [:]
     private var observers: [NSObjectProtocol] = []
 
     private init() {}
@@ -119,9 +120,13 @@ public final class AorusPluginRuntimeManager {
             contextActions[sandbox.manifest.id] = nil
             overlays[sandbox.manifest.id] = nil
             nativeButtons[sandbox.manifest.id] = nil
+            stringOverrides[sandbox.manifest.id] = nil
         }
         lock.unlock()
-        if !stale.isEmpty { publishIntegrationsChanged() }
+        if !stale.isEmpty {
+            publishIntegrationsChanged()
+            publishStringOverrides()
+        }
         stale.forEach { sandbox in
             host.clearPluginState(sandbox.manifest.id)
             sandbox.stop()
@@ -167,9 +172,13 @@ public final class AorusPluginRuntimeManager {
         contextActions[id] = nil
         overlays[id] = nil
         nativeButtons[id] = nil
+        stringOverrides[id] = nil
         lock.unlock()
         publishIntegrationsChanged()
         publishOverlaysChanged()
+        // Same reason as the badge below: a word this plugin put into somebody's interface
+        // must not outlive the plugin, or nothing left running can explain or remove it.
+        publishStringOverrides()
         // A badge outliving the plugin that set it is a word in the title bar nobody can
         // explain or remove.
         AorusPluginChatBridge.clearHeaderBadge(pluginId: id)
@@ -334,6 +343,49 @@ public final class AorusPluginRuntimeManager {
     fileprivate func setNativeButtons(_ value: [AorusPluginNativeButton], id: String) {
         lock.lock(); nativeButtons[id] = value; lock.unlock()
         publishIntegrationsChanged()
+    }
+
+    fileprivate func setStringOverrides(_ value: [String: String], id: String) {
+        lock.lock(); stringOverrides[id] = value.isEmpty ? nil : value; lock.unlock()
+        publishStringOverrides()
+    }
+
+    /// Every override every running plugin has asked for, merged into the one table the
+    /// string lookup reads.
+    ///
+    /// Two plugins that claim the same key are resolved by plugin id rather than by who
+    /// asked last: last-one-wins would make the word in somebody's interface depend on
+    /// which plugin happened to start first, which is not a rule anybody can reason about.
+    /// The whole table is republished on every change, so removing an override is
+    /// publishing the rest.
+    private func publishStringOverrides() {
+        lock.lock()
+        var merged: [String: String] = [:]
+        for pluginId in stringOverrides.keys.sorted() {
+            for (key, value) in stringOverrides[pluginId] ?? [:] { merged[key] = value }
+        }
+        lock.unlock()
+        AorusStringOverrides.publish(merged)
+    }
+
+    /// One plugin's message, handed to the others.
+    ///
+    /// The sender never receives its own message: a plugin already knows what it emitted,
+    /// and delivering it back turns every `emit` inside a handler into a loop. Delivery is
+    /// gated on the receiver's own grant as well as the sender's, so a plugin that was
+    /// never asked about plugin messaging is not in the conversation.
+    fileprivate func deliverPluginMessage(from pluginId: String, topic: String, json: String) {
+        lock.lock()
+        let recipients = sandboxes.filter { $0.key != pluginId }.map { $0.value }
+        lock.unlock()
+        guard !recipients.isEmpty else { return }
+        let decoded = (try? JSONSerialization.jsonObject(with: Data(json.utf8), options: [.fragmentsAllowed]))
+        var payload: [String: Any] = ["topic": topic, "from": pluginId]
+        if let decoded, !(decoded is NSNull) { payload["payload"] = decoded }
+        for sandbox in recipients {
+            guard isPermissionGranted(.pluginMessaging, pluginId: sandbox.manifest.id) else { continue }
+            sandbox.dispatch(event: "pluginMessage", payload: payload)
+        }
     }
 
     /// Every button every running plugin has put into one of Telegram's own containers,
@@ -1450,6 +1502,33 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         manager?.setNativeButtons(buttons, id: pluginId)
     }
 
+    func pluginStringOverridesChanged(_ pluginId: String, overrides: [String: String]) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
+        manager?.setStringOverrides(overrides, id: pluginId)
+    }
+
+    func pluginBroadcast(_ pluginId: String, topic: String, json: String) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.pluginMessaging, pluginId: pluginId) == true else { return }
+        manager?.deliverPluginMessage(from: pluginId, topic: topic, json: json)
+    }
+
+    /// Whether the client is allowed to move itself off the endpoint it is on.
+    ///
+    /// With it off the watchdog still rebuilds a route that has stopped carrying Telegram —
+    /// a client that gives up on reconnecting is not a setting anybody wants — but it stays
+    /// on the server it was given instead of ranking the others and switching.
+    func pluginSetAutoSwitch(_ pluginId: String, enabled: Bool, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.connectionControl, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Connection control is unavailable")))
+            return
+        }
+        AorusConnectionPreferences.shared.setAutoSwitchEnabled(enabled)
+        completion(.success(AorusPluginProxyBroker.snapshot()))
+    }
+
     func pluginSetHeaderBadge(_ pluginId: String, text: String?, color: String?) {
         guard AorusPluginEntitlement.isAllowed,
               manager?.isPermissionGranted(.customUI, pluginId: pluginId) == true else { return }
@@ -1542,7 +1621,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                     answer(nil)
                     return
                 }
-                answer(self.pluginPeerDictionary(EnginePeer(peer)))
+                answer(self.pluginPeerDictionary(peer))
             })
             navigation.pushViewController(controller)
         }
@@ -1922,7 +2001,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     /// plugin's message now arrives the same way a "Message deleted" or a "Link copied"
     /// does, with the same placement, the same dismissal and the same swipe.
     func presentNotice(_ text: String, title: String? = nil, duration: Double? = nil) {
-        guard !text.isEmpty, let presenter = self.topController() else { return }
+        guard !text.isEmpty, let window = self.context.sharedContext.mainWindow else { return }
         let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
         let controller = UndoOverlayController(
             presentationData: presentationData,
@@ -1936,7 +2015,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             position: .bottom,
             action: { _ in return true }
         )
-        presenter.present(controller, in: .window(.root))
+        window.present(controller, on: .root)
     }
 
     func pluginAlert(_ pluginId: String, title: String, text: String?, completion: @escaping () -> Void) {
@@ -2354,6 +2433,7 @@ private enum AorusPluginProxyBroker {
         var result: [String: Any] = [
             "enabled": preferences.bypassEnabled,
             "stableCalls": preferences.stableCallsEnabled,
+            "autoSwitch": preferences.autoSwitchEnabled,
             "connected": false,
             "servers": [],
         ]

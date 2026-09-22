@@ -18344,6 +18344,89 @@ def patch_plugin_chat_list_button(tg: Path) -> None:
     print("ChatListButton: plugin buttons added to the chat list header")
 
 
+AORUS_STRING_OVERRIDE_OBJC = '''
+// AorusGram: words a plugin replaced, consulted before the language pack.
+//
+// Every string the app draws goes through `getSingle`, which is the only place an override
+// can be applied once rather than at several thousand call sites. The table arrives by
+// notification because this file is generated into the strings module, which nothing that
+// knows about plugins can be linked against; the defaults key is read once so a table
+// published before this process started is not lost between launches.
+static NSDictionary<NSString *, NSString *> * _Nullable aorusStringOverrides = nil;
+static os_unfair_lock aorusStringOverrideLock = OS_UNFAIR_LOCK_INIT;
+
+static NSString * _Nullable aorusStringOverrideFor(NSString * _Nonnull key) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSDictionary *initial = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"aorusgram_string_overrides"];
+        if ([initial isKindOfClass:[NSDictionary class]] && initial.count != 0) {
+            aorusStringOverrides = [initial copy];
+        }
+        [[NSNotificationCenter defaultCenter] addObserverForName:@"aorusgram_string_overrides_changed"
+                                                          object:nil
+                                                           queue:nil
+                                                      usingBlock:^(NSNotification * _Nonnull note) {
+            NSDictionary *value = note.userInfo[@"overrides"];
+            NSDictionary *replacement = nil;
+            if ([value isKindOfClass:[NSDictionary class]] && value.count != 0) {
+                replacement = [value copy];
+            }
+            os_unfair_lock_lock(&aorusStringOverrideLock);
+            aorusStringOverrides = replacement;
+            os_unfair_lock_unlock(&aorusStringOverrideLock);
+        }];
+    });
+    os_unfair_lock_lock(&aorusStringOverrideLock);
+    NSString *result = aorusStringOverrides[key];
+    os_unfair_lock_unlock(&aorusStringOverrideLock);
+    return result;
+}
+
+'''
+
+
+def patch_plugin_string_overrides(tg: Path) -> None:
+    """Let a plugin replace a word the app draws.
+
+    `getSingle` is the single funnel every generated string accessor goes through, so the
+    override is applied there rather than at the call sites, which are generated and number
+    in the thousands. It is checked before the language pack: an override that lost to the
+    pack would only ever apply to keys the pack is missing, which is not what anybody asked
+    for. A key with no override costs one pointer read under an uncontended lock.
+    """
+    path = tg / "build-system/GenerateStrings/GenerateStrings.py"
+    if not path.is_file():
+        raise SystemExit("StringOverrides: GenerateStrings.py not found")
+    source = path.read_text(encoding="utf-8")
+    if "aorusStringOverrideFor" in source:
+        print("StringOverrides: already patched")
+        return
+
+    import_anchor = "#import <AppBundle/AppBundle.h>\n"
+    if source.count(import_anchor) != 1:
+        raise SystemExit("StringOverrides: AppBundle import anchor not found")
+    source = source.replace(import_anchor, import_anchor + "#import <os/lock.h>\n", 1)
+
+    function_anchor = (
+        "static NSString * _Nonnull getSingle(_PresentationStrings * _Nullable strings, NSString * _Nonnull key,\n"
+        "    bool * _Nullable isFound) {\n"
+        "    NSString *result = nil;\n"
+        "    if (strings) {\n"
+    )
+    if source.count(function_anchor) != 1:
+        raise SystemExit("StringOverrides: getSingle anchor not found")
+    replacement = (
+        AORUS_STRING_OVERRIDE_OBJC
+        + "static NSString * _Nonnull getSingle(_PresentationStrings * _Nullable strings, NSString * _Nonnull key,\n"
+        "    bool * _Nullable isFound) {\n"
+        "    NSString *result = aorusStringOverrideFor(key);\n"
+        "    if (!result && strings) {\n"
+    )
+    source = source.replace(function_anchor, replacement, 1)
+    path.write_text(source, encoding="utf-8")
+    print("StringOverrides: getSingle consults the plugin table")
+
+
 def patch_plugin_header_badge(tg: Path) -> None:
     """Draw the word a plugin put in the chat's title bar.
 
@@ -27108,6 +27191,7 @@ def main() -> None:
     # methods, and their anchors span the lines this one inserts.
     patch_plugin_chat_surface(tg)
     patch_plugin_header_badge(tg)
+    patch_plugin_string_overrides(tg)
     patch_plugin_chat_list_button(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)

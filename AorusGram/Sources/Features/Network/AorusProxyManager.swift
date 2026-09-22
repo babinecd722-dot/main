@@ -1114,7 +1114,13 @@ public final class AorusProxyManager {
         // guaranteed: a profile can sign a single bridge, and a tunnel that never came up has
         // no active endpoint at all. That second case is precisely the client sitting on "no
         // connection" — the one this watchdog exists for — and returning here left it there.
-        let canFailover = profile.validEndpoints.count > 1 && activeEndpoint != nil
+        // Switching servers is something the client is allowed to do rather than something
+        // it always does. With it off there is still a stall to recover from, so the route
+        // is rebuilt below on the endpoint it was given — which is the difference between
+        // staying put and giving up.
+        let canFailover = profile.validEndpoints.count > 1
+            && activeEndpoint != nil
+            && AorusConnectionPreferences.shared.autoSwitchEnabled
         if canFailover, let activeEndpoint {
             penalizedEndpoints[endpointKey(activeEndpoint)] = now.addingTimeInterval(endpointPenaltyDuration)
         }

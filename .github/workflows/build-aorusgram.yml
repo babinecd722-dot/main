@@ -67,6 +67,12 @@ jobs:
       - name: Plugin prelude preflight
         run: python3 aorusgram/scripts/plugin_prelude_check.py aorusgram
 
+      # A requirement added to a protocol with the test double updated and the real host not
+      # is invisible to every other check here and costs a full Bazel run to find out. Run
+      # 496 died twenty-nine minutes in on three of them.
+      - name: Protocol conformance preflight
+        run: python3 aorusgram/scripts/swift_protocol_conformance_check.py aorusgram
+
       - name: AorusAI transport and store preflight
         run: |
           mkdir -p /tmp/aorus-ai-preflight/module-cache
@@ -208,6 +214,7 @@ jobs:
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginPrelude.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSandbox.swift \
+            aorusgram/AorusGram/Sources/Features/UI/AorusStringOverrides.swift \
             aorusgram/scripts/tests/AorusPluginCoreTests.swift \
             -o /tmp/aorus-ai-preflight/plugin-core-tests
           /tmp/aorus-ai-preflight/plugin-core-tests
@@ -992,6 +999,11 @@ jobs:
       # have. Signatures still reach Bazel; a name that does not exist at all stops here.
       - name: Tree symbol preflight
         run: python3 aorusgram/scripts/swift_tree_symbol_check.py telegram-ios aorusgram
+
+      # And again over the patched tree, where a protocol Telegram declares and one of our
+      # types adopts are finally both in scope.
+      - name: Tree protocol conformance preflight
+        run: python3 aorusgram/scripts/swift_protocol_conformance_check.py telegram-ios Aorus
 
       - name: Install Bazel
         run: brew install bazel 2>/dev/null || true
