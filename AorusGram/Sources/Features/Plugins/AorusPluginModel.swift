@@ -159,7 +159,9 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
     /// about and the plugin is therefore never granted — it is checked against the prelude
     /// by `AorusPluginCoreTests`, needle by needle.
     public static let sourceProbes: [(AorusPluginPermission, [String])] = [
-            (.network, ["aorus.http"]),
+            // A socket and a file transfer are the same capability as a request: a plugin
+            // reaching a backend somebody wrote.
+            (.network, ["aorus.http", "aorus.ws."]),
             (.sendMessages, ["aorus.messages.send", "aorus.chat.sendText", "aorus.chat.replyText"]),
             // `chats.*` names a chat by id; `chat.*` is the one on screen. Reading either is
             // the same capability: a title, an identifier and what is in view.
@@ -300,6 +302,9 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             (.composer, [
                 "aorus.chat.draft", "aorus.chat.setDraft", "aorus.chat.insert", "aorus.chat.clear",
                 "aorus.chat.setTyping", "aorus.chat.markRead", "aorus.chat.scrollTo",
+                // Opening the editor puts a message into the composer, which is this
+                // grant. Rewriting one outright is `messages.edit` and `manageMessages`.
+                "aorus.messages.beginEdit",
                 "aorus.on('inputChanged",
                 "aorus.on(\"inputChanged",
                 "aorus.once('inputChanged",

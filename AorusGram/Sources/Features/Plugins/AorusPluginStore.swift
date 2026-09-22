@@ -524,8 +524,19 @@ public struct AorusPluginFiles {
     }
 
     public func write(_ name: String, text: String) throws {
+        try writeData(name, data: Data(text.utf8))
+    }
+
+    /// The same write, for bytes that are not text.
+    ///
+    /// A file a plugin downloaded from its own backend is an image, an archive or a signed
+    /// blob as often as it is JSON, and routing those through a String meant they arrived
+    /// corrupted or not at all. Every rule is the one the text write already applied: the
+    /// per-file cap, the file count, the quota measured against what the directory will hold
+    /// afterwards, and the write-beside-and-move that leaves the previous file rather than
+    /// half of the new one.
+    public func writeData(_ name: String, data: Data) throws {
         let target = try url(for: name)
-        let data = Data(text.utf8)
         guard data.count <= AorusPluginFiles.maximumFileBytes else { throw FileError.tooLarge }
         let existing = entries()
         let previous = existing.first(where: { $0.name == target.lastPathComponent })
@@ -547,9 +558,15 @@ public struct AorusPluginFiles {
     }
 
     public func read(_ name: String) throws -> String? {
-        let target = try url(for: name)
-        guard let data = try? Data(contentsOf: target) else { return nil }
+        guard let data = readData(name) else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    /// The bytes, or nothing. A name this refuses is a name that cannot address a file in
+    /// this directory, which is the same answer as the file not being there.
+    public func readData(_ name: String) -> Data? {
+        guard let target = try? url(for: name) else { return nil }
+        return try? Data(contentsOf: target)
     }
 
     public func info(_ name: String) throws -> [String: Any]? {

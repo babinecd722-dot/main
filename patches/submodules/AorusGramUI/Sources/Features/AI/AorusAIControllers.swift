@@ -1392,6 +1392,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     private var pendingReference: AorusAIReferencedMessage?
     private var streamHandle: AorusAIStreamHandle?
     private var turnId: String?
+    /// Set once the gateway has named this chat. Only stops a later placeholder from being
+    /// written over that name; it is not persisted, because the name itself is.
+    private var titleCameFromServer = false
     private var activeAssistantId: UUID?
     /// Where this chat's turn stands: the server's turn id, how far the journal has
     /// been applied, and when the server says the turn started. Resume rebuilds the
@@ -2022,7 +2025,9 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         beginReveal(messageId: assistant.id)
         conversation.messages.append(userMessage)
         conversation.messages.append(assistant)
-        if conversation.title.isEmpty { conversation.title = AorusAIFormat.title(from: text) }
+        if conversation.title.isEmpty, !titleCameFromServer {
+            conversation.title = AorusAIFormat.title(from: text)
+        }
         conversation.draft = ""
         conversation.updatedAt = Date()
         activeAssistantId = assistant.id
@@ -2227,14 +2232,20 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             // already shows a placeholder cut from the first message, so nothing waited for
             // this and nothing breaks if it never comes.
             //
-            // It replaces the placeholder and only the placeholder. If the title is no
-            // longer the one this app generated, someone has renamed the chat, and their
-            // name outranks the gateway's.
+            // The turn id is the only condition, which is what the contract states. An
+            // earlier version also required the current title to still equal a placeholder
+            // recomputed from the first message — to protect a chat somebody had renamed.
+            // There is no way to rename a chat, so that guard protected nothing and did the
+            // one thing a guard must never do: it silently dropped valid titles whenever the
+            // recomputation differed from the stored string by a character. The symptom was
+            // exactly this feature appearing not to work, with the first message left on
+            // screen as the name.
             guard turnId == self.turnId else { break }
-            let placeholder = conversation.messages.first(where: { $0.role == .user })
-                .map { AorusAIFormat.title(from: $0.rawText) } ?? ""
-            guard conversation.title.isEmpty || conversation.title == placeholder else { break }
             conversation.title = String(title.prefix(120))
+            titleCameFromServer = true
+            // Once per chat and only ever on the first turn, so it is written through
+            // rather than left to the debounce that a live turn stretches to 2.5 seconds.
+            persist(force: true)
         case let .status(label, progress):
             let rendered = aorusAITimelineText(key: label.key, params: label.params, fallback: label.text)
             let visibleLabel = rendered.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

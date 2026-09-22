@@ -25,7 +25,8 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginSettingsSchemaChanged(_ pluginId: String, fields: [AorusPluginSettingField])
     func pluginSettingsChanged(_ pluginId: String, values: [String: AorusPluginJSONValue])
     func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], replyTo: Int32?, completion: @escaping (Result<Void, Error>) -> Void)
-    func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, completion: @escaping (Result<Void, Error>) -> Void)
+    func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void)
+    func pluginBeginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginDeleteMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, forEveryone: Bool, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginForwardMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, toPeerId: Int64, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginReactToMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, reaction: String?, completion: @escaping (Result<Void, Error>) -> Void)
@@ -93,6 +94,7 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginBroadcast(_ pluginId: String, topic: String, json: String)
     func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void)
+    func pluginNetworkCall(_ pluginId: String, action: String, payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void)
     var pluginAppState: [String: Any] { get }
     var pluginDeviceInfo: [String: Any] { get }
     var pluginInterfaceLanguage: String { get }
@@ -138,6 +140,8 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onBroadcast: ((String, String, String) -> Void)?
     public var onNotify: ((String, String, String, String, String, Double) -> [String: Any]?)?
     public var onRuntimeCall: ((String, String, [String: Any]) -> [String: Any]?)?
+    public var onEditEntities: ((String, [AorusPluginTextEntity]) -> Void)?
+    public var onNetworkCall: ((String, String, [String: Any]) -> [String: Any]?)?
     // The open chat. Nothing is open unless a test says so, which is also true on a device
     // between chats, so the default answer here is the same one the app gives.
     public var onCurrentChat: ((String) -> [String: Any]?)?
@@ -173,7 +177,8 @@ open class AorusPluginNullHost: AorusPluginHostServices {
         onSendMessage?(pluginId, peerId, toSelf, accountId, text, replyTo)
         completion(.success(()))
     }
-    open func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "edit", peerId, namespace, messageId); completion(.success(())) }
+    open func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "edit", peerId, namespace, messageId); onEditEntities?(pluginId, entities); completion(.success(())) }
+    open func pluginBeginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "beginEdit", peerId, namespace, messageId); completion(.success(())) }
     open func pluginDeleteMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, forEveryone: Bool, completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "delete", peerId, namespace, messageId); completion(.success(())) }
     open func pluginForwardMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, toPeerId: Int64, completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "forward", peerId, namespace, messageId); completion(.success(())) }
     open func pluginReactToMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, reaction: String?, completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "react", peerId, namespace, messageId); completion(.success(())) }
@@ -234,6 +239,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
         completion(.success(onRuntimeCall?(pluginId, action, payload) ?? ["ok": NSNumber(value: true)]))
+    }
+    open func pluginNetworkCall(_ pluginId: String, action: String, payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        completion(.success(onNetworkCall?(pluginId, action, payload) ?? ["ok": NSNumber(value: true)]))
     }
     open func pluginMedia(_ pluginId: String, action: String, peerId: Int64, namespace: Int32, messageId: Int32, directory: URL?, completion: @escaping (Result<[String: Any]?, Error>) -> Void) {
         completion(.success(onMedia?(pluginId, action, peerId, namespace, messageId)))
@@ -1451,7 +1459,23 @@ public final class AorusPluginSandbox {
                 settle(id, with: .failure(AorusPluginRequestError("A valid message reference and text are required")))
                 return
             }
-            host.pluginEditMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, text: text) { [weak self] result in
+            // The same rich text `messages.send` takes. An edit that dropped the entities
+            // would turn every link and every bold run in a message into plain text the
+            // moment a plugin touched it.
+            let editEntities = AorusPluginTextEntity.validated(payload["entities"] as? [[String: Any]] ?? [], text: text)
+            host.pluginEditMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, text: text, entities: editEntities) { [weak self] result in
+                self?.settle(id, with: result.map { _ -> Any? in nil })
+            }
+        // Opening Telegram's own editor on a message, which is the composer this plugin is
+        // allowed to write into — so it is gated on the composer grant rather than on the
+        // one that edits a message outright.
+        case "messages.beginEdit":
+            guard require(.composer, id: id) else { return }
+            guard let peerId = int64("peerId"), let namespace = int32("namespace"), let messageId = int32("messageId") else {
+                settle(id, with: .failure(AorusPluginRequestError("A valid message reference is required")))
+                return
+            }
+            host.pluginBeginEditMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId) { [weak self] result in
                 self?.settle(id, with: result.map { _ -> Any? in nil })
             }
         case "messages.delete":
@@ -2010,6 +2034,18 @@ public final class AorusPluginSandbox {
         case "http.fetch":
             guard require(.network, id: id) else { return }
             fetch(payload: payload, id: id)
+        // A live socket and file transfer, on the same grant and the same host rules as
+        // `fetch`. A plugin talking to a backend of its own needs all three: a request, a
+        // connection that stays open, and a way to move a file that is not a JSON string.
+        case "ws.open", "ws.send", "ws.close", "http.download", "http.upload":
+            guard require(.network, id: id) else { return }
+            if kind == "http.download" || kind == "http.upload", files == nil {
+                settle(id, with: .failure(AorusPluginRequestError("This plugin has no file storage")))
+                return
+            }
+            host.pluginNetworkCall(pluginId, action: kind, payload: payload, directory: files?.directory) { [weak self] result in
+                self?.settle(id, with: result.map { value -> Any? in value as Any })
+            }
         default:
             settle(id, with: .failure(AorusPluginRequestError("Unknown request: \(kind)")))
         }

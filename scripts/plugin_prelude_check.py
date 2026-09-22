@@ -439,6 +439,68 @@ aorus.chat.current().then(function (value) {
     const late = [];
     aorus.schedule.at('overdue', Date.now() - 60000, function (event) { late.push(event); });
 
+    // The network a plugin talks to its own backend over.
+    check('ws is missing', typeof aorus.ws === 'object');
+    for (const name of ['download', 'upload', 'get', 'post', 'put', 'patch', 'delete', 'json', 'fetch']) {
+        check('http.' + name + ' is missing', typeof aorus.http[name] === 'function');
+    }
+    aorus.http.get('https://api.example.com/things');
+    check('http.get did not send GET', lastRequest('http.fetch').method === 'GET');
+    aorus.http.post('https://api.example.com/things', { name: 'x' });
+    const postedBody = lastRequest('http.fetch');
+    check('http.post did not send POST', postedBody.method === 'POST');
+    // An object body is JSON, because that is what a plugin passing an object meant.
+    check('http.post did not encode the body', postedBody.body === '{"name":"x"}');
+    check('http.post did not say it was JSON', postedBody.headers['Content-Type'] === 'application/json');
+    // And a plugin that said otherwise is not overruled.
+    aorus.http.post('https://api.example.com/x', { a: 1 }, { headers: { 'content-type': 'text/plain' } });
+    const explicit = lastRequest('http.fetch').headers;
+    // Counted case-insensitively, because the failure this is for is not a wrong value but
+    // two headers: the plugin's `content-type` and a `Content-Type` added beside it, with
+    // whichever the host happens to set last deciding what the backend sees.
+    const contentTypes = Object.keys(explicit).filter((name) => name.toLowerCase() === 'content-type');
+    check('a content type was sent twice', contentTypes.length === 1);
+    check('an explicit content type was overwritten', explicit[contentTypes[0]] === 'text/plain');
+    aorus.http.post('https://api.example.com/x', 'raw');
+    check('a string body was re-encoded', lastRequest('http.fetch').body === 'raw');
+    aorus.http.delete('https://api.example.com/things/1');
+    check('http.delete did not send DELETE', lastRequest('http.fetch').method === 'DELETE');
+    aorus.http.download('https://api.example.com/f.bin', 'f.bin');
+    check('http.download lost its name', lastRequest('http.download').name === 'f.bin');
+    aorus.http.upload('https://api.example.com/f', 'f.bin');
+    check('http.upload did not default to POST', lastRequest('http.upload').method === 'POST');
+    throws('ws.send accepted no id', () => aorus.ws.send());
+    throws('http.download accepted no name', () => aorus.http.download('https://a.example.com/x'));
+
+    // A frame reaches the handler the socket was opened with, and only that one.
+    const frames = [];
+    globalThis.__answers['ws.open'] = { id: 'ws-1', ok: true };
+    return aorus.ws.open('wss://api.example.com/live', function (event) { frames.push(event); }).then(function (socket) {
+        check('ws.open did not answer a socket', socket.id === 'ws-1');
+        globalThis.__dispatcher.dispatch('socketMessage', { id: 'ws-1', event: 'message', text: 'hello' });
+        check('a frame did not reach its handler', frames.length === 1 && frames[0].text === 'hello');
+        globalThis.__dispatcher.dispatch('socketMessage', { id: 'ws-other', event: 'message', text: 'not mine' });
+        check('a frame reached the wrong socket', frames.length === 1);
+        socket.send({ hello: true });
+        check('socket.send did not encode its value', lastRequest('ws.send').text === '{"hello":true}');
+        socket.close();
+        check('socket.close lost its id', lastRequest('ws.close').id === 'ws-1');
+        // A closed socket stops delivering, so a plugin cannot be woken by one it let go.
+        globalThis.__dispatcher.dispatch('socketMessage', { id: 'ws-1', event: 'message', text: 'after close' });
+        check('a closed socket still delivered', frames.length === 1);
+
+        // Editing keeps the formatting, which is the whole reason it takes rich text.
+        aorus.messages.edit({ peerId: '5', namespace: 0, messageId: 3 }, aorus.text.compose([aorus.text.bold('hi')]));
+        const edited = lastRequest('messages.edit');
+        check('messages.edit dropped its entities', Array.isArray(edited.entities) && edited.entities.length === 1);
+        check('messages.edit lost its text', edited.text === 'hi');
+        aorus.messages.edit({ peerId: '5', namespace: 0, messageId: 3 }, 'plain');
+        check('a plain string edit did not work', lastRequest('messages.edit').text === 'plain');
+        aorus.messages.beginEdit({ peerId: '5', namespace: 0, messageId: 3 });
+        check('messages.beginEdit lost its message', lastRequest('messages.beginEdit').messageId === 3);
+        return null;
+    }).then(function () {
+
     // Hooks, the view tree and the runtime. What is checked here is what a plugin can get
     // wrong before anything crosses; what it may reach once it has crossed is the denylist,
     // which the Swift tests check directly.
@@ -552,6 +614,7 @@ aorus.chat.current().then(function (value) {
                 function (error) { check('waitFor gave up for the wrong reason', /Timed out/.test(String(error.message))); }
             );
         });
+    });
     });
 }).then(function () {
 VERDICT_TAIL

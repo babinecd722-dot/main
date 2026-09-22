@@ -29,6 +29,9 @@ public protocol AorusPluginChatHost: AnyObject {
     func aorusPluginSetTyping(_ enabled: Bool)
     func aorusPluginMarkRead()
     func aorusPluginScrollToMessage(_ messageId: Int32)
+    /// Opens the app's own editor on a message, with its text in the composer. Answers
+    /// whether there was a message to open it on.
+    func aorusPluginBeginEditMessage(_ messageId: Int32) -> Bool
     /// The messages on screen, newest last, as plain dictionaries ready to cross into
     /// JavaScript.
     func aorusPluginVisibleMessages(limit: Int) -> [[String: Any]]

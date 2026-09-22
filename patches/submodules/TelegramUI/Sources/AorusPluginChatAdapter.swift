@@ -144,6 +144,17 @@ final class AorusPluginChatAdapter: NSObject, AorusPluginChatHost {
         let _ = controller.context.engine.messages.applyMaxReadIndexInteractively(index: message.index).start()
     }
 
+    /// Telegram's own editor, opened on a message — the same thing "Edit" in the context
+    /// menu does, which is the point: a plugin hands the person the pencil rather than
+    /// rewriting the message behind them.
+    func aorusPluginBeginEditMessage(_ messageId: Int32) -> Bool {
+        guard let controller = self.liveController, let peerId = controller.chatLocation.peerId else { return false }
+        let id = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: messageId)
+        guard let interaction = controller.chatDisplayNode.interfaceInteraction else { return false }
+        interaction.setupEditMessage(id, { _ in })
+        return true
+    }
+
     func aorusPluginScrollToMessage(_ messageId: Int32) {
         guard let controller = self.liveController, let peerId = controller.chatLocation.peerId else { return }
         let id = MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: messageId)

@@ -192,6 +192,8 @@ public final class AorusPluginRuntimeManager {
         stringOverrides[id] = nil
         lock.unlock()
         AorusPluginHookBroker.shared.removePlugin(id)
+        // A socket that outlived its plugin is a connection nobody can see.
+        AorusPluginNetworkBroker.shared.closeAll(pluginId: id)
         publishIntegrationsChanged()
         publishOverlaysChanged()
         // Same reason as the badge below: a word this plugin put into somebody's interface
@@ -494,6 +496,15 @@ public final class AorusPluginRuntimeManager {
         }.map { key in (title: key.isEmpty ? nil : key, rows: grouped[key] ?? []) }
     }
 
+    /// A frame from a socket this plugin opened, or the socket closing.
+    ///
+    /// Delivered only to the plugin that opened it: a socket is a conversation with somebody
+    /// else's backend, and nothing about it belongs to any other plugin.
+    public func dispatchSocketEvent(pluginId: String, payload: [String: Any]) {
+        lock.lock(); let sandbox = sandboxes[pluginId]; lock.unlock()
+        sandbox?.dispatch(event: "socketMessage", payload: payload)
+    }
+
     public func dispatchNativeButtonAction(pluginId: String, buttonId: String, payload: [String: Any] = [:]) {
         lock.lock(); let sandbox = sandboxes[pluginId]; lock.unlock()
         guard let sandbox else { return }
@@ -792,8 +803,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             return
         }
         DispatchQueue.main.async {
-            guard let page = self.manager?.page(pluginId: pluginId, pageId: pageId),
-                  let presenter = self.topController() else {
+            guard let page = self.manager?.page(pluginId: pluginId, pageId: pageId) else {
                 completion(.failure(AorusPluginRequestError("Plugin page is not available")))
                 return
             }
@@ -803,7 +813,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             // containers call — inside a plain `UINavigationController` presented by UIKit it
             // is never called at all and the page comes up blank. `navigationPresentation`
             // is what makes the same stack render a controller as a card or full screen.
-            guard let navigation = presenter.navigationController as? NavigationController else {
+            guard let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
@@ -844,7 +854,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         // ranges and the control plane.
         DispatchQueue.main.async {
             guard self.pluginExecutionAllowed,
-                  let navigation = self.topController()?.navigationController as? NavigationController else {
+                  let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
@@ -882,7 +892,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         }
         DispatchQueue.main.async {
             guard self.pluginExecutionAllowed,
-                  let navigation = self.topController()?.navigationController as? NavigationController else {
+                  let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
@@ -1356,15 +1366,17 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         let _ = signal.start(completed: { completion(.success(())) })
     }
 
-    func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, completion: @escaping (Result<Void, Error>) -> Void) {
+    func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void) {
+        let converted = aorusPluginMessageEntities(entities)
         withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id in
             let signal = self.context.engine.messages.requestEditMessage(
                 messageId: id,
                 text: text,
                 media: .keep,
-                // Plugin edits are plain text. Entity generation belongs to TelegramUI and
-                // importing that module here would create a dependency cycle.
-                entities: nil,
+                // The same entities `messages.send` carries, built the same way. They were
+                // dropped here, so a plugin editing a message turned every link and every
+                // bold run in it into plain text.
+                entities: converted.isEmpty ? nil : TextEntitiesMessageAttribute(entities: converted),
                 richText: nil,
                 inlineStickers: [:],
                 webpagePreviewAttribute: nil,
@@ -1694,6 +1706,21 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     /// about what happens when somebody taps something — so all of it runs on the main
     /// thread. The plugin asked asynchronously and is answered asynchronously; nothing here
     /// makes anybody wait.
+    func pluginNetworkCall(_ pluginId: String, action: String, payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.network, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Network permission is not granted")))
+            return
+        }
+        AorusPluginNetworkBroker.shared.perform(
+            pluginId: pluginId,
+            action: action,
+            payload: payload,
+            directory: directory,
+            completion: completion
+        )
+    }
+
     func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
         let writes = action == "tree.mutate" || action.hasPrefix("objc.")
             || (action == "hook.define" && (payload["mode"] as? String) == "replace")
@@ -1813,8 +1840,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             return
         }
         DispatchQueue.main.async {
-            guard let presenter = self.topController(),
-                  let navigation = presenter.navigationController as? NavigationController else {
+            guard let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
@@ -1859,7 +1885,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                 completion(.failure(AorusPluginRequestError("Chat is not available")))
                 return
             }
-            guard let navigation = self.topController()?.navigationController as? NavigationController,
+            guard let navigation = self.topNavigationController(),
                   let controller = self.context.sharedContext.makePeerInfoController(
                     context: self.context, updatedPresentationData: nil, peer: peer,
                     mode: .generic, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil
@@ -1879,7 +1905,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             return
         }
         DispatchQueue.main.async {
-            guard let navigation = self.topController()?.navigationController as? NavigationController else {
+            guard let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
@@ -2041,7 +2067,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                 completion(.failure(AorusPluginRequestError("Chat is not available")))
                 return
             }
-            guard let navigation = self.topController()?.navigationController as? NavigationController else {
+            guard let navigation = self.topNavigationController() else {
                 completion(.failure(AorusPluginRequestError("Navigation is unavailable")))
                 return
             }
@@ -2136,6 +2162,34 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     func pluginCurrentChatScrollTo(_ pluginId: String, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void) {
         withOpenChat(pluginId, permission: .composer, denied: "Composer permission is not granted", completion: completion) { host in
             host.aorusPluginScrollToMessage(messageId)
+        }
+    }
+
+    /// Opens the app's own editor on a message in the chat that is on screen.
+    ///
+    /// Only the open chat, because that is where the composer is. Editing a message in a
+    /// chat nobody is looking at is `messages.edit`, which writes it; this hands the person
+    /// the pencil, and there is no pencil in a chat that is not open.
+    func pluginBeginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.composer, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Composer permission is not granted")))
+            return
+        }
+        DispatchQueue.main.async {
+            guard let host = AorusPluginChatBridge.shared.current else {
+                completion(.failure(AorusPluginRequestError(AorusPluginSandbox.noChatOpen)))
+                return
+            }
+            guard host.aorusPluginPeerId == peerId else {
+                completion(.failure(AorusPluginRequestError("That message is not in the open chat")))
+                return
+            }
+            guard host.aorusPluginBeginEditMessage(messageId) else {
+                completion(.failure(AorusPluginRequestError("The editor could not be opened")))
+                return
+            }
+            completion(.success(()))
         }
     }
 
@@ -2394,6 +2448,29 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             "scam": peer.isScam
         ]
         if let username = peer.addressName { result["username"] = username }
+        return result
+    }
+
+    /// Telegram's navigation controller, from a place that holds no controller.
+    ///
+    /// Not `topController()?.navigationController`. Telegram's `NavigationController` keeps
+    /// its own stack and does not put the controllers in it into UIKit's parent chain, so
+    /// that property answers nil for a controller that is very much inside a navigation
+    /// stack — which is why a plugin's settings row said "Navigation is unavailable" from
+    /// the one screen a plugin's settings row is on. This is the lookup Telegram itself uses
+    /// from callers that hold nothing.
+    ///
+    /// A modal stack presented over the main one wins, because that is where the person is.
+    private func topNavigationController() -> NavigationController? {
+        guard let root = self.context.sharedContext.mainWindow?.viewController as? NavigationController else {
+            return self.topController()?.navigationController as? NavigationController
+        }
+        var result = root
+        var presented: UIViewController? = root.presentedViewController
+        while let current = presented {
+            if let deeper = current as? NavigationController { result = deeper }
+            presented = current.presentedViewController
+        }
         return result
     }
 

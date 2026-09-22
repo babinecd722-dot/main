@@ -22,6 +22,7 @@ public enum AorusPluginPrelude {
         "foreground", "background", "settingsChanged", "appSettingsChanged",
         "connectionChanged", "uiAction", "contextAction", "settings.changed", "settings.action", "settings.reset",
         "chatOpened", "chatClosed", "inputChanged", "overlayAction", "pluginMessage", "nativeButtonAction",
+        "socketMessage",
     ]
 
     /// The places a plugin can get between the app and what it was about to do. Declared
@@ -192,6 +193,7 @@ public enum AorusPluginPrelude {
             // have to subscribe to a stream and work out which of its buttons was pressed.
             // The event is also emitted, for a plugin that prefers to listen.
             if (event === 'pluginMessage') { pluginMessageReceived(payload); }
+            if (event === 'socketMessage') { socketMessageReceived(payload); }
             if (event === 'nativeButtonAction' && payload && nativeHandlers.hasOwnProperty(payload.id)) {
                 try {
                     var pressed = nativeHandlers[payload.id](payload);
@@ -879,6 +881,47 @@ public enum AorusPluginPrelude {
             } catch (error) {
                 reportError('Timer callback failed', error);
             }
+        }
+
+        // ---- the network ----------------------------------------------------------------
+
+        var socketHandlers = {};
+        function socketMessageReceived(event) {
+            if (!event || typeof event.id !== 'string') { return; }
+            var handler = socketHandlers[event.id];
+            if (event.event === 'close') { delete socketHandlers[event.id]; }
+            if (typeof handler !== 'function') { return; }
+            try {
+                handler(event);
+            } catch (error) {
+                reportError('Socket handler failed', error);
+            }
+        }
+
+        function withMethod(options, method) {
+            var opts = optionalObject(options, 'options');
+            var copy = {};
+            var names = Object.keys(opts);
+            for (var i = 0; i < names.length; i++) { copy[names[i]] = opts[names[i]]; }
+            copy.method = method;
+            return copy;
+        }
+
+        function withBody(options, method, body) {
+            var copy = withMethod(options, method);
+            copy.body = body;
+            // A backend is sent JSON unless the plugin said otherwise, because that is what
+            // a plugin passing an object meant.
+            if (body !== undefined && body !== null && typeof body !== 'string') {
+                copy.headers = copy.headers || {};
+                var hasType = false;
+                var names = Object.keys(copy.headers);
+                for (var i = 0; i < names.length; i++) {
+                    if (names[i].toLowerCase() === 'content-type') { hasType = true; }
+                }
+                if (!hasType) { copy.headers['Content-Type'] = 'application/json'; }
+            }
+            return copy;
         }
 
         // ---- hooks --------------------------------------------------------------------
@@ -1705,8 +1748,18 @@ public enum AorusPluginPrelude {
                 },
                 edit: function (message, text) {
                     var ref = messageReference(message);
-                    ref.text = requireString(text, 'text');
+                    // The same rich text `send` takes: a string, or what `text.compose`
+                    // built. An edit that dropped the entities turned every link and every
+                    // bold run in a message into plain text the moment a plugin touched it.
+                    var payload = textPayload(text);
+                    ref.text = payload.text;
+                    ref.entities = payload.entities;
                     return request('messages.edit', ref);
+                },
+                // Opens Telegram's own editor on the message, with the text in the composer
+                // for the person to change. `edit` writes; this hands them the pencil.
+                beginEdit: function (message) {
+                    return request('messages.beginEdit', messageReference(message));
                 },
                 delete: function (message, options) {
                     var ref = messageReference(message);
@@ -1964,7 +2017,78 @@ public enum AorusPluginPrelude {
             }),
             storage: storage,
             settings: settings,
+            // A socket that stays open, for a plugin talking to a backend somebody wrote.
+            // Frames arrive on the handler given to `open`, and on the `socketMessage`
+            // event for a plugin that prefers to listen; a socket is closed when the plugin
+            // stops, whether or not it remembered to.
+            ws: freeze({
+                open: function (url, handler) {
+                    requireString(url, 'url');
+                    if (handler !== undefined && handler !== null) { requireFunction(handler, 'handler'); }
+                    return request('ws.open', { url: url, headers: {} }).then(function (answer) {
+                        var id = answer && answer.id;
+                        if (typeof id !== 'string') { throw new Error('The socket did not open'); }
+                        if (handler) { socketHandlers[id] = handler; }
+                        return freeze({
+                            id: id,
+                            send: function (value) { return aorus.ws.send(id, value); },
+                            close: function () { return aorus.ws.close(id); }
+                        });
+                    });
+                },
+                send: function (id, value) {
+                    requireString(id, 'id');
+                    if (value !== null && typeof value === 'object' && typeof value.base64 === 'string') {
+                        return request('ws.send', { id: id, base64: value.base64 });
+                    }
+                    var text = typeof value === 'string' ? value : JSON.stringify(value === undefined ? null : value);
+                    return request('ws.send', { id: id, text: text });
+                },
+                close: function (id) {
+                    requireString(id, 'id');
+                    delete socketHandlers[id];
+                    return request('ws.close', { id: id });
+                }
+            }),
             http: freeze({
+                // The file moves whole, rather than through a string. A backend that answers
+                // with an image or an archive was unusable otherwise: `fetch` decodes a
+                // response as UTF-8, and bytes that are not text do not survive that.
+                download: function (url, name) {
+                    return request('http.download', {
+                        url: requireString(url, 'url'),
+                        name: requireString(name, 'name')
+                    });
+                },
+                upload: function (url, name, options) {
+                    var opts = optionalObject(options, 'options');
+                    var headers = {};
+                    if (opts.headers && typeof opts.headers === 'object') {
+                        var names = Object.keys(opts.headers);
+                        for (var i = 0; i < names.length; i++) { headers[names[i]] = String(opts.headers[names[i]]); }
+                    }
+                    return request('http.upload', {
+                        url: requireString(url, 'url'),
+                        name: requireString(name, 'name'),
+                        method: typeof opts.method === 'string' ? opts.method.toUpperCase() : 'POST',
+                        headers: headers
+                    });
+                },
+                // The four verbs, because a backend integration written with them reads like
+                // what it is. Each one is `fetch` with its method filled in.
+                get: function (url, options) { return aorus.http.fetch(url, withMethod(options, 'GET')); },
+                post: function (url, body, options) { return aorus.http.fetch(url, withBody(options, 'POST', body)); },
+                put: function (url, body, options) { return aorus.http.fetch(url, withBody(options, 'PUT', body)); },
+                patch: function (url, body, options) { return aorus.http.fetch(url, withBody(options, 'PATCH', body)); },
+                delete: function (url, options) { return aorus.http.fetch(url, withMethod(options, 'DELETE')); },
+                // `fetch` and then `.json()`, which is what almost every call to a backend
+                // actually wants and what almost every plugin got subtly wrong.
+                json: function (url, options) {
+                    return aorus.http.fetch(url, options).then(function (response) {
+                        if (!response.ok) { throw new Error('HTTP ' + response.status); }
+                        return response.json();
+                    });
+                },
                 fetch: function (url, options) {
                     requireString(url, 'url');
                     var opts = optionalObject(options, 'options');
