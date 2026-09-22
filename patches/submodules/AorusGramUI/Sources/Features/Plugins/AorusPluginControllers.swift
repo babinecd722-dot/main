@@ -2373,6 +2373,7 @@ private func permissionTitle(_ permission: AorusPluginPermission) -> String {
     case .manageMessages: return aorusL("Управление сообщениями", "Manage messages")
     case .composer: return aorusL("Поле ввода открытого чата", "Open chat composer")
     case .pluginMessaging: return aorusL("Обмен с другими плагинами", "Talk to other plugins")
+    case .notifications: return aorusL("Уведомления", "Notifications")
     }
 }
 
@@ -2427,6 +2428,8 @@ private func permissionDescription(_ permission: AorusPluginPermission, requeste
         return marker + aorusL("Разрешает обмениваться сообщениями с другими установленными плагинами. Каждое сообщение несет идентификатор отправителя, и плагины без этого разрешения ничего не получают и ничего не отправляют.", "Allows exchanging messages with other installed plugins. Every message carries the sender's identifier, and plugins without this permission neither send nor receive anything.")
     case .composer:
         return marker + aorusL("Разрешает менять текст в поле ввода открытого чата, видеть, как он меняется при наборе, показывать статус печати и прокручивать историю. Отправку сообщений это разрешение не дает.", "Allows changing the text in the open chat composer, seeing it change as it is typed, showing the typing status and scrolling the history. It does not allow sending messages.")
+    case .notifications:
+        return marker + aorusL("Разрешает показывать уведомления от имени приложения, в том числе когда оно закрыто. Уведомление всегда подписано именем плагина, и плагин не видит и не трогает уведомления Telegram.", "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.")
     }
 }
 

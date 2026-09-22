@@ -1144,6 +1144,71 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(mediaResults["noChat"] == .string("rejected"), "moderating without naming the group is refused before it crosses")
     mediaSandbox.stop()
 
+    // Notifications, which reach somebody who is not looking at the screen — so they are
+    // their own capability rather than part of the one that shows a toast, and a plugin
+    // without it neither posts nor finds out.
+    let notifyHost = AorusPluginNullHost()
+    var notifyCalls: [(String, String, String, Double)] = []
+    notifyHost.onNotify = { _, action, notificationId, title, body, after in
+        notifyCalls.append((action, notificationId, body, after))
+        return ["ok": NSNumber(value: true), "id": notificationId]
+    }
+    var notifyResults: [String: AorusPluginJSONValue] = [:]
+    notifyHost.onStorageChanged = { _, values in notifyResults = values }
+    let notifySandbox = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Notify"),
+        source: """
+        aorus.on('start', function () {
+            aorus.notifications.post({ id: 'digest', title: 'Ready', body: 'Five new', after: 60 })
+                .then(function (value) { aorus.storage.set('posted', value.ok ? 'yes' : 'no'); });
+            aorus.notifications.cancel('digest');
+            try { aorus.notifications.post({}); } catch (error) { aorus.storage.set('empty', 'rejected'); }
+            try { aorus.notifications.post({ body: 'x', after: 90000 }); } catch (error) { aorus.storage.set('far', 'rejected'); }
+        });
+        """,
+        host: notifyHost,
+        permissions: [.notifications]
+    )
+    let notifyStarted = DispatchSemaphore(value: 0)
+    notifySandbox.start { error in expect(error == nil, "notification plugin starts"); notifyStarted.signal() }
+    _ = notifyStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.3)
+    expect(notifyCalls.map { $0.0 } == ["post", "cancel"], "each notification call reaches the host as its own action")
+    expect(notifyCalls.first?.1 == "digest", "and carries the identifier the plugin chose")
+    expect(notifyCalls.first?.3 == 60.0, "and how long to wait")
+    expect(notifyResults["posted"] == .string("yes"), "posting answers whether it was accepted")
+    expect(notifyResults["empty"] == .string("rejected"), "a notification with nothing to say is refused before it crosses")
+    expect(notifyResults["far"] == .string("rejected"), "a notification further out than a day is refused before it crosses")
+    notifySandbox.stop()
+
+    // Without the grant it does not reach the app at all, and the plugin is told rather than
+    // left believing it worked.
+    let notifyDeniedHost = AorusPluginNullHost()
+    var notifyDeniedCalls = 0
+    notifyDeniedHost.onNotify = { _, _, _, _, _, _ in notifyDeniedCalls += 1; return nil }
+    var notifyDeniedResults: [String: AorusPluginJSONValue] = [:]
+    notifyDeniedHost.onStorageChanged = { _, values in notifyDeniedResults = values }
+    let notifyDenied = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Notify denied"),
+        source: """
+        aorus.on('start', function () {
+            aorus.notifications.post({ body: 'hello' }).then(
+                function () { aorus.storage.set('post', 'allowed'); },
+                function () { aorus.storage.set('post', 'refused'); }
+            );
+        });
+        """,
+        host: notifyDeniedHost,
+        permissions: [.dialogs]
+    )
+    let notifyDeniedStarted = DispatchSemaphore(value: 0)
+    notifyDenied.start { error in expect(error == nil, "plugin without notifications starts"); notifyDeniedStarted.signal() }
+    _ = notifyDeniedStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.3)
+    expect(notifyDeniedCalls == 0, "an ungranted notification never reaches the app")
+    expect(notifyDeniedResults["post"] == .string("refused"), "and the plugin is told rather than left believing it worked")
+    notifyDenied.stop()
+
     // Sharing and saving put something on screen, so they need the grant that covers that —
     // even for a plugin that may read the message.
     let mediaReadOnlyHost = AorusPluginNullHost()

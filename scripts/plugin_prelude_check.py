@@ -428,6 +428,22 @@ aorus.chat.current().then(function (value) {
     const late = [];
     aorus.schedule.at('overdue', Date.now() - 60000, function (event) { late.push(event); });
 
+    // Notifications. What crosses matters more than usual here, because on the other side
+    // it wakes somebody up.
+    check('notifications is missing', typeof aorus.notifications === 'object');
+    aorus.notifications.post({ id: 'digest', title: 'Ready', body: 'Five new', after: 60 });
+    const posted = lastRequest('notifications.post');
+    check('notifications.post lost its id', posted.id === 'digest');
+    check('notifications.post lost its body', posted.body === 'Five new');
+    check('notifications.post lost its delay', posted.after === 60);
+    aorus.notifications.post('just a line');
+    check('a bare string is not the body', lastRequest('notifications.post').body === 'just a line');
+    throws('notifications.post accepted nothing to say', () => aorus.notifications.post({}));
+    throws('notifications.post accepted a delay past a day', () => aorus.notifications.post({ body: 'x', after: 90000 }));
+    throws('notifications.cancel accepted no id', () => aorus.notifications.cancel());
+    aorus.notifications.cancel('digest');
+    check('notifications.cancel lost its id', lastRequest('notifications.cancel').id === 'digest');
+
     // A plugin's own words, in the app's language, falling back rather than showing a key.
     aorus.i18n.define({ en: { hello: 'Hello {name}' }, ru: { hello: 'Привет {name}' } });
     check('i18n.t did not substitute', aorus.i18n.t('hello', { name: 'Ann' }) === 'Hello Ann');

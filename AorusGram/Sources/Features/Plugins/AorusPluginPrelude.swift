@@ -1631,6 +1631,34 @@ public enum AorusPluginPrelude {
             // leaves the plugin at all.
             schedule: scheduleApi,
             i18n: i18nApi,
+            // Telling somebody something when they are not looking at the screen. The other
+            // half of `schedule`: work that happens while the app is closed is work nobody
+            // hears about otherwise. Every identifier here is the plugin's own — the app
+            // namespaces them — so a plugin can cancel and list what it posted and nothing
+            // else, including Telegram's own notifications.
+            notifications: freeze({
+                post: function (options) {
+                    var opts = typeof options === 'string' ? { body: options } : optionalObject(options, 'options');
+                    var title = typeof opts.title === 'string' ? opts.title : '';
+                    var body = typeof opts.body === 'string' ? opts.body : '';
+                    if (title.length === 0 && body.length === 0) {
+                        throw typeError('options.title or options.body is required');
+                    }
+                    var after = opts.after === undefined ? 0 : Number(opts.after);
+                    if (!isFinite(after) || after < 0 || after > 86400) {
+                        throw new RangeError('options.after must be between 0 and 86400 seconds');
+                    }
+                    return request('notifications.post', {
+                        id: typeof opts.id === 'string' ? opts.id : '',
+                        title: title,
+                        body: body,
+                        after: after
+                    });
+                },
+                cancel: function (id) { return request('notifications.cancel', { id: requireString(id, 'id') }); },
+                pending: function () { return request('notifications.pending', {}); },
+                clear: function () { return request('notifications.clear', {}); }
+            }),
             // The document groups subscription under a namespace and this API had it only at
             // the top level, so `GGAPI.events.on(...)` — the spelling in every example — was
             // a TypeError. The same four functions, not copies of them: a handler added

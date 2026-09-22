@@ -91,6 +91,7 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginNativeButtonsChanged(_ pluginId: String, buttons: [AorusPluginNativeButton])
     func pluginShareFile(_ pluginId: String, path: URL, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginBroadcast(_ pluginId: String, topic: String, json: String)
+    func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void)
     var pluginAppState: [String: Any] { get }
     var pluginDeviceInfo: [String: Any] { get }
     var pluginInterfaceLanguage: String { get }
@@ -134,6 +135,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onNativeButtonsChanged: ((String, [AorusPluginNativeButton]) -> Void)?
     public var onShareFile: ((String, URL) -> Void)?
     public var onBroadcast: ((String, String, String) -> Void)?
+    public var onNotify: ((String, String, String, String, String, Double) -> [String: Any]?)?
     // The open chat. Nothing is open unless a test says so, which is also true on a device
     // between chats, so the default answer here is the same one the app gives.
     public var onCurrentChat: ((String) -> [String: Any]?)?
@@ -224,6 +226,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginBroadcast(_ pluginId: String, topic: String, json: String) {
         onBroadcast?(pluginId, topic, json)
+    }
+    open func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        completion(.success(onNotify?(pluginId, action, notificationId, title, body, after) ?? ["ok": NSNumber(value: true)]))
     }
     open func pluginMedia(_ pluginId: String, action: String, peerId: Int64, namespace: Int32, messageId: Int32, directory: URL?, completion: @escaping (Result<[String: Any]?, Error>) -> Void) {
         completion(.success(onMedia?(pluginId, action, peerId, namespace, messageId)))
@@ -1560,6 +1565,23 @@ public final class AorusPluginSandbox {
                 return
             }
             host.pluginModerate(pluginId, action: String(kind.dropFirst("moderation.".count)), chatPeerId: chatPeerId, userPeerId: userPeerId) { [weak self] result in
+                self?.settle(id, with: result.map { value -> Any? in value as Any })
+            }
+        // A notification, which reaches somebody who is not looking at the screen — so it
+        // carries the plugin's name whether the plugin asks for it or not, and it can only
+        // ever cancel or list its own.
+        case "notifications.post", "notifications.cancel", "notifications.pending", "notifications.clear":
+            guard require(.notifications, id: id) else { return }
+            let action = String(kind.dropFirst("notifications.".count))
+            let notificationId = (payload["id"] as? String) ?? ""
+            let title = String(((payload["title"] as? String) ?? "").prefix(120))
+            let body = String(((payload["body"] as? String) ?? "").prefix(2_000))
+            let after = (payload["after"] as? NSNumber)?.doubleValue ?? 0.0
+            if action == "post" && title.isEmpty && body.isEmpty {
+                settle(id, with: .failure(AorusPluginRequestError("A notification needs a title or a body")))
+                return
+            }
+            host.pluginNotify(pluginId, action: action, notificationId: notificationId, title: title, body: body, after: after) { [weak self] result in
                 self?.settle(id, with: result.map { value -> Any? in value as Any })
             }
         case "files.pick":

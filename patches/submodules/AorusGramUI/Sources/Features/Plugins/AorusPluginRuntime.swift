@@ -11,6 +11,7 @@ import ContextUI
 import UndoUI
 import QuickLook
 import UniformTypeIdentifiers
+import UserNotifications
 import AorusGram
 
 /// The entitlement verdict for the plugin runtime, read once and re-read only when it can
@@ -1506,6 +1507,92 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         guard AorusPluginEntitlement.isAllowed,
               manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
         manager?.setStringOverrides(overrides, id: pluginId)
+    }
+
+    /// A notification, from a plugin, to somebody who is not looking at the screen.
+    ///
+    /// Everything here is namespaced by plugin. The identifier a plugin chooses is prefixed
+    /// before it reaches the notification centre, so one plugin can neither cancel another
+    /// plugin's notification nor Telegram's own, and `pending` and `clear` see only the ones
+    /// this plugin posted. The title carries the plugin's name whether the plugin asked for
+    /// it or not: a notification nobody can attribute is one nobody can turn off.
+    ///
+    /// Authorization is requested at the point of posting rather than at install. A plugin
+    /// somebody installed and has not used yet is not a reason to ask about notifications,
+    /// and a refusal is an answer — `{ ok: false }` — rather than an error, because "you
+    /// said no to notifications" is not a bug in the plugin.
+    func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.notifications, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Notifications permission is not granted")))
+            return
+        }
+        let prefix = "aorusgram.plugin.\(pluginId)."
+        let center = UNUserNotificationCenter.current()
+        switch action {
+        case "post":
+            let identifier = prefix + (notificationId.isEmpty ? UUID().uuidString : String(notificationId.prefix(64)))
+            let content = UNMutableNotificationContent()
+            content.title = title.isEmpty ? (pluginName(pluginId) ?? "AorusGram") : title
+            content.body = body
+            // The plugin's name where a notification puts the thread it belongs to, so a
+            // person looking at a pile of them can see which plugin is talking.
+            if let name = pluginName(pluginId) { content.subtitle = name }
+            content.sound = .default
+            // Zero is not a valid interval for a trigger, and "now" is what a plugin means
+            // by it, so it becomes the smallest interval the API accepts.
+            let interval = max(1.0, min(after, 86400.0))
+            let request = UNNotificationRequest(
+                identifier: identifier,
+                content: content,
+                trigger: UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+            )
+            center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                guard granted else {
+                    DispatchQueue.main.async { completion(.success(["ok": NSNumber(value: false), "reason": "denied"])) }
+                    return
+                }
+                center.add(request) { error in
+                    DispatchQueue.main.async {
+                        if let error {
+                            completion(.success(["ok": NSNumber(value: false), "reason": error.localizedDescription]))
+                        } else {
+                            completion(.success(["ok": NSNumber(value: true), "id": String(identifier.dropFirst(prefix.count))]))
+                        }
+                    }
+                }
+            }
+        case "cancel":
+            guard !notificationId.isEmpty else {
+                completion(.failure(AorusPluginRequestError("id is required")))
+                return
+            }
+            let identifier = prefix + String(notificationId.prefix(64))
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            center.removeDeliveredNotifications(withIdentifiers: [identifier])
+            completion(.success(["ok": NSNumber(value: true)]))
+        case "clear":
+            center.getPendingNotificationRequests { requests in
+                let mine = requests.map { $0.identifier }.filter { $0.hasPrefix(prefix) }
+                center.removePendingNotificationRequests(withIdentifiers: mine)
+                center.removeDeliveredNotifications(withIdentifiers: mine)
+                DispatchQueue.main.async { completion(.success(["ok": NSNumber(value: true), "count": NSNumber(value: mine.count)])) }
+            }
+        default:
+            center.getPendingNotificationRequests { requests in
+                let mine = requests.filter { $0.identifier.hasPrefix(prefix) }.prefix(64).map { request -> [String: Any] in
+                    var item: [String: Any] = ["id": String(request.identifier.dropFirst(prefix.count))]
+                    item["title"] = request.content.title
+                    item["body"] = request.content.body
+                    if let trigger = request.trigger as? UNTimeIntervalNotificationTrigger,
+                       let next = trigger.nextTriggerDate() {
+                        item["due"] = NSNumber(value: next.timeIntervalSince1970 * 1000.0)
+                    }
+                    return item
+                }
+                DispatchQueue.main.async { completion(.success(["notifications": Array(mine)])) }
+            }
+        }
     }
 
     func pluginBroadcast(_ pluginId: String, topic: String, json: String) {

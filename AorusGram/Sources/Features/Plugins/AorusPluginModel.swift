@@ -145,6 +145,7 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
     case manageMessages
     case composer
     case pluginMessaging
+    case notifications
 
     /// What each permission looks like in a plugin's source. The consent sheet is built
     /// from this, so a capability with no needle here is one the person is never asked
@@ -264,6 +265,10 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             // One plugin talking to another. Separate from everything else because it is
             // the one capability whose other side is not the app but code somebody else
             // wrote, and a plugin should be able to refuse to be in that conversation.
+            // Reaching somebody when the app is not open. Deliberately not folded into
+            // `dialogs`: a toast is seen by a person already looking at the screen, and this
+            // is a plugin waking somebody up.
+            (.notifications, ["aorus.notifications."]),
             (.pluginMessaging, [
                 "aorus.plugins.emit", "aorus.plugins.on",
                 "aorus.on('pluginMessage",
