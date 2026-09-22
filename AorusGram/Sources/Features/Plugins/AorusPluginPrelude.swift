@@ -1143,7 +1143,47 @@ public enum AorusPluginPrelude {
                 id = Number(id);
                 if (!Number.isSafeInteger(id) || id <= 0) { throw typeError('message must be a message or a message id'); }
                 return request('chat.scrollTo', { messageId: id });
-            }
+            },
+
+            // The names the published documentation uses. Every one of them is a call that
+            // was already here under a shorter name — a plugin written from that document
+            // should run rather than fail on a spelling, and a plugin written from this API
+            // should not have to learn the other one. Nothing below asks for a permission
+            // its own name does not already cover.
+            currentPeerId: function () {
+                return chatApi.current().then(function (chat) {
+                    return (chat && chat.id !== undefined && chat.id !== null) ? chat.id : null;
+                });
+            },
+            draftText: function () {
+                return chatApi.draft().then(function (draft) {
+                    return (draft && typeof draft.text === 'string') ? draft.text : '';
+                });
+            },
+            setDraftText: function (text) { return chatApi.setDraft(text); },
+            insertText: function (text) { return chatApi.insert(text); },
+            clearInput: function () { return chatApi.clear(); },
+            scrollToMessage: function (message) { return chatApi.scrollTo(message); },
+            sendText: function (text, options) {
+                var opts = optionalObject(options, 'options');
+                return chatApi.current().then(function (chat) {
+                    if (!chat || chat.id === undefined || chat.id === null) { throw new Error('No chat is open'); }
+                    return aorus.messages.send(chat.id, text, opts);
+                });
+            },
+            replyText: function (message, text) {
+                var ref = messageReference(message);
+                return chatApi.current().then(function (chat) {
+                    if (!chat || chat.id === undefined || chat.id === null) { throw new Error('No chat is open'); }
+                    return aorus.messages.send(chat.id, text, { replyTo: ref.messageId });
+                });
+            },
+            // The synchronous hook, under both names the document gives it. It is the `send`
+            // event: a handler returning a string replaces the text, and returning an empty
+            // one cancels the send. Registering it here rather than reimplementing it means
+            // one queue of handlers, in the order they were added, whichever name added them.
+            onBeforeSend: function (handler) { return on('send', handler); },
+            transformOutgoing: function (handler) { return on('send', handler); }
         });
 
         var telegramProxyApi = freeze({
@@ -1328,6 +1368,11 @@ public enum AorusPluginPrelude {
                 select: function (options) {
                     var opts = optionalObject(options, 'options');
                     return request('users.pick', { title: typeof opts.title === 'string' ? opts.title : null });
+                },
+                // The document's name for the same picker.
+                selectUser: function (options) {
+                    var opts = optionalObject(options, 'options');
+                    return request('users.pick', { title: typeof opts.title === 'string' ? opts.title : null });
                 }
             }),
             navigation: freeze({
@@ -1488,6 +1533,36 @@ public enum AorusPluginPrelude {
                     }
                 },
                 removeAllOverlays: removeAllOverlays,
+                // An entry in the message context menu, registered with its handler in one
+                // call. `integrations.contextMenu.register` is the same registration with
+                // the handler arriving as a `contextAction` event; this wires the event up
+                // for the caller and filters it to this entry, because a plugin with three
+                // actions should not have to demultiplex its own menu. Unregistering takes
+                // both halves with it.
+                addMessageContextAction: function (config, handler) {
+                    var value = optionalObject(config, 'config');
+                    requireFunction(handler, 'handler');
+                    if (typeof value.id !== 'string' || typeof value.title !== 'string') {
+                        throw typeError('config.id and config.title must be strings');
+                    }
+                    var remove = registerIntegration(contextActions, value, function (json) {
+                        return host.contextActionsDefine(json);
+                    });
+                    var listening = on('contextAction', function (event) {
+                        if (!event || event.actionId !== value.id) { return; }
+                        handler(event);
+                    });
+                    return function () { listening(); remove(); };
+                },
+                removeMessageContextAction: function (unregister) {
+                    requireFunction(unregister, 'unregister');
+                    unregister();
+                },
+                // The document's name for the notice. Same call.
+                showToast: function (text, options) {
+                    var opts = optionalObject(options, 'options');
+                    host.toast(requireString(text, 'text').slice(0, 200), typeof opts.duration === 'number' ? opts.duration : 0);
+                },
                 showSheet: function (options) {
                     var opts = typeof options === 'string' ? { text: options } : optionalObject(options, 'options');
                     return request('ui.alert', {
@@ -1528,6 +1603,26 @@ public enum AorusPluginPrelude {
                 state: function () { return request('app.state', {}); },
                 openSettings: function (section) {
                     return request('navigation.openSettings', { section: section === undefined ? null : requireString(section, 'section') });
+                },
+                // Which client this is and which version of it, for a plugin that adjusts
+                // itself rather than guessing. The plugin's own id is here because the
+                // document puts it here; `runtime.pluginId` is the same string.
+                clientInfo: function () {
+                    return freeze({
+                        client: 'AorusGram',
+                        version: device.appVersion,
+                        apiVersion: '\(apiVersion)',
+                        pluginId: info.id,
+                        language: device.language,
+                        systemVersion: device.systemVersion,
+                        isDark: !!device.isDark
+                    });
+                },
+                // Says that a restart is needed. It does not restart anything: an app that
+                // closed itself because a plugin asked is not something anybody can debug.
+                restartHint: function (text) {
+                    var message = (typeof text === 'string' && text.length > 0) ? text : 'Restart AorusGram to apply';
+                    host.toast(message.slice(0, 200), 0);
                 }
             }),
             integrations: freeze({

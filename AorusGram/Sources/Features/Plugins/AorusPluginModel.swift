@@ -152,11 +152,12 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
     /// by `AorusPluginCoreTests`, needle by needle.
     public static let sourceProbes: [(AorusPluginPermission, [String])] = [
             (.network, ["aorus.http"]),
-            (.sendMessages, ["aorus.messages.send"]),
+            (.sendMessages, ["aorus.messages.send", "aorus.chat.sendText", "aorus.chat.replyText"]),
             // `chats.*` names a chat by id; `chat.*` is the one on screen. Reading either is
             // the same capability: a title, an identifier and what is in view.
             (.chatMetadata, [
                 "aorus.chats.resolve", "aorus.chats.get", "aorus.chat.current", "aorus.chat.messages",
+                "aorus.chat.currentPeerId",
                 "aorus.users.get", "aorus.users.resolve", "aorus.users.search", "aorus.messages.visible",
             ]),
             (.openChats, [
@@ -167,7 +168,7 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             // `toast` is gated on the same permission as the other dialogs and had no
             // needle, so a plugin whose only visible output is a toast was granted nothing
             // and every message it showed went nowhere, silently.
-            (.dialogs, ["aorus.ui.alert", "aorus.ui.confirm", "aorus.ui.prompt", "aorus.ui.share", "aorus.app.share", "aorus.ui.toast", "aorus.ui.showSheet", "aorus.users.select", "aorus.files.pick", "aorus.files.share"]),
+            (.dialogs, ["aorus.ui.alert", "aorus.ui.confirm", "aorus.ui.prompt", "aorus.ui.share", "aorus.app.share", "aorus.ui.toast", "aorus.ui.showToast", "aorus.ui.showSheet", "aorus.users.select", "aorus.files.pick", "aorus.files.share", "aorus.app.restartHint"]),
             (.clipboardRead, ["aorus.clipboard.read"]),
             (.clipboardWrite, ["aorus.clipboard.write"]),
             (.incomingMessages, [
@@ -177,7 +178,12 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             ]),
             // Reading a message's text, and reading what is attached to it.
             (.messageHistory, ["aorus.chats.history", "aorus.media."]),
-            (.outgoingMessages, ["aorus.on('send'", "aorus.on(\"send\"", "aorus.once('send'", "aorus.once(\"send\"", "aorus.commands"]),
+            (.outgoingMessages, [
+                "aorus.on('send'", "aorus.on(\"send\"", "aorus.once('send'", "aorus.once(\"send\"", "aorus.commands",
+                // The document's two names for the same hook. A plugin that registers it
+                // under either one is asking for the same thing.
+                "aorus.chat.onBeforeSend", "aorus.chat.transformOutgoing",
+            ]),
             // Pages someone opens, and the things a plugin draws over the chat without
             // being asked to. Both are native UI built from data the app validates.
             (.customUI, [
@@ -185,7 +191,7 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 "aorus.ui.addFloatingButton", "aorus.ui.addChatPanel",
             ]),
             (.settingsIntegration, ["aorus.integrations.settings.register"]),
-            (.contextMenu, ["aorus.integrations.contextMenu.register"]),
+            (.contextMenu, ["aorus.integrations.contextMenu.register", "aorus.ui.addMessageContextAction"]),
             // The call sites and the two ways a page declares a link row. A bare `url:`
             // is not one of them: it appears in an http options object, in a share, in a
             // comment — and asking for the browser on every plugin that writes those

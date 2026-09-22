@@ -304,6 +304,67 @@ aorus.chat.current().then(function (value) {
         }
     );
 }).then(function () {
+    // The names the published documentation uses. A plugin written from that document must
+    // reach the same calls, so each one is followed to what it actually sends rather than
+    // only checked for being a function.
+    for (const name of ['sendText', 'replyText', 'setDraftText', 'insertText', 'clearInput',
+                        'currentPeerId', 'draftText', 'scrollToMessage', 'onBeforeSend',
+                        'transformOutgoing']) {
+        check('chat.' + name + ' is missing', typeof aorus.chat[name] === 'function');
+    }
+    for (const name of ['showToast', 'addMessageContextAction', 'removeMessageContextAction']) {
+        check('ui.' + name + ' is missing', typeof aorus.ui[name] === 'function');
+    }
+    check('users.selectUser is missing', typeof aorus.users.selectUser === 'function');
+    check('app.clientInfo is missing', typeof aorus.app.clientInfo === 'function');
+    check('app.restartHint is missing', typeof aorus.app.restartHint === 'function');
+
+    check('app.clientInfo does not name the client', aorus.app.clientInfo().client === 'AorusGram');
+    check('app.clientInfo does not carry the plugin id', aorus.app.clientInfo().pluginId === 'test');
+
+    aorus.chat.setDraftText('draft');
+    check('chat.setDraftText sends the wrong mode', lastRequest('chat.setDraft').mode === 'set');
+    aorus.chat.insertText('more');
+    check('chat.insertText sends the wrong mode', lastRequest('chat.setDraft').mode === 'insert');
+    aorus.chat.clearInput();
+    check('chat.clearInput sends the wrong mode', lastRequest('chat.setDraft').mode === 'clear');
+    aorus.chat.scrollToMessage(7);
+    check('chat.scrollToMessage sends the wrong message', lastRequest('chat.scrollTo').messageId === 7);
+
+    aorus.app.restartHint();
+    const hinted = globalThis.__calls.filter((call) => call.name === 'toast').pop();
+    check('app.restartHint says nothing', !!hinted && hinted.args[0].length > 0);
+
+    // The hook under both of its names is the `send` queue, in the order handlers were
+    // added — not two queues that each think they are the only one.
+    const order = [];
+    const offBefore = aorus.chat.onBeforeSend(function (event) { order.push('before'); return event.text; });
+    const offTransform = aorus.chat.transformOutgoing(function (event) { order.push('transform'); return event.text; });
+    globalThis.__dispatcher.runOutgoing('hello', '5', null);
+    check('onBeforeSend did not run', order[0] === 'before');
+    check('transformOutgoing did not run after it', order[1] === 'transform');
+    offBefore();
+    offTransform();
+    order.length = 0;
+    globalThis.__dispatcher.runOutgoing('hello', '5', null);
+    check('an unregistered outgoing handler still ran', order.length === 0);
+
+    // `sendText` is the current chat plus `messages.send`, so it must ask which chat is open
+    // and then send there — and refuse when none is, rather than sending somewhere else.
+    globalThis.__answers['chat.current'] = { peerId: '5', id: '5', title: 'Team', kind: 'group' };
+    return aorus.chat.sendText('hi').then(function () {
+        check('chat.sendText did not send to the open chat', lastRequest('messages.send').peerId === '5');
+        check('chat.sendText did not send its text', lastRequest('messages.send').text === 'hi');
+        return aorus.chat.replyText({ peerId: '5', namespace: 0, messageId: 9 }, 'answer');
+    }).then(function () {
+        check('chat.replyText did not reply to the message', lastRequest('messages.send').replyTo === 9);
+        globalThis.__answers['chat.current'] = null;
+        return aorus.chat.sendText('nowhere').then(
+            function () { problems.push('chat.sendText sent with no chat open'); },
+            function (error) { check('chat.sendText refused for the wrong reason', String(error.message) === 'No chat is open'); }
+        );
+    });
+}).then(function () {
 VERDICT_TAIL
     globalThis.__nodeLog('VERDICT ' + JSON.stringify(problems));
 }, function (error) {
@@ -387,6 +448,33 @@ def main() -> int:
         if not needle.startswith("aorus.on(") and not needle.startswith("aorus.once(")
         and len(needle.split(".")) > 1
     })
+
+    # And every needle in full, not only its namespace. A needle whose last component the
+    # prelude does not publish can never match, so the capability it guards is one the
+    # person is never asked about and the plugin is therefore never granted — the call then
+    # does nothing, silently, which is the failure this whole surface keeps running into.
+    # The Swift tests check the same thing; it is here too because this runs without a
+    # toolchain, which is where the aliases were written.
+    needle_problems = []
+    for needle in re.findall(r'"((?:[^"\\]|\\.)*)"', block):
+        needle = needle.replace('\\"', '"')
+        if needle.startswith("aorus.on(") or needle.startswith("aorus.once("):
+            quote = needle[needle.index("(") + 1]
+            rest = needle[needle.index(quote) + 1:]
+            event = rest.split(quote)[0]
+            if event not in events:
+                needle_problems.append("%s watches an event the prelude does not accept" % needle)
+            continue
+        if not needle.startswith("aorus."):
+            continue
+        for member in needle.split(".")[1:]:
+            if ("%s:" % member) not in prelude:
+                needle_problems.append("%s names %s, which the prelude does not publish" % (needle, member))
+    if needle_problems:
+        print("Plugin prelude check FAILED:")
+        for problem in needle_problems:
+            print("  %s" % problem)
+        return 1
 
     sources = plugin_sources(root)
     if not sources:
