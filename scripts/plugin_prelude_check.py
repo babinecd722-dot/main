@@ -102,6 +102,13 @@ HARNESS = r"""
 // this process, which is how a check can pass while testing nothing.
 const nodeLog = console.error.bind(console);
 globalThis.__nodeLog = nodeLog;
+// And Node's timers, for the same reason and then some: the prelude publishes its own
+// `setTimeout` over the global, so a harness that calls `setTimeout` after the prelude has
+// run is calling the thing it is supposed to be driving. Firing a timer then scheduled
+// another one, without end.
+const nodeSetTimeout = globalThis.setTimeout;
+globalThis.__nodeSetTimeout = nodeSetTimeout;
+const nodeTimers = {};
 
 const calls = [];
 const storageValues = {};
@@ -160,10 +167,30 @@ const host = new Proxy({}, {
         };
         case 'timerSchedule': return (id, ms, repeats) => {
             record('timerSchedule', [id, ms, repeats]);
-            setTimeout(() => {
+            // The delay is honoured rather than collapsed to zero. Firing everything
+            // immediately made a schedule armed for an hour fire at once and re-arm itself,
+            // which is a tight loop here and nothing like what happens on a device. Short
+            // waits still run immediately so the checks stay fast; anything a second or more
+            // out simply does not come due inside a test, which is the correct answer — and
+            // is unreferenced so an hour-long timer does not hold this process open for an
+            // hour waiting for it.
+            const handle = nodeSetTimeout(() => {
+                delete nodeTimers[id];
                 const dispatcher = globalThis.__dispatcher;
                 if (dispatcher) { dispatcher.timerFire(id); }
-            }, 0);
+            }, ms >= 1000 ? ms : 0);
+            // Only the far-off ones are unreferenced. A schedule armed for an hour must not
+            // hold this process open for an hour; a one-second timeout that a check is
+            // waiting on must, or the process exits before the thing under test happens.
+            if (ms >= 60000 && typeof handle.unref === 'function') { handle.unref(); }
+            nodeTimers[id] = handle;
+        };
+        case 'timerCancel': return (id) => {
+            record('timerCancel', [id]);
+            if (nodeTimers[id] !== undefined) {
+                clearTimeout(nodeTimers[id]);
+                delete nodeTimers[id];
+            }
         };
         }
         return (...args) => { record(name, args); return true; };
@@ -365,6 +392,94 @@ aorus.chat.current().then(function (value) {
         );
     });
 }).then(function () {
+    // Schedules. The whole point is that they are not timers: the row survives the context,
+    // and registering the same one again keeps the clock it was already running.
+    check('schedule is missing', typeof aorus.schedule === 'object');
+    const fired = [];
+    aorus.schedule.every('sync', 3600000, function (event) { fired.push(event); });
+    // Registered now, compared after the clock has moved: see below.
+    const registeredAt = Date.now();
+    aorus.schedule.every('keep', 3600000, function () {});
+    const keepDue = aorus.schedule.list().filter((entry) => entry.id === 'keep')[0].due;
+    const afterFirst = aorus.schedule.list().filter((entry) => entry.id === 'sync');
+    check('schedule.every did not register', afterFirst.length === 1 && afterFirst[0].id === 'sync');
+    check('schedule.every did not record its interval', afterFirst[0].interval === 3600000);
+    check('schedule.every is not repeating', afterFirst[0].repeating === true);
+    check('a registered schedule is not armed', afterFirst[0].armed === true);
+
+    // It is stored, not held in memory — that is the difference from a timer.
+    const stored = globalThis.__calls.filter((call) => call.name === 'storageWrite' && call.args[0] === '__aorus.schedules');
+    check('the schedule table was not written to storage', stored.length > 0);
+    // And a plugin cannot reach the bookkeeping through the public calls.
+    throws('storage.set accepted a reserved key', () => aorus.storage.set('__aorus.schedules', {}));
+    throws('storage.remove accepted a reserved key', () => aorus.storage.remove('__aorus.schedules'));
+    throws('a schedule id may not be reserved', () => aorus.schedule.every('__aorus.x', 60000, function () {}));
+    check('storage.keys leaks the bookkeeping', aorus.storage.keys().indexOf('__aorus.schedules') === -1);
+
+    throws('schedule.every accepted a sub-second interval', () => aorus.schedule.every('a', 10, function () {}));
+    throws('schedule.at accepted a non-time', () => aorus.schedule.at('a', 'soon', function () {}));
+    throws('schedule.every accepted no handler', () => aorus.schedule.every('a', 60000));
+    check('schedule.cancel did not remove', aorus.schedule.cancel('sync') === true);
+    check('cancelling twice claims it removed something', aorus.schedule.cancel('sync') === false);
+    check('a cancelled schedule is still listed', aorus.schedule.list().filter((entry) => entry.id === 'sync').length === 0);
+
+    // A schedule that came due while nothing was running fires on registration rather than
+    // never, and says how late it is.
+    const late = [];
+    aorus.schedule.at('overdue', Date.now() - 60000, function (event) { late.push(event); });
+
+    // A plugin's own words, in the app's language, falling back rather than showing a key.
+    aorus.i18n.define({ en: { hello: 'Hello {name}' }, ru: { hello: 'Привет {name}' } });
+    check('i18n.t did not substitute', aorus.i18n.t('hello', { name: 'Ann' }) === 'Hello Ann');
+    check('i18n.t invented a translation', aorus.i18n.t('missing') === 'missing');
+    check('i18n.has is wrong', aorus.i18n.has('hello') === true && aorus.i18n.has('missing') === false);
+    check('i18n.language is wrong', aorus.i18n.language() === 'en');
+
+    // Storage watchers hear the plugin's own writes, and stop when they are told to.
+    const seen = [];
+    const unwatch = aorus.storage.watch('flag', function (event) { seen.push(event); });
+    aorus.storage.set('flag', 1);
+    check('a storage watcher did not fire', seen.length === 1 && seen[0].value === 1);
+    check('a storage watcher lost the key', seen[0].key === 'flag');
+    aorus.storage.remove('flag');
+    check('a removal did not reach the watcher', seen.length === 2 && seen[1].removed === true);
+    unwatch();
+    aorus.storage.set('flag', 2);
+    check('an unwatched key still reported', seen.length === 2);
+
+    return new Promise(function (resolve) { globalThis.__nodeSetTimeout(resolve, 30); }).then(function () {
+        // The rule that makes this worth having, checked after the clock has moved so that
+        // "kept" and "recomputed" cannot produce the same number. Re-registering keeps the
+        // time it was counting to — an hourly task on a phone somebody opens every ten
+        // minutes would otherwise never run at all.
+        check('the clock did not advance, so this proves nothing', Date.now() > registeredAt);
+        aorus.schedule.every('keep', 3600000, function () {});
+        const kept = aorus.schedule.list().filter((entry) => entry.id === 'keep')[0];
+        check('re-registering reset the clock', kept.due === keepDue);
+        check('a kept due time is not in the past relative to a fresh one', kept.due < Date.now() + 3600000);
+        // Unless the interval itself changed, at which point the old due time belongs to a
+        // schedule that no longer exists.
+        aorus.schedule.every('keep', 7200000, function () {});
+        check('a changed interval kept the old due time', aorus.schedule.list().filter((entry) => entry.id === 'keep')[0].due !== keepDue);
+        aorus.schedule.cancel('keep');
+
+        check('an overdue schedule did not fire', late.length === 1);
+        check('an overdue schedule did not say it was late', late.length === 1 && late[0].late > 1000);
+        check('a one-shot schedule survived firing', aorus.schedule.list().filter((entry) => entry.id === 'overdue').length === 0);
+
+        // `waitFor` resolves with the event, filters with its predicate, and gives up.
+        const waited = aorus.events.waitFor('uiAction', { where: (event) => event.rowId === 'b', timeout: 5000 });
+        globalThis.__dispatcher.dispatch('uiAction', { pageId: 'p', rowId: 'a' });
+        globalThis.__dispatcher.dispatch('uiAction', { pageId: 'p', rowId: 'b' });
+        return waited.then(function (event) {
+            check('waitFor resolved with the wrong event', event.rowId === 'b');
+            return aorus.events.waitFor('chatOpened', { timeout: 1000 }).then(
+                function () { problems.push('waitFor resolved with nothing to resolve it'); },
+                function (error) { check('waitFor gave up for the wrong reason', /Timed out/.test(String(error.message))); }
+            );
+        });
+    });
+}).then(function () {
 VERDICT_TAIL
     globalThis.__nodeLog('VERDICT ' + JSON.stringify(problems));
 }, function (error) {
@@ -442,11 +557,13 @@ def main() -> int:
     # capability is granted something it can never call.
     model = (root / "AorusGram/Sources/Features/Plugins/AorusPluginModel.swift").read_text(encoding="utf-8")
     block = model[model.index("sourceProbes"):model.index("public static func requestedBySource")]
+    # Only needles that name an API path contribute a namespace. A subscription needle is a
+    # call with a quoted event inside it — `aorus.events.waitFor('message` — and reading its
+    # second component as a namespace asks whether the prelude publishes `waitFor('message`.
     namespaces = sorted({
         needle.split(".")[1]
         for needle in re.findall(r'"(aorus\.[^"]*)"', block)
-        if not needle.startswith("aorus.on(") and not needle.startswith("aorus.once(")
-        and len(needle.split(".")) > 1
+        if "(" not in needle and len(needle.split(".")) > 1
     })
 
     # And every needle in full, not only its namespace. A needle whose last component the
@@ -458,7 +575,10 @@ def main() -> int:
     needle_problems = []
     for needle in re.findall(r'"((?:[^"\\]|\\.)*)"', block):
         needle = needle.replace('\\"', '"')
-        if needle.startswith("aorus.on(") or needle.startswith("aorus.once("):
+        # Any needle that opens a call with a quoted event name is a subscription needle,
+        # whichever of the six spellings it uses. Listing the prefixes by hand meant one
+        # added later was read as an API path and checked against the wrong thing.
+        if "(" in needle and ("'" in needle or '"' in needle):
             quote = needle[needle.index("(") + 1]
             rest = needle[needle.index(quote) + 1:]
             event = rest.split(quote)[0]

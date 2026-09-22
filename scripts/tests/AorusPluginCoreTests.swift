@@ -82,7 +82,11 @@ for permission in AorusPluginPermission.allCases {
 // one the prelude accepts.
 for (permission, needles) in AorusPluginPermission.sourceProbes {
     for needle in needles {
-        if needle.hasPrefix("aorus.on(") || needle.hasPrefix("aorus.once(") {
+        // Any needle that opens a call with a quoted event name is a subscription needle,
+        // whichever of the six spellings it uses — `aorus.on(`, `aorus.events.once(`,
+        // `aorus.events.waitFor(` and so on. Matching on the prefixes by hand meant a
+        // spelling added later was read as an API path and checked against the wrong thing.
+        if needle.contains("("), needle.contains("'") || needle.contains("\"") {
             let quoted = needle.drop(while: { $0 != "'" && $0 != "\"" }).dropFirst()
             let event = String(quoted.prefix(while: { $0 != "'" && $0 != "\"" }))
             expect(

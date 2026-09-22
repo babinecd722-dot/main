@@ -308,21 +308,69 @@ public enum AorusPluginPrelude {
         var storageCache = parseJSON(host.storageInitial(), {});
         if (storageCache === null || typeof storageCache !== 'object' || Array.isArray(storageCache)) { storageCache = {}; }
 
+        // Keys the prelude keeps its own bookkeeping in — the schedule table is one. A plugin
+        // writing over them would break machinery it did not know it had, so the public calls
+        // refuse the prefix and the machinery goes through `storageWriteRaw`.
+        var STORAGE_RESERVED = '__aorus.';
+        var storageWatchers = {};
+
+        function storageWriteRaw(key, value) {
+            if (value === undefined) {
+                host.storageWrite(key, null);
+                delete storageCache[key];
+            } else {
+                var json = encodeValue(value, 'value');
+                if (!host.storageWrite(key, json)) { throw new Error('Storage limit exceeded'); }
+                storageCache[key] = JSON.parse(json);
+            }
+            if (key.slice(0, STORAGE_RESERVED.length) === STORAGE_RESERVED) { return; }
+            var list = storageWatchers[key];
+            if (!list) { return; }
+            var snapshot = list.slice();
+            for (var i = 0; i < snapshot.length; i++) {
+                try {
+                    snapshot[i](freeze({ key: key, value: value === undefined ? null : JSON.parse(JSON.stringify(storageCache[key])), removed: value === undefined }));
+                } catch (error) {
+                    reportError('Storage watcher failed: ' + key, error);
+                }
+            }
+        }
+
+        function storageKey(key) {
+            requireString(key, 'key');
+            if (key.slice(0, STORAGE_RESERVED.length) === STORAGE_RESERVED) {
+                throw typeError('key must not start with ' + STORAGE_RESERVED);
+            }
+            return key;
+        }
+
         var storage = freeze({
             get: function (key, fallback) {
                 requireString(key, 'key');
                 return storageCache.hasOwnProperty(key) ? JSON.parse(JSON.stringify(storageCache[key])) : fallback;
             },
             set: function (key, value) {
-                requireString(key, 'key');
-                var json = encodeValue(value, 'value');
-                if (!host.storageWrite(key, json)) { throw new Error('Storage limit exceeded'); }
-                storageCache[key] = JSON.parse(json);
+                storageKey(key);
+                storageWriteRaw(key, value === undefined ? null : value);
             },
             remove: function (key) {
-                requireString(key, 'key');
-                host.storageWrite(key, null);
-                delete storageCache[key];
+                storageKey(key);
+                storageWriteRaw(key, undefined);
+            },
+            // Told when a key changes, including by another part of this same plugin. Its own
+            // writes are the point: a floating button and a settings page in one plugin are
+            // two pieces of code that otherwise have no way to hear about each other.
+            watch: function (key, handler) {
+                storageKey(key);
+                requireFunction(handler, 'handler');
+                if (!storageWatchers.hasOwnProperty(key)) { storageWatchers[key] = []; }
+                storageWatchers[key].push(handler);
+                return function () {
+                    var list = storageWatchers[key] || [];
+                    for (var i = list.length - 1; i >= 0; i--) {
+                        if (list[i] === handler) { list.splice(i, 1); }
+                    }
+                };
             },
             has: function (key) { return storageCache.hasOwnProperty(requireString(key, 'key')); },
             // `getJSON`/`setJSON` are the same bucket. Storage already holds JSON values, so
@@ -346,11 +394,20 @@ public enum AorusPluginPrelude {
                 storage.set(key, current);
                 return current.length;
             },
-            keys: function () { return Object.keys(storageCache); },
+            keys: function () {
+                return Object.keys(storageCache).filter(function (key) {
+                    return key.slice(0, STORAGE_RESERVED.length) !== STORAGE_RESERVED;
+                });
+            },
+            // Clears what the plugin put here, and not the bookkeeping. A plugin resetting
+            // its own state should not silently lose the schedules it registered; those are
+            // cleared by `schedule.clear`, which is the call that says so.
             clear: function () {
-                var keys = Object.keys(storageCache);
-                for (var i = 0; i < keys.length; i++) { host.storageWrite(keys[i], null); }
-                storageCache = {};
+                var keys = Object.keys(storageCache).filter(function (key) {
+                    return key.slice(0, STORAGE_RESERVED.length) !== STORAGE_RESERVED;
+                });
+                for (var i = 0; i < keys.length; i++) { storageWriteRaw(keys[i], undefined); }
+                return keys.length;
             }
         });
 
@@ -812,6 +869,221 @@ public enum AorusPluginPrelude {
             }
         }
 
+        // ---- schedules ----------------------------------------------------------------
+
+        // Work that outlives the plugin's context.
+        //
+        // A timer is a callback inside a JSContext, and the context goes away when the plugin
+        // stops — taking everything pending with it. Anything a plugin wants to do in an hour
+        // is therefore something it cannot ask for, because it will not be running in an hour:
+        // the person will have closed the app. A schedule is a row in the plugin's own storage
+        // instead. It survives the plugin stopping, the app being killed and the phone being
+        // restarted, and it is armed again the next time the plugin starts.
+        //
+        // The handler cannot be stored, so a plugin re-registers on every start. Registering a
+        // schedule that already exists keeps the time it was counting to rather than starting
+        // over — an hourly task on a phone somebody opens every ten minutes would otherwise
+        // never run at all. That one rule is the whole difference between this and a timer.
+        var SCHEDULE_KEY = '__aorus.schedules';
+        var MAX_SCHEDULES = 32;
+        var scheduleHandlers = {};
+        var scheduleTimers = {};
+
+        function scheduleTable() {
+            var table = storage.getJSON(SCHEDULE_KEY, {});
+            if (table === null || typeof table !== 'object' || Array.isArray(table)) { return {}; }
+            return table;
+        }
+
+        function armSchedule(id) {
+            if (scheduleTimers.hasOwnProperty(id)) {
+                cancel(scheduleTimers[id]);
+                delete scheduleTimers[id];
+            }
+            var entry = scheduleTable()[id];
+            if (!entry || !scheduleHandlers.hasOwnProperty(id)) { return; }
+            var wait = entry.due - Date.now();
+            if (wait < 0) { wait = 0; }
+            // Nothing further out than a day is armed as a timer. The app will not be running
+            // that long, so a callback scheduled for next week is a promise nothing can keep;
+            // it is picked up on a later start instead, which is where it was always going to
+            // come from.
+            if (wait > 86400000) { return; }
+            scheduleTimers[id] = schedule(function () {
+                delete scheduleTimers[id];
+                fireSchedule(id);
+            }, wait, false);
+        }
+
+        function fireSchedule(id) {
+            var table = scheduleTable();
+            var entry = table[id];
+            var handler = scheduleHandlers[id];
+            if (!entry || typeof handler !== 'function') { return; }
+            var late = Date.now() - entry.due;
+            if (entry.interval > 0) {
+                // The next one is counted from now rather than from when this one was due: a
+                // phone that was off for a week should not fire a daily task seven times in
+                // a row the moment it comes back.
+                entry.due = Date.now() + entry.interval;
+                table[id] = entry;
+            } else {
+                delete table[id];
+                delete scheduleHandlers[id];
+            }
+            storageWriteRaw(SCHEDULE_KEY, table);
+            try {
+                handler(freeze({ id: id, late: late > 1000 ? late : 0, repeating: entry.interval > 0 }));
+            } catch (error) {
+                reportError('Schedule failed: ' + id, error);
+            }
+            if (entry.interval > 0) { armSchedule(id); }
+        }
+
+        function scheduleName(id) {
+            requireString(id, 'id');
+            if (id.length === 0 || id.length > 64) { throw typeError('id must be 1 to 64 characters'); }
+            if (id.slice(0, 8) === '__aorus.') { throw typeError('id must not start with __aorus.'); }
+            return id;
+        }
+
+        function defineSchedule(id, interval, due, handler, explicitTime) {
+            scheduleName(id);
+            requireFunction(handler, 'handler');
+            var table = scheduleTable();
+            var existing = table[id];
+            if (!existing && Object.keys(table).length >= MAX_SCHEDULES) {
+                throw new Error('Too many schedules (limit ' + MAX_SCHEDULES + ')');
+            }
+            scheduleHandlers[id] = handler;
+            // A time somebody named explicitly is always honoured. Everything else keeps the
+            // clock it was already running, unless the interval itself changed — at which
+            // point the old due time belongs to a schedule that no longer exists.
+            var entry = (!explicitTime && existing && existing.interval === interval)
+                ? { interval: interval, due: existing.due }
+                : { interval: interval, due: due };
+            table[id] = entry;
+            storageWriteRaw(SCHEDULE_KEY, table);
+            armSchedule(id);
+            return function () { cancelSchedule(id); };
+        }
+
+        function cancelSchedule(id) {
+            scheduleName(id);
+            var table = scheduleTable();
+            if (!table.hasOwnProperty(id)) { return false; }
+            delete table[id];
+            storageWriteRaw(SCHEDULE_KEY, table);
+            delete scheduleHandlers[id];
+            if (scheduleTimers.hasOwnProperty(id)) {
+                cancel(scheduleTimers[id]);
+                delete scheduleTimers[id];
+            }
+            return true;
+        }
+
+        function requireInterval(value, name) {
+            var ms = Number(value);
+            if (!isFinite(ms) || ms < 1000) { throw new RangeError(name + ' must be at least 1000'); }
+            if (ms > 31536000000) { throw new RangeError(name + ' must be at most a year'); }
+            return Math.floor(ms);
+        }
+
+        var scheduleApi = freeze({
+            every: function (id, milliseconds, handler) {
+                var interval = requireInterval(milliseconds, 'milliseconds');
+                return defineSchedule(id, interval, Date.now() + interval, handler, false);
+            },
+            after: function (id, milliseconds, handler) {
+                var delay = requireInterval(milliseconds, 'milliseconds');
+                return defineSchedule(id, 0, Date.now() + delay, handler, false);
+            },
+            at: function (id, timestamp, handler) {
+                var due = Number(timestamp);
+                if (!isFinite(due) || due <= 0) { throw typeError('timestamp must be a time in milliseconds'); }
+                return defineSchedule(id, 0, Math.floor(due), handler, true);
+            },
+            cancel: function (id) { return cancelSchedule(id); },
+            // What is waiting, and when. A plugin that has just started reads this to decide
+            // what to re-register rather than guessing.
+            list: function () {
+                var table = scheduleTable();
+                return Object.keys(table).sort().map(function (id) {
+                    return freeze({
+                        id: id,
+                        due: table[id].due,
+                        interval: table[id].interval,
+                        repeating: table[id].interval > 0,
+                        armed: scheduleHandlers.hasOwnProperty(id)
+                    });
+                });
+            },
+            clear: function () {
+                var ids = Object.keys(scheduleTable());
+                for (var i = 0; i < ids.length; i++) { cancelSchedule(ids[i]); }
+                return ids.length;
+            }
+        });
+
+        // ---- the plugin's own words ---------------------------------------------------
+
+        // A plugin draws text of its own, and that text is in one language unless the plugin
+        // does something about it. `strings.override` replaces words the app draws; this is
+        // the other direction — the plugin's own, keyed by the language the app is in, with
+        // English as the fallback because it is the one every table here has.
+        var i18nTable = {};
+        var i18nApi = freeze({
+            define: function (translations) {
+                var value = optionalObject(translations, 'translations');
+                var next = {};
+                var languages = Object.keys(value);
+                if (languages.length > 64) { throw new RangeError('at most 64 languages'); }
+                for (var i = 0; i < languages.length; i++) {
+                    var entries = value[languages[i]];
+                    if (entries === null || typeof entries !== 'object' || Array.isArray(entries)) { continue; }
+                    var table = {};
+                    var keys = Object.keys(entries);
+                    for (var j = 0; j < keys.length; j++) {
+                        if (typeof entries[keys[j]] === 'string') { table[keys[j]] = entries[keys[j]]; }
+                    }
+                    next[String(languages[i]).toLowerCase()] = table;
+                }
+                i18nTable = next;
+                return Object.keys(next).length;
+            },
+            // The language, then the language without its region, then English, then the key
+            // itself — which is readable enough to ship and obvious enough to notice.
+            t: function (key, params) {
+                requireString(key, 'key');
+                var language = String(device.language || 'en').toLowerCase();
+                var candidates = [language, language.split('-')[0], 'en'];
+                var text = key;
+                for (var i = 0; i < candidates.length; i++) {
+                    var table = i18nTable[candidates[i]];
+                    if (table && typeof table[key] === 'string') { text = table[key]; break; }
+                }
+                if (params !== null && typeof params === 'object') {
+                    var names = Object.keys(params);
+                    for (var j = 0; j < names.length; j++) {
+                        text = text.split('{' + names[j] + '}').join(String(params[names[j]]));
+                    }
+                }
+                return text;
+            },
+            language: function () { return String(device.language || 'en'); },
+            has: function (key) {
+                requireString(key, 'key');
+                var language = String(device.language || 'en').toLowerCase();
+                var candidates = [language, language.split('-')[0], 'en'];
+                for (var i = 0; i < candidates.length; i++) {
+                    var table = i18nTable[candidates[i]];
+                    if (table && typeof table[key] === 'string') { return true; }
+                }
+                return false;
+            },
+            all: function () { return freeze(JSON.parse(JSON.stringify(i18nTable))); }
+        });
+
         // ---- the outgoing text hook -------------------------------------------------------
 
         function runCommand(text, peerId, accountId) {
@@ -1239,6 +1511,43 @@ public enum AorusPluginPrelude {
             on: on,
             off: off,
             once: once,
+            // The next matching event, as a promise. `once` is a callback and therefore the
+            // wrong shape for "send this, then wait for the reply": the code that continues
+            // afterwards ends up inside the handler, one indent deeper each time. With a
+            // timeout, because a wait with no end is a plugin that looks like it hung.
+            waitFor: function (event, options) {
+                var opts = optionalObject(options, 'options');
+                var timeout = opts.timeout === undefined ? 30000 : Number(opts.timeout);
+                if (!isFinite(timeout) || timeout < 0 || timeout > 300000) {
+                    throw new RangeError('options.timeout must be between 0 and 300000');
+                }
+                var where = opts.where;
+                if (where !== undefined && typeof where !== 'function') {
+                    throw typeError('options.where must be a function');
+                }
+                return new Promise(function (resolve, reject) {
+                    var timer = null;
+                    var stop = on(event, function (payload) {
+                        if (where) {
+                            var matched = false;
+                            // A predicate that throws is a predicate that did not match.
+                            // Rejecting the wait instead would turn one bad comparison into
+                            // a failure of whatever the plugin was actually waiting for.
+                            try { matched = !!where(payload); } catch (error) { matched = false; }
+                            if (!matched) { return; }
+                        }
+                        stop();
+                        if (timer !== null) { cancel(timer); }
+                        resolve(payload);
+                    });
+                    if (timeout > 0) {
+                        timer = schedule(function () {
+                            stop();
+                            reject(new Error('Timed out waiting for ' + event));
+                        }, timeout, false);
+                    }
+                });
+            },
             commands: freeze({
                 register: registerCommand,
                 setPrefix: setPrefix,
@@ -1316,6 +1625,26 @@ public enum AorusPluginPrelude {
             }),
             chat: chatApi,
             files: filesApi,
+            // Work that outlives this context, and the plugin's own words in the app's
+            // language. Neither needs a permission of its own: a schedule runs the plugin's
+            // code later and nothing it could not already do, and a translation table never
+            // leaves the plugin at all.
+            schedule: scheduleApi,
+            i18n: i18nApi,
+            // The document groups subscription under a namespace and this API had it only at
+            // the top level, so `GGAPI.events.on(...)` — the spelling in every example — was
+            // a TypeError. The same four functions, not copies of them: a handler added
+            // through either spelling is in the one queue.
+            events: freeze({
+                on: on,
+                off: off,
+                once: once,
+                waitFor: function (event, options) { return aorus.waitFor(event, options); },
+                // What this build accepts. A plugin written against a newer document can ask
+                // rather than subscribing to a name that will never arrive.
+                names: function () { return KNOWN_EVENTS.slice(); },
+                has: function (event) { return KNOWN_EVENTS.indexOf(String(event)) !== -1; }
+            }),
             // The same object as the global `console`. Both spellings are in the contract,
             // and a plugin that reaches for the one that was missing got a TypeError in the
             // middle of its own start handler with nothing to say why.
