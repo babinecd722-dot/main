@@ -841,6 +841,25 @@ public enum AorusPluginPrelude {
             });
         }
 
+        // What an answer to the agent may carry: how much it is allowed to read, and over
+        // what stretch of time. A permission option the agent offered names its own limit,
+        // so a plugin usually passes one of those straight back.
+        function aiAnswerOptions(options) {
+            var opts = optionalObject(options, 'options');
+            var value = {};
+            if (opts.limit !== undefined) {
+                var limit = Number(opts.limit);
+                if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
+                    throw new RangeError('options.limit must be between 1 and 1000');
+                }
+                value.limit = limit;
+            }
+            if (typeof opts.username === 'string') { value.username = opts.username.replace(/^@/, ''); }
+            if (opts.from !== undefined) { value.from = Math.floor(Number(opts.from)) || 0; }
+            if (opts.to !== undefined) { value.to = Math.floor(Number(opts.to)) || 0; }
+            return value;
+        }
+
         // ---- timers -------------------------------------------------------------------
 
         var timers = {};
@@ -2312,6 +2331,39 @@ public enum AorusPluginPrelude {
                 },
                 openArtifact: function (artifactId) {
                     return request('ai.openArtifact', { artifactId: requireString(artifactId, 'artifactId') });
+                },
+                // The agent asks before it reads somebody's messages, and it asks whoever
+                // started the turn. For a turn a plugin started, that is the plugin: the
+                // question arrives on `onEvent` as `ai.permission` or `ai.tool`, and one of
+                // these three sends it back. Until one of them does, the turn waits.
+                //
+                // There used to be no answer to give. The turn was cancelled and the plugin
+                // was handed an error telling somebody to go and have the conversation in a
+                // different screen, which is not an API.
+                allow: function (requestId, options) {
+                    return request('ai.answer', {
+                        requestId: requireString(requestId, 'requestId'),
+                        action: 'allow',
+                        options: aiAnswerOptions(options)
+                    });
+                },
+                deny: function (requestId) {
+                    return request('ai.answer', {
+                        requestId: requireString(requestId, 'requestId'),
+                        action: 'deny',
+                        options: {}
+                    });
+                },
+                // The plugin ran the tool itself and hands back what it found. The agent
+                // carries on with it as though it had run the tool.
+                resolveTool: function (requestId, result, options) {
+                    var value = aiAnswerOptions(options);
+                    value.result = result === undefined ? null : result;
+                    return request('ai.answer', {
+                        requestId: requireString(requestId, 'requestId'),
+                        action: 'resolve',
+                        options: value
+                    });
                 }
             }),
             text: textApi,

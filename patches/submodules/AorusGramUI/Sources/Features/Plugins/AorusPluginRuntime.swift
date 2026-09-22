@@ -725,6 +725,248 @@ public final class AorusPluginRuntimeManager {
     }
 }
 
+/// One AorusAI turn a plugin asked for, across as many rounds as the agent needs.
+///
+/// A turn is not one stream. The backend ends the stream on `awaiting_tool` and
+/// `awaiting_permission`, and the next round is a fresh request carrying
+/// `aorus_tool_results` — which is why this is an object and not a pile of locals inside
+/// one call. It used to be the latter, so a turn that stopped to ask a question had nowhere
+/// to be answered, and the plugin was handed an error telling somebody to go and continue
+/// the conversation in a different screen.
+final class AorusPluginAITurn {
+    private unowned let host: AorusPluginTelegramHost
+    let pluginId: String
+    private let messages: [AorusAIAgentPayload.Message]
+    private let threadId: String?
+    private let onEvent: ([String: Any]) -> Void
+    private let completion: (Result<[String: Any], Error>) -> Void
+
+    private let lock = NSLock()
+    private var toolResults: [AorusAIToolResult] = []
+    private var text = ""
+    private var artifacts: [AorusAIArtifact] = []
+    private var finished = false
+    private var rounds = 0
+    /// What the agent is waiting to be told, or nothing if it is not waiting.
+    private var pending: (requestId: String, tool: String, username: String?, limit: Int?)?
+
+    /// A turn that keeps asking is a turn that never ends. The full chat stops at the same
+    /// number for the same reason.
+    private static let maximumRounds = 6
+
+    init(
+        host: AorusPluginTelegramHost,
+        pluginId: String,
+        messages: [AorusAIAgentPayload.Message],
+        threadId: String?,
+        onEvent: @escaping ([String: Any]) -> Void,
+        completion: @escaping (Result<[String: Any], Error>) -> Void
+    ) {
+        self.host = host
+        self.pluginId = pluginId
+        self.messages = messages
+        self.threadId = threadId
+        self.onEvent = onEvent
+        self.completion = completion
+    }
+
+    var pendingRequestId: String? {
+        lock.lock(); defer { lock.unlock() }
+        return pending?.requestId
+    }
+
+    func finish(_ result: Result<[String: Any], Error>) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        finished = true
+        lock.unlock()
+        host.clearAITurn(pluginId)
+        completion(result)
+    }
+
+    private func succeed() {
+        lock.lock()
+        let finalText = text
+        let finalArtifacts = artifacts
+        lock.unlock()
+        host.rememberArtifacts(finalArtifacts, pluginId: pluginId)
+        finish(.success([
+            "text": finalText,
+            "artifacts": finalArtifacts.map {
+                ["id": $0.artifactId, "filename": $0.filename, "mime": $0.mime, "size": $0.size, "format": $0.format]
+            },
+        ]))
+    }
+
+    /// The plugin's answer, turned into the one thing the backend reads.
+    ///
+    /// `allow` and `deny` differ only in the `denied` flag: the agent is told it was refused
+    /// rather than left waiting, which is what lets it answer around the refusal instead of
+    /// stopping. `resolve` carries a result the plugin produced itself.
+    func answer(action: String, options: [String: Any]) {
+        lock.lock()
+        guard let pending, !finished else { lock.unlock(); return }
+        self.pending = nil
+        let arguments = AorusAIToolResult.Arguments(
+            username: (options["username"] as? String) ?? pending.username,
+            limit: (options["limit"] as? NSNumber)?.intValue ?? pending.limit,
+            fromDate: (options["from"] as? NSNumber)?.int64Value,
+            toDate: (options["to"] as? NSNumber)?.int64Value
+        )
+        let denied = action == "deny"
+        var value: AorusAIJSONValue?
+        if let result = options["result"], !denied {
+            value = AorusAIJSONValue(any: result, depth: 0)
+        }
+        toolResults.append(AorusAIToolResult(
+            tool: pending.tool,
+            requestId: pending.requestId,
+            ok: !denied,
+            denied: denied,
+            arguments: arguments,
+            result: value
+        ))
+        lock.unlock()
+        dispatch()
+    }
+
+    /// One round: the same conversation, plus everything the plugin has answered so far.
+    func dispatch() {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        rounds += 1
+        guard rounds <= Self.maximumRounds else {
+            lock.unlock()
+            finish(.failure(AorusPluginRequestError("AorusAI asked for too many rounds")))
+            return
+        }
+        let payload = AorusAIAgentPayload(messages: messages, toolResults: toolResults, threadId: threadId)
+        lock.unlock()
+
+        let handle = AorusAIClient.shared.start(payload: payload, event: { [weak self] event, _ in
+            self?.receive(event)
+        }, completion: { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                // A stream that ended because the agent asked something is not the end of
+                // the turn. The question is already with the plugin; the turn waits.
+                self.lock.lock()
+                let waiting = self.pending != nil
+                self.lock.unlock()
+                if waiting { return }
+                self.succeed()
+            case let .failure(error):
+                self.finish(.failure(error))
+            }
+        })
+        guard let handle else {
+            finish(.failure(AorusPluginRequestError("AorusAI is unavailable")))
+            return
+        }
+        host.adoptAIStream(handle, turn: self)
+    }
+
+    private func receive(_ event: AorusAIEvent) {
+        switch event {
+        case let .agentStarted(turnId, _):
+            onEvent(["type": "agent.start"])
+            host.noteAITurnId(turnId, pluginId: pluginId)
+        case let .responseDelta(delta):
+            onEvent(["type": "response.delta", "text": delta])
+            lock.lock()
+            let room = max(0, AorusAIRequestLimits.responseCharacters - text.count)
+            if room > 0 { text.append(room >= delta.count ? delta : String(delta.prefix(room))) }
+            lock.unlock()
+        case let .completion(value, ready):
+            lock.lock()
+            if let value, !value.isEmpty { text = String(value.prefix(AorusAIRequestLimits.responseCharacters)) }
+            for artifact in ready where !artifacts.contains(where: { $0.artifactId == artifact.artifactId }) {
+                if artifacts.count < AorusAIRequestLimits.responseArtifactCount { artifacts.append(artifact) }
+            }
+            lock.unlock()
+        case let .artifactReady(artifact):
+            onEvent(["type": "artifact.ready", "filename": artifact.filename, "format": artifact.format, "size": artifact.size, "id": artifact.artifactId])
+            lock.lock()
+            if artifacts.count < AorusAIRequestLimits.responseArtifactCount,
+               !artifacts.contains(where: { $0.artifactId == artifact.artifactId }) { artifacts.append(artifact) }
+            lock.unlock()
+        case let .status(label, progress):
+            var value: [String: Any] = [
+                "type": "status",
+                "label": aorusAITimelineText(key: label.key, params: label.params, fallback: label.text),
+            ]
+            if let key = label.key { value["key"] = key }
+            if let progress { value["progress"] = progress }
+            onEvent(value)
+        case let .buildPhase(phase, label, attempt):
+            onEvent(["type": "build.phase", "phase": phase, "label": label, "attempt": attempt])
+        case let .reasoningSummary(summary):
+            onEvent([
+                "type": "reasoning.summary",
+                "summary": aorusAITimelineText(key: summary.key, params: summary.params, fallback: summary.text),
+            ])
+        case .responseStarted:
+            onEvent(["type": "response.start"])
+        case .responseDone:
+            onEvent(["type": "response.done"])
+        case let .toolRequest(request):
+            lock.lock()
+            pending = (request.requestId, request.tool, request.username, request.limit)
+            lock.unlock()
+            host.noteAIPending(self)
+            var value: [String: Any] = [
+                "type": "ai.tool",
+                "requestId": request.requestId,
+                "tool": request.tool,
+                "needsApproval": NSNumber(value: request.requiresUserApproval),
+            ]
+            if let label = request.label { value["label"] = label }
+            if let username = request.username { value["username"] = username }
+            if let limit = request.limit { value["limit"] = NSNumber(value: limit) }
+            onEvent(value)
+        case let .permissionRequest(request):
+            lock.lock()
+            pending = (request.requestId, request.tool, request.username, nil)
+            lock.unlock()
+            host.noteAIPending(self)
+            var value: [String: Any] = [
+                "type": "ai.permission",
+                "requestId": request.requestId,
+                "tool": request.tool,
+                "allowCancel": NSNumber(value: request.allowCancel),
+                // The localized sentence, built the way the chat builds it, so a plugin
+                // drawing its own prompt shows the words somebody would have read anyway.
+                "title": aorusAITimelineText(key: request.titleKey, params: request.params, fallback: request.title ?? ""),
+                "text": aorusAITimelineText(key: request.textKey, params: request.params, fallback: request.text ?? ""),
+                "options": request.options.map { option -> [String: Any] in
+                    var item: [String: Any] = ["id": option.id, "label": option.label]
+                    if let limit = option.limit { item["limit"] = NSNumber(value: limit) }
+                    if let mode = option.mode { item["mode"] = mode }
+                    return item
+                },
+            ]
+            if let username = request.username { value["username"] = username }
+            onEvent(value)
+        case let .done(ok, _):
+            onEvent(["type": "done", "ok": ok])
+            lock.lock()
+            let waiting = pending != nil
+            lock.unlock()
+            // `awaiting_tool` and `awaiting_permission` report `ok` and end the stream;
+            // the turn goes on.
+            if waiting { return }
+            if ok {
+                succeed()
+            } else {
+                finish(.failure(AorusPluginRequestError("AorusAI could not complete the request")))
+            }
+        default:
+            break
+        }
+    }
+}
+
 private final class AorusPluginTelegramHost: AorusPluginHostServices {
     private let context: AccountContext
     private weak var manager: AorusPluginRuntimeManager?
@@ -735,6 +977,9 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     private var aiReservations = Set<String>()
     private var aiArtifacts: [String: [String: AorusAIArtifact]] = [:]
     private var aiTurnIds: [String: String] = [:]
+    /// A turn that is waiting for the plugin to answer a question the agent asked, and
+    /// everything needed to send the next round when it does.
+    private var aiPending: [String: AorusPluginAITurn] = [:]
 
     init(context: AccountContext, manager: AorusPluginRuntimeManager) {
         self.context = context
@@ -917,7 +1162,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             return
         }
         aiLock.lock()
-        guard aiStreams[pluginId] == nil, !aiReservations.contains(pluginId) else {
+        guard aiStreams[pluginId] == nil, !aiReservations.contains(pluginId), aiPending[pluginId] == nil else {
             aiLock.unlock()
             completion(.failure(AorusPluginRequestError("This plugin already has an AorusAI request in progress")))
             return
@@ -930,118 +1175,36 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             return AorusAIAgentPayload.Message(role: role, content: content)
         }
         messages.append(AorusAIAgentPayload.Message(role: "user", content: prompt))
-        let payload = AorusAIAgentPayload(messages: messages, threadId: threadId)
-        let stateLock = NSLock()
-        var text = ""
-        var artifacts: [AorusAIArtifact] = []
-        var finished = false
-        func finish(_ result: Result<[String: Any], Error>) {
-            stateLock.lock()
-            guard !finished else { stateLock.unlock(); return }
-            finished = true
-            stateLock.unlock()
-            self.aiLock.lock()
-            self.aiReservations.remove(pluginId)
-            self.aiStreams[pluginId] = nil
-            self.aiTurnIds[pluginId] = nil
-            self.aiLock.unlock()
-            completion(result)
-        }
+        let turn = AorusPluginAITurn(
+            host: self,
+            pluginId: pluginId,
+            messages: messages,
+            threadId: threadId,
+            onEvent: onEvent,
+            completion: completion
+        )
+        turn.dispatch()
+    }
 
-        let handle = AorusAIClient.shared.start(payload: payload, event: { event, _ in
-            stateLock.lock()
-            switch event {
-            case let .agentStarted(turnId, _):
-                onEvent(["type": "agent.start"])
-                self.aiLock.lock()
-                let active = self.aiReservations.contains(pluginId) || self.aiStreams[pluginId] != nil
-                if active { self.aiTurnIds[pluginId] = turnId }
-                self.aiLock.unlock()
-                if !active { AorusAIClient.shared.cancelTurn(turnId) { _ in } }
-            case let .responseDelta(delta):
-                onEvent(["type": "response.delta", "text": delta])
-                let room = max(0, AorusAIRequestLimits.responseCharacters - text.count)
-                if room > 0 { text.append(room >= delta.count ? delta : String(delta.prefix(room))) }
-            case let .completion(value, ready):
-                if let value, !value.isEmpty { text = String(value.prefix(AorusAIRequestLimits.responseCharacters)) }
-                for artifact in ready where !artifacts.contains(where: { $0.artifactId == artifact.artifactId }) {
-                    if artifacts.count < AorusAIRequestLimits.responseArtifactCount { artifacts.append(artifact) }
-                }
-            case let .artifactReady(artifact):
-                onEvent(["type": "artifact.ready", "filename": artifact.filename, "format": artifact.format, "size": artifact.size, "id": artifact.artifactId])
-                if artifacts.count < AorusAIRequestLimits.responseArtifactCount,
-                   !artifacts.contains(where: { $0.artifactId == artifact.artifactId }) { artifacts.append(artifact) }
-            case let .status(label, progress):
-                var value: [String: Any] = [
-                    "type": "status",
-                    "label": aorusAITimelineText(key: label.key, params: label.params, fallback: label.text),
-                ]
-                if let key = label.key { value["key"] = key }
-                if let progress { value["progress"] = progress }
-                onEvent(value)
-            case let .buildPhase(phase, label, attempt):
-                onEvent(["type": "build.phase", "phase": phase, "label": label, "attempt": attempt])
-            case let .reasoningSummary(summary):
-                onEvent([
-                    "type": "reasoning.summary",
-                    "summary": aorusAITimelineText(key: summary.key, params: summary.params, fallback: summary.text),
-                ])
-            case .responseStarted:
-                onEvent(["type": "response.start"])
-            case .responseDone:
-                onEvent(["type": "response.done"])
-            case .toolRequest, .permissionRequest:
-                stateLock.unlock()
-                self.cancelAIStream(pluginId)
-                finish(.failure(AorusPluginRequestError("This AorusAI request needs an interaction in the full AorusAI chat")))
-                return
-            case let .done(ok, _):
-                onEvent(["type": "done", "ok": ok])
-                let finalText = text
-                let finalArtifacts = artifacts
-                stateLock.unlock()
-                if ok {
-                    self.rememberArtifacts(finalArtifacts, pluginId: pluginId)
-                    let files: [[String: Any]] = finalArtifacts.map {
-                        ["id": $0.artifactId, "filename": $0.filename, "mime": $0.mime, "size": $0.size, "format": $0.format]
-                    }
-                    finish(.success(["text": finalText, "artifacts": files]))
-                } else {
-                    finish(.failure(AorusPluginRequestError("AorusAI could not complete the request")))
-                }
-                return
-            default:
-                break
-            }
-            stateLock.unlock()
-        }, completion: { result in
-            switch result {
-            case .success:
-                stateLock.lock(); let finalText = text; let finalArtifacts = artifacts; stateLock.unlock()
-                self.rememberArtifacts(finalArtifacts, pluginId: pluginId)
-                let files: [[String: Any]] = finalArtifacts.map {
-                    ["id": $0.artifactId, "filename": $0.filename, "mime": $0.mime, "size": $0.size, "format": $0.format]
-                }
-                finish(.success(["text": finalText, "artifacts": files]))
-            case let .failure(error):
-                finish(.failure(error))
-            }
-        })
-        guard let handle else {
-            finish(.failure(AorusPluginRequestError("AorusAI is unavailable")))
+    /// The agent asked something and the plugin has answered.
+    ///
+    /// One call for all three answers, because they are the same thing to the backend: a
+    /// `aorus_tool_results` entry saying what happened, and another round of the turn.
+    func pluginAIAnswer(_ pluginId: String, requestId: String, action: String, options: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.artificialIntelligence, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("AorusAI is unavailable")))
             return
         }
         aiLock.lock()
-        if aiStreams[pluginId] == nil, aiReservations.contains(pluginId) {
-            aiReservations.remove(pluginId)
-            aiStreams[pluginId] = handle
-            aiLock.unlock()
-        } else {
-            aiReservations.remove(pluginId)
-            aiLock.unlock()
-            handle.cancelTransport()
-            finish(.failure(AorusPluginRequestError("This plugin already has an AorusAI request in progress")))
+        let turn = aiPending[pluginId]
+        aiLock.unlock()
+        guard let turn, turn.pendingRequestId == requestId else {
+            completion(.failure(AorusPluginRequestError("There is no AorusAI request waiting for an answer")))
+            return
         }
+        turn.answer(action: action, options: options)
+        completion(.success(["ok": NSNumber(value: true)]))
     }
 
     func pluginAIOpenArtifact(_ pluginId: String, artifactId: String, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -1322,7 +1485,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         return result
     }
 
-    private func rememberArtifacts(_ artifacts: [AorusAIArtifact], pluginId: String) {
+    fileprivate func rememberArtifacts(_ artifacts: [AorusAIArtifact], pluginId: String) {
         aiLock.lock()
         var known = aiArtifacts[pluginId] ?? [:]
         for artifact in artifacts.prefix(AorusAIRequestLimits.responseArtifactCount) {
@@ -1335,6 +1498,51 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     private func cancelAIStream(_ pluginId: String) {
         aiLock.lock(); let stream = aiStreams[pluginId]; aiLock.unlock()
         stream?.cancelTransport()
+    }
+
+    // MARK: - What a turn needs from the host
+
+    /// The stream for this round. A turn that was cancelled while the round was starting is
+    /// not adopted: it is ended, and the stream with it.
+    fileprivate func adoptAIStream(_ handle: AorusAIStreamHandle, turn: AorusPluginAITurn) {
+        aiLock.lock()
+        let live = aiReservations.contains(turn.pluginId) || aiPending[turn.pluginId] === turn
+        if live {
+            aiReservations.insert(turn.pluginId)
+            aiStreams[turn.pluginId] = handle
+            aiPending[turn.pluginId] = turn
+        }
+        aiLock.unlock()
+        if !live {
+            handle.cancelTransport()
+            turn.finish(.failure(AorusPluginRequestError("The AorusAI request was cancelled")))
+        }
+    }
+
+    fileprivate func noteAITurnId(_ turnId: String, pluginId: String) {
+        aiLock.lock()
+        let active = aiReservations.contains(pluginId) || aiStreams[pluginId] != nil
+        if active { aiTurnIds[pluginId] = turnId }
+        aiLock.unlock()
+        if !active { AorusAIClient.shared.cancelTurn(turnId) { _ in } }
+    }
+
+    /// This turn is waiting to be told something, so it must still be findable when the
+    /// plugin answers — the stream that carried the question has already closed.
+    fileprivate func noteAIPending(_ turn: AorusPluginAITurn) {
+        aiLock.lock()
+        aiPending[turn.pluginId] = turn
+        aiStreams[turn.pluginId] = nil
+        aiLock.unlock()
+    }
+
+    fileprivate func clearAITurn(_ pluginId: String) {
+        aiLock.lock()
+        aiReservations.remove(pluginId)
+        aiStreams[pluginId] = nil
+        aiTurnIds[pluginId] = nil
+        aiPending[pluginId] = nil
+        aiLock.unlock()
     }
 
     func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], replyTo: Int32?, completion: @escaping (Result<Void, Error>) -> Void) {

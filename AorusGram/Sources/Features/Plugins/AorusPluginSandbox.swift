@@ -59,6 +59,7 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginOpenTelegramLink(_ pluginId: String, url: String, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginAIAsk(_ pluginId: String, prompt: String, history: [[String: String]], threadId: String?, event: @escaping ([String: Any]) -> Void, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginAIOpenArtifact(_ pluginId: String, artifactId: String, completion: @escaping (Result<Void, Error>) -> Void)
+    func pluginAIAnswer(_ pluginId: String, requestId: String, action: String, options: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginAppFeatures(_ pluginId: String, completion: @escaping (Result<[[String: Any]], Error>) -> Void)
     func pluginSetAppFeature(_ pluginId: String, featureId: String, value: Any, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginProxyStatus(_ pluginId: String, completion: @escaping (Result<[String: Any], Error>) -> Void)
@@ -142,6 +143,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onRuntimeCall: ((String, String, [String: Any]) -> [String: Any]?)?
     public var onEditEntities: ((String, [AorusPluginTextEntity]) -> Void)?
     public var onNetworkCall: ((String, String, [String: Any]) -> [String: Any]?)?
+    public var onAIAnswer: ((String, String, String, [String: Any]) -> [String: Any]?)?
     // The open chat. Nothing is open unless a test says so, which is also true on a device
     // between chats, so the default answer here is the same one the app gives.
     public var onCurrentChat: ((String) -> [String: Any]?)?
@@ -351,6 +353,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     open func pluginAIOpenArtifact(_ pluginId: String, artifactId: String, completion: @escaping (Result<Void, Error>) -> Void) {
         onAIOpenArtifact?(pluginId, artifactId)
         completion(.success(()))
+    }
+    open func pluginAIAnswer(_ pluginId: String, requestId: String, action: String, options: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        completion(.success(onAIAnswer?(pluginId, requestId, action, options) ?? ["ok": NSNumber(value: true)]))
     }
     open func pluginAppFeatures(_ pluginId: String, completion: @escaping (Result<[[String: Any]], Error>) -> Void) {
         completion(.success(onAppFeatures?(pluginId) ?? []))
@@ -2010,6 +2015,18 @@ public final class AorusPluginSandbox {
             host.pluginAIAsk(pluginId, prompt: prompt, history: Array(history), threadId: threadId, event: { [weak self] value in
                 self?.deliverRequestEvent(id, value: value)
             }) { [weak self] result in
+                self?.settle(id, with: result.map { $0 as Any })
+            }
+        // The agent stopped to ask something. Answering it is the same grant as asking in
+        // the first place: it is the same turn, and the plugin is the one it is talking to.
+        case "ai.answer":
+            guard require(.artificialIntelligence, id: id) else { return }
+            guard let requestId = string("requestId"), !requestId.isEmpty,
+                  let action = string("action"), ["allow", "deny", "resolve"].contains(action) else {
+                settle(id, with: .failure(AorusPluginRequestError("A request id and one of allow, deny or resolve are required")))
+                return
+            }
+            host.pluginAIAnswer(pluginId, requestId: requestId, action: action, options: (payload["options"] as? [String: Any]) ?? [:]) { [weak self] result in
                 self?.settle(id, with: result.map { $0 as Any })
             }
         case "ai.openArtifact":

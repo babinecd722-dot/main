@@ -292,6 +292,40 @@ public indirect enum AorusAIJSONValue: Equatable, Encodable {
     case array([AorusAIJSONValue])
     case object([String: AorusAIJSONValue])
 
+    /// A value that came from somewhere untyped — a plugin's JavaScript, in practice.
+    ///
+    /// Bounded on the way in rather than trusted: a tool result is encoded into a request
+    /// body, and a plugin that handed over a structure nesting into itself a thousand deep
+    /// would otherwise be building that body. Anything this cannot represent becomes its
+    /// description, which is honest and still encodes.
+    public init?(any value: Any, depth: Int = 0) {
+        guard depth < 8 else { return nil }
+        switch value {
+        case let value as String:
+            self = .string(String(value.prefix(32_768)))
+        case let value as NSNumber:
+            if CFGetTypeID(value) == CFBooleanGetTypeID() {
+                self = .bool(value.boolValue)
+            } else if value.doubleValue == value.doubleValue.rounded(), abs(value.doubleValue) < 9.0e15 {
+                self = .int64(value.int64Value)
+            } else {
+                self = .double(value.doubleValue)
+            }
+        case let value as [Any]:
+            self = .array(value.prefix(256).compactMap { AorusAIJSONValue(any: $0, depth: depth + 1) })
+        case let value as [String: Any]:
+            var object: [String: AorusAIJSONValue] = [:]
+            for (key, item) in value.prefix(256) {
+                if let converted = AorusAIJSONValue(any: item, depth: depth + 1) { object[key] = converted }
+            }
+            self = .object(object)
+        case is NSNull:
+            return nil
+        default:
+            self = .string(String(String(describing: value).prefix(4_096)))
+        }
+    }
+
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {

@@ -439,6 +439,29 @@ aorus.chat.current().then(function (value) {
     const late = [];
     aorus.schedule.at('overdue', Date.now() - 60000, function (event) { late.push(event); });
 
+    // The agent's own questions, answered by the plugin. This is what used to be an error
+    // telling somebody to go and have the conversation in a different screen.
+    for (const name of ['allow', 'deny', 'resolveTool']) {
+        check('ai.' + name + ' is missing', typeof aorus.ai[name] === 'function');
+    }
+    aorus.ai.allow('req-1', { limit: 50 });
+    const allowed = lastRequest('ai.answer');
+    check('ai.allow lost the request', allowed.requestId === 'req-1');
+    check('ai.allow did not allow', allowed.action === 'allow');
+    check('ai.allow lost the limit', allowed.options.limit === 50);
+    aorus.ai.deny('req-1');
+    check('ai.deny did not deny', lastRequest('ai.answer').action === 'deny');
+    aorus.ai.resolveTool('req-2', { messages: 3 }, { username: '@monk' });
+    const resolved = lastRequest('ai.answer');
+    check('ai.resolveTool did not resolve', resolved.action === 'resolve');
+    check('ai.resolveTool lost its result', resolved.options.result.messages === 3);
+    // The agent names people without the @, and a plugin passing one back with it should
+    // not thereby ask about a different person.
+    check('ai.resolveTool kept the @', resolved.options.username === 'monk');
+    throws('ai.allow accepted no request id', () => aorus.ai.allow());
+    throws('ai.allow accepted an impossible limit', () => aorus.ai.allow('req-1', { limit: 0 }));
+    throws('ai.allow accepted a limit past the cap', () => aorus.ai.allow('req-1', { limit: 5000 }));
+
     // The network a plugin talks to its own backend over.
     check('ws is missing', typeof aorus.ws === 'object');
     for (const name of ['download', 'upload', 'get', 'post', 'put', 'patch', 'delete', 'json', 'fetch']) {
