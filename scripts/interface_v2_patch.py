@@ -3120,6 +3120,267 @@ def _patch_pane_page_background(tg: Path) -> None:
     print("InterfaceV2: gifts pane continues the page")
 
 
+def _patch_sparse_grid_tiles(tg: Path) -> None:
+    """Teach the media grid two things it only ever did one way: the gap between items and the
+    corners they are drawn with.
+
+    Upstream the gap is a hard-coded point and the corners are square except while reordering,
+    which is right for the edge-to-edge photo walls Telegram draws everywhere. The posts on a
+    profile under Interface 2.0 are a block on the page instead, like every other block there, and
+    a block of photos reads as one only when the photos are cards of their own: rounded, apart, and
+    rounded to match the pane they sit in. Both are carried in the grid's container layout next to
+    the insets, so that pinching to another zoom level and every transition in between lay the
+    items out with the same gap the grid was asked for.
+
+    The defaults are upstream's own values, and nothing outside the posts pane changes them, so the
+    media tabs, the story archive and every other grid in the app are untouched.
+
+    The grid also answers where its items are. The posts pane stands a pane of glass behind them,
+    and the glass has to cover exactly the rows there are, wherever the grid has been scrolled to.
+    """
+    path = tg / "submodules/SparseItemGrid/Sources/SparseItemGrid.swift"
+    text = _read(path, "SparseItemGrid.swift")
+    if "aorusItemSpacing" in text:
+        print("InterfaceV2: media grid already takes a gap and corners")
+        return
+    text = _replace_once(
+        text,
+        "        var fixedItemAspect: CGFloat?\n"
+        "        var adjustForSmallCount: Bool\n"
+        "    }\n",
+        "        var fixedItemAspect: CGFloat?\n"
+        "        var adjustForSmallCount: Bool\n"
+        "        // AorusGram: upstream's values unless the grid is told otherwise.\n"
+        "        var itemSpacing: CGFloat = 1.0\n"
+        "        var itemCornerRadius: CGFloat = 0.0\n"
+        "    }\n",
+        "grid container layout fields",
+    )
+    text = _replace_once(
+        text,
+        "                    self.itemSpacing = 1.0\n",
+        "                    self.itemSpacing = containerLayout.itemSpacing\n",
+        "grid item spacing",
+    )
+    text = _replace_once(
+        text,
+        "        let containerLayout = ContainerLayout(size: size, insets: insets, useSideInsets: useSideInsets, scrollIndicatorInsets: scrollIndicatorInsets, lockScrollingAtTop: lockScrollingAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount)\n",
+        "        let containerLayout = ContainerLayout(size: size, insets: insets, useSideInsets: useSideInsets, scrollIndicatorInsets: scrollIndicatorInsets, lockScrollingAtTop: lockScrollingAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, itemSpacing: self.aorusItemSpacing, itemCornerRadius: self.aorusItemCornerRadius)\n",
+        "grid container layout construction",
+    )
+    text = _replace_once(
+        text,
+        "                        } else {\n"
+        "                            itemScale = 1.0\n"
+        "                            itemCornerRadius = 0.0\n"
+        "                        }\n",
+        "                        } else {\n"
+        "                            itemScale = 1.0\n"
+        "                            itemCornerRadius = layout.containerLayout.itemCornerRadius\n"
+        "                        }\n",
+        "grid item corner radius",
+    )
+    text = _replace_once(
+        text,
+        "                        if transition.animation.isImmediate || isNewlyAdded {\n",
+        "                        // AorusGram: a rounded item clips its picture and its badges to the corner.\n"
+        "                        // Only when the grid was asked for corners, so every other grid keeps\n"
+        "                        // exactly the layers it had.\n"
+        "                        if layout.containerLayout.itemCornerRadius > 0.0, let itemLayerValue = itemLayer.layer {\n"
+        "                            itemLayerValue.masksToBounds = true\n"
+        "                            if #available(iOS 13.0, *) {\n"
+        "                                itemLayerValue.cornerCurve = .continuous\n"
+        "                            }\n"
+        "                        }\n"
+        "                        if transition.animation.isImmediate || isNewlyAdded {\n",
+        "grid item clipping",
+    )
+    text = _replace_once(
+        text,
+        "                            placeholderLayer.update(size: itemFrame.size)\n",
+        "                            placeholderLayer.update(size: itemFrame.size)\n"
+        "                            if layout.containerLayout.itemCornerRadius > 0.0 {\n"
+        "                                placeholderLayer.cornerRadius = layout.containerLayout.itemCornerRadius\n"
+        "                                placeholderLayer.masksToBounds = true\n"
+        "                            }\n",
+        "grid item shimmer corners",
+    )
+    text = _replace_once(
+        text,
+        "                        placeholderLayer.update(size: itemFrame.size)\n"
+        "                        usedPlaceholderCount += 1\n",
+        "                        placeholderLayer.update(size: itemFrame.size)\n"
+        "                        if layout.containerLayout.itemCornerRadius > 0.0 {\n"
+        "                            placeholderLayer.cornerRadius = layout.containerLayout.itemCornerRadius\n"
+        "                            placeholderLayer.masksToBounds = true\n"
+        "                        }\n"
+        "                        usedPlaceholderCount += 1\n",
+        "grid hole shimmer corners",
+    )
+    text = _replace_once(
+        text,
+        "    public var cancelExternalContentGestures: (() -> Void)?\n",
+        "    /// AorusGram: the gap between items and the corners they are drawn with. Read at the next\n"
+        "    /// `update`, like the insets are.\n"
+        "    public var aorusItemSpacing: CGFloat = 1.0\n"
+        "    public var aorusItemCornerRadius: CGFloat = 0.0\n"
+        "\n"
+        "    /// AorusGram: the rectangle the items take up, in this grid's own coordinates and as it is\n"
+        "    /// scrolled right now -- from the first column to the last and from the top of the first row\n"
+        "    /// to the bottom of the last. Nil before the first layout and while there is nothing to show.\n"
+        "    public var aorusItemsFrame: CGRect? {\n"
+        "        guard let currentViewport = self.currentViewport, let layout = currentViewport.layout, let items = currentViewport.items, items.count > 0 else {\n"
+        "            return nil\n"
+        "        }\n"
+        "        let containerLayout = layout.containerLayout\n"
+        "        let first = layout.frame(at: 0)\n"
+        "        let last = layout.frame(at: items.count - 1)\n"
+        "        let minX: CGFloat = containerLayout.useSideInsets ? containerLayout.insets.left : 0.0\n"
+        "        let maxX: CGFloat = containerLayout.useSideInsets ? containerLayout.size.width - containerLayout.insets.right : containerLayout.size.width\n"
+        "        let rect = CGRect(x: minX, y: first.minY, width: max(0.0, maxX - minX), height: max(0.0, last.maxY - first.minY))\n"
+        "        return self.view.convert(rect, from: currentViewport.scrollView)\n"
+        "    }\n"
+        "\n"
+        "    public var cancelExternalContentGestures: (() -> Void)?\n",
+        "grid public tile parameters",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: media grid takes a gap and corners")
+
+
+def _patch_posts_block(tg: Path) -> None:
+    """Make a profile's posts a block of the page instead of a photo wall with gutters.
+
+    Upstream lays a profile's posts out edge to edge, and when there are one or two of them it
+    doubles their size and, for a single post, centres it -- one large picture with the page
+    showing down both sides of it. On the stock interface the page there is the theme's grey and
+    it passes. Under Interface 2.0 it is the colour sampled off the avatar, and a lone photo with a
+    band of that colour either side of it is exactly what was reported as looking cheap.
+
+    So under Interface 2.0, and only on a profile, the posts become what every other section of the
+    page already is: a block inset from the edges, on a pane of real glass cornered at the page's
+    radius. Inside it the posts are cards -- three to a row however many there are, a few points
+    apart, each rounded concentrically with the pane around it, so that the corner of the pane and
+    the corner of the post in it run parallel. The glass shows in the gaps and round the edge, and
+    through the empty end of a last row that is not full, which is what makes it read as one block
+    rather than a grid laid over a colour.
+
+    The pane follows the grid rather than the other way round. The grid owns the scrolling, and
+    reports every change of offset; the pane is laid behind the rows the grid says it has, and
+    trimmed to the screen with a margin wider than its corner, so that a profile with a thousand
+    posts does not ask for a thousand-row pane of glass and no clipped corner is ever on screen.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift"
+    text = _read(path, "PeerInfoStoryPaneNode.swift")
+    if "aorusPostsBlockView" in text:
+        print("InterfaceV2: posts already a block of the page")
+        return
+    if _GLASS_IMPORT not in text:
+        text = _replace_once(
+            text,
+            "import ComponentFlow\n",
+            "import ComponentFlow\n" + _GLASS_IMPORT,
+            "posts glass import",
+        )
+    text = _replace_once(
+        text,
+        "            self.itemGrid.pinchEnabled = items.count > 2 && !self.isReordering\n"
+        "            self.itemGrid.update(size: size, insets: UIEdgeInsets(top: gridTopInset, left: sideInset, bottom:  listBottomInset, right: sideInset), useSideInsets: !isList, scrollIndicatorInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: bottomInset, right: sideInset), lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)\n",
+        "            // AorusGram: under Interface 2.0 a profile's posts are a block of the page. Inset\n"
+        "            // from the edges by what every block is inset by and by the pane's own padding,\n"
+        "            // three to a row however few there are, and cards rather than a wall.\n"
+        "            // A bot's preview media keeps its own layout: a footer is laid out against the\n"
+        "            // last row there, and the block's padding would put that footer on the pane.\n"
+        "            var aorusPostsBlock = self.isProfileEmbedded && AorusGlassPane.isEnabled\n"
+        "            if case .botPreview = self.scope {\n"
+        "                aorusPostsBlock = false\n"
+        "            }\n"
+        "            var aorusGridInsets = UIEdgeInsets(top: gridTopInset, left: sideInset, bottom: listBottomInset, right: sideInset)\n"
+        "            if aorusPostsBlock {\n"
+        "                adjustForSmallCount = false\n"
+        "                let aorusInset = AorusGlassPane.blockSideInset + PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
+        "                aorusGridInsets.left += aorusInset\n"
+        "                aorusGridInsets.right += aorusInset\n"
+        "                aorusGridInsets.top += 10.0 + PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
+        "                aorusGridInsets.bottom += 16.0 + PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
+        "            }\n"
+        "            self.itemGrid.aorusItemSpacing = aorusPostsBlock ? 4.0 : 1.0\n"
+        "            self.itemGrid.aorusItemCornerRadius = aorusPostsBlock ? AorusGlassPane.blockCornerRadius - PeerInfoStoryPaneNode.aorusPostsBlockPadding : 0.0\n"
+        "            self.itemGrid.pinchEnabled = items.count > 2 && !self.isReordering\n"
+        "            self.itemGrid.update(size: size, insets: aorusGridInsets, useSideInsets: !isList, scrollIndicatorInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: bottomInset, right: sideInset), lockScrollingAtTop: isScrollingLockedAtTop, fixedItemHeight: fixedItemHeight, fixedItemAspect: fixedItemAspect, adjustForSmallCount: adjustForSmallCount, items: items, theme: self.itemGridBinding.chatPresentationData.theme.theme, synchronous: wasFirstTime ? .full : .none, transition: animateGridItems ? .spring(duration: 0.35) : .immediate)\n"
+        "            self.aorusLayoutPostsBlock(isEnabled: aorusPostsBlock)\n",
+        "posts grid layout",
+    )
+    text = _replace_once(
+        text,
+        "    private func gridScrollingOffsetUpdated(transition: ContainedViewLayoutTransition) {\n",
+        "    /// AorusGram: the space between the pane of glass behind the posts and the posts on it.\n"
+        "    static let aorusPostsBlockPadding: CGFloat = 6.0\n"
+        "\n"
+        "    private var aorusPostsBlockView: GlassBackgroundView?\n"
+        "    private var aorusPostsBlockEnabled: Bool = false\n"
+        "    private var aorusPostsBlockIsDark: Bool?\n"
+        "\n"
+        "    /// AorusGram: the pane of glass behind a profile's posts, laid behind the rows the grid\n"
+        "    /// reports and trimmed to what is on screen.\n"
+        "    private func aorusLayoutPostsBlock(isEnabled: Bool? = nil) {\n"
+        "        if let isEnabled {\n"
+        "            self.aorusPostsBlockEnabled = isEnabled\n"
+        "        }\n"
+        "        guard self.aorusPostsBlockEnabled, let host = self.itemGrid.view.superview, let itemsFrame = self.itemGrid.aorusItemsFrame else {\n"
+        "            self.aorusPostsBlockView?.isHidden = true\n"
+        "            return\n"
+        "        }\n"
+        "        let padding = PeerInfoStoryPaneNode.aorusPostsBlockPadding\n"
+        "        let block = self.itemGrid.view.convert(itemsFrame.insetBy(dx: -padding, dy: -padding), to: host)\n"
+        "        // Trimmed to the screen, with a margin wider than the corner so that the rounded\n"
+        "        // edge of a trimmed pane is never inside it.\n"
+        "        let margin = AorusGlassPane.blockCornerRadius * 2.0\n"
+        "        let visible = host.bounds.insetBy(dx: -margin, dy: -margin)\n"
+        "        let frame = block.intersection(visible)\n"
+        "        if frame.isNull || frame.isEmpty {\n"
+        "            self.aorusPostsBlockView?.isHidden = true\n"
+        "            return\n"
+        "        }\n"
+        "        let glassView: GlassBackgroundView\n"
+        "        if let current = self.aorusPostsBlockView {\n"
+        "            glassView = current\n"
+        "        } else {\n"
+        "            glassView = GlassBackgroundView(frame: frame)\n"
+        "            glassView.isUserInteractionEnabled = false\n"
+        "            self.aorusPostsBlockView = glassView\n"
+        "        }\n"
+        "        if glassView.superview !== host {\n"
+        "            host.insertSubview(glassView, belowSubview: self.itemGrid.view)\n"
+        "        }\n"
+        "        glassView.isHidden = false\n"
+        "        // Scrolling moves the pane on every frame; the material is only rebuilt when its size\n"
+        "        // or the page under it has changed.\n"
+        "        let isDark = AorusGlassPane.profilePageIsDark\n"
+        "        let sizeChanged = glassView.bounds.size != frame.size\n"
+        "        glassView.frame = frame\n"
+        "        if sizeChanged || self.aorusPostsBlockIsDark != isDark {\n"
+        "            self.aorusPostsBlockIsDark = isDark\n"
+        "            glassView.update(\n"
+        "                size: frame.size,\n"
+        "                cornerRadius: AorusGlassPane.blockCornerRadius,\n"
+        "                isDark: isDark,\n"
+        "                tintColor: GlassBackgroundView.TintColor(kind: .clear),\n"
+        "                isInteractive: false,\n"
+        "                isVisible: true,\n"
+        "                transition: .immediate\n"
+        "            )\n"
+        "        }\n"
+        "    }\n"
+        "\n"
+        "    private func gridScrollingOffsetUpdated(transition: ContainedViewLayoutTransition) {\n"
+        "        self.aorusLayoutPostsBlock()\n",
+        "posts glass block",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: posts are a block of the page")
+
+
 def _patch_members_pane_glass(tg: Path) -> None:
     """Give the members list the page it sits on instead of a black card.
 
@@ -6167,6 +6428,11 @@ def _patch_build(tg: Path) -> None:
         ["//submodules/TelegramUI/Components/GlassBackgroundComponent"],
         "ShareController",
     )
+    _add_build_deps(
+        tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/BUILD",
+        ["//submodules/TelegramUI/Components/GlassBackgroundComponent"],
+        "PeerInfoVisualMediaPaneNode",
+    )
 
 
 def patch_interface_v2(tg: Path) -> None:
@@ -6210,6 +6476,8 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_nav_button_glass(tg)
     _patch_pane_container_glass(tg)
     _patch_pane_page_background(tg)
+    _patch_sparse_grid_tiles(tg)
+    _patch_posts_block(tg)
     _patch_members_pane_glass(tg)
     _patch_groups_pane_glass(tg)
     _patch_recommended_pane_glass(tg)

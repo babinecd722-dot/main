@@ -53,6 +53,9 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Couldn't open the page": "Impossibile aprire la pagina",
+        "Check your connection and try again.": "Controlla la connessione e riprova.",
+        "Try Again": "Riprova",
         "Screen effects": "Effetti sullo schermo",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Consente al plugin di disegnare animazioni sopra l'app: neve, coriandoli, fuochi d'artificio, lampi e scosse dello schermo. Gli effetti non intercettano mai un tocco, rispettano l'impostazione Riduci movimento e scompaiono quando il plugin si ferma.",
         "Observe the app": "Osservare l'app",
@@ -831,6 +834,9 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Couldn't open the page": "Nie udało się otworzyć strony",
+        "Check your connection and try again.": "Sprawdź połączenie i spróbuj ponownie.",
+        "Try Again": "Spróbuj ponownie",
         "Screen effects": "Efekty na ekranie",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Pozwala wtyczce rysować animacje na aplikacji: śnieg, konfetti, fajerwerki, błyski i potrząsanie ekranem. Efekty nigdy nie przechwytują dotknięcia, respektują ustawienie Ogranicz ruch i znikają, gdy wtyczka się zatrzyma.",
         "Observe the app": "Obserwowanie aplikacji",
@@ -1609,6 +1615,9 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Couldn't open the page": "Kan de pagina niet openen",
+        "Check your connection and try again.": "Controleer je verbinding en probeer het opnieuw.",
+        "Try Again": "Probeer opnieuw",
         "Screen effects": "Schermeffecten",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Laat de plug-in animaties over de app tekenen: sneeuw, confetti, vuurwerk, flitsen en schermschuddingen. Effecten nemen nooit een tik over, volgen de instelling Verminder beweging en verdwijnen wanneer de plug-in stopt.",
         "Observe the app": "De app observeren",
@@ -2387,6 +2396,9 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Couldn't open the page": "No s'ha pogut obrir la pàgina",
+        "Check your connection and try again.": "Comprova la connexió i torna-ho a provar.",
+        "Try Again": "Torna-ho a provar",
         "Screen effects": "Efectes de pantalla",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permet al connector dibuixar animacions sobre l'aplicació: neu, confeti, focs artificials, flaixos i sacsejades de pantalla. Els efectes mai no intercepten un toc, respecten la configuració Redueix el moviment i desapareixen quan el connector s'atura.",
         "Observe the app": "Observar l'aplicació",
@@ -3165,6 +3177,9 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Couldn't open the page": "Tidak dapat membuka halaman",
+        "Check your connection and try again.": "Periksa koneksi Anda dan coba lagi.",
+        "Try Again": "Coba Lagi",
         "Screen effects": "Efek layar",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Mengizinkan plugin menggambar animasi di atas aplikasi: salju, konfeti, kembang api, kilatan, dan guncangan layar. Efek tidak pernah mengambil sentuhan, mengikuti pengaturan Kurangi Gerakan, dan menghilang saat plugin berhenti.",
         "Observe the app": "Mengamati aplikasi",
@@ -3943,6 +3958,9 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Couldn't open the page": "Tidak dapat membuka halaman",
+        "Check your connection and try again.": "Semak sambungan anda dan cuba lagi.",
+        "Try Again": "Cuba Lagi",
         "Screen effects": "Kesan skrin",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Membenarkan pemalam melukis animasi di atas aplikasi: salji, konfeti, bunga api, kilat dan goncangan skrin. Kesan tidak pernah mengambil sentuhan, mematuhi tetapan Kurangkan Gerakan dan hilang apabila pemalam berhenti.",
         "Observe the app": "Memerhati aplikasi",
@@ -4721,6 +4739,9 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Couldn't open the page": "Не ўдалося адкрыць старонку",
+        "Check your connection and try again.": "Праверце падключэнне і паспрабуйце яшчэ раз.",
+        "Try Again": "Паўтарыць",
         "Screen effects": "Эфекты на экране",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Дазваляе плагіну маляваць анімацыі паверх праграмы: снег, канфеці, феерверкі, успышкі і дрыжанне экрана. Эфекты ніколі не перахопліваюць дотык, улічваюць наладу «Паменшыць рух» і знікаюць, калі плагін спыняецца.",
         "Observe the app": "Назіранне за праграмай",
@@ -5499,6 +5520,9 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Couldn't open the page": "Sahifani ochib boʻlmadi",
+        "Check your connection and try again.": "Ulanishni tekshiring va qayta urinib koʻring.",
+        "Try Again": "Qayta urinish",
         "Screen effects": "Ekran effektlari",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Plaginga ilova ustida animatsiyalar chizishga ruxsat beradi: qor, konfetti, otashinlar, chaqnashlar va ekran silkinishi. Effektlar hech qachon teginishni tutmaydi, «Harakatni kamaytirish» sozlamasiga amal qiladi va plagin toʻxtaganda yoʻqoladi.",
         "Observe the app": "Ilovani kuzatish",
@@ -6277,6 +6301,9 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Couldn't open the page": "페이지를 열 수 없습니다",
+        "Check your connection and try again.": "연결을 확인한 후 다시 시도하세요.",
+        "Try Again": "다시 시도",
         "Screen effects": "화면 효과",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "플러그인이 앱 위에 애니메이션을 그릴 수 있게 합니다: 눈, 색종이, 불꽃놀이, 번쩍임, 화면 흔들기. 효과는 절대 터치를 가로채지 않고, 동작 줄이기 설정을 따르며, 플러그인이 멈추면 사라집니다.",
         "Observe the app": "앱 관찰",
@@ -7055,6 +7082,9 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Couldn't open the page": "تعذّر فتح الصفحة",
+        "Check your connection and try again.": "تحقق من الاتصال ثم حاول مرة أخرى.",
+        "Try Again": "إعادة المحاولة",
         "Screen effects": "مؤثرات الشاشة",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "يسمح للإضافة برسم رسوم متحركة فوق التطبيق: ثلج، قصاصات ورقية، ألعاب نارية، ومضات واهتزاز الشاشة. لا تعترض المؤثرات أي لمسة أبدًا، وتحترم إعداد «تقليل الحركة»، وتختفي عند توقف الإضافة.",
         "Observe the app": "مراقبة التطبيق",
@@ -7833,6 +7863,9 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Couldn't open the page": "باز کردن صفحه ممکن نشد",
+        "Check your connection and try again.": "اتصال خود را بررسی کنید و دوباره تلاش کنید.",
+        "Try Again": "تلاش دوباره",
         "Screen effects": "جلوه‌های صفحه",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "به افزونه اجازه می‌دهد انیمیشن‌هایی روی برنامه بکشد: برف، کاغذرنگی، آتش‌بازی، فلاش و لرزش صفحه. جلوه‌ها هرگز لمس را نمی‌گیرند، از تنظیم «کاهش حرکت» پیروی می‌کنند و با توقف افزونه ناپدید می‌شوند.",
         "Observe the app": "مشاهده برنامه",
@@ -8611,6 +8644,9 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Couldn't open the page": "Бетті ашу мүмкін болмады",
+        "Check your connection and try again.": "Байланысты тексеріп, қайталап көріңіз.",
+        "Try Again": "Қайталау",
         "Screen effects": "Экран эффекттері",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Плагинге қолданба үстіне анимациялар салуға рұқсат береді: қар, конфетти, отшашу, жарқылдар және экран дірілі. Эффекттер ешқашан тиюді ұстап алмайды, «Қозғалысты азайту» параметрін ескереді және плагин тоқтағанда жоғалады.",
         "Observe the app": "Қолданбаны бақылау",
@@ -9389,6 +9425,9 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Couldn't open the page": "无法打开页面",
+        "Check your connection and try again.": "请检查网络连接后重试。",
+        "Try Again": "重试",
         "Screen effects": "屏幕特效",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "允许插件在应用之上绘制动画：雪花、彩纸、烟花、闪光和屏幕震动。特效从不拦截触摸，遵循「减弱动态效果」设置，并在插件停止时消失。",
         "Observe the app": "观察应用",
@@ -10168,6 +10207,9 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Couldn't open the page": "無法開啟頁面",
+        "Check your connection and try again.": "請檢查網路連線後再試一次。",
+        "Try Again": "重試",
         "Screen effects": "螢幕特效",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "允許外掛在應用程式之上繪製動畫：雪花、彩紙、煙火、閃光和螢幕震動。特效從不攔截觸控，遵循「減少動態效果」設定，並在外掛停止時消失。",
         "Observe the app": "觀察應用程式",
@@ -10946,6 +10988,9 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Couldn't open the page": "ページを開けませんでした",
+        "Check your connection and try again.": "接続を確認して、もう一度お試しください。",
+        "Try Again": "再試行",
         "Screen effects": "画面エフェクト",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "プラグインがアプリの上にアニメーションを描画できるようにします：雪、紙吹雪、花火、フラッシュ、画面の揺れ。エフェクトはタップを奪わず、「視差効果を減らす」設定に従い、プラグインが停止すると消えます。",
         "Observe the app": "アプリの観察",
@@ -11724,6 +11769,9 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Couldn't open the page": "Sivua ei voitu avata",
+        "Check your connection and try again.": "Tarkista yhteys ja yritä uudelleen.",
+        "Try Again": "Yritä uudelleen",
         "Screen effects": "Näyttötehosteet",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Sallii laajennuksen piirtää animaatioita sovelluksen päälle: lunta, konfetteja, ilotulitusta, välähdyksiä ja ruudun tärinää. Tehosteet eivät koskaan sieppaa kosketusta, noudattavat Vähennä liikettä -asetusta ja katoavat, kun laajennus pysäytetään.",
         "Observe the app": "Sovelluksen tarkkailu",
@@ -12502,6 +12550,9 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Couldn't open the page": "לא ניתן לפתוח את הדף",
+        "Check your connection and try again.": "בדקו את החיבור ונסו שוב.",
+        "Try Again": "לנסות שוב",
         "Screen effects": "אפקטים על המסך",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "מאפשר לתוסף לצייר הנפשות מעל האפליקציה: שלג, קונפטי, זיקוקים, הבזקים ורעידות מסך. האפקטים לעולם אינם קולטים נגיעה, מכבדים את הגדרת «צמצום תנועה» ונעלמים כשהתוסף נעצר.",
         "Observe the app": "מעקב אחר האפליקציה",
@@ -13280,6 +13331,9 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Couldn't open the page": "Stranicu nije moguće otvoriti",
+        "Check your connection and try again.": "Provjerite vezu i pokušajte ponovno.",
+        "Try Again": "Pokušaj ponovno",
         "Screen effects": "Efekti na zaslonu",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Dopušta dodatku crtati animacije preko aplikacije: snijeg, konfete, vatromet, bljeskove i tresenje zaslona. Efekti nikada ne presreću dodir, poštuju postavku Smanji kretanje i nestaju kada se dodatak zaustavi.",
         "Observe the app": "Promatranje aplikacije",
@@ -14058,6 +14112,9 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Couldn't open the page": "Није могуће отворити страницу",
+        "Check your connection and try again.": "Проверите везу и покушајте поново.",
+        "Try Again": "Покушај поново",
         "Screen effects": "Ефекти на екрану",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Дозвољава додатку да црта анимације преко апликације: снег, конфете, ватромет, бљескове и тресење екрана. Ефекти никада не пресрећу додир, поштују подешавање Смањи кретање и нестају када се додатак заустави.",
         "Observe the app": "Праћење апликације",
@@ -14836,6 +14893,9 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Couldn't open the page": "Stránku se nepodařilo otevřít",
+        "Check your connection and try again.": "Zkontrolujte připojení a zkuste to znovu.",
+        "Try Again": "Zkusit znovu",
         "Screen effects": "Efekty na obrazovce",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Umožňuje pluginu kreslit animace přes aplikaci: sníh, konfety, ohňostroj, záblesky a otřesy obrazovky. Efekty nikdy nezachytí dotek, respektují nastavení Omezit pohyb a zmizí, když se plugin zastaví.",
         "Observe the app": "Sledování aplikace",
@@ -15614,6 +15674,9 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Couldn't open the page": "Stránku sa nepodarilo otvoriť",
+        "Check your connection and try again.": "Skontrolujte pripojenie a skúste to znova.",
+        "Try Again": "Skúsiť znova",
         "Screen effects": "Efekty na obrazovke",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Umožňuje pluginu kresliť animácie cez aplikáciu: sneh, konfety, ohňostroj, záblesky a otrasy obrazovky. Efekty nikdy nezachytia dotyk, rešpektujú nastavenie Obmedziť pohyb a zmiznú, keď sa plugin zastaví.",
         "Observe the app": "Sledovanie aplikácie",
@@ -16392,6 +16455,9 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Couldn't open the page": "Pagina nu a putut fi deschisă",
+        "Check your connection and try again.": "Verifică conexiunea și încearcă din nou.",
+        "Try Again": "Încearcă din nou",
         "Screen effects": "Efecte pe ecran",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permite pluginului să deseneze animații peste aplicație: zăpadă, confetti, artificii, fulgerări și zguduiri ale ecranului. Efectele nu interceptează niciodată o atingere, respectă setarea Reducere mișcare și dispar când pluginul se oprește.",
         "Observe the app": "Observarea aplicației",
@@ -17170,6 +17236,9 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Couldn't open the page": "Nem sikerült megnyitni az oldalt",
+        "Check your connection and try again.": "Ellenőrizd a kapcsolatot, és próbáld újra.",
+        "Try Again": "Újra",
         "Screen effects": "Képernyőeffektek",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Lehetővé teszi, hogy a bővítmény animációkat rajzoljon az alkalmazás fölé: hó, konfetti, tűzijáték, villanások és képernyőrázás. Az effektek soha nem fogják el az érintést, követik a Mozgás csökkentése beállítást, és eltűnnek, amikor a bővítmény leáll.",
         "Observe the app": "Az alkalmazás figyelése",
@@ -17948,6 +18017,9 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Couldn't open the page": "Kunne ikke åpne siden",
+        "Check your connection and try again.": "Sjekk tilkoblingen og prøv igjen.",
+        "Try Again": "Prøv igjen",
         "Screen effects": "Skjermeffekter",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Lar programtillegget tegne animasjoner over appen: snø, konfetti, fyrverkeri, blink og skjermrist. Effektene fanger aldri opp et trykk, følger innstillingen Reduser bevegelse og forsvinner når programtillegget stopper.",
         "Observe the app": "Observere appen",
@@ -18726,6 +18798,9 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Couldn't open the page": "Det gick inte att öppna sidan",
+        "Check your connection and try again.": "Kontrollera anslutningen och försök igen.",
+        "Try Again": "Försök igen",
         "Screen effects": "Skärmeffekter",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Låter tillägget rita animationer över appen: snö, konfetti, fyrverkerier, blixtar och skärmskakningar. Effekterna fångar aldrig en tryckning, följer inställningen Minska rörelse och försvinner när tillägget stoppas.",
         "Observe the app": "Observera appen",
@@ -19504,6 +19579,9 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Couldn't open the page": "Không thể mở trang",
+        "Check your connection and try again.": "Hãy kiểm tra kết nối và thử lại.",
+        "Try Again": "Thử lại",
         "Screen effects": "Hiệu ứng màn hình",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Cho phép plugin vẽ hoạt ảnh lên trên ứng dụng: tuyết, hoa giấy, pháo hoa, chớp sáng và rung màn hình. Hiệu ứng không bao giờ chặn thao tác chạm, tuân theo cài đặt Giảm chuyển động và biến mất khi plugin dừng.",
         "Observe the app": "Quan sát ứng dụng",
@@ -20282,6 +20360,9 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Couldn't open the page": "Не вдалося відкрити сторінку",
+        "Check your connection and try again.": "Перевірте підключення та спробуйте ще раз.",
+        "Try Again": "Повторити",
         "Screen effects": "Ефекти на екрані",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Дозволяє плагіну малювати анімації поверх програми: сніг, конфеті, феєрверки, спалахи та тремтіння екрана. Ефекти ніколи не перехоплюють дотик, враховують налаштування «Зменшити рух» і зникають, коли плагін зупиняється.",
         "Observe the app": "Спостереження за застосунком",
@@ -21069,6 +21150,9 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Couldn't open the page": "No se pudo abrir la página",
+        "Check your connection and try again.": "Comprueba tu conexión e inténtalo de nuevo.",
+        "Try Again": "Reintentar",
         "Screen effects": "Efectos de pantalla",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permite que el plugin dibuje animaciones sobre la app: nieve, confeti, fuegos artificiales, destellos y sacudidas de pantalla. Los efectos nunca interceptan un toque, respetan el ajuste Reducir movimiento y desaparecen cuando el plugin se detiene.",
         "Observe the app": "Observar la aplicación",
@@ -21856,6 +21940,9 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Couldn't open the page": "Não foi possível abrir a página",
+        "Check your connection and try again.": "Verifique sua conexão e tente novamente.",
+        "Try Again": "Tentar novamente",
         "Screen effects": "Efeitos de tela",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permite que o plugin desenhe animações sobre o app: neve, confete, fogos de artifício, flashes e tremores de tela. Os efeitos nunca interceptam um toque, respeitam a configuração Reduzir movimento e desaparecem quando o plugin para.",
         "Observe the app": "Observar a aplicação",
@@ -22643,6 +22730,9 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Couldn't open the page": "Seite konnte nicht geöffnet werden",
+        "Check your connection and try again.": "Prüfe deine Verbindung und versuche es erneut.",
+        "Try Again": "Erneut versuchen",
         "Screen effects": "Bildschirmeffekte",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Erlaubt dem Plugin, Animationen über die App zu zeichnen: Schnee, Konfetti, Feuerwerk, Blitze und Bildschirmwackeln. Effekte fangen nie eine Berührung ab, befolgen die Einstellung „Bewegung reduzieren“ und verschwinden, wenn das Plugin stoppt.",
         "Observe the app": "Die App beobachten",
@@ -23430,6 +23520,9 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Couldn't open the page": "Impossible d'ouvrir la page",
+        "Check your connection and try again.": "Vérifiez votre connexion et réessayez.",
+        "Try Again": "Réessayer",
         "Screen effects": "Effets d'écran",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permet au plugin de dessiner des animations par-dessus l'app : neige, confettis, feux d'artifice, flashs et secousses de l'écran. Les effets n'interceptent jamais un toucher, respectent le réglage Réduire les animations et disparaissent quand le plugin s'arrête.",
         "Observe the app": "Observer l'application",
@@ -24217,6 +24310,9 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Couldn't open the page": "Sayfa açılamadı",
+        "Check your connection and try again.": "Bağlantınızı kontrol edip tekrar deneyin.",
+        "Try Again": "Tekrar Dene",
         "Screen effects": "Ekran efektleri",
         "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Eklentinin uygulamanın üzerine animasyon çizmesine izin verir: kar, konfeti, havai fişek, parlamalar ve ekran sarsıntısı. Efektler asla bir dokunuşu yakalamaz, Hareketi Azalt ayarına uyar ve eklenti durduğunda kaybolur.",
         "Observe the app": "Uygulamayı gözlemleme",

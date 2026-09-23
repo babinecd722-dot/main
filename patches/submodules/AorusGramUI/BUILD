@@ -16,6 +16,9 @@ swift_library(
         "//submodules/AorusGram:AorusGram",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Display:Display",
+        # The UIView properties a plugin's web page sets so that swiping back goes through the
+        # page's own history before it closes the page. Display already depends on it.
+        "//submodules/UIKitRuntimeUtils:UIKitRuntimeUtils",
         "//submodules/ImageBlur:ImageBlur",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/Postbox:Postbox",

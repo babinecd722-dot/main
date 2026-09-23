@@ -133,10 +133,27 @@ open class NavigationController: UINavigationController {
     public func pushViewController(_ controller: ViewController) {}
 }
 
+// MARK: - UIKitRuntimeUtils
+
+// Declared in Objective-C as `bool (^)()` and `BOOL (^)(CGPoint)` on a UIView category; this is
+// how Swift sees them.
+extension UIView {
+    public var disablesInteractiveTransitionGestureRecognizerNow: (() -> Bool)? {
+        get { return nil }
+        set {}
+    }
+
+    public var interactiveTransitionGestureRecognizerTest: ((CGPoint) -> Bool)? {
+        get { return nil }
+        set {}
+    }
+}
+
 // MARK: - TelegramPresentationData
 
 public final class PresentationThemeList {
     public let blocksBackgroundColor = UIColor.white
+    public let plainBackgroundColor = UIColor.white
     public let itemBlocksBackgroundColor = UIColor.white
     public let itemPrimaryTextColor = UIColor.black
     public let itemSecondaryTextColor = UIColor.gray

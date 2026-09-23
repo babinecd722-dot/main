@@ -162,6 +162,15 @@ jobs:
             -target arm64-apple-ios13.0 \
             aorusgram/AorusGram/Sources/Features/UI/AorusGlassSnapshot.swift \
             aorusgram/scripts/tests/AorusGlassSnapshotStubs.swift
+          # Screen effects: UIKit and QuartzCore over the request the model has validated.
+          # Every CAEmitterCell and CAEmitterLayer property the renderer sets is checked here
+          # against the SDK, and against iOS 13, in seconds rather than an hour into the build.
+          swiftc -typecheck \
+            -module-cache-path /tmp/aorus-ai-preflight/module-cache \
+            -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -target arm64-apple-ios13.0 \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginModel.swift \
+            aorusgram/AorusGram/Sources/Features/UI/AorusPluginEffects.swift
           # The UIKit calls the AI chat makes, repeated against the real SDK. Those two files
           # name Telegram's modules and can only be parsed here, and a method that does not
           # exist parses perfectly — so every one of them is written out once more in a file
@@ -238,6 +247,11 @@ jobs:
           sed -E '/^import (Display|AccountContext|TelegramPresentationData|TelegramCore|Postbox|SwiftSignalKit|ContextUI|QuickLook|AorusGram)$/d' \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginControllers.swift \
             > /tmp/aorus-plugin-ui/AorusPluginControllers.swift
+          # The plugin's web page is WebKit over the same Telegram surface, and every WebKit
+          # delegate signature in it is checked here against the SDK.
+          sed -E '/^import (Display|TelegramPresentationData|UIKitRuntimeUtils|AorusGram)$/d' \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginWebPageController.swift \
+            > /tmp/aorus-plugin-ui/AorusPluginWebPageController.swift
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
@@ -250,7 +264,8 @@ jobs:
             aorusgram/scripts/tests/AorusPluginUIStubs.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginChatBridge.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/AI/AorusAITimelineStrings.swift \
-            /tmp/aorus-plugin-ui/AorusPluginControllers.swift
+            /tmp/aorus-plugin-ui/AorusPluginControllers.swift \
+            /tmp/aorus-plugin-ui/AorusPluginWebPageController.swift
           swiftc -frontend -parse \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusBuildKeyProvider.swift \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusUpdateManifest.swift \

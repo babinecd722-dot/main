@@ -3301,6 +3301,26 @@ def main() -> None:
             "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoGiftsPaneNode.swift",
             ("aorusContinuesPage",),
         ),
+        # A profile's posts: a block on a pane of glass, three cards to a row. Without the grid
+        # half the pane has nothing to follow; without the pane half a single post is one large
+        # photo with the page showing down both sides of it, which is what was reported.
+        (
+            "submodules/SparseItemGrid/Sources/SparseItemGrid.swift",
+            (
+                "self.itemSpacing = containerLayout.itemSpacing",
+                "itemCornerRadius = layout.containerLayout.itemCornerRadius",
+                "public var aorusItemsFrame: CGRect?",
+            ),
+        ),
+        (
+            "submodules/TelegramUI/Components/PeerInfo/PeerInfoVisualMediaPaneNode/Sources/PeerInfoStoryPaneNode.swift",
+            (
+                "aorusPostsBlockView",
+                "self.aorusLayoutPostsBlock()",
+                "adjustForSmallCount = false\n                let aorusInset",
+                "import GlassBackgroundComponent",
+            ),
+        ),
         # The header calls this with photo:/photoCount:, so a stale copy of the table here would
         # only surface as a missing-argument error deep inside a CI compile.
         (

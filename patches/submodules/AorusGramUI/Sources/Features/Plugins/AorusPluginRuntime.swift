@@ -1091,13 +1091,13 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         }
         // No DNS pre-check here, on purpose. It exists to stop a plugin reaching something
         // on the local network *and reading the answer*, which is what `http.fetch` does.
-        // Opening a page hands it to the person, in Telegram's own browser, with the address
-        // in front of them; nothing comes back to the plugin. What the check did do was
-        // block on `getaddrinfo` before a link someone had just tapped — on a device whose
-        // traffic goes through this app's own tunnel, which is exactly when it fails. A
-        // guard that protects nothing and stops the button from working is not a guard.
-        // The scheme and the blocklist above still refuse tg://, file://, loopback, private
-        // ranges and the control plane.
+        // Opening a page hands it to the person; nothing comes back to the plugin. What the
+        // check did do was block on `getaddrinfo` before a link someone had just tapped — on
+        // a device whose traffic goes through this app's own tunnel, which is exactly when it
+        // fails. A guard that protects nothing and stops the button from working is not a
+        // guard. The scheme and the blocklist above still refuse tg://, file://, loopback,
+        // private ranges and the control plane, and the page itself goes on refusing them
+        // for every navigation after the first.
         DispatchQueue.main.async {
             guard self.pluginExecutionAllowed,
                   let navigation = self.topNavigationController() else {
@@ -1105,15 +1105,29 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                 return
             }
             let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
-            self.context.sharedContext.openExternalUrl(
-                context: self.context,
-                urlContext: .generic,
-                url: url,
-                forceExternal: false,
-                presentationData: presentationData,
-                navigationController: navigation,
-                dismissInput: {}
-            )
+            let openInTelegram: (URL) -> Void = { [weak self, weak navigation] link in
+                guard let self, let navigation else { return }
+                let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+                self.context.sharedContext.openExternalUrl(
+                    context: self.context,
+                    urlContext: .generic,
+                    url: link.absoluteString,
+                    forceExternal: false,
+                    presentationData: presentationData,
+                    navigationController: navigation,
+                    dismissInput: {}
+                )
+            }
+            // A Telegram link is a chat, a channel or a bot, not a page, and goes where
+            // Telegram sends it. Everything else opens as a page of the app: Telegram's own
+            // resolver would hand it to Safari whenever the person's link setting says so,
+            // and a plugin's page is part of the plugin, not a link out of the app.
+            if AorusPluginWebPageController.isTelegramLink(parsed) {
+                openInTelegram(parsed)
+            } else {
+                let page = AorusPluginWebPageController(presentationData: presentationData, url: parsed, openTelegramLink: openInTelegram)
+                navigation.pushViewController(page)
+            }
             completion(.success(()))
         }
     }
