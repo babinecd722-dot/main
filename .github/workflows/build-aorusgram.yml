@@ -73,6 +73,12 @@ jobs:
       - name: Protocol conformance preflight
         run: python3 aorusgram/scripts/swift_protocol_conformance_check.py aorusgram
 
+      # An internal declaration whose signature names a private type is a semantic error the
+      # parser cannot see, reported once the whole module compiles. Run 500 died on one of
+      # these twenty-three minutes into Bazel: an internal init taking a private host type.
+      - name: Access level preflight
+        run: python3 aorusgram/scripts/swift_access_level_check.py aorusgram
+
       - name: AorusAI transport and store preflight
         run: |
           mkdir -p /tmp/aorus-ai-preflight/module-cache

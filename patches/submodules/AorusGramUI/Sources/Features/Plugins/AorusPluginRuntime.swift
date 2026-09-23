@@ -754,7 +754,9 @@ final class AorusPluginAITurn {
     /// number for the same reason.
     private static let maximumRounds = 6
 
-    init(
+    // fileprivate because the host is: an internal initializer cannot take a private type,
+    // and the only place a turn is made is the host itself, in this file.
+    fileprivate init(
         host: AorusPluginTelegramHost,
         pluginId: String,
         messages: [AorusAIAgentPayload.Message],
