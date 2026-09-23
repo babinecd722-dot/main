@@ -146,6 +146,10 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
     case composer
     case pluginMessaging
     case notifications
+    /// Animations drawn over the whole app — snow, confetti, a flash, a shake. Separate from
+    /// `customUI` because that is a plugin's own screens and buttons, and this is something
+    /// laid over everybody else's.
+    case screenEffects
     /// Watching what the app does and reading its live view tree. Observing only.
     case appInternals
     /// Changing what the app does: replacing an action, mutating the view tree, calling
@@ -170,6 +174,10 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 "aorus.chats.resolve", "aorus.chats.get", "aorus.chat.current", "aorus.chat.messages",
                 "aorus.chat.currentPeerId",
                 "aorus.users.get", "aorus.users.resolve", "aorus.users.search", "aorus.messages.visible",
+                "aorus.messages.current",
+                // Both ask which chat is open before they send there. Without this they were
+                // granted the send and refused the question, and failed in every chat.
+                "aorus.chat.sendText", "aorus.chat.replyText",
             ]),
             (.openChats, [
                 "aorus.chats.open", "aorus.app.openChat", "aorus.telegram.openLink",
@@ -248,7 +256,8 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 "aorus.ui.definePages", "aorus.ui.createPage", "aorus.ui.openPage", "aorus.ui.presentPage",
                 "aorus.ui.addFloatingButton", "aorus.ui.addChatPanel",
                 "aorus.ui.addInputAccessory", "aorus.ui.addChatListHeaderButton",
-                "aorus.ui.setChatHeaderBadge", "aorus.profile.addAction", "aorus.profile.addSection",
+                "aorus.ui.setChatHeaderBadge", "aorus.ui.clearChatHeaderBadge", "aorus.ui.removeAllOverlays",
+                "aorus.profile.addAction", "aorus.profile.addSection",
             ]),
             (.settingsIntegration, ["aorus.integrations.settings.register"]),
             (.contextMenu, ["aorus.integrations.contextMenu.register", "aorus.ui.addMessageContextAction"]),
@@ -283,6 +292,7 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             // `dialogs`: a toast is seen by a person already looking at the screen, and this
             // is a plugin waking somebody up.
             (.notifications, ["aorus.notifications."]),
+            (.screenEffects, ["aorus.effects."]),
             (.appInternals, ["aorus.hook.before", "aorus.hook.after", "aorus.hook.list", "aorus.tree.query"]),
             (.appInternalsWrite, ["aorus.hook.replace", "aorus.tree.mutate", "aorus.objc."]),
             (.pluginMessaging, [
@@ -1251,3 +1261,171 @@ public struct AorusPluginExport: Codable, Equatable {
 // and shown on the permission sheet. An earlier, coarser scanner lived here as well; it was
 // never called, and keeping a second list of needles next to the one the consent sheet uses
 // is how a later edit ends up asking for less than the plugin actually does.
+
+// MARK: - Screen effects
+
+/// The animations a plugin can put over the app. Each is a recipe the renderer owns: a plugin
+/// names it and tunes it, and never hands over a layer, an image or a path — the same rule the
+/// native screens follow.
+public enum AorusPluginEffectPreset: String, CaseIterable, Codable {
+    case snow
+    case confetti
+    case fireworks
+    case hearts
+    case emoji
+    case rain
+    case sparkles
+    case bubbles
+    case leaves
+    case warp
+}
+
+public struct AorusPluginEffectError: Error, Equatable {
+    public let message: String
+    public init(_ message: String) { self.message = message }
+}
+
+/// One effect command, validated.
+///
+/// Numbers are clamped rather than refused, the rule the overlays already follow: a plugin
+/// asking for a thousand times the snow gets the most snow there is, not an error it did not
+/// expect. What cannot be drawn at all — an unknown preset, an id that is not an id — is
+/// refused. Durations arrive in milliseconds, which is what every other call here takes, and
+/// are kept in seconds, which is what Core Animation takes.
+public struct AorusPluginEffectRequest: Equatable {
+    public enum Action: Equatable {
+        case start(id: String, preset: AorusPluginEffectPreset)
+        case burst(preset: AorusPluginEffectPreset)
+        case stop(id: String)
+        case stopAll
+        case flash
+        case shake
+        case ripple
+        case glow
+    }
+
+    public var action: Action
+    /// How much of the effect there is. Scales the birth rate.
+    public var intensity: Double = 1
+    public var speed: Double = 1
+    public var size: Double = 1
+    /// Sideways drift, left to right.
+    public var wind: Double = 0
+    public var colors: [String] = []
+    public var emoji: [String] = []
+    /// Seconds. For `start`, zero means until it is stopped.
+    public var duration: Double = 0
+    public var opacity: Double = 0.35
+    public var pulses: Int = 2
+    /// A point on the screen as fractions of its width and height.
+    public var x: Double = 0.5
+    public var y: Double = 0.5
+    /// Emoji rise instead of falling.
+    public var rising = false
+
+    public static let maximumColors = 8
+    public static let maximumEmoji = 8
+    public static let maximumEmojiLength = 16
+    public static let maximumContinuousDuration: Double = 600
+
+    public init(action: Action) {
+        self.action = action
+    }
+
+    public static func isValidIdentifier(_ value: String) -> Bool {
+        guard !value.isEmpty, value.count <= 64 else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            (scalar.value >= 0x30 && scalar.value <= 0x39) || (scalar.value >= 0x41 && scalar.value <= 0x5A)
+                || (scalar.value >= 0x61 && scalar.value <= 0x7A) || scalar == "." || scalar == "_" || scalar == "-"
+        }
+    }
+
+    public static func parse(kind: String, payload: [String: Any]) -> Result<AorusPluginEffectRequest, AorusPluginEffectError> {
+        func number(_ key: String) -> Double? {
+            guard let value = payload[key] as? NSNumber else { return nil }
+            let double = value.doubleValue
+            return double.isFinite ? double : nil
+        }
+        func clamped(_ key: String, _ fallback: Double, _ range: ClosedRange<Double>) -> Double {
+            guard let value = number(key) else { return fallback }
+            return min(range.upperBound, max(range.lowerBound, value))
+        }
+        func preset() -> Result<AorusPluginEffectPreset, AorusPluginEffectError> {
+            guard let name = payload["preset"] as? String, let value = AorusPluginEffectPreset(rawValue: name) else {
+                let known = AorusPluginEffectPreset.allCases.map { $0.rawValue }.joined(separator: ", ")
+                return .failure(AorusPluginEffectError("Unknown effect. Known effects: " + known))
+            }
+            return .success(value)
+        }
+
+        let action: Action
+        switch kind {
+        case "effects.start":
+            guard let id = payload["id"] as? String, isValidIdentifier(id) else {
+                return .failure(AorusPluginEffectError("An effect id is 1 to 64 letters, digits, dot, dash or underscore"))
+            }
+            switch preset() {
+            case let .success(value): action = .start(id: id, preset: value)
+            case let .failure(error): return .failure(error)
+            }
+        case "effects.burst":
+            switch preset() {
+            case let .success(value): action = .burst(preset: value)
+            case let .failure(error): return .failure(error)
+            }
+        case "effects.stop":
+            guard let id = payload["id"] as? String, isValidIdentifier(id) else {
+                return .failure(AorusPluginEffectError("stop needs the id of an effect"))
+            }
+            action = .stop(id: id)
+        case "effects.stopAll": action = .stopAll
+        case "effects.flash": action = .flash
+        case "effects.shake": action = .shake
+        case "effects.ripple": action = .ripple
+        case "effects.glow": action = .glow
+        default:
+            return .failure(AorusPluginEffectError("Unknown effect call: " + kind))
+        }
+
+        var request = AorusPluginEffectRequest(action: action)
+        request.intensity = clamped("intensity", 1, 0.1 ... 3)
+        request.speed = clamped("speed", 1, 0.25 ... 3)
+        request.size = clamped("size", 1, 0.25 ... 3)
+        request.wind = clamped("wind", 0, -1 ... 1)
+        request.x = clamped("x", 0.5, 0 ... 1)
+        request.y = clamped("y", 0.5, 0 ... 1)
+        request.rising = (payload["rising"] as? Bool) ?? false
+
+        let colorValues: [Any] = (payload["colors"] as? [Any]) ?? ((payload["color"] as? String).map { [$0] } ?? [])
+        request.colors = Array(colorValues.compactMap { ($0 as? String).flatMap(AorusPluginOverlay.normalizedColor) }.prefix(maximumColors))
+
+        let emojiValues: [Any] = (payload["emoji"] as? [Any]) ?? ((payload["emoji"] as? String).map { [$0] } ?? [])
+        request.emoji = Array(emojiValues.compactMap { value -> String? in
+            guard let text = value as? String else { return nil }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.utf16.count <= maximumEmojiLength else { return nil }
+            return trimmed
+        }.prefix(maximumEmoji))
+
+        switch action {
+        case .start:
+            // Zero is "until stopped". Anything else is at least a second, because an effect
+            // that ends before its first particle lands is one nobody saw.
+            let milliseconds = number("duration") ?? 0
+            request.duration = milliseconds <= 0 ? 0 : min(maximumContinuousDuration, max(1, milliseconds / 1000))
+        case .flash:
+            request.duration = clamped("duration", 250, 80 ... 1000) / 1000
+            request.opacity = clamped("opacity", 0.35, 0.05 ... 0.8)
+        case .shake:
+            request.duration = clamped("duration", 450, 150 ... 1200) / 1000
+        case .ripple:
+            request.duration = clamped("duration", 700, 300 ... 2000) / 1000
+        case .glow:
+            request.duration = clamped("duration", 1600, 300 ... 10000) / 1000
+            request.pulses = Int(clamped("pulses", 2, 1 ... 10))
+        case .burst, .stop, .stopAll:
+            break
+        }
+        return .success(request)
+    }
+}

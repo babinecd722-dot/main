@@ -53,6 +53,8 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Screen effects": "Effetti sullo schermo",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Consente al plugin di disegnare animazioni sopra l'app: neve, coriandoli, fuochi d'artificio, lampi e scosse dello schermo. Gli effetti non intercettano mai un tocco, rispettano l'impostazione Riduci movimento e scompaiono quando il plugin si ferma.",
         "Observe the app": "Osservare l'app",
         "Change what the app does": "Cambiare il comportamento dell'app",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Consente al plugin di vedere cosa fa l'app: tocchi su messaggi e profili, menu che si aprono, reazioni, e di leggere l'albero dello schermo. Solo lettura: non può cambiare nulla.",
@@ -829,6 +831,8 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Screen effects": "Efekty na ekranie",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Pozwala wtyczce rysować animacje na aplikacji: śnieg, konfetti, fajerwerki, błyski i potrząsanie ekranem. Efekty nigdy nie przechwytują dotknięcia, respektują ustawienie Ogranicz ruch i znikają, gdy wtyczka się zatrzyma.",
         "Observe the app": "Obserwowanie aplikacji",
         "Change what the app does": "Zmiana zachowania aplikacji",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Pozwala wtyczce widzieć, co robi aplikacja: dotknięcia wiadomości i profili, otwierane menu, reakcje, oraz czytać drzewo ekranu. Tylko odczyt: nic nie może zmienić.",
@@ -1605,6 +1609,8 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Screen effects": "Schermeffecten",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Laat de plug-in animaties over de app tekenen: sneeuw, confetti, vuurwerk, flitsen en schermschuddingen. Effecten nemen nooit een tik over, volgen de instelling Verminder beweging en verdwijnen wanneer de plug-in stopt.",
         "Observe the app": "De app observeren",
         "Change what the app does": "Gedrag van de app wijzigen",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Laat de plug-in zien wat de app doet: tikken op berichten en profielen, menu's die opengaan, reacties, en de schermboom lezen. Alleen lezen: veranderen kan niet.",
@@ -2381,6 +2387,8 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Screen effects": "Efectes de pantalla",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permet al connector dibuixar animacions sobre l'aplicació: neu, confeti, focs artificials, flaixos i sacsejades de pantalla. Els efectes mai no intercepten un toc, respecten la configuració Redueix el moviment i desapareixen quan el connector s'atura.",
         "Observe the app": "Observar l'aplicació",
         "Change what the app does": "Canviar el comportament de l'aplicació",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permet al connector veure què fa l'aplicació: tocs en missatges i perfils, menús que s'obren, reaccions, i llegir l'arbre de la pantalla. Només lectura: no pot canviar res.",
@@ -3157,6 +3165,8 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Screen effects": "Efek layar",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Mengizinkan plugin menggambar animasi di atas aplikasi: salju, konfeti, kembang api, kilatan, dan guncangan layar. Efek tidak pernah mengambil sentuhan, mengikuti pengaturan Kurangi Gerakan, dan menghilang saat plugin berhenti.",
         "Observe the app": "Mengamati aplikasi",
         "Change what the app does": "Mengubah perilaku aplikasi",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Mengizinkan plugin melihat apa yang dilakukan aplikasi: ketukan pada pesan dan profil, menu yang terbuka, reaksi, serta membaca pohon layar. Hanya membaca: tidak dapat mengubah apa pun.",
@@ -3933,6 +3943,8 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Screen effects": "Kesan skrin",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Membenarkan pemalam melukis animasi di atas aplikasi: salji, konfeti, bunga api, kilat dan goncangan skrin. Kesan tidak pernah mengambil sentuhan, mematuhi tetapan Kurangkan Gerakan dan hilang apabila pemalam berhenti.",
         "Observe the app": "Memerhati aplikasi",
         "Change what the app does": "Mengubah kelakuan aplikasi",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Membenarkan pemalam melihat apa yang dilakukan aplikasi: ketikan pada mesej dan profil, menu yang dibuka, reaksi, serta membaca pokok skrin. Baca sahaja: tiada apa yang boleh diubah.",
@@ -4709,6 +4721,8 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Screen effects": "Эфекты на экране",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Дазваляе плагіну маляваць анімацыі паверх праграмы: снег, канфеці, феерверкі, успышкі і дрыжанне экрана. Эфекты ніколі не перахопліваюць дотык, улічваюць наладу «Паменшыць рух» і знікаюць, калі плагін спыняецца.",
         "Observe the app": "Назіранне за праграмай",
         "Change what the app does": "Змена паводзін праграмы",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Дазваляе плагіну бачыць, што робіць праграма: дотыкі да паведамленняў і профіляў, адкрыццё меню, рэакцыі, а таксама чытаць дрэва экрана. Толькі чытанне: змяніць нічога нельга.",
@@ -5485,6 +5499,8 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Screen effects": "Ekran effektlari",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Plaginga ilova ustida animatsiyalar chizishga ruxsat beradi: qor, konfetti, otashinlar, chaqnashlar va ekran silkinishi. Effektlar hech qachon teginishni tutmaydi, «Harakatni kamaytirish» sozlamasiga amal qiladi va plagin toʻxtaganda yoʻqoladi.",
         "Observe the app": "Ilovani kuzatish",
         "Change what the app does": "Ilova xatti-harakatini oʻzgartirish",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Plaginga ilova nima qilayotganini koʻrishga ruxsat beradi: xabarlar va profillarga bosishlar, ochilayotgan menyular, reaksiyalar, shuningdek ekran daraxtini oʻqish. Faqat oʻqish: hech narsani oʻzgartirib boʻlmaydi.",
@@ -6261,6 +6277,8 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Screen effects": "화면 효과",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "플러그인이 앱 위에 애니메이션을 그릴 수 있게 합니다: 눈, 색종이, 불꽃놀이, 번쩍임, 화면 흔들기. 효과는 절대 터치를 가로채지 않고, 동작 줄이기 설정을 따르며, 플러그인이 멈추면 사라집니다.",
         "Observe the app": "앱 관찰",
         "Change what the app does": "앱 동작 변경",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "플러그인이 앱의 동작을 볼 수 있게 합니다: 메시지와 프로필 탭, 열리는 메뉴, 반응, 그리고 화면 트리 읽기. 읽기 전용이며 아무것도 바꿀 수 없습니다.",
@@ -7037,6 +7055,8 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Screen effects": "مؤثرات الشاشة",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "يسمح للإضافة برسم رسوم متحركة فوق التطبيق: ثلج، قصاصات ورقية، ألعاب نارية، ومضات واهتزاز الشاشة. لا تعترض المؤثرات أي لمسة أبدًا، وتحترم إعداد «تقليل الحركة»، وتختفي عند توقف الإضافة.",
         "Observe the app": "مراقبة التطبيق",
         "Change what the app does": "تغيير سلوك التطبيق",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "يسمح للإضافة برؤية ما يفعله التطبيق: النقر على الرسائل والملفات الشخصية، فتح القوائم، التفاعلات، وقراءة شجرة الشاشة. قراءة فقط: لا يمكنها تغيير أي شيء.",
@@ -7813,6 +7833,8 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Screen effects": "جلوه‌های صفحه",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "به افزونه اجازه می‌دهد انیمیشن‌هایی روی برنامه بکشد: برف، کاغذرنگی، آتش‌بازی، فلاش و لرزش صفحه. جلوه‌ها هرگز لمس را نمی‌گیرند، از تنظیم «کاهش حرکت» پیروی می‌کنند و با توقف افزونه ناپدید می‌شوند.",
         "Observe the app": "مشاهده برنامه",
         "Change what the app does": "تغییر رفتار برنامه",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "به افزونه اجازه می‌دهد ببیند برنامه چه می‌کند: ضربه روی پیام‌ها و نمایه‌ها، باز شدن منوها، واکنش‌ها، و خواندن درخت صفحه. فقط خواندن: چیزی را نمی‌تواند تغییر دهد.",
@@ -8589,6 +8611,8 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Screen effects": "Экран эффекттері",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Плагинге қолданба үстіне анимациялар салуға рұқсат береді: қар, конфетти, отшашу, жарқылдар және экран дірілі. Эффекттер ешқашан тиюді ұстап алмайды, «Қозғалысты азайту» параметрін ескереді және плагин тоқтағанда жоғалады.",
         "Observe the app": "Қолданбаны бақылау",
         "Change what the app does": "Қолданба әрекетін өзгерту",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Плагинге қолданба не істеп жатқанын көруге рұқсат береді: хабарлар мен профильдерге түрту, ашылатын мәзірлер, реакциялар, сондай-ақ экран ағашын оқу. Тек оқу: ештеңені өзгерте алмайды.",
@@ -9365,6 +9389,8 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Screen effects": "屏幕特效",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "允许插件在应用之上绘制动画：雪花、彩纸、烟花、闪光和屏幕震动。特效从不拦截触摸，遵循「减弱动态效果」设置，并在插件停止时消失。",
         "Observe the app": "观察应用",
         "Change what the app does": "改变应用行为",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "允许插件看到应用在做什么：点按消息和资料、打开菜单、反应，以及读取屏幕树。只读，什么都改不了。",
@@ -10142,6 +10168,8 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Screen effects": "螢幕特效",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "允許外掛在應用程式之上繪製動畫：雪花、彩紙、煙火、閃光和螢幕震動。特效從不攔截觸控，遵循「減少動態效果」設定，並在外掛停止時消失。",
         "Observe the app": "觀察應用程式",
         "Change what the app does": "改變應用程式行為",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "允許外掛看到應用程式在做什麼：點按訊息和個人資料、開啟選單、反應，以及讀取畫面樹。唯讀，什麼都改不了。",
@@ -10918,6 +10946,8 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Screen effects": "画面エフェクト",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "プラグインがアプリの上にアニメーションを描画できるようにします：雪、紙吹雪、花火、フラッシュ、画面の揺れ。エフェクトはタップを奪わず、「視差効果を減らす」設定に従い、プラグインが停止すると消えます。",
         "Observe the app": "アプリの観察",
         "Change what the app does": "アプリの動作の変更",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "プラグインがアプリの動作を見られるようにします。メッセージやプロフィールのタップ、開くメニュー、リアクション、そして画面ツリーの読み取り。読み取りのみで、何も変更できません。",
@@ -11694,6 +11724,8 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Screen effects": "Näyttötehosteet",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Sallii laajennuksen piirtää animaatioita sovelluksen päälle: lunta, konfetteja, ilotulitusta, välähdyksiä ja ruudun tärinää. Tehosteet eivät koskaan sieppaa kosketusta, noudattavat Vähennä liikettä -asetusta ja katoavat, kun laajennus pysäytetään.",
         "Observe the app": "Sovelluksen tarkkailu",
         "Change what the app does": "Sovelluksen toiminnan muuttaminen",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Sallii liitännäisen nähdä, mitä sovellus tekee: viestien ja profiilien napautukset, avautuvat valikot, reaktiot, sekä lukea näkymäpuun. Vain luku: mitään ei voi muuttaa.",
@@ -12470,6 +12502,8 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Screen effects": "אפקטים על המסך",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "מאפשר לתוסף לצייר הנפשות מעל האפליקציה: שלג, קונפטי, זיקוקים, הבזקים ורעידות מסך. האפקטים לעולם אינם קולטים נגיעה, מכבדים את הגדרת «צמצום תנועה» ונעלמים כשהתוסף נעצר.",
         "Observe the app": "מעקב אחר האפליקציה",
         "Change what the app does": "שינוי התנהגות האפליקציה",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "מאפשר לתוסף לראות מה האפליקציה עושה: הקשות על הודעות ופרופילים, תפריטים שנפתחים, תגובות, וגם לקרוא את עץ המסך. קריאה בלבד: אי אפשר לשנות דבר.",
@@ -13246,6 +13280,8 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Screen effects": "Efekti na zaslonu",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Dopušta dodatku crtati animacije preko aplikacije: snijeg, konfete, vatromet, bljeskove i tresenje zaslona. Efekti nikada ne presreću dodir, poštuju postavku Smanji kretanje i nestaju kada se dodatak zaustavi.",
         "Observe the app": "Promatranje aplikacije",
         "Change what the app does": "Promjena ponašanja aplikacije",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Omogućuje dodatku vidjeti što aplikacija radi: dodire na poruke i profile, otvaranje izbornika, reakcije, te čitati stablo zaslona. Samo čitanje: ništa se ne može promijeniti.",
@@ -14022,6 +14058,8 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Screen effects": "Ефекти на екрану",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Дозвољава додатку да црта анимације преко апликације: снег, конфете, ватромет, бљескове и тресење екрана. Ефекти никада не пресрећу додир, поштују подешавање Смањи кретање и нестају када се додатак заустави.",
         "Observe the app": "Праћење апликације",
         "Change what the app does": "Промена понашања апликације",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Омогућава додатку да види шта апликација ради: додире на поруке и профиле, отварање менија, реакције, као и да чита стабло екрана. Само читање: ништа се не може променити.",
@@ -14798,6 +14836,8 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Screen effects": "Efekty na obrazovce",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Umožňuje pluginu kreslit animace přes aplikaci: sníh, konfety, ohňostroj, záblesky a otřesy obrazovky. Efekty nikdy nezachytí dotek, respektují nastavení Omezit pohyb a zmizí, když se plugin zastaví.",
         "Observe the app": "Sledování aplikace",
         "Change what the app does": "Změna chování aplikace",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Umožňuje pluginu vidět, co aplikace dělá: klepnutí na zprávy a profily, otevírání nabídek, reakce, a číst strom obrazovky. Pouze čtení: nic nelze změnit.",
@@ -15574,6 +15614,8 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Screen effects": "Efekty na obrazovke",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Umožňuje pluginu kresliť animácie cez aplikáciu: sneh, konfety, ohňostroj, záblesky a otrasy obrazovky. Efekty nikdy nezachytia dotyk, rešpektujú nastavenie Obmedziť pohyb a zmiznú, keď sa plugin zastaví.",
         "Observe the app": "Sledovanie aplikácie",
         "Change what the app does": "Zmena správania aplikácie",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Umožňuje pluginu vidieť, čo aplikácia robí: ťuknutia na správy a profily, otváranie ponúk, reakcie, a čítať strom obrazovky. Iba čítanie: nič sa nedá zmeniť.",
@@ -16350,6 +16392,8 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Screen effects": "Efecte pe ecran",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permite pluginului să deseneze animații peste aplicație: zăpadă, confetti, artificii, fulgerări și zguduiri ale ecranului. Efectele nu interceptează niciodată o atingere, respectă setarea Reducere mișcare și dispar când pluginul se oprește.",
         "Observe the app": "Observarea aplicației",
         "Change what the app does": "Schimbarea comportamentului aplicației",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permite pluginului să vadă ce face aplicația: atingeri pe mesaje și profiluri, meniuri care se deschid, reacții, și să citească arborele ecranului. Doar citire: nu poate schimba nimic.",
@@ -17126,6 +17170,8 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Screen effects": "Képernyőeffektek",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Lehetővé teszi, hogy a bővítmény animációkat rajzoljon az alkalmazás fölé: hó, konfetti, tűzijáték, villanások és képernyőrázás. Az effektek soha nem fogják el az érintést, követik a Mozgás csökkentése beállítást, és eltűnnek, amikor a bővítmény leáll.",
         "Observe the app": "Az alkalmazás figyelése",
         "Change what the app does": "Az alkalmazás viselkedésének módosítása",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Lehetővé teszi, hogy a bővítmény lássa, mit csinál az alkalmazás: üzenetek és profilok megérintését, menük megnyílását, reakciókat, és olvassa a képernyőfát. Csak olvasás: semmit sem változtathat meg.",
@@ -17902,6 +17948,8 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Screen effects": "Skjermeffekter",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Lar programtillegget tegne animasjoner over appen: snø, konfetti, fyrverkeri, blink og skjermrist. Effektene fanger aldri opp et trykk, følger innstillingen Reduser bevegelse og forsvinner når programtillegget stopper.",
         "Observe the app": "Observere appen",
         "Change what the app does": "Endre appens oppførsel",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Lar programtillegget se hva appen gjør: trykk på meldinger og profiler, menyer som åpnes, reaksjoner, og lese skjermtreet. Kun lesing: ingenting kan endres.",
@@ -18678,6 +18726,8 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Screen effects": "Skärmeffekter",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Låter tillägget rita animationer över appen: snö, konfetti, fyrverkerier, blixtar och skärmskakningar. Effekterna fångar aldrig en tryckning, följer inställningen Minska rörelse och försvinner när tillägget stoppas.",
         "Observe the app": "Observera appen",
         "Change what the app does": "Ändra appens beteende",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Låter tillägget se vad appen gör: tryck på meddelanden och profiler, menyer som öppnas, reaktioner, och läsa skärmträdet. Endast läsning: ingenting kan ändras.",
@@ -19454,6 +19504,8 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Screen effects": "Hiệu ứng màn hình",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Cho phép plugin vẽ hoạt ảnh lên trên ứng dụng: tuyết, hoa giấy, pháo hoa, chớp sáng và rung màn hình. Hiệu ứng không bao giờ chặn thao tác chạm, tuân theo cài đặt Giảm chuyển động và biến mất khi plugin dừng.",
         "Observe the app": "Quan sát ứng dụng",
         "Change what the app does": "Thay đổi hành vi ứng dụng",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Cho phép tiện ích thấy ứng dụng đang làm gì: chạm vào tin nhắn và hồ sơ, menu mở ra, biểu cảm, và đọc cây màn hình. Chỉ đọc: không thể thay đổi gì.",
@@ -20230,6 +20282,8 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Screen effects": "Ефекти на екрані",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Дозволяє плагіну малювати анімації поверх програми: сніг, конфеті, феєрверки, спалахи та тремтіння екрана. Ефекти ніколи не перехоплюють дотик, враховують налаштування «Зменшити рух» і зникають, коли плагін зупиняється.",
         "Observe the app": "Спостереження за застосунком",
         "Change what the app does": "Зміна поведінки застосунку",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Дозволяє плагіну бачити, що робить застосунок: дотики до повідомлень і профілів, відкриття меню, реакції, а також читати дерево екрана. Лише читання: змінити нічого не можна.",
@@ -21015,6 +21069,8 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Screen effects": "Efectos de pantalla",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permite que el plugin dibuje animaciones sobre la app: nieve, confeti, fuegos artificiales, destellos y sacudidas de pantalla. Los efectos nunca interceptan un toque, respetan el ajuste Reducir movimiento y desaparecen cuando el plugin se detiene.",
         "Observe the app": "Observar la aplicación",
         "Change what the app does": "Cambiar el comportamiento de la aplicación",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permite al complemento ver qué hace la aplicación: toques en mensajes y perfiles, menús que se abren, reacciones, y leer el árbol de la pantalla. Solo lectura: no puede cambiar nada.",
@@ -21800,6 +21856,8 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Screen effects": "Efeitos de tela",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permite que o plugin desenhe animações sobre o app: neve, confete, fogos de artifício, flashes e tremores de tela. Os efeitos nunca interceptam um toque, respeitam a configuração Reduzir movimento e desaparecem quando o plugin para.",
         "Observe the app": "Observar a aplicação",
         "Change what the app does": "Alterar o comportamento da aplicação",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permite ao plugin ver o que a aplicação faz: toques em mensagens e perfis, menus que abrem, reações, e ler a árvore do ecrã. Apenas leitura: não pode alterar nada.",
@@ -22585,6 +22643,8 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Screen effects": "Bildschirmeffekte",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Erlaubt dem Plugin, Animationen über die App zu zeichnen: Schnee, Konfetti, Feuerwerk, Blitze und Bildschirmwackeln. Effekte fangen nie eine Berührung ab, befolgen die Einstellung „Bewegung reduzieren“ und verschwinden, wenn das Plugin stoppt.",
         "Observe the app": "Die App beobachten",
         "Change what the app does": "Das Verhalten der App ändern",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Erlaubt dem Plugin zu sehen, was die App tut: Tippen auf Nachrichten und Profile, sich öffnende Menüs, Reaktionen, und den Bildschirmbaum zu lesen. Nur lesend: es kann nichts ändern.",
@@ -23370,6 +23430,8 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Screen effects": "Effets d'écran",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Permet au plugin de dessiner des animations par-dessus l'app : neige, confettis, feux d'artifice, flashs et secousses de l'écran. Les effets n'interceptent jamais un toucher, respectent le réglage Réduire les animations et disparaissent quand le plugin s'arrête.",
         "Observe the app": "Observer l'application",
         "Change what the app does": "Changer le comportement de l'application",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Permet à l'extension de voir ce que fait l'application : appuis sur les messages et les profils, menus qui s'ouvrent, réactions, et de lire l'arbre de l'écran. Lecture seule : elle ne peut rien changer.",
@@ -24155,6 +24217,8 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Screen effects": "Ekran efektleri",
+        "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.": "Eklentinin uygulamanın üzerine animasyon çizmesine izin verir: kar, konfeti, havai fişek, parlamalar ve ekran sarsıntısı. Efektler asla bir dokunuşu yakalamaz, Hareketi Azalt ayarına uyar ve eklenti durduğunda kaybolur.",
         "Observe the app": "Uygulamayı gözlemleme",
         "Change what the app does": "Uygulamanın davranışını değiştirme",
         "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.": "Eklentinin uygulamanın ne yaptığını görmesine izin verir: mesajlara ve profillere dokunuşlar, açılan menüler, tepkiler ve ekran ağacını okuma. Yalnızca okuma: hiçbir şeyi değiştiremez.",

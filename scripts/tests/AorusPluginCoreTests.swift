@@ -1562,6 +1562,57 @@ for malformed in ["set Text:", "text;drop", "a/b", "a.b", "init()"] {
     expect(!AorusPluginObjCDenylist.isAllowedSelector(malformed), "malformed selector \(malformed) is refused")
 }
 
+// Screen effects: the request is validated here, so the renderer is handed a recipe it can
+// draw and never a value it has to guard against. Numbers are clamped, not refused; a preset
+// or an id that cannot be drawn at all is refused.
+expect(AorusPluginPermission.requestedBySource("aorus.effects.start('a', 'snow')") == [.screenEffects],
+       "an effect call asks for the screen-effects grant, and nothing else")
+
+func effect(_ kind: String, _ payload: [String: Any]) -> AorusPluginEffectRequest? {
+    if case let .success(request) = AorusPluginEffectRequest.parse(kind: kind, payload: payload) { return request }
+    return nil
+}
+
+if let snow = effect("effects.start", ["id": "winter", "preset": "snow", "intensity": NSNumber(value: 99), "wind": NSNumber(value: -5), "colors": ["#8899FF", "bad", "00FF00"]]) {
+    if case let .start(id, preset) = snow.action {
+        expect(id == "winter" && preset == .snow, "start keeps its id and preset")
+    } else {
+        expect(false, "start parses to a start action")
+    }
+    expect(snow.intensity == 3, "an over-large intensity is clamped to the maximum, not refused")
+    expect(snow.wind == -1, "wind is clamped into range")
+    expect(snow.colors == ["8899FF", "00FF00"], "only the colours that are real hex survive, normalised")
+} else {
+    expect(false, "a valid snow request parses")
+}
+
+// Duration arrives in milliseconds and is kept in seconds; zero means until stopped.
+expect(effect("effects.start", ["id": "a", "preset": "rain", "duration": NSNumber(value: 5000)])?.duration == 5, "duration is milliseconds in, seconds out")
+expect(effect("effects.start", ["id": "a", "preset": "rain"])?.duration == 0, "no duration means until stopped")
+expect(effect("effects.start", ["id": "a", "preset": "rain", "duration": NSNumber(value: 9_000_000)])?.duration == AorusPluginEffectRequest.maximumContinuousDuration, "an absurd duration is capped")
+
+// A single "color" is the same as a one-element "colors".
+expect(effect("effects.burst", ["preset": "confetti", "color": "FF0000"])?.colors == ["FF0000"], "a single color becomes a one-element palette")
+
+// Emoji are trimmed and bounded; a too-long one is dropped rather than drawn.
+expect(effect("effects.start", ["id": "a", "preset": "emoji", "emoji": ["🎉", " 🌟 ", String(repeating: "x", count: 40)]])?.emoji == ["🎉", "🌟"], "emoji are trimmed and the oversized one is dropped")
+
+// What cannot be drawn is refused, not clamped.
+expect(effect("effects.start", ["id": "a", "preset": "lasers"]) == nil, "an unknown preset is refused")
+expect(effect("effects.start", ["preset": "snow"]) == nil, "start with no id is refused")
+expect(effect("effects.start", ["id": "no spaces", "preset": "snow"]) == nil, "an id with spaces is refused")
+expect(effect("effects.stop", ["id": "winter"]) != nil, "stop with an id parses")
+expect(effect("effects.stop", [:]) == nil, "stop with no id is refused")
+expect(effect("effects.stopAll", [:]) != nil, "stopAll needs nothing")
+expect(effect("effects.flash", ["opacity": NSNumber(value: 9)])?.opacity == 0.8, "flash opacity is clamped")
+expect(effect("effects.nonsense", [:]) == nil, "an unknown effect call is refused")
+
+// The identifier rule is the plugin-file rule: letters, digits, dot, dash, underscore.
+expect(AorusPluginEffectRequest.isValidIdentifier("winter.2026-a_b"), "a normal id is valid")
+expect(!AorusPluginEffectRequest.isValidIdentifier(""), "an empty id is not")
+expect(!AorusPluginEffectRequest.isValidIdentifier("a/b"), "a slash is not allowed in an id")
+expect(!AorusPluginEffectRequest.isValidIdentifier(String(repeating: "a", count: 65)), "an over-long id is refused")
+
 if failures == 0 {
     print("Aorus plugin core tests: OK")
 } else {

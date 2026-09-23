@@ -2374,6 +2374,7 @@ private func permissionTitle(_ permission: AorusPluginPermission) -> String {
     case .composer: return aorusL("Поле ввода открытого чата", "Open chat composer")
     case .pluginMessaging: return aorusL("Обмен с другими плагинами", "Talk to other plugins")
     case .notifications: return aorusL("Уведомления", "Notifications")
+    case .screenEffects: return aorusL("Эффекты на экране", "Screen effects")
     case .appInternals: return aorusL("Наблюдение за приложением", "Observe the app")
     case .appInternalsWrite: return aorusL("Изменение поведения приложения", "Change what the app does")
     }
@@ -2432,6 +2433,8 @@ private func permissionDescription(_ permission: AorusPluginPermission, requeste
         return marker + aorusL("Разрешает менять текст в поле ввода открытого чата, видеть, как он меняется при наборе, показывать статус печати и прокручивать историю. Отправку сообщений это разрешение не дает.", "Allows changing the text in the open chat composer, seeing it change as it is typed, showing the typing status and scrolling the history. It does not allow sending messages.")
     case .notifications:
         return marker + aorusL("Разрешает показывать уведомления от имени приложения, в том числе когда оно закрыто. Уведомление всегда подписано именем плагина, и плагин не видит и не трогает уведомления Telegram.", "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.")
+    case .screenEffects:
+        return marker + aorusL("Разрешает рисовать анимации поверх приложения: снег, конфетти, фейерверки, вспышки и дрожание экрана. Эффекты не перехватывают касания, учитывают настройку «Уменьшение движения» и исчезают, когда плагин останавливается.", "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.")
     case .appInternals:
         return marker + aorusL("Разрешает плагину видеть, что делает приложение: тапы по сообщениям и профилям, открытие меню, реакции, а также читать дерево экрана. Только чтение: изменить ничего нельзя.", "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.")
     case .appInternalsWrite:

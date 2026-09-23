@@ -397,6 +397,44 @@ throws('silent accepted a non-boolean', () => aorus.messages.send('me', 'x', { s
 aorus.messages.reply({ peerId: '-100', namespace: 0, messageId: 5 }, 'answer');
 check('messages.reply did not reply in the message\'s chat', lastRequest('messages.send').peerId === '-100' && lastRequest('messages.send').replyTo === 5);
 
+// Screen effects: every call names an effect the app knows, and the app decides whether it
+// is drawn. What crosses matters, because a wrong preset here is an effect nobody sees.
+check('effects is missing', typeof aorus.effects === 'object');
+check('effects.presets is empty', aorus.effects.presets().indexOf('snow') !== -1 && aorus.effects.presets().length === 10);
+aorus.effects.start('winter', 'snow', { intensity: 2, wind: 0.5, color: '#8899FF' });
+const startedEffect = lastRequest('effects.start');
+check('effects.start lost its id', startedEffect.id === 'winter');
+check('effects.start lost its preset', startedEffect.preset === 'snow');
+check('effects.start lost its options', startedEffect.intensity === 2 && startedEffect.wind === 0.5);
+check('effects.start lost its colour', startedEffect.color === '#8899FF');
+aorus.effects.burst('confetti', { colors: ['FF0000', '00FF00'], x: 0.25 });
+check('effects.burst lost its preset', lastRequest('effects.burst').preset === 'confetti');
+check('effects.burst lost its colours', lastRequest('effects.burst').colors.length === 2);
+aorus.effects.stop('winter');
+check('effects.stop lost its id', lastRequest('effects.stop').id === 'winter');
+aorus.effects.flash({ opacity: 0.5 });
+check('effects.flash did not send', lastRequest('effects.flash').opacity === 0.5);
+aorus.effects.celebrate();
+check('effects.celebrate is not a fireworks burst', lastRequest('effects.burst').preset === 'fireworks');
+throws('effects.start accepted an unknown preset', () => aorus.effects.start('x', 'lasers'));
+throws('effects.start accepted no id', () => aorus.effects.start(undefined, 'snow'));
+throws('effects.burst accepted no preset', () => aorus.effects.burst());
+
+// Colours, as the RRGGBB the rest of the API takes. Pure computation in the plugin.
+check('color.parse is wrong', (function () { const c = aorus.color.parse('#FF8800'); return c.r === 255 && c.g === 136 && c.b === 0; })());
+check('color.hex is wrong', aorus.color.hex(255, 136, 0) === 'FF8800');
+check('color.mix is not the midpoint', aorus.color.mix('000000', 'FFFFFF', 0.5) === '808080');
+check('color.readable does not contrast', aorus.color.readable('FFFFFF') === '000000' && aorus.color.readable('000000') === 'FFFFFF');
+check('color.isDark is wrong', aorus.color.isDark('101010') && !aorus.color.isDark('EEEEEE'));
+check('color.palette is the wrong size', aorus.color.palette('5B4DFF', 6).length === 6);
+check('color shorthand does not expand', aorus.color.parse('#f80').r === 255);
+throws('color.parse accepted nonsense', () => aorus.color.parse('nope'));
+
+// Haptics accept the names people use, and fall back rather than refusing.
+aorus.ui.haptic('success');
+aorus.ui.haptic('unknownKind');
+check('haptic did not fall back', globalThis.__calls.filter((c) => c.name === 'haptic').pop().args[0] === 'light');
+
 // The runtime answers about itself.
 check('runtime.pluginId is missing', aorus.runtime.pluginId === 'test');
 check('runtime.hasPermission is wrong', aorus.runtime.hasPermission('sendMessages') === true);

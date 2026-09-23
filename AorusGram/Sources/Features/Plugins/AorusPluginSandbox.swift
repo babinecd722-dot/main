@@ -94,6 +94,9 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginShareFile(_ pluginId: String, path: URL, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginBroadcast(_ pluginId: String, topic: String, json: String)
     func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void)
+    /// An animation over the app, already validated. The answer says whether it was shown:
+    /// Reduce Motion, a hot phone or an app in the background is a `shown: false`, not an error.
+    func pluginEffect(_ pluginId: String, request: AorusPluginEffectRequest, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginNetworkCall(_ pluginId: String, action: String, payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void)
     var pluginAppState: [String: Any] { get }
@@ -141,6 +144,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onShareFile: ((String, URL) -> Void)?
     public var onBroadcast: ((String, String, String) -> Void)?
     public var onNotify: ((String, String, String, String, String, Double) -> [String: Any]?)?
+    public var onEffect: ((String, AorusPluginEffectRequest) -> [String: Any]?)?
     public var onRuntimeCall: ((String, String, [String: Any]) -> [String: Any]?)?
     public var onEditEntities: ((String, [AorusPluginTextEntity]) -> Void)?
     public var onNetworkCall: ((String, String, [String: Any]) -> [String: Any]?)?
@@ -240,6 +244,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         completion(.success(onNotify?(pluginId, action, notificationId, title, body, after) ?? ["ok": NSNumber(value: true)]))
+    }
+    open func pluginEffect(_ pluginId: String, request: AorusPluginEffectRequest, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        completion(.success(onEffect?(pluginId, request) ?? ["ok": NSNumber(value: true), "shown": NSNumber(value: true)]))
     }
     open func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
         completion(.success(onRuntimeCall?(pluginId, action, payload) ?? ["ok": NSNumber(value: true)]))
@@ -1699,6 +1706,19 @@ public final class AorusPluginSandbox {
             }
             host.pluginNotify(pluginId, action: action, notificationId: notificationId, title: title, body: body, after: after) { [weak self] result in
                 self?.settle(id, with: result.map { value -> Any? in value as Any })
+            }
+        // Animations over the app. Validated here, so the renderer is handed a recipe it can
+        // draw and never a value it has to guard against.
+        case "effects.start", "effects.burst", "effects.stop", "effects.stopAll",
+             "effects.flash", "effects.shake", "effects.ripple", "effects.glow":
+            guard require(.screenEffects, id: id) else { return }
+            switch AorusPluginEffectRequest.parse(kind: kind, payload: payload) {
+            case let .failure(error):
+                settle(id, with: .failure(AorusPluginRequestError(error.message)))
+            case let .success(effect):
+                host.pluginEffect(pluginId, request: effect) { [weak self] result in
+                    self?.settle(id, with: result.map { value -> Any? in value as Any })
+                }
             }
         // Reaching into the app itself. The two grants are split by what the call does
         // rather than by which namespace it is in: reading the screen and watching what the

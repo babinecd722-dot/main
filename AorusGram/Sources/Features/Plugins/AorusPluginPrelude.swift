@@ -45,6 +45,7 @@ public enum AorusPluginPrelude {
         var HOOK_SITES = [\(hookSites.map { "'\($0)'" }.joined(separator: ", "))];
         var MAX_TIMERS = 64;
         var MAX_LOG_CHARS = 4096;
+        var HAPTIC_KINDS = ['light', 'medium', 'heavy', 'soft', 'rigid', 'selection', 'success', 'warning', 'error'];
 
         function typeError(message) { return new TypeError(message); }
 
@@ -2237,6 +2238,153 @@ public enum AorusPluginPrelude {
             return copy;
         }
 
+        // Animations over the whole app. Every one is a named recipe the app owns and draws;
+        // a plugin names it and tunes it with numbers, and never hands over a layer or an image.
+        // The app decides whether it is shown — Reduce Motion, a hot phone, the app in the
+        // background — and says so in the answer, so nothing here throws for that.
+        var EFFECT_PRESETS = ['snow', 'confetti', 'fireworks', 'hearts', 'emoji', 'rain', 'sparkles', 'bubbles', 'leaves', 'warp'];
+        function effectOptions(options) {
+            var opts = optionalObject(options, 'options');
+            var value = {};
+            var numbers = ['intensity', 'speed', 'size', 'wind', 'x', 'y', 'opacity', 'pulses', 'duration'];
+            for (var i = 0; i < numbers.length; i++) {
+                if (opts[numbers[i]] !== undefined) {
+                    var n = Number(opts[numbers[i]]);
+                    if (isFinite(n)) { value[numbers[i]] = n; }
+                }
+            }
+            if (opts.rising !== undefined) { value.rising = !!opts.rising; }
+            if (opts.color !== undefined) { value.color = String(opts.color); }
+            if (Array.isArray(opts.colors)) { value.colors = opts.colors.slice(0, 8).map(String); }
+            if (Array.isArray(opts.emoji)) { value.emoji = opts.emoji.slice(0, 8).map(String); }
+            else if (typeof opts.emoji === 'string') { value.emoji = [opts.emoji]; }
+            return value;
+        }
+        function effectRequest(kind, preset, id, options) {
+            var payload = effectOptions(options);
+            if (preset !== null) {
+                if (EFFECT_PRESETS.indexOf(preset) === -1) { throw new Error('Unknown effect: ' + preset + '. Known: ' + EFFECT_PRESETS.join(', ')); }
+                payload.preset = preset;
+            }
+            if (id !== null) { payload.id = requireString(id, 'id'); }
+            return request(kind, payload);
+        }
+        var effectsApi = freeze({
+            presets: function () { return EFFECT_PRESETS.slice(); },
+            // Runs until stopped, or for `duration` ms. The id is the plugin's own handle to it.
+            start: function (id, preset, options) { return effectRequest('effects.start', requireString(preset, 'preset'), requireString(id, 'id'), options); },
+            // A one-shot the app cleans up itself.
+            burst: function (preset, options) { return effectRequest('effects.burst', requireString(preset, 'preset'), null, options); },
+            stop: function (id) { return effectRequest('effects.stop', null, requireString(id, 'id'), {}); },
+            stopAll: function () { return effectRequest('effects.stopAll', null, null, {}); },
+            // The whole screen, briefly. Rate-limited to stay well under a strobe.
+            flash: function (options) { return effectRequest('effects.flash', null, null, options); },
+            shake: function (options) { return effectRequest('effects.shake', null, null, options); },
+            // A circle spreading from a point given as fractions of the screen.
+            ripple: function (options) { return effectRequest('effects.ripple', null, null, options); },
+            // The edges of the screen pulsing, for an alert a plugin wants noticed.
+            glow: function (options) { return effectRequest('effects.glow', null, null, options); },
+            // Snow for a moment, wherever the person taps. Convenience over start + stop.
+            snow: function (options) { return effectRequest('effects.start', 'snow', 'snow', options); },
+            confetti: function (options) { return effectRequest('effects.burst', 'confetti', null, options); },
+            celebrate: function (options) { return effectRequest('effects.burst', 'fireworks', null, options); }
+        });
+
+        // Colours, as the "RRGGBB" the rest of the API takes. A plugin choosing snow to match
+        // the theme, or a palette for confetti, should not have to do the hex arithmetic.
+        function clampByte(value) { return Math.max(0, Math.min(255, Math.round(value))); }
+        function parseColor(value) {
+            var text = requireString(value, 'color').trim().replace(/^#/, '');
+            if (/^[0-9a-fA-F]{3}$/.test(text)) { text = text.split('').map(function (c) { return c + c; }).join(''); }
+            if (!/^[0-9a-fA-F]{6}$/.test(text)) { throw typeError('color must be RRGGBB or RGB hex'); }
+            return {
+                r: parseInt(text.slice(0, 2), 16),
+                g: parseInt(text.slice(2, 4), 16),
+                b: parseInt(text.slice(4, 6), 16)
+            };
+        }
+        function toHex(rgb) {
+            return [rgb.r, rgb.g, rgb.b].map(function (c) {
+                var h = clampByte(c).toString(16);
+                return h.length === 1 ? '0' + h : h;
+            }).join('').toUpperCase();
+        }
+        function toHslParts(rgb) {
+            var r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+            var max = Math.max(r, g, b), min = Math.min(r, g, b);
+            var h = 0, s = 0, l = (max + min) / 2;
+            if (max !== min) {
+                var d = max - min;
+                s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+                if (max === r) { h = (g - b) / d + (g < b ? 6 : 0); }
+                else if (max === g) { h = (b - r) / d + 2; }
+                else { h = (r - g) / d + 4; }
+                h /= 6;
+            }
+            return { h: h * 360, s: s, l: l };
+        }
+        function fromHsl(h, s, l) {
+            h = ((h % 360) + 360) % 360 / 360;
+            s = Math.max(0, Math.min(1, s));
+            l = Math.max(0, Math.min(1, l));
+            function channel(p, q, t) {
+                if (t < 0) { t += 1; } if (t > 1) { t -= 1; }
+                if (t < 1 / 6) { return p + (q - p) * 6 * t; }
+                if (t < 1 / 2) { return q; }
+                if (t < 2 / 3) { return p + (q - p) * (2 / 3 - t) * 6; }
+                return p;
+            }
+            if (s === 0) { var v = l * 255; return { r: v, g: v, b: v }; }
+            var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            var p = 2 * l - q;
+            return { r: channel(p, q, h + 1 / 3) * 255, g: channel(p, q, h) * 255, b: channel(p, q, h - 1 / 3) * 255 };
+        }
+        function relativeLuminance(rgb) {
+            var channels = [rgb.r, rgb.g, rgb.b].map(function (c) {
+                var v = c / 255;
+                return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+            });
+            return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+        }
+        function shift(value, amount) {
+            var hsl = toHslParts(parseColor(value));
+            return toHex(fromHsl(hsl.h, hsl.s, hsl.l + amount));
+        }
+        var colorApi = freeze({
+            parse: function (value) { var rgb = parseColor(value); return freeze({ r: rgb.r, g: rgb.g, b: rgb.b }); },
+            hex: function (r, g, b) { return toHex({ r: Number(r) || 0, g: Number(g) || 0, b: Number(b) || 0 }); },
+            hsl: function (h, s, l) { return toHex(fromHsl(Number(h) || 0, Number(s), Number(l))); },
+            toHsl: function (value) { var p = toHslParts(parseColor(value)); return freeze({ h: Math.round(p.h), s: p.s, l: p.l }); },
+            lighten: function (value, amount) { return shift(value, amount === undefined ? 0.1 : Number(amount)); },
+            darken: function (value, amount) { return shift(value, -(amount === undefined ? 0.1 : Number(amount))); },
+            // A weighted average of two colours. ratio 0 is the first, 1 is the second.
+            mix: function (first, second, ratio) {
+                var a = parseColor(first), b = parseColor(second);
+                var t = ratio === undefined ? 0.5 : Math.max(0, Math.min(1, Number(ratio)));
+                return toHex({ r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t });
+            },
+            // Black or white, whichever reads on top of this colour. The WCAG contrast rule.
+            readable: function (value) {
+                var luminance = relativeLuminance(parseColor(value));
+                return (luminance + 0.05) > Math.sqrt(0.0525) ? '000000' : 'FFFFFF';
+            },
+            isDark: function (value) { return relativeLuminance(parseColor(value)) < 0.35; },
+            // A ring of colours evenly spaced around the wheel from this one — a ready palette
+            // for confetti or a chart. Keeps the saturation and lightness of the seed.
+            palette: function (value, count) {
+                var n = Math.max(1, Math.min(12, Math.floor(Number(count) || 5)));
+                var hsl = toHslParts(parseColor(value === undefined ? '5B4DFF' : value));
+                var out = [];
+                for (var i = 0; i < n; i++) { out.push(toHex(fromHsl(hsl.h + (360 / n) * i, Math.max(0.5, hsl.s), Math.max(0.45, Math.min(0.6, hsl.l))))); }
+                return out;
+            },
+            random: function () {
+                var bytes = host.crypto('random', '3', '');
+                if (typeof bytes === 'string' && /^[0-9a-fA-F]{6}$/.test(bytes)) { return bytes.toUpperCase(); }
+                return toHex({ r: Math.random() * 255, g: Math.random() * 255, b: Math.random() * 255 });
+            }
+        });
+
         var chatApi = freeze({
             current: function () { return request('chat.current', {}); },
             draft: function () { return request('chat.draft', {}); },
@@ -2577,6 +2725,7 @@ public enum AorusPluginPrelude {
                     }).map(function (button) { return JSON.parse(JSON.stringify(button)); }));
                 }
             }),
+            effects: effectsApi,
             notifications: freeze({
                 post: function (options) {
                     var opts = typeof options === 'string' ? { body: options } : optionalObject(options, 'options');
@@ -2857,7 +3006,7 @@ public enum AorusPluginPrelude {
                         url: typeof opts.url === 'string' ? opts.url : null
                     });
                 },
-                haptic: function (kind) { host.haptic(requireString(kind, 'kind')); },
+                haptic: function (kind) { host.haptic(HAPTIC_KINDS.indexOf(requireString(kind, 'kind')) === -1 ? 'light' : kind); },
                 definePages: function (pages) {
                     if (!Array.isArray(pages)) { throw typeError('pages must be an array'); }
                     if (!host.pagesDefine(JSON.stringify(pages))) { throw new Error('Invalid page definition or permission not granted'); }
@@ -2960,7 +3109,7 @@ public enum AorusPluginPrelude {
                     return request('chats.open', { peerId: target === 'me' ? null : target, toSelf: target === 'me' });
                 },
                 openURL: function (url) { return request('browser.open', { url: requireString(url, 'url') }); },
-                haptic: function (kind) { host.haptic(requireString(kind, 'kind')); },
+                haptic: function (kind) { host.haptic(HAPTIC_KINDS.indexOf(requireString(kind, 'kind')) === -1 ? 'light' : kind); },
                 share: function (value) {
                     var opts = typeof value === 'string' ? { text: value } : optionalObject(value, 'value');
                     return request('ui.share', {
@@ -3057,6 +3206,7 @@ public enum AorusPluginPrelude {
                 write: function (text) { host.clipboardWrite(requireString(text, 'text')); }
             }),
             crypto: cryptoApi,
+            color: colorApi,
             util: freeze({
                 sleep: function (ms) { return request('util.sleep', { ms: Number(ms) || 0 }); },
                 // Settled on this context's own timers. They count against the same limit as

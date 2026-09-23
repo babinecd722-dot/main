@@ -130,24 +130,10 @@ public final class AorusPluginRuntimeManager {
 
         lock.lock()
         let stale = sandboxes.filter { !enabledIds.contains($0.key) }.map { $0.value }
-        for sandbox in stale {
-            sandboxes[sandbox.manifest.id] = nil
-            pages[sandbox.manifest.id] = nil
-            settingsShortcuts[sandbox.manifest.id] = nil
-            contextActions[sandbox.manifest.id] = nil
-            overlays[sandbox.manifest.id] = nil
-            nativeButtons[sandbox.manifest.id] = nil
-            stringOverrides[sandbox.manifest.id] = nil
-        }
+        for sandbox in stale { sandboxes[sandbox.manifest.id] = nil }
         lock.unlock()
-        if !stale.isEmpty {
-            publishIntegrationsChanged()
-            publishStringOverrides()
-        }
-        stale.forEach { sandbox in
-            host.clearPluginState(sandbox.manifest.id)
-            sandbox.stop()
-        }
+        releaseResources(of: stale.map { $0.manifest.id })
+        stale.forEach { $0.stop() }
 
         for record in desired {
             let state = AorusPluginStore.shared.permissionState(for: record.manifest.id)
@@ -184,27 +170,44 @@ public final class AorusPluginRuntimeManager {
     public func stop(id: String, completion: (() -> Void)? = nil) {
         lock.lock()
         let sandbox = sandboxes.removeValue(forKey: id)
-        pages[id] = nil
-        settingsShortcuts[id] = nil
-        contextActions[id] = nil
-        overlays[id] = nil
-        nativeButtons[id] = nil
-        stringOverrides[id] = nil
         lock.unlock()
-        AorusPluginHookBroker.shared.removePlugin(id)
-        // A socket that outlived its plugin is a connection nobody can see.
-        AorusPluginNetworkBroker.shared.closeAll(pluginId: id)
-        publishIntegrationsChanged()
-        publishOverlaysChanged()
-        // Same reason as the badge below: a word this plugin put into somebody's interface
-        // must not outlive the plugin, or nothing left running can explain or remove it.
-        publishStringOverrides()
-        // A badge outliving the plugin that set it is a word in the title bar nobody can
-        // explain or remove.
-        AorusPluginChatBridge.clearHeaderBadge(pluginId: id)
-        currentHost()?.clearPluginState(id)
+        releaseResources(of: [id])
         sandbox?.stop(completion: completion)
         if sandbox == nil { completion?() }
+    }
+
+    /// Everything a plugin put into the app, taken back out.
+    ///
+    /// One path for every way a plugin stops — switched off, disabled by a reload, locked out
+    /// by a lapsed licence — because each of the three used to forget a different part. The
+    /// licence path left the words a plugin had replaced in Telegram's own interface, its
+    /// buttons over the chat, its hooks and its sockets; the reload path left the hooks, the
+    /// sockets, the header badge and the overlays drawn until something else republished.
+    /// Anything a plugin leaves behind is something nothing still running can explain or
+    /// remove.
+    private func releaseResources(of ids: [String]) {
+        guard !ids.isEmpty else { return }
+        lock.lock()
+        for id in ids {
+            pages[id] = nil
+            settingsShortcuts[id] = nil
+            contextActions[id] = nil
+            overlays[id] = nil
+            nativeButtons[id] = nil
+            stringOverrides[id] = nil
+        }
+        lock.unlock()
+        for id in ids {
+            AorusPluginHookBroker.shared.removePlugin(id)
+            // A socket that outlived its plugin is a connection nobody can see.
+            AorusPluginNetworkBroker.shared.closeAll(pluginId: id)
+            AorusPluginChatBridge.clearHeaderBadge(pluginId: id)
+            AorusPluginEffectsRenderer.shared.stopAll(pluginId: id)
+            currentHost()?.clearPluginState(id)
+        }
+        publishIntegrationsChanged()
+        publishOverlaysChanged()
+        publishStringOverrides()
     }
 
     public func restart(id: String, completion: ((AorusPluginRunError?) -> Void)? = nil) {
@@ -563,12 +566,8 @@ public final class AorusPluginRuntimeManager {
         let active = Array(sandboxes.values)
         sandboxes.removeAll()
         schemas.removeAll()
-        pages.removeAll()
-        settingsShortcuts.removeAll()
-        contextActions.removeAll()
         lock.unlock()
-        publishIntegrationsChanged()
-        if let host = currentHost() { active.forEach { host.clearPluginState($0.manifest.id) } }
+        releaseResources(of: active.map { $0.manifest.id })
         active.forEach { $0.stop() }
     }
 
@@ -2589,7 +2588,17 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
 
     func pluginHaptic(_ pluginId: String, kind: String) {
         guard pluginExecutionAllowed else { return }
-        DispatchQueue.main.async { UIImpactFeedbackGenerator(style: kind == "heavy" ? .heavy : .light).impactOccurred() }
+        // Every generator iOS has, by the name a plugin would use. This used to know `heavy`
+        // and play a light tap for everything else, `success` and `error` included.
+        AorusPluginHaptics.play(kind)
+    }
+
+    func pluginEffect(_ pluginId: String, request: AorusPluginEffectRequest, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        guard pluginExecutionAllowed, manager?.isPermissionGranted(.screenEffects, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Screen effects permission is not granted")))
+            return
+        }
+        AorusPluginEffectsRenderer.shared.perform(request, pluginId: pluginId, completion: completion)
     }
 
     func pluginClipboardRead(_ pluginId: String, completion: @escaping (String?) -> Void) {
