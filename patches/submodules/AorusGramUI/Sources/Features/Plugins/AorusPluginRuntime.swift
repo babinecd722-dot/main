@@ -1545,7 +1545,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         aiLock.unlock()
     }
 
-    func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], replyTo: Int32?, completion: @escaping (Result<Void, Error>) -> Void) {
+    func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], options: AorusPluginSendOptions, completion: @escaping (Result<Void, Error>) -> Void) {
         guard manager?.isPermissionGranted(.sendMessages, pluginId: pluginId) == true else {
             completion(.failure(AorusPluginRequestError("Send messages permission is not granted")))
             return
@@ -1568,8 +1568,21 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         if !converted.isEmpty {
             attributes.append(TextEntitiesMessageAttribute(entities: converted))
         }
+        // The same attributes Telegram's own composer attaches for a silent and for a
+        // scheduled send, in the same order (TelegramEngineMessages.enqueueOutgoingMessage).
+        if options.silent {
+            attributes.append(NotificationInfoMessageAttribute(flags: .muted))
+        }
+        if let scheduleAt = options.scheduleAt {
+            attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: scheduleAt, repeatPeriod: nil))
+        }
+        // `replyTo` used to be read and then dropped here, so every reply a plugin sent
+        // arrived as a plain message. A reply is to a message in the chat being written to.
+        let replySubject = options.replyTo.map {
+            EngineMessageReplySubject(messageId: MessageId(peerId: target, namespace: Namespaces.Message.Cloud, id: $0), quote: nil, innerSubject: nil)
+        }
         let signal = enqueueMessages(account: context.account, peerId: target, messages: [
-            .message(text: text, attributes: attributes, inlineStickers: [:], mediaReference: nil, threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+            .message(text: text, attributes: attributes, inlineStickers: [:], mediaReference: nil, threadId: options.threadId, replyToMessageId: replySubject, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
         ])
         let _ = signal.start(completed: { completion(.success(())) })
     }

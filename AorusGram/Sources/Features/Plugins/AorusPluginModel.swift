@@ -162,7 +162,8 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             // A socket and a file transfer are the same capability as a request: a plugin
             // reaching a backend somebody wrote.
             (.network, ["aorus.http", "aorus.ws."]),
-            (.sendMessages, ["aorus.messages.send", "aorus.chat.sendText", "aorus.chat.replyText"]),
+            // `schedule` and `reply` are `send` with an option filled in, and ask for the same.
+            (.sendMessages, ["aorus.messages.send", "aorus.messages.schedule", "aorus.messages.reply", "aorus.chat.sendText", "aorus.chat.replyText"]),
             // `chats.*` names a chat by id; `chat.*` is the one on screen. Reading either is
             // the same capability: a title, an identifier and what is in view.
             (.chatMetadata, [
@@ -182,6 +183,8 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             (.clipboardRead, ["aorus.clipboard.read"]),
             (.clipboardWrite, ["aorus.clipboard.write"]),
             (.incomingMessages, [
+                // The same event, filtered before it reaches the handler.
+                "aorus.messages.onIncoming",
                 "aorus.on('message",
                 "aorus.on(\"message",
                 "aorus.once('message",

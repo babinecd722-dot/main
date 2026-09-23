@@ -646,6 +646,50 @@ if AorusPluginSandbox.watchdogAvailable {
     }
     format.stop()
 
+    // Markdown and the send options, through the whole boundary. The entities have to come
+    // out of `text.markdown` in UTF-16 units and survive validation; the options have to
+    // reach the host rather than being read and dropped, which is what `replyTo` used to be.
+    let markdownHost = AorusPluginNullHost()
+    var markdownText: String?
+    var markdownEntities: [AorusPluginTextEntity] = []
+    var markdownOptions: AorusPluginSendOptions?
+    markdownHost.onSendMessage = { _, _, _, _, text, _ in markdownText = text }
+    markdownHost.onSendEntities = { _, entities in markdownEntities = entities }
+    markdownHost.onSendOptions = { _, options in markdownOptions = options }
+    let markdownSource = """
+    aorus.on('start', function () {
+        var payload = aorus.text.markdown('💎 **bold** [site](https://example.com) ||hidden||');
+        aorus.messages.send('-1001', payload, { replyTo: 42, threadId: 7, silent: true, scheduleAt: Date.now() + 3600000 });
+    });
+    """
+    let markdown = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Markdown"),
+        source: markdownSource,
+        host: markdownHost,
+        permissions: [.sendMessages]
+    )
+    let markdownStarted = DispatchSemaphore(value: 0)
+    markdown.start { error in expect(error == nil, "markdown plugin starts"); markdownStarted.signal() }
+    _ = markdownStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.2)
+    expect(markdownText == "💎 bold site hidden", "markdown drops its markup and keeps the text")
+    expect(markdownEntities.count == 3, "each marked run becomes an entity")
+    if markdownEntities.count == 3 {
+        expect(markdownEntities[0].kind == .bold && markdownEntities[0].offset == 3 && markdownEntities[0].length == 4, "the bold run is counted in UTF-16 units")
+        expect(markdownEntities[1].kind == .textLink && markdownEntities[1].url == "https://example.com", "a markdown link carries its url")
+        expect(markdownEntities[2].kind == .spoiler, "a spoiler survives validation")
+    }
+    expect(markdownOptions?.replyTo == 42, "replyTo reaches the host")
+    expect(markdownOptions?.threadId == 7, "threadId reaches the host")
+    expect(markdownOptions?.silent == true, "silent reaches the host")
+    if let scheduleAt = markdownOptions?.scheduleAt {
+        let lead = Int(scheduleAt) - Int(Date().timeIntervalSince1970)
+        expect(lead > 3500 && lead <= 3600, "scheduleAt arrives in seconds, an hour ahead")
+    } else {
+        expect(false, "scheduleAt reaches the host")
+    }
+    markdown.stop()
+
     // Everything a plugin can get wrong in an entity is dropped rather than shifting the
     // rest of the formatting: a range past the end, a link that is not a web link, an
     // emoji id that is not a number, a type nobody knows.

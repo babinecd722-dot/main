@@ -24,7 +24,7 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginStorageChanged(_ pluginId: String, values: [String: AorusPluginJSONValue])
     func pluginSettingsSchemaChanged(_ pluginId: String, fields: [AorusPluginSettingField])
     func pluginSettingsChanged(_ pluginId: String, values: [String: AorusPluginJSONValue])
-    func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], replyTo: Int32?, completion: @escaping (Result<Void, Error>) -> Void)
+    func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], options: AorusPluginSendOptions, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void)
     func pluginBeginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginDeleteMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, forEveryone: Bool, completion: @escaping (Result<Void, Error>) -> Void)
@@ -111,6 +111,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onSettingsChanged: ((String, [String: AorusPluginJSONValue]) -> Void)?
     public var onSendMessage: ((String, Int64?, Bool, Int64?, String, Int32?) -> Void)?
     public var onSendEntities: ((String, [AorusPluginTextEntity]) -> Void)?
+    public var onSendOptions: ((String, AorusPluginSendOptions) -> Void)?
     public var onMessageAction: ((String, String, Int64, Int32, Int32) -> Void)?
     public var onToast: ((String, String) -> Void)?
     public var onShare: ((String, String?, String?) -> Void)?
@@ -174,9 +175,10 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     open func pluginStorageChanged(_ pluginId: String, values: [String: AorusPluginJSONValue]) { onStorageChanged?(pluginId, values) }
     open func pluginSettingsSchemaChanged(_ pluginId: String, fields: [AorusPluginSettingField]) { onSettingsSchemaChanged?(pluginId, fields) }
     open func pluginSettingsChanged(_ pluginId: String, values: [String: AorusPluginJSONValue]) { onSettingsChanged?(pluginId, values) }
-    open func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], replyTo: Int32?, completion: @escaping (Result<Void, Error>) -> Void) {
+    open func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], options: AorusPluginSendOptions, completion: @escaping (Result<Void, Error>) -> Void) {
         onSendEntities?(pluginId, entities)
-        onSendMessage?(pluginId, peerId, toSelf, accountId, text, replyTo)
+        onSendOptions?(pluginId, options)
+        onSendMessage?(pluginId, peerId, toSelf, accountId, text, options.replyTo)
         completion(.success(()))
     }
     open func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "edit", peerId, namespace, messageId); onEditEntities?(pluginId, entities); completion(.success(())) }
@@ -490,6 +492,35 @@ public struct AorusPluginOutgoingVerdict: Equatable {
     }
 
     public static let passThrough = AorusPluginOutgoingVerdict()
+}
+
+/// How a plugin's message goes out, beyond its text.
+///
+/// Every field is what Telegram's own composer can already do: answer a message, post into a
+/// forum topic, send without a sound, and hand the message to Telegram's server to deliver
+/// later. The last one is the server's schedule, not a timer here, so it arrives whether or
+/// not the app, the plugin or the phone is still running when the time comes.
+public struct AorusPluginSendOptions: Equatable {
+    /// The message being answered, in the chat the message is sent to.
+    public var replyTo: Int32?
+    /// A forum topic. Nil is the chat itself.
+    public var threadId: Int64?
+    /// Delivered without a notification sound on the other side.
+    public var silent: Bool
+    /// Unix seconds. Telegram accepts a time from a few seconds ahead to a year ahead.
+    public var scheduleAt: Int32?
+
+    public init(replyTo: Int32? = nil, threadId: Int64? = nil, silent: Bool = false, scheduleAt: Int32? = nil) {
+        self.replyTo = replyTo
+        self.threadId = threadId
+        self.silent = silent
+        self.scheduleAt = scheduleAt
+    }
+
+    /// The window Telegram accepts. Earlier than this the server answers that the date is
+    /// invalid, later than this it refuses the schedule outright.
+    public static let minimumScheduleLead: Int32 = 10
+    public static let maximumScheduleLead: Int32 = 365 * 24 * 60 * 60
 }
 
 public final class AorusPluginSandbox {
@@ -1452,9 +1483,35 @@ public final class AorusPluginSandbox {
                 settle(id, with: .failure(AorusPluginRequestError("Message is empty or too long")))
                 return
             }
-            let replyTo: Int32? = (payload["replyTo"] as? NSNumber).map { $0.int32Value }
+            // Each option is either valid or absent-and-refused. A reply id that does not fit
+            // was silently truncated to a different message before; now it is an error.
+            if payload["replyTo"] != nil, !(payload["replyTo"] is NSNull), int32("replyTo") == nil {
+                settle(id, with: .failure(AorusPluginRequestError("replyTo must be a message id")))
+                return
+            }
+            if payload["threadId"] != nil, !(payload["threadId"] is NSNull), int64("threadId") == nil {
+                settle(id, with: .failure(AorusPluginRequestError("threadId must be a topic id")))
+                return
+            }
+            var scheduleAt: Int32?
+            if payload["scheduleAt"] != nil, !(payload["scheduleAt"] is NSNull) {
+                let now = Int32(Date().timeIntervalSince1970)
+                guard let value = int32("scheduleAt"),
+                      value >= now + AorusPluginSendOptions.minimumScheduleLead,
+                      value <= now + AorusPluginSendOptions.maximumScheduleLead else {
+                    settle(id, with: .failure(AorusPluginRequestError("scheduleAt must be between ten seconds and a year from now")))
+                    return
+                }
+                scheduleAt = value
+            }
+            let options = AorusPluginSendOptions(
+                replyTo: int32("replyTo"),
+                threadId: int64("threadId"),
+                silent: boolean("silent") ?? false,
+                scheduleAt: scheduleAt
+            )
             let entities = AorusPluginTextEntity.validated(payload["entities"] as? [[String: Any]] ?? [], text: text)
-            host.pluginSendMessage(pluginId, peerId: int64("peerId"), toSelf: toSelf, accountId: int64("accountId"), text: text, entities: entities, replyTo: replyTo) { [weak self] result in
+            host.pluginSendMessage(pluginId, peerId: int64("peerId"), toSelf: toSelf, accountId: int64("accountId"), text: text, entities: entities, options: options) { [weak self] result in
                 self?.settle(id, with: result.map { _ -> Any? in nil })
             }
         case "messages.edit":

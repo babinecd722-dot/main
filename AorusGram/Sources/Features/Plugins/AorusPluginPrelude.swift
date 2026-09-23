@@ -234,25 +234,53 @@ public enum AorusPluginPrelude {
         var prefix = '.';
         var commands = {};
         var commandOrder = [];
+        // Other names for a command, pointing at its own name. `.r` for `.remind` is the
+        // same command, so it is listed once and unregistered with it.
+        var commandAliases = {};
+
+        function commandName(value, what) {
+            var key = requireString(value, what).trim().toLowerCase();
+            if (!/^[a-z0-9_][a-z0-9_\\-]{0,31}$/.test(key)) {
+                throw new Error('Command name may contain letters, digits, _ and -, up to 32 characters');
+            }
+            return key;
+        }
 
         function registerCommand(name, handler, options) {
             requireString(name, 'name');
             requireFunction(handler, 'handler');
             var opts = optionalObject(options, 'options');
-            var key = name.trim().toLowerCase();
-            if (!/^[a-z0-9_][a-z0-9_\\-]{0,31}$/.test(key)) {
-                throw new Error('Command name may contain letters, digits, _ and -, up to 32 characters');
+            var key = commandName(name, 'name');
+            var aliases = [];
+            if (opts.aliases !== undefined) {
+                if (!Array.isArray(opts.aliases) || opts.aliases.length > 8) { throw typeError('options.aliases must be an array of up to 8 names'); }
+                for (var a = 0; a < opts.aliases.length; a++) {
+                    var alias = commandName(opts.aliases[a], 'alias');
+                    if (alias === key || aliases.indexOf(alias) !== -1) { continue; }
+                    // A name that is already somebody's command stays theirs. Taking it over
+                    // silently would make `.help` stop doing what it did yesterday.
+                    if (commands.hasOwnProperty(alias)) { throw new Error('Alias is already a command: ' + alias); }
+                    aliases.push(alias);
+                }
             }
+            if (commandAliases.hasOwnProperty(key)) { delete commandAliases[key]; }
             if (!commands.hasOwnProperty(key)) { commandOrder.push(key); }
+            var previous = commands[key];
+            if (previous) {
+                for (var p = 0; p < previous.aliases.length; p++) { delete commandAliases[previous.aliases[p]]; }
+            }
             commands[key] = {
                 name: key,
                 handler: handler,
                 description: typeof opts.description === 'string' ? opts.description : '',
-                usage: typeof opts.usage === 'string' ? opts.usage : ''
+                usage: typeof opts.usage === 'string' ? opts.usage : '',
+                aliases: aliases
             };
+            for (var b = 0; b < aliases.length; b++) { commandAliases[aliases[b]] = key; }
             notifyHooks();
             return function () {
                 if (commands[key] && commands[key].handler === handler) {
+                    for (var c = 0; c < commands[key].aliases.length; c++) { delete commandAliases[commands[key].aliases[c]]; }
                     delete commands[key];
                     commandOrder.splice(commandOrder.indexOf(key), 1);
                     notifyHooks();
@@ -271,7 +299,7 @@ public enum AorusPluginPrelude {
         function listCommands() {
             return commandOrder.map(function (key) {
                 var command = commands[key];
-                return { name: command.name, description: command.description, usage: command.usage };
+                return { name: command.name, description: command.description, usage: command.usage, aliases: command.aliases.slice() };
             });
         }
 
@@ -546,6 +574,9 @@ public enum AorusPluginPrelude {
                 return textPart(value, { type: 'custom_emoji', customEmojiId: requireString(customEmojiId, 'customEmojiId') });
             },
             entity: entityDescriptor,
+            // Telegram's own markup, read into text and entities. See parseMarkdown.
+            markdown: function (source) { return parseMarkdown(source); },
+            escapeMarkdown: function (text) { return escapeMarkdown(text); },
             compose: function (parts) {
                 if (!Array.isArray(parts)) { throw typeError('parts must be an array'); }
                 var text = '';
@@ -571,6 +602,37 @@ public enum AorusPluginPrelude {
                 return { text: text, entities: entities };
             }
         });
+
+        // What a send carries besides its text. Checked here so a wrong value is a TypeError at
+        // the call rather than a rejection somebody has to go looking for.
+        var SCHEDULE_MIN_LEAD = 10000;
+        var SCHEDULE_MAX_LEAD = 365 * 86400000;
+        function sendOptions(opts) {
+            var value = {};
+            if (opts.replyTo !== undefined && opts.replyTo !== null) {
+                var reply = (typeof opts.replyTo === 'object') ? messageReference(opts.replyTo).messageId : Number(opts.replyTo);
+                if (!Number.isSafeInteger(reply) || reply <= 0 || reply > 2147483647) { throw typeError('options.replyTo must be a message or a message id'); }
+                value.replyTo = reply;
+            }
+            if (opts.threadId !== undefined && opts.threadId !== null) {
+                var thread = Number(opts.threadId);
+                if (!Number.isSafeInteger(thread) || thread <= 0) { throw typeError('options.threadId must be a topic id'); }
+                value.threadId = thread;
+            }
+            if (opts.silent !== undefined) {
+                if (typeof opts.silent !== 'boolean') { throw typeError('options.silent must be a boolean'); }
+                value.silent = opts.silent;
+            }
+            if (opts.scheduleAt !== undefined && opts.scheduleAt !== null) {
+                var at = opts.scheduleAt instanceof Date ? opts.scheduleAt.getTime() : Number(opts.scheduleAt);
+                var lead = at - Date.now();
+                if (!isFinite(at) || lead < SCHEDULE_MIN_LEAD || lead > SCHEDULE_MAX_LEAD) {
+                    throw new RangeError('options.scheduleAt must be between ten seconds and a year from now');
+                }
+                value.scheduleAt = Math.floor(at / 1000);
+            }
+            return value;
+        }
 
         // A send payload may be a plain string or the object `text.compose` returns.
         function textPayload(value, fallbackOptions) {
@@ -1281,6 +1343,560 @@ public enum AorusPluginPrelude {
             all: function () { return freeze(JSON.parse(JSON.stringify(i18nTable))); }
         });
 
+        // ---- markdown -----------------------------------------------------------------
+
+        // The markup people already type into Telegram's own composer, turned into the text
+        // and entities `messages.send` takes. Offsets come out in UTF-16 units because that is
+        // what a JavaScript string is indexed in, which is the unit Telegram counts in.
+        //
+        //   **bold**  __italic__  ~~strikethrough~~  ||spoiler||  `code`  ```lang\\npre```
+        //   [label](https://…)  and lines starting with `>` as a quote.
+        //
+        // A marker with no partner is text, not an error: somebody writing `2 ** 3` meant the
+        // asterisks. A backslash makes the next character literal.
+        var MARKDOWN_PAIRS = [['**', 'bold'], ['__', 'italic'], ['~~', 'strikethrough'], ['||', 'spoiler']];
+        var MARKDOWN_LIMIT = 32768;
+        var MARKDOWN_BUDGET = 500000;
+        // Deeper than this, a marker is text. Nobody nests formatting sixteen levels deep on
+        // purpose, and recursion without a floor is a stack that runs out on somebody's input.
+        var MARKDOWN_MAX_DEPTH = 16;
+
+        function parseMarkdown(source) {
+            var src = requireString(source, 'source');
+            if (src.length > MARKDOWN_LIMIT) { throw new RangeError('source is longer than a message can be'); }
+            var out = '';
+            var entities = [];
+            var work = 0;
+
+            function spend() {
+                work += 1;
+                if (work > MARKDOWN_BUDGET) { throw new RangeError('markdown is too deeply ambiguous to read'); }
+            }
+
+            function pairAt(i) {
+                for (var p = 0; p < MARKDOWN_PAIRS.length; p++) {
+                    if (src.substr(i, 2) === MARKDOWN_PAIRS[p][0]) { return MARKDOWN_PAIRS[p]; }
+                }
+                return null;
+            }
+
+            function push(type, start, extra) {
+                var length = out.length - start;
+                if (length <= 0) { return; }
+                var entity = { type: type, offset: start, length: length };
+                if (extra) {
+                    var names = Object.keys(extra);
+                    for (var n = 0; n < names.length; n++) { entity[names[n]] = extra[names[n]]; }
+                }
+                entities.push(entity);
+            }
+
+            function codeBlock(i) {
+                var close = src.indexOf('```', i + 3);
+                if (close === -1) { out += '```'; return i + 3; }
+                var body = src.slice(i + 3, close);
+                var language = null;
+                var newline = body.indexOf('\\n');
+                if (newline !== -1 && /^[A-Za-z0-9_+#.-]{1,32}$/.test(body.slice(0, newline))) {
+                    language = body.slice(0, newline);
+                    body = body.slice(newline + 1);
+                } else if (newline === 0) {
+                    body = body.slice(1);
+                }
+                if (body.slice(-1) === '\\n') { body = body.slice(0, -1); }
+                var start = out.length;
+                out += body;
+                push('pre', start, language ? { language: language } : null);
+                return close + 3;
+            }
+
+            // Reads until `closing` (answering the index after it), until `stop` (answering its
+            // index), or to the end. -1 means `closing` never came, and the caller undoes
+            // whatever this call wrote.
+            //
+            // `open` is every marker still waiting to be closed around this run. Reaching one of
+            // them means this run was never closed: `**a __b** c__` is bold `a __b`, not an
+            // italic that swallows the bold's end. Without that rule every unpartnered marker
+            // re-read the rest of the text, and a line of them took exponential time.
+            function inline(i, closing, stop, depth, open) {
+                while (i < src.length) {
+                    spend();
+                    if (closing !== null && src.substr(i, closing.length) === closing) { return i + closing.length; }
+                    if (closing !== null) {
+                        for (var o = 0; o < open.length; o++) {
+                            if (src.substr(i, open[o].length) === open[o]) { return -1; }
+                        }
+                    }
+                    var ch = src.charAt(i);
+                    if (stop !== null && ch === stop) { return i; }
+                    if (ch === '\\\\' && i + 1 < src.length) { out += src.charAt(i + 1); i += 2; continue; }
+                    if (depth === 0 && ch === '>' && (i === 0 || src.charAt(i - 1) === '\\n')) { i = quote(i); continue; }
+                    if (src.substr(i, 3) === '```') { i = codeBlock(i); continue; }
+                    if (ch === '`') {
+                        var end = src.indexOf('`', i + 1);
+                        if (end > i + 1) {
+                            var codeStart = out.length;
+                            out += src.slice(i + 1, end);
+                            push('code', codeStart);
+                            i = end + 1;
+                            continue;
+                        }
+                    }
+                    if (ch === '[' && depth < MARKDOWN_MAX_DEPTH && src.indexOf('](', i + 1) !== -1) {
+                        var linked = link(i, depth, closing === null ? open : open.concat([closing]));
+                        if (linked !== -1) { i = linked; continue; }
+                    }
+                    var pair = depth < MARKDOWN_MAX_DEPTH ? pairAt(i) : null;
+                    if (pair && src.indexOf(pair[0], i + 2) !== -1) {
+                        var mark = out.length;
+                        var count = entities.length;
+                        var after = inline(i + 2, pair[0], null, depth + 1, closing === null ? open : open.concat([closing]));
+                        if (after !== -1) {
+                            push(pair[1], mark);
+                            i = after;
+                            continue;
+                        }
+                        out = out.slice(0, mark);
+                        entities.length = count;
+                    }
+                    out += ch;
+                    i += 1;
+                }
+                return (closing === null) ? i : -1;
+            }
+
+            function link(i, depth, open) {
+                var mark = out.length;
+                var count = entities.length;
+                var labelEnd = inline(i + 1, null, ']', depth + 1, open);
+                if (labelEnd < src.length && src.charAt(labelEnd) === ']' && src.charAt(labelEnd + 1) === '(') {
+                    var urlEnd = src.indexOf(')', labelEnd + 2);
+                    var url = urlEnd === -1 ? '' : src.slice(labelEnd + 2, urlEnd).trim();
+                    if (url.length > 0 && url.length <= 2048 && !/\\s/.test(url)) {
+                        push('text_link', mark, { url: url });
+                        return urlEnd + 1;
+                    }
+                }
+                out = out.slice(0, mark);
+                entities.length = count;
+                return -1;
+            }
+
+            // Consecutive lines starting with `>` are one quote. The marker and one space after
+            // it are markup; everything else on the line is read as usual.
+            function quote(i) {
+                var start = out.length;
+                while (i < src.length && src.charAt(i) === '>') {
+                    i += 1;
+                    if (src.charAt(i) === ' ') { i += 1; }
+                    i = inline(i, null, '\\n', 1, []);
+                    if (i < src.length && src.charAt(i) === '\\n' && src.charAt(i + 1) === '>') {
+                        out += '\\n';
+                        i += 1;
+                        continue;
+                    }
+                    break;
+                }
+                push('blockquote', start);
+                return i;
+            }
+
+            inline(0, null, null, 0, []);
+            entities.sort(function (a, b) { return a.offset - b.offset || b.length - a.length; });
+            return { text: out, entities: entities };
+        }
+
+        function escapeMarkdown(value) {
+            return String(requireString(value, 'text')).replace(/[\\\\`*_~|\\[\\]()>]/g, '\\\\$&');
+        }
+
+        // ---- small tools --------------------------------------------------------------
+
+        // A promise that settles on this plugin's own timers. `util.sleep` goes out to the app
+        // and back; these never leave the context, so they cost nothing and cannot outlive it.
+        function delay(ms) {
+            return new Promise(function (resolve) { schedule(resolve, ms, false); });
+        }
+
+        var DURATION_UNITS = {
+            ms: 1, s: 1000, sec: 1000, m: 60000, min: 60000, h: 3600000, d: 86400000, w: 604800000,
+            'мс': 1, 'с': 1000, 'сек': 1000, 'м': 60000, 'мин': 60000, 'ч': 3600000, 'д': 86400000, 'н': 604800000
+        };
+
+        // `90s`, `1h30m`, `2д`, `1.5h`. A bare number is milliseconds, which is what every
+        // other call here takes.
+        function parseDuration(value) {
+            if (typeof value === 'number') {
+                if (!isFinite(value) || value < 0) { throw new RangeError('duration must be a non-negative number'); }
+                return Math.floor(value);
+            }
+            var text = requireString(value, 'duration').trim().toLowerCase();
+            if (/^\\d+(\\.\\d+)?$/.test(text)) { return Math.floor(Number(text)); }
+            var pattern = /(\\d+(?:\\.\\d+)?)\\s*([a-zа-я]+)/g;
+            var total = 0;
+            var matched = '';
+            var match;
+            while ((match = pattern.exec(text)) !== null) {
+                var unit = DURATION_UNITS[match[2]];
+                if (unit === undefined) { throw new Error('Unknown duration unit: ' + match[2]); }
+                total += Number(match[1]) * unit;
+                matched += match[0].replace(/\\s+/g, '');
+            }
+            // Everything typed has to have been read. `1h and then some` is not an hour.
+            if (matched.length === 0 || matched !== text.replace(/\\s+/g, '')) { throw new Error('Not a duration: ' + value); }
+            return Math.floor(total);
+        }
+
+        function isRussian() { return String(device.language || 'en').toLowerCase().split('-')[0] === 'ru'; }
+
+        function formatDuration(ms) {
+            var value = Number(ms);
+            if (!isFinite(value) || value < 0) { throw new RangeError('duration must be a non-negative number'); }
+            var ru = isRussian();
+            var parts = [
+                [86400000, ru ? ' д' : 'd'], [3600000, ru ? ' ч' : 'h'],
+                [60000, ru ? ' мин' : 'm'], [1000, ru ? ' с' : 's']
+            ];
+            if (value < 1000) { return Math.floor(value) + (ru ? ' мс' : 'ms'); }
+            var pieces = [];
+            var rest = Math.floor(value);
+            for (var i = 0; i < parts.length && pieces.length < 2; i++) {
+                var amount = Math.floor(rest / parts[i][0]);
+                if (amount > 0) { pieces.push(amount + parts[i][1]); rest -= amount * parts[i][0]; }
+                else if (pieces.length > 0) { break; }
+            }
+            return pieces.join(' ');
+        }
+
+        function formatBytes(bytes) {
+            var value = Number(bytes);
+            if (!isFinite(value) || value < 0) { throw new RangeError('bytes must be a non-negative number'); }
+            var ru = isRussian();
+            var units = ru ? ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'] : ['B', 'KB', 'MB', 'GB', 'TB'];
+            var index = 0;
+            while (value >= 1024 && index < units.length - 1) { value /= 1024; index += 1; }
+            var text = index === 0 ? String(Math.floor(value)) : (value < 10 ? value.toFixed(1) : String(Math.round(value)));
+            if (ru) { text = text.replace('.', ','); }
+            return text + ' ' + units[index];
+        }
+
+        // What a command's arguments are when somebody types them like a shell: words, "quoted
+        // phrases", and --flags. It never throws, because a command should run on what was
+        // typed rather than refuse it for an unclosed quote.
+        function parseArgs(value) {
+            var text = typeof value === 'string' ? value : '';
+            var words = [];
+            var current = '';
+            var quoteChar = null;
+            var started = false;
+            for (var i = 0; i < text.length; i++) {
+                var ch = text.charAt(i);
+                if (ch === '\\\\' && i + 1 < text.length) { current += text.charAt(i + 1); i += 1; started = true; continue; }
+                if (quoteChar !== null) {
+                    if (ch === quoteChar) { quoteChar = null; } else { current += ch; }
+                    continue;
+                }
+                if (ch === '"' || ch === '\\'' || ch === '«') { quoteChar = ch === '«' ? '»' : ch; started = true; continue; }
+                if (/\\s/.test(ch)) {
+                    if (started) { words.push(current); current = ''; started = false; }
+                    continue;
+                }
+                current += ch;
+                started = true;
+            }
+            if (started) { words.push(current); }
+            var positional = [];
+            var flags = {};
+            for (var w = 0; w < words.length; w++) {
+                var word = words[w];
+                var long = /^--([A-Za-z][A-Za-z0-9_-]*)(?:=([\\s\\S]*))?$/.exec(word);
+                if (long) { flags[long[1]] = long[2] === undefined ? true : long[2]; continue; }
+                if (word === '--') { positional = positional.concat(words.slice(w + 1)); break; }
+                if (/^-[A-Za-z]+$/.test(word)) {
+                    for (var c = 1; c < word.length; c++) { flags[word.charAt(c)] = true; }
+                    continue;
+                }
+                positional.push(word);
+            }
+            return { args: positional, flags: flags };
+        }
+
+        function debounce(fn, ms) {
+            requireFunction(fn, 'fn');
+            var wait = Number(ms);
+            if (!isFinite(wait) || wait < 0) { throw new RangeError('ms must be a non-negative number'); }
+            var timer = null;
+            var lastArgs = null;
+            function run() {
+                timer = null;
+                var args = lastArgs;
+                lastArgs = null;
+                try { fn.apply(undefined, args); } catch (error) { reportError('Debounced function failed', error); }
+            }
+            var wrapped = function () {
+                lastArgs = Array.prototype.slice.call(arguments);
+                if (timer !== null) { cancel(timer); }
+                timer = schedule(run, wait, false);
+            };
+            wrapped.cancel = function () { if (timer !== null) { cancel(timer); timer = null; lastArgs = null; } };
+            wrapped.flush = function () { if (timer !== null) { cancel(timer); run(); } };
+            wrapped.pending = function () { return timer !== null; };
+            return freeze(wrapped);
+        }
+
+        function throttle(fn, ms) {
+            requireFunction(fn, 'fn');
+            var wait = Number(ms);
+            if (!isFinite(wait) || wait < 0) { throw new RangeError('ms must be a non-negative number'); }
+            var last = 0;
+            var timer = null;
+            var trailingArgs = null;
+            function invoke(args) {
+                last = Date.now();
+                try { fn.apply(undefined, args); } catch (error) { reportError('Throttled function failed', error); }
+            }
+            var wrapped = function () {
+                var args = Array.prototype.slice.call(arguments);
+                var remaining = wait - (Date.now() - last);
+                if (remaining <= 0 && timer === null) { invoke(args); return; }
+                // The last call inside the window is the one that runs when it closes, so the
+                // final state is never dropped.
+                trailingArgs = args;
+                if (timer === null) {
+                    timer = schedule(function () {
+                        timer = null;
+                        var pending = trailingArgs;
+                        trailingArgs = null;
+                        if (pending) { invoke(pending); }
+                    }, Math.max(0, remaining), false);
+                }
+            };
+            wrapped.cancel = function () { if (timer !== null) { cancel(timer); timer = null; } trailingArgs = null; };
+            return freeze(wrapped);
+        }
+
+        function retry(fn, options) {
+            requireFunction(fn, 'fn');
+            var opts = optionalObject(options, 'options');
+            var attempts = opts.attempts === undefined ? 3 : Number(opts.attempts);
+            if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > 10) { throw new RangeError('options.attempts must be between 1 and 10'); }
+            var first = opts.delay === undefined ? 500 : Number(opts.delay);
+            if (!isFinite(first) || first < 0 || first > 60000) { throw new RangeError('options.delay must be between 0 and 60000'); }
+            var factor = opts.factor === undefined ? 2 : Number(opts.factor);
+            if (!isFinite(factor) || factor < 1 || factor > 10) { throw new RangeError('options.factor must be between 1 and 10'); }
+            var ceiling = opts.maxDelay === undefined ? 30000 : Number(opts.maxDelay);
+            var when = opts.when;
+            if (when !== undefined && typeof when !== 'function') { throw typeError('options.when must be a function'); }
+            return new Promise(function (resolve, reject) {
+                var attempt = 0;
+                function next(wait) {
+                    attempt += 1;
+                    var result;
+                    try { result = Promise.resolve(fn(attempt)); } catch (error) { result = Promise.reject(error); }
+                    result.then(resolve, function (error) {
+                        var again = attempt < attempts;
+                        // A predicate that throws is a predicate that said no: retrying on a
+                        // broken check would hide the error that was the reason to stop.
+                        if (again && when) { try { again = !!when(error, attempt); } catch (ignored) { again = false; } }
+                        if (!again) { reject(error); return; }
+                        delay(wait).then(function () { next(Math.min(ceiling, wait * factor)); });
+                    });
+                }
+                next(first);
+            });
+        }
+
+        function withTimeout(promise, ms, message) {
+            var wait = Number(ms);
+            if (!isFinite(wait) || wait < 0 || wait > 300000) { throw new RangeError('ms must be between 0 and 300000'); }
+            return new Promise(function (resolve, reject) {
+                var timer = schedule(function () {
+                    reject(new Error(typeof message === 'string' ? message : 'Timed out after ' + wait + ' ms'));
+                }, wait, false);
+                Promise.resolve(promise).then(function (value) {
+                    cancel(timer);
+                    resolve(value);
+                }, function (error) {
+                    cancel(timer);
+                    reject(error);
+                });
+            });
+        }
+
+        // ---- the cache ----------------------------------------------------------------
+
+        // Values that stop being true after a while: a rate fetched from a backend, a lookup
+        // that is fine to repeat once an hour. It lives in the plugin's storage, so it survives
+        // a restart and counts against the same megabyte, and `storage.clear` leaves it alone
+        // for the same reason it leaves the schedules alone.
+        var CACHE_KEY = '__aorus.cache';
+        var MAX_CACHE_ENTRIES = 256;
+        var cacheInFlight = {};
+
+        function cacheTable() {
+            var table = storage.getJSON(CACHE_KEY, {});
+            if (table === null || typeof table !== 'object' || Array.isArray(table)) { return {}; }
+            return table;
+        }
+
+        function cacheKey(key) {
+            requireString(key, 'key');
+            if (key.length === 0 || key.length > 256) { throw typeError('key must be 1 to 256 characters'); }
+            return key;
+        }
+
+        function cacheLive(entry, now) {
+            return entry !== null && typeof entry === 'object' && typeof entry.e === 'number' && entry.e > now;
+        }
+
+        function cacheStore(key, value, ttl) {
+            var now = Date.now();
+            var table = cacheTable();
+            var names = Object.keys(table);
+            for (var i = 0; i < names.length; i++) {
+                if (!cacheLive(table[names[i]], now)) { delete table[names[i]]; }
+            }
+            table[key] = { v: value === undefined ? null : value, e: now + ttl };
+            names = Object.keys(table);
+            if (names.length > MAX_CACHE_ENTRIES) {
+                // The ones closest to expiring go first: they were going to anyway.
+                names.sort(function (a, b) { return table[a].e - table[b].e; });
+                for (var j = 0; j < names.length - MAX_CACHE_ENTRIES; j++) { delete table[names[j]]; }
+            }
+            storageWriteRaw(CACHE_KEY, table);
+        }
+
+        function cacheTTL(value) {
+            if (typeof value === 'string') { value = parseDuration(value); }
+            return requireInterval(value, 'ttl');
+        }
+
+        var cacheApi = freeze({
+            get: function (key, fallback) {
+                var entry = cacheTable()[cacheKey(key)];
+                if (!cacheLive(entry, Date.now())) { return fallback; }
+                return JSON.parse(JSON.stringify(entry.v));
+            },
+            has: function (key) { return cacheLive(cacheTable()[cacheKey(key)], Date.now()); },
+            set: function (key, value, ttl) {
+                cacheStore(cacheKey(key), value, cacheTTL(ttl));
+            },
+            // The cached value, or the producer's answer stored for next time. Two calls for
+            // the same key while the first is still working share its answer rather than
+            // asking the backend twice; a producer that fails stores nothing.
+            remember: function (key, ttl, producer) {
+                cacheKey(key);
+                var lifetime = cacheTTL(ttl);
+                requireFunction(producer, 'producer');
+                var entry = cacheTable()[key];
+                if (cacheLive(entry, Date.now())) { return Promise.resolve(JSON.parse(JSON.stringify(entry.v))); }
+                if (cacheInFlight.hasOwnProperty(key)) { return cacheInFlight[key]; }
+                var result;
+                try { result = Promise.resolve(producer()); } catch (error) { result = Promise.reject(error); }
+                var shared = result.then(function (value) {
+                    delete cacheInFlight[key];
+                    cacheStore(key, value, lifetime);
+                    return value;
+                }, function (error) {
+                    delete cacheInFlight[key];
+                    throw error;
+                });
+                cacheInFlight[key] = shared;
+                return shared;
+            },
+            delete: function (key) {
+                var table = cacheTable();
+                if (!table.hasOwnProperty(cacheKey(key))) { return false; }
+                delete table[key];
+                storageWriteRaw(CACHE_KEY, table);
+                return true;
+            },
+            keys: function () {
+                var now = Date.now();
+                var table = cacheTable();
+                return Object.keys(table).filter(function (name) { return cacheLive(table[name], now); });
+            },
+            clear: function () {
+                var count = Object.keys(cacheTable()).length;
+                storageWriteRaw(CACHE_KEY, undefined);
+                return count;
+            }
+        });
+
+        // ---- incoming messages, filtered ------------------------------------------------
+
+        var PEER_KINDS = { 0: 'private', 1: 'group', 2: 'channel' };
+
+        function incomingFilter(value) {
+            var filter = optionalObject(value, 'filter');
+            var test = {};
+            if (filter.peerId !== undefined) {
+                var peers = Array.isArray(filter.peerId) ? filter.peerId : [filter.peerId];
+                test.peers = peers.map(function (peer) {
+                    var id = toPeerId(peer);
+                    if (id === 'me') { throw typeError('filter.peerId must identify a chat'); }
+                    return id;
+                });
+            }
+            if (filter.from !== undefined) {
+                var senders = Array.isArray(filter.from) ? filter.from : [filter.from];
+                test.senders = senders.map(function (sender) {
+                    var id = toPeerId(sender);
+                    if (id === 'me') { throw typeError('filter.from must identify a person'); }
+                    return id;
+                });
+            }
+            if (filter.kind !== undefined) {
+                var kinds = Array.isArray(filter.kind) ? filter.kind : [filter.kind];
+                for (var k = 0; k < kinds.length; k++) {
+                    if (['private', 'group', 'channel'].indexOf(kinds[k]) === -1) {
+                        throw typeError('filter.kind must be private, group or channel');
+                    }
+                }
+                test.kinds = kinds;
+            }
+            if (filter.contains !== undefined) {
+                test.contains = requireString(filter.contains, 'filter.contains').toLowerCase();
+                if (test.contains.length === 0) { throw typeError('filter.contains must not be empty'); }
+            }
+            if (filter.pattern !== undefined) {
+                if (!(filter.pattern instanceof RegExp)) { throw typeError('filter.pattern must be a RegExp'); }
+                // Without `g` and `y`: a sticky or global expression keeps its position between
+                // calls, so the same message would match on one delivery and not the next.
+                test.pattern = new RegExp(filter.pattern.source, filter.pattern.flags.replace(/[gy]/g, ''));
+            }
+            return test;
+        }
+
+        function onIncoming(filter, handler) {
+            var fn = typeof filter === 'function' ? filter : requireFunction(handler, 'handler');
+            var test = typeof filter === 'function' ? {} : incomingFilter(filter);
+            return on('message', function (event) {
+                if (!event) { return; }
+                if (test.peers && test.peers.indexOf(String(event.peerId)) === -1) { return; }
+                if (test.senders && test.senders.indexOf(String(event.senderId)) === -1) { return; }
+                var kind = PEER_KINDS[event.peerKind];
+                if (test.kinds && test.kinds.indexOf(kind) === -1) { return; }
+                var text = typeof event.text === 'string' ? event.text : '';
+                if (test.contains && text.toLowerCase().indexOf(test.contains) === -1) { return; }
+                var match = null;
+                if (test.pattern) {
+                    match = test.pattern.exec(text);
+                    if (match === null) { return; }
+                }
+                return fn(freeze({
+                    accountId: event.accountId,
+                    peerId: event.peerId,
+                    senderId: event.senderId,
+                    kind: kind || null,
+                    text: text,
+                    date: event.date,
+                    message: freeze({ peerId: event.peerId, namespace: event.msgNs, messageId: event.msgId }),
+                    match: match
+                }));
+            });
+        }
+
         // ---- the outgoing text hook -------------------------------------------------------
 
         function runCommand(text, peerId, accountId) {
@@ -1289,11 +1905,22 @@ public enum AorusPluginPrelude {
             var body = trimmed.slice(prefix.length);
             var match = /^([A-Za-z0-9_\\-]+)(?:\\s+([\\s\\S]*))?$/.exec(body);
             if (!match) { return null; }
-            var name = match[1].toLowerCase();
+            var typed = match[1].toLowerCase();
+            var name = commandAliases.hasOwnProperty(typed) ? commandAliases[typed] : typed;
             var command = commands[name];
             if (!command) { return null; }
             var args = match[2] === undefined ? '' : match[2].replace(/\\s+$/, '');
-            var context = freeze({ peerId: peerId, accountId: accountId, raw: text, command: name });
+            // `argv` is the same text read the way a shell reads it, so a command taking
+            // `"a phrase" --flag` does not have to write its own splitter.
+            var parsed = parseArgs(args);
+            var context = freeze({
+                peerId: peerId,
+                accountId: accountId,
+                raw: text,
+                command: name,
+                alias: typed === name ? null : typed,
+                argv: freeze({ args: freeze(parsed.args), flags: freeze(parsed.flags) })
+            });
             var result;
             try {
                 result = command.handler(args, context);
@@ -1588,6 +2215,28 @@ public enum AorusPluginPrelude {
         // and rejects the moment none is, which is what "the current chat" means: there is no
         // last one to fall back on, and pretending otherwise would write a draft into a chat
         // nobody is looking at.
+        // What `chat.current` answers is `{ peerId, title, kind, threadId }`. The calls built on
+        // it read `id`, which it never had, so `currentPeerId` was always null and `sendText`
+        // refused with "No chat is open" in every chat there was. `id` is still accepted, for
+        // anything that hands one of these a record it built itself.
+        function openChatPeerId(chat) {
+            if (!chat || typeof chat !== 'object') { return null; }
+            var value = chat.peerId !== undefined && chat.peerId !== null ? chat.peerId : chat.id;
+            return (value === undefined || value === null) ? null : String(value);
+        }
+
+        // A copy of the caller's options, with the open topic filled in unless the caller named
+        // one. Copied, because the caller's object is theirs.
+        function openChatOptions(options, chat) {
+            var copy = {};
+            var names = Object.keys(options);
+            for (var i = 0; i < names.length; i++) { copy[names[i]] = options[names[i]]; }
+            if (chat && copy.threadId === undefined && chat.threadId !== undefined && chat.threadId !== null) {
+                copy.threadId = Number(chat.threadId);
+            }
+            return copy;
+        }
+
         var chatApi = freeze({
             current: function () { return request('chat.current', {}); },
             draft: function () { return request('chat.draft', {}); },
@@ -1620,12 +2269,13 @@ public enum AorusPluginPrelude {
             // should not have to learn the other one. Nothing below asks for a permission
             // its own name does not already cover.
             currentPeerId: function () {
-                return chatApi.current().then(function (chat) {
-                    return (chat && chat.id !== undefined && chat.id !== null) ? chat.id : null;
-                });
+                return chatApi.current().then(function (chat) { return openChatPeerId(chat); });
             },
+            // `draft` answers the text itself. This read `draft.text` off a string and so
+            // answered '' whatever had been typed.
             draftText: function () {
                 return chatApi.draft().then(function (draft) {
+                    if (typeof draft === 'string') { return draft; }
                     return (draft && typeof draft.text === 'string') ? draft.text : '';
                 });
             },
@@ -1633,18 +2283,24 @@ public enum AorusPluginPrelude {
             insertText: function (text) { return chatApi.insert(text); },
             clearInput: function () { return chatApi.clear(); },
             scrollToMessage: function (message) { return chatApi.scrollTo(message); },
+            // Into the chat on screen, and into the topic on screen when that chat is a forum:
+            // a message typed into a topic and sent to the general thread is in the wrong place.
             sendText: function (text, options) {
-                var opts = optionalObject(options, 'options');
+                var opts = openChatOptions(optionalObject(options, 'options'));
                 return chatApi.current().then(function (chat) {
-                    if (!chat || chat.id === undefined || chat.id === null) { throw new Error('No chat is open'); }
-                    return aorus.messages.send(chat.id, text, opts);
+                    var peerId = openChatPeerId(chat);
+                    if (peerId === null) { throw new Error('No chat is open'); }
+                    return aorus.messages.send(peerId, text, openChatOptions(opts, chat));
                 });
             },
-            replyText: function (message, text) {
+            replyText: function (message, text, options) {
                 var ref = messageReference(message);
+                var opts = openChatOptions(optionalObject(options, 'options'));
+                opts.replyTo = ref.messageId;
                 return chatApi.current().then(function (chat) {
-                    if (!chat || chat.id === undefined || chat.id === null) { throw new Error('No chat is open'); }
-                    return aorus.messages.send(chat.id, text, { replyTo: ref.messageId });
+                    var peerId = openChatPeerId(chat);
+                    if (peerId === null) { throw new Error('No chat is open'); }
+                    return aorus.messages.send(peerId, text, openChatOptions(opts, chat));
                 });
             },
             // The synchronous hook, under both names the document gives it. It is the `send`
@@ -1756,14 +2412,38 @@ public enum AorusPluginPrelude {
                     var target = toPeerId(peerId);
                     var payload = textPayload(text);
                     var opts = optionalObject(options, 'options');
+                    var extra = sendOptions(opts);
                     return request('messages.send', {
                         peerId: target === 'me' ? null : target,
                         toSelf: target === 'me',
                         text: payload.text,
                         entities: payload.entities,
-                        replyTo: typeof opts.replyTo === 'number' ? opts.replyTo : null,
+                        replyTo: extra.replyTo === undefined ? null : extra.replyTo,
+                        threadId: extra.threadId === undefined ? null : extra.threadId,
+                        silent: extra.silent === true,
+                        scheduleAt: extra.scheduleAt === undefined ? null : extra.scheduleAt,
                         accountId: (typeof opts.accountId === 'string' && /^-?\\d+$/.test(opts.accountId)) ? opts.accountId : (typeof opts.accountId === 'number' && Number.isSafeInteger(opts.accountId) ? String(opts.accountId) : null)
                     });
+                },
+                // Handed to Telegram's server to deliver at a time, the same as a message
+                // scheduled from the composer: it arrives whether or not the app is running
+                // then. `when` is a time in milliseconds or a Date.
+                schedule: function (peerId, text, when, options) {
+                    var opts = optionalObject(options, 'options');
+                    var copy = {};
+                    var names = Object.keys(opts);
+                    for (var i = 0; i < names.length; i++) { copy[names[i]] = opts[names[i]]; }
+                    copy.scheduleAt = when;
+                    return aorus.messages.send(peerId, text, copy);
+                },
+                reply: function (message, text, options) {
+                    var ref = messageReference(message);
+                    var opts = optionalObject(options, 'options');
+                    var copy = {};
+                    var names = Object.keys(opts);
+                    for (var i = 0; i < names.length; i++) { copy[names[i]] = opts[names[i]]; }
+                    copy.replyTo = ref.messageId;
+                    return aorus.messages.send(ref.peerId, text, copy);
                 },
                 edit: function (message, text) {
                     var ref = messageReference(message);
@@ -1805,7 +2485,11 @@ public enum AorusPluginPrelude {
                     return request('messages.deleteLocal', messageReference(message));
                 },
                 visible: function (options) { return chatApi.messages(options); },
-                current: function () { return chatApi.current(); }
+                current: function () { return chatApi.current(); },
+                // The `message` event, filtered: by chat, by sender, by kind of chat, by a word
+                // or by a pattern. The handler gets a reference `messages.*` takes directly,
+                // and the pattern's match when there is one.
+                onIncoming: onIncoming
             }),
             chats: freeze({
                 resolve: function (username) {
@@ -2035,6 +2719,7 @@ public enum AorusPluginPrelude {
                 openLink: function (url) { return request('telegram.openLink', { url: requireString(url, 'url') }); }
             }),
             storage: storage,
+            cache: cacheApi,
             settings: settings,
             // A socket that stays open, for a plugin talking to a backend somebody wrote.
             // Frames arrive on the handler given to `open`, and on the `socketMessage`
@@ -2373,7 +3058,22 @@ public enum AorusPluginPrelude {
             }),
             crypto: cryptoApi,
             util: freeze({
-                sleep: function (ms) { return request('util.sleep', { ms: Number(ms) || 0 }); }
+                sleep: function (ms) { return request('util.sleep', { ms: Number(ms) || 0 }); },
+                // Settled on this context's own timers. They count against the same limit as
+                // setTimeout and go away with the plugin.
+                delay: function (ms) {
+                    var wait = Number(ms);
+                    if (!isFinite(wait) || wait < 0 || wait > 86400000) { throw new RangeError('ms must be between 0 and 86400000'); }
+                    return delay(wait);
+                },
+                debounce: debounce,
+                throttle: throttle,
+                retry: retry,
+                timeout: withTimeout,
+                parseDuration: parseDuration,
+                formatDuration: formatDuration,
+                formatBytes: formatBytes,
+                parseArgs: parseArgs
             })
         });
 

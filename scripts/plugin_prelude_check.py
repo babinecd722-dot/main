@@ -325,6 +325,78 @@ check('compose joined the parts wrongly', composed.text === '\u{1F48E} bold');
 check('compose counted an emoji as one unit', composed.entities[0].offset === 3);
 check('compose measured the run wrongly', composed.entities[0].length === 4);
 
+// Markdown: the markup Telegram's composer takes, read into text and UTF-16 entities, with
+// an unpartnered marker left as text rather than refused.
+const md = aorus.text.markdown('\u{1F48E} **b** [l](https://a.example) `c` ||s||');
+check('markdown lost the text', md.text === '\u{1F48E} b l c s');
+check('markdown counted an emoji as one unit', md.entities[0].type === 'bold' && md.entities[0].offset === 3);
+check('markdown lost the link', md.entities[1].type === 'text_link' && md.entities[1].url === 'https://a.example');
+check('markdown lost the code or the spoiler', md.entities[2].type === 'code' && md.entities[3].type === 'spoiler');
+check('markdown ate an unpartnered marker', aorus.text.markdown('2 ** 3').text === '2 ** 3');
+check('markdown nests', aorus.text.markdown('**a __b__ c**').entities.length === 2);
+check('markdown quotes', aorus.text.markdown('> q\nafter').entities[0].type === 'blockquote');
+check('escapeMarkdown does not round-trip', aorus.text.markdown(aorus.text.escapeMarkdown('**x** [y](z)')).text === '**x** [y](z)');
+throws('markdown accepted a non-string', () => aorus.text.markdown(5));
+
+// Small tools, all of them in this context.
+check('parseDuration is wrong', aorus.util.parseDuration('1h30m') === 5400000 && aorus.util.parseDuration('2д') === 172800000);
+throws('parseDuration accepted trailing words', () => aorus.util.parseDuration('1h and more'));
+check('formatDuration is wrong', aorus.util.formatDuration(5400000) === '1h 30m');
+check('formatBytes is wrong', aorus.util.formatBytes(1536) === '1.5 KB');
+const argv = aorus.util.parseArgs('10m "buy milk" --silent --to=ann');
+check('parseArgs lost a quoted phrase', argv.args.length === 2 && argv.args[1] === 'buy milk');
+check('parseArgs lost a flag', argv.flags.silent === true && argv.flags.to === 'ann');
+for (const name of ['delay', 'debounce', 'throttle', 'retry', 'timeout']) {
+    check('util.' + name + ' is missing', typeof aorus.util[name] === 'function');
+}
+throws('retry accepted zero attempts', () => aorus.util.retry(function () {}, { attempts: 0 }));
+
+// The cache lives in storage under the reserved prefix, and expires.
+aorus.cache.set('rate', { usd: 90 }, '1m');
+check('cache.get does not round-trip', aorus.cache.get('rate').usd === 90);
+check('cache.has is wrong', aorus.cache.has('rate') && !aorus.cache.has('missing'));
+check('the cache was not written under the reserved prefix',
+    globalThis.__calls.some((call) => call.name === 'storageWrite' && call.args[0] === '__aorus.cache'));
+check('storage.keys leaks the cache', aorus.storage.keys().indexOf('__aorus.cache') === -1);
+throws('cache.set accepted a sub-second lifetime', () => aorus.cache.set('x', 1, 10));
+check('cache.delete did not delete', aorus.cache.delete('rate') === true && aorus.cache.get('rate', 'gone') === 'gone');
+
+// Incoming messages, filtered before the handler sees them.
+const filtered = [];
+aorus.messages.onIncoming({ kind: 'group', pattern: /^!(\w+)/g }, function (event) { filtered.push(event); });
+globalThis.__dispatcher.dispatch('message', { peerId: '-100', senderId: '5', peerKind: 1, text: '!ping', msgId: 7, msgNs: 0 });
+globalThis.__dispatcher.dispatch('message', { peerId: '-100', senderId: '5', peerKind: 1, text: '!ping', msgId: 8, msgNs: 0 });
+globalThis.__dispatcher.dispatch('message', { peerId: '5', senderId: '5', peerKind: 0, text: '!ping', msgId: 9, msgNs: 0 });
+check('onIncoming did not filter by kind, or a global pattern alternated', filtered.length === 2);
+check('onIncoming lost the match', filtered.length > 0 && filtered[0].match[1] === 'ping');
+check('onIncoming did not hand back a message reference', filtered.length > 0 && filtered[0].message.messageId === 7);
+throws('onIncoming accepted an unknown kind', () => aorus.messages.onIncoming({ kind: 'forum' }, function () {}));
+
+// Commands: an alias reaches the same handler, and the arguments arrive parsed.
+let commandContext = null;
+aorus.commands.register('remind', function (args, context) { commandContext = context; return false; }, { aliases: ['r'] });
+globalThis.__dispatcher.runOutgoing('.r 10m "buy milk" --silent', '5', null);
+check('an alias did not reach its command', commandContext !== null && commandContext.command === 'remind');
+check('the alias was not named', commandContext !== null && commandContext.alias === 'r');
+check('argv was not parsed', commandContext !== null && commandContext.argv.args[1] === 'buy milk' && commandContext.argv.flags.silent === true);
+check('commands.list does not show aliases', aorus.commands.list().filter((c) => c.name === 'remind')[0].aliases[0] === 'r');
+throws('an alias took over another command', () => aorus.commands.register('other', function () {}, { aliases: ['remind'] }));
+
+// Send options are checked before they cross, and cross in the host's units.
+aorus.messages.send('-100', 'hi', { replyTo: { peerId: '-100', namespace: 0, messageId: 12 }, threadId: 3, silent: true });
+const sentWithOptions = lastRequest('messages.send');
+check('replyTo did not accept a message reference', sentWithOptions.replyTo === 12);
+check('threadId or silent was dropped', sentWithOptions.threadId === 3 && sentWithOptions.silent === true);
+aorus.messages.schedule('me', 'later', Date.now() + 3600000);
+const scheduled = lastRequest('messages.send');
+check('messages.schedule did not send seconds an hour ahead',
+    scheduled.scheduleAt > Date.now() / 1000 + 3500 && scheduled.scheduleAt <= Date.now() / 1000 + 3600);
+throws('scheduleAt accepted the past', () => aorus.messages.send('me', 'x', { scheduleAt: Date.now() - 1000 }));
+throws('scheduleAt accepted more than a year', () => aorus.messages.send('me', 'x', { scheduleAt: Date.now() + 400 * 86400000 }));
+throws('silent accepted a non-boolean', () => aorus.messages.send('me', 'x', { silent: 'yes' }));
+aorus.messages.reply({ peerId: '-100', namespace: 0, messageId: 5 }, 'answer');
+check('messages.reply did not reply in the message\'s chat', lastRequest('messages.send').peerId === '-100' && lastRequest('messages.send').replyTo === 5);
+
 // The runtime answers about itself.
 check('runtime.pluginId is missing', aorus.runtime.pluginId === 'test');
 check('runtime.hasPermission is wrong', aorus.runtime.hasPermission('sendMessages') === true);
@@ -389,13 +461,34 @@ aorus.chat.current().then(function (value) {
 
     // `sendText` is the current chat plus `messages.send`, so it must ask which chat is open
     // and then send there — and refuse when none is, rather than sending somewhere else.
-    globalThis.__answers['chat.current'] = { peerId: '5', id: '5', title: 'Team', kind: 'group' };
-    return aorus.chat.sendText('hi').then(function () {
+    //
+    // The answer is the shape the app really gives: `peerId`, never `id`. A stub that answered
+    // both let `sendText` read a field the app never sends, and every one of these checks
+    // passed while the call refused in every chat on a device.
+    globalThis.__answers['chat.current'] = { peerId: '5', title: 'Team', kind: 'group' };
+    delete globalThis.__requestFailures['chat.draft'];
+    globalThis.__answers['chat.draft'] = 'typed so far';
+    return aorus.chat.currentPeerId().then(function (peerId) {
+        check('chat.currentPeerId did not read peerId', peerId === '5');
+        return aorus.chat.draftText();
+    }).then(function (draft) {
+        check('chat.draftText did not answer the text', draft === 'typed so far');
+        return aorus.chat.sendText('hi');
+    }).then(function () {
         check('chat.sendText did not send to the open chat', lastRequest('messages.send').peerId === '5');
         check('chat.sendText did not send its text', lastRequest('messages.send').text === 'hi');
+        check('chat.sendText invented a topic', lastRequest('messages.send').threadId === null);
         return aorus.chat.replyText({ peerId: '5', namespace: 0, messageId: 9 }, 'answer');
     }).then(function () {
         check('chat.replyText did not reply to the message', lastRequest('messages.send').replyTo === 9);
+        // A forum topic on screen is where the message goes.
+        globalThis.__answers['chat.current'] = { peerId: '-1007', title: 'Forum', kind: 'community', threadId: '44' };
+        return aorus.chat.sendText('in the topic');
+    }).then(function () {
+        check('chat.sendText did not post into the open topic', lastRequest('messages.send').threadId === 44);
+        return aorus.chat.sendText('elsewhere', { threadId: 3 });
+    }).then(function () {
+        check('an explicit topic was overridden by the open one', lastRequest('messages.send').threadId === 3);
         globalThis.__answers['chat.current'] = null;
         return aorus.chat.sendText('nowhere').then(
             function () { problems.push('chat.sendText sent with no chat open'); },
