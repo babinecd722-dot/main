@@ -836,6 +836,9 @@ jobs:
           #    three calls into this file are injected by aorus_branding.py.
           cp $PATCHES/submodules/TelegramUI/Sources/AorusPluginChatAdapter.swift $TG/submodules/TelegramUI/Sources/
           cp $PATCHES/submodules/TelegramUI/Sources/AorusPluginOverlayHost.swift $TG/submodules/TelegramUI/Sources/
+          # The two install functions patch_plugin_hook_sites calls from the chat controller.
+          # Without this file the call sites are injected and nothing defines them.
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusPluginHookInstall.swift $TG/submodules/TelegramUI/Sources/
 
           # 8. Copy the AorusGram SOCKS5 call-proxy reader into TelegramCallsUI (the
           #    call-start sites are patched to use it by aorus_branding.py).

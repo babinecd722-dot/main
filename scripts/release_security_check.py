@@ -1160,6 +1160,7 @@ def main() -> int:
     check_missing_override(root, errors)
     check_corefoundation_casts(root, errors)
     check_plugin_boundary(root, errors)
+    check_patch_injection(root, workflow, errors)
 
     if errors:
         print("Release security check failed:")
@@ -1556,6 +1557,38 @@ def check_ambiguous_timer(root: Path, errors: list[str]) -> None:
                 line = stripped.count("\n", 0, match.start()) + 1
                 fail(errors, f"{path.relative_to(root)}:{line}: Timer is ambiguous in a file "
                              f"that imports SwiftSignalKit — write Foundation.Timer")
+
+
+# Modules the workflow copies as whole directories. Everything else under patches/submodules is
+# a single file dropped into one of Telegram's own modules, and each of those is copied by name.
+_WHOLE_PATCH_MODULES = ("AorusGram", "AorusGramUI", "AorusBadge", "AorusMaskPicker")
+_PATCH_COPY = re.compile(r"^\s*cp\s+\$PATCHES/submodules/(\S+)", re.MULTILINE)
+
+
+def check_patch_injection(root: Path, workflow: str, errors: list[str]) -> None:
+    """Every single-file patch is copied into the tree, and every copy names a real file.
+
+    A file here that the workflow never copies is compiled by nobody, and the calls the
+    branding script injects into Telegram then name a function that does not exist. Bazel
+    reports that forty minutes in; this reports it before the checkout.
+    """
+    patches = root / "patches/submodules"
+    if not patches.is_dir():
+        return
+    copied = set(_PATCH_COPY.findall(workflow))
+    for source in sorted(patches.rglob("*.swift")):
+        relative = source.relative_to(patches).as_posix()
+        if relative.split("/", 1)[0] in _WHOLE_PATCH_MODULES:
+            continue
+        if relative not in copied:
+            fail(
+                errors,
+                f"patches/submodules/{relative} is never copied into telegram-ios: add a cp line "
+                f"to the Inject AorusGram sources step, or delete the file",
+            )
+    for relative in sorted(copied):
+        if relative.endswith(".swift") and not (patches / relative).is_file():
+            fail(errors, f"the workflow copies patches/submodules/{relative}, which does not exist")
 
 
 def check_mirrored_sources(root: Path, errors: list[str]) -> None:
