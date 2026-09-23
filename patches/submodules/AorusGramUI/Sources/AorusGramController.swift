@@ -1135,7 +1135,10 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .proxyDiagnostics(theme, l10n.proxyDiagnostics), // AORUS-DIAG
     ]
 
-    let shortcuts = AorusPluginRuntimeManager.shared.pluginSettingsShortcuts().prefix(24)
+    // Only the shortcuts placed in a section of this screen. One placed in Telegram's own
+    // settings list (`plugins`, the default) is drawn there, by the settings screen, and
+    // drawing it here as well is what showed every shortcut twice.
+    let shortcuts = AorusPluginRuntimeManager.shared.pluginSettingsShortcuts().filter { !$0.shortcut.isInTelegramSettings }.prefix(24)
     for (offset, item) in shortcuts.enumerated() {
         let placement = item.shortcut.placement
         let anchor = entries.firstIndex(where: { entry in
@@ -1143,8 +1146,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
             case ("privacy", .privacyHeader), ("interface", .uiHeader),
                  ("tabs", .tabsHeader), ("messages", .editLocalHeader),
                  ("calls", .callsHeader), ("wall", .wallHeader),
-                 ("aorusCode", .aorusCodeHeader), ("other", .misc),
-                 ("plugins", .plugins):
+                 ("aorusCode", .aorusCodeHeader), ("other", .misc):
                 return true
             default: return false
             }

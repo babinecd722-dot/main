@@ -125,6 +125,21 @@ for key in aorusAITimelineKeys where parameterised[key] == nil {
     expect(!template.contains("{"), "key \(key) carries a placeholder nothing fills")
 }
 
+// thread.title (contract addendum V2, section A): the name is kept as the gateway sent it,
+// and only a title that names nothing, or no turn, is refused.
+let named = AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "Hello Who Are You", "lang": "en"])
+expect(named?.turnId == "t-1" && named?.title == "Hello Who Are You", "a title is taken as sent")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "  \"Trip to Rome\"  "])?.title == "Trip to Rome", "quotes around a title are not part of it")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "«Поездка в Рим»"])?.title == "Поездка в Рим", "guillemets around a title are not part of it")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "Rock'n'roll"])?.title == "Rock'n'roll", "an apostrophe inside a title stays")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "First line\nsecond line"])?.title == "First line", "a title is one line")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "   "]) == nil, "an empty title keeps the placeholder")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "\"\""]) == nil, "a title of quotes alone keeps the placeholder")
+expect(AorusAIThreadTitle.decode(["turn_id": "", "title": "Hello"]) == nil, "a title for no turn is refused")
+expect(AorusAIThreadTitle.decode(["title": "Hello"]) == nil, "a title without a turn is refused")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": String(repeating: "a", count: 400)])?.title.count == AorusAIThreadTitle.maximumLength, "an over-long title is cut to the ceiling")
+expect(AorusAIThreadTitle.decode(["turn_id": "t-1", "title": "Ok"])?.title == "Ok", "a short title the contract did not promise is still shown")
+
 if failures == 0 {
     print("AorusAI timeline tests: OK")
 } else {

@@ -3237,6 +3237,18 @@ public enum AorusPluginPrelude {
         publish('setInterval', function (callback, delay) { return schedule.apply(undefined, [callback, delay, true].concat(Array.prototype.slice.call(arguments, 2))); });
         publish('clearTimeout', cancel);
         publish('clearInterval', cancel);
+        // What a source with `await` at its top level runs inside (the sandbox wraps it as the
+        // body of an async function). A rejection anywhere in that body is the plugin's own
+        // error and reaches the console the way an error thrown from a handler does. Not
+        // enumerable: it is plumbing, not part of the API.
+        Object.defineProperty(globalThis, '__aorusTopLevel', {
+            value: function (promise) {
+                Promise.resolve(promise).then(undefined, function (error) { reportError('main.js', error); });
+            },
+            writable: false,
+            configurable: false,
+            enumerable: false
+        });
 
         host.registerDispatcher(freeze({
             dispatch: function (event, payload) { emit(event, payload === undefined ? undefined : freeze(payload)); },

@@ -779,7 +779,11 @@ public final class AorusPluginSandbox {
             }
             self.setState(running: true, hung: false, error: .some(nil))
             self.pendingException = nil
-            context.evaluateScript(self.source, withSourceURL: URL(string: "aorus://main.js"))
+            let executable = AorusPluginSandbox.executableSource(self.source)
+            if executable != self.source {
+                self.record(.debug, "Top-level await: the plugin runs as the body of an async function")
+            }
+            context.evaluateScript(executable, withSourceURL: URL(string: "aorus://main.js"))
             if let exception = self.pendingException {
                 let line = exception.forProperty("line").isNumber ? Int(exception.forProperty("line").toInt32()) : nil
                 let message = AorusPluginSandbox.describe(exception: exception)
@@ -1021,6 +1025,11 @@ public final class AorusPluginSandbox {
 
     /// Evaluates a snippet in the running context and describes the result. For the console
     /// in the editor.
+    ///
+    /// `await` works at the top of a snippet, as it does in a plugin's own source: the
+    /// snippet runs as the body of an async function, and the answer is what it settles to
+    /// rather than a Promise. A single expression gives its value, so `await
+    /// aorus.effects.start('a', 'snow')` prints the effect's answer.
     public func runSnippet(_ code: String, completion: @escaping (Result<String, AorusPluginRunError>) -> Void) {
         queue.async {
             guard let context = self.context else {
@@ -1028,25 +1037,110 @@ public final class AorusPluginSandbox {
                 return
             }
             self.pendingException = nil
-            let result = context.evaluateScript(code, withSourceURL: URL(string: "aorus://console.js"))
+            let prepared = AorusPluginSandbox.consoleSource(code)
+            let result = context.evaluateScript(prepared.source, withSourceURL: URL(string: "aorus://console.js"))
             if let exception = self.pendingException {
-                let message = AorusPluginSandbox.describe(exception: exception)
-                if message.contains("execution terminated") {
-                    completion(.failure(.terminated))
-                } else {
-                    let line = exception.forProperty("line").isNumber ? Int(exception.forProperty("line").toInt32()) : nil
-                    completion(.failure(.runtime(message: message, line: line)))
-                }
+                completion(.failure(AorusPluginSandbox.runError(from: exception)))
                 return
             }
-            completion(.success(AorusPluginSandbox.describe(result: result, in: context)))
+            guard prepared.isAsync, let promise = result, promise.isObject,
+                  let then = promise.forProperty("then"), then.isObject else {
+                completion(.success(AorusPluginSandbox.describe(result: result, in: context)))
+                return
+            }
+            // Settled on this queue: the promise resolves when the host answers, and every
+            // host answer is delivered here. Whichever of the two handlers or the time limit
+            // comes first answers the console; the others find it already answered.
+            var answered = false
+            let finish: (Result<String, AorusPluginRunError>) -> Void = { outcome in
+                guard !answered else { return }
+                answered = true
+                completion(outcome)
+            }
+            let fulfilled: @convention(block) (JSValue) -> Void = { value in
+                finish(.success(AorusPluginSandbox.describe(result: value, in: context)))
+            }
+            let rejected: @convention(block) (JSValue) -> Void = { error in
+                finish(.failure(AorusPluginSandbox.runError(from: error)))
+            }
+            promise.invokeMethod("then", withArguments: [
+                JSValue(object: fulfilled, in: context) as Any,
+                JSValue(object: rejected, in: context) as Any
+            ])
+            self.queue.asyncAfter(deadline: .now() + AorusPluginSandbox.consoleAwaitLimit) {
+                finish(.success("Promise { <pending> }"))
+            }
         }
+    }
+
+    /// How long the console waits for an awaited snippet before it says the promise is still
+    /// pending. The snippet goes on running; only the console stops waiting.
+    static let consoleAwaitLimit: TimeInterval = 15
+
+    private static func runError(from exception: JSValue) -> AorusPluginRunError {
+        let message = AorusPluginSandbox.describe(exception: exception)
+        if message.contains("execution terminated") {
+            return .terminated
+        }
+        let line = exception.forProperty("line").isNumber ? Int(exception.forProperty("line").toInt32()) : nil
+        return .runtime(message: message, line: line)
+    }
+
+    // MARK: - Top-level await
+
+    /// The body a plugin's source is wrapped in when it uses `await` outside any function.
+    ///
+    /// A plugin's source is run as a classic script, and in a classic script `await` is an
+    /// ordinary name: `await aorus.effects.start(...)` on the first line is a syntax error,
+    /// "Unexpected identifier 'aorus'", and the plugin never starts. Every example in the
+    /// documentation is written that way, because that is how the calls read best. So a
+    /// source that needs it runs as the body of an async function instead. The wrapper opens
+    /// on the source's own first line, so every line number an error reports is still the
+    /// line the person wrote; a rejection anywhere in that body goes to the console.
+    ///
+    /// Declarations in a wrapped source are the function's rather than the global object's.
+    /// Nothing in the runtime looks a plugin's functions up by name, so nothing is lost.
+    static func topLevelBody(_ source: String) -> String {
+        return "__aorusTopLevel((async function () {" + source + "\n})());"
+    }
+
+    /// What is actually evaluated for a plugin's source: the source itself, or, when it only
+    /// parses as the body of an async function, that body.
+    public static func executableSource(_ source: String) -> String {
+        guard source.contains("await"), !syntaxDiagnostics(source).isEmpty else { return source }
+        let body = topLevelBody(source)
+        return syntaxDiagnostics(body).isEmpty ? body : source
+    }
+
+    /// The console's form of a snippet. An expression is returned as the async function's
+    /// value, so what it settles to is printed; statements run as its body.
+    static func consoleSource(_ code: String) -> (source: String, isAsync: Bool) {
+        guard code.contains("await"), !syntaxDiagnostics(code).isEmpty else { return (code, false) }
+        var expression = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        while expression.hasSuffix(";") {
+            expression = String(expression.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let asExpression = "(async function () { return (\n" + expression + "\n); })()"
+        if syntaxDiagnostics(asExpression).isEmpty { return (asExpression, true) }
+        let asStatements = "(async function () {" + code + "\n})()"
+        if syntaxDiagnostics(asStatements).isEmpty { return (asStatements, true) }
+        return (code, false)
     }
 
     // MARK: - Syntax
 
     /// Parses without running. Line and column are what JavaScriptCore reports, 1-based.
+    ///
+    /// A source that uses `await` at the top level is valid: it is run as the body of an async
+    /// function (see `executableSource`), so it is checked as one. Any other error is reported
+    /// exactly as the source has it.
     public static func checkSyntax(_ source: String) -> [AorusPluginDiagnostic] {
+        let diagnostics = syntaxDiagnostics(source)
+        guard !diagnostics.isEmpty, source.contains("await") else { return diagnostics }
+        return syntaxDiagnostics(topLevelBody(source)).isEmpty ? [] : diagnostics
+    }
+
+    private static func syntaxDiagnostics(_ source: String) -> [AorusPluginDiagnostic] {
         guard let context = JSContext() else { return [] }
         let script = JSStringCreateWithCFString(source as CFString)
         defer { JSStringRelease(script) }

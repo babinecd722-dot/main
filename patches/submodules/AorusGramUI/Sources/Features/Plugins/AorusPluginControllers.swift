@@ -1399,6 +1399,11 @@ private enum AorusPluginDocumentation {
             aorus.on('foreground', handler)
             aorus.on('background', handler)
 
+            Верхний уровень
+            await можно писать прямо на верхнем уровне файла плагина, без обёртки в функцию:
+            await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
+            Такой файл выполняется как тело асинхронной функции. Номера строк в ошибках совпадают с вашими, а ошибка после await попадает в консоль. Обработчики aorus.on регистрируйте до первого await: событие start приходит сразу после того, как файл дошёл до первого ожидания.
+
             События
             aorus.on(event, handler) возвращает функцию отписки. Также доступны aorus.once и aorus.off.
             message: { accountId, peerId, senderId, msgId, msgNs, peerKind, text, date }
@@ -1415,6 +1420,10 @@ private enum AorusPluginDocumentation {
             Сообщения и чаты
             Идентификаторы peerId и accountId передаются десятичными строками без потери точности.
             await aorus.messages.send(peerId, text)
+            await aorus.messages.send(peerId, text, { replyTo: 123, threadId: 7, silent: true, scheduleAt: Date.now() + 3600000 })
+            await aorus.messages.reply(message, 'Ответ')
+            await aorus.messages.schedule('me', 'Позвонить маме', new Date(2026, 9, 1, 9, 0))
+            aorus.messages.onIncoming({ kind: 'group', contains: 'срочно', pattern: /^!([a-z]+)/ }, event => aorus.messages.reply(event.message, 'Принято'))
             const message = { peerId, namespace, messageId }
             await aorus.messages.edit(message, 'Новый текст')
             await aorus.messages.delete(message, { forEveryone: true })
@@ -1427,7 +1436,7 @@ private enum AorusPluginDocumentation {
             await aorus.chats.open(peerId)
             await aorus.account.current()
             await aorus.telegram.openLink('tg://resolve?domain=telegram')
-            Используйте 'me' вместо peerId для текущего сохранённого чата. История требует отдельного разрешения и возвращает очищенные поля id, namespace, peerId, senderId, text, date, incoming и hasMedia. Эти peerId, namespace и id образуют ссылку на сообщение для edit/delete/forward/react. Перед действием клиент проверяет наличие сообщения локально, а права на изменение проверяет Telegram. Один запрос истории ограничен 100 сообщениями и 128 000 символами. Telegram-ссылки открываются нативной навигацией. Отправка всегда выполняется только от активного аккаунта; подмена accountId отклоняется.
+            Используйте 'me' вместо peerId для текущего сохранённого чата. История требует отдельного разрешения и возвращает очищенные поля id, namespace, peerId, senderId, text, date, incoming и hasMedia. Эти peerId, namespace и id образуют ссылку на сообщение для edit/delete/forward/react. Перед действием клиент проверяет наличие сообщения локально, а права на изменение проверяет Telegram. Один запрос истории ограничен 100 сообщениями и 128 000 символами. Telegram-ссылки открываются нативной навигацией. Отправка всегда выполняется только от активного аккаунта; подмена accountId отклоняется. scheduleAt ставит сообщение в отложенные на сервере Telegram, от десяти секунд до года вперёд; silent отправляет без звука. onIncoming получает входящие, прошедшие фильтр по типу чата, чату, отправителю, подстроке и регулярному выражению, и требует разрешения на входящие сообщения.
 
             Хранилище и настройки
             aorus.storage.get(key)
@@ -1452,6 +1461,46 @@ private enum AorusPluginDocumentation {
             await aorus.ui.confirm(title, text)
             await aorus.ui.prompt(title, text)
             aorus.ui.haptic('light')
+            Вибрация: light, medium, heavy, soft, rigid, selection, success, warning, error.
+
+            Эффекты на экране
+            Анимация поверх всего приложения, выше всех окон и клавиатуры. Касания проходят сквозь неё.
+            Непрерывный эффект включается start и выключается stop. id выбираете вы; повторный start с тем же id меняет параметры, а не добавляет второй эффект:
+            await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
+            await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
+            await aorus.effects.stop('winter')
+            Так же включается каждый эффект:
+            await aorus.effects.start('rain', 'rain', { wind: -0.3 })
+            await aorus.effects.start('autumn', 'leaves')
+            await aorus.effects.start('party', 'confetti', { colors: ['FF2D55', 'FFD60A', '30D158'] })
+            await aorus.effects.start('salute', 'fireworks')
+            await aorus.effects.start('love', 'hearts')
+            await aorus.effects.start('soap', 'bubbles')
+            await aorus.effects.start('magic', 'sparkles')
+            await aorus.effects.start('hyper', 'warp')
+            await aorus.effects.start('rockets', 'emoji', { emoji: ['🚀', '✨'], rising: true })
+            await aorus.effects.start('flurry', 'snow', { duration: 60000 })
+            await aorus.effects.stopAll()
+            Короткая запись снега: aorus.effects.snow(options), выключается aorus.effects.stop('snow'). Функции set нет.
+            Разовые эффекты приложение убирает само:
+            await aorus.effects.burst('confetti', { x: 0.5, y: 0.4 })
+            await aorus.effects.confetti()
+            await aorus.effects.celebrate()
+            await aorus.effects.flash({ color: 'FF3B30', opacity: 0.4 })
+            await aorus.effects.shake({ intensity: 1.2 })
+            await aorus.effects.ripple({ x: 0.5, y: 0.5, color: '3BA3FF' })
+            await aorus.effects.glow({ colors: ['7B61FF', '3BA3FF'], pulses: 3 })
+            aorus.effects.presets()
+            Эффекты: snow (снегопад в четыре слоя глубины), rain, confetti, fireworks (ракеты со следом и залпы), hearts, bubbles, sparkles, leaves, warp, emoji.
+            Параметры: intensity от 0.1 до 3 (сколько частиц), speed и size от 0.25 до 3, wind от -1 до 1 (плюс сносит вправо), color или colors в формате RRGGBB, emoji и rising для emoji и leaves, x и y от 0 до 1 для burst и ripple, duration в миллисекундах (0 значит «пока не остановят», иначе до десяти минут). Числа ограничиваются, а не отклоняются.
+            Ответ { ok, shown, reason, id }. shown: false — не ошибка, а причина в reason: reduceMotion (залпы, волны и тряска при «Уменьшении движения»), thermal (телефон перегрет), background и noScreen (эффект начнётся сам, когда приложение откроют), rateLimited (вспышка чаще раза в треть секунды), tooMany (три эффекта на плагин, шесть на все), notRunning (stop для эффекта, которого нет).
+            При «Уменьшении движения» непрерывный эффект идёт спокойнее: один слой, медленнее, без покачивания и вращения. При экономии заряда частиц вдвое меньше, при перегреве они редеют. Всё нарисованное исчезает, когда плагин останавливается. Нужно разрешение «Эффекты на экране».
+
+            Цвета
+            aorus.color.parse('#5B4DFF'), aorus.color.hex(r, g, b), aorus.color.hsl(h, s, l), aorus.color.toHsl(color)
+            aorus.color.lighten(color, 0.1), aorus.color.darken(color, 0.1), aorus.color.mix(a, b, 0.5)
+            aorus.color.readable(color), aorus.color.isDark(color), aorus.color.palette('5B4DFF', 6), aorus.color.random()
+            Цвета — строки RRGGBB; их напрямую принимают effects и ui. readable выбирает цвет текста с достаточным контрастом.
 
             Нативные страницы
             aorus.ui.definePages([{ id: 'main', title: 'Помощник', sections: [{ title: 'Ответ', rows: [{ id: 'enabled', type: 'toggle', title: 'Включено', value: true }, { id: 'run', type: 'button', title: 'Запустить', icon: 'bolt.fill' }] }] }])
@@ -1475,7 +1524,11 @@ private enum AorusPluginDocumentation {
             await aorus.app.share({ text: 'Готово', url: 'https://example.com' })
             aorus.app.haptic('light')
 
-            App API дает безопасный доступ к состоянию интерфейса, текущему аккаунту, навигации по чатам, браузеру, системному меню отправки и тактильному отклику. Действия проходят через проверяемый нативный broker и отдельные разрешения.
+            App API дает безопасный доступ к состоянию интерфейса, текущему аккаунту, навигации по чатам, страницам сайтов, системному меню отправки и тактильному отклику. Действия проходят через проверяемый нативный broker и отдельные разрешения.
+
+            Страница сайта
+            aorus.app.openURL, aorus.ui.openURL, aorus.browser.open, строка link и ярлык с url открывают сайт не в Safari, а страницей внутри приложения: с панелью навигации приложения, в его теме и с названием сайта в заголовке. Адреса нет нигде — ни строки адреса, ни домена, ни меню ссылки по долгому нажатию, ни «Открыть в Safari».
+            Cookie и данные сайтов хранятся на диске: вход на сайт сохраняется между открытиями и после перезапуска. Свайп от края идёт назад по истории сайта, а когда идти некуда — закрывает страницу. Потянуть вниз — обновить. Ссылки t.me открываются в Telegram, tel:, mailto: и App Store — только по нажатию. Каждый переход проверяется: loopback, локальная сеть и служебные домены AorusGram отклоняются.
 
             Аккаунты
             const accounts = await aorus.accounts.list()
@@ -1516,7 +1569,7 @@ private enum AorusPluginDocumentation {
 
             Интеграции
             aorus.integrations.settings.register({ id: 'youtube', title: 'YouTube', icon: 'play.rectangle.fill', url: 'https://youtube.com', placement: 'interface' })
-            Ярлык содержит ровно одно из полей pageId или url и появляется в основных настройках, но не в списке плагинов. placement: plugins (по умолчанию), privacy, interface, tabs, messages, calls, wall, aorusCode или other. Для url нужна выдача разрешения встроенного браузера при включении плагина. loopback, локальная сеть и служебные домены AorusGram заблокированы.
+            Ярлык содержит ровно одно из полей pageId или url и показывается ровно в одном месте, по placement: plugins (по умолчанию) — основные настройки Telegram рядом со входом в AorusGram; privacy, interface, tabs, messages, calls, wall, aorusCode или other — соответствующий блок настроек AorusGram, и только он. В списке плагинов ярлыков нет. Ярлык с url открывает сайт страницей внутри приложения и требует разрешения встроенного браузера. loopback, локальная сеть и служебные домены AorusGram заблокированы.
             aorus.integrations.contextMenu.register({ id: 'reply', title: 'Подготовить ответ', icon: 'message.fill' })
             При выборе приходит aorus.on('contextAction', event) с actionId, source и, когда выбрано одно сообщение, peerId, namespace, messageId и text. События новых сообщений требуют отдельного разрешения. В меню одновременно показываются не более четырёх действий плагинов.
 
@@ -1562,6 +1615,13 @@ private enum AorusPluginDocumentation {
             aorus.crypto.randomUUID()
             aorus.crypto.randomBytes(count)
             aorus.crypto.base64Encode(text) / base64Decode(text)
+            aorus.cache.set('rate', { usd: 92.4 }, '10m'), aorus.cache.get(key, fallback), aorus.cache.has(key)
+            const rate = await aorus.cache.remember('rate', '10m', async () => (await aorus.http.fetch(url)).json())
+            await aorus.util.retry(fn, { attempts: 3, delay: 500 })
+            await aorus.util.timeout(promise, 5000)
+            aorus.util.debounce(fn, ms), aorus.util.throttle(fn, ms)
+            aorus.util.parseDuration('1h30m'), aorus.util.formatDuration(ms), aorus.util.formatBytes(bytes), aorus.util.parseArgs(text)
+            Кэш живёт в хранилище плагина и переживает перезапуск; время жизни — миллисекунды или строка вроде '90s', '10m', '1h30m'.
             Доступны console.log/info/warn/error/debug, setTimeout, setInterval и функции отмены таймеров.
 
             Безопасность
@@ -1583,6 +1643,11 @@ private enum AorusPluginDocumentation {
     aorus.on('foreground', handler)
     aorus.on('background', handler)
 
+    Top level
+    await works directly at the top level of a plugin file, with no wrapper function:
+    await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
+    Such a file runs as the body of an async function. Error line numbers stay yours, and an error after an await goes to the console. Register aorus.on handlers before the first await: start is delivered as soon as the file reaches its first wait.
+
     Events
     aorus.on(event, handler) returns an unsubscribe function. aorus.once and aorus.off are also available.
     message: { accountId, peerId, senderId, msgId, msgNs, peerKind, text, date }
@@ -1599,6 +1664,10 @@ private enum AorusPluginDocumentation {
     Messages and chats
     peerId and accountId values are decimal strings so 64-bit identifiers remain exact.
     await aorus.messages.send(peerId, text)
+    await aorus.messages.send(peerId, text, { replyTo: 123, threadId: 7, silent: true, scheduleAt: Date.now() + 3600000 })
+    await aorus.messages.reply(message, 'Reply')
+    await aorus.messages.schedule('me', 'Call mum', new Date(2026, 9, 1, 9, 0))
+    aorus.messages.onIncoming({ kind: 'group', contains: 'urgent', pattern: /^!([a-z]+)/ }, event => aorus.messages.reply(event.message, 'Got it'))
     const message = { peerId, namespace, messageId }
     await aorus.messages.edit(message, 'Updated text')
     await aorus.messages.delete(message, { forEveryone: true })
@@ -1611,7 +1680,7 @@ private enum AorusPluginDocumentation {
     await aorus.chats.open(peerId)
     await aorus.account.current()
     await aorus.telegram.openLink('tg://resolve?domain=telegram')
-    Use 'me' as peerId for Saved Messages. History uses a separate permission and returns sanitized id, namespace, peerId, senderId, text, date, incoming and hasMedia fields. Those peerId, namespace and id values form the reference used by edit/delete/forward/react. The client verifies that the message exists locally before acting, while Telegram enforces edit and deletion rights. One history call is bounded to 100 messages and 128,000 characters. Telegram links use native app navigation. Sending always uses the active account; a mismatched accountId is rejected.
+    Use 'me' as peerId for Saved Messages. History uses a separate permission and returns sanitized id, namespace, peerId, senderId, text, date, incoming and hasMedia fields. Those peerId, namespace and id values form the reference used by edit/delete/forward/react. The client verifies that the message exists locally before acting, while Telegram enforces edit and deletion rights. One history call is bounded to 100 messages and 128,000 characters. Telegram links use native app navigation. Sending always uses the active account; a mismatched accountId is rejected. scheduleAt queues the message on Telegram's server, ten seconds to a year ahead; silent sends it without sound. onIncoming delivers incoming messages that pass a filter by chat kind, chat, sender, substring and regular expression, and needs the incoming-messages permission.
 
     Storage and settings
     aorus.storage.get(key)
@@ -1636,6 +1705,46 @@ private enum AorusPluginDocumentation {
     await aorus.ui.confirm(title, text)
     await aorus.ui.prompt(title, text)
     aorus.ui.haptic('light')
+    Haptics: light, medium, heavy, soft, rigid, selection, success, warning, error.
+
+    Screen effects
+    An animation over the whole app, above every window and the keyboard. Touches pass straight through it.
+    A continuous effect is turned on with start and off with stop. You choose the id; start again with the same id changes the settings instead of adding a second effect:
+    await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
+    await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
+    await aorus.effects.stop('winter')
+    Every effect is turned on the same way:
+    await aorus.effects.start('rain', 'rain', { wind: -0.3 })
+    await aorus.effects.start('autumn', 'leaves')
+    await aorus.effects.start('party', 'confetti', { colors: ['FF2D55', 'FFD60A', '30D158'] })
+    await aorus.effects.start('salute', 'fireworks')
+    await aorus.effects.start('love', 'hearts')
+    await aorus.effects.start('soap', 'bubbles')
+    await aorus.effects.start('magic', 'sparkles')
+    await aorus.effects.start('hyper', 'warp')
+    await aorus.effects.start('rockets', 'emoji', { emoji: ['🚀', '✨'], rising: true })
+    await aorus.effects.start('flurry', 'snow', { duration: 60000 })
+    await aorus.effects.stopAll()
+    Snow has a shorthand: aorus.effects.snow(options), turned off with aorus.effects.stop('snow'). There is no set function.
+    One-shot effects clear themselves:
+    await aorus.effects.burst('confetti', { x: 0.5, y: 0.4 })
+    await aorus.effects.confetti()
+    await aorus.effects.celebrate()
+    await aorus.effects.flash({ color: 'FF3B30', opacity: 0.4 })
+    await aorus.effects.shake({ intensity: 1.2 })
+    await aorus.effects.ripple({ x: 0.5, y: 0.5, color: '3BA3FF' })
+    await aorus.effects.glow({ colors: ['7B61FF', '3BA3FF'], pulses: 3 })
+    aorus.effects.presets()
+    Effects: snow (a snowfall in four layers of depth), rain, confetti, fireworks (rockets with trails and bursts), hearts, bubbles, sparkles, leaves, warp, emoji.
+    Options: intensity 0.1 to 3 (how many particles), speed and size 0.25 to 3, wind -1 to 1 (positive drifts right), color or colors as RRGGBB, emoji and rising for emoji and leaves, x and y 0 to 1 for burst and ripple, duration in milliseconds (0 means until stopped, otherwise up to ten minutes). Numbers are clamped, not rejected.
+    The answer is { ok, shown, reason, id }. shown: false is not an error; reason says why: reduceMotion (bursts, ripples and shakes under Reduce Motion), thermal (the phone is hot), background and noScreen (the effect starts by itself when the app is opened), rateLimited (a flash more often than every third of a second), tooMany (three effects per plugin, six in total), notRunning (stop for an effect that is not there).
+    Under Reduce Motion a continuous effect runs calm: one layer, slower, no sway and no spin. Low Power Mode halves the particles and a hot phone thins them. Everything drawn disappears when the plugin stops. Needs the Screen effects permission.
+
+    Colours
+    aorus.color.parse('#5B4DFF'), aorus.color.hex(r, g, b), aorus.color.hsl(h, s, l), aorus.color.toHsl(color)
+    aorus.color.lighten(color, 0.1), aorus.color.darken(color, 0.1), aorus.color.mix(a, b, 0.5)
+    aorus.color.readable(color), aorus.color.isDark(color), aorus.color.palette('5B4DFF', 6), aorus.color.random()
+    Colours are RRGGBB strings, taken as they are by effects and ui. readable picks a text colour with enough contrast.
 
     Native pages
     aorus.ui.definePages([{ id: 'main', title: 'Assistant', sections: [{ title: 'Reply', rows: [{ id: 'enabled', type: 'toggle', title: 'Enabled', value: true }, { id: 'run', type: 'button', title: 'Run', icon: 'bolt.fill' }] }] }])
@@ -1659,7 +1768,11 @@ private enum AorusPluginDocumentation {
     await aorus.app.share({ text: 'Ready', url: 'https://example.com' })
     aorus.app.haptic('light')
 
-    The App API provides safe access to interface state, the current account, chat navigation, the in-app browser, system share sheet and haptics. Actions use the validated native broker and separate permissions.
+    The App API provides safe access to interface state, the current account, chat navigation, site pages, system share sheet and haptics. Actions use the validated native broker and separate permissions.
+
+    Site page
+    aorus.app.openURL, aorus.ui.openURL, aorus.browser.open, a link row and a url shortcut open the site not in Safari but as a page of the app: under the app's own navigation bar, in its theme, titled with the site's own name. There is no address anywhere: no address bar, no domain, no link menu on a long press, no Open in Safari.
+    Cookies and site data are kept on disk, so a sign-in survives between visits and across relaunches. Swiping from the edge goes back through the site's history, and closes the page when there is nothing to go back to. Pull down to reload. t.me links open in Telegram; tel:, mailto: and App Store links open only on a tap. Every navigation is checked: loopback, local networks and AorusGram control-plane domains are refused.
 
     Accounts
     const accounts = await aorus.accounts.list()
@@ -1700,7 +1813,7 @@ private enum AorusPluginDocumentation {
 
     Integrations
     aorus.integrations.settings.register({ id: 'youtube', title: 'YouTube', icon: 'play.rectangle.fill', url: 'https://youtube.com', placement: 'interface' })
-    A shortcut has exactly one of pageId or url and appears in the main settings, never in the plugin library. placement: plugins (default), privacy, interface, tabs, messages, calls, wall, aorusCode or other. URL shortcuts request browser permission when the plugin is enabled. Loopback, local networks and AorusGram control-plane domains are blocked.
+    A shortcut has exactly one of pageId or url and is shown in exactly one place, by placement: plugins (default) is Telegram's own settings list next to the AorusGram entry; privacy, interface, tabs, messages, calls, wall, aorusCode or other is that section of the AorusGram settings, and only that. Shortcuts never appear in the plugin library. A url shortcut opens the site as a page of the app and needs the in-app browser permission. Loopback, local networks and AorusGram control-plane domains are blocked.
     aorus.integrations.contextMenu.register({ id: 'reply', title: 'Prepare reply', icon: 'message.fill' })
     Selection emits aorus.on('contextAction', event) with actionId and source. For a single selected message it also includes peerId, namespace, messageId and text. New-message events require a separate permission. At most four plugin actions appear at once.
 
@@ -1745,6 +1858,13 @@ private enum AorusPluginDocumentation {
     aorus.crypto.randomUUID()
     aorus.crypto.randomBytes(count)
     aorus.crypto.base64Encode(text) / base64Decode(text)
+    aorus.cache.set('rate', { usd: 92.4 }, '10m'), aorus.cache.get(key, fallback), aorus.cache.has(key)
+    const rate = await aorus.cache.remember('rate', '10m', async () => (await aorus.http.fetch(url)).json())
+    await aorus.util.retry(fn, { attempts: 3, delay: 500 })
+    await aorus.util.timeout(promise, 5000)
+    aorus.util.debounce(fn, ms), aorus.util.throttle(fn, ms)
+    aorus.util.parseDuration('1h30m'), aorus.util.formatDuration(ms), aorus.util.formatBytes(bytes), aorus.util.parseArgs(text)
+    The cache lives in the plugin's storage and survives a relaunch; a lifetime is milliseconds or a string such as '90s', '10m' or '1h30m'.
     console.log/info/warn/error/debug, setTimeout, setInterval and timer cancellation are available.
 
     Security

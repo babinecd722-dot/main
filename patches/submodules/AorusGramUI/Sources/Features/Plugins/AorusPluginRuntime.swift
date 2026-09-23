@@ -3153,9 +3153,13 @@ public struct AorusPluginSettingsEntry {
     public let open: () -> Void
 }
 
-/// Every shortcut every running plugin has registered, in a stable order.
+/// The shortcuts that belong in Telegram's own settings list, in a stable order.
+///
+/// Only those placed there. A shortcut placed in a section of the AorusGram screen —
+/// `interface`, `privacy` and the rest — is drawn in that section and nowhere else; handing
+/// every shortcut across here was what drew each one twice, once in each screen.
 public func aorusPluginSettingsEntries() -> [AorusPluginSettingsEntry] {
-    return AorusPluginRuntimeManager.shared.pluginSettingsShortcuts().map { item in
+    return AorusPluginRuntimeManager.shared.pluginSettingsShortcuts().filter { $0.shortcut.isInTelegramSettings }.map { item in
         let manifest = AorusPluginStore.shared.manifest(id: item.pluginId)
         let accent = aorusPluginEntryColor(manifest?.accent ?? AorusPluginAccent.fallback)
         let symbol = item.shortcut.icon ?? manifest?.icon ?? AorusPluginIcon.fallback

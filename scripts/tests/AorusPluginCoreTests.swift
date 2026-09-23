@@ -132,6 +132,11 @@ let shortcutJSON = Data("[{\"id\":\"youtube\",\"title\":\"YouTube\",\"url\":\"ht
 expect(AorusPluginSettingsShortcut.validated(from: shortcutJSON)?.count == 1, "valid settings shortcut is accepted")
 let placedShortcutJSON = Data("[{\"id\":\"youtube\",\"title\":\"YouTube\",\"url\":\"https://youtube.com\",\"placement\":\"interface\"}]".utf8)
 expect(AorusPluginSettingsShortcut.validated(from: placedShortcutJSON)?.first?.placement == "interface", "settings shortcut can choose its native destination")
+// One shortcut, one place: a shortcut placed in a section of the AorusGram screen is drawn
+// there only, and the default one only in Telegram's own settings list.
+expect(AorusPluginSettingsShortcut.validated(from: placedShortcutJSON)?.first?.isInTelegramSettings == false, "a shortcut placed in the AorusGram interface section is not also drawn in Telegram's settings")
+expect(AorusPluginSettingsShortcut.validated(from: shortcutJSON)?.first?.isInTelegramSettings == true, "a shortcut with the default placement is drawn in Telegram's settings")
+expect(AorusPluginSettingsShortcut.placements.filter { $0 == AorusPluginSettingsShortcut.telegramSettingsPlacement }.count == 1, "exactly one placement belongs to Telegram's settings")
 let invalidPlacementJSON = Data("[{\"id\":\"wrong\",\"title\":\"Wrong\",\"url\":\"https://example.com\",\"placement\":\"license\"}]".utf8)
 expect(AorusPluginSettingsShortcut.validated(from: invalidPlacementJSON) == nil, "plugins cannot inject into the license screen")
 let settingSchema = AorusPluginSettingField.schema(from: [
@@ -197,6 +202,20 @@ do {
 
 let diagnostics = AorusPluginSandbox.checkSyntax("function () {")
 expect(!diagnostics.isEmpty, "invalid JavaScript is diagnosed")
+
+// Top-level await: the documentation's own examples are written with it, and a classic
+// script reads it as a syntax error ("Unexpected identifier 'aorus'").
+let awaitingSource = "await aorus.effects.start('winter', 'snow', { intensity: 0.7 });\nawait aorus.effects.stop('winter');"
+expect(AorusPluginSandbox.checkSyntax(awaitingSource).isEmpty, "top-level await is valid plugin source")
+let awaitingBody = AorusPluginSandbox.executableSource(awaitingSource)
+expect(awaitingBody.hasPrefix("__aorusTopLevel((async function () {await aorus.effects.start"), "top-level await runs as an async body that keeps line 1 on line 1")
+expect(awaitingBody.components(separatedBy: "\n").count == awaitingSource.components(separatedBy: "\n").count + 1, "the async body adds no line before the source")
+let plainSource = "aorus.on('start', function () {});"
+expect(AorusPluginSandbox.executableSource(plainSource) == plainSource, "a source without top-level await runs exactly as written")
+let awaitInsideFunction = "aorus.on('start', async function () { await aorus.effects.stop('x'); });"
+expect(AorusPluginSandbox.executableSource(awaitInsideFunction) == awaitInsideFunction, "await inside a function needs no wrapper")
+expect(!AorusPluginSandbox.checkSyntax("await aorus.effects.start('a', 'snow'));").isEmpty, "a real syntax error next to await is still reported")
+expect(AorusPluginSandbox.executableSource("await (;") == "await (;", "a source that is broken either way is left for the error to show")
 let tokens = AorusJavaScriptTokenizer.tokenize("const x = aorus.storage.get('x');")
 expect(tokens.contains(where: { $0.kind == .keyword }), "tokenizer finds keywords")
 expect(tokens.contains(where: { $0.kind == .api }), "tokenizer finds plugin API")

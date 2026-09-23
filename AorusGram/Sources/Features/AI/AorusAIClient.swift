@@ -840,13 +840,12 @@ private final class AorusAIStreamOperation: NSObject, URLSessionDataDelegate, UR
             guard let turn = object["turn_id"] as? String, !turn.isEmpty else { return nil }
             return .agentStarted(turnId: turn, context: object["context"] as? String)
         case "thread.title":
-            // First turn only, and optional. A title that is empty, absurdly long or for a
-            // different turn is dropped: the local placeholder is already on screen and is
-            // a better answer than a wrong name.
-            guard let turn = object["turn_id"] as? String, !turn.isEmpty,
-                  let title = (object["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  title.count >= 2, title.count <= 120 else { return nil }
-            return .threadTitle(turnId: turn, title: title)
+            // First turn only, and it may come after `response.start` or between deltas:
+            // the parser runs until `done` and hands it on wherever it lands. A title that
+            // names nothing is dropped, and the local placeholder stays, which is what the
+            // contract asks for when no title arrives at all.
+            guard let decoded = AorusAIThreadTitle.decode(object) else { return nil }
+            return .threadTitle(turnId: decoded.turnId, title: decoded.title)
         case "status", "render.start", "render.phase", "render_progress", "build_progress":
             // The backend's own `phase` name is an implementation detail and never reaches
             // the chat. What is shown is the key localized here, or the sentence the gateway

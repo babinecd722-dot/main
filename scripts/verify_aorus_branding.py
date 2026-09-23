@@ -3304,6 +3304,18 @@ def main() -> None:
         # A profile's posts: a block on a pane of glass, three cards to a row. Without the grid
         # half the pane has nothing to follow; without the pane half a single post is one large
         # photo with the page showing down both sides of it, which is what was reported.
+        # Profile > Edit > Personal colours. Upstream fakes one continuous card out of the preview,
+        # a hidden card-coloured slab and a gradient; under glass that slab turns the top of the
+        # first block grey and the gradient smears the rest.
+        (
+            "submodules/TelegramUI/Components/Settings/PeerNameColorScreen/Sources/UserApperanceScreen.swift",
+            (
+                "let aorusGlassPreview = AorusGlassPane.isEnabled",
+                "self.topOverscrollLayer.isHidden = AorusGlassPane.isEnabled",
+                "blur: !aorusGlassPreview",
+                "background: aorusGlassPreview ? .all : .range(",
+            ),
+        ),
         (
             "submodules/SparseItemGrid/Sources/SparseItemGrid.swift",
             (

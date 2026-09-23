@@ -771,6 +771,23 @@ aorus.chat.current().then(function (value) {
     });
     });
 }).then(function () {
+    // Top-level await. A source that uses it runs as the body of an async function inside
+    // __aorusTopLevel; this is the exact wrapper AorusPluginSandbox.topLevelBody builds. The
+    // call on its first line has to reach the host, and a rejection anywhere in the body has
+    // to reach the console rather than vanish.
+    check('__aorusTopLevel is missing', typeof globalThis.__aorusTopLevel === 'function');
+    check('__aorusTopLevel is enumerable', Object.keys(globalThis).indexOf('__aorusTopLevel') === -1);
+    const beforeTopLevel = globalThis.__calls.length;
+    (0, eval)("__aorusTopLevel((async function () {await aorus.effects.start('winter', 'snow', { intensity: 0.7 });\n})());");
+    check('top-level await did not reach effects.start', (lastRequest('effects.start') || {}).intensity === 0.7);
+    (0, eval)("__aorusTopLevel((async function () {throw new Error('boom at the top');\n})());");
+    return new Promise(function (resolve) { globalThis.__nodeSetTimeout(resolve, 10); }).then(function () {
+        const logged = globalThis.__calls.slice(beforeTopLevel).some(function (call) {
+            return call.name === 'log' && call.args[0] === 'error' && /boom at the top/.test(call.args[1]);
+        });
+        check('a rejection at the top level did not reach the console', logged);
+    });
+}).then(function () {
 VERDICT_TAIL
     globalThis.__nodeLog('VERDICT ' + JSON.stringify(problems));
 }, function (error) {

@@ -987,13 +987,47 @@ public struct AorusAIWorkPhase: Codable, Equatable, Identifiable {
     }
 }
 
+/// `thread.title`: the gateway's name for a brand-new chat (client contract addendum V2,
+/// section A).
+///
+/// Sent on the first turn of a chat only, fire-and-forget, and at any point of the stream:
+/// the live order puts it after `response.start`, and it can land between two deltas. The
+/// title is 3 to 60 characters with no quotes; the client still guards what it shows, since
+/// the name goes into the chat list and the navigation bar.
+public enum AorusAIThreadTitle {
+    /// The most the client will show. The contract promises 60; this is the ceiling for a
+    /// server that does not keep its promise, not a limit anybody should reach.
+    public static let maximumLength = 120
+
+    /// The turn a title belongs to and the title itself, or nil for one that names nothing
+    /// or no turn. Quotes a model wrapped its answer in, and anything after a first line,
+    /// are not part of a name.
+    public static func decode(_ object: [String: Any]) -> (turnId: String, title: String)? {
+        guard let turnId = (object["turn_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !turnId.isEmpty,
+              let raw = object["title"] as? String else {
+            return nil
+        }
+        let quotes = CharacterSet(charactersIn: "\"'`\u{00AB}\u{00BB}\u{201C}\u{201D}\u{201E}\u{2018}\u{2019}")
+        let firstLine = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines).first ?? ""
+        let title = firstLine
+            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: quotes)
+            .trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return nil }
+        return (turnId, String(title.prefix(maximumLength)))
+    }
+}
+
 public enum AorusAIEvent: Equatable {
     /// The head of a resumed stream. Metadata about a turn already running on the
     /// server — never a second assistant message, which the contract states outright.
     case turnResume(AorusAIResumeInfo)
     case agentStarted(turnId: String, context: String?)
     /// The gateway's name for a brand-new chat. Fire-and-forget on the first turn only:
-    /// the client shows its own placeholder until this arrives and never waits for it.
+    /// the client shows its own placeholder until this arrives and never waits for it. It
+    /// can arrive anywhere before `done`, deltas included (see `AorusAIThreadTitle`).
     case threadTitle(turnId: String, title: String)
     case status(label: AorusAITimelineText, progress: Double?)
     /// A build/repair/diagnose/finalize phase. Only `label` is ever shown; `phase` is the

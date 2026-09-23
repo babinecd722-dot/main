@@ -521,8 +521,25 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
     public var icon: String?
     public var pageId: String?
     public var url: String?
-    /// Main AorusGram settings destination. Never shown in the plugin library itself.
+    /// Where the shortcut is shown, and it is shown in exactly one place. `plugins`, the
+    /// default, is Telegram's own settings list, under the AorusGram rows; every other value
+    /// names a section of the AorusGram settings screen and the shortcut is shown there and
+    /// nowhere else. Never shown in the plugin library itself.
     public var placement: String
+
+    /// Every placement a shortcut may ask for.
+    public static let placements = ["plugins", "privacy", "interface", "tabs", "messages", "calls", "wall", "aorusCode", "other"]
+
+    /// The placement that belongs to Telegram's own settings list rather than to a section
+    /// of the AorusGram screen.
+    public static let telegramSettingsPlacement = "plugins"
+
+    /// True for a shortcut drawn in Telegram's settings list; false for one drawn in its own
+    /// section of the AorusGram screen. The two screens both ask, so one shortcut can never
+    /// be drawn by both of them.
+    public var isInTelegramSettings: Bool {
+        return placement == AorusPluginSettingsShortcut.telegramSettingsPlacement
+    }
 
     public init(id: String, title: String, subtitle: String? = nil, icon: String? = nil, pageId: String? = nil, url: String? = nil, placement: String = "plugins") {
         self.id = id
@@ -558,7 +575,7 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
             guard identifier?.firstMatch(in: item.id, range: NSRange(location: 0, length: item.id.utf16.count)) != nil,
                   ids.insert(item.id).inserted,
                   !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  ["plugins", "privacy", "interface", "tabs", "messages", "calls", "wall", "aorusCode", "other"].contains(item.placement),
+                  AorusPluginSettingsShortcut.placements.contains(item.placement),
                   (item.pageId != nil) != (item.url != nil) else { return nil }
             if let pageId = item.pageId,
                identifier?.firstMatch(in: pageId, range: NSRange(location: 0, length: pageId.utf16.count)) == nil { return nil }

@@ -4723,6 +4723,97 @@ def _patch_component_section_glass(tg: Path) -> None:
     print("InterfaceV2: put every component section on its own pane of glass")
 
 
+def _patch_personal_colours_glass(tg: Path) -> None:
+    """Give Profile > Edit > Personal colours the same glass blocks as every other screen.
+
+    Upstream builds this screen as one card: the preview pinned at the top, and the first section
+    scrolling underneath it with its top 38 points tucked under the preview's bottom edge. What makes
+    the two read as a single card is a third thing nobody sees -- an opaque layer the colour of a
+    card, `itemBlocksBackgroundColor`, laid inside the scroll view from far above the content down
+    to 340 points into it, so that pulling the list down shows more card instead of the page. A
+    gradient under the preview, in the page colour on one tab and the card colour on the other, and
+    blurred on the profile tab, hides the join.
+
+    Under Interface 2.0 the sections are glass, and every one of those three pieces works against
+    it. The hidden layer is suddenly behind the top of a transparent section, so the first block is
+    grey slab down to 340 points and glass below it -- the "part native glass, part grey" that was
+    reported. The gradient lays card grey, or a blur, over the glass it is supposed to be blending
+    into, which is the smear.
+
+    So under Interface 2.0 the preview is a card of its own, rounded at both ends and standing a
+    little apart from the blocks below it, and every section is a whole block rather than the tail
+    of the preview's card. The layer that faked the continuous card goes, and the gradient under the
+    preview fades into the page, unblurred, from the preview's own bottom edge -- which is all it
+    has to do once nothing is meant to join there.
+    """
+    path = tg / "submodules/TelegramUI/Components/Settings/PeerNameColorScreen/Sources/UserApperanceScreen.swift"
+    text = _read(path, "UserApperanceScreen.swift")
+    if "aorusGlassPreview" in text:
+        print("InterfaceV2: personal colours already on glass blocks")
+        return
+    text = _replace_once(
+        text,
+        "            let itemCornerRadius: CGFloat = 26.0\n",
+        "            let itemCornerRadius: CGFloat = 26.0\n"
+        "            // AorusGram: under Interface 2.0 the preview is a card of its own and the sections\n"
+        "            // below it are whole glass blocks, not the tail of one continuous card.\n"
+        "            let aorusGlassPreview = AorusGlassPane.isEnabled\n"
+        "            let aorusPreviewGap: CGFloat = aorusGlassPreview ? 12.0 : 0.0\n",
+        "personal colours glass flag",
+    )
+    old_corners = "bottomCornerRadius: !self.scrolledUp ? itemCornerRadius : 0.0"
+    if text.count(old_corners) != 2:
+        raise RuntimeError("InterfaceV2: personal colours preview corners anchor count changed")
+    text = text.replace(old_corners, "bottomCornerRadius: (!self.scrolledUp || aorusGlassPreview) ? itemCornerRadius : 0.0")
+    text = _replace_once(
+        text,
+        "                contentHeight += profilePreviewSize.height - 38.0\n",
+        "                contentHeight += profilePreviewSize.height - 38.0 + aorusPreviewGap\n",
+        "personal colours profile gap",
+    )
+    text = _replace_once(
+        text,
+        "                contentHeight += namePreviewSize.height - 38.0\n",
+        "                contentHeight += namePreviewSize.height - 38.0 + aorusPreviewGap\n",
+        "personal colours name gap",
+    )
+    text = _replace_once(
+        text,
+        "let previewEdgeEffectFrame = CGRect(origin: CGPoint(x: profilePreviewFrame.minX, y: profilePreviewFrame.maxY - 35.0)",
+        "let previewEdgeEffectFrame = CGRect(origin: CGPoint(x: profilePreviewFrame.minX, y: profilePreviewFrame.maxY - (aorusGlassPreview ? 0.0 : 35.0))",
+        "personal colours profile fade origin",
+    )
+    text = _replace_once(
+        text,
+        "self.previewEdgeEffectView.update(content: environment.theme.list.blocksBackgroundColor, blur: true, alpha: 1.0, rect: previewEdgeEffectFrame",
+        "self.previewEdgeEffectView.update(content: environment.theme.list.blocksBackgroundColor, blur: !aorusGlassPreview, alpha: 1.0, rect: previewEdgeEffectFrame",
+        "personal colours profile fade",
+    )
+    text = _replace_once(
+        text,
+        "self.previewEdgeEffectView.update(content: environment.theme.list.itemBlocksBackgroundColor, alpha: 1.0, rect: previewEdgeEffectFrame",
+        "self.previewEdgeEffectView.update(content: aorusGlassPreview ? environment.theme.list.blocksBackgroundColor : environment.theme.list.itemBlocksBackgroundColor, alpha: 1.0, rect: previewEdgeEffectFrame",
+        "personal colours name fade",
+    )
+    text = _replace_once(
+        text,
+        "background: .range(from: 0, corners: DynamicCornerRadiusView.Corners(minXMinY: 0.0, maxXMinY: 0.0, minXMaxY: itemCornerRadius, maxXMaxY: itemCornerRadius)),",
+        "background: aorusGlassPreview ? .all : .range(from: 0, corners: DynamicCornerRadiusView.Corners(minXMinY: 0.0, maxXMinY: 0.0, minXMaxY: itemCornerRadius, maxXMaxY: itemCornerRadius)),",
+        "personal colours name section corners",
+    )
+    text = _replace_once(
+        text,
+        "            self.topOverscrollLayer.backgroundColor = environment.theme.list.itemBlocksBackgroundColor.cgColor\n",
+        "            self.topOverscrollLayer.backgroundColor = environment.theme.list.itemBlocksBackgroundColor.cgColor\n"
+        "            // AorusGram: the card-coloured slab that made preview and section one card. Under\n"
+        "            // Interface 2.0 it would sit behind the top of a glass block and turn it grey.\n"
+        "            self.topOverscrollLayer.isHidden = AorusGlassPane.isEnabled\n",
+        "personal colours overscroll slab",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: personal colours on glass blocks")
+
+
 def _patch_static_avatar(tg: Path) -> None:
     """Make the photo an ordinary block: it scrolls with the content and nothing else.
 
@@ -6473,6 +6564,7 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_header_button_set(tg)
     _patch_item_list_glass(tg)
     _patch_component_section_glass(tg)
+    _patch_personal_colours_glass(tg)
     _patch_nav_button_glass(tg)
     _patch_pane_container_glass(tg)
     _patch_pane_page_background(tg)

@@ -1593,6 +1593,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         // `title` stays unset because Telegram's navigation bar draws either the string or
         // the custom view, never both.
         let titleView = AorusAINavigationTitleView(theme: presentationData.theme)
+        titleView.setTitle(conversation.title, animated: false)
         self.headerView = titleView
         self.navigationItem.titleView = titleView
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
@@ -2027,6 +2028,7 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         conversation.messages.append(assistant)
         if conversation.title.isEmpty, !titleCameFromServer {
             conversation.title = AorusAIFormat.title(from: text)
+            headerView?.setTitle(conversation.title, animated: true)
         }
         conversation.draft = ""
         conversation.updatedAt = Date()
@@ -2207,6 +2209,16 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             applyResume(info)
             return
         }
+        // The chat's name is metadata about the chat, not a step of the answer, so it is
+        // taken before the cursor too. The gateway makes it on the side while the answer
+        // streams, and its frame number says when it was queued rather than where it
+        // belongs: a title numbered behind a delta that overtook it was being discarded as
+        // a replay, and the chat kept its placeholder for ever. Applying it twice is
+        // harmless, which is what lets it skip the deduplication safely.
+        if case let .threadTitle(turnId, title) = event {
+            applyThreadTitle(turnId: turnId, title: title)
+            return
+        }
         switch turnCursor.admit(seq: frame.seq, turnId: turnCursor.turnId) {
         case .apply:
             break
@@ -2227,25 +2239,10 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
             // V7: and it is the identity the journal is numbered against. The client
             // never invents one — this and `turn.resume` are the only two sources.
             turnCursor.adopt(turnId: turnId)
-        case let .threadTitle(turnId, title):
-            // A name for the chat, from the first turn only, fire-and-forget. The list
-            // already shows a placeholder cut from the first message, so nothing waited for
-            // this and nothing breaks if it never comes.
-            //
-            // The turn id is the only condition, which is what the contract states. An
-            // earlier version also required the current title to still equal a placeholder
-            // recomputed from the first message — to protect a chat somebody had renamed.
-            // There is no way to rename a chat, so that guard protected nothing and did the
-            // one thing a guard must never do: it silently dropped valid titles whenever the
-            // recomputation differed from the stored string by a character. The symptom was
-            // exactly this feature appearing not to work, with the first message left on
-            // screen as the name.
-            guard turnId == self.turnId else { break }
-            conversation.title = String(title.prefix(120))
-            titleCameFromServer = true
-            // Once per chat and only ever on the first turn, so it is written through
-            // rather than left to the debounce that a live turn stretches to 2.5 seconds.
-            persist(force: true)
+        case .threadTitle:
+            // Never reaches here: `receive` applies the title before the cursor, because it
+            // is metadata about the chat rather than a step of the answer.
+            break
         case let .status(label, progress):
             let rendered = aorusAITimelineText(key: label.key, params: label.params, fallback: label.text)
             let visibleLabel = rendered.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -2362,6 +2359,32 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
         conversation.updatedAt = Date()
         startRevealIfNeeded()
         scheduleRender(messageId: id)
+    }
+
+    /// Names the chat (client contract addendum V2, section A).
+    ///
+    /// The one condition is the turn: the title must belong to the turn this chat's
+    /// `agent.start` named. It is not required to arrive before the first token, or before
+    /// `response.done` — the live order has it after `response.start`, often in the middle
+    /// of the deltas — and nothing waits for it: the placeholder cut from the first message
+    /// is on screen from the moment it was sent. If it never comes, that placeholder stays;
+    /// nothing is retried and no other call is made.
+    ///
+    /// An earlier version also required the current title to still equal a placeholder
+    /// recomputed from the first message, to protect a chat somebody had renamed. There is
+    /// no way to rename a chat, so that guard protected nothing and silently dropped valid
+    /// titles whenever the recomputation differed by a character.
+    private func applyThreadTitle(turnId: String, title: String) {
+        guard turnId == self.turnId || turnId == turnCursor.turnId else { return }
+        let name = String(title.prefix(AorusAIThreadTitle.maximumLength))
+        titleCameFromServer = true
+        guard conversation.title != name else { return }
+        conversation.title = name
+        headerView?.setTitle(name, animated: true)
+        // Once per chat and only ever on the first turn, so it is written through rather
+        // than left to the debounce that a live turn stretches to 2.5 seconds. The list
+        // redraws from the store's own change notification.
+        persist(force: true)
     }
 
     /// Folds the head of a resumed stream in.
@@ -5798,6 +5821,25 @@ private final class AorusAINavigationTitleView: UIView {
         isDarkAppearance = theme.overallDarkAppearance
         titleLabel.textColor = theme.rootController.navigationBar.primaryTextColor
         statusLabel.textColor = AorusAIPalette.resolve(theme).secondary
+        setNeedsLayout()
+    }
+
+    /// The chat's name on the capsule's first line, or "AorusAI" for a chat that has none
+    /// yet. Crossfaded when the gateway's title replaces the placeholder, so the name changes
+    /// in place instead of jumping.
+    func setTitle(_ text: String, animated: Bool) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = trimmed.isEmpty ? "AorusAI" : trimmed
+        accessibilityLabel = value
+        guard titleLabel.text != value else { return }
+        if animated {
+            UIView.transition(with: titleLabel, duration: 0.22, options: [.transitionCrossDissolve, .beginFromCurrentState], animations: {
+                self.titleLabel.text = value
+            })
+        } else {
+            titleLabel.text = value
+        }
+        invalidateIntrinsicContentSize()
         setNeedsLayout()
     }
 
