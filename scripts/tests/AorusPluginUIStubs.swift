@@ -29,6 +29,9 @@ open class ASDisplayNode {
 public struct ContainerViewLayout: Equatable {
     public var size: CGSize
     public var intrinsicInsets: UIEdgeInsets
+    public var safeInsets: UIEdgeInsets
+    /// The keyboard's height when it is up, as Telegram's layout reports it.
+    public var inputHeight: CGFloat?
 }
 
 public enum ContainedViewLayoutTransitionCurve: Equatable {
@@ -272,7 +275,9 @@ public final class AorusPluginMarketClient {
     public func publish(id: String, version: String, name: String, description: String, code: String, permissions: [String], completion: @escaping (Result<AorusPluginMarketPublishResult, AorusPluginMarketError>) -> Void) {}
     public func uploadIcon(id: String, data: Data, contentType: String, completion: @escaping (Result<Void, AorusPluginMarketError>) -> Void) {}
     public func mine(completion: @escaping (Result<[AorusPluginMarketOwnedPlugin], AorusPluginMarketError>) -> Void) {}
+    public func delete(id: String, completion: @escaping (Result<AorusPluginMarketDeleteResult, AorusPluginMarketError>) -> Void) {}
     public func forgetIcon(id: String) {}
+    public var isAuthorBanned: Bool { return false }
 }
 
 /// The Market's Telegram side (`AorusPluginMarketBridge.swift`): its glass, avatars, names,

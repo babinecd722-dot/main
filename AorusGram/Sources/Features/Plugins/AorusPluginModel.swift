@@ -1539,6 +1539,11 @@ public struct AorusPluginEffectRequest: Equatable {
     public var y: Double = 0.5
     /// Emoji rise instead of falling.
     public var rising = false
+    /// The run of the plugin that asked, set by the sandbox and never by the plugin. A plugin
+    /// that is replaced by a new run of itself — a restart, a change of account — says goodbye
+    /// with its stop handler while the new run is already drawing, and a stop from a run that
+    /// has been replaced must not end the snow the new one started.
+    public var owner = ""
 
     public static let maximumColors = 8
     public static let maximumEmoji = 8

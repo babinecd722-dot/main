@@ -186,7 +186,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
 
     private func openMarketCard(_ card: AorusPluginMarketCard, host: AorusPluginMarketHost) {
         let detail = AorusPluginMarketDetailController(card: card, theme: presentationData.theme, host: host)
-        detail.onOpenOwn = { [weak self] manifest in self?.openAppearance(pluginId: manifest.id) }
+        detail.onOpenOwn = { [weak self] manifest in self?.openManagement(pluginId: manifest.id) }
         detail.onReviewAndEnable = { [weak self] manifest in self?.setEnabled(true, manifest: manifest) }
         present(detail, animated: true)
     }
@@ -200,9 +200,11 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         (navigationController as? NavigationController)?.pushViewController(mine)
     }
 
-    private func openAppearance(pluginId: String) {
+    /// The author's control over a published plugin: status, what goes out with the next
+    /// publish, Publish and Delete.
+    private func openManagement(pluginId: String) {
         guard let record = AorusPluginStore.shared.load(id: pluginId) else { return }
-        (navigationController as? NavigationController)?.pushViewController(AorusPluginMetadataController(context: context, record: record))
+        (navigationController as? NavigationController)?.pushViewController(AorusPluginMetadataController(context: context, record: record, mode: .management))
     }
 
     /// The author's copy of a published plugin: the one on this phone, or one made from the live
@@ -210,7 +212,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
     /// update and not a clash.
     private func openWorkingCopy(_ plugin: AorusPluginMarketOwnedPlugin, from controller: UIViewController) {
         if let manifest = AorusPluginStore.shared.plugin(marketId: plugin.id), manifest.market?.isOwn == true {
-            openAppearance(pluginId: manifest.id)
+            openManagement(pluginId: manifest.id)
             return
         }
         guard let live = plugin.live else {
@@ -233,7 +235,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
                 manifest.market = AorusPluginMarketLink(id: plugin.id, version: plugin.highestVersion, authorId: live.authorId, isOwn: true, hasIcon: live.hasIcon)
                 do {
                     try AorusPluginStore.shared.save(AorusPluginRecord(manifest: manifest, source: source))
-                    self.openAppearance(pluginId: manifest.id)
+                    self.openManagement(pluginId: manifest.id)
                 } catch {
                     self.showError(error)
                 }
@@ -555,13 +557,25 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     private func show(_ error: Error) { let alert = UIAlertController(title: AorusPluginUIString.plugins.text, message: error.localizedDescription, preferredStyle: .alert); alert.addAction(UIAlertAction(title: "OK", style: .default)); present(alert, animated: true) }
 }
 
-/// A plugin's Appearance: the banner the Market shows it with, its name, description and
-/// version, its glyph and colour — and, for a plugin of one's own, publishing it.
+/// A plugin's own details, in one of two screens that are different things.
 ///
-/// Publishing is here because this is where everything the Market shows about a plugin is
-/// decided. A plugin installed from the Market is someone else's and is not published from
-/// here; its Market section only says where it came from.
+/// Appearance is how the plugin looks here: its banner, name, description and version, its
+/// glyph and its colour, and — for a plugin of one's own — a way into the Market: Publish the
+/// first time, and after that a row that opens the management screen.
+///
+/// Management is the author's control over a published plugin, reached from My Plugins: where
+/// each version stands, the banner, name, description and version that go out with the next
+/// publish and the code behind them, then Publish, and Delete, which takes every version out
+/// of the Market. How the plugin looks on this phone is not part of it.
+///
+/// A plugin installed from the Market is someone else's: its Appearance has no banner and no
+/// publishing, and its Market section only says where it came from.
 private final class AorusPluginMetadataController: ViewController, UITableViewDataSource, UITableViewDelegate {
+    enum Mode {
+        case appearance
+        case management
+    }
+
     private enum Row {
         case banner
         case name
@@ -572,7 +586,9 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         case source
         case status(String, UIColor)
         case editor
+        case manage
         case publish
+        case delete
 
         var isBanner: Bool {
             if case .banner = self { return true }
@@ -580,20 +596,28 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         }
     }
 
+    private struct Section {
+        var rows: [Row]
+        var header: String? = nil
+        var footer: String? = nil
+    }
+
     private let context: AccountContext
     private let presentationData: PresentationData
+    private let mode: Mode
     private var record: AorusPluginRecord
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var observer: NSObjectProtocol?
     /// Where this plugin stands in the Market, for the author's own copy.
     private var owned: AorusPluginMarketOwnedPlugin?
 
-    init(context: AccountContext, record: AorusPluginRecord) {
+    init(context: AccountContext, record: AorusPluginRecord, mode: Mode = .appearance) {
         self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.record = record
+        self.mode = mode
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
-        title = AorusPluginUIString.configure.text
+        title = mode == .management ? record.manifest.name : AorusPluginUIString.configure.text
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -643,42 +667,73 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         }
     }
 
-    private var sections: [[Row]] {
-        var first: [Row] = []
-        if !isInstalledCopy { first.append(.banner) }
-        first += [.name, .description, .version]
-        var market: [Row] = []
-        if let link = record.manifest.market, !link.isOwn {
-            market.append(.source)
-        } else {
-            if let owned {
-                if let live = owned.live { market.append(.status(AorusPluginMarketText.published(live.version), .systemGreen)) }
-                if let pending = owned.pending { market.append(.status(AorusPluginMarketText.underReview + " · " + pending.version, .systemOrange)) }
-                if let rejected = owned.rejected, rejected.version != owned.live?.version {
-                    market.append(.status(AorusPluginMarketText.rejected + " · " + rejected.version + (rejected.reason.isEmpty ? "" : " — " + rejected.reason), presentationData.theme.list.itemDestructiveColor))
-                }
-                if owned.live == nil, owned.takenDown != nil { market.append(.status(AorusPluginMarketText.takenDown, presentationData.theme.list.itemSecondaryTextColor)) }
-            }
-            market += [.editor, .publish]
+    /// In the Market as this author's plugin.
+    private var isPublished: Bool {
+        return record.manifest.market?.isOwn == true
+    }
+
+    /// Where each version stands, one line each: live, under review, rejected with the
+    /// moderator's reason, taken down.
+    private var statusRows: [Row] {
+        guard let owned else { return [] }
+        var rows: [Row] = []
+        if let live = owned.live { rows.append(.status(AorusPluginMarketText.published(live.version), .systemGreen)) }
+        if let pending = owned.pending { rows.append(.status(AorusPluginMarketText.underReview + " · " + pending.version, .systemOrange)) }
+        if let rejected = owned.rejected, rejected.version != owned.live?.version {
+            rows.append(.status(AorusPluginMarketText.rejected + " · " + rejected.version + (rejected.reason.isEmpty ? "" : " — " + rejected.reason), presentationData.theme.list.itemDestructiveColor))
         }
-        return [first, [.icon, .accent], market]
+        if owned.live == nil, owned.takenDown != nil { rows.append(.status(AorusPluginMarketText.takenDown, presentationData.theme.list.itemSecondaryTextColor)) }
+        return rows
+    }
+
+    private var sections: [Section] {
+        let marketFooter = record.manifest.market.flatMap { $0.isOwn ? AorusPluginPublishText.marketId + ": " + $0.id : nil }
+        switch mode {
+        case .management:
+            var result: [Section] = []
+            let status = statusRows
+            if !status.isEmpty { result.append(Section(rows: status, header: AorusPluginMarketText.market)) }
+            result.append(Section(rows: [.banner, .name, .description, .version, .editor]))
+            if isPublished {
+                result.append(Section(rows: [.publish]))
+                result.append(Section(rows: [.delete], footer: marketFooter))
+            } else {
+                result.append(Section(rows: [.publish], footer: marketFooter))
+            }
+            return result
+        case .appearance:
+            var first: [Row] = []
+            if !isInstalledCopy { first.append(.banner) }
+            first += [.name, .description, .version]
+            let market: Section
+            if isInstalledCopy {
+                market = Section(rows: [.source], header: AorusPluginMarketText.market)
+            } else if isPublished {
+                market = Section(rows: [.manage], header: AorusPluginMarketText.market, footer: marketFooter)
+            } else {
+                market = Section(rows: [.publish], header: AorusPluginMarketText.market)
+            }
+            return [Section(rows: first), Section(rows: [.icon, .accent]), market]
+        }
     }
 
     func numberOfSections(in tableView: UITableView) -> Int { sections.count }
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { sections[section].count }
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { sections[section].rows.count }
 
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        return section == 2 ? AorusPluginMarketText.market : nil
+        return sections[section].header
     }
 
     func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
-        guard section == 2, let link = record.manifest.market, link.isOwn else { return nil }
-        return AorusPluginPublishText.marketId + ": " + link.id
+        return sections[section].footer
     }
+
+    /// Generating, publishing, uploading an icon and deleting are all off for a banned author.
+    private var isBanned: Bool { AorusPluginMarketClient.shared.isAuthorBanned }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let theme = presentationData.theme
-        let row = sections[indexPath.section][indexPath.row]
+        let row = sections[indexPath.section].rows[indexPath.row]
         let cell = UITableViewCell(style: row.isBanner ? .subtitle : .value1, reuseIdentifier: nil)
         cell.backgroundColor = theme.list.itemBlocksBackgroundColor
         cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
@@ -727,10 +782,20 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             cell.selectionStyle = .none
         case .editor:
             cell.textLabel?.text = AorusPluginUIString.editCode.text
+        case .manage:
+            cell.textLabel?.text = AorusPluginMarketText.manageInMarket
+            cell.detailTextLabel?.text = owned?.live.map { AorusPluginMarketText.published($0.version) }
+                ?? (owned?.pending != nil ? AorusPluginMarketText.underReview : nil)
         case .publish:
             cell.textLabel?.text = AorusPluginPublishText.publish
-            cell.textLabel?.textColor = theme.list.itemAccentColor
+            cell.textLabel?.textColor = isBanned ? theme.list.itemSecondaryTextColor : theme.list.itemAccentColor
             cell.textLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+            cell.textLabel?.textAlignment = .center
+            cell.accessoryType = .none
+        case .delete:
+            cell.textLabel?.text = AorusPluginMarketText.deletePlugin
+            cell.textLabel?.textColor = isBanned ? theme.list.itemSecondaryTextColor : theme.list.itemDestructiveColor
+            cell.textLabel?.font = .systemFont(ofSize: 17, weight: .regular)
             cell.textLabel?.textAlignment = .center
             cell.accessoryType = .none
         }
@@ -763,7 +828,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        switch sections[indexPath.section][indexPath.row] {
+        switch sections[indexPath.section].rows[indexPath.row] {
         case .banner:
             chooseBanner()
         case .name:
@@ -794,15 +859,58 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         case .editor:
             guard let current = AorusPluginStore.shared.load(id: record.manifest.id) else { return }
             (navigationController as? NavigationController)?.pushViewController(AorusPluginEditorController(context: context, record: current))
+        case .manage:
+            (navigationController as? NavigationController)?.pushViewController(AorusPluginMetadataController(context: context, record: record, mode: .management))
         case .publish:
+            guard !isBanned else { return show(AorusPluginMarketText.banned) }
             AorusPluginPublisher.publish(pluginId: record.manifest.id, from: self) { [weak self] in
                 guard let self else { return }
                 if let saved = AorusPluginStore.shared.load(id: self.record.manifest.id) { self.record = saved }
                 self.tableView.reloadData()
                 self.loadMarketStatus()
             }
+        case .delete:
+            guard !isBanned else { return show(AorusPluginMarketText.banned) }
+            confirmMarketDelete()
         case .source, .status:
             break
+        }
+    }
+
+    /// The contract's own words: Delete plugin, a confirmation, Plugin deleted. What goes is
+    /// every version in the Market, with its code and its icon; the copy on this phone stays,
+    /// as a plugin that is no longer in the Market.
+    private func confirmMarketDelete() {
+        guard let link = record.manifest.market, link.isOwn else { return }
+        let alert = UIAlertController(title: AorusPluginMarketText.deletePlugin, message: AorusPluginMarketText.deleteFromMarket(record.manifest.name), preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+        alert.addAction(UIAlertAction(title: AorusPluginMarketText.delete, style: .destructive) { [weak self] _ in
+            self?.deleteFromMarket(link)
+        })
+        present(alert, animated: true)
+    }
+
+    private func deleteFromMarket(_ link: AorusPluginMarketLink) {
+        let progress = AorusPluginProgressOverlay.show(in: view, text: AorusPluginMarketText.deleting)
+        AorusPluginMarketClient.shared.delete(id: link.id) { [weak self] result in
+            progress.hide()
+            guard let self else { return }
+            switch result {
+            case .success:
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                var manifest = self.record.manifest
+                manifest.market = nil
+                try? AorusPluginStore.shared.updateManifest(manifest)
+                AorusPluginMarketCatalog.shared.remove(id: link.id)
+                let done = UIAlertController(title: AorusPluginMarketText.pluginDeleted, message: nil, preferredStyle: .alert)
+                done.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+                    _ = (self?.navigationController as? NavigationController)?.popViewController(animated: true)
+                })
+                self.present(done, animated: true)
+            case let .failure(error):
+                if error == .authorBanned { self.tableView.reloadData() }
+                self.show(AorusPluginMarketText.message(for: error))
+            }
         }
     }
 
@@ -823,6 +931,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
                 }
                 self.tableView.reloadData()
                 if let link = self.record.manifest.market, link.isOwn {
+                    guard !self.isBanned else { return self.show(AorusPluginMarketText.banned) }
                     AorusPluginMarketClient.shared.uploadIcon(id: link.id, data: data, contentType: AorusPluginBanner.contentType(of: data)) { _ in }
                 }
             }
@@ -869,6 +978,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         do {
             try AorusPluginStore.shared.updateManifest(record.manifest)
             if let saved = AorusPluginStore.shared.load(id: record.manifest.id) { record = saved }
+            if mode == .management { title = record.manifest.name }
             tableView.reloadData()
         } catch {
             show(error.localizedDescription)
@@ -1148,8 +1258,33 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     private var highlightWork: DispatchWorkItem?
     private var currentLayout: ContainerViewLayout?
 
+    // MARK: History
+    //
+    // The editor keeps its own history rather than leaning on the text view's: highlighting
+    // rewrites attributes under it and AorusAI types whole plugins into it, neither of which the
+    // system's keystroke undo understands. Typing is grouped the way a person thinks of it —
+    // until a pause, a new line or a paste — a generation is one step, and the arrows at the
+    // bottom corner walk back and forward through it.
+
+    private struct Snapshot {
+        let text: String
+        let selection: NSRange
+    }
+
+    private static let historyLimit = 100
+    private static let historyBytes = 16 * 1024 * 1024
+    private var undoStack: [Snapshot] = []
+    private var redoStack: [Snapshot] = []
+    /// The text as it stood when the last step was closed.
+    private var lastRecorded: Snapshot
+    private var editGroupOpen = false
+    private var editBoundary = false
+    private var groupWork: DispatchWorkItem?
+    private var historyControl: AorusPluginHistoryControl?
+
     init(context: AccountContext, record: AorusPluginRecord) {
         self.context = context; self.record = record; self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        self.lastRecorded = Snapshot(text: record.source, selection: NSRange(location: 0, length: 0))
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = record.manifest.name
         // Save · AI · ⋯. AI writes or rewrites the plugin from a description, into this editor.
@@ -1166,6 +1301,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
 
     deinit {
         highlightWork?.cancel()
+        groupWork?.cancel()
         observedSandbox?.observeLog(nil)
         if let licenseObserver { NotificationCenter.default.removeObserver(licenseObserver) }
     }
@@ -1189,6 +1325,12 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         editorTools.axis = .horizontal; editorTools.distribution = .fillEqually; editorTools.backgroundColor = dark ? UIColor(white: 0.12, alpha: 0.94) : UIColor(white: 1, alpha: 0.96)
         addTool(AorusPluginUIString.run.text, "play.fill", #selector(runPlugin)); addTool(AorusPluginUIString.stop.text, "stop.fill", #selector(stopPlugin)); addTool(AorusPluginUIString.console.text, "terminal.fill", #selector(toggleConsole)); addTool(AorusPluginUIString.documentation.text, "book.fill", #selector(openDocs))
         displayNode.view.addSubview(lineNumbers); displayNode.view.addSubview(editor); displayNode.view.addSubview(console); displayNode.view.addSubview(consolePlaceholder); displayNode.view.addSubview(editorTools)
+        let history = AorusPluginHistoryControl(glass: aorusPluginMarketHost(context: context, controller: self).makeGlassBackground(), theme: presentationData.theme)
+        history.undoButton.addTarget(self, action: #selector(undoEdit), for: .touchUpInside)
+        history.redoButton.addTarget(self, action: #selector(redoEdit), for: .touchUpInside)
+        displayNode.view.addSubview(history)
+        historyControl = history
+        updateHistoryControl(animated: false)
         licenseObserver = NotificationCenter.default.addObserver(forName: Notification.Name("aorusgram.licenseLockChanged"), object: nil, queue: .main) { [weak self] _ in
             guard !AorusLicenseAccess.isAllowed else { return }
             self?.stopPlugin()
@@ -1201,17 +1343,124 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         currentLayout = layout
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         let toolbarHeight: CGFloat = 52 + layout.intrinsicInsets.bottom
+        // With the keyboard up the code ends above it, and the arrows ride on top of it, which
+        // is where they are wanted while typing; the tools stay under it at the bottom.
+        let bottom = max(toolbarHeight, layout.inputHeight ?? 0)
         let consoleHeight: CGFloat = console.isHidden ? 0 : min(190, layout.size.height * 0.28)
-        transition.updateFrame(view: lineNumbers, frame: CGRect(x: 6, y: top + 14, width: 34, height: max(0, layout.size.height - top - toolbarHeight - 14)))
-        transition.updateFrame(view: editor, frame: CGRect(x: 40, y: top, width: layout.size.width - 40, height: max(0, layout.size.height - top - toolbarHeight - consoleHeight)))
-        transition.updateFrame(view: console, frame: CGRect(x: 0, y: layout.size.height - toolbarHeight - consoleHeight, width: layout.size.width, height: consoleHeight))
-        transition.updateFrame(view: consolePlaceholder, frame: CGRect(x: 20, y: layout.size.height - toolbarHeight - consoleHeight + 12, width: layout.size.width - 40, height: 22))
+        transition.updateFrame(view: lineNumbers, frame: CGRect(x: 6, y: top + 14, width: 34, height: max(0, layout.size.height - top - bottom - 14)))
+        transition.updateFrame(view: editor, frame: CGRect(x: 40, y: top, width: layout.size.width - 40, height: max(0, layout.size.height - top - bottom - consoleHeight)))
+        transition.updateFrame(view: console, frame: CGRect(x: 0, y: layout.size.height - bottom - consoleHeight, width: layout.size.width, height: consoleHeight))
+        transition.updateFrame(view: consolePlaceholder, frame: CGRect(x: 20, y: layout.size.height - bottom - consoleHeight + 12, width: layout.size.width - 40, height: 22))
         transition.updateFrame(view: editorTools, frame: CGRect(x: 0, y: layout.size.height - toolbarHeight, width: layout.size.width, height: toolbarHeight))
+        if let historyControl {
+            let size = AorusPluginHistoryControl.size
+            let codeBottom = layout.size.height - bottom - consoleHeight
+            transition.updateFrame(view: historyControl, frame: CGRect(
+                x: layout.size.width - layout.safeInsets.right - 14 - size.width,
+                y: codeBottom - 12 - size.height,
+                width: size.width,
+                height: size.height
+            ))
+        }
     }
 
     private func addTool(_ title: String, _ image: String, _ action: Selector) { let button = UIButton(type: .system); button.setImage(UIImage(systemName: image), for: .normal); button.setTitle(" " + title, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold); button.addTarget(self, action: action, for: .touchUpInside); editorTools.addArrangedSubview(button) }
 
-    func textViewDidChange(_ textView: UITextView) { updateLineNumbers(); highlightWork?.cancel(); let work = DispatchWorkItem { [weak self] in self?.highlight() }; highlightWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work) }
+    func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        // A new line, a paste or a deletion of a whole selection ends the step it belongs to.
+        if text.contains("\n") || text.count > 1 || range.length > 1 { editBoundary = true }
+        return true
+    }
+
+    func textViewDidChange(_ textView: UITextView) {
+        updateLineNumbers(); highlightWork?.cancel(); let work = DispatchWorkItem { [weak self] in self?.highlight() }; highlightWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
+        recordEdit()
+    }
+
+    private var currentSnapshot: Snapshot {
+        return Snapshot(text: editor.text ?? "", selection: editor.selectedRange)
+    }
+
+    private var isTypingCode: Bool {
+        return AorusPluginCodeTyper.isTyping(into: editor)
+    }
+
+    private func pushHistory(_ snapshot: Snapshot, onto stack: inout [Snapshot]) {
+        if stack.last?.text == snapshot.text { return }
+        stack.append(snapshot)
+        if stack.count > Self.historyLimit { stack.removeFirst(stack.count - Self.historyLimit) }
+        var bytes = stack.reduce(0) { $0 + $1.text.utf8.count }
+        while bytes > Self.historyBytes, stack.count > 1 {
+            bytes -= stack.removeFirst().text.utf8.count
+        }
+    }
+
+    /// A change typed by hand. The first one after a pause opens a step; the step closes after
+    /// a pause of its own, or at once after a new line or a paste.
+    private func recordEdit() {
+        if !editGroupOpen {
+            pushHistory(lastRecorded, onto: &undoStack)
+            redoStack.removeAll()
+            editGroupOpen = true
+        }
+        groupWork?.cancel()
+        if editBoundary {
+            editBoundary = false
+            closeEditGroup()
+        } else {
+            let work = DispatchWorkItem { [weak self] in self?.closeEditGroup() }
+            groupWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+        }
+        updateHistoryControl(animated: true)
+    }
+
+    private func closeEditGroup() {
+        groupWork?.cancel()
+        groupWork = nil
+        guard editGroupOpen else { return }
+        editGroupOpen = false
+        lastRecorded = currentSnapshot
+    }
+
+    @objc private func undoEdit() {
+        guard !isTypingCode else { return }
+        closeEditGroup()
+        guard let previous = undoStack.popLast() else { return updateHistoryControl(animated: true) }
+        pushHistory(currentSnapshot, onto: &redoStack)
+        restore(previous)
+    }
+
+    @objc private func redoEdit() {
+        guard !isTypingCode else { return }
+        closeEditGroup()
+        guard let next = redoStack.popLast() else { return updateHistoryControl(animated: true) }
+        pushHistory(currentSnapshot, onto: &undoStack)
+        restore(next)
+    }
+
+    private func restore(_ snapshot: Snapshot) {
+        highlightWork?.cancel()
+        editor.text = snapshot.text
+        highlight()
+        updateLineNumbers()
+        let length = (snapshot.text as NSString).length
+        let location = min(snapshot.selection.location, length)
+        editor.selectedRange = NSRange(location: location, length: min(snapshot.selection.length, length - location))
+        editor.scrollRangeToVisible(editor.selectedRange)
+        // The system's keystroke history no longer describes this text.
+        editor.undoManager?.removeAllActions()
+        lastRecorded = snapshot
+        UISelectionFeedbackGenerator().selectionChanged()
+        updateHistoryControl(animated: true)
+    }
+
+    private func updateHistoryControl(animated: Bool) {
+        let typing = isTypingCode
+        let canUndo = !typing && (editGroupOpen || !undoStack.isEmpty)
+        let canRedo = !typing && !redoStack.isEmpty
+        historyControl?.update(canUndo: canUndo, canRedo: canRedo, animated: animated)
+    }
 
     private func updateLineNumbers() { let count = max(1, editor.text.reduce(1) { $1 == "\n" ? $0 + 1 : $0 }); lineNumbers.text = (1...count).map(String.init).joined(separator: "\n") }
 
@@ -1228,6 +1477,8 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     }
 
     @objc private func save() {
+        // A generation still being typed is finished first: what is saved is the whole plugin.
+        AorusPluginCodeTyper.finishTyping(in: editor)
         let source = editor.text ?? ""
         let sourceChanged = source != record.source
         record.source = source
@@ -1294,6 +1545,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
             appendConsole("Plugin execution is unavailable")
             return
         }
+        AorusPluginCodeTyper.finishTyping(in: editor)
         let source = editor.text ?? ""
         let diagnostics = AorusPluginSandbox.checkSyntax(source)
         guard diagnostics.isEmpty else { appendConsole("Line \(diagnostics[0].line): \(diagnostics[0].message)"); return }
@@ -1338,23 +1590,30 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         let sheet = AorusPluginGenerateController(
             theme: presentationData.theme,
             languageCode: presentationData.strings.baseLanguageCode,
-            currentCode: { [weak self] in self?.editor.text ?? "" },
             onDraft: { [weak self] draft in self?.apply(draft) }
         )
         present(sheet, animated: true)
     }
 
-    /// The generated code, typed in. It is not saved: Save does that, as for anything typed by
-    /// hand. A plugin still called by its default name takes the draft's name and description.
+    /// The generated code, typed in over what was there. It is not saved: Save does that, as for
+    /// anything typed by hand, and the back arrow brings the previous code back in one step. A
+    /// plugin still called by its default name takes the draft's name and description.
     private func apply(_ draft: AorusPluginMarketDraft) {
         highlightWork?.cancel()
+        AorusPluginCodeTyper.finishTyping(in: editor)
+        closeEditGroup()
+        pushHistory(currentSnapshot, onto: &undoStack)
+        redoStack.removeAll()
         AorusPluginCodeTyper.type(draft.code, into: editor, progress: { [weak self] in
             self?.updateLineNumbers()
         }, completion: { [weak self] in
             guard let self else { return }
             self.updateLineNumbers()
             self.highlight()
+            self.lastRecorded = Snapshot(text: self.editor.text ?? "", selection: NSRange(location: 0, length: 0))
+            self.updateHistoryControl(animated: true)
         })
+        updateHistoryControl(animated: true)
         if let name = draft.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
            record.manifest.name == AorusPluginUIString.plugins.text {
             var manifest = record.manifest
@@ -1381,6 +1640,85 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard scrollView === editor else { return }
         lineNumbers.contentOffset = CGPoint(x: 0, y: editor.contentOffset.y)
+    }
+}
+
+/// Back and forward through the editor's history, on Telegram's own glass at the bottom corner of
+/// the code. Each arrow is lit in the accent colour when there is a step to take and dimmed
+/// when there is none, and answers a press with a small spring.
+private final class AorusPluginHistoryControl: UIView {
+    static let size = CGSize(width: 108, height: 44)
+
+    let undoButton = UIButton(type: .custom)
+    let redoButton = UIButton(type: .custom)
+    private let glass: UIView & AorusPluginGlassBackground
+    private let divider = UIView()
+    private let isDark: Bool
+    private let lit: UIColor
+    private let unlit: UIColor
+
+    init(glass: UIView & AorusPluginGlassBackground, theme: PresentationTheme) {
+        self.glass = glass
+        self.isDark = theme.overallDarkAppearance
+        self.lit = theme.list.itemAccentColor
+        self.unlit = theme.list.itemSecondaryTextColor.withAlphaComponent(0.35)
+        super.init(frame: CGRect(origin: .zero, size: Self.size))
+        glass.isUserInteractionEnabled = false
+        addSubview(glass)
+        divider.backgroundColor = theme.list.itemSecondaryTextColor.withAlphaComponent(0.22)
+        divider.isUserInteractionEnabled = false
+        addSubview(divider)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+        for (button, symbol, label) in [
+            (undoButton, "arrow.uturn.backward", aorusL("Отменить", "Undo")),
+            (redoButton, "arrow.uturn.forward", aorusL("Повторить", "Redo")),
+        ] {
+            button.setImage(UIImage(systemName: symbol, withConfiguration: configuration)?.withRenderingMode(.alwaysTemplate), for: .normal)
+            button.accessibilityLabel = label
+            button.tintColor = unlit
+            button.addTarget(self, action: #selector(pressed(_:)), for: .touchUpInside)
+            addSubview(button)
+        }
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = isDark ? 0.35 : 0.12
+        layer.shadowRadius = 10
+        layer.shadowOffset = CGSize(width: 0, height: 3)
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        glass.frame = bounds
+        glass.updateGlass(size: bounds.size, cornerRadius: bounds.height / 2, isDark: isDark)
+        let half = bounds.width / 2
+        undoButton.frame = CGRect(x: 4, y: 0, width: half - 4, height: bounds.height)
+        redoButton.frame = CGRect(x: half, y: 0, width: half - 4, height: bounds.height)
+        let hairline = 1 / UIScreen.main.scale
+        divider.frame = CGRect(x: half - hairline / 2, y: 12, width: hairline, height: bounds.height - 24)
+        layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: bounds.height / 2).cgPath
+    }
+
+    func update(canUndo: Bool, canRedo: Bool, animated: Bool) {
+        let change = {
+            self.undoButton.tintColor = canUndo ? self.lit : self.unlit
+            self.redoButton.tintColor = canRedo ? self.lit : self.unlit
+        }
+        undoButton.isUserInteractionEnabled = canUndo
+        redoButton.isUserInteractionEnabled = canRedo
+        if animated, window != nil {
+            UIView.transition(with: self, duration: 0.2, options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction], animations: change, completion: nil)
+        } else {
+            change()
+        }
+    }
+
+    @objc private func pressed(_ button: UIButton) {
+        guard let image = button.imageView else { return }
+        image.transform = CGAffineTransform(scaleX: 0.82, y: 0.82)
+        UIView.animate(withDuration: 0.36, delay: 0, usingSpringWithDamping: 0.5, initialSpringVelocity: 0.8, options: [.allowUserInteraction], animations: {
+            image.transform = .identity
+        }, completion: nil)
     }
 }
 
@@ -1815,7 +2153,7 @@ private enum AorusPluginDocumentation {
             Вибрация: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
             Эффекты на экране
-            Анимация поверх всего приложения и его алертов, на том же уровне, что и статистика производительности (CPU, RAM). Касания проходят сквозь неё. Эффект появляется сразу, как его включили, без перезапуска приложения, а после возвращения из фона идущие эффекты рисуются заново сами. Включённый плагин запускается при каждом открытии приложения, поэтому снег возвращается и после того, как система закрыла приложение в фоне. Эффект пропадает, только если его выключили, выключили плагин, истёк duration или телефон перегрелся.
+            Анимация поверх всего приложения и его алертов, на том же уровне, что и статистика производительности (CPU, RAM). Касания проходят сквозь неё. Эффект появляется сразу, как его включили, без перезапуска приложения, а после возвращения из фона идущие эффекты рисуются заново сами. Включённый плагин запускается при каждом открытии приложения, поэтому снег возвращается и после того, как система закрыла приложение в фоне, а каждый выход на передний план — в том числе по нажатию на уведомление — запускает включённые плагины, которые не смогли стартовать в фоне. Каждый запуск плагина рисует свои эффекты: когда один запуск сменяет другой (перезапуск, смена аккаунта по уведомлению), stop уходящего не выключает снег нового, а тот же эффект просто передаётся новому запуску и не мигает. Эффект пропадает, только если его выключили, выключили плагин, истёк duration или телефон перегрелся.
             Непрерывный эффект включается start и выключается stop. id выбираете вы; повторный start с тем же id меняет параметры, а не добавляет второй эффект:
             await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
             await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
@@ -1987,10 +2325,13 @@ private enum AorusPluginDocumentation {
 
             Маркет и публикация
             Вверху экрана плагинов стеклянный переключатель «Плагины» и «Маркет». В Маркете плагины авторов: «Установить» и «Обновить» работают прямо из списка, а нажатие на строку открывает страницу плагина с иконкой, описанием, автором (имя, аватарка и бейдж из Telegram по его id) и разрешениями, с кнопкой внизу, которая остаётся на месте при прокрутке. Установленный плагин появляется в «Плагинах» выключенным, с названием и версией из Маркета; включение показывает его разрешения. Обновление заменяет код, выключает плагин и отзывает разрешения.
-            Публикация — из «Оформления» плагина: «Баннер» над названием (фото из галереи, кадрируется в квадрат, уходит в Маркет иконкой) и кнопка «Опубликовать». При первой публикации приложение спрашивает идентификатор в Маркете: латиница, цифры, точка, дефис, начинается с буквы, потом не меняется. Автором считается владелец лицензии устройства. Ответ: «Опубликовано», «Ваш плагин на модерации» (обновление всегда проходит модерацию, до одобрения в Маркете остаётся прежняя версия), «Плагин отклонён» с причиной, «Плагин снят с публикации». Одобренную версию нельзя отправить повторно — приложение предложит поднять номер. «Мои плагины» в Маркете появляются, когда у вас есть опубликованные плагины, и открывают «Оформление» рабочей копии.
+            «Оформление» и управление в Маркете — разные экраны. Первая публикация — из «Оформления»: «Баннер» над названием (фото из галереи, кадрируется в квадрат, уходит в Маркет иконкой) и кнопка «Опубликовать»; у опубликованного плагина вместо неё строка «Управление в Маркете». При первой публикации приложение спрашивает идентификатор в Маркете: латиница, цифры, точка, дефис, начинается с буквы, потом не меняется. Автором считается владелец лицензии устройства. Ответ: «Опубликовано», «Ваш плагин на модерации» (обновление всегда проходит модерацию, до одобрения в Маркете остаётся прежняя версия), «Плагин отклонён» с причиной, «Плагин снят с публикации». Одобренную версию нельзя отправить повторно — приложение предложит поднять номер. «Мои плагины» в Маркете появляются, когда у вас есть опубликованные плагины, и открывают экран управления: состояние версий; баннер, название, описание, версия и «Редактор»; «Опубликовать»; «Удалить плагин». Удаление убирает из Маркета все ваши версии вместе с кодом и иконкой и освобождает id; копия на телефоне остаётся обычным плагином. Значка и цвета там нет — это оформление.
 
             AorusAI в редакторе
-            В редакторе кнопки «Сохранить», «AI» и «⋯». «AI» принимает запрос от 8 до 4000 символов — что должен делать плагин или что изменить в открытом коде. Текущий код уходит как контекст, а ответ — только код — печатается прямо в редакторе. Сохраняет его «Сохранить».
+            В редакторе кнопки «Сохранить», «AI» и «⋯». «AI» принимает запрос от 8 до 4000 символов — что должен делать плагин. Каждая генерация — отдельный плагин: код из редактора не отправляется, а ответ — только код — печатается поверх старого, и старый уходит, пока пишется новый. Сохраняет его «Сохранить».
+
+            История правок
+            Справа внизу редактора, над панелью или над клавиатурой, — стрелки назад и вперёд. Стрелка горит, когда есть куда идти, и тускнеет, когда некуда. Набор объединяется в шаг до паузы, новой строки или вставки; генерация AorusAI — один шаг, так что «назад» возвращает прежний код целиком.
 
             Ограничения
             Код: 512 КБ. Хранилище: 1 МБ. HTTP-ответ: 5 МБ. Один вход в JavaScript прерывается через 3 секунды. На плагин разрешено до 64 таймеров и 32 незавершённых запросов к приложению.
@@ -2073,7 +2414,7 @@ private enum AorusPluginDocumentation {
     Haptics: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
     Screen effects
-    An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears the moment it is turned on, with no restart of the app, and running effects are drawn again by themselves when the app comes back from the background. An enabled plugin starts every time the app opens, so snow comes back even after the system closed the app in the background. An effect only goes away when it is stopped, its plugin is switched off, its duration runs out or the phone overheats.
+    An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears the moment it is turned on, with no restart of the app, and running effects are drawn again by themselves when the app comes back from the background. An enabled plugin starts every time the app opens, so snow comes back even after the system closed the app in the background, and every return to the front, a tap on a notification included, starts any enabled plugin that could not start in the background. Every run of a plugin draws its own effects: when one run replaces another (a restart, a change of account from a notification), the old run's stop does not turn off the new run's snow, and the same effect asked for again is handed to the new run without a blink. An effect only goes away when it is stopped, its plugin is switched off, its duration runs out or the phone overheats.
     A continuous effect is turned on with start and off with stop. You choose the id; start again with the same id changes the settings instead of adding a second effect:
     await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
     await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
@@ -2244,10 +2585,13 @@ private enum AorusPluginDocumentation {
 
     Market and publishing
     At the top of the plugins screen a glass switch holds Plugins and Market. The Market lists authors' plugins: Install and Update work straight from the list, and a row opens the plugin's page with its icon, description, author (name, avatar and badge from Telegram, by their id) and permissions, and a button at the bottom that stays put while the page scrolls. An installed plugin appears in Plugins switched off, under the Market's name and version; turning it on shows its permissions. An update replaces the code, switches the plugin off and revokes its permissions.
-    Publishing is in the plugin's Appearance: Banner above the name (a photo from the library, framed as a square, sent to the Market as the icon) and a Publish button. The first publish asks for the Market ID: Latin letters, digits, dots and dashes, starting with a letter, and fixed from then on. The author is whoever owns the licence on this device. The answer is Published, Your plugin is under review (every update is moderated and the previous version stays in the Market until it is approved), Plugin rejected with the reason, or Plugin taken down. An approved version cannot be sent again; the app offers to raise the number. My Plugins appears in the Market once you have published something and opens the working copy's Appearance.
+    Appearance and managing a plugin in the Market are separate screens. The first publish is from Appearance: Banner above the name (a photo from the library, framed as a square, sent to the Market as the icon) and a Publish button; a published plugin shows Manage in Market there instead. The first publish asks for the Market ID: Latin letters, digits, dots and dashes, starting with a letter, and fixed from then on. The author is whoever owns the licence on this device. The answer is Published, Your plugin is under review (every update is moderated and the previous version stays in the Market until it is approved), Plugin rejected with the reason, or Plugin taken down. An approved version cannot be sent again; the app offers to raise the number. My Plugins appears in the Market once you have published something and opens the management screen: where each version stands; banner, name, description, version and Editor; Publish; Delete plugin. Deleting removes every version you published under that id, with its code and icon, and frees the id; the copy on this phone stays as an ordinary plugin. The glyph and colour are not there: they are appearance.
 
     AorusAI in the editor
-    The editor has Save, AI and ⋯. AI takes a request of 8 to 4000 characters: what the plugin should do, or what to change in the open code. The current code goes along as context, and the answer, code only, is typed straight into the editor. Save keeps it.
+    The editor has Save, AI and ⋯. AI takes a request of 8 to 4000 characters: what the plugin should do. Every generation is a plugin of its own: the editor's code is not sent, and the answer, code only, is typed over the old code, which gives way as the new is written. Save keeps it.
+
+    Edit history
+    At the bottom right of the editor, above the tools or above the keyboard, are back and forward arrows. An arrow is lit when there is a step to take and dimmed when there is none. Typing is one step until a pause, a new line or a paste; an AorusAI generation is one step, so Back brings the previous code back whole.
 
     Limits
     Source: 512 KB. Storage: 1 MB. HTTP response: 5 MB. A JavaScript entry is terminated after 3 seconds. Up to 64 timers and 32 pending host requests are allowed per plugin.

@@ -1388,6 +1388,12 @@ def check_plugin_ui_stubs(root: Path, errors: list[str]) -> None:
                 fail(errors, f"plugin UI stub has drifted from AorusPluginMarketClient: {signature}")
         if checked == 0:
             fail(errors, "plugin UI stubs declare no Market client methods to check")
+        # Properties the screens read are held to the real file too: a stand-in that answers
+        # a property the client no longer has type-checks the screens against nothing.
+        client_text = client.read_text(encoding="utf-8")
+        for name in re.findall(r"^\s*public var (\w+):", client_block.group(1), re.M):
+            if not re.search(r"public (?:private\(set\) )?var " + re.escape(name) + r"\b", client_text):
+                fail(errors, f"plugin UI stub has drifted from AorusPluginMarketClient: var {name}")
     host_stub = re.search(r"^func aorusPluginMarketHost\(.*?\) -> AorusPluginMarketHost", stub_text, re.M)
     if host_stub is None or not bridge.is_file():
         fail(errors, "plugin UI stubs no longer declare the Market host entry point")

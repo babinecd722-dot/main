@@ -32,6 +32,9 @@ import QuartzCore
 //   A hot phone or Low Power Mode gets less: nothing new starts while the device is
 //   overheating, and whatever is running thins out, or stops being born, until it cools.
 //   Nothing outlives its plugin. Stopping the plugin stops every effect it started.
+//   A run of a plugin only stops what it drew itself. When a plugin is replaced by a new run
+//   of itself — a restart, a change of account — the old run's stop handler must not take the
+//   new run's snow with it, however the two happen to interleave.
 //
 // UIKit and QuartzCore only, apart from the validated request out of AorusPluginModel. That is
 // what lets the preflight type-check this file against the iOS SDK in seconds rather than
@@ -91,7 +94,9 @@ public final class AorusPluginEffectsRenderer {
         let pluginId: String
         let id: String
         let preset: AorusPluginEffectPreset
-        let request: AorusPluginEffectRequest
+        /// What was asked for. Its owner moves to a new run of the plugin that asks for the
+        /// same effect again, so the layers on the screen carry on instead of starting over.
+        var request: AorusPluginEffectRequest
         var streams: [Stream] = []
         var isFilling = false
         /// Moves on whenever the layers are rebuilt or dropped, so that a seeding timer set for
@@ -166,15 +171,11 @@ public final class AorusPluginEffectsRenderer {
         if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
     }
 
+    /// The plugin stopped: everything it drew goes, whichever run drew it.
     public func stopAll(pluginId: String) {
         let work = { [weak self] in
             guard let self else { return }
-            for (key, item) in self.running where item.pluginId == pluginId {
-                self.finish(key: key, item: item, animated: false)
-            }
-            for key in self.pending.keys where self.pending[key]?.pluginId == pluginId {
-                self.pending[key] = nil
-            }
+            self.removeAll(pluginId: pluginId, owner: nil, animated: false)
             for layer in self.transient.removeValue(forKey: pluginId) ?? [] {
                 layer.removeFromSuperlayer()
             }
@@ -182,6 +183,32 @@ public final class AorusPluginEffectsRenderer {
             self.hideWindowIfIdle()
         }
         if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
+    }
+
+    /// One run of the plugin is over and another has taken its place: whatever that run drew
+    /// and the new one has not drawn again goes. What the new run started stays.
+    public func stopAll(pluginId: String, owner: String) {
+        let work = { [weak self] in
+            guard let self else { return }
+            self.removeAll(pluginId: pluginId, owner: owner, animated: true)
+            self.hideWindowIfIdle()
+        }
+        if Thread.isMainThread { work() } else { DispatchQueue.main.async(execute: work) }
+    }
+
+    /// Whether `request` may end what `existing` asked for: the same run, or a caller that
+    /// does not say which run it is.
+    private static func owns(_ request: AorusPluginEffectRequest, _ existing: AorusPluginEffectRequest) -> Bool {
+        return request.owner.isEmpty || existing.owner.isEmpty || request.owner == existing.owner
+    }
+
+    private func removeAll(pluginId: String, owner: String?, animated: Bool) {
+        for (key, item) in running where item.pluginId == pluginId && (owner == nil || item.request.owner == owner) {
+            finish(key: key, item: item, animated: animated)
+        }
+        for (key, item) in pending where item.pluginId == pluginId && (owner == nil || item.request.owner == owner) {
+            pending[key] = nil
+        }
     }
 
     // MARK: - Dispatch
@@ -198,14 +225,26 @@ public final class AorusPluginEffectsRenderer {
         case let .stop(id):
             // `shown` answers whether there was such an effect to stop, so a plugin that stops
             // one twice, or one that already ran out, can tell. One still waiting for the app
-            // to come to the front counts: it would have been on the screen.
+            // to come to the front counts: it would have been on the screen. An effect a newer
+            // run of the plugin started is not this run's to stop, and to this run it is gone.
             let key = Self.key(pluginId, id)
-            if pending.removeValue(forKey: key) != nil { return answer(true, id: id) }
-            guard let item = running[key] else { return answer(false, reason: "notRunning", id: id) }
+            if let queued = pending[key], Self.owns(request, queued.request) {
+                pending[key] = nil
+                return answer(true, id: id)
+            }
+            guard let item = running[key], Self.owns(request, item.request) else { return answer(false, reason: "notRunning", id: id) }
             finish(key: key, item: item, animated: true)
             return answer(true, id: id)
         case .stopAll:
-            stopAll(pluginId: pluginId)
+            if request.owner.isEmpty {
+                stopAll(pluginId: pluginId)
+            } else {
+                removeAll(pluginId: pluginId, owner: request.owner, animated: true)
+                for layer in transient.removeValue(forKey: pluginId) ?? [] {
+                    layer.removeFromSuperlayer()
+                }
+                hideWindowIfIdle()
+            }
             return answer(true)
         default:
             break
@@ -243,7 +282,19 @@ public final class AorusPluginEffectsRenderer {
         case let .start(id, preset):
             let key = Self.key(pluginId, id)
             pending[key] = nil
-            if let existing = running[key] { finish(key: key, item: existing, animated: false) }
+            if let existing = running[key] {
+                // The same effect asked for again — typically by a new run of the plugin that
+                // has just replaced the one that started it — is the effect already falling.
+                // It is handed over rather than drawn again, so snow does not blink when a
+                // plugin restarts or the account changes.
+                var adopted = existing.request
+                adopted.owner = request.owner
+                if request.duration == 0, adopted == request, isDrawn(existing, in: host) {
+                    existing.request = request
+                    return answer(true, id: id)
+                }
+                finish(key: key, item: existing, animated: false)
+            }
             let mine = running.values.filter { $0.pluginId == pluginId }.count
             if mine >= Self.maximumPerPlugin || running.count >= Self.maximumTotal {
                 hideWindowIfIdle()

@@ -174,6 +174,26 @@ public final class AorusPluginStore {
         return try? decoder.decode(AorusPluginManifest.self, from: data)
     }
 
+    /// Whether there is a plugin with this id, readable or not.
+    public func contains(id: String) -> Bool {
+        guard let id = AorusPluginStore.normalizedIdentifier(id) else { return false }
+        return queue.sync { FileManager.default.fileExists(atPath: manifestURL(for: id).path) }
+    }
+
+    /// Whether the plugin's code and grants can be read right now. False only when a file
+    /// that is there cannot be read — the phone restarted and not unlocked yet, an I/O error —
+    /// which is a reason to look again later and never a reason to switch the plugin off.
+    public func isReadable(id: String) -> Bool {
+        guard let id = AorusPluginStore.normalizedIdentifier(id) else { return false }
+        return queue.sync {
+            for url in [manifestURL(for: id), sourceURL(for: id), permissionsURL(for: id)]
+            where FileManager.default.fileExists(atPath: url.path) {
+                if (try? Data(contentsOf: url)) == nil { return false }
+            }
+            return true
+        }
+    }
+
     public func manifest(id: String) -> AorusPluginManifest? {
         guard let id = AorusPluginStore.normalizedIdentifier(id) else { return nil }
         return queue.sync {

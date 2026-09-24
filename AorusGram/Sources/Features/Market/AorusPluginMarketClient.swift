@@ -5,9 +5,9 @@ import UIKit
 ///
 /// Reading is open: the catalog, a card, an approved version's source and an icon are plain
 /// GETs. Writing — generating a draft, publishing, uploading an icon, listing one's own
-/// plugins — is a POST in the same signed envelope as the licence and AorusAI: a timestamp, a
-/// nonce, the device fingerprint, the key version and the SHA-256 of the exact body bytes,
-/// signed with the licence key. The author is whoever that licence belongs to; nothing here
+/// plugins, deleting one — is a POST or a DELETE in the same signed envelope as the licence
+/// and AorusAI: a timestamp, a nonce, the device fingerprint, the key version and the SHA-256
+/// of the exact body bytes (of no bytes at all for a DELETE), signed with the licence key. The author is whoever that licence belongs to; nothing here
 /// ever sends a name, an id or a hash that says who is asking.
 ///
 /// Every session goes through the pinned delegate, which refuses a redirect to another host —
@@ -25,6 +25,12 @@ public final class AorusPluginMarketClient {
     private let iconCache = NSCache<NSString, UIImage>()
     private let iconDirectory: URL
     private let iconQueue = DispatchQueue(label: "aorusgram.plugins.market.icons", qos: .utility)
+
+    /// The Market has said this author is banned. A ban is the author's and not a plugin's,
+    /// so from then on generating, publishing, uploading an icon and deleting are all off
+    /// for the rest of the session, and the screens say why instead of asking again.
+    /// Read on the main queue.
+    public private(set) var isAuthorBanned = false
 
     private init() {
         func makeSession(timeout: TimeInterval) -> URLSession {
@@ -203,6 +209,22 @@ public final class AorusPluginMarketClient {
         }
     }
 
+    /// Takes a plugin out of the Market: every version of it this licence owns, with its code
+    /// and its icon. The id is free again afterwards, to this device as a first publish.
+    public func delete(id: String, completion: @escaping (Result<AorusPluginMarketDeleteResult, AorusPluginMarketError>) -> Void) {
+        guard AorusPluginMarketID.isValid(id) else { return deliver(completion, .failure(.invalid("invalid_id"))) }
+        guard let request = signedRequest(path: "/v1/plugins/\(id)", method: "DELETE", body: Data(), contentType: "application/json") else {
+            return deliver(completion, .failure(.unavailable))
+        }
+        perform(request, session: session) { [weak self] result in
+            if case .success = result { self?.forgetIcon(id: id) }
+            completion(result.flatMap { data -> Result<AorusPluginMarketDeleteResult, AorusPluginMarketError> in
+                guard let deleted = AorusPluginMarketDeleteResult(data: data), deleted.id == id else { return .failure(.malformedResponse) }
+                return .success(deleted)
+            })
+        }
+    }
+
     public func forgetIcon(id: String) {
         iconCache.removeObject(forKey: id as NSString)
         let file = iconDirectory.appendingPathComponent(id).appendingPathExtension("png")
@@ -239,14 +261,15 @@ public final class AorusPluginMarketClient {
     }
 
     private func post(_ path: String, body: Data, contentType: String, slow: Bool, completion: @escaping (Result<Data, AorusPluginMarketError>) -> Void) {
-        guard let request = signedRequest(path: path, body: body, contentType: contentType) else {
+        guard let request = signedRequest(path: path, method: "POST", body: body, contentType: contentType) else {
             return deliver(completion, .failure(.unavailable))
         }
         perform(request, session: slow ? slowSession : session, completion: completion)
     }
 
-    /// The licence envelope over the exact bytes that are sent.
-    private func signedRequest(path: String, body: Data, contentType: String) -> URLRequest? {
+    /// The licence envelope over the exact bytes that are sent. A DELETE sends none, and its
+    /// body hash is the hash of nothing.
+    private func signedRequest(path: String, method: String, body: Data, contentType: String) -> URLRequest? {
         guard AorusLicenseAccess.isAllowed, AorusEnvGuard.enforceBeforeRequest(), let url = url(path) else { return nil }
         let timestamp = String(Int64(Date().timeIntervalSince1970))
         let nonce = LicenseCrypto.randomHex(byteCount: 16).lowercased()
@@ -259,8 +282,8 @@ public final class AorusPluginMarketClient {
         }) else { return nil }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = body
+        request.httpMethod = method
+        if !body.isEmpty { request.httpBody = body }
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(SubscriptionConfig.userAgent, forHTTPHeaderField: "User-Agent")
@@ -276,7 +299,7 @@ public final class AorusPluginMarketClient {
     }
 
     private func perform(_ request: URLRequest, session: URLSession, completion: @escaping (Result<Data, AorusPluginMarketError>) -> Void) {
-        session.dataTask(with: request) { data, response, error in
+        session.dataTask(with: request) { [weak self] data, response, error in
             let result: Result<Data, AorusPluginMarketError>
             if error != nil {
                 result = .failure(.network)
@@ -290,7 +313,10 @@ public final class AorusPluginMarketClient {
             } else {
                 result = .failure(.network)
             }
-            DispatchQueue.main.async { completion(result) }
+            DispatchQueue.main.async {
+                if case .failure(.authorBanned) = result { self?.isAuthorBanned = true }
+                completion(result)
+            }
         }.resume()
     }
 }

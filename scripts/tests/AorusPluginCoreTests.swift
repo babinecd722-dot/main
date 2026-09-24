@@ -699,6 +699,45 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(slow.registration().commands.isEmpty, "a send handler is not a command")
     slow.stop()
 
+    // Two runs of one plugin — a restart, a change of account. What each draws carries its own
+    // run, so the old run's goodbye cannot stop the new run's snow, and what a stopping run
+    // publishes never reaches the app.
+    let effectHost = AorusPluginNullHost()
+    var effectOwners: [String] = []
+    var overlayPublications = 0
+    effectHost.onEffect = { _, request in
+        effectOwners.append(request.owner)
+        return nil
+    }
+    effectHost.onOverlaysChanged = { _, _ in overlayPublications += 1 }
+    let snowSource = """
+    aorus.effects.start('snow', 'snow');
+    aorus.on('stop', function () {
+        aorus.effects.stop('snow');
+        aorus.ui.addFloatingButton({ title: 'Bye' });
+    });
+    """
+    let firstRun = AorusPluginSandbox(manifest: AorusPluginManifest(name: "Snow"), source: snowSource, host: effectHost, permissions: [.screenEffects, .customUI])
+    let secondRun = AorusPluginSandbox(manifest: firstRun.manifest, source: snowSource, host: effectHost, permissions: [.screenEffects, .customUI])
+    expect(firstRun.runId != secondRun.runId && !firstRun.runId.isEmpty, "every run of a plugin has an identity of its own")
+    let firstStarted = DispatchSemaphore(value: 0)
+    firstRun.start { _ in firstStarted.signal() }
+    _ = firstStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.1)
+    expect(effectOwners.first == firstRun.runId, "an effect request carries the run that asked for it")
+    let firstStopped = DispatchSemaphore(value: 0)
+    firstRun.stop { firstStopped.signal() }
+    _ = firstStopped.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.1)
+    expect(effectOwners.count == 2 && effectOwners.last == firstRun.runId, "a stop from the old run is marked as the old run's")
+    expect(overlayPublications == 0, "what a run publishes while it is stopping never reaches the app")
+    let secondStarted = DispatchSemaphore(value: 0)
+    secondRun.start { _ in secondStarted.signal() }
+    _ = secondStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.1)
+    expect(effectOwners.last == secondRun.runId, "the new run's snow is the new run's")
+    secondRun.stop()
+
     // Formatted text. Telegram counts entity offsets in UTF-16 code units, which is not
     // what a character count gives once an emoji is in the string — get it wrong and the
     // formatting lands on the wrong characters instead of failing, so the offsets are
@@ -1712,7 +1751,7 @@ expect(!AorusPluginEffectRequest.isValidIdentifier(""), "an empty id is not")
 expect(!AorusPluginEffectRequest.isValidIdentifier("a/b"), "a slash is not allowed in an id")
 expect(!AorusPluginEffectRequest.isValidIdentifier(String(repeating: "a", count: 65)), "an over-long id is refused")
 
-// MARK: Market contract (2026-09-24.4)
+// MARK: Market contract (2026-09-24.6)
 
 // Ids and versions keep the contract's patterns; versions compare as numbers.
 expect(AorusPluginMarketID.isValid("com.example.ping") && !AorusPluginMarketID.isValid("Com.example") && !AorusPluginMarketID.isValid("1abc") && !AorusPluginMarketID.isValid("a"), "market ids follow ^[a-z][a-z0-9._-]{1,79}$")
@@ -1756,6 +1795,12 @@ expect(owned.first?.highestVersion == "1.2.0", "the next publish has to be above
 expect(owned.last?.live == nil && owned.last?.takenDown?.version == "0.9.0", "a taken-down plugin has nothing live")
 
 // Publish answers: 200 is not "published"; only approved is live.
+// DELETE /v1/plugins/{id}: only an answer that says ok, for a valid id, is a deletion.
+let deletedAnswer = AorusPluginMarketDeleteResult(data: Data("{\"ok\":true,\"id\":\"com.me.a\",\"removed_versions\":[\"1.0.0\",\"1.0.1\",\"bad\"]}".utf8))
+expect(deletedAnswer?.id == "com.me.a" && deletedAnswer?.removedVersions == ["1.0.0", "1.0.1"], "a deletion lists the versions it removed")
+expect(AorusPluginMarketDeleteResult(data: Data("{\"ok\":false,\"id\":\"com.me.a\"}".utf8)) == nil, "an answer that is not ok is not a deletion")
+expect(AorusPluginMarketDeleteResult(data: Data("{\"ok\":true,\"id\":\"Not An Id\"}".utf8)) == nil, "a deletion names a valid Market id")
+expect(AorusPluginMarketDeleteResult(data: Data("{\"ok\":true,\"id\":\"com.me.a\"}".utf8))?.removedVersions == [], "a deletion without a version list removed nothing it can name")
 let reviewAnswer = AorusPluginMarketPublishResult(data: Data("{\"ok\":false,\"status\":\"review\",\"reason\":\"\",\"id\":\"com.me.a\",\"version\":\"1.2.0\",\"sha256\":\"ab\",\"permissions\":[]}".utf8))
 expect(reviewAnswer?.status == .review && reviewAnswer?.isLive == false, "a publish that went to review is not live")
 expect(AorusPluginMarketError.from(status: 409, body: Data("{\"detail\":\"version_exists\"}".utf8)) == .versionExists, "409 version_exists asks for a bump")

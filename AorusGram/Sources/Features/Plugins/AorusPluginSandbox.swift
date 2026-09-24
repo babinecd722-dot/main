@@ -591,6 +591,22 @@ public final class AorusPluginSandbox {
     private var hungUntil: Date?
     /// The ids of the tabs the plugin last defined, so a badge can only be set on one of them.
     private var definedTabIds: Set<String> = []
+    /// This run of the plugin. What it puts on the screen is marked with it, so that when a
+    /// new run of the same plugin replaces this one, a goodbye from this one cannot take down
+    /// what the new one has drawn.
+    public let runId = UUID().uuidString
+    /// Set the moment this run is told to stop. Its stop handler still runs and can still save
+    /// what it wants to keep, but what it publishes to the app from then on is accepted and
+    /// dropped: the app takes a stopped plugin's buttons, pages and tabs away itself, and a
+    /// new run replacing this one publishes its own — which a goodbye from this one arriving
+    /// late must not overwrite.
+    private var retiring = false
+
+    private var publishes: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return !retiring
+    }
     private var lastErrorText: String?
     private var recentEntries: [AorusPluginLogEntry] = []
     private var sendHooks = false
@@ -740,6 +756,9 @@ public final class AorusPluginSandbox {
 
     /// Builds the context, runs the prelude and the plugin, then delivers `start`.
     public func start(completion: ((AorusPluginRunError?) -> Void)? = nil) {
+        stateLock.lock()
+        retiring = false
+        stateLock.unlock()
         queue.async {
             if self.context != nil {
                 completion?(nil)
@@ -834,6 +853,9 @@ public final class AorusPluginSandbox {
 
     /// Delivers `stop` and destroys the context. Timers die with it.
     public func stop(completion: (() -> Void)? = nil) {
+        stateLock.lock()
+        retiring = true
+        stateLock.unlock()
         queue.async {
             if self.context != nil, !self.isHung {
                 self.deliver(event: "stop", payload: nil)
@@ -1245,7 +1267,7 @@ public final class AorusPluginSandbox {
             self.stateLock.lock()
             self.settingsSchema = fields
             self.stateLock.unlock()
-            self.hostServices.pluginSettingsSchemaChanged(pluginId, fields: fields)
+            if self.publishes { self.hostServices.pluginSettingsSchemaChanged(pluginId, fields: fields) }
         }
         hostObject.setObject(settingsDefine, forKeyedSubscript: "settingsDefine" as NSString)
 
@@ -1274,7 +1296,7 @@ public final class AorusPluginSandbox {
             guard let pages = AorusPluginUIPage.validated(from: data) else { return false }
             if pages.contains(where: { page in page.sections.contains(where: { section in section.rows.contains(where: { $0.kind == .link }) }) }),
                !self.permissions.contains(.inAppBrowser) { return false }
-            self.hostServices.pluginPagesChanged(pluginId, pages: pages)
+            if self.publishes { self.hostServices.pluginPagesChanged(pluginId, pages: pages) }
             return true
         }
         hostObject.setObject(pagesDefine, forKeyedSubscript: "pagesDefine" as NSString)
@@ -1284,7 +1306,7 @@ public final class AorusPluginSandbox {
             let data = Data(json.utf8)
             guard let shortcuts = AorusPluginSettingsShortcut.validated(from: data) else { return false }
             if shortcuts.contains(where: { $0.url != nil }), !self.permissions.contains(.inAppBrowser) { return false }
-            self.hostServices.pluginSettingsShortcutsChanged(pluginId, shortcuts: shortcuts)
+            if self.publishes { self.hostServices.pluginSettingsShortcutsChanged(pluginId, shortcuts: shortcuts) }
             return true
         }
         hostObject.setObject(settingsShortcutsDefine, forKeyedSubscript: "settingsShortcutsDefine" as NSString)
@@ -1293,7 +1315,7 @@ public final class AorusPluginSandbox {
             guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.contextMenu) else { return false }
             let data = Data(json.utf8)
             guard let actions = AorusPluginContextAction.validated(from: data) else { return false }
-            self.hostServices.pluginContextActionsChanged(pluginId, actions: actions)
+            if self.publishes { self.hostServices.pluginContextActionsChanged(pluginId, actions: actions) }
             return true
         }
         hostObject.setObject(contextActionsDefine, forKeyedSubscript: "contextActionsDefine" as NSString)
@@ -1308,7 +1330,7 @@ public final class AorusPluginSandbox {
         let overlaysDefine: @convention(block) (String) -> Int32 = { [weak self] json in
             guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.customUI) else { return -1 }
             guard let overlays = AorusPluginOverlay.validated(from: Data(json.utf8)) else { return -1 }
-            self.hostServices.pluginOverlaysChanged(pluginId, overlays: overlays)
+            if self.publishes { self.hostServices.pluginOverlaysChanged(pluginId, overlays: overlays) }
             return Int32(overlays.count)
         }
         hostObject.setObject(overlaysDefine, forKeyedSubscript: "overlaysDefine" as NSString)
@@ -1326,7 +1348,7 @@ public final class AorusPluginSandbox {
                 guard let text = value as? String, !key.isEmpty, key.count <= 256, text.count <= 512 else { continue }
                 overrides[key] = text
             }
-            self.hostServices.pluginStringOverridesChanged(pluginId, overrides: overrides)
+            if self.publishes { self.hostServices.pluginStringOverridesChanged(pluginId, overrides: overrides) }
             return true
         }
         hostObject.setObject(stringsDefine, forKeyedSubscript: "stringsDefine" as NSString)
@@ -1337,7 +1359,7 @@ public final class AorusPluginSandbox {
             guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.customUI) else { return false }
             let value = text.isString ? String(text.toString().prefix(16)) : nil
             let tint = color.isString ? AorusPluginOverlay.normalizedColor(color.toString()) : nil
-            self.hostServices.pluginSetHeaderBadge(pluginId, text: (value?.isEmpty == false) ? value : nil, color: tint)
+            if self.publishes { self.hostServices.pluginSetHeaderBadge(pluginId, text: (value?.isEmpty == false) ? value : nil, color: tint) }
             return true
         }
         hostObject.setObject(headerBadge, forKeyedSubscript: "headerBadge" as NSString)
@@ -1348,7 +1370,7 @@ public final class AorusPluginSandbox {
         let nativeButtonsDefine: @convention(block) (String) -> Int32 = { [weak self] json in
             guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.customUI) else { return -1 }
             guard let buttons = AorusPluginNativeButton.validated(from: Data(json.utf8)) else { return -1 }
-            self.hostServices.pluginNativeButtonsChanged(pluginId, buttons: buttons)
+            if self.publishes { self.hostServices.pluginNativeButtonsChanged(pluginId, buttons: buttons) }
             return Int32(buttons.count)
         }
         hostObject.setObject(nativeButtonsDefine, forKeyedSubscript: "nativeButtonsDefine" as NSString)
@@ -1364,7 +1386,7 @@ public final class AorusPluginSandbox {
             self.stateLock.lock()
             self.definedTabIds = Set(tabs.map { $0.id })
             self.stateLock.unlock()
-            self.hostServices.pluginTabsChanged(pluginId, tabs: tabs)
+            if self.publishes { self.hostServices.pluginTabsChanged(pluginId, tabs: tabs) }
             return true
         }
         hostObject.setObject(tabsDefine, forKeyedSubscript: "tabsDefine" as NSString)
@@ -1378,7 +1400,7 @@ public final class AorusPluginSandbox {
             self.stateLock.unlock()
             guard known else { return false }
             let raw: Any? = (value.isNull || value.isUndefined) ? nil : value.toObject()
-            self.hostServices.pluginTabBadge(pluginId, tabId: tabId, badge: AorusPluginTab.normalizedBadge(raw))
+            if self.publishes { self.hostServices.pluginTabBadge(pluginId, tabId: tabId, badge: AorusPluginTab.normalizedBadge(raw)) }
             return true
         }
         hostObject.setObject(tabBadge, forKeyedSubscript: "tabBadge" as NSString)
@@ -1856,7 +1878,9 @@ public final class AorusPluginSandbox {
             case let .failure(error):
                 settle(id, with: .failure(AorusPluginRequestError(error.message)))
             case let .success(effect):
-                host.pluginEffect(pluginId, request: effect) { [weak self] result in
+                var owned = effect
+                owned.owner = runId
+                host.pluginEffect(pluginId, request: owned) { [weak self] result in
                     self?.settle(id, with: result.map { value -> Any? in value as Any })
                 }
             }

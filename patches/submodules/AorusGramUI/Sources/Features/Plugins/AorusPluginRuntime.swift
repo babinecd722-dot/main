@@ -92,6 +92,10 @@ public final class AorusPluginRuntimeManager {
     private var tabBadges: [String: String] = [:]
     /// The tabs the bar was last told about, so it is rebuilt only when they change.
     private var publishedTabKeys: [String] = []
+    /// Plugins whose code failed to start, by the digest of that code, so the check made every
+    /// time the app comes to the front does not run a broken script again and again. A new
+    /// version, or a start someone asked for, tries again.
+    private var failedStarts: [String: String] = [:]
     private var observers: [NSObjectProtocol] = []
 
     private init() {}
@@ -114,49 +118,85 @@ public final class AorusPluginRuntimeManager {
         guard !unchanged else { return }
         previous.forEach { sandbox in
             previousHost?.clearPluginState(sandbox.manifest.id)
-            sandbox.stop()
+            AorusPluginRuntimeManager.retire(sandbox)
         }
         publishIntegrationsChanged()
         installObservers()
         reloadAutostart()
     }
 
-    public func reloadAutostart() {
+    /// Stops a run of a plugin that a new run replaces. Its stop handler still runs, but what
+    /// it stops is only what it drew itself, and once it is gone whatever it drew that the new
+    /// run has not drawn again goes too — snow the new run asked for stays on the screen.
+    private static func retire(_ sandbox: AorusPluginSandbox) {
+        let pluginId = sandbox.manifest.id
+        let runId = sandbox.runId
+        sandbox.stop {
+            AorusPluginEffectsRenderer.shared.stopAll(pluginId: pluginId, owner: runId)
+        }
+    }
+
+    /// Makes what runs match what is switched on.
+    ///
+    /// `startingMissingOnly` is the check made each time the app comes to the front: plugins
+    /// already running are left exactly as they are, and a plugin whose code failed to start
+    /// is not started again until its code changes.
+    public func reloadAutostart(startingMissingOnly: Bool = false) {
         guard let host = currentHost() else { return }
         guard AorusPluginEntitlement.isAllowed else {
             stopAll()
             return
         }
-        let records = AorusPluginStore.shared.list().compactMap { AorusPluginStore.shared.load(id: $0.id) }
+        let store = AorusPluginStore.shared
+        let records = store.list().compactMap { store.load(id: $0.id) }
         // Enabled is running. Every enabled plugin is started when the account runtime appears
         // — at launch, after the system closed the app in the background, after a change of
-        // account — because the switch in the list says it is on, and a plugin that said on
-        // and was not running is how snow disappeared after a return to the app. The old
-        // "Run at Launch" flag no longer holds a plugin back.
+        // account — and again whenever the app comes to the front, because the switch in the
+        // list says it is on, and a plugin that said on and was not running is how snow
+        // disappeared. The old "Run at Launch" flag no longer holds a plugin back.
         let desired = records.filter { $0.manifest.isEnabled }
         let enabledIds = Set(desired.map { $0.manifest.id })
+        let listedIds = Set(records.map { $0.manifest.id })
 
+        // Stale is a plugin whose manifest was read and says off, or one that is gone. One whose
+        // manifest could not be read just now goes on running: a read that failed is not
+        // somebody switching the plugin off.
         lock.lock()
-        let stale = sandboxes.filter { !enabledIds.contains($0.key) }.map { $0.value }
-        for sandbox in stale { sandboxes[sandbox.manifest.id] = nil }
+        let runningIds = Array(sandboxes.keys)
+        lock.unlock()
+        let staleIds = runningIds.filter { id in
+            !enabledIds.contains(id) && (listedIds.contains(id) || !store.contains(id: id))
+        }
+        lock.lock()
+        let stale = staleIds.compactMap { sandboxes.removeValue(forKey: $0) }
         lock.unlock()
         releaseResources(of: stale.map { $0.manifest.id })
         stale.forEach { $0.stop() }
 
         for record in desired {
-            let state = AorusPluginStore.shared.permissionState(for: record.manifest.id)
+            let id = record.manifest.id
+            lock.lock()
+            let exists = sandboxes[id] != nil
+            let failedDigest = failedStarts[id]
+            lock.unlock()
+            if startingMissingOnly && exists { continue }
+            let state = store.permissionState(for: id)
             let digest = AorusPluginStore.sourceDigest(record.source)
             let requested = AorusPluginPermission.requestedBySource(record.source)
             guard state.sourceDigest == digest, requested.isSubset(of: state.granted) else {
+                // Switched off only when the code and its grants were both read and do not
+                // agree. Files that could not be read — the phone just restarted and not yet
+                // unlocked, an I/O error — are tried again the next time, never taken as a
+                // reason to turn the plugin off.
+                guard store.isReadable(id: id) else { continue }
                 var manifest = record.manifest
                 manifest.isEnabled = false
-                try? AorusPluginStore.shared.updateManifest(manifest)
+                try? store.updateManifest(manifest)
                 continue
             }
-            lock.lock()
-            let exists = sandboxes[record.manifest.id] != nil
-            lock.unlock()
-            if !exists { start(record: record, host: host, permissions: state.granted) }
+            if exists { continue }
+            if startingMissingOnly && failedDigest == digest { continue }
+            start(record: record, host: host, permissions: state.granted)
         }
     }
 
@@ -637,6 +677,7 @@ public final class AorusPluginRuntimeManager {
         let active = Array(sandboxes.values)
         sandboxes.removeAll()
         schemas.removeAll()
+        failedStarts.removeAll()
         lock.unlock()
         releaseResources(of: active.map { $0.manifest.id })
         active.forEach { $0.stop() }
@@ -664,6 +705,8 @@ public final class AorusPluginRuntimeManager {
             settingsSchema: settingsSchema(id: record.manifest.id),
             filesDirectory: AorusPluginStore.shared.filesDirectory(for: record.manifest.id)
         )
+        let digest = AorusPluginStore.sourceDigest(record.source)
+        let runId = sandbox.runId
         lock.lock()
         let previous = sandboxes.updateValue(sandbox, forKey: record.manifest.id)
         pages[record.manifest.id] = nil
@@ -671,16 +714,23 @@ public final class AorusPluginRuntimeManager {
         contextActions[record.manifest.id] = nil
         lock.unlock()
         publishIntegrationsChanged()
-        previous?.stop()
+        if let previous { AorusPluginRuntimeManager.retire(previous) }
         sandbox.start { [weak self, weak sandbox] error in
+            self?.lock.lock()
             if error != nil {
-                self?.lock.lock()
+                self?.failedStarts[record.manifest.id] = digest
                 if self?.sandboxes[record.manifest.id] === sandbox { self?.sandboxes[record.manifest.id] = nil }
                 self?.pages[record.manifest.id] = nil
                 self?.settingsShortcuts[record.manifest.id] = nil
                 self?.contextActions[record.manifest.id] = nil
-                self?.lock.unlock()
+            } else {
+                self?.failedStarts[record.manifest.id] = nil
+            }
+            self?.lock.unlock()
+            if error != nil {
                 self?.publishIntegrationsChanged()
+                // A run that failed takes what it managed to draw with it.
+                AorusPluginEffectsRenderer.shared.stopAll(pluginId: record.manifest.id, owner: runId)
             }
             completion?(error)
         }
@@ -703,6 +753,16 @@ public final class AorusPluginRuntimeManager {
         observers.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
             AorusPluginEntitlement.invalidate()
         })
+        // Enabled is running, and the moment the app is in front is when that is made true
+        // again. A launch in the background — a push, a tap on a notification, a refresh — can
+        // meet a licence or a keychain that is not ready yet, and whatever could not start
+        // then starts now; what is already running is not touched.
+        for name in [UIApplication.didBecomeActiveNotification, UIApplication.protectedDataDidBecomeAvailableNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                AorusPluginEntitlement.invalidate()
+                self?.reloadAutostart(startingMissingOnly: true)
+            })
+        }
         observers.append(center.addObserver(forName: NSNotification.Name("aorusgram.didReceiveMessage"), object: nil, queue: nil) { [weak self] note in
             guard let self, let info = note.userInfo,
                   let eventAccountPath = info["accountPath"] as? String,

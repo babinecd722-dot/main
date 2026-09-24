@@ -1,6 +1,6 @@
 import Foundation
 
-// The plugin Market's wire contract, as data (AORUSGRAM PLUGINS HTTP CONTRACT 2026-09-24.4).
+// The plugin Market's wire contract, as data (AORUSGRAM PLUGINS HTTP CONTRACT 2026-09-24.6).
 //
 // Everything here is Foundation and nothing else, so the shapes the server sends and the rules
 // the client keeps about them — which version is live, what counts as an update, what a
@@ -270,6 +270,21 @@ public struct AorusPluginMarketPublishResult: Equatable {
         self.version = version
         self.sha256 = (object["sha256"] as? String) ?? ""
         self.permissions = ((object["permissions"] as? [Any]) ?? []).compactMap { $0 as? String }.filter(AorusPluginMarketPermission.isKnown)
+    }
+}
+
+/// The answer to `DELETE /v1/plugins/{id}`: every version of the id this licence owned is
+/// gone, with its code and its icon. Only an answer that says so is taken as a deletion.
+public struct AorusPluginMarketDeleteResult: Equatable {
+    public let id: String
+    public let removedVersions: [String]
+
+    public init?(data: Data) {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["ok"] as? Bool == true,
+              let id = object["id"] as? String, AorusPluginMarketID.isValid(id) else { return nil }
+        self.id = id
+        self.removedVersions = ((object["removed_versions"] as? [Any]) ?? []).compactMap { $0 as? String }.filter { AorusPluginSemVer($0) != nil }
     }
 }
 

@@ -43,7 +43,12 @@ enum AorusPluginMarketText {
     static var installedOff: String { aorusL("Установлен и выключен. Включите его в «Плагинах», когда будете готовы.", "Installed and switched off. Turn it on in Plugins when you're ready.") }
     static func updatedOff(_ value: String) -> String { aorusL("Обновлён до %@. Плагин выключен, чтобы вы проверили, что может новая версия.", "Updated to %@. The plugin is off so you can review what the new version may do.").replacingOccurrences(of: "%@", with: value) }
     static func installedVersion(_ value: String) -> String { aorusL("Установлена версия %@", "Version %@ is installed").replacingOccurrences(of: "%@", with: value) }
-    static var ownPlugin: String { aorusL("Это ваш плагин. Изменить и опубликовать новую версию можно в его «Оформлении».", "This is your plugin. Change it and publish a new version from its Appearance.") }
+    static var ownPlugin: String { aorusL("Это ваш плагин. Изменить его и опубликовать новую версию можно в «Моих плагинах».", "This is your plugin. Change it and publish a new version from My Plugins.") }
+    static var manageInMarket: String { aorusL("Управление в Маркете", "Manage in Market") }
+    static var deletePlugin: String { aorusL("Удалить плагин", "Delete plugin") }
+    static func deleteFromMarket(_ name: String) -> String { aorusL("Все версии «%@» будут удалены из Маркета вместе с иконкой. Копия на этом телефоне останется.", "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.").replacingOccurrences(of: "%@", with: name) }
+    static var pluginDeleted: String { aorusL("Плагин удалён", "Plugin deleted") }
+    static var deleting: String { aorusL("Удаление…", "Deleting…") }
     static var turnOn: String { aorusL("Включить", "Turn On") }
     static var deleteConfirm: String { aorusL("Удалить плагин?", "Delete the plugin?") }
     static var installFailed: String { aorusL("Не удалось установить", "Couldn't install") }
@@ -99,10 +104,18 @@ enum AorusPluginMarketInstallState {
 /// without asking the network itself.
 final class AorusPluginMarketCatalog {
     static let shared = AorusPluginMarketCatalog()
+    /// Posted on the main queue, with the Market id under "id", when the author has taken one
+    /// of their plugins out of the Market.
+    static let removedNotification = Notification.Name("aorusgram.plugins.market.removed")
     private(set) var cards: [AorusPluginMarketCard] = []
 
     func store(_ cards: [AorusPluginMarketCard]) {
         self.cards = cards
+    }
+
+    func remove(id: String) {
+        cards.removeAll { $0.id == id }
+        NotificationCenter.default.post(name: Self.removedNotification, object: nil, userInfo: ["id": id])
     }
 
     func card(id: String) -> AorusPluginMarketCard? {
@@ -193,30 +206,57 @@ enum AorusPluginMarketDrawing {
         return UIColor(red: CGFloat((value >> 16) & 0xff) / 255, green: CGFloat((value >> 8) & 0xff) / 255, blue: CGFloat(value & 0xff) / 255, alpha: 1)
     }
 
-    /// The picture for a plugin that has none of its own: its colour as a gradient and the first
-    /// letter of its name, the way a contact without a photo is drawn.
-    static func placeholder(name: String, id: String, side: CGFloat) -> UIImage {
+    private static let placeholders = NSCache<NSString, UIImage>()
+
+    /// The picture for a plugin that has none of its own. Not a letter on a colour — that reads
+    /// as a contact with no photo — but a tile of its own: the plugin's colour as a diagonal
+    /// gradient lit from the top corner, a large puzzle piece pressed faintly into it, and the
+    /// puzzle piece itself in the middle, so a plugin without an icon still looks finished.
+    static func placeholder(id: String, side: CGFloat) -> UIImage {
+        let key = "\(id)|\(Int(side))" as NSString
+        if let cached = placeholders.object(forKey: key) { return cached }
         let base = color(AorusPluginMarketInstaller.accent(for: id))
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        func shifted(_ amount: CGFloat, saturation delta: CGFloat, brightness lift: CGFloat) -> UIColor {
+            var shiftedHue = hue + amount
+            if shiftedHue < 0 { shiftedHue += 1 }
+            if shiftedHue > 1 { shiftedHue -= 1 }
+            return UIColor(hue: shiftedHue, saturation: min(1, max(0, saturation + delta)), brightness: min(1, max(0, brightness + lift)), alpha: 1)
+        }
         let format = UIGraphicsImageRendererFormat()
         format.opaque = false
-        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { context in
-            let rect = CGRect(x: 0, y: 0, width: side, height: side)
-            var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
-            base.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
-            let top = UIColor(hue: hue, saturation: max(0, saturation - 0.12), brightness: min(1, brightness + 0.12), alpha: 1)
-            let bottom = UIColor(hue: hue, saturation: min(1, saturation + 0.08), brightness: max(0, brightness - 0.12), alpha: 1)
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [top.cgColor, bottom.cgColor] as CFArray, locations: [0, 1]) {
-                context.cgContext.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: side), options: [])
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { renderer in
+            let context = renderer.cgContext
+            let space = CGColorSpaceCreateDeviceRGB()
+            let colors = [shifted(-0.035, saturation: -0.14, brightness: 0.16), base, shifted(0.045, saturation: 0.06, brightness: -0.2)]
+            if let gradient = CGGradient(colorsSpace: space, colors: colors.map { $0.cgColor } as CFArray, locations: [0, 0.55, 1]) {
+                context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: side, y: side), options: [])
             }
-            let letter = name.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? "P"
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: side * 0.46, weight: .bold),
-                .foregroundColor: UIColor.white,
-            ]
-            let text = letter as NSString
-            let size = text.size(withAttributes: attributes)
-            text.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: attributes)
+            // Light from the top corner, the way the system draws its own tiles.
+            if let glow = CGGradient(colorsSpace: space, colors: [UIColor.white.withAlphaComponent(0.34).cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 1]) {
+                context.drawRadialGradient(glow, startCenter: CGPoint(x: side * 0.22, y: side * 0.12), startRadius: 0, endCenter: CGPoint(x: side * 0.22, y: side * 0.12), endRadius: side * 0.85, options: [])
+            }
+            let symbol = "puzzlepiece.extension.fill"
+            // The watermark: the same piece, much larger, turned a little and barely there.
+            if let mark = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: side * 0.78, weight: .bold))?
+                .withTintColor(UIColor.white.withAlphaComponent(0.13), renderingMode: .alwaysOriginal) {
+                context.saveGState()
+                context.translateBy(x: side * 0.74, y: side * 0.76)
+                context.rotate(by: -0.26)
+                mark.draw(in: CGRect(x: -mark.size.width / 2, y: -mark.size.height / 2, width: mark.size.width, height: mark.size.height))
+                context.restoreGState()
+            }
+            if let glyph = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: side * 0.36, weight: .semibold))?
+                .withTintColor(.white, renderingMode: .alwaysOriginal) {
+                context.saveGState()
+                context.setShadow(offset: CGSize(width: 0, height: side * 0.018), blur: side * 0.06, color: UIColor.black.withAlphaComponent(0.2).cgColor)
+                glyph.draw(in: CGRect(x: (side - glyph.size.width) / 2, y: (side - glyph.size.height) / 2, width: glyph.size.width, height: glyph.size.height))
+                context.restoreGState()
+            }
         }
+        placeholders.setObject(image, forKey: key)
+        return image
     }
 
     /// The average colour of a picture, for the header wash behind a plugin's icon.
@@ -432,6 +472,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     private var owned: [AorusPluginMarketOwnedPlugin] = []
     private var phase: Phase = .loading
     private var busy: Set<String> = []
+    private var removedObserver: NSObjectProtocol?
     private var storeObserver: NSObjectProtocol?
     private var hasLoaded = false
 
@@ -478,7 +519,12 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         addSubview(messageView)
 
         storeObserver = NotificationCenter.default.addObserver(forName: AorusPluginStore.changedNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.tableView.reloadData()
+            self?.refreshVisibleRows()
+        }
+        removedObserver = NotificationCenter.default.addObserver(forName: AorusPluginMarketCatalog.removedNotification, object: nil, queue: .main) { [weak self] note in
+            guard let self, let id = note.userInfo?["id"] as? String else { return }
+            self.removeCard(id: id)
+            self.reload()
         }
     }
 
@@ -486,6 +532,25 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
 
     deinit {
         if let storeObserver { NotificationCenter.default.removeObserver(storeObserver) }
+        if let removedObserver { NotificationCenter.default.removeObserver(removedObserver) }
+    }
+
+    /// Brings the rows on screen up to date where they are: a pill changes what it says with a
+    /// crossfade of its own, instead of the whole list being reloaded under it mid-animation.
+    private func refreshVisibleRows() {
+        for case let cell as AorusPluginMarketCell in tableView.visibleCells {
+            guard let indexPath = tableView.indexPath(for: cell), !(showsMine && indexPath.section == 0), indexPath.row < cards.count else { continue }
+            let card = cards[indexPath.row]
+            cell.configure(card: card, state: AorusPluginMarketInstallState.of(card), busy: busy.contains(card.id), theme: theme)
+        }
+    }
+
+    /// A card that left the Market while the list was open.
+    private func removeCard(id: String) {
+        guard let index = cards.firstIndex(where: { $0.id == id }) else { return }
+        cards.remove(at: index)
+        owned.removeAll { $0.id == id }
+        tableView.reloadData()
     }
 
     func setInsets(top: CGFloat, bottom: CGFloat) {
@@ -615,11 +680,11 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         switch AorusPluginMarketInstallState.of(card) {
         case .notInstalled:
             busy.insert(card.id)
-            tableView.reloadData()
+            refreshVisibleRows()
             AorusPluginMarketInstaller.install(card) { [weak self] result in
                 guard let self else { return }
                 self.busy.remove(card.id)
-                self.tableView.reloadData()
+                self.refreshVisibleRows()
                 if case let .failure(error) = result {
                     self.onError?(AorusPluginMarketText.message(for: error))
                 } else {
@@ -632,12 +697,91 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     }
 }
 
+/// A filled or tinted pill for Install, Update, Delete and Open.
+///
+/// A custom button, not a system one: a system button fades and slides its title every time the
+/// title changes, and that is the jump that showed between Install and Delete. Here a change of
+/// what the pill says is one crossfade of title and colour together, working is the title
+/// giving way to a spinner in the same place, and pressing dims and shrinks it a little, the
+/// way the system's own filled buttons answer a touch.
+final class AorusPluginPillButton: UIButton {
+    struct Style: Equatable {
+        let title: String
+        let foreground: UIColor
+        let background: UIColor
+    }
+
+    private let spinner = UIActivityIndicatorView(style: .medium)
+    private(set) var style: Style?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        spinner.hidesWhenStopped = true
+        spinner.isUserInteractionEnabled = false
+        spinner.alpha = 0
+        addSubview(spinner)
+        titleLabel?.lineBreakMode = .byTruncatingTail
+        layer.cornerCurve = .continuous
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isHighlighted: Bool {
+        didSet {
+            guard isHighlighted != oldValue else { return }
+            let pressed = isHighlighted
+            UIView.animate(withDuration: pressed ? 0.08 : 0.24, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+                self.alpha = pressed ? 0.7 : 1
+                self.transform = pressed ? CGAffineTransform(scaleX: 0.97, y: 0.97) : .identity
+            }, completion: nil)
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        spinner.center = CGPoint(x: bounds.midX, y: bounds.midY)
+    }
+
+    func apply(_ style: Style, animated: Bool) {
+        guard style != self.style else { return }
+        self.style = style
+        spinner.color = style.foreground
+        let change = {
+            self.setTitle(style.title, for: .normal)
+            self.setTitleColor(style.foreground, for: .normal)
+            self.backgroundColor = style.background
+        }
+        if animated, window != nil {
+            UIView.transition(with: self, duration: 0.28, options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction], animations: change, completion: nil)
+        } else {
+            UIView.performWithoutAnimation {
+                change()
+                self.layoutIfNeeded()
+            }
+        }
+    }
+
+    var isWorking = false {
+        didSet {
+            guard isWorking != oldValue else { return }
+            let working = isWorking
+            isUserInteractionEnabled = !working
+            if working { spinner.startAnimating() }
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState], animations: {
+                self.titleLabel?.alpha = working ? 0 : 1
+                self.spinner.alpha = working ? 1 : 0
+            }, completion: { _ in
+                if !self.isWorking { self.spinner.stopAnimating() }
+            })
+        }
+    }
+}
+
 final class AorusPluginMarketCell: UITableViewCell {
     private let icon = UIImageView()
     private let nameLabel = UILabel()
     private let summaryLabel = UILabel()
-    private let actionButton = UIButton(type: .system)
-    private let spinner = UIActivityIndicatorView(style: .medium)
+    private let actionButton = AorusPluginPillButton()
     private var representedId: String?
     var onAction: (() -> Void)?
 
@@ -654,8 +798,7 @@ final class AorusPluginMarketCell: UITableViewCell {
         actionButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
         actionButton.layer.cornerRadius = 15
         actionButton.addTarget(self, action: #selector(actionTapped), for: .touchUpInside)
-        spinner.hidesWhenStopped = true
-        [icon, nameLabel, summaryLabel, actionButton, spinner].forEach {
+        [icon, nameLabel, summaryLabel, actionButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview($0)
         }
@@ -676,8 +819,7 @@ final class AorusPluginMarketCell: UITableViewCell {
             actionButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
             actionButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
             actionButton.heightAnchor.constraint(equalToConstant: 30),
-            spinner.centerXAnchor.constraint(equalTo: actionButton.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: actionButton.centerYAnchor),
+            actionButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 76),
         ])
         actionButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         actionButton.setContentHuggingPriority(.required, for: .horizontal)
@@ -686,6 +828,9 @@ final class AorusPluginMarketCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func configure(card: AorusPluginMarketCard, state: AorusPluginMarketInstallState, busy: Bool, theme: PresentationTheme) {
+        // The same card again — after an install, an update, a removal — changes in place and
+        // animates; a reused cell showing another card takes its new look at once.
+        let sameCard = representedId == card.id
         representedId = card.id
         backgroundColor = theme.list.itemBlocksBackgroundColor
         nameLabel.text = card.name
@@ -707,19 +852,17 @@ final class AorusPluginMarketCell: UITableViewCell {
         case .own:
             title = AorusPluginMarketText.yours
         }
-        actionButton.setTitle(title, for: .normal)
-        actionButton.setTitleColor(filled ? .white : accent, for: .normal)
-        actionButton.backgroundColor = filled ? accent : accent.withAlphaComponent(0.12)
-        actionButton.alpha = busy ? 0 : 1
-        if busy {
-            spinner.startAnimating()
-        } else {
-            spinner.stopAnimating()
-        }
+        actionButton.apply(AorusPluginPillButton.Style(
+            title: title,
+            foreground: filled ? .white : accent,
+            background: filled ? accent : accent.withAlphaComponent(0.12)
+        ), animated: sameCard)
+        actionButton.isWorking = busy
+        if sameCard, icon.image != nil { return }
         if let cached = AorusPluginMarketClient.shared.cachedIcon(id: card.id) {
             icon.image = cached
         } else {
-            icon.image = AorusPluginMarketDrawing.placeholder(name: card.name, id: card.id, side: 112)
+            icon.image = AorusPluginMarketDrawing.placeholder(id: card.id, side: 112)
             if card.hasIcon {
                 AorusPluginMarketClient.shared.icon(id: card.id) { [weak self] image in
                     guard let self, self.representedId == card.id, let image else { return }
@@ -756,10 +899,9 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
     private let descriptionLabel = UILabel()
     private let moreButton = UIButton(type: .system)
     private let bottomBar = UIVisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
-    private let primaryButton = UIButton(type: .system)
-    private let secondaryButton = UIButton(type: .system)
+    private let primaryButton = AorusPluginPillButton()
+    private let secondaryButton = AorusPluginPillButton()
     private let captionLabel = UILabel()
-    private let buttonSpinner = UIActivityIndicatorView(style: .medium)
     private let closeButton = UIButton(type: .system)
     private var authorAvatar: (UIView & AorusPluginMarketAvatar)?
     private let authorName = UILabel()
@@ -813,20 +955,21 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         super.viewDidLayoutSubviews()
         let bounds = view.bounds
         let barContent: CGFloat = captionLabel.text?.isEmpty == false ? 104 : 80
+        bottomBar.clipsToBounds = true
         let barHeight = barContent + view.safeAreaInsets.bottom
         bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
         let buttonWidth = min(bounds.width - 40, 420)
         let buttonX = (bounds.width - buttonWidth) / 2
-        let hasSecondary = !secondaryButton.isHidden
-        if hasSecondary {
-            let secondaryWidth: CGFloat = 104
+        // Delete beside Update slides in from the edge and out to it, rather than appearing
+        // with a width of nothing: the primary button gives it room in the same animation.
+        let secondaryWidth: CGFloat = 104
+        if showsSecondary {
             primaryButton.frame = CGRect(x: buttonX, y: 14, width: buttonWidth - secondaryWidth - 10, height: 52)
             secondaryButton.frame = CGRect(x: primaryButton.frame.maxX + 10, y: 14, width: secondaryWidth, height: 52)
         } else {
             primaryButton.frame = CGRect(x: buttonX, y: 14, width: buttonWidth, height: 52)
-            secondaryButton.frame = .zero
+            secondaryButton.frame = CGRect(x: buttonX + buttonWidth + 10, y: 14, width: secondaryWidth, height: 52)
         }
-        buttonSpinner.center = CGPoint(x: primaryButton.frame.midX, y: primaryButton.frame.midY)
         captionLabel.frame = CGRect(x: buttonX, y: primaryButton.frame.maxY + 8, width: buttonWidth, height: 36)
 
         scrollView.frame = bounds
@@ -897,7 +1040,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         iconView.layer.cornerCurve = .continuous
         iconView.clipsToBounds = true
         iconView.contentMode = .scaleAspectFill
-        iconView.image = AorusPluginMarketDrawing.placeholder(name: card.name, id: card.id, side: 256)
+        iconView.image = AorusPluginMarketDrawing.placeholder(id: card.id, side: 256)
         iconView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             iconView.widthAnchor.constraint(equalToConstant: 124),
@@ -1098,20 +1241,16 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         view.addSubview(bottomBar)
         primaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
         primaryButton.layer.cornerRadius = 26
-        primaryButton.layer.cornerCurve = .continuous
         primaryButton.addTarget(self, action: #selector(primaryTapped), for: .touchUpInside)
         secondaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
         secondaryButton.layer.cornerRadius = 26
-        secondaryButton.layer.cornerCurve = .continuous
-        secondaryButton.setTitle(AorusPluginMarketText.delete, for: .normal)
+        secondaryButton.alpha = 0
         secondaryButton.addTarget(self, action: #selector(deleteTapped), for: .touchUpInside)
         captionLabel.font = .systemFont(ofSize: 13)
         captionLabel.textColor = theme.list.itemSecondaryTextColor
         captionLabel.textAlignment = .center
         captionLabel.numberOfLines = 2
-        buttonSpinner.color = .white
-        buttonSpinner.hidesWhenStopped = true
-        [primaryButton, secondaryButton, captionLabel, buttonSpinner].forEach(bottomBar.contentView.addSubview)
+        [primaryButton, secondaryButton, captionLabel].forEach(bottomBar.contentView.addSubview)
     }
 
     private func buildCloseButton() {
@@ -1128,49 +1267,65 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
 
     // MARK: State
 
-    private func applyState(caption: String? = nil) {
+    /// Whether Delete stands beside the primary button: an installed plugin with an update.
+    private var showsSecondary = false
+
+    /// Draws the buttons for where the plugin stands now. The first time, as it is; after an
+    /// install, an update or a removal, as one movement: the primary button crossfades to what
+    /// it says now, Delete slides in beside it or out, and the caption and the bar's height
+    /// follow in the same spring.
+    private func applyState(caption: String? = nil, animated: Bool = false) {
         let accent = theme.list.itemAccentColor
         let destructive = theme.list.itemDestructiveColor
-        secondaryButton.isHidden = true
+        let filled = { (title: String) in AorusPluginPillButton.Style(title: title, foreground: .white, background: accent) }
+        let tinted = { (title: String) in AorusPluginPillButton.Style(title: title, foreground: destructive, background: destructive.withAlphaComponent(0.12)) }
+        let primary: AorusPluginPillButton.Style
+        let secondary: Bool
+        let text: String?
         switch AorusPluginMarketInstallState.of(card) {
         case .notInstalled:
-            primaryButton.setTitle(AorusPluginMarketText.install, for: .normal)
-            primaryButton.setTitleColor(.white, for: .normal)
-            primaryButton.backgroundColor = accent
-            captionLabel.text = caption
+            primary = filled(AorusPluginMarketText.install)
+            secondary = false
+            text = caption
         case let .updatable(manifest):
-            primaryButton.setTitle(AorusPluginMarketText.update, for: .normal)
-            primaryButton.setTitleColor(.white, for: .normal)
-            primaryButton.backgroundColor = accent
-            secondaryButton.isHidden = false
-            secondaryButton.setTitleColor(destructive, for: .normal)
-            secondaryButton.backgroundColor = destructive.withAlphaComponent(0.12)
-            captionLabel.text = caption ?? AorusPluginMarketText.installedVersion(manifest.market?.version ?? manifest.version)
+            primary = filled(AorusPluginMarketText.update)
+            secondary = true
+            text = caption ?? AorusPluginMarketText.installedVersion(manifest.market?.version ?? manifest.version)
         case .installed:
-            primaryButton.setTitle(AorusPluginMarketText.delete, for: .normal)
-            primaryButton.setTitleColor(destructive, for: .normal)
-            primaryButton.backgroundColor = destructive.withAlphaComponent(0.12)
-            captionLabel.text = caption
+            primary = tinted(AorusPluginMarketText.delete)
+            secondary = false
+            text = caption
         case .own:
-            primaryButton.setTitle(AorusPluginMarketText.open, for: .normal)
-            primaryButton.setTitleColor(.white, for: .normal)
-            primaryButton.backgroundColor = accent
-            captionLabel.text = caption ?? AorusPluginMarketText.ownPlugin
+            primary = filled(AorusPluginMarketText.open)
+            secondary = false
+            text = caption ?? AorusPluginMarketText.ownPlugin
         }
-        view.setNeedsLayout()
+        secondaryButton.apply(tinted(AorusPluginMarketText.delete), animated: false)
+        primaryButton.apply(primary, animated: animated)
+        showsSecondary = secondary
+        if animated, captionLabel.text != text {
+            UIView.transition(with: captionLabel, duration: 0.25, options: [.transitionCrossDissolve, .beginFromCurrentState], animations: {
+                self.captionLabel.text = text
+            }, completion: nil)
+        } else {
+            captionLabel.text = text
+        }
+        guard animated, view.window != nil else {
+            secondaryButton.alpha = secondary ? 1 : 0
+            view.setNeedsLayout()
+            return
+        }
+        UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+            self.secondaryButton.alpha = secondary ? 1 : 0
+            self.view.setNeedsLayout()
+            self.view.layoutIfNeeded()
+        }, completion: nil)
     }
 
     private func setWorking(_ working: Bool) {
         isWorking = working
-        primaryButton.isEnabled = !working
+        primaryButton.isWorking = working
         secondaryButton.isEnabled = !working
-        primaryButton.titleLabel?.alpha = working ? 0 : 1
-        if working {
-            buttonSpinner.color = primaryButton.titleColor(for: .normal)
-            buttonSpinner.startAnimating()
-        } else {
-            buttonSpinner.stopAnimating()
-        }
     }
 
     @objc private func primaryTapped() {
@@ -1184,7 +1339,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
                 switch result {
                 case .success:
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    self.applyState(caption: AorusPluginMarketText.installedOff)
+                    self.applyState(caption: AorusPluginMarketText.installedOff, animated: true)
                 case let .failure(error):
                     self.showError(AorusPluginMarketText.installFailed, AorusPluginMarketText.message(for: error))
                 }
@@ -1197,7 +1352,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
                 switch result {
                 case let .success(updated):
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
-                    self.applyState(caption: AorusPluginMarketText.updatedOff(self.card.version))
+                    self.applyState(caption: AorusPluginMarketText.updatedOff(self.card.version), animated: true)
                     if updated.wasEnabled {
                         self.offerReenable(updated.manifest)
                     }
@@ -1227,7 +1382,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         alert.addAction(UIAlertAction(title: aorusL("Отмена", "Cancel"), style: .cancel))
         alert.addAction(UIAlertAction(title: AorusPluginMarketText.delete, style: .destructive) { [weak self] _ in
             AorusPluginMarketInstaller.remove(manifest)
-            self?.applyState()
+            self?.applyState(animated: true)
         })
         present(alert, animated: true)
     }
@@ -1321,8 +1476,15 @@ final class AorusPluginMarketMineController: ViewController, UITableViewDataSour
             sender?.endRefreshing()
             switch result {
             case let .success(owned):
+                let hadPlugins = !self.owned.isEmpty
                 self.owned = owned
                 self.tableView.tableHeaderView = nil
+                // The last of them deleted: My Plugins only exists for someone who has some.
+                if owned.isEmpty, hadPlugins, let navigation = self.navigationController as? NavigationController,
+                   navigation.viewControllers.last === self {
+                    _ = navigation.popViewController(animated: true)
+                    return
+                }
             case let .failure(error):
                 if error == .authorBanned { self.showBanner(AorusPluginMarketText.banned) }
             }
@@ -1420,7 +1582,7 @@ final class AorusPluginMarketMineCell: UITableViewCell {
             let reason = takenDown.reason.isEmpty ? "" : " — " + takenDown.reason
             line(AorusPluginMarketText.takenDown + reason, theme.list.itemSecondaryTextColor)
         }
-        icon.image = AorusPluginMarketClient.shared.cachedIcon(id: plugin.id) ?? AorusPluginMarketDrawing.placeholder(name: plugin.newest.name, id: plugin.id, side: 96)
+        icon.image = AorusPluginMarketClient.shared.cachedIcon(id: plugin.id) ?? AorusPluginMarketDrawing.placeholder(id: plugin.id, side: 96)
         AorusPluginMarketClient.shared.icon(id: plugin.id) { [weak self] image in
             guard let self, self.representedId == plugin.id, let image else { return }
             self.icon.image = image

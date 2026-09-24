@@ -53,6 +53,14 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Questo è il tuo plugin. Modificalo e pubblica una nuova versione da I miei plugin.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Tutte le versioni di «%@» saranno rimosse dal Market insieme all’icona. La copia su questo telefono resta.",
+        "Manage in Market": "Gestisci nel Market",
+        "Deleting…": "Eliminazione…",
+        "Plugin deleted": "Plugin eliminato",
+        "Delete plugin": "Elimina plugin",
+        "Redo": "Ripeti",
+        "Undo": "Annulla",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Consente di modificare le funzioni e l’aspetto di AorusGram da un catalogo verificato e di aggiungere schede alla barra inferiore.",
         "Couldn't write the code": "Impossibile scrivere il codice",
         "Generation isn't available for this licence.": "La generazione non è disponibile per questa licenza.",
@@ -100,7 +108,6 @@ enum AorusL10nTable {
         "Couldn't install": "Impossibile installare",
         "Delete the plugin?": "Eliminare il plugin?",
         "Turn On": "Attiva",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Questo è il tuo plugin. Modificalo e pubblica una nuova versione dal suo Aspetto.",
         "Version %@ is installed": "È installata la versione %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Aggiornato alla %@. Il plugin è disattivato, così puoi controllare cosa può fare la nuova versione.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Installato e disattivato. Attivalo in Plugin quando sei pronto.",
@@ -896,6 +903,14 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "To Twoja wtyczka. Zmień ją i opublikuj nową wersję w sekcji Moje wtyczki.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Wszystkie wersje „%@” zostaną usunięte z Marketu razem z ikoną. Kopia na tym telefonie pozostanie.",
+        "Manage in Market": "Zarządzaj w Markecie",
+        "Deleting…": "Usuwanie…",
+        "Plugin deleted": "Wtyczka usunięta",
+        "Delete plugin": "Usuń wtyczkę",
+        "Redo": "Ponów",
+        "Undo": "Cofnij",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Umożliwia zmianę funkcji i wyglądu AorusGram z zatwierdzonego katalogu oraz dodawanie kart do dolnego paska.",
         "Couldn't write the code": "Nie udało się napisać kodu",
         "Generation isn't available for this licence.": "Generowanie nie jest dostępne dla tej licencji.",
@@ -943,7 +958,6 @@ enum AorusL10nTable {
         "Couldn't install": "Nie udało się zainstalować",
         "Delete the plugin?": "Usunąć wtyczkę?",
         "Turn On": "Włącz",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "To twoja wtyczka. Zmień ją i opublikuj nową wersję w jej Wyglądzie.",
         "Version %@ is installed": "Zainstalowana wersja %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Zaktualizowano do %@. Wtyczka jest wyłączona, aby można było sprawdzić, co może nowa wersja.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Zainstalowano i wyłączono. Włącz we Wtyczkach, gdy będziesz gotowy.",
@@ -1739,6 +1753,14 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Dit is je plug-in. Wijzig hem en publiceer een nieuwe versie via Mijn plug-ins.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alle versies van ‘%@’ worden met het icoon uit de Market verwijderd. De kopie op deze telefoon blijft.",
+        "Manage in Market": "Beheren in Market",
+        "Deleting…": "Verwijderen…",
+        "Plugin deleted": "Plug-in verwijderd",
+        "Delete plugin": "Plug-in verwijderen",
+        "Redo": "Opnieuw",
+        "Undo": "Ongedaan maken",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Staat toe om functies en het uiterlijk van AorusGram te wijzigen vanuit een gecontroleerde catalogus en tabbladen aan de onderste balk toe te voegen.",
         "Couldn't write the code": "Kan de code niet schrijven",
         "Generation isn't available for this licence.": "Genereren is niet beschikbaar voor deze licentie.",
@@ -1786,7 +1808,6 @@ enum AorusL10nTable {
         "Couldn't install": "Kan niet installeren",
         "Delete the plugin?": "Plug-in verwijderen?",
         "Turn On": "Aanzetten",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Dit is jouw plug-in. Wijzig hem en publiceer een nieuwe versie via Weergave.",
         "Version %@ is installed": "Versie %@ is geïnstalleerd",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Bijgewerkt naar %@. De plug-in staat uit zodat je kunt nagaan wat de nieuwe versie mag doen.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Geïnstalleerd en uitgeschakeld. Zet het aan bij Plug-ins wanneer je klaar bent.",
@@ -2582,6 +2603,14 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Aquest és el teu connector. Canvia’l i publica’n una versió nova des d’Els meus connectors.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Totes les versions de «%@» se suprimiran del Market juntament amb la icona. La còpia d’aquest telèfon es conserva.",
+        "Manage in Market": "Gestiona al Market",
+        "Deleting…": "S’està eliminant…",
+        "Plugin deleted": "Connector eliminat",
+        "Delete plugin": "Elimina el connector",
+        "Redo": "Refés",
+        "Undo": "Desfés",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permet canviar les funcions i l’aspecte d’AorusGram des d’un catàleg verificat i afegir pestanyes a la barra inferior.",
         "Couldn't write the code": "No s'ha pogut escriure el codi",
         "Generation isn't available for this licence.": "La generació no està disponible per a aquesta llicència.",
@@ -2629,7 +2658,6 @@ enum AorusL10nTable {
         "Couldn't install": "No s'ha pogut instal·lar",
         "Delete the plugin?": "Vols eliminar el connector?",
         "Turn On": "Activa",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Aquest és el teu connector. Modifica'l i publica una versió nova des de la seva Aparença.",
         "Version %@ is installed": "Tens instal·lada la versió %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Actualitzat a la %@. El connector està desactivat perquè puguis revisar què pot fer la versió nova.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Instal·lat i desactivat. Activa'l a Connectors quan vulguis.",
@@ -3425,6 +3453,14 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Ini plugin Anda. Ubah dan terbitkan versi baru dari Plugin Saya.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Semua versi “%@” akan dihapus dari Market beserta ikonnya. Salinan di ponsel ini tetap ada.",
+        "Manage in Market": "Kelola di Market",
+        "Deleting…": "Menghapus…",
+        "Plugin deleted": "Plugin dihapus",
+        "Delete plugin": "Hapus plugin",
+        "Redo": "Ulangi",
+        "Undo": "Urungkan",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Mengizinkan perubahan fitur dan tampilan AorusGram dari katalog terverifikasi serta menambahkan tab ke bilah bawah.",
         "Couldn't write the code": "Tidak dapat menulis kode",
         "Generation isn't available for this licence.": "Pembuatan tidak tersedia untuk lisensi ini.",
@@ -3472,7 +3508,6 @@ enum AorusL10nTable {
         "Couldn't install": "Tidak dapat memasang",
         "Delete the plugin?": "Hapus plugin?",
         "Turn On": "Aktifkan",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Ini plugin Anda. Ubah dan terbitkan versi baru dari Tampilannya.",
         "Version %@ is installed": "Versi %@ terpasang",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Diperbarui ke %@. Plugin dinonaktifkan agar Anda dapat meninjau apa yang boleh dilakukan versi baru.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Terpasang dan nonaktif. Aktifkan di Plugin saat Anda siap.",
@@ -4268,6 +4303,14 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Ini pemalam anda. Ubah dan terbitkan versi baharu daripada Pemalam Saya.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Setiap versi “%@” akan dialih keluar daripada Pasaran bersama ikonnya. Salinan pada telefon ini kekal.",
+        "Manage in Market": "Urus di Pasaran",
+        "Deleting…": "Memadam…",
+        "Plugin deleted": "Pemalam dipadam",
+        "Delete plugin": "Padam pemalam",
+        "Redo": "Buat semula",
+        "Undo": "Buat asal",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Membenarkan perubahan ciri dan rupa AorusGram daripada katalog yang disahkan serta menambah tab pada bar bawah.",
         "Couldn't write the code": "Tidak dapat menulis kod",
         "Generation isn't available for this licence.": "Penjanaan tidak tersedia untuk lesen ini.",
@@ -4315,7 +4358,6 @@ enum AorusL10nTable {
         "Couldn't install": "Tidak dapat memasang",
         "Delete the plugin?": "Padam pemalam?",
         "Turn On": "Hidupkan",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Ini pemalam anda. Ubah dan terbitkan versi baharu daripada Penampilannya.",
         "Version %@ is installed": "Versi %@ dipasang",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Dikemas kini ke %@. Pemalam dimatikan supaya anda boleh menyemak apa yang boleh dilakukan versi baharu.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Dipasang dan dimatikan. Hidupkan dalam Pemalam apabila anda sedia.",
@@ -5111,6 +5153,14 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Гэта ваш плагін. Змяніць яго і апублікаваць новую версію можна ў «Мае плагіны».",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Усе версіі «%@» будуць выдалены з Маркета разам са значком. Копія на гэтым тэлефоне застанецца.",
+        "Manage in Market": "Кіраванне ў Маркеце",
+        "Deleting…": "Выдаленне…",
+        "Plugin deleted": "Плагін выдалены",
+        "Delete plugin": "Выдаліць плагін",
+        "Redo": "Паўтарыць",
+        "Undo": "Адрабіць",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Дазваляе змяняць функцыі і выгляд AorusGram з праверанага каталога і дадаваць укладкі ў ніжнюю панэль.",
         "Couldn't write the code": "Не ўдалося напісаць код",
         "Generation isn't available for this licence.": "Генерацыя недаступная для гэтай ліцэнзіі.",
@@ -5158,7 +5208,6 @@ enum AorusL10nTable {
         "Couldn't install": "Не ўдалося ўсталяваць",
         "Delete the plugin?": "Выдаліць плагін?",
         "Turn On": "Уключыць",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Гэта ваш плагін. Змяніць яго і апублікаваць новую версію можна ў яго «Афармленні».",
         "Version %@ is installed": "Усталявана версія %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Абноўлена да %@. Плагін выключаны, каб вы праверылі, што можа новая версія.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Усталяваны і выключаны. Уключыце яго ў «Плагінах», калі будзеце гатовыя.",
@@ -5954,6 +6003,14 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Bu sizning plaginingiz. Uni o‘zgartirish va yangi versiyasini chop etish Mening plaginlarim bo‘limida.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@” ning barcha versiyalari belgisi bilan birga Marketdan o‘chiriladi. Ushbu telefondagi nusxa qoladi.",
+        "Manage in Market": "Marketda boshqarish",
+        "Deleting…": "O‘chirilmoqda…",
+        "Plugin deleted": "Plagin o‘chirildi",
+        "Delete plugin": "Plaginni o‘chirish",
+        "Redo": "Qaytarish",
+        "Undo": "Bekor qilish",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "AorusGram funksiyalari va ko‘rinishini tekshirilgan katalog orqali o‘zgartirishga va pastki panelga yorliqlar qo‘shishga ruxsat beradi.",
         "Couldn't write the code": "Kodni yozib bo‘lmadi",
         "Generation isn't available for this licence.": "Generatsiya bu litsenziya uchun mavjud emas.",
@@ -6001,7 +6058,6 @@ enum AorusL10nTable {
         "Couldn't install": "O‘rnatib bo‘lmadi",
         "Delete the plugin?": "Plagin o‘chirilsinmi?",
         "Turn On": "Yoqish",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Bu sizning plaginingiz. Uni o‘zgartirish va yangi versiyani «Ko‘rinish»dan chop etish mumkin.",
         "Version %@ is installed": "O‘rnatilgan versiya: %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "%@ ga yangilandi. Yangi versiya nima qila olishini tekshirishingiz uchun plagin o‘chirildi.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "O‘rnatildi va o‘chirilgan. Tayyor bo‘lganingizda «Plaginlar»da yoqing.",
@@ -6797,6 +6853,14 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "내 플러그인입니다. 내 플러그인에서 수정하고 새 버전을 게시하세요.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@”의 모든 버전이 아이콘과 함께 마켓에서 삭제됩니다. 이 휴대폰의 사본은 그대로 남습니다.",
+        "Manage in Market": "마켓에서 관리",
+        "Deleting…": "삭제 중…",
+        "Plugin deleted": "플러그인이 삭제되었습니다",
+        "Delete plugin": "플러그인 삭제",
+        "Redo": "실행 복귀",
+        "Undo": "실행 취소",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "검증된 카탈로그에서 AorusGram 기능과 모양을 변경하고 하단 막대에 탭을 추가할 수 있습니다.",
         "Couldn't write the code": "코드를 작성할 수 없습니다",
         "Generation isn't available for this licence.": "이 라이선스에서는 생성을 사용할 수 없습니다.",
@@ -6844,7 +6908,6 @@ enum AorusL10nTable {
         "Couldn't install": "설치할 수 없습니다",
         "Delete the plugin?": "플러그인을 삭제할까요?",
         "Turn On": "켜기",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "내 플러그인입니다. 모양에서 수정하고 새 버전을 게시하세요.",
         "Version %@ is installed": "%@ 버전이 설치되어 있습니다",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "%@(으)로 업데이트되었습니다. 새 버전이 할 수 있는 일을 확인할 수 있도록 플러그인을 껐습니다.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "설치되었고 꺼져 있습니다. 준비되면 플러그인에서 켜세요.",
@@ -7640,6 +7703,14 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "هذه إضافتك. عدّلها وانشر إصدارًا جديدًا من «إضافاتي».",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "ستُزال كل إصدارات «%@» من المتجر مع أيقونتها. تبقى النسخة الموجودة على هذا الهاتف.",
+        "Manage in Market": "الإدارة في المتجر",
+        "Deleting…": "جارٍ الحذف…",
+        "Plugin deleted": "تم حذف الإضافة",
+        "Delete plugin": "حذف الإضافة",
+        "Redo": "إعادة",
+        "Undo": "تراجع",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "يسمح بتغيير ميزات AorusGram ومظهره من كتالوج موثوق وإضافة علامات تبويب إلى الشريط السفلي.",
         "Couldn't write the code": "تعذّرت كتابة الرمز",
         "Generation isn't available for this licence.": "الإنشاء غير متاح لهذا الترخيص.",
@@ -7687,7 +7758,6 @@ enum AorusL10nTable {
         "Couldn't install": "تعذّر التثبيت",
         "Delete the plugin?": "هل تريد حذف الإضافة؟",
         "Turn On": "تشغيل",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "هذه إضافتك. عدّلها وانشر إصدارًا جديدًا من المظهر الخاص بها.",
         "Version %@ is installed": "الإصدار المثبت %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "تم التحديث إلى %@. أُوقفت الإضافة لتراجع ما يمكن للإصدار الجديد فعله.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "تم التثبيت وهي متوقفة. شغّلها من الإضافات عندما تكون جاهزًا.",
@@ -8483,6 +8553,14 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "این افزونه شماست. آن را در «افزونه‌های من» تغییر دهید و نسخه تازه منتشر کنید.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "همه نسخه‌های «%@» همراه با نمادش از بازار حذف می‌شوند. نسخه روی این تلفن باقی می‌ماند.",
+        "Manage in Market": "مدیریت در بازار",
+        "Deleting…": "در حال حذف…",
+        "Plugin deleted": "افزونه حذف شد",
+        "Delete plugin": "حذف افزونه",
+        "Redo": "ازنو",
+        "Undo": "واگرد",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "امکان تغییر قابلیت‌ها و ظاهر AorusGram را از فهرست تأییدشده و افزودن زبانه به نوار پایین فراهم می‌کند.",
         "Couldn't write the code": "نوشتن کد ممکن نشد",
         "Generation isn't available for this licence.": "تولید برای این مجوز در دسترس نیست.",
@@ -8530,7 +8608,6 @@ enum AorusL10nTable {
         "Couldn't install": "نصب نشد",
         "Delete the plugin?": "افزونه حذف شود؟",
         "Turn On": "روشن کردن",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "این افزونهٔ شماست. آن را در «ظاهر» ویرایش کنید و نسخهٔ جدید منتشر کنید.",
         "Version %@ is installed": "نسخهٔ %@ نصب است",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "به %@ به‌روز شد. افزونه خاموش است تا بررسی کنید نسخهٔ جدید چه کارهایی می‌تواند بکند.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "نصب شد و خاموش است. هر وقت آماده بودید آن را در «افزونه‌ها» روشن کنید.",
@@ -9326,6 +9403,14 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Бұл сіздің плагиніңіз. Оны өзгертіп, жаңа нұсқасын «Менің плагиндерім» бөлімінде жариялаңыз.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "«%@» барлық нұсқалары белгішесімен бірге Маркеттен жойылады. Осы телефондағы көшірме қалады.",
+        "Manage in Market": "Маркетте басқару",
+        "Deleting…": "Жойылуда…",
+        "Plugin deleted": "Плагин жойылды",
+        "Delete plugin": "Плагинді жою",
+        "Redo": "Қайталау",
+        "Undo": "Болдырмау",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Тексерілген каталогтан AorusGram мүмкіндіктері мен көрінісін өзгертуге және төменгі панельге қойындылар қосуға мүмкіндік береді.",
         "Couldn't write the code": "Кодты жазу мүмкін болмады",
         "Generation isn't available for this licence.": "Генерация бұл лицензия үшін қолжетімсіз.",
@@ -9373,7 +9458,6 @@ enum AorusL10nTable {
         "Couldn't install": "Орнату мүмкін болмады",
         "Delete the plugin?": "Плагинді жою керек пе?",
         "Turn On": "Қосу",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Бұл сіздің плагиніңіз. Оны «Безендіру» бөлімінде өзгертіп, жаңа нұсқасын жариялаңыз.",
         "Version %@ is installed": "%@ нұсқасы орнатылған",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "%@ нұсқасына жаңартылды. Жаңа нұсқаның не істей алатынын тексеруіңіз үшін плагин өшірілді.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Орнатылды және өшірулі. Дайын болғанда «Плагиндер» бөлімінде қосыңыз.",
@@ -10169,6 +10253,14 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "这是你的插件。可在“我的插件”中修改并发布新版本。",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@”的所有版本将连同图标一起从市场中移除。此手机上的副本会保留。",
+        "Manage in Market": "在市场中管理",
+        "Deleting…": "正在删除…",
+        "Plugin deleted": "插件已删除",
+        "Delete plugin": "删除插件",
+        "Redo": "重做",
+        "Undo": "撤销",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "允许从已验证的目录中更改 AorusGram 功能和外观，并向底部栏添加标签页。",
         "Couldn't write the code": "无法编写代码",
         "Generation isn't available for this licence.": "此许可证无法使用生成功能。",
@@ -10216,7 +10308,6 @@ enum AorusL10nTable {
         "Couldn't install": "无法安装",
         "Delete the plugin?": "删除插件？",
         "Turn On": "开启",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "这是你的插件。在它的“外观”中修改并发布新版本。",
         "Version %@ is installed": "已安装版本 %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "已更新到 %@。插件已关闭，以便你检查新版本可以做什么。",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "已安装并处于关闭状态。准备好后在“插件”中开启。",
@@ -11013,6 +11104,14 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "這是你的外掛。可在「我的外掛」中修改並發佈新版本。",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "「%@」的所有版本將連同圖示一起從市集中移除。這支手機上的副本會保留。",
+        "Manage in Market": "在市集中管理",
+        "Deleting…": "正在刪除…",
+        "Plugin deleted": "外掛已刪除",
+        "Delete plugin": "刪除外掛",
+        "Redo": "重做",
+        "Undo": "還原",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "允許從已驗證的目錄中變更 AorusGram 功能和外觀，並在底部列加入分頁。",
         "Couldn't write the code": "無法撰寫程式碼",
         "Generation isn't available for this licence.": "此授權無法使用生成功能。",
@@ -11060,7 +11159,6 @@ enum AorusL10nTable {
         "Couldn't install": "無法安裝",
         "Delete the plugin?": "刪除外掛？",
         "Turn On": "開啟",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "這是你的外掛。在它的「外觀」中修改並發布新版本。",
         "Version %@ is installed": "已安裝版本 %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "已更新至 %@。外掛已關閉，方便你檢查新版本可以做什麼。",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "已安裝並處於關閉狀態。準備好後在「外掛」中開啟。",
@@ -11856,6 +11954,14 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "これはあなたのプラグインです。マイプラグインで変更して新しいバージョンを公開できます。",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "「%@」のすべてのバージョンがアイコンとともにマーケットから削除されます。このスマートフォン上のコピーは残ります。",
+        "Manage in Market": "マーケットで管理",
+        "Deleting…": "削除中…",
+        "Plugin deleted": "プラグインを削除しました",
+        "Delete plugin": "プラグインを削除",
+        "Redo": "やり直す",
+        "Undo": "取り消す",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "確認済みのカタログから AorusGram の機能と外観を変更し、下部バーにタブを追加できます。",
         "Couldn't write the code": "コードを書けませんでした",
         "Generation isn't available for this licence.": "このライセンスでは生成を利用できません。",
@@ -11903,7 +12009,6 @@ enum AorusL10nTable {
         "Couldn't install": "インストールできませんでした",
         "Delete the plugin?": "プラグインを削除しますか？",
         "Turn On": "オンにする",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "あなたのプラグインです。「外観」で変更して新しいバージョンを公開できます。",
         "Version %@ is installed": "バージョン %@ がインストールされています",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "%@ にアップデートしました。新しいバージョンができることを確認できるよう、プラグインはオフになっています。",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "インストールされ、オフになっています。準備ができたら「プラグイン」でオンにしてください。",
@@ -12699,6 +12804,14 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Tämä on oma laajennuksesi. Muokkaa sitä ja julkaise uusi versio kohdassa Omat laajennukset.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Kaikki laajennuksen ”%@” versiot poistetaan Marketista kuvakkeineen. Tämän puhelimen kopio säilyy.",
+        "Manage in Market": "Hallitse Marketissa",
+        "Deleting…": "Poistetaan…",
+        "Plugin deleted": "Laajennus poistettu",
+        "Delete plugin": "Poista laajennus",
+        "Redo": "Tee uudelleen",
+        "Undo": "Kumoa",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Sallii AorusGramin toimintojen ja ulkoasun muuttamisen tarkistetusta luettelosta sekä välilehtien lisäämisen alapalkkiin.",
         "Couldn't write the code": "Koodia ei voitu kirjoittaa",
         "Generation isn't available for this licence.": "Luominen ei ole käytettävissä tällä lisenssillä.",
@@ -12746,7 +12859,6 @@ enum AorusL10nTable {
         "Couldn't install": "Asennus epäonnistui",
         "Delete the plugin?": "Poistetaanko laajennus?",
         "Turn On": "Ota käyttöön",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Tämä on sinun laajennuksesi. Muuta sitä ja julkaise uusi versio sen Ulkoasusta.",
         "Version %@ is installed": "Asennettu versio %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Päivitetty versioon %@. Laajennus on pois päältä, jotta voit tarkistaa, mitä uusi versio saa tehdä.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Asennettu ja pois päältä. Ota se käyttöön Laajennuksissa, kun olet valmis.",
@@ -13542,6 +13654,14 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "זה התוסף שלך. אפשר לשנות אותו ולפרסם גרסה חדשה מ„התוספים שלי”.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "כל הגרסאות של „%@” יוסרו מהחנות יחד עם הסמל. העותק בטלפון הזה יישאר.",
+        "Manage in Market": "ניהול בחנות",
+        "Deleting…": "מוחק…",
+        "Plugin deleted": "התוסף נמחק",
+        "Delete plugin": "מחיקת התוסף",
+        "Redo": "ביצוע חוזר",
+        "Undo": "ביטול פעולה",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "מאפשר לשנות תכונות ומראה של AorusGram מתוך קטלוג מאומת ולהוסיף כרטיסיות לסרגל התחתון.",
         "Couldn't write the code": "לא ניתן לכתוב את הקוד",
         "Generation isn't available for this licence.": "יצירה אינה זמינה לרישיון הזה.",
@@ -13589,7 +13709,6 @@ enum AorusL10nTable {
         "Couldn't install": "לא ניתן להתקין",
         "Delete the plugin?": "למחוק את התוסף?",
         "Turn On": "הפעלה",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "זה התוסף שלכם. אפשר לשנות אותו ולפרסם גרסה חדשה במראה שלו.",
         "Version %@ is installed": "גרסה %@ מותקנת",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "עודכן לגרסה %@. התוסף כבוי כדי שתוכלו לבדוק מה הגרסה החדשה יכולה לעשות.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "הותקן וכבוי. אפשר להפעיל אותו בתוספים כשתהיו מוכנים.",
@@ -14385,6 +14504,14 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Ovo je tvoj dodatak. Promijeni ga i objavi novu verziju u Mojim dodacima.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Sve verzije „%@” bit će uklonjene iz Marketa zajedno s ikonom. Kopija na ovom telefonu ostaje.",
+        "Manage in Market": "Upravljaj u Marketu",
+        "Deleting…": "Brisanje…",
+        "Plugin deleted": "Dodatak izbrisan",
+        "Delete plugin": "Izbriši dodatak",
+        "Redo": "Ponovi",
+        "Undo": "Poništi",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Omogućuje promjenu značajki i izgleda AorusGrama iz provjerenog kataloga te dodavanje kartica u donju traku.",
         "Couldn't write the code": "Kod nije moguće napisati",
         "Generation isn't available for this licence.": "Generiranje nije dostupno za ovu licencu.",
@@ -14432,7 +14559,6 @@ enum AorusL10nTable {
         "Couldn't install": "Instalacija nije uspjela",
         "Delete the plugin?": "Izbrisati dodatak?",
         "Turn On": "Uključi",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Ovo je vaš dodatak. Izmijenite ga i objavite novu verziju iz njegova Izgleda.",
         "Version %@ is installed": "Instalirana je verzija %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Ažurirano na %@. Dodatak je isključen kako biste provjerili što nova verzija smije raditi.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Instalirano i isključeno. Uključite ga u Dodacima kad budete spremni.",
@@ -15228,6 +15354,14 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Ово је твој додатак. Промени га и објави нову верзију у Мојим додацима.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Све верзије „%@” биће уклоњене из Маркета заједно са иконом. Копија на овом телефону остаје.",
+        "Manage in Market": "Управљај у Маркету",
+        "Deleting…": "Брисање…",
+        "Plugin deleted": "Додатак је обрисан",
+        "Delete plugin": "Обриши додатак",
+        "Redo": "Понови",
+        "Undo": "Опозови",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Омогућава промену функција и изгледа AorusGram-а из провереног каталога и додавање картица на доњу траку.",
         "Couldn't write the code": "Код није могуће написати",
         "Generation isn't available for this licence.": "Генерисање није доступно за ову лиценцу.",
@@ -15275,7 +15409,6 @@ enum AorusL10nTable {
         "Couldn't install": "Инсталација није успела",
         "Delete the plugin?": "Избрисати додатак?",
         "Turn On": "Укључи",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Ово је ваш додатак. Измените га и објавите нову верзију из његовог Изгледа.",
         "Version %@ is installed": "Инсталирана је верзија %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Ажурирано на %@. Додатак је искључен да бисте проверили шта нова верзија сме да ради.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Инсталирано и искључено. Укључите га у Додацима када будете спремни.",
@@ -16071,6 +16204,14 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Toto je váš plugin. Upravit ho a vydat novou verzi můžete v sekci Moje pluginy.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Všechny verze „%@“ budou z Marketu odstraněny i s ikonou. Kopie v tomto telefonu zůstane.",
+        "Manage in Market": "Spravovat v Marketu",
+        "Deleting…": "Mazání…",
+        "Plugin deleted": "Plugin smazán",
+        "Delete plugin": "Smazat plugin",
+        "Redo": "Znovu",
+        "Undo": "Zpět",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Umožňuje měnit funkce a vzhled AorusGramu z ověřeného katalogu a přidávat karty do spodní lišty.",
         "Couldn't write the code": "Kód se nepodařilo napsat",
         "Generation isn't available for this licence.": "Generování není pro tuto licenci k dispozici.",
@@ -16118,7 +16259,6 @@ enum AorusL10nTable {
         "Couldn't install": "Instalace se nezdařila",
         "Delete the plugin?": "Smazat plugin?",
         "Turn On": "Zapnout",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Tohle je váš plugin. Upravte ho a novou verzi publikujte v jeho Vzhledu.",
         "Version %@ is installed": "Nainstalovaná verze %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Aktualizováno na %@. Plugin je vypnutý, abyste mohli zkontrolovat, co nová verze smí dělat.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Nainstalováno a vypnuto. Zapněte ho v Pluginech, až budete připraveni.",
@@ -16914,6 +17054,14 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Toto je váš plugin. Upraviť ho a vydať novú verziu môžete v sekcii Moje pluginy.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Všetky verzie „%@“ budú z Marketu odstránené aj s ikonou. Kópia v tomto telefóne zostane.",
+        "Manage in Market": "Spravovať v Markete",
+        "Deleting…": "Mazanie…",
+        "Plugin deleted": "Plugin zmazaný",
+        "Delete plugin": "Zmazať plugin",
+        "Redo": "Znova",
+        "Undo": "Späť",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Umožňuje meniť funkcie a vzhľad AorusGramu z overeného katalógu a pridávať karty do spodnej lišty.",
         "Couldn't write the code": "Kód sa nepodarilo napísať",
         "Generation isn't available for this licence.": "Generovanie nie je pre túto licenciu k dispozícii.",
@@ -16961,7 +17109,6 @@ enum AorusL10nTable {
         "Couldn't install": "Inštalácia zlyhala",
         "Delete the plugin?": "Vymazať plugin?",
         "Turn On": "Zapnúť",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Toto je váš plugin. Upravte ho a novú verziu publikujte v jeho Vzhľade.",
         "Version %@ is installed": "Nainštalovaná verzia %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Aktualizované na %@. Plugin je vypnutý, aby ste mohli skontrolovať, čo nová verzia smie robiť.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Nainštalované a vypnuté. Zapnite ho v Pluginoch, keď budete pripravení.",
@@ -17757,6 +17904,14 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Acesta este pluginul tău. Modifică-l și publică o versiune nouă din Pluginurile mele.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Toate versiunile „%@” vor fi eliminate din Market împreună cu pictograma. Copia de pe acest telefon rămâne.",
+        "Manage in Market": "Gestionează în Market",
+        "Deleting…": "Se șterge…",
+        "Plugin deleted": "Plugin șters",
+        "Delete plugin": "Șterge pluginul",
+        "Redo": "Refă",
+        "Undo": "Anulează",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permite modificarea funcțiilor și aspectului AorusGram dintr-un catalog verificat și adăugarea de file în bara de jos.",
         "Couldn't write the code": "Nu s-a putut scrie codul",
         "Generation isn't available for this licence.": "Generarea nu este disponibilă pentru această licență.",
@@ -17804,7 +17959,6 @@ enum AorusL10nTable {
         "Couldn't install": "Nu s-a putut instala",
         "Delete the plugin?": "Ștergi pluginul?",
         "Turn On": "Pornește",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Acesta este pluginul tău. Modifică-l și publică o versiune nouă din Aspectul lui.",
         "Version %@ is installed": "Este instalată versiunea %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Actualizat la %@. Pluginul este oprit ca să poți verifica ce poate face noua versiune.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Instalat și oprit. Pornește-l din Pluginuri când ești gata.",
@@ -18600,6 +18754,14 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Ez a saját bővítményed. A Saját bővítményekben módosíthatod, és ott tehetsz közzé új verziót.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "A(z) „%@” minden verziója eltűnik a Marketből az ikonjával együtt. A telefonon lévő példány megmarad.",
+        "Manage in Market": "Kezelés a Marketben",
+        "Deleting…": "Törlés…",
+        "Plugin deleted": "Bővítmény törölve",
+        "Delete plugin": "Bővítmény törlése",
+        "Redo": "Ismét",
+        "Undo": "Visszavonás",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Lehetővé teszi az AorusGram funkcióinak és megjelenésének módosítását egy ellenőrzött katalógusból, valamint lapok hozzáadását az alsó sávhoz.",
         "Couldn't write the code": "Nem sikerült megírni a kódot",
         "Generation isn't available for this licence.": "A generálás nem érhető el ehhez a licenchez.",
@@ -18647,7 +18809,6 @@ enum AorusL10nTable {
         "Couldn't install": "Nem sikerült telepíteni",
         "Delete the plugin?": "Törlöd a bővítményt?",
         "Turn On": "Bekapcsolás",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Ez a saját bővítményed. A Megjelenésében módosíthatod és adhatsz ki új verziót.",
         "Version %@ is installed": "Telepített verzió: %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Frissítve erre: %@. A bővítmény ki van kapcsolva, hogy átnézhesd, mit tehet az új verzió.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Telepítve és kikapcsolva. Kapcsold be a Bővítményekben, amikor készen állsz.",
@@ -19443,6 +19604,14 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Dette er din utvidelse. Endre den og publiser en ny versjon fra Mine utvidelser.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alle versjoner av «%@» fjernes fra Market sammen med ikonet. Kopien på denne telefonen blir værende.",
+        "Manage in Market": "Administrer i Market",
+        "Deleting…": "Sletter …",
+        "Plugin deleted": "Utvidelsen er slettet",
+        "Delete plugin": "Slett utvidelsen",
+        "Redo": "Gjør om",
+        "Undo": "Angre",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Tillater endring av AorusGram-funksjoner og utseende fra en verifisert katalog og å legge til faner i den nederste linjen.",
         "Couldn't write the code": "Kunne ikke skrive koden",
         "Generation isn't available for this licence.": "Generering er ikke tilgjengelig for denne lisensen.",
@@ -19490,7 +19659,6 @@ enum AorusL10nTable {
         "Couldn't install": "Kunne ikke installere",
         "Delete the plugin?": "Slette utvidelsen?",
         "Turn On": "Slå på",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Dette er din utvidelse. Endre den og publiser en ny versjon fra Utseende.",
         "Version %@ is installed": "Versjon %@ er installert",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Oppdatert til %@. Utvidelsen er slått av slik at du kan se hva den nye versjonen får gjøre.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Installert og slått av. Slå den på under Utvidelser når du er klar.",
@@ -20286,6 +20454,14 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Det här är ditt tillägg. Ändra det och publicera en ny version från Mina tillägg.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alla versioner av ”%@” tas bort från Market tillsammans med ikonen. Kopian på den här telefonen finns kvar.",
+        "Manage in Market": "Hantera i Market",
+        "Deleting…": "Raderar …",
+        "Plugin deleted": "Tillägget har raderats",
+        "Delete plugin": "Radera tillägget",
+        "Redo": "Gör om",
+        "Undo": "Ångra",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Tillåter ändring av AorusGrams funktioner och utseende från en verifierad katalog och att lägga till flikar i det nedre fältet.",
         "Couldn't write the code": "Det gick inte att skriva koden",
         "Generation isn't available for this licence.": "Generering är inte tillgänglig för den här licensen.",
@@ -20333,7 +20509,6 @@ enum AorusL10nTable {
         "Couldn't install": "Det gick inte att installera",
         "Delete the plugin?": "Radera tillägget?",
         "Turn On": "Slå på",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Det här är ditt tillägg. Ändra det och publicera en ny version från dess Utseende.",
         "Version %@ is installed": "Version %@ är installerad",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Uppdaterad till %@. Tillägget är avstängt så att du kan granska vad den nya versionen får göra.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Installerad och avstängd. Slå på den under Tillägg när du är redo.",
@@ -21129,6 +21304,14 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Đây là plugin của bạn. Hãy chỉnh sửa và phát hành phiên bản mới trong Plugin của tôi.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Mọi phiên bản của “%@” sẽ bị xóa khỏi Chợ cùng biểu tượng. Bản sao trên điện thoại này vẫn được giữ lại.",
+        "Manage in Market": "Quản lý trên Chợ",
+        "Deleting…": "Đang xóa…",
+        "Plugin deleted": "Đã xóa plugin",
+        "Delete plugin": "Xóa plugin",
+        "Redo": "Làm lại",
+        "Undo": "Hoàn tác",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Cho phép thay đổi tính năng và giao diện AorusGram từ danh mục đã xác minh và thêm thẻ vào thanh dưới cùng.",
         "Couldn't write the code": "Không thể viết mã",
         "Generation isn't available for this licence.": "Tính năng tạo không khả dụng với giấy phép này.",
@@ -21176,7 +21359,6 @@ enum AorusL10nTable {
         "Couldn't install": "Không thể cài đặt",
         "Delete the plugin?": "Xóa plugin?",
         "Turn On": "Bật",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Đây là plugin của bạn. Hãy sửa và phát hành phiên bản mới trong Giao diện của nó.",
         "Version %@ is installed": "Đã cài phiên bản %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Đã cập nhật lên %@. Plugin đang tắt để bạn xem phiên bản mới được phép làm gì.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Đã cài và đang tắt. Bật nó trong Plugin khi bạn sẵn sàng.",
@@ -21972,6 +22154,14 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Це ваш плагін. Змінити його й опублікувати нову версію можна в «Мої плагіни».",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Усі версії «%@» буде видалено з Маркету разом зі значком. Копія на цьому телефоні залишиться.",
+        "Manage in Market": "Керування в Маркеті",
+        "Deleting…": "Видалення…",
+        "Plugin deleted": "Плагін видалено",
+        "Delete plugin": "Видалити плагін",
+        "Redo": "Повторити",
+        "Undo": "Скасувати",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Дозволяє змінювати функції та вигляд AorusGram із перевіреного каталогу й додавати вкладки до нижньої панелі.",
         "Couldn't write the code": "Не вдалося написати код",
         "Generation isn't available for this licence.": "Генерація недоступна для цієї ліцензії.",
@@ -22019,7 +22209,6 @@ enum AorusL10nTable {
         "Couldn't install": "Не вдалося встановити",
         "Delete the plugin?": "Видалити плагін?",
         "Turn On": "Увімкнути",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Це ваш плагін. Змінити його й опублікувати нову версію можна в його «Оформленні».",
         "Version %@ is installed": "Встановлено версію %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Оновлено до %@. Плагін вимкнено, щоб ви перевірили, що може нова версія.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Встановлено й вимкнено. Увімкніть його в «Плагінах», коли будете готові.",
@@ -22824,6 +23013,14 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Este es tu plugin. Cámbialo y publica una nueva versión desde Mis plugins.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Todas las versiones de «%@» se eliminarán del Market junto con su icono. La copia de este teléfono se conserva.",
+        "Manage in Market": "Gestionar en el Market",
+        "Deleting…": "Eliminando…",
+        "Plugin deleted": "Plugin eliminado",
+        "Delete plugin": "Eliminar plugin",
+        "Redo": "Rehacer",
+        "Undo": "Deshacer",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permite cambiar las funciones y la apariencia de AorusGram desde un catálogo verificado y añadir pestañas a la barra inferior.",
         "Couldn't write the code": "No se pudo escribir el código",
         "Generation isn't available for this licence.": "La generación no está disponible para esta licencia.",
@@ -22871,7 +23068,6 @@ enum AorusL10nTable {
         "Couldn't install": "No se pudo instalar",
         "Delete the plugin?": "¿Eliminar el plugin?",
         "Turn On": "Activar",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Este es tu plugin. Cámbialo y publica una nueva versión desde su Apariencia.",
         "Version %@ is installed": "Tienes instalada la versión %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Actualizado a la %@. El plugin está desactivado para que revises lo que puede hacer la nueva versión.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Instalado y desactivado. Actívalo en Plugins cuando quieras.",
@@ -23676,6 +23872,14 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Este é o seu plugin. Altere-o e publique uma nova versão em Meus plugins.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Todas as versões de “%@” serão removidas do Market com o ícone. A cópia neste telefone permanece.",
+        "Manage in Market": "Gerenciar no Market",
+        "Deleting…": "Excluindo…",
+        "Plugin deleted": "Plugin excluído",
+        "Delete plugin": "Excluir plugin",
+        "Redo": "Refazer",
+        "Undo": "Desfazer",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permite alterar os recursos e a aparência do AorusGram a partir de um catálogo verificado e adicionar abas à barra inferior.",
         "Couldn't write the code": "Não foi possível escrever o código",
         "Generation isn't available for this licence.": "A geração não está disponível para esta licença.",
@@ -23723,7 +23927,6 @@ enum AorusL10nTable {
         "Couldn't install": "Não foi possível instalar",
         "Delete the plugin?": "Apagar o plugin?",
         "Turn On": "Ativar",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Este é o seu plugin. Altere-o e publique uma nova versão pela Aparência dele.",
         "Version %@ is installed": "Versão %@ instalada",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Atualizado para %@. O plugin está desligado para que você revise o que a nova versão pode fazer.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Instalado e desligado. Ative-o em Plugins quando estiver pronto.",
@@ -24528,6 +24731,14 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Das ist dein Plugin. Ändere es und veröffentliche eine neue Version unter „Meine Plugins“.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alle Versionen von „%@“ werden samt Symbol aus dem Market entfernt. Die Kopie auf diesem Telefon bleibt.",
+        "Manage in Market": "Im Market verwalten",
+        "Deleting…": "Wird gelöscht …",
+        "Plugin deleted": "Plugin gelöscht",
+        "Delete plugin": "Plugin löschen",
+        "Redo": "Wiederholen",
+        "Undo": "Widerrufen",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Erlaubt das Ändern von AorusGram-Funktionen und -Darstellung aus einem geprüften Katalog und das Hinzufügen von Tabs zur unteren Leiste.",
         "Couldn't write the code": "Code konnte nicht geschrieben werden",
         "Generation isn't available for this licence.": "Generieren ist für diese Lizenz nicht verfügbar.",
@@ -24575,7 +24786,6 @@ enum AorusL10nTable {
         "Couldn't install": "Installation fehlgeschlagen",
         "Delete the plugin?": "Plugin löschen?",
         "Turn On": "Einschalten",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Das ist dein Plugin. Ändere es und veröffentliche eine neue Version über seine Darstellung.",
         "Version %@ is installed": "Version %@ ist installiert",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Auf %@ aktualisiert. Das Plugin ist ausgeschaltet, damit du prüfen kannst, was die neue Version darf.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Installiert und ausgeschaltet. Schalte es unter Plugins ein, wenn du so weit bist.",
@@ -25380,6 +25590,14 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "C’est votre plugin. Modifiez-le et publiez une nouvelle version depuis Mes plugins.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Toutes les versions de « %@ » seront retirées du Market avec leur icône. La copie sur ce téléphone est conservée.",
+        "Manage in Market": "Gérer dans le Market",
+        "Deleting…": "Suppression…",
+        "Plugin deleted": "Plugin supprimé",
+        "Delete plugin": "Supprimer le plugin",
+        "Redo": "Rétablir",
+        "Undo": "Annuler",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Autorise la modification des fonctions et de l’apparence d’AorusGram à partir d’un catalogue vérifié et l’ajout d’onglets à la barre inférieure.",
         "Couldn't write the code": "Impossible d'écrire le code",
         "Generation isn't available for this licence.": "La génération n'est pas disponible pour cette licence.",
@@ -25427,7 +25645,6 @@ enum AorusL10nTable {
         "Couldn't install": "Installation impossible",
         "Delete the plugin?": "Supprimer le plugin ?",
         "Turn On": "Activer",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "C'est votre plugin. Modifiez-le et publiez une nouvelle version depuis son Apparence.",
         "Version %@ is installed": "Version %@ installée",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "Mis à jour vers la %@. Le plugin est désactivé pour que vous vérifiiez ce que la nouvelle version peut faire.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Installé et désactivé. Activez-le dans Plugins quand vous êtes prêt.",
@@ -26232,6 +26449,14 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "This is your plugin. Change it and publish a new version from My Plugins.": "Bu sizin eklentiniz. Değiştirip yeni sürümünü Eklentilerim bölümünden yayımlayın.",
+        "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@” eklentisinin tüm sürümleri simgesiyle birlikte Market’ten kaldırılacak. Bu telefondaki kopya kalır.",
+        "Manage in Market": "Market’te yönet",
+        "Deleting…": "Siliniyor…",
+        "Plugin deleted": "Eklenti silindi",
+        "Delete plugin": "Eklentiyi sil",
+        "Redo": "Yinele",
+        "Undo": "Geri al",
         "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Doğrulanmış bir katalogdan AorusGram özelliklerinin ve görünümünün değiştirilmesine ve alt çubuğa sekme eklenmesine izin verir.",
         "Couldn't write the code": "Kod yazılamadı",
         "Generation isn't available for this licence.": "Oluşturma bu lisans için kullanılamıyor.",
@@ -26279,7 +26504,6 @@ enum AorusL10nTable {
         "Couldn't install": "Yüklenemedi",
         "Delete the plugin?": "Eklenti silinsin mi?",
         "Turn On": "Aç",
-        "This is your plugin. Change it and publish a new version from its Appearance.": "Bu sizin eklentiniz. Görünüm bölümünden değiştirip yeni bir sürüm yayımlayın.",
         "Version %@ is installed": "Yüklü sürüm %@",
         "Updated to %@. The plugin is off so you can review what the new version may do.": "%@ sürümüne güncellendi. Yeni sürümün neler yapabileceğini incelemeniz için eklenti kapatıldı.",
         "Installed and switched off. Turn it on in Plugins when you're ready.": "Yüklendi ve kapalı. Hazır olduğunuzda Eklentiler'den açın.",
