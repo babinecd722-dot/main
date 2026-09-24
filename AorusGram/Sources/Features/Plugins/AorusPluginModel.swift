@@ -353,7 +353,7 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             // A needle this misses is denied at the call itself, with a message saying so.
             (.inAppBrowser, [
                 "aorus.browser.open", "aorus.ui.openURL", "aorus.app.openURL",
-                "aorus.integrations.settings.register", "aorus.navigation.openUrl",
+                "aorus.integrations.settings.register", "aorus.navigation.openUrl", "aorus.tabs.register",
                 "type: 'link'", "type: \"link\"", "\"type\":\"link\"", ".link({",
             ]),
             (.artificialIntelligence, ["aorus.ai."]),
@@ -694,6 +694,102 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
             items[index] = item
         }
         return items
+    }
+}
+
+/// A tab a plugin puts into the bottom bar, next to Chats, Calls and Settings: a site, drawn
+/// as a page of the app, or one of the plugin's own screens.
+///
+/// The bar has room for so much, so a plugin gets two tabs and all plugins together get
+/// `maximumTotal`; the rest wait. The icon is always a glyph from the catalogue — a site's own
+/// icon is for the settings list, where rows are tiles, not for a bar of line glyphs.
+public struct AorusPluginTab: Codable, Equatable {
+    public static let maximumPerPlugin = 2
+    public static let maximumTotal = 2
+
+    public var id: String
+    public var title: String
+    public var icon: String?
+    public var pageId: String?
+    public var url: String?
+
+    public init(id: String, title: String, icon: String? = nil, pageId: String? = nil, url: String? = nil) {
+        self.id = id
+        self.title = title
+        self.icon = icon
+        self.pageId = pageId
+        self.url = url
+    }
+
+    public static func validated(from data: Data) -> [AorusPluginTab]? {
+        guard data.count <= 16 * 1024,
+              var items = try? JSONDecoder().decode([AorusPluginTab].self, from: data),
+              items.count <= maximumPerPlugin else { return nil }
+        let identifier = try? NSRegularExpression(pattern: "^[A-Za-z0-9_.-]{1,64}$")
+        var ids = Set<String>()
+        for index in items.indices {
+            var item = items[index]
+            guard identifier?.firstMatch(in: item.id, range: NSRange(location: 0, length: item.id.utf16.count)) != nil,
+                  ids.insert(item.id).inserted,
+                  (item.pageId != nil) != (item.url != nil) else { return nil }
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+            // A tab title sits under a glyph in a bar shared with four others.
+            item.title = String(title.prefix(24))
+            item.icon = AorusPluginIcon.normalized(item.icon ?? AorusPluginIcon.fallback)
+            if let pageId = item.pageId,
+               identifier?.firstMatch(in: pageId, range: NSRange(location: 0, length: pageId.utf16.count)) == nil { return nil }
+            if let value = item.url {
+                let bounded = String(value.prefix(2_048))
+                guard let url = URL(string: bounded), let scheme = url.scheme?.lowercased(),
+                      scheme == "http" || scheme == "https", url.host?.isEmpty == false else { return nil }
+                item.url = bounded
+            }
+            items[index] = item
+        }
+        return items
+    }
+
+    /// What the tab's badge says, from whatever a plugin or a site gave: a count (0 or less is
+    /// no badge, more than 99 is "99+"), a short text, or nothing. The same red circle Telegram
+    /// puts on Chats.
+    public static func normalizedBadge(_ value: Any?) -> String? {
+        switch value {
+        case let number as NSNumber:
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue ? "•" : nil }
+            let count = number.intValue
+            return count <= 0 ? nil : (count > 99 ? "99+" : String(count))
+        case let text as String:
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { return nil }
+            if let count = Int(trimmed) { return normalizedBadge(NSNumber(value: count)) }
+            return String(trimmed.prefix(4))
+        default:
+            return nil
+        }
+    }
+
+    /// The unread count a page's title carries at its start, the way sites put it there:
+    /// "(3) Inbox", "(12+) Feed".
+    public static func badge(fromTitle title: String) -> String? {
+        guard let prefix = countPrefix(of: title) else { return nil }
+        return normalizedBadge(NSNumber(value: prefix.count))
+    }
+
+    /// The title without that count, for a bar whose tab already shows it as a badge.
+    public static func title(withoutBadge title: String) -> String {
+        guard let prefix = countPrefix(of: title) else { return title }
+        return prefix.rest
+    }
+
+    private static func countPrefix(of title: String) -> (count: Int, rest: String)? {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix("("), let close = trimmed.firstIndex(of: ")") else { return nil }
+        var inside = String(trimmed[trimmed.index(after: trimmed.startIndex)..<close])
+        if inside.hasSuffix("+") { inside.removeLast() }
+        guard !inside.isEmpty, inside.count <= 4, inside.allSatisfy({ $0.isASCII && $0.isNumber }), let count = Int(inside) else { return nil }
+        let rest = String(trimmed[trimmed.index(after: close)...]).trimmingCharacters(in: .whitespaces)
+        return (count, rest)
     }
 }
 

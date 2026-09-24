@@ -87,6 +87,11 @@ public final class AorusPluginRuntimeManager {
     private var overlays: [String: [AorusPluginOverlay]] = [:]
     private var nativeButtons: [String: [AorusPluginNativeButton]] = [:]
     private var stringOverrides: [String: [String: String]] = [:]
+    private var tabs: [String: [AorusPluginTab]] = [:]
+    /// Badges plugins set on their tabs, by `pluginId + "\u{1}" + tabId`.
+    private var tabBadges: [String: String] = [:]
+    /// The tabs the bar was last told about, so it is rebuilt only when they change.
+    private var publishedTabKeys: [String] = []
     private var observers: [NSObjectProtocol] = []
 
     private init() {}
@@ -198,8 +203,11 @@ public final class AorusPluginRuntimeManager {
             overlays[id] = nil
             nativeButtons[id] = nil
             stringOverrides[id] = nil
+            tabs[id] = nil
+            tabBadges = tabBadges.filter { key, _ in key.components(separatedBy: "\u{1}").first != id }
         }
         lock.unlock()
+        publishTabsIfChanged()
         for id in ids {
             AorusPluginHookBroker.shared.removePlugin(id)
             // A socket that outlived its plugin is a connection nobody can see.
@@ -346,9 +354,69 @@ public final class AorusPluginRuntimeManager {
         }
     }
 
+    // MARK: Tabs
+
+    /// The plugin tabs the bottom bar shows, in a stable order and never more than it has
+    /// room for. A tab for a screen appears once the plugin has defined that screen.
+    public func pluginTabs() -> [(pluginId: String, tab: AorusPluginTab)] {
+        lock.lock(); defer { lock.unlock() }
+        var result: [(pluginId: String, tab: AorusPluginTab)] = []
+        for pluginId in tabs.keys.sorted() {
+            for tab in tabs[pluginId] ?? [] {
+                if let pageId = tab.pageId, !(pages[pluginId] ?? []).contains(where: { $0.id == pageId }) { continue }
+                result.append((pluginId, tab))
+            }
+        }
+        return Array(result.prefix(AorusPluginTab.maximumTotal))
+    }
+
+    public func pluginTabBadge(pluginId: String, tabId: String) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return tabBadges[pluginId + "\u{1}" + tabId]
+    }
+
+    fileprivate func setTabs(_ value: [AorusPluginTab], id: String) {
+        lock.lock()
+        tabs[id] = value
+        let ids = Set(value.map { $0.id })
+        tabBadges = tabBadges.filter { key, _ in
+            let parts = key.components(separatedBy: "\u{1}")
+            return parts.first != id || ids.contains(parts.last ?? "")
+        }
+        lock.unlock()
+        publishTabsIfChanged()
+    }
+
+    fileprivate func setTabBadge(_ badge: String?, pluginId: String, tabId: String) {
+        lock.lock()
+        tabBadges[pluginId + "\u{1}" + tabId] = badge
+        lock.unlock()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: AorusPluginTabs.badgeChangedNotification, object: nil)
+        }
+    }
+
+    /// Tells the root controller to rebuild the bar, but only when which tabs there are, or
+    /// where they lead, has changed: a rebuild resets the bar, and a plugin republishing the
+    /// same tabs must not cost that.
+    private func publishTabsIfChanged() {
+        let keys = pluginTabs().map { item in
+            [item.pluginId, item.tab.id, item.tab.title, item.tab.icon ?? "", item.tab.url ?? "", item.tab.pageId ?? ""].joined(separator: "\u{1}")
+        }
+        lock.lock()
+        let changed = keys != publishedTabKeys
+        publishedTabKeys = keys
+        lock.unlock()
+        guard changed else { return }
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: AorusPluginTabs.changedNotification, object: nil)
+        }
+    }
+
     fileprivate func setPages(_ value: [AorusPluginUIPage], id: String) {
         lock.lock(); pages[id] = value; lock.unlock()
         publishIntegrationsChanged()
+        publishTabsIfChanged()
     }
 
     fileprivate func setSettingsShortcuts(_ value: [AorusPluginSettingsShortcut], id: String) {
@@ -1847,6 +1915,19 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     func pluginNativeButtonsChanged(_ pluginId: String, buttons: [AorusPluginNativeButton]) {
         guard manager?.isPermissionGranted(.customUI, pluginId: pluginId) == true else { return }
         manager?.setNativeButtons(buttons, id: pluginId)
+    }
+
+    func pluginTabsChanged(_ pluginId: String, tabs: [AorusPluginTab]) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
+        if tabs.contains(where: { $0.url != nil }), manager?.isPermissionGranted(.inAppBrowser, pluginId: pluginId) != true { return }
+        if tabs.contains(where: { $0.pageId != nil }), manager?.isPermissionGranted(.customUI, pluginId: pluginId) != true { return }
+        manager?.setTabs(tabs, id: pluginId)
+    }
+
+    func pluginTabBadge(_ pluginId: String, tabId: String, badge: String?) {
+        guard manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
+        manager?.setTabBadge(badge, pluginId: pluginId, tabId: tabId)
     }
 
     func pluginStringOverridesChanged(_ pluginId: String, overrides: [String: String]) {

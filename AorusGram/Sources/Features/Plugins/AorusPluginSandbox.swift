@@ -91,6 +91,10 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginPickFile(_ pluginId: String, directory: URL?, completion: @escaping (Result<[String: Any]?, Error>) -> Void)
     func pluginSetHeaderBadge(_ pluginId: String, text: String?, color: String?)
     func pluginNativeButtonsChanged(_ pluginId: String, buttons: [AorusPluginNativeButton])
+    /// The tabs a plugin puts into the bottom bar, the whole set each time.
+    func pluginTabsChanged(_ pluginId: String, tabs: [AorusPluginTab])
+    /// What one of the plugin's tabs says in its badge, or nil for no badge.
+    func pluginTabBadge(_ pluginId: String, tabId: String, badge: String?)
     func pluginShareFile(_ pluginId: String, path: URL, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginBroadcast(_ pluginId: String, topic: String, json: String)
     func pluginNotify(_ pluginId: String, action: String, notificationId: String, title: String, body: String, after: Double, completion: @escaping (Result<[String: Any], Error>) -> Void)
@@ -141,6 +145,8 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onPickFile: ((String) -> [String: Any]?)?
     public var onHeaderBadge: ((String, String?, String?) -> Void)?
     public var onNativeButtonsChanged: ((String, [AorusPluginNativeButton]) -> Void)?
+    public var onTabsChanged: ((String, [AorusPluginTab]) -> Void)?
+    public var onTabBadge: ((String, String, String?) -> Void)?
     public var onShareFile: ((String, URL) -> Void)?
     public var onBroadcast: ((String, String, String) -> Void)?
     public var onNotify: ((String, String, String, String, String, Double) -> [String: Any]?)?
@@ -268,6 +274,14 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginNativeButtonsChanged(_ pluginId: String, buttons: [AorusPluginNativeButton]) {
         onNativeButtonsChanged?(pluginId, buttons)
+    }
+
+    open func pluginTabsChanged(_ pluginId: String, tabs: [AorusPluginTab]) {
+        onTabsChanged?(pluginId, tabs)
+    }
+
+    open func pluginTabBadge(_ pluginId: String, tabId: String, badge: String?) {
+        onTabBadge?(pluginId, tabId, badge)
     }
     open func pluginShareFile(_ pluginId: String, path: URL, completion: @escaping (Result<Void, Error>) -> Void) {
         onShareFile?(pluginId, path)
@@ -575,6 +589,8 @@ public final class AorusPluginSandbox {
     /// session — the first entry into a fresh JavaScript context pays for the warm-up, and
     /// a permanent flag turned one slow millisecond into a plugin that never worked again.
     private var hungUntil: Date?
+    /// The ids of the tabs the plugin last defined, so a badge can only be set on one of them.
+    private var definedTabIds: Set<String> = []
     private var lastErrorText: String?
     private var recentEntries: [AorusPluginLogEntry] = []
     private var sendHooks = false
@@ -1336,6 +1352,36 @@ public final class AorusPluginSandbox {
             return Int32(buttons.count)
         }
         hostObject.setObject(nativeButtonsDefine, forKeyedSubscript: "nativeButtonsDefine" as NSString)
+
+        // Tabs in the bottom bar. A tab changes the app's own frame, so it is app
+        // customisation; a site in a tab is the in-app browser and a screen in one is the
+        // plugin's own UI, and each needs its permission as it would anywhere else.
+        let tabsDefine: @convention(block) (String) -> Bool = { [weak self] json in
+            guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.appCustomization) else { return false }
+            guard let tabs = AorusPluginTab.validated(from: Data(json.utf8)) else { return false }
+            if tabs.contains(where: { $0.url != nil }), !self.permissions.contains(.inAppBrowser) { return false }
+            if tabs.contains(where: { $0.pageId != nil }), !self.permissions.contains(.customUI) { return false }
+            self.stateLock.lock()
+            self.definedTabIds = Set(tabs.map { $0.id })
+            self.stateLock.unlock()
+            self.hostServices.pluginTabsChanged(pluginId, tabs: tabs)
+            return true
+        }
+        hostObject.setObject(tabsDefine, forKeyedSubscript: "tabsDefine" as NSString)
+
+        // A tab's badge: a count, a short text, true for a dot, or null to clear it. Only for
+        // a tab this plugin has, so an answer of false means "no such tab".
+        let tabBadge: @convention(block) (String, JSValue) -> Bool = { [weak self] tabId, value in
+            guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.appCustomization) else { return false }
+            self.stateLock.lock()
+            let known = self.definedTabIds.contains(tabId)
+            self.stateLock.unlock()
+            guard known else { return false }
+            let raw: Any? = (value.isNull || value.isUndefined) ? nil : value.toObject()
+            self.hostServices.pluginTabBadge(pluginId, tabId: tabId, badge: AorusPluginTab.normalizedBadge(raw))
+            return true
+        }
+        hostObject.setObject(tabBadge, forKeyedSubscript: "tabBadge" as NSString)
 
         // One plugin talking to another. The message goes out through the app, which knows
         // which plugins are running, and comes back as a `pluginMessage` event carrying the

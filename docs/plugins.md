@@ -142,9 +142,9 @@ aorus.on('stop', () => console.log('плагин остановлен'));
 | `customUI` | Свои экраны, кнопки и панели поверх чата, строки в профиле | `aorus.ui.definePages/createPage/openPage/presentPage`, `aorus.ui.addFloatingButton/addChatPanel/addInputAccessory/addChatListHeaderButton/setChatHeaderBadge`, `aorus.profile.addAction/addSection` |
 | `settingsIntegration` | Ярлык в настройках | `aorus.integrations.settings.register` |
 | `contextMenu` | Действие в меню сообщения | `aorus.integrations.contextMenu.register`, `aorus.ui.addMessageContextAction` |
-| `inAppBrowser` | Открытие сайтов страницей внутри приложения | `aorus.browser.open`, `aorus.ui.openURL`, `aorus.app.openURL`, `aorus.navigation.openUrl`, строки с ссылками |
+| `inAppBrowser` | Открытие сайтов страницей внутри приложения | `aorus.browser.open`, `aorus.ui.openURL`, `aorus.app.openURL`, `aorus.navigation.openUrl`, `aorus.tabs.register` с `url`, строки с ссылками |
 | `artificialIntelligence` | Запросы к AorusAI | `aorus.ai.` |
-| `appCustomization` | Флаги интерфейса, вкладки, аватары, стена, строки и акцент | `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings` |
+| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки и акцент | `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings` |
 | `connectionControl` | Состояние соединения AorusGram | `aorus.proxy.` |
 | `telegramProxy` | Список и переключение прокси Telegram | `aorus.telegramProxy.` |
 | `pluginMessaging` | Сообщения другим плагинам и от них | `aorus.plugins.emit/on`, `aorus.on('pluginMessage'…)` |
@@ -1243,6 +1243,39 @@ await aorus.theme.resetAccentColor();
 `strings.override` заменяет слова, которые рисует само приложение; набор замен публикуется
 целиком при каждом изменении. Цвета темы — в виде `"RRGGBB"`, ровно в том виде, в каком их
 принимает всё остальное. Чтение темы разрешения не требует, изменение — `appCustomization`.
+
+### Свои вкладки в нижней панели
+
+```js
+const remove = aorus.tabs.register({ id: 'mail', title: 'Почта', icon: 'envelope', url: 'https://mail.example.com' });
+aorus.tabs.register({ id: 'feed', title: 'Лента', icon: 'newspaper', pageId: 'feed' });
+
+aorus.tabs.setBadge('feed', 3);      // красный кружок с цифрой, как у «Чатов»
+aorus.tabs.setBadge('feed', true);   // точка без цифры
+aorus.tabs.setBadge('feed', 'new');  // короткий текст, до 4 символов
+aorus.tabs.setBadge('feed', null);   // убрать
+remove();                            // убрать вкладку
+```
+
+Вкладка встаёт в нижнюю панель после «Настроек» и «Стены»: с `url` — сайт, нарисованный
+страницей приложения (§ «Страница сайта»), с `pageId` — экран плагина из `definePages`.
+Одно из двух, не оба. У плагина до двух вкладок, у всех плагинов вместе — тоже две: панель
+не резиновая. Заголовок — до 24 символов, `icon` — глиф из каталога (§17), по умолчанию
+`puzzlepiece.extension`; в панели он рисуется залитым, если у символа есть залитая форма, в
+цветах темы, как собственные вкладки Telegram. Своя иконка сайта (`siteIcon`) здесь не
+используется — она только для строки в настройках Telegram.
+
+Бейдж — родной бейдж Telegram. Число 0 и меньше — бейджа нет, больше 99 — «99+». Если
+плагин бейдж не ставил, вкладка с сайтом показывает то, что говорит сам сайт: через Badging
+API (`navigator.setAppBadge(n)`, `navigator.clearAppBadge()`, как в установленном веб-
+приложении) или счётчиком в начале заголовка — «(3) Входящие» даёт 3, а в панели навигации
+остаётся «Входящие». Сайт загружается сразу, как вкладка появилась в панели, поэтому счётчик
+виден ещё до первого открытия. Бейдж, поставленный плагином, главнее бейджа сайта.
+
+Нужны `appCustomization`, а для сайта ещё `inAppBrowser`, для экрана — `customUI`. Вкладка
+держит свой экран, пока ведёт туда же: новый заголовок или глиф не перезагружают сайт.
+Повторное нажатие на открытую вкладку прокручивает её наверх. Когда плагин останавливается,
+его вкладки уходят из панели, а если открыта была одна из них — открываются «Чаты».
 
 ## 29. Соединение и прокси
 

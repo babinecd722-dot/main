@@ -654,6 +654,7 @@ public enum AorusPluginPrelude {
         // ---- native UI and integrations -------------------------------------------------
 
         var settingsShortcuts = [];
+        var pluginTabs = [];
         var contextActions = [];
         var builderPages = [];
         // What the plugin has drawn over the chat, and who to call when it is tapped. The
@@ -2034,6 +2035,21 @@ public enum AorusPluginPrelude {
             setCompact: function (compact) {
                 if (typeof compact !== 'boolean') { throw typeError('compact must be a boolean'); }
                 return featureApi.set('compactTabBar', compact);
+            },
+            // A tab of the plugin's own in the bottom bar: { id, title, icon, url } for a site
+            // drawn as a page of the app, or { id, title, icon, pageId } for one of its screens.
+            // Returns the function that takes it away again.
+            register: function (definition) {
+                return registerIntegration(pluginTabs, definition, function (json) { return host.tabsDefine(json); });
+            },
+            // The red badge on a tab: a count, a short text, true for a dot, null to clear.
+            setBadge: function (id, value) {
+                requireString(id, 'id');
+                var badge = (value === undefined) ? null : value;
+                if (badge !== null && typeof badge !== 'number' && typeof badge !== 'string' && typeof badge !== 'boolean') {
+                    throw typeError('badge must be a number, a string, a boolean or null');
+                }
+                if (!host.tabBadge(id, badge)) { throw new Error('Unknown tab: ' + id); }
             }
         });
 

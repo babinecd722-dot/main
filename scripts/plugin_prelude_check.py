@@ -150,6 +150,12 @@ const host = new Proxy({}, {
             if (json === null) { delete storageValues[key]; } else { storageValues[key] = JSON.parse(json); }
             return true;
         };
+        case 'tabsDefine':
+        case 'tabBadge': return (...args) => {
+            record(name, args);
+            if (globalThis.__defineVerdict[name] !== undefined) { return globalThis.__defineVerdict[name]; }
+            return true;
+        };
         case 'overlaysDefine':
         case 'nativeButtonsDefine': return (json) => {
             record(name, [json]);
@@ -297,6 +303,38 @@ check('addChatListHeaderButton did not answer an id', typeof buttonId === 'strin
 globalThis.__defineVerdict.nativeButtonsDefine = -1;
 throws('an ungranted button add did not throw', () => aorus.ui.addChatListHeaderButton({ title: 'No' }));
 globalThis.__defineVerdict.nativeButtonsDefine = undefined;
+
+// Tabs in the bottom bar: the whole set goes to the app on every change, the function
+// register hands back takes the tab out again, and a badge is checked on the way in.
+function lastTabs() {
+    for (let i = globalThis.__calls.length - 1; i >= 0; i--) {
+        if (globalThis.__calls[i].name === 'tabsDefine') { return JSON.parse(globalThis.__calls[i].args[0]); }
+    }
+    return null;
+}
+const removeMailTab = aorus.tabs.register({ id: 'mail', title: 'Mail', icon: 'envelope', url: 'https://mail.example.com' });
+check('tabs.register did not publish the tab', lastTabs().length === 1 && lastTabs()[0].url === 'https://mail.example.com');
+aorus.tabs.register({ id: 'feed', title: 'Feed', pageId: 'feed' });
+check('a second tab did not join the first', lastTabs().map(function (tab) { return tab.id; }).join(',') === 'mail,feed');
+aorus.tabs.register({ id: 'mail', title: 'Inbox', url: 'https://mail.example.com' });
+check('registering a tab again did not replace it', lastTabs().length === 2 && lastTabs()[1].title === 'Inbox');
+globalThis.__defineVerdict.tabsDefine = false;
+throws('a refused tab did not throw', () => aorus.tabs.register({ id: 'no', title: 'No', url: 'https://example.com' }));
+globalThis.__defineVerdict.tabsDefine = undefined;
+throws('a tab without a title did not throw', () => aorus.tabs.register({ id: 'untitled' }));
+aorus.tabs.setBadge('mail', 3);
+check('setBadge did not reach the app', globalThis.__calls[globalThis.__calls.length - 1].name === 'tabBadge');
+aorus.tabs.setBadge('mail', null);
+aorus.tabs.setBadge('mail', true);
+aorus.tabs.setBadge('mail', 'new');
+aorus.tabs.setBadge('mail');
+throws('setBadge took an object', () => aorus.tabs.setBadge('mail', { count: 1 }));
+throws('setBadge took a tab id that is not a string', () => aorus.tabs.setBadge(3, 1));
+globalThis.__defineVerdict.tabBadge = false;
+throws('a badge on an unknown tab did not throw', () => aorus.tabs.setBadge('nope', 1));
+globalThis.__defineVerdict.tabBadge = undefined;
+removeMailTab();
+check('removing a tab left it in the bar', lastTabs().length === 1 && lastTabs()[0].id === 'feed');
 
 // Handlers given to `add` are called directly, so a plugin with several does not have to
 // work out which one fired.

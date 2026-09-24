@@ -163,6 +163,34 @@ let coloured = AorusPluginSettingsShortcut.validated(from: colouredShortcut)
 expect(coloured?.first?.color == "FF9F0A" && coloured?.last?.color == nil, "a shortcut colour is six hex digits, anything else falls back to the plugin's")
 expect(Set(AorusPluginIcon.all).count == AorusPluginIcon.all.count && AorusPluginIcon.all.count >= 200, "the icon catalogue is large and has no duplicates")
 expect(AorusPluginIcon.all.first == AorusPluginIcon.fallback, "the fallback glyph leads the catalogue")
+// Tabs in the bottom bar: two per plugin, a site or a screen and never both, a short title,
+// and a badge normalised the way Telegram draws its own.
+let siteTab = Data("[{\"id\":\"mail\",\"title\":\"  Mail  \",\"icon\":\"envelope\",\"url\":\"https://mail.example.com\"}]".utf8)
+let validatedSiteTab = AorusPluginTab.validated(from: siteTab)?.first
+expect(validatedSiteTab?.title == "Mail" && validatedSiteTab?.url == "https://mail.example.com", "a site tab is accepted with its title trimmed")
+let longTitleTab = Data("[{\"id\":\"t\",\"title\":\"\(String(repeating: "x", count: 40))\",\"pageId\":\"main\"}]".utf8)
+expect(AorusPluginTab.validated(from: longTitleTab)?.first?.title.count == 24, "a tab title is cut to what fits under a glyph")
+expect(AorusPluginTab.validated(from: longTitleTab)?.first?.icon == AorusPluginIcon.fallback, "a tab without a glyph gets the fallback one")
+let threeTabs = Data("[{\"id\":\"a\",\"title\":\"A\",\"pageId\":\"p\"},{\"id\":\"b\",\"title\":\"B\",\"pageId\":\"p\"},{\"id\":\"c\",\"title\":\"C\",\"pageId\":\"p\"}]".utf8)
+expect(AorusPluginTab.validated(from: threeTabs) == nil, "a plugin gets no more than two tabs")
+let mixedTab = Data("[{\"id\":\"a\",\"title\":\"A\",\"pageId\":\"p\",\"url\":\"https://example.com\"}]".utf8)
+expect(AorusPluginTab.validated(from: mixedTab) == nil, "a tab leads to a site or to a screen, not both")
+let emptyTab = Data("[{\"id\":\"a\",\"title\":\"A\"}]".utf8)
+expect(AorusPluginTab.validated(from: emptyTab) == nil, "a tab that leads nowhere is refused")
+let unsafeTab = Data("[{\"id\":\"a\",\"title\":\"A\",\"url\":\"file:///etc/hosts\"}]".utf8)
+expect(AorusPluginTab.validated(from: unsafeTab) == nil, "a tab's site is http or https")
+let duplicateTabs = Data("[{\"id\":\"a\",\"title\":\"A\",\"pageId\":\"p\"},{\"id\":\"a\",\"title\":\"B\",\"pageId\":\"q\"}]".utf8)
+expect(AorusPluginTab.validated(from: duplicateTabs) == nil, "tab ids are unique within a plugin")
+expect(AorusPluginTab.validated(from: Data("[]".utf8))?.isEmpty == true, "no tabs is a valid set, the one a removal publishes")
+expect(AorusPluginTab.normalizedBadge(NSNumber(value: 0)) == nil && AorusPluginTab.normalizedBadge(NSNumber(value: -4)) == nil, "a count of zero or less is no badge")
+expect(AorusPluginTab.normalizedBadge(NSNumber(value: 7)) == "7" && AorusPluginTab.normalizedBadge(NSNumber(value: 150)) == "99+", "a count is drawn as Telegram draws one")
+expect(AorusPluginTab.normalizedBadge(NSNumber(value: true)) == "•" && AorusPluginTab.normalizedBadge(NSNumber(value: false)) == nil, "true is a dot, false is none")
+expect(AorusPluginTab.normalizedBadge("  12 ") == "12" && AorusPluginTab.normalizedBadge("new!!") == "new!" && AorusPluginTab.normalizedBadge("") == nil, "a text badge is short")
+expect(AorusPluginTab.normalizedBadge(nil) == nil && AorusPluginTab.normalizedBadge(["x"]) == nil, "anything else is no badge")
+expect(AorusPluginTab.badge(fromTitle: "(3) Inbox") == "3" && AorusPluginTab.badge(fromTitle: "(12+) Feed") == "12", "a site's count at the start of its title is its badge")
+expect(AorusPluginTab.badge(fromTitle: "(2024 year") == nil && AorusPluginTab.badge(fromTitle: "Inbox (3)") == nil && AorusPluginTab.badge(fromTitle: "(beta) App") == nil, "only a count at the start of the title is one")
+expect(AorusPluginTab.badge(fromTitle: "(0) Inbox") == nil && AorusPluginTab.title(withoutBadge: "(0) Inbox") == "Inbox", "a zero count is no badge and still leaves the title")
+expect(AorusPluginTab.title(withoutBadge: "(3) Inbox") == "Inbox" && AorusPluginTab.title(withoutBadge: "Inbox") == "Inbox", "the title the bar shows has no count in it")
 
 let root = temporaryDirectory()
 defer { try? FileManager.default.removeItem(at: root) }
@@ -398,6 +426,46 @@ if AorusPluginSandbox.watchdogAvailable {
     _ = linkStarted.wait(timeout: .now() + 2)
     expect(linkedShortcuts.first?.placement == "interface", "URL shortcut reaches its chosen section")
     link.stop()
+
+    // A tab in the bottom bar goes through the same checks: app customisation for the tab,
+    // the in-app browser for a site in it, and a badge only on a tab the plugin has.
+    let tabHost = AorusPluginNullHost()
+    var definedTabs: [AorusPluginTab] = []
+    var tabBadges: [String: String] = [:]
+    tabHost.onTabsChanged = { _, tabs in definedTabs = tabs }
+    tabHost.onTabBadge = { _, tabId, badge in tabBadges[tabId] = badge ?? "none" }
+    let tabSource = """
+    aorus.tabs.register({ id: 'mail', title: 'Mail', icon: 'envelope', url: 'https://mail.example.com' });
+    aorus.tabs.setBadge('mail', 150);
+    var unknownRefused = false;
+    try { aorus.tabs.setBadge('nope', 1); } catch (error) { unknownRefused = true; }
+    aorus.storage.set('unknownRefused', unknownRefused);
+    """
+    let tabPermissions = AorusPluginPermission.requestedBySource(tabSource)
+    expect(tabPermissions.contains(.appCustomization) && tabPermissions.contains(.inAppBrowser), "a site tab asks for app customisation and the in-app browser during review")
+    let tabPlugin = AorusPluginSandbox(manifest: AorusPluginManifest(name: "Mail tab"), source: tabSource, host: tabHost, permissions: [.appCustomization, .inAppBrowser])
+    let tabStarted = DispatchSemaphore(value: 0)
+    tabPlugin.start { error in expect(error == nil, "a tab plugin starts with its reviewed permissions"); tabStarted.signal() }
+    _ = tabStarted.wait(timeout: .now() + 2)
+    expect(definedTabs.first?.url == "https://mail.example.com", "a registered tab reaches the native host")
+    expect(tabBadges["mail"] == "99+", "a tab badge reaches the host normalised")
+    expect(tabPlugin.storageSnapshot["unknownRefused"]?.boolValue == true, "a badge on a tab the plugin never defined is refused")
+    tabPlugin.stop()
+
+    let browserlessHost = AorusPluginNullHost()
+    var browserlessTabs: [AorusPluginTab]?
+    browserlessHost.onTabsChanged = { _, tabs in browserlessTabs = tabs }
+    let browserless = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "No browser"),
+        source: "try { aorus.tabs.register({ id: 'mail', title: 'Mail', url: 'https://mail.example.com' }); } catch (error) {}",
+        host: browserlessHost,
+        permissions: [.appCustomization]
+    )
+    let browserlessStarted = DispatchSemaphore(value: 0)
+    browserless.start { _ in browserlessStarted.signal() }
+    _ = browserlessStarted.wait(timeout: .now() + 2)
+    expect(browserlessTabs == nil, "a site tab without the in-app browser permission never reaches the host")
+    browserless.stop()
 
     let settingsHost = AorusPluginNullHost()
     var declaredSettings: [AorusPluginSettingField] = []

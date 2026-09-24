@@ -19395,6 +19395,105 @@ def patch_wall_postbox_paging(tg: Path) -> None:
         print("WallPaging: WARNING — scanTopMessages anchor not found")
 
 
+def patch_plugin_tabs(tg: Path) -> None:
+    """Put the tabs plugins define into the bottom bar, after Telegram's own and the Wall.
+
+    The root controller owns an `AorusPluginTabHost` (AorusGramUI) that hands out one
+    controller per plugin tab and keeps its glyph and badge current. The bar is assembled again
+    when the set of tabs changes; the selection stays where it was, or goes to Chats when the
+    tab that was open has just left the bar.
+    """
+    root = tg / "submodules/TelegramUI/Sources/TelegramRootController.swift"
+    if not root.is_file():
+        print("PluginTabs: TelegramRootController.swift not found, skip")
+        return
+    source = root.read_text(encoding="utf-8")
+    sentinel = "private var aorusPluginTabs: AorusPluginTabHost? // AorusGram: plugin tabs"
+    if sentinel in source:
+        print("PluginTabs: already patched")
+        return
+    if "AorusGram: Wall tab" not in source:
+        # The Wall patch rewrites the very lines this one extends and has already said why it
+        # could not.
+        print("PluginTabs: WARNING — the Wall tab is not in the root controller, skip")
+        return
+    edits = [
+        (
+            "    public var aorusWallController: ViewController? // AorusGram: Wall tab\n",
+            "    public var aorusWallController: ViewController? // AorusGram: Wall tab\n"
+            "    " + sentinel + "\n"
+            "    private var aorusShowCallsTab = true\n",
+        ),
+        (
+            "    public func addRootControllers(showCallsTab: Bool) {\n",
+            "    public func addRootControllers(showCallsTab: Bool) {\n"
+            "        self.aorusShowCallsTab = showCallsTab\n",
+        ),
+        (
+            "        if let aorusWallController {\n"
+            "            controllers.append(aorusWallController)\n"
+            "        }\n",
+            "        if let aorusWallController {\n"
+            "            controllers.append(aorusWallController)\n"
+            "        }\n"
+            "        let aorusPluginTabs = AorusPluginTabHost(context: self.context)\n"
+            "        controllers.append(contentsOf: aorusPluginTabs.controllers())\n",
+        ),
+        (
+            "        self.aorusWallController = aorusWallController\n"
+            "        self.rootTabController = tabBarController\n",
+            "        self.aorusWallController = aorusWallController\n"
+            "        self.rootTabController = tabBarController\n"
+            "        self.aorusPluginTabs = aorusPluginTabs\n"
+            "        aorusPluginTabs.navigationController = self\n"
+            "        aorusPluginTabs.changed = { [weak self] in\n"
+            "            guard let self else {\n"
+            "                return\n"
+            "            }\n"
+            "            self.updateRootControllers(showCallsTab: self.aorusShowCallsTab)\n"
+            "        }\n",
+        ),
+        (
+            "    public func updateRootControllers(showCallsTab: Bool) {\n"
+            "        guard let rootTabController = self.rootTabController as? TabBarControllerImpl else {\n"
+            "            return\n"
+            "        }\n",
+            "    public func updateRootControllers(showCallsTab: Bool) {\n"
+            "        guard let rootTabController = self.rootTabController as? TabBarControllerImpl else {\n"
+            "            return\n"
+            "        }\n"
+            "        self.aorusShowCallsTab = showCallsTab\n",
+        ),
+        (
+            "        } else {\n"
+            "            self.aorusWallController = nil\n"
+            "        }\n"
+            "        \n"
+            "        rootTabController.setControllers(controllers, selectedIndex: nil)\n",
+            "        } else {\n"
+            "            self.aorusWallController = nil\n"
+            "        }\n"
+            "        if let aorusPluginTabs = self.aorusPluginTabs {\n"
+            "            controllers.append(contentsOf: aorusPluginTabs.controllers())\n"
+            "        }\n"
+            "        // A plugin tab that has just left the bar may be the one that was open: the\n"
+            "        // selection goes to Chats then, not to whichever tab happens to be first.\n"
+            "        var aorusSelectedIndex: Int?\n"
+            "        if let current = rootTabController.currentController, !controllers.contains(where: { $0 === current }) {\n"
+            "            aorusSelectedIndex = controllers.firstIndex(where: { $0 === self.chatListController })\n"
+            "        }\n"
+            "        \n"
+            "        rootTabController.setControllers(controllers, selectedIndex: aorusSelectedIndex)\n",
+        ),
+    ]
+    for old, new in edits:
+        if source.count(old) != 1:
+            raise SystemExit(f"PluginTabs: anchor not found ({source.count(old)}): {old.splitlines()[0]!r}")
+        source = source.replace(old, new, 1)
+    root.write_text(source, encoding="utf-8")
+    print("PluginTabs: plugin tabs join the bottom bar")
+
+
 def patch_wall_tab(tg: Path) -> None:
     """Add the native AorusGram Wall tab and wire its chat lifecycle."""
     account_context = tg / "submodules/AccountContext/Sources/ChatController.swift"
@@ -27421,6 +27520,8 @@ def main() -> None:
     patch_hide_tabs(tg)
     patch_tab_bar_visibility_controls(tg)
     patch_wall_tab(tg)
+    # After the Wall: it rewrites the tab assembly this one extends.
+    patch_plugin_tabs(tg)
     patch_wall_exclusion_swipe(tg)
     # After the Wall patches: they anchor on the same two chat-controller lifecycle
     # methods, and their anchors span the lines this one inserts.

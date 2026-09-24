@@ -113,6 +113,10 @@ public enum ViewControllerNavigationPresentation {
         super.init(nibName: nil, bundle: nil)
     }
 
+    public final var isNodeLoaded: Bool {
+        return self._displayNode != nil
+    }
+
     open func loadDisplayNode() {
         self._displayNode = ASDisplayNode()
     }

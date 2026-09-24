@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Consente di modificare le funzioni e l’aspetto di AorusGram da un catalogo verificato e di aggiungere schede alla barra inferiore.",
         "Couldn't write the code": "Impossibile scrivere il codice",
         "Generation isn't available for this licence.": "La generazione non è disponibile per questa licenza.",
         "Say a little more — at least 8 characters.": "Scrivi qualcosa in più: almeno 8 caratteri.",
@@ -224,7 +225,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Leggi cronologia messaggi",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Consente di modificare le funzioni e l’aspetto di AorusGram da un catalogo verificato.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Consente di leggere lo stato del percorso, modificare le opzioni utente e aggiornare il percorso senza accedere alle credenziali del server.",
         "Allows reading up to 100 recent messages from a selected chat.": "Consente di leggere fino a 100 messaggi recenti dalla chat selezionata.",
         "Open chats": "Apertura delle chat",
@@ -896,6 +896,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Umożliwia zmianę funkcji i wyglądu AorusGram z zatwierdzonego katalogu oraz dodawanie kart do dolnego paska.",
         "Couldn't write the code": "Nie udało się napisać kodu",
         "Generation isn't available for this licence.": "Generowanie nie jest dostępne dla tej licencji.",
         "Say a little more — at least 8 characters.": "Opisz dokładniej — co najmniej 8 znaków.",
@@ -1067,7 +1068,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Czytanie historii wiadomości",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Umożliwia zmianę funkcji i wyglądu AorusGram z zatwierdzonego katalogu.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Umożliwia odczyt stanu trasy, zmianę przełączników użytkownika i odświeżenie trasy bez dostępu do danych logowania serwera.",
         "Allows reading up to 100 recent messages from a selected chat.": "Umożliwia odczyt do 100 ostatnich wiadomości z wybranego czatu.",
         "Open chats": "Otwieranie czatów",
@@ -1739,6 +1739,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Staat toe om functies en het uiterlijk van AorusGram te wijzigen vanuit een gecontroleerde catalogus en tabbladen aan de onderste balk toe te voegen.",
         "Couldn't write the code": "Kan de code niet schrijven",
         "Generation isn't available for this licence.": "Genereren is niet beschikbaar voor deze licentie.",
         "Say a little more — at least 8 characters.": "Vertel iets meer — minstens 8 tekens.",
@@ -1910,7 +1911,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Berichtgeschiedenis lezen",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Staat toe om functies en het uiterlijk van AorusGram te wijzigen vanuit een gecontroleerde catalogus.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Staat toe om de routestatus te lezen, gebruikersschakelaars te wijzigen en de route te vernieuwen zonder toegang tot servergegevens.",
         "Allows reading up to 100 recent messages from a selected chat.": "Staat toe om maximaal 100 recente berichten uit de geselecteerde chat te lezen.",
         "Open chats": "Chats openen",
@@ -2582,6 +2582,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permet canviar les funcions i l’aspecte d’AorusGram des d’un catàleg verificat i afegir pestanyes a la barra inferior.",
         "Couldn't write the code": "No s'ha pogut escriure el codi",
         "Generation isn't available for this licence.": "La generació no està disponible per a aquesta llicència.",
         "Say a little more — at least 8 characters.": "Explica-ho una mica més: com a mínim 8 caràcters.",
@@ -2753,7 +2754,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Llegeix l’historial de missatges",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Permet canviar les funcions i l’aspecte d’AorusGram des d’un catàleg verificat.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Permet consultar l’estat de la ruta, canviar els controls de l’usuari i actualitzar la ruta sense accedir a les credencials del servidor.",
         "Allows reading up to 100 recent messages from a selected chat.": "Permet llegir fins a 100 missatges recents del xat seleccionat.",
         "Open chats": "Obrir xats",
@@ -3425,6 +3425,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Mengizinkan perubahan fitur dan tampilan AorusGram dari katalog terverifikasi serta menambahkan tab ke bilah bawah.",
         "Couldn't write the code": "Tidak dapat menulis kode",
         "Generation isn't available for this licence.": "Pembuatan tidak tersedia untuk lisensi ini.",
         "Say a little more — at least 8 characters.": "Jelaskan lebih banyak — minimal 8 karakter.",
@@ -3596,7 +3597,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Baca riwayat pesan",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Mengizinkan perubahan fitur dan tampilan AorusGram dari katalog terverifikasi.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Mengizinkan pembacaan status rute, perubahan sakelar pengguna, dan penyegaran rute tanpa akses ke kredensial server.",
         "Allows reading up to 100 recent messages from a selected chat.": "Mengizinkan pembacaan hingga 100 pesan terbaru dari obrolan yang dipilih.",
         "Open chats": "Membuka obrolan",
@@ -4268,6 +4268,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Membenarkan perubahan ciri dan rupa AorusGram daripada katalog yang disahkan serta menambah tab pada bar bawah.",
         "Couldn't write the code": "Tidak dapat menulis kod",
         "Generation isn't available for this licence.": "Penjanaan tidak tersedia untuk lesen ini.",
         "Say a little more — at least 8 characters.": "Terangkan sedikit lagi — sekurang-kurangnya 8 aksara.",
@@ -4439,7 +4440,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Baca sejarah mesej",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Membenarkan perubahan ciri dan rupa AorusGram daripada katalog yang disahkan.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Membenarkan pembacaan status laluan, perubahan suis pengguna dan penyegaran laluan tanpa akses kepada kelayakan pelayan.",
         "Allows reading up to 100 recent messages from a selected chat.": "Membenarkan pembacaan sehingga 100 mesej terkini daripada sembang yang dipilih.",
         "Open chats": "Membuka sembang",
@@ -5111,6 +5111,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Дазваляе змяняць функцыі і выгляд AorusGram з праверанага каталога і дадаваць укладкі ў ніжнюю панэль.",
         "Couldn't write the code": "Не ўдалося напісаць код",
         "Generation isn't available for this licence.": "Генерацыя недаступная для гэтай ліцэнзіі.",
         "Say a little more — at least 8 characters.": "Апішыце падрабязней — хаця б 8 сімвалаў.",
@@ -5282,7 +5283,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Чытаць гісторыю паведамленняў",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Дазваляе змяняць функцыі і выгляд AorusGram з праверанага каталога.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Дазваляе чытаць стан маршруту, змяняць карыстальніцкія пераключальнікі і абнаўляць маршрут без доступу да ўліковых даных сервера.",
         "Allows reading up to 100 recent messages from a selected chat.": "Дазваляе чытаць да 100 апошніх паведамленняў з выбранага чата.",
         "Open chats": "Адкрыццё чатаў",
@@ -5954,6 +5954,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "AorusGram funksiyalari va ko‘rinishini tekshirilgan katalog orqali o‘zgartirishga va pastki panelga yorliqlar qo‘shishga ruxsat beradi.",
         "Couldn't write the code": "Kodni yozib bo‘lmadi",
         "Generation isn't available for this licence.": "Generatsiya bu litsenziya uchun mavjud emas.",
         "Say a little more — at least 8 characters.": "Batafsilroq yozing — kamida 8 ta belgi.",
@@ -6125,7 +6126,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Xabarlar tarixini o‘qish",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "AorusGram funksiyalari va ko‘rinishini tekshirilgan katalog orqali o‘zgartirishga ruxsat beradi.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Server hisob ma’lumotlariga kirmasdan marshrut holatini ko‘rish, foydalanuvchi kalitlarini o‘zgartirish va marshrutni yangilashga ruxsat beradi.",
         "Allows reading up to 100 recent messages from a selected chat.": "Tanlangan chatdagi so‘nggi 100 tagacha xabarni o‘qishga ruxsat beradi.",
         "Open chats": "Chatlarni ochish",
@@ -6797,6 +6797,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "검증된 카탈로그에서 AorusGram 기능과 모양을 변경하고 하단 막대에 탭을 추가할 수 있습니다.",
         "Couldn't write the code": "코드를 작성할 수 없습니다",
         "Generation isn't available for this licence.": "이 라이선스에서는 생성을 사용할 수 없습니다.",
         "Say a little more — at least 8 characters.": "조금 더 자세히 적어 주세요. 최소 8자가 필요합니다.",
@@ -6968,7 +6969,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "메시지 기록 읽기",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "검증된 카탈로그에서 AorusGram 기능과 모양을 변경할 수 있습니다.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "서버 자격 증명에 접근하지 않고 경로 상태를 확인하고 사용자 스위치를 변경하며 경로를 새로 고칠 수 있습니다.",
         "Allows reading up to 100 recent messages from a selected chat.": "선택한 채팅에서 최근 메시지를 최대 100개까지 읽을 수 있습니다.",
         "Open chats": "채팅 열기",
@@ -7640,6 +7640,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "يسمح بتغيير ميزات AorusGram ومظهره من كتالوج موثوق وإضافة علامات تبويب إلى الشريط السفلي.",
         "Couldn't write the code": "تعذّرت كتابة الرمز",
         "Generation isn't available for this licence.": "الإنشاء غير متاح لهذا الترخيص.",
         "Say a little more — at least 8 characters.": "أضف مزيدًا من التفاصيل، 8 أحرف على الأقل.",
@@ -7811,7 +7812,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "قراءة سجل الرسائل",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "يسمح بتغيير ميزات AorusGram ومظهره من كتالوج موثوق.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "يسمح بقراءة حالة المسار وتغيير مفاتيح المستخدم وتحديث المسار دون الوصول إلى بيانات اعتماد الخادم.",
         "Allows reading up to 100 recent messages from a selected chat.": "يسمح بقراءة ما يصل إلى 100 رسالة حديثة من الدردشة المحددة.",
         "Open chats": "فتح المحادثات",
@@ -8483,6 +8483,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "امکان تغییر قابلیت‌ها و ظاهر AorusGram را از فهرست تأییدشده و افزودن زبانه به نوار پایین فراهم می‌کند.",
         "Couldn't write the code": "نوشتن کد ممکن نشد",
         "Generation isn't available for this licence.": "تولید برای این مجوز در دسترس نیست.",
         "Say a little more — at least 8 characters.": "کمی بیشتر توضیح دهید، دست‌کم ۸ نویسه.",
@@ -8654,7 +8655,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "خواندن تاریخچه پیام‌ها",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "امکان تغییر قابلیت‌ها و ظاهر AorusGram را از فهرست تأییدشده فراهم می‌کند.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "امکان مشاهده وضعیت مسیر، تغییر گزینه‌های کاربر و تازه‌سازی مسیر را بدون دسترسی به اطلاعات ورود سرور فراهم می‌کند.",
         "Allows reading up to 100 recent messages from a selected chat.": "امکان خواندن حداکثر ۱۰۰ پیام اخیر از گفت‌وگوی انتخاب‌شده را فراهم می‌کند.",
         "Open chats": "باز کردن گفتگوها",
@@ -9326,6 +9326,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Тексерілген каталогтан AorusGram мүмкіндіктері мен көрінісін өзгертуге және төменгі панельге қойындылар қосуға мүмкіндік береді.",
         "Couldn't write the code": "Кодты жазу мүмкін болмады",
         "Generation isn't available for this licence.": "Генерация бұл лицензия үшін қолжетімсіз.",
         "Say a little more — at least 8 characters.": "Толығырақ жазыңыз — кемінде 8 таңба.",
@@ -9497,7 +9498,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Хабарлар тарихын оқу",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Тексерілген каталогтан AorusGram мүмкіндіктері мен көрінісін өзгертуге мүмкіндік береді.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Сервер тіркелгі деректеріне қол жеткізбей, маршрут күйін оқуға, пайдаланушы ауыстырғыштарын өзгертуге және маршрутты жаңартуға мүмкіндік береді.",
         "Allows reading up to 100 recent messages from a selected chat.": "Таңдалған чаттан соңғы 100 хабарға дейін оқуға мүмкіндік береді.",
         "Open chats": "Чаттарды ашу",
@@ -10169,6 +10169,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "允许从已验证的目录中更改 AorusGram 功能和外观，并向底部栏添加标签页。",
         "Couldn't write the code": "无法编写代码",
         "Generation isn't available for this licence.": "此许可证无法使用生成功能。",
         "Say a little more — at least 8 characters.": "请再详细一点，至少 8 个字符。",
@@ -10340,7 +10341,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "读取消息历史",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "允许从已验证的目录中更改 AorusGram 功能和外观。",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "允许在不访问服务器凭据的情况下读取路由状态、更改用户开关并刷新路由。",
         "Allows reading up to 100 recent messages from a selected chat.": "允许读取所选聊天中最多 100 条最近消息。",
         "Open chats": "打开聊天",
@@ -11013,6 +11013,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "允許從已驗證的目錄中變更 AorusGram 功能和外觀，並在底部列加入分頁。",
         "Couldn't write the code": "無法撰寫程式碼",
         "Generation isn't available for this licence.": "此授權無法使用生成功能。",
         "Say a little more — at least 8 characters.": "請再詳細一點，至少 8 個字元。",
@@ -11184,7 +11185,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "讀取訊息記錄",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "允許從已驗證的目錄中變更 AorusGram 功能和外觀。",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "允許在不存取伺服器憑證的情況下讀取路由狀態、變更使用者開關並重新整理路由。",
         "Allows reading up to 100 recent messages from a selected chat.": "允許讀取所選聊天中最多 100 則最近訊息。",
         "Open chats": "開啟聊天",
@@ -11856,6 +11856,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "確認済みのカタログから AorusGram の機能と外観を変更し、下部バーにタブを追加できます。",
         "Couldn't write the code": "コードを書けませんでした",
         "Generation isn't available for this licence.": "このライセンスでは生成を利用できません。",
         "Say a little more — at least 8 characters.": "もう少し詳しく書いてください。8 文字以上必要です。",
@@ -12027,7 +12028,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "メッセージ履歴を読む",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "確認済みのカタログから AorusGram の機能と外観を変更できます。",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "サーバーの認証情報にアクセスせずに、経路の状態確認、ユーザー設定の変更、経路の更新を行えます。",
         "Allows reading up to 100 recent messages from a selected chat.": "選択したチャットから最新のメッセージを最大100件まで読み取れます。",
         "Open chats": "チャットを開く",
@@ -12699,6 +12699,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Sallii AorusGramin toimintojen ja ulkoasun muuttamisen tarkistetusta luettelosta sekä välilehtien lisäämisen alapalkkiin.",
         "Couldn't write the code": "Koodia ei voitu kirjoittaa",
         "Generation isn't available for this licence.": "Luominen ei ole käytettävissä tällä lisenssillä.",
         "Say a little more — at least 8 characters.": "Kerro vähän enemmän – vähintään 8 merkkiä.",
@@ -12870,7 +12871,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Lue viestihistoria",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Sallii AorusGramin toimintojen ja ulkoasun muuttamisen tarkistetusta luettelosta.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Sallii reitin tilan lukemisen, käyttäjän valintojen muuttamisen ja reitin päivittämisen ilman palvelimen tunnistetietoja.",
         "Allows reading up to 100 recent messages from a selected chat.": "Sallii enintään 100 viimeisimmän viestin lukemisen valitusta keskustelusta.",
         "Open chats": "Keskustelujen avaaminen",
@@ -13542,6 +13542,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "מאפשר לשנות תכונות ומראה של AorusGram מתוך קטלוג מאומת ולהוסיף כרטיסיות לסרגל התחתון.",
         "Couldn't write the code": "לא ניתן לכתוב את הקוד",
         "Generation isn't available for this licence.": "יצירה אינה זמינה לרישיון הזה.",
         "Say a little more — at least 8 characters.": "כתבו קצת יותר, לפחות 8 תווים.",
@@ -13713,7 +13714,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "קריאת היסטוריית הודעות",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "מאפשר לשנות תכונות ומראה של AorusGram מתוך קטלוג מאומת.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "מאפשר לקרוא את מצב הנתיב, לשנות מתגי משתמש ולרענן את הנתיב ללא גישה לפרטי הגישה של השרת.",
         "Allows reading up to 100 recent messages from a selected chat.": "מאפשר לקרוא עד 100 הודעות אחרונות מהצ׳אט שנבחר.",
         "Open chats": "פתיחת צ'אטים",
@@ -14385,6 +14385,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Omogućuje promjenu značajki i izgleda AorusGrama iz provjerenog kataloga te dodavanje kartica u donju traku.",
         "Couldn't write the code": "Kod nije moguće napisati",
         "Generation isn't available for this licence.": "Generiranje nije dostupno za ovu licencu.",
         "Say a little more — at least 8 characters.": "Napišite malo više, najmanje 8 znakova.",
@@ -14556,7 +14557,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Čitanje povijesti poruka",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Omogućuje promjenu značajki i izgleda AorusGrama iz provjerenog kataloga.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Omogućuje čitanje stanja rute, promjenu korisničkih prekidača i osvježavanje rute bez pristupa vjerodajnicama poslužitelja.",
         "Allows reading up to 100 recent messages from a selected chat.": "Omogućuje čitanje do 100 nedavnih poruka iz odabranog razgovora.",
         "Open chats": "Otvaranje razgovora",
@@ -15228,6 +15228,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Омогућава промену функција и изгледа AorusGram-а из провереног каталога и додавање картица на доњу траку.",
         "Couldn't write the code": "Код није могуће написати",
         "Generation isn't available for this licence.": "Генерисање није доступно за ову лиценцу.",
         "Say a little more — at least 8 characters.": "Напишите мало више, најмање 8 знакова.",
@@ -15399,7 +15400,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Читање историје порука",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Омогућава промену функција и изгледа AorusGram-а из провереног каталога.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Омогућава читање стања руте, промену корисничких прекидача и освежавање руте без приступа серверским акредитивима.",
         "Allows reading up to 100 recent messages from a selected chat.": "Омогућава читање до 100 недавних порука из изабраног ћаскања.",
         "Open chats": "Отварање ћаскања",
@@ -16071,6 +16071,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Umožňuje měnit funkce a vzhled AorusGramu z ověřeného katalogu a přidávat karty do spodní lišty.",
         "Couldn't write the code": "Kód se nepodařilo napsat",
         "Generation isn't available for this licence.": "Generování není pro tuto licenci k dispozici.",
         "Say a little more — at least 8 characters.": "Popište to podrobněji, alespoň 8 znaků.",
@@ -16242,7 +16243,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Čtení historie zpráv",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Umožňuje měnit funkce a vzhled AorusGramu z ověřeného katalogu.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Umožňuje číst stav trasy, měnit uživatelské přepínače a obnovit trasu bez přístupu k přihlašovacím údajům serveru.",
         "Allows reading up to 100 recent messages from a selected chat.": "Umožňuje přečíst až 100 posledních zpráv z vybraného chatu.",
         "Open chats": "Otevírání chatů",
@@ -16914,6 +16914,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Umožňuje meniť funkcie a vzhľad AorusGramu z overeného katalógu a pridávať karty do spodnej lišty.",
         "Couldn't write the code": "Kód sa nepodarilo napísať",
         "Generation isn't available for this licence.": "Generovanie nie je pre túto licenciu k dispozícii.",
         "Say a little more — at least 8 characters.": "Opíšte to podrobnejšie, aspoň 8 znakov.",
@@ -17085,7 +17086,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Čítanie histórie správ",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Umožňuje meniť funkcie a vzhľad AorusGramu z overeného katalógu.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Umožňuje čítať stav trasy, meniť používateľské prepínače a obnoviť trasu bez prístupu k prihlasovacím údajom servera.",
         "Allows reading up to 100 recent messages from a selected chat.": "Umožňuje prečítať až 100 posledných správ z vybraného chatu.",
         "Open chats": "Otváranie chatov",
@@ -17757,6 +17757,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permite modificarea funcțiilor și aspectului AorusGram dintr-un catalog verificat și adăugarea de file în bara de jos.",
         "Couldn't write the code": "Nu s-a putut scrie codul",
         "Generation isn't available for this licence.": "Generarea nu este disponibilă pentru această licență.",
         "Say a little more — at least 8 characters.": "Scrie ceva mai mult, cel puțin 8 caractere.",
@@ -17928,7 +17929,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Citește istoricul mesajelor",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Permite modificarea funcțiilor și aspectului AorusGram dintr-un catalog verificat.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Permite citirea stării rutei, schimbarea opțiunilor utilizatorului și reîmprospătarea rutei fără acces la datele de autentificare ale serverului.",
         "Allows reading up to 100 recent messages from a selected chat.": "Permite citirea a până la 100 de mesaje recente din conversația selectată.",
         "Open chats": "Deschiderea conversațiilor",
@@ -18600,6 +18600,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Lehetővé teszi az AorusGram funkcióinak és megjelenésének módosítását egy ellenőrzött katalógusból, valamint lapok hozzáadását az alsó sávhoz.",
         "Couldn't write the code": "Nem sikerült megírni a kódot",
         "Generation isn't available for this licence.": "A generálás nem érhető el ehhez a licenchez.",
         "Say a little more — at least 8 characters.": "Írj egy kicsit többet, legalább 8 karaktert.",
@@ -18771,7 +18772,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Üzenetelőzmények olvasása",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Lehetővé teszi az AorusGram funkcióinak és megjelenésének módosítását egy ellenőrzött katalógusból.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Lehetővé teszi az útvonal állapotának olvasását, a felhasználói kapcsolók módosítását és az útvonal frissítését a kiszolgáló hitelesítő adatainak elérése nélkül.",
         "Allows reading up to 100 recent messages from a selected chat.": "Legfeljebb 100 legutóbbi üzenet olvasását teszi lehetővé a kiválasztott csevegésből.",
         "Open chats": "Csevegések megnyitása",
@@ -19443,6 +19443,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Tillater endring av AorusGram-funksjoner og utseende fra en verifisert katalog og å legge til faner i den nederste linjen.",
         "Couldn't write the code": "Kunne ikke skrive koden",
         "Generation isn't available for this licence.": "Generering er ikke tilgjengelig for denne lisensen.",
         "Say a little more — at least 8 characters.": "Skriv litt mer, minst 8 tegn.",
@@ -19614,7 +19615,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Les meldingshistorikk",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Tillater endring av AorusGram-funksjoner og utseende fra en verifisert katalog.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Tillater lesing av rutestatus, endring av brukerbrytere og oppdatering av ruten uten tilgang til serverlegitimasjon.",
         "Allows reading up to 100 recent messages from a selected chat.": "Tillater lesing av opptil 100 nylige meldinger fra den valgte chatten.",
         "Open chats": "Åpne chatter",
@@ -20286,6 +20286,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Tillåter ändring av AorusGrams funktioner och utseende från en verifierad katalog och att lägga till flikar i det nedre fältet.",
         "Couldn't write the code": "Det gick inte att skriva koden",
         "Generation isn't available for this licence.": "Generering är inte tillgänglig för den här licensen.",
         "Say a little more — at least 8 characters.": "Skriv lite mer, minst 8 tecken.",
@@ -20457,7 +20458,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Läs meddelandehistorik",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Tillåter ändring av AorusGrams funktioner och utseende från en verifierad katalog.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Tillåter läsning av ruttstatus, ändring av användarreglage och uppdatering av rutten utan åtkomst till serveruppgifter.",
         "Allows reading up to 100 recent messages from a selected chat.": "Tillåter läsning av upp till 100 senaste meddelanden från den valda chatten.",
         "Open chats": "Öppna chattar",
@@ -21129,6 +21129,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Cho phép thay đổi tính năng và giao diện AorusGram từ danh mục đã xác minh và thêm thẻ vào thanh dưới cùng.",
         "Couldn't write the code": "Không thể viết mã",
         "Generation isn't available for this licence.": "Tính năng tạo không khả dụng với giấy phép này.",
         "Say a little more — at least 8 characters.": "Hãy mô tả thêm, ít nhất 8 ký tự.",
@@ -21300,7 +21301,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Đọc lịch sử tin nhắn",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Cho phép thay đổi tính năng và giao diện AorusGram từ danh mục đã xác minh.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Cho phép đọc trạng thái tuyến, thay đổi công tắc người dùng và làm mới tuyến mà không truy cập thông tin xác thực máy chủ.",
         "Allows reading up to 100 recent messages from a selected chat.": "Cho phép đọc tối đa 100 tin nhắn gần đây từ cuộc trò chuyện đã chọn.",
         "Open chats": "Mở cuộc trò chuyện",
@@ -21972,6 +21972,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Дозволяє змінювати функції та вигляд AorusGram із перевіреного каталогу й додавати вкладки до нижньої панелі.",
         "Couldn't write the code": "Не вдалося написати код",
         "Generation isn't available for this licence.": "Генерація недоступна для цієї ліцензії.",
         "Say a little more — at least 8 characters.": "Опишіть докладніше — щонайменше 8 символів.",
@@ -22143,7 +22144,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Читати історію повідомлень",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Дозволяє змінювати функції та вигляд AorusGram із перевіреного каталогу.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Дозволяє читати стан маршруту, змінювати перемикачі користувача й оновлювати маршрут без доступу до облікових даних сервера.",
         "Allows reading up to 100 recent messages from a selected chat.": "Дозволяє читати до 100 останніх повідомлень із вибраного чату.",
         "Open chats": "Відкриття чатів",
@@ -22824,6 +22824,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permite cambiar las funciones y la apariencia de AorusGram desde un catálogo verificado y añadir pestañas a la barra inferior.",
         "Couldn't write the code": "No se pudo escribir el código",
         "Generation isn't available for this licence.": "La generación no está disponible para esta licencia.",
         "Say a little more — at least 8 characters.": "Cuenta un poco más: al menos 8 caracteres.",
@@ -22995,7 +22996,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Leer historial de mensajes",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Permite cambiar las funciones y la apariencia de AorusGram desde un catálogo verificado.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Permite consultar el estado de la ruta, cambiar los controles del usuario y actualizar la ruta sin acceder a las credenciales del servidor.",
         "Allows reading up to 100 recent messages from a selected chat.": "Permite leer hasta 100 mensajes recientes del chat seleccionado.",
         "Open chats": "Abrir chats",
@@ -23676,6 +23676,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Permite alterar os recursos e a aparência do AorusGram a partir de um catálogo verificado e adicionar abas à barra inferior.",
         "Couldn't write the code": "Não foi possível escrever o código",
         "Generation isn't available for this licence.": "A geração não está disponível para esta licença.",
         "Say a little more — at least 8 characters.": "Descreva um pouco mais: pelo menos 8 caracteres.",
@@ -23847,7 +23848,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Ler histórico de mensagens",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Permite alterar os recursos e a aparência do AorusGram a partir de um catálogo verificado.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Permite ler o estado da rota, alterar os controles do usuário e atualizar a rota sem acessar as credenciais do servidor.",
         "Allows reading up to 100 recent messages from a selected chat.": "Permite ler até 100 mensagens recentes do chat selecionado.",
         "Open chats": "Abrir chats",
@@ -24528,6 +24528,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Erlaubt das Ändern von AorusGram-Funktionen und -Darstellung aus einem geprüften Katalog und das Hinzufügen von Tabs zur unteren Leiste.",
         "Couldn't write the code": "Code konnte nicht geschrieben werden",
         "Generation isn't available for this licence.": "Generieren ist für diese Lizenz nicht verfügbar.",
         "Say a little more — at least 8 characters.": "Schreib etwas mehr – mindestens 8 Zeichen.",
@@ -24699,7 +24700,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Nachrichtenverlauf lesen",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Erlaubt das Ändern von AorusGram-Funktionen und -Darstellung aus einem geprüften Katalog.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Erlaubt das Lesen des Routenstatus, das Ändern von Benutzerschaltern und das Aktualisieren der Route ohne Zugriff auf Server-Anmeldedaten.",
         "Allows reading up to 100 recent messages from a selected chat.": "Erlaubt das Lesen von bis zu 100 aktuellen Nachrichten aus dem ausgewählten Chat.",
         "Open chats": "Chats öffnen",
@@ -25380,6 +25380,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Autorise la modification des fonctions et de l’apparence d’AorusGram à partir d’un catalogue vérifié et l’ajout d’onglets à la barre inférieure.",
         "Couldn't write the code": "Impossible d'écrire le code",
         "Generation isn't available for this licence.": "La génération n'est pas disponible pour cette licence.",
         "Say a little more — at least 8 characters.": "Précisez un peu : au moins 8 caractères.",
@@ -25551,7 +25552,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Lire l’historique des messages",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Autorise la modification des fonctions et de l’apparence d’AorusGram à partir d’un catalogue vérifié.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Autorise la lecture de l’état de la route, la modification des réglages utilisateur et l’actualisation de la route sans accès aux identifiants du serveur.",
         "Allows reading up to 100 recent messages from a selected chat.": "Autorise la lecture de 100 messages récents au maximum dans la discussion sélectionnée.",
         "Open chats": "Ouvrir des discussions",
@@ -26232,6 +26232,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.": "Doğrulanmış bir katalogdan AorusGram özelliklerinin ve görünümünün değiştirilmesine ve alt çubuğa sekme eklenmesine izin verir.",
         "Couldn't write the code": "Kod yazılamadı",
         "Generation isn't available for this licence.": "Oluşturma bu lisans için kullanılamıyor.",
         "Say a little more — at least 8 characters.": "Biraz daha açıklayın, en az 8 karakter.",
@@ -26403,7 +26404,6 @@ enum AorusL10nTable {
         "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.": "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.",
         "Allows editing, deleting and forwarding messages and changing reactions as the current account.": "Allows editing, deleting and forwarding messages and changing reactions as the current account.",
         "Read message history": "Mesaj geçmişini oku",
-        "Allows changing AorusGram features and appearance from a verified catalog.": "Doğrulanmış bir katalogdan AorusGram özelliklerinin ve görünümünün değiştirilmesine izin verir.",
         "Allows reading route status, changing user switches and refreshing the route without access to server credentials.": "Sunucu kimlik bilgilerine erişmeden rota durumunu okumaya, kullanıcı anahtarlarını değiştirmeye ve rotayı yenilemeye izin verir.",
         "Allows reading up to 100 recent messages from a selected chat.": "Seçilen sohbetten en fazla 100 son mesajın okunmasına izin verir.",
         "Open chats": "Sohbet açma",

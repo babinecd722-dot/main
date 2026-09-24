@@ -1901,6 +1901,13 @@ private enum AorusPluginDocumentation {
             await aorus.wall.setEnabled(true)
             Каталог содержит стабильный id, категорию, тип, текущее значение, допустимый диапазон или варианты и признак перезапуска. В него входят все переключатели центрального менеджера AorusGram: приватность, сообщения, медиа, звонки, вкладки, поиск, подписи и размер панели, аватарки, хранилище и показатели производительности. Сырые UserDefaults и внутренние ключи приложению не выдаются. Изменения применяются через нативные сеттеры и событие appSettingsChanged.
 
+            Свои вкладки
+            const remove = aorus.tabs.register({ id: 'mail', title: 'Почта', icon: 'envelope', url: 'https://mail.example.com' })
+            aorus.tabs.register({ id: 'feed', title: 'Лента', icon: 'newspaper', pageId: 'feed' })
+            aorus.tabs.setBadge('feed', 3)
+            aorus.tabs.setBadge('feed', null)
+            Вкладка встаёт в нижнюю панель после «Настроек»: с url — сайт страницей приложения, с pageId — экран плагина из definePages, одно из двух. Вкладок до двух на все плагины, заголовок до 24 символов, иконка — глиф из каталога. Бейдж — родной красный кружок Telegram: число (больше 99 — «99+»), true — точка, короткий текст или null, чтобы убрать. Пока плагин бейдж не ставил, вкладка сайта показывает счётчик самого сайта: из navigator.setAppBadge или из «(3)» в начале заголовка. Сайт загружается, как только вкладка появилась, так что счётчик виден до первого открытия. Нужны appCustomization, для сайта — ещё inAppBrowser, для экрана — customUI. Плагин остановился — его вкладки уходят из панели.
+
             Соединение
             const state = await aorus.proxy.status()
             await aorus.proxy.setEnabled(true)
@@ -2152,6 +2159,13 @@ private enum AorusPluginDocumentation {
     await aorus.wall.setEnabled(true)
     The catalog returns a stable id, category, type, current value, allowed range or options and restart requirement. It covers every switch in the central AorusGram manager: privacy, messages, media, calls, tabs, search, tab labels and size, avatars, storage and performance metrics. Raw UserDefaults and internal keys are never exposed. Changes use native setters and emit appSettingsChanged.
 
+    Your own tabs
+    const remove = aorus.tabs.register({ id: 'mail', title: 'Mail', icon: 'envelope', url: 'https://mail.example.com' })
+    aorus.tabs.register({ id: 'feed', title: 'Feed', icon: 'newspaper', pageId: 'feed' })
+    aorus.tabs.setBadge('feed', 3)
+    aorus.tabs.setBadge('feed', null)
+    A tab goes into the bottom bar after Settings: with url it is a site drawn as a page of the app, with pageId one of the plugin's screens from definePages, one or the other. Two tabs across all plugins, a title of up to 24 characters, a glyph from the catalogue. The badge is Telegram's own red circle: a count (over 99 is "99+"), true for a dot, a short text, or null to clear it. Until the plugin sets one, a site's tab shows the site's own count, from navigator.setAppBadge or a "(3)" at the start of its title. The site loads as soon as its tab appears, so the count is there before the first visit. Needs appCustomization, plus inAppBrowser for a site and customUI for a screen. When the plugin stops, its tabs leave the bar.
+
     Connection
     const state = await aorus.proxy.status()
     await aorus.proxy.setEnabled(true)
@@ -2247,9 +2261,12 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     private let context: AccountContext
     private let pluginId: String
     private var page: AorusPluginUIPage
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var integrationObserver: NSObjectProtocol?
+    /// The page is the root of a tab in the bottom bar. A tab whose page the plugin withdraws
+    /// leaves the bar with it; there is nothing for the page to close.
+    var isTab = false
 
     init(context: AccountContext, pluginId: String, page: AorusPluginUIPage) {
         self.context = context
@@ -2265,6 +2282,23 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
 
     func installModalCloseButton() {
         navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .close, target: self, action: #selector(closeModal))
+    }
+
+    /// The app's theme changed under a page that stays: a tab's. The navigation bar is the
+    /// caller's to update; this is the list.
+    func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        tableView.separatorColor = presentationData.theme.list.itemBlocksSeparatorColor
+        tableView.reloadData()
+    }
+
+    /// A second tap on the tab that is already open.
+    func scrollListToTop() {
+        tableView.setContentOffset(CGPoint(x: 0, y: -tableView.adjustedContentInset.top), animated: true)
     }
 
     @objc private func closeModal() {
@@ -2295,7 +2329,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             guard let self else { return }
             guard let updated = AorusPluginRuntimeManager.shared.page(pluginId: self.pluginId, pageId: self.page.id) else {
                 // The plugin withdrew the page or stopped. It leaves the same way it came.
-                self.closeModal()
+                if !self.isTab { self.closeModal() }
                 return
             }
             self.page = updated
@@ -2946,7 +2980,7 @@ func permissionSummary(_ permission: AorusPluginPermission) -> String {
     case .artificialIntelligence:
         return aorusL("Разрешает отправлять запросы AorusAI через защищенный клиентский шлюз.", "Allows AorusAI requests through the protected client gateway.")
     case .appCustomization:
-        return aorusL("Разрешает изменять функции и оформление AorusGram из проверенного списка.", "Allows changing AorusGram features and appearance from a verified catalog.")
+        return aorusL("Разрешает изменять функции и оформление AorusGram из проверенного списка и добавлять вкладки в нижнюю панель.", "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.")
     case .connectionControl:
         return aorusL("Разрешает читать состояние маршрута, менять пользовательские переключатели и запускать перепроверку без доступа к ключам серверов.", "Allows reading route status, changing user switches and refreshing the route without access to server credentials.")
     case .accountSwitching:

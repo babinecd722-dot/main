@@ -23,8 +23,12 @@ import AorusGram
 // app's own control plane — is refused, as the first address was. A Telegram link opens in
 // Telegram, and a link to another app (tel:, mailto:, the App Store) is handed to the system,
 // but only when the person tapped it, never because a page redirected itself there.
+//
+// In a tab of the bottom bar the page is the root of that tab: it has nowhere to go back to and
+// never closes, and what the site says its unread count is — through the Badging API
+// (`navigator.setAppBadge`) or a count at the start of its title — becomes the tab's badge.
 final class AorusPluginWebPageController: ViewController {
-    private let presentationData: PresentationData
+    private var presentationData: PresentationData
     private let initialURL: URL
     private let openTelegramLink: (URL) -> Void
     private let events = AorusPluginWebPageEvents()
@@ -35,6 +39,43 @@ final class AorusPluginWebPageController: ViewController {
     private var observations: [NSKeyValueObservation] = []
     private var progress: CGFloat = 0
     private var contentFrame: CGRect = .zero
+    private let badgeHandler = AorusPluginWebPageBadgeHandler()
+    private var appBadge: String?
+    private var usesAppBadge = false
+    private var titleBadge: String?
+    private var reportedBadge: String?
+
+    /// Set for a site in a tab, before the page loads: the site's unread count, as the text of
+    /// a badge, or nil for none.
+    var onBadge: ((String?) -> Void)?
+    /// A tab's page is the root of its tab, so `window.close()` and the like leave it where it is.
+    var isTab = false
+
+    private static let badgeHandlerName = "aorusBadge"
+    // The Badging API as a site uses it for an installed web app: a count, no argument for a
+    // plain dot, and clearAppBadge() or a count of 0 for none. Only in the main frame — an
+    // advert in a frame does not get to put a number on the tab.
+    private static let badgeScript = """
+    (function () {
+        var handlers = window.webkit && window.webkit.messageHandlers;
+        if (!handlers || !handlers.aorusBadge) { return; }
+        function post(value) {
+            try { handlers.aorusBadge.postMessage(value); } catch (error) {}
+            return Promise.resolve();
+        }
+        function setAppBadge(contents) {
+            if (contents === undefined) { return post(true); }
+            var count = Number(contents);
+            if (!isFinite(count) || count < 0) { return Promise.reject(new TypeError('The badge must be a non-negative number')); }
+            return post(Math.floor(count));
+        }
+        function clearAppBadge() { return post(0); }
+        try {
+            Object.defineProperty(Navigator.prototype, 'setAppBadge', { configurable: true, writable: true, value: setAppBadge });
+            Object.defineProperty(Navigator.prototype, 'clearAppBadge', { configurable: true, writable: true, value: clearAppBadge });
+        } catch (error) {}
+    })();
+    """
 
     /// Every page shares one session, so this is the one place the configuration is decided.
     private static func makeConfiguration() -> WKWebViewConfiguration {
@@ -76,6 +117,7 @@ final class AorusPluginWebPageController: ViewController {
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         self.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
         self.events.controller = self
+        self.badgeHandler.controller = self
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -86,6 +128,9 @@ final class AorusPluginWebPageController: ViewController {
             webView.stopLoading()
             webView.navigationDelegate = nil
             webView.uiDelegate = nil
+            if onBadge != nil {
+                webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.badgeHandlerName)
+            }
         }
     }
 
@@ -93,11 +138,39 @@ final class AorusPluginWebPageController: ViewController {
         return presentationData.theme.list.plainBackgroundColor
     }
 
+    /// The app's theme changed under a page that stays: a tab's. The navigation bar is the
+    /// caller's to update; this is the page's own chrome.
+    func updatePresentationData(_ presentationData: PresentationData) {
+        self.presentationData = presentationData
+        statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
+        guard isNodeLoaded else { return }
+        displayNode.backgroundColor = pageBackground
+        progressView.backgroundColor = presentationData.theme.list.itemAccentColor
+        if let webView {
+            webView.backgroundColor = pageBackground
+            webView.scrollView.backgroundColor = pageBackground
+            webView.overrideUserInterfaceStyle = presentationData.theme.overallDarkAppearance ? .dark : .light
+        }
+    }
+
+    /// A second tap on the tab that is already open, as everywhere else in the app.
+    func scrollPageToTop() {
+        guard let scrollView = webView?.scrollView else { return }
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top), animated: true)
+    }
+
     override func loadDisplayNode() {
         displayNode = ViewControllerTracingNode()
         displayNode.backgroundColor = pageBackground
 
-        let webView = WKWebView(frame: .zero, configuration: Self.makeConfiguration())
+        let configuration = Self.makeConfiguration()
+        if onBadge != nil {
+            configuration.userContentController.addUserScript(WKUserScript(source: Self.badgeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            configuration.userContentController.add(badgeHandler, name: Self.badgeHandlerName)
+        }
+        // The size of the screen until the first layout, so a tab's page that loads before the
+        // tab is ever opened lays itself out for a phone and not for a width of zero.
+        let webView = WKWebView(frame: UIScreen.main.bounds, configuration: configuration)
         webView.navigationDelegate = events
         webView.uiDelegate = events
         webView.allowsBackForwardNavigationGestures = true
@@ -164,10 +237,31 @@ final class AorusPluginWebPageController: ViewController {
     // MARK: - Page state
 
     private func pageTitleChanged(_ value: String?) {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if onBadge != nil {
+            // "(3) Inbox": the count goes to the tab's badge and the bar says "Inbox".
+            titleBadge = AorusPluginTab.badge(fromTitle: trimmed)
+            trimmed = AorusPluginTab.title(withoutBadge: trimmed)
+            reportBadge()
+        }
         // Until the page names itself the bar says nothing. The address is exactly what this
         // screen does not show.
         title = trimmed.isEmpty ? nil : trimmed
+    }
+
+    fileprivate func appBadgeChanged(_ value: Any) {
+        // A site that uses the Badging API is taken at its word from then on, its title aside.
+        usesAppBadge = true
+        appBadge = AorusPluginTab.normalizedBadge(value)
+        reportBadge()
+    }
+
+    private func reportBadge() {
+        guard let onBadge else { return }
+        let badge = usesAppBadge ? appBadge : titleBadge
+        guard badge != reportedBadge else { return }
+        reportedBadge = badge
+        onBadge(badge)
     }
 
     private func progressChanged(_ value: CGFloat) {
@@ -239,6 +333,9 @@ final class AorusPluginWebPageController: ViewController {
     }
 
     fileprivate func close() {
+        // A tab has nothing under it to go back to, and whatever is on top of the app is not
+        // this page's to close.
+        if isTab { return }
         if let navigation = navigationController as? NavigationController, navigation.viewControllers.count > 1 {
             _ = navigation.popViewController(animated: true)
         } else {
@@ -290,6 +387,17 @@ final class AorusPluginWebPageController: ViewController {
 
     fileprivate var cancelTitle: String {
         return presentationData.strings.Common_Cancel
+    }
+}
+
+/// Receives what the page's Badging API reports. WebKit keeps its message handlers for as long
+/// as the web view lives, so this holds the controller weakly instead of the page holding it.
+private final class AorusPluginWebPageBadgeHandler: NSObject, WKScriptMessageHandler {
+    weak var controller: AorusPluginWebPageController?
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame else { return }
+        controller?.appBadgeChanged(message.body)
     }
 }
 
