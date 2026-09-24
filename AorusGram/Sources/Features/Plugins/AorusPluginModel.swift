@@ -11,16 +11,69 @@ import Foundation
 /// The glyphs a plugin may pick for its tile. SF Symbol names; a name the running iOS does
 /// not know falls back to `fallback` at draw time, so the list can hold newer symbols.
 public enum AorusPluginIcon {
+    /// Every glyph a plugin may use for itself, a shortcut, a button or a tab, in the order
+    /// the picker shows them. Grouped so a person looking for "something with money" finds a
+    /// row of it rather than one coin among two hundred. A name the device's SF Symbols does
+    /// not have is drawn as the fallback, never as nothing.
     public static let all: [String] = [
-        "puzzlepiece.extension", "bolt.fill", "sparkles", "message.fill", "shield.fill",
-        "globe", "terminal.fill", "clock.fill", "wand.and.stars", "heart.fill", "star.fill",
-        "bell.fill", "text.bubble.fill", "arrow.triangle.2.circlepath", "lock.fill",
-        "paperplane.fill", "brain.head.profile", "camera.fill", "mic.fill", "play.fill",
-        "music.note", "play.rectangle.fill", "hand.wave.fill", "doc.fill", "folder.fill", "link", "bookmark.fill", "person.fill",
-        "person.2.fill", "gearshape.fill", "slider.horizontal.3", "checkmark.circle.fill",
-        "square.and.pencil", "command", "curlybraces", "network", "photo.fill", "calendar",
-        "location.fill", "map.fill", "cart.fill", "creditcard.fill", "gamecontroller.fill",
-        "hammer.fill", "wrench.and.screwdriver.fill", "lightbulb.fill", "flame.fill",
+        // Plugins and magic
+        "puzzlepiece.extension", "puzzlepiece.fill", "sparkles", "wand.and.stars", "wand.and.rays",
+        "bolt.fill", "flame.fill", "star.fill", "heart.fill", "crown.fill", "rosette", "gift.fill",
+        "lightbulb.fill", "brain.head.profile", "atom", "hands.sparkles.fill",
+        // People and conversation
+        "message.fill", "bubble.left.fill", "bubble.left.and.bubble.right.fill", "text.bubble.fill",
+        "quote.bubble.fill", "ellipsis.bubble.fill", "phone.fill", "video.fill", "envelope.fill",
+        "paperplane.fill", "megaphone.fill", "bell.fill", "bell.badge.fill", "bell.slash.fill", "at",
+        "number", "person.fill", "person.2.fill", "person.3.fill", "person.crop.circle",
+        "person.crop.circle.fill", "person.badge.plus", "hand.raised.fill", "hand.thumbsup.fill",
+        "hand.wave.fill", "face.smiling",
+        // Media and play
+        "photo.fill", "photo.on.rectangle", "camera.fill", "camera.viewfinder", "film.fill", "tv.fill",
+        "play.tv.fill", "play.fill", "play.circle.fill", "play.rectangle.fill", "music.note",
+        "music.note.list", "music.mic", "headphones", "mic.fill", "speaker.wave.2.fill", "waveform",
+        "radio.fill", "guitars.fill", "pianokeys", "gamecontroller.fill", "die.face.5.fill",
+        "suit.heart.fill", "ticket.fill", "theatermasks.fill", "paintbrush.fill",
+        "paintbrush.pointed.fill", "paintpalette.fill", "pencil", "highlighter", "scribble",
+        "scissors", "eyedropper",
+        // Documents and time
+        "doc.fill", "doc.text.fill", "doc.on.doc", "doc.text.magnifyingglass", "note.text",
+        "square.and.pencil", "list.bullet", "list.number", "checkmark.circle.fill",
+        "checkmark.seal.fill", "folder.fill", "archivebox.fill", "tray.full.fill", "paperclip", "link",
+        "pin.fill", "bookmark.fill", "tag.fill", "flag.fill", "book.fill", "books.vertical.fill",
+        "newspaper.fill", "graduationcap.fill", "text.book.closed.fill", "character.book.closed.fill",
+        "translate", "textformat", "calendar", "calendar.badge.clock", "clock.fill", "alarm.fill",
+        "timer", "stopwatch.fill", "hourglass",
+        // Money and work
+        "cart.fill", "bag.fill", "creditcard.fill", "banknote.fill", "dollarsign.circle.fill",
+        "bitcoinsign.circle.fill", "chart.bar.fill", "chart.pie.fill", "chart.bar.xaxis", "percent",
+        "shippingbox.fill", "briefcase.fill", "building.2.fill",
+        // Tools and devices
+        "gearshape.fill", "gearshape.2.fill", "slider.horizontal.3", "wrench.fill", "hammer.fill",
+        "wrench.and.screwdriver.fill", "screwdriver.fill", "terminal.fill", "curlybraces",
+        "chevron.left.forwardslash.chevron.right", "command", "keyboard", "cpu", "memorychip",
+        "desktopcomputer", "laptopcomputer", "iphone", "ipad", "printer.fill", "externaldrive.fill",
+        "server.rack", "qrcode", "qrcode.viewfinder", "barcode", "magnifyingglass", "function", "sum",
+        "ruler.fill", "cube.fill", "cube.box.fill", "square.grid.2x2.fill", "square.stack.3d.up.fill",
+        "arrow.triangle.2.circlepath", "arrow.clockwise", "arrow.down.circle.fill",
+        "square.and.arrow.down.fill", "square.and.arrow.up.fill", "icloud.fill",
+        "icloud.and.arrow.down.fill", "power", "battery.100", "flashlight.on.fill",
+        // Privacy and safety
+        "lock.fill", "lock.open.fill", "lock.shield.fill", "shield.fill", "checkmark.shield.fill",
+        "key.fill", "eye.fill", "eye.slash.fill", "faceid", "touchid", "hand.raised.slash.fill",
+        "exclamationmark.triangle.fill", "info.circle.fill", "questionmark.circle.fill",
+        // Web and places
+        "globe", "globe.europe.africa.fill", "globe.americas.fill", "network", "wifi",
+        "antenna.radiowaves.left.and.right", "safari.fill", "link.circle.fill", "location.fill",
+        "map.fill", "mappin.and.ellipse", "house.fill", "car.fill", "bus.fill", "tram.fill",
+        "airplane", "bicycle", "ferry.fill", "sportscourt.fill", "figure.walk",
+        // Nature and weather
+        "leaf.fill", "drop.fill", "snowflake", "sun.max.fill", "moon.fill", "moon.stars.fill",
+        "moon.zzz.fill", "cloud.fill", "cloud.sun.fill", "cloud.rain.fill", "cloud.bolt.fill", "wind",
+        "tornado", "thermometer", "umbrella.fill", "sunrise.fill", "pawprint.fill", "hare.fill",
+        "tortoise.fill", "ant.fill", "ladybug.fill",
+        // Health
+        "cross.fill", "cross.case.fill", "pills.fill", "heart.text.square.fill", "bandage.fill",
+        "stethoscope", "bed.double.fill",
     ]
     public static let fallback = "puzzlepiece.extension"
 
@@ -530,6 +583,14 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
     /// names a section of the AorusGram settings screen and the shortcut is shown there and
     /// nowhere else. Never shown in the plugin library itself.
     public var placement: String
+    /// The tile's colour as "RRGGBB", so two shortcuts of one plugin can look like two
+    /// different things. The plugin's own colour when absent.
+    public var color: String?
+    /// The site's own icon instead of a glyph, for a shortcut that opens a site. The client
+    /// fetches the icon the site publishes for itself and draws it as the row's tile. Only
+    /// in Telegram's settings list: the AorusGram screen and the tab bar draw glyphs, and a
+    /// shortcut that asks for a site icon anywhere else is refused.
+    public var siteIcon: Bool
 
     /// Every placement a shortcut may ask for.
     public static let placements = ["plugins", "privacy", "interface", "tabs", "messages", "calls", "wall", "aorusCode", "other"]
@@ -545,7 +606,7 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
         return placement == AorusPluginSettingsShortcut.telegramSettingsPlacement
     }
 
-    public init(id: String, title: String, subtitle: String? = nil, icon: String? = nil, pageId: String? = nil, url: String? = nil, placement: String = "plugins") {
+    public init(id: String, title: String, subtitle: String? = nil, icon: String? = nil, pageId: String? = nil, url: String? = nil, placement: String = "plugins", color: String? = nil, siteIcon: Bool = false) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
@@ -553,9 +614,11 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
         self.pageId = pageId
         self.url = url
         self.placement = placement
+        self.color = color
+        self.siteIcon = siteIcon
     }
 
-    private enum CodingKeys: String, CodingKey { case id, title, subtitle, icon, pageId, url, placement }
+    private enum CodingKeys: String, CodingKey { case id, title, subtitle, icon, pageId, url, placement, color, siteIcon }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -566,6 +629,8 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
         pageId = try values.decodeIfPresent(String.self, forKey: .pageId)
         url = try values.decodeIfPresent(String.self, forKey: .url)
         placement = try values.decodeIfPresent(String.self, forKey: .placement) ?? "plugins"
+        color = try values.decodeIfPresent(String.self, forKey: .color)
+        siteIcon = try values.decodeIfPresent(Bool.self, forKey: .siteIcon) ?? false
     }
 
     public static func validated(from data: Data) -> [AorusPluginSettingsShortcut]? {
@@ -586,11 +651,18 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
             item.title = String(item.title.prefix(120))
             item.subtitle = item.subtitle.map { String($0.prefix(240)) }
             item.icon = item.icon.map { AorusPluginIcon.normalized($0) }
+            // Any six hex digits, with or without "#"; anything else is the plugin's colour.
+            item.color = item.color.flatMap { value in
+                let hex = value.hasPrefix("#") ? String(value.dropFirst()) : value
+                return hex.count == 6 && hex.allSatisfy({ $0.isHexDigit }) ? hex.uppercased() : nil
+            }
             item.url = item.url.map { String($0.prefix(2_048)) }
             if let value = item.url {
                 guard let url = URL(string: value), let scheme = url.scheme?.lowercased(),
                       (scheme == "http" || scheme == "https"), url.host?.isEmpty == false else { return nil }
             }
+            // A site's icon needs a site, and is drawn only in Telegram's settings list.
+            if item.siteIcon, item.url == nil || !item.isInTelegramSettings { return nil }
             items[index] = item
         }
         return items

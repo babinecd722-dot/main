@@ -774,13 +774,19 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
     private var items: [String] {
         switch mode {
         case .icons:
-            return AorusPluginIcon.all
+            return AorusPluginIcons.available
         case .colors:
             var values = AorusPluginAccent.all
             if !values.contains(selected) { values.insert(selected, at: 0) }
             return values
         }
     }
+}
+
+/// The glyphs this device can draw, in the catalogue's order. A symbol from a newer SF Symbols
+/// than the one on the phone would be an empty square in the picker.
+private enum AorusPluginIcons {
+    static let available: [String] = AorusPluginIcon.all.filter { UIImage(systemName: $0) != nil }
 }
 
 private final class AorusPluginPickerCell: UICollectionViewCell {
@@ -1570,7 +1576,7 @@ private enum AorusPluginDocumentation {
 
             Интеграции
             aorus.integrations.settings.register({ id: 'youtube', title: 'YouTube', icon: 'play.rectangle.fill', url: 'https://youtube.com', placement: 'interface' })
-            Ярлык содержит ровно одно из полей pageId или url и показывается ровно в одном месте, по placement: plugins (по умолчанию) — основные настройки Telegram рядом со входом в AorusGram; privacy, interface, tabs, messages, calls, wall, aorusCode или other — соответствующий блок настроек AorusGram, и только он. В списке плагинов ярлыков нет. Ярлык с url открывает сайт страницей внутри приложения и требует разрешения встроенного браузера. loopback, локальная сеть и служебные домены AorusGram заблокированы.
+            Ярлык содержит ровно одно из полей pageId или url и показывается ровно в одном месте, по placement: plugins (по умолчанию) — основные настройки Telegram рядом со входом в AorusGram; privacy, interface, tabs, messages, calls, wall, aorusCode или other — соответствующий блок настроек AorusGram, и только он. В списке плагинов ярлыков нет. Ярлык с url открывает сайт страницей внутри приложения и требует разрешения встроенного браузера. loopback, локальная сеть и служебные домены AorusGram заблокированы. icon — любой из двух с лишним сотен значков каталога (выбор в «Оформлении» плагина показывает их все по группам), color — свой цвет плитки RRGGBB для этого ярлыка. siteIcon: true рисует вместо значка иконку самого сайта: приложение находит её на странице (apple-touch-icon или favicon), сохраняет и рисует плиткой. Работает только для ярлыка с url в основных настройках Telegram; в настройках AorusGram и во вкладках всегда значок.
             aorus.integrations.contextMenu.register({ id: 'reply', title: 'Подготовить ответ', icon: 'message.fill' })
             При выборе приходит aorus.on('contextAction', event) с actionId, source и, когда выбрано одно сообщение, peerId, namespace, messageId и text. События новых сообщений требуют отдельного разрешения. В меню одновременно показываются не более четырёх действий плагинов.
 
@@ -1814,7 +1820,7 @@ private enum AorusPluginDocumentation {
 
     Integrations
     aorus.integrations.settings.register({ id: 'youtube', title: 'YouTube', icon: 'play.rectangle.fill', url: 'https://youtube.com', placement: 'interface' })
-    A shortcut has exactly one of pageId or url and is shown in exactly one place, by placement: plugins (default) is Telegram's own settings list next to the AorusGram entry; privacy, interface, tabs, messages, calls, wall, aorusCode or other is that section of the AorusGram settings, and only that. Shortcuts never appear in the plugin library. A url shortcut opens the site as a page of the app and needs the in-app browser permission. Loopback, local networks and AorusGram control-plane domains are blocked.
+    A shortcut has exactly one of pageId or url and is shown in exactly one place, by placement: plugins (default) is Telegram's own settings list next to the AorusGram entry; privacy, interface, tabs, messages, calls, wall, aorusCode or other is that section of the AorusGram settings, and only that. Shortcuts never appear in the plugin library. A url shortcut opens the site as a page of the app and needs the in-app browser permission. Loopback, local networks and AorusGram control-plane domains are blocked. icon is any of the two hundred and more glyphs in the catalogue (the picker in the plugin's Appearance shows them all by group), color is the tile's own RRGGBB for this shortcut. siteIcon: true draws the site's own icon instead of a glyph: the app finds it on the page (apple-touch-icon or favicon), keeps it and draws it as the tile. Only for a url shortcut in Telegram's own settings; the AorusGram settings and tabs always draw a glyph.
     aorus.integrations.contextMenu.register({ id: 'reply', title: 'Prepare reply', icon: 'message.fill' })
     Selection emits aorus.on('contextAction', event) with actionId and source. For a single selected message it also includes peerId, namespace, messageId and text. New-message events require a separate permission. At most four plugin actions appear at once.
 

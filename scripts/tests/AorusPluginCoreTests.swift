@@ -151,6 +151,18 @@ let ambiguousShortcutJSON = Data("[{\"id\":\"bad\",\"title\":\"Bad\",\"pageId\":
 expect(AorusPluginSettingsShortcut.validated(from: ambiguousShortcutJSON) == nil, "shortcut cannot mix page and URL destinations")
 let unsafeShortcutJSON = Data("[{\"id\":\"bad\",\"title\":\"Bad\",\"url\":\"javascript:alert(1)\"}]".utf8)
 expect(AorusPluginSettingsShortcut.validated(from: unsafeShortcutJSON) == nil, "settings shortcuts reject non-web schemes")
+// A site's own icon: only with a url, only in Telegram's settings list.
+let siteIconShortcut = Data("[{\"id\":\"gh\",\"title\":\"GitHub\",\"url\":\"https://github.com\",\"siteIcon\":true}]".utf8)
+expect(AorusPluginSettingsShortcut.validated(from: siteIconShortcut)?.first?.siteIcon == true, "a url shortcut in Telegram's settings may draw the site's icon")
+let placedSiteIcon = Data("[{\"id\":\"gh\",\"title\":\"GitHub\",\"url\":\"https://github.com\",\"siteIcon\":true,\"placement\":\"interface\"}]".utf8)
+expect(AorusPluginSettingsShortcut.validated(from: placedSiteIcon) == nil, "the site's icon is refused outside Telegram's settings list")
+let pageSiteIcon = Data("[{\"id\":\"gh\",\"title\":\"GitHub\",\"pageId\":\"main\",\"siteIcon\":true}]".utf8)
+expect(AorusPluginSettingsShortcut.validated(from: pageSiteIcon) == nil, "a shortcut without a site cannot ask for its icon")
+let colouredShortcut = Data("[{\"id\":\"a\",\"title\":\"A\",\"pageId\":\"main\",\"color\":\"#ff9f0a\"},{\"id\":\"b\",\"title\":\"B\",\"pageId\":\"main\",\"color\":\"orange\"}]".utf8)
+let coloured = AorusPluginSettingsShortcut.validated(from: colouredShortcut)
+expect(coloured?.first?.color == "FF9F0A" && coloured?.last?.color == nil, "a shortcut colour is six hex digits, anything else falls back to the plugin's")
+expect(Set(AorusPluginIcon.all).count == AorusPluginIcon.all.count && AorusPluginIcon.all.count >= 200, "the icon catalogue is large and has no duplicates")
+expect(AorusPluginIcon.all.first == AorusPluginIcon.fallback, "the fallback glyph leads the catalogue")
 
 let root = temporaryDirectory()
 defer { try? FileManager.default.removeItem(at: root) }

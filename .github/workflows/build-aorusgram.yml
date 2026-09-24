@@ -252,6 +252,11 @@ jobs:
           sed -E '/^import (Display|TelegramPresentationData|UIKitRuntimeUtils|AorusGram)$/d' \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginWebPageController.swift \
             > /tmp/aorus-plugin-ui/AorusPluginWebPageController.swift
+          # A site's own icon for a settings shortcut: networking over the plugin blocklist and
+          # a tile drawn with UIKit, checked against the SDK like the screens that show it.
+          sed -E '/^import AorusGram$/d' \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginSiteIcons.swift \
+            > /tmp/aorus-plugin-ui/AorusPluginSiteIcons.swift
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
@@ -265,7 +270,8 @@ jobs:
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginChatBridge.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/AI/AorusAITimelineStrings.swift \
             /tmp/aorus-plugin-ui/AorusPluginControllers.swift \
-            /tmp/aorus-plugin-ui/AorusPluginWebPageController.swift
+            /tmp/aorus-plugin-ui/AorusPluginWebPageController.swift \
+            /tmp/aorus-plugin-ui/AorusPluginSiteIcons.swift
           swiftc -frontend -parse \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusBuildKeyProvider.swift \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusUpdateManifest.swift \

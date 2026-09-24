@@ -3164,12 +3164,20 @@ public struct AorusPluginSettingsEntry {
 public func aorusPluginSettingsEntries() -> [AorusPluginSettingsEntry] {
     return AorusPluginRuntimeManager.shared.pluginSettingsShortcuts().filter { $0.shortcut.isInTelegramSettings }.map { item in
         let manifest = AorusPluginStore.shared.manifest(id: item.pluginId)
-        let accent = aorusPluginEntryColor(manifest?.accent ?? AorusPluginAccent.fallback)
+        let accent = aorusPluginEntryColor(item.shortcut.color ?? manifest?.accent ?? AorusPluginAccent.fallback)
         let symbol = item.shortcut.icon ?? manifest?.icon ?? AorusPluginIcon.fallback
+        // The site's own icon when the shortcut asked for it and it has arrived; the glyph
+        // until then. The store posts `integrationsChanged` when it lands, and the settings
+        // list redraws.
+        var image = aorusPluginSettingsRowIcon(symbol, color: accent)
+        if item.shortcut.siteIcon, let value = item.shortcut.url, let url = URL(string: value),
+           let siteIcon = AorusPluginSiteIcons.shared.icon(for: url) {
+            image = aorusPluginSettingsRowTile(siteIcon)
+        }
         return AorusPluginSettingsEntry(
             title: item.shortcut.title,
             subtitle: item.shortcut.subtitle ?? "",
-            image: aorusPluginSettingsRowIcon(symbol, color: accent),
+            image: image,
             open: {
                 AorusPluginRuntimeManager.shared.performSettingsShortcut(pluginId: item.pluginId, id: item.shortcut.id)
             }
@@ -3182,7 +3190,9 @@ public func aorusPluginSettingsEntries() -> [AorusPluginSettingsEntry] {
 private func aorusPluginSettingsRowIcon(_ symbol: String, color: UIColor) -> UIImage? {
     let side = CGSize(width: 30.0, height: 30.0)
     let configuration = UIImage.SymbolConfiguration(pointSize: 17.0, weight: .medium)
+    // A glyph newer than this iOS is drawn as the fallback rather than as an empty tile.
     let glyph = UIImage(systemName: AorusPluginIcon.normalized(symbol), withConfiguration: configuration)
+        ?? UIImage(systemName: AorusPluginIcon.fallback, withConfiguration: configuration)
     let format = UIGraphicsImageRendererFormat.default()
     format.opaque = false
     return UIGraphicsImageRenderer(size: side, format: format).image { context in
@@ -3193,6 +3203,17 @@ private func aorusPluginSettingsRowIcon(_ symbol: String, color: UIColor) -> UII
         let size = glyph.size
         let origin = CGPoint(x: (side.width - size.width) / 2.0, y: (side.height - size.height) / 2.0)
         glyph.withTintColor(.white, renderingMode: .alwaysOriginal).draw(in: CGRect(origin: origin, size: size))
+    }
+}
+
+/// A site's icon as the same 30pt tile, rounded the same way.
+private func aorusPluginSettingsRowTile(_ image: UIImage) -> UIImage? {
+    let side = CGSize(width: 30.0, height: 30.0)
+    let format = UIGraphicsImageRendererFormat.default()
+    format.opaque = false
+    return UIGraphicsImageRenderer(size: side, format: format).image { _ in
+        UIBezierPath(roundedRect: CGRect(origin: .zero, size: side), cornerRadius: 8.0).addClip()
+        image.draw(in: CGRect(origin: .zero, size: side))
     }
 }
 
@@ -3234,7 +3255,8 @@ public func aorusPluginMessageContextMenuItems(message: EngineRawMessage?) -> [C
 /// `cgImage`, and that raster is then tinted the same way every other item in the menu is.
 private func aorusPluginMenuIcon(_ name: String, color: UIColor) -> UIImage? {
     let configuration = UIImage.SymbolConfiguration(pointSize: 22.0, weight: .regular)
-    guard let symbol = UIImage(systemName: AorusPluginIcon.normalized(name), withConfiguration: configuration) else {
+    guard let symbol = UIImage(systemName: AorusPluginIcon.normalized(name), withConfiguration: configuration)
+            ?? UIImage(systemName: AorusPluginIcon.fallback, withConfiguration: configuration) else {
         return nil
     }
     let size = CGSize(width: max(1.0, symbol.size.width), height: max(1.0, symbol.size.height))

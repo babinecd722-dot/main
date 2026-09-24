@@ -832,13 +832,22 @@ aorus.integrations.settings.register({
     pageId: 'main'          // либо url: 'https://…', но не оба сразу
 });
 
-// Ярлык в блоке «Интерфейс» настроек AorusGram
+// Ярлык в блоке «Интерфейс» настроек AorusGram, со своим цветом плитки
 aorus.integrations.settings.register({
     id: 'funpay',
     title: 'FunPay',
-    icon: 'play.rectangle.fill',
+    icon: 'cart.fill',
+    color: 'FF9F0A',
     url: 'https://funpay.com',
     placement: 'interface'
+});
+
+// Ярлык в основных настройках Telegram с иконкой самого сайта
+aorus.integrations.settings.register({
+    id: 'github',
+    title: 'GitHub',
+    url: 'https://github.com',
+    siteIcon: true
 });
 
 const removeAction = aorus.ui.addMessageContextAction(
@@ -873,6 +882,35 @@ const removeSection = aorus.profile.addSection({
 Ярлык с разделом AorusGram не повторяется в основных настройках Telegram, а ярлык по
 умолчанию не повторяется в настройках AorusGram. Ярлык с `url` открывает сайт страницей
 внутри приложения (раздел 12).
+
+Поля ярлыка:
+
+| Поле | Что это |
+|---|---|
+| `id`, `title` | Обязательные. `id` — латиница, цифры, `_ . -`, до 64 символов |
+| `subtitle` | Текст справа в строке |
+| `pageId` или `url` | Ровно одно из двух: свой экран плагина или сайт |
+| `icon` | Значок из каталога (ниже). Незнакомое имя рисуется значком по умолчанию |
+| `color` | Цвет плитки `RRGGBB` для этого ярлыка. Без него — цвет плагина |
+| `siteIcon` | `true` — вместо значка иконка самого сайта. Только вместе с `url` и только в основных настройках Telegram (`placement: 'plugins'`), иначе ярлык не принимается |
+| `placement` | Где ярлык, таблица выше |
+
+С `siteIcon` приложение само находит иконку сайта: сначала ту, что сайт отдаёт для домашнего
+экрана (`apple-touch-icon`), потом обычную (`rel="icon"`), потом `/apple-touch-icon.png` и
+`/favicon.ico`. Картинка приводится к квадратной плитке, хранится на устройстве и
+обновляется раз в неделю. Пока её нет, строка рисуется значком ярлыка, и как только иконка
+пришла, настройки перерисовываются сами. Запросы идут без cookies, и к локальной сети и
+служебным адресам AorusGram не ходят.
+
+Каталог значков — больше двухсот SF Symbols, по группам: плагины и магия (`sparkles`,
+`wand.and.stars`, `crown.fill`), люди и общение (`message.fill`, `person.2.fill`,
+`megaphone.fill`), медиа (`play.rectangle.fill`, `music.note`, `gamecontroller.fill`),
+документы и время (`doc.text.fill`, `note.text`, `calendar`, `timer`), деньги и работа
+(`cart.fill`, `creditcard.fill`, `chart.bar.fill`, `bitcoinsign.circle.fill`), инструменты и
+устройства (`terminal.fill`, `curlybraces`, `cpu`, `qrcode`), приватность (`lock.shield.fill`,
+`key.fill`, `eye.slash.fill`), сеть и места (`globe`, `safari.fill`, `map.fill`, `airplane`),
+природа и погода (`snowflake`, `moon.stars.fill`, `leaf.fill`), здоровье (`cross.case.fill`,
+`pills.fill`). Полный список с картинками — в выборе значка в «Оформлении» плагина.
 
 Действие контекстного меню появляется в меню сообщения. `ui.addMessageContextAction`
 регистрирует его вместе с обработчиком и возвращает функцию, которая снимает и то и другое.

@@ -18735,6 +18735,69 @@ def patch_plugin_settings_rows(tg: Path) -> None:
     print("PluginSettingsRows: plugin shortcuts added to Telegram settings")
 
 
+def patch_plugin_settings_refresh(tg: Path) -> None:
+    """Redraw Telegram's settings list when a plugin's shortcuts, or their site icons, change.
+
+    The rows are rebuilt on every layout of the settings screen, but nothing laid it out when
+    a plugin registered a shortcut or a site's icon finished downloading, so either showed up
+    only after the screen happened to move. The settings node now re-runs its last layout on
+    `aorusgram.plugins.integrationsChanged`.
+    """
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift"
+    if not path.is_file():
+        print("PluginSettingsRefresh: PeerInfoScreen.swift not found, skip")
+        return
+    source = path.read_text(encoding="utf-8")
+    sentinel = "// AorusGram plugins: redraw settings rows when integrations change"
+    if sentinel in source:
+        print("PluginSettingsRefresh: already patched")
+        return
+    edits = [
+        (
+            "    private(set) var validLayout: (ContainerViewLayout, CGFloat)?\n",
+            "    private(set) var validLayout: (ContainerViewLayout, CGFloat)?\n"
+            "    private var aorusPluginIntegrationsObserver: NSObjectProtocol?\n",
+        ),
+        (
+            "    override func didLoad() {\n"
+            "        super.didLoad()\n"
+            "                \n"
+            "        self.view.disablesInteractiveTransitionGestureRecognizerNow = { [weak self] in\n",
+            "    override func didLoad() {\n"
+            "        super.didLoad()\n"
+            "        \n"
+            "        " + sentinel + "\n"
+            "        if self.isSettings {\n"
+            "            self.aorusPluginIntegrationsObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram.plugins.integrationsChanged\"), object: nil, queue: .main) { [weak self] _ in\n"
+            "                guard let self, let (layout, navigationHeight) = self.validLayout else {\n"
+            "                    return\n"
+            "                }\n"
+            "                self.containerLayoutUpdated(layout: layout, navigationHeight: navigationHeight, transition: .immediate)\n"
+            "            }\n"
+            "        }\n"
+            "                \n"
+            "        self.view.disablesInteractiveTransitionGestureRecognizerNow = { [weak self] in\n",
+        ),
+        (
+            "    deinit {\n"
+            "        self.dataDisposable?.dispose()\n"
+            "        self.hiddenMediaDisposable?.dispose()\n",
+            "    deinit {\n"
+            "        if let aorusPluginIntegrationsObserver = self.aorusPluginIntegrationsObserver {\n"
+            "            NotificationCenter.default.removeObserver(aorusPluginIntegrationsObserver)\n"
+            "        }\n"
+            "        self.dataDisposable?.dispose()\n"
+            "        self.hiddenMediaDisposable?.dispose()\n",
+        ),
+    ]
+    for old, new in edits:
+        if source.count(old) != 1:
+            raise SystemExit(f"PluginSettingsRefresh: anchor not found ({source.count(old)}): {old.splitlines()[0]!r}")
+        source = source.replace(old, new, 1)
+    path.write_text(source, encoding="utf-8")
+    print("PluginSettingsRefresh: settings list redraws on plugin integration changes")
+
+
 def patch_plugin_context_menu(tg: Path) -> None:
     """Append bounded declarative plugin actions to the native message menu."""
     path = tg / "submodules/TelegramUI/Sources/ChatInterfaceStateContextMenus.swift"
@@ -27352,6 +27415,7 @@ def main() -> None:
     patch_plugin_outgoing_hook_composer(tg)
     patch_plugin_context_menu(tg)
     patch_plugin_settings_rows(tg)
+    patch_plugin_settings_refresh(tg)
     patch_settings_route_registration(tg)
     patch_internal_delete_maintenance(tg)
     patch_hide_tabs(tg)
