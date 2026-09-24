@@ -58,6 +58,10 @@ public struct AorusPluginManifest: Codable, Equatable {
     public var icon: String
     public var accent: String
     public var isEnabled: Bool
+    /// Read and written so a manifest from an older build keeps its shape, and decides
+    /// nothing: an enabled plugin runs whenever the app does. It used to keep an enabled
+    /// plugin from starting at launch — the switch on, nothing running, and snow gone every
+    /// time the system closed the app in the background.
     public var autostart: Bool
     public var apiVersion: Int
     public var createdAt: Date

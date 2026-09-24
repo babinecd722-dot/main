@@ -52,6 +52,12 @@ public final class AorusPluginEffectsRenderer {
     /// on screen, and the snow must appear the moment it is, not at the next launch.
     private static let retryDelays: [TimeInterval] = [0.15, 0.35, 0.75, 1.5, 3.0, 6.0, 10.0]
 
+    /// When the drawing is looked at again after the app comes back, the way the statistics
+    /// look at their window: the first minute after a return is when a window made on the way
+    /// in turns out not to be on the screen, and every look that finds nothing wrong costs a
+    /// few comparisons.
+    private static let restorationDelays: [TimeInterval] = [0.2, 0.6, 1.2, 2.5, 5.0, 10.0, 20.0, 40.0, 60.0]
+
     /// The scale sprites are drawn at, and the one every cell is told they were drawn at, so a
     /// cell's `scale` of 1 is the sprite's size in points on every screen.
     private static let spriteScale: CGFloat = 3
@@ -118,17 +124,29 @@ public final class AorusPluginEffectsRenderer {
     private var images: [String: CGImage] = [:]
     private var observers: [NSObjectProtocol] = []
     private var retryCount = 0
+    /// Moves on with every return to the app, so the looks scheduled for an earlier return
+    /// stop once a newer one has its own.
+    private var restorationToken = 0
 
     private init() {
         let center = NotificationCenter.default
-        observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.resume(restartingRetries: true)
-        })
-        observers.append(center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.resume(restartingRetries: true)
-        })
-        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.suspend()
+        // Every way the app says it is back: the application and the scene, on the way in and
+        // once it is in front. Any of them alone has been seen to be the only one that came.
+        for name in [UIApplication.willEnterForegroundNotification, UIApplication.didBecomeActiveNotification,
+                     UIScene.willEnterForegroundNotification, UIScene.didActivateNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.returned()
+            })
+        }
+        for name in [UIApplication.didEnterBackgroundNotification, UIScene.didEnterBackgroundNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.suspend()
+            })
+        }
+        // Reduce Motion turned on or off with snow on the screen: the snow is drawn again the
+        // way the new setting asks, rather than at the next start.
+        observers.append(center.addObserver(forName: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.redrawAll()
         })
         observers.append(center.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.applyBudget()
@@ -327,10 +345,8 @@ public final class AorusPluginEffectsRenderer {
     /// screen, and the snow in it stays; a new window is only ever made in an active one.
     private func isUsable(_ window: UIWindow) -> Bool {
         guard !window.isHidden, window.rootViewController != nil else { return false }
-        if let scene = window.windowScene {
-            return scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive
-        }
-        return false
+        guard let scene = window.windowScene, scene.windows.contains(where: { $0 === window }) else { return false }
+        return scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive
     }
 
     private func ensureWindow() -> UIView? {
@@ -381,20 +397,59 @@ public final class AorusPluginEffectsRenderer {
 
     /// The app went to the background. The window goes with it; the effects do not.
     private func suspend() {
+        restorationToken += 1
         discardWindow()
     }
 
-    /// The app is in front again, or its scene has just become active: draw what is running
-    /// and start what was waiting. A system activation starts the retries over; a retry does not.
+    /// The app is back. What was running is drawn now, and looked at again over the next
+    /// minute: a window made while the app is still coming up can be dropped or never shown,
+    /// and a return that nobody checks on is exactly how snow ends up gone.
+    private func returned() {
+        resume(restartingRetries: true)
+        restorationToken += 1
+        let token = restorationToken
+        for delay in Self.restorationDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, token == self.restorationToken else { return }
+                self.resume()
+            }
+        }
+    }
+
+    /// Draw what is running and start what was waiting. A system activation starts the
+    /// retries over; a retry does not.
+    ///
+    /// Also the check that everything running is really drawn: a window that is on screen,
+    /// and in it, for every effect, layers that are still attached to it. Anything short of
+    /// that is drawn again, so an effect is only ever off because something turned it off.
     private func resume(restartingRetries: Bool = false) {
         if restartingRetries { retryCount = 0 }
         guard !running.isEmpty || !pending.isEmpty else { return }
-        if !running.isEmpty {
-            _ = ensureWindow()
+        if !running.isEmpty, let view = ensureWindow() {
+            let calm = UIAccessibility.isReduceMotionEnabled
+            for item in running.values where !isDrawn(item, in: view) {
+                build(item, in: view, calm: calm)
+            }
         }
         startPending()
         if window == nil || !pending.isEmpty {
             scheduleRetry()
+        }
+    }
+
+    /// Whether a running effect has its layers in the current window.
+    private func isDrawn(_ item: Running, in host: UIView) -> Bool {
+        guard !item.streams.isEmpty else { return false }
+        return item.streams.allSatisfy { $0.emitter.superlayer === host.layer }
+    }
+
+    /// Every running effect drawn again from its request, for a change that alters how all of
+    /// them look.
+    private func redrawAll() {
+        guard !running.isEmpty, let view = ensureWindow() else { return }
+        let calm = UIAccessibility.isReduceMotionEnabled
+        for item in running.values {
+            build(item, in: view, calm: calm)
         }
     }
 

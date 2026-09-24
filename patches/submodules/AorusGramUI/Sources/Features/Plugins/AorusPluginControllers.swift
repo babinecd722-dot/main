@@ -19,7 +19,7 @@ public func aorusPluginsTitle() -> String {
 // translation for each one in all 32 further languages, so a plugin screen can never be the
 // one place that falls back to English.
 private enum AorusPluginUIString {
-    case plugins, emptyTitle, emptyBody, create, importFile, enabled, autostart, editCode
+    case plugins, emptyTitle, emptyBody, create, importFile, enabled, editCode
     case configure, settings, permissions, duplicate, export, delete, save, run, stop, console, documentation
     case name, description, version, author, icon, accent, reviewPermissions, grantAndEnable, noPermissions, syntaxReady
     case status, running, stopped, failed, diagnostics, commands, events, noCommands
@@ -34,7 +34,6 @@ private enum AorusPluginUIString {
         case .create: return aorusL("Создать плагин", "Create Plugin")
         case .importFile: return aorusL("Импортировать файл", "Import File")
         case .enabled: return aorusL("Включен", "Enabled")
-        case .autostart: return aorusL("Автозапуск", "Run at Launch")
         case .editCode: return aorusL("Редактор", "Editor")
         case .configure: return aorusL("Оформление", "Appearance")
         case .settings: return aorusL("Настройки", "Settings")
@@ -143,7 +142,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
     }
 
     private func createPlugin() {
-        let manifest = AorusPluginManifest(name: AorusPluginUIString.plugins.text, autostart: false)
+        let manifest = AorusPluginManifest(name: AorusPluginUIString.plugins.text)
         let source = """
         aorus.ui.definePages([{
           id: 'home', title: 'My plugin', sections: [{
@@ -343,7 +342,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch section {
-        case 0: return 2
+        case 0: return 1
         case 1: return screens.count
         default: return 3
         }
@@ -354,9 +353,11 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
         cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
         cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
         if indexPath.section == 0 {
+            // One switch: on is running, now and at every launch after it.
             let toggle = UISwitch()
-            if indexPath.row == 0 { cell.textLabel?.text = AorusPluginUIString.enabled.text; toggle.isOn = record.manifest.isEnabled; toggle.addTarget(self, action: #selector(enabledChanged(_:)), for: .valueChanged) }
-            else { cell.textLabel?.text = AorusPluginUIString.autostart.text; toggle.isOn = record.manifest.autostart; toggle.addTarget(self, action: #selector(autostartChanged(_:)), for: .valueChanged) }
+            cell.textLabel?.text = AorusPluginUIString.enabled.text
+            toggle.isOn = record.manifest.isEnabled
+            toggle.addTarget(self, action: #selector(enabledChanged(_:)), for: .valueChanged)
             cell.accessoryView = toggle
             cell.selectionStyle = .none
         } else if indexPath.section == 1 {
@@ -423,8 +424,6 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
         }
     }
 
-    @objc private func autostartChanged(_ sender: UISwitch) { record.manifest.autostart = sender.isOn; try? AorusPluginStore.shared.updateManifest(record.manifest) }
-
     private func exportPlugin() {
         guard let data = AorusPluginStore.shared.export(id: record.manifest.id) else { return }
         let safe = record.manifest.name.replacingOccurrences(of: "/", with: "-")
@@ -476,7 +475,10 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
     }
 
     func numberOfSections(in tableView: UITableView) -> Int { 2 }
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { section == 0 ? 4 : 2 }
+    // Name, description and version. There is no author field: who wrote a plugin is not
+    // something a person types about themselves, it is who published it, and the Market says
+    // that from the account that did.
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { section == 0 ? 3 : 2 }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
@@ -485,8 +487,8 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         cell.detailTextLabel?.textColor = presentationData.theme.list.itemSecondaryTextColor
         cell.accessoryType = .disclosureIndicator
         if indexPath.section == 0 {
-            let labels = [AorusPluginUIString.name.text, AorusPluginUIString.description.text, AorusPluginUIString.version.text, AorusPluginUIString.author.text]
-            let values = [record.manifest.name, record.manifest.summary, record.manifest.version, record.manifest.author]
+            let labels = [AorusPluginUIString.name.text, AorusPluginUIString.description.text, AorusPluginUIString.version.text]
+            let values = [record.manifest.name, record.manifest.summary, record.manifest.version]
             cell.textLabel?.text = labels[indexPath.row]
             cell.detailTextLabel?.text = values[indexPath.row]
         } else if indexPath.row == 0 {
@@ -541,8 +543,8 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
 
     private func editText(row: Int) {
         guard row != 1 else { return }
-        let labels = [AorusPluginUIString.name.text, AorusPluginUIString.description.text, AorusPluginUIString.version.text, AorusPluginUIString.author.text]
-        let values = [record.manifest.name, record.manifest.summary, record.manifest.version, record.manifest.author]
+        let labels = [AorusPluginUIString.name.text, AorusPluginUIString.description.text, AorusPluginUIString.version.text]
+        let values = [record.manifest.name, record.manifest.summary, record.manifest.version]
         let alert = UIAlertController(title: labels[row], message: nil, preferredStyle: .alert)
         alert.addTextField { field in
             field.text = values[row]
@@ -554,8 +556,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             switch row {
             case 0: self.record.manifest.name = value
             case 1: self.record.manifest.summary = value
-            case 2: self.record.manifest.version = value
-            default: self.record.manifest.author = value
+            default: self.record.manifest.version = value
             }
             self.persist()
         })
@@ -1464,7 +1465,7 @@ private enum AorusPluginDocumentation {
             Вибрация: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
             Эффекты на экране
-            Анимация поверх всего приложения и его алертов, на том же уровне, что и статистика производительности (CPU, RAM). Касания проходят сквозь неё. Эффект появляется сразу, как его включили, без перезапуска приложения, а после возвращения из фона идущие эффекты рисуются заново сами.
+            Анимация поверх всего приложения и его алертов, на том же уровне, что и статистика производительности (CPU, RAM). Касания проходят сквозь неё. Эффект появляется сразу, как его включили, без перезапуска приложения, а после возвращения из фона идущие эффекты рисуются заново сами. Включённый плагин запускается при каждом открытии приложения, поэтому снег возвращается и после того, как система закрыла приложение в фоне. Эффект пропадает, только если его выключили, выключили плагин, истёк duration или телефон перегрелся.
             Непрерывный эффект включается start и выключается stop. id выбираете вы; повторный start с тем же id меняет параметры, а не добавляет второй эффект:
             await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
             await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
@@ -1708,7 +1709,7 @@ private enum AorusPluginDocumentation {
     Haptics: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
     Screen effects
-    An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears the moment it is turned on, with no restart of the app, and running effects are drawn again by themselves when the app comes back from the background.
+    An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears the moment it is turned on, with no restart of the app, and running effects are drawn again by themselves when the app comes back from the background. An enabled plugin starts every time the app opens, so snow comes back even after the system closed the app in the background. An effect only goes away when it is stopped, its plugin is switched off, its duration runs out or the phone overheats.
     A continuous effect is turned on with start and off with stop. You choose the id; start again with the same id changes the settings instead of adding a second effect:
     await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
     await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })

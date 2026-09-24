@@ -123,10 +123,13 @@ public final class AorusPluginRuntimeManager {
             return
         }
         let records = AorusPluginStore.shared.list().compactMap { AorusPluginStore.shared.load(id: $0.id) }
-        let desired = records.filter { $0.manifest.isEnabled && $0.manifest.autostart }
-        // Autostart decides what is launched when the account runtime appears. It must not
-        // stop an enabled plugin that the person started manually during this session.
-        let enabledIds = Set(records.filter { $0.manifest.isEnabled }.map { $0.manifest.id })
+        // Enabled is running. Every enabled plugin is started when the account runtime appears
+        // — at launch, after the system closed the app in the background, after a change of
+        // account — because the switch in the list says it is on, and a plugin that said on
+        // and was not running is how snow disappeared after a return to the app. The old
+        // "Run at Launch" flag no longer holds a plugin back.
+        let desired = records.filter { $0.manifest.isEnabled }
+        let enabledIds = Set(desired.map { $0.manifest.id })
 
         lock.lock()
         let stale = sandboxes.filter { !enabledIds.contains($0.key) }.map { $0.value }
