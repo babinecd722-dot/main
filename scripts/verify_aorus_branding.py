@@ -498,7 +498,7 @@ def main() -> None:
     personal_colors_build = tg / "submodules" / "TelegramUI" / "Components" / "Settings" / "PeerNameColorScreen" / "BUILD"
     if personal_colors_build.is_file():
         personal_colors_build_text = personal_colors_build.read_text(encoding="utf-8")
-        if "//submodules/AorusGramUI" not in personal_colors_build_text or "ListSwitchItemComponent" not in personal_colors_build_text:
+        if "//submodules/AorusGramUI" not in personal_colors_build_text:
             err.append("ProfilePersonalization: Personal Colors BUILD dependencies are incomplete")
     else:
         err.append("ProfilePersonalization: PeerNameColorScreen BUILD is missing")
@@ -515,10 +515,11 @@ def main() -> None:
             err.append("ProfilePersonalization: disabled animated banner still exposes its reset action")
         if "aorusAnimatedBackgroundEnabled || aorusAnimatedBackgroundHasMedia" in personal_colors_text:
             err.append("ProfilePersonalization: reset button must stay hidden until banner media exists")
-
-    list_switch_source = tg / "submodules" / "TelegramUI" / "Components" / "ListSwitchItemComponent" / "Sources" / "ListSwitchItemComponent.swift"
-    if not list_switch_source.is_file() or "AorusGram: component tag support" not in list_switch_source.read_text(encoding="utf-8"):
-        err.append("SettingsShortcuts: ListSwitch component tag support is missing")
+        # The banner switch is a row of the profile section, not a card of its own
+        if "accessory: .toggle(ListActionItemComponent.Toggle(style: .regular, isOn: aorusAnimatedBackgroundEnabled," not in personal_colors_text:
+            err.append("ProfilePersonalization: animated banner switch must be a native row of the profile section")
+        if "ListSwitchItemComponent(" in personal_colors_text:
+            err.append("ProfilePersonalization: animated banner switch draws its own card inside the section")
 
     peer_info_build = tg / "submodules" / "TelegramUI" / "Components" / "PeerInfo" / "PeerInfoScreen" / "BUILD"
     if not peer_info_build.is_file():

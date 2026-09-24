@@ -1464,7 +1464,7 @@ private enum AorusPluginDocumentation {
             Вибрация: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
             Эффекты на экране
-            Анимация поверх всего приложения, выше всех окон и клавиатуры. Касания проходят сквозь неё.
+            Анимация поверх всего приложения и его алертов, на том же уровне, что и статистика производительности (CPU, RAM). Касания проходят сквозь неё. Эффект появляется сразу, как его включили, без перезапуска приложения, а после возвращения из фона идущие эффекты рисуются заново сами.
             Непрерывный эффект включается start и выключается stop. id выбираете вы; повторный start с тем же id меняет параметры, а не добавляет второй эффект:
             await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
             await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
@@ -1493,7 +1493,7 @@ private enum AorusPluginDocumentation {
             aorus.effects.presets()
             Эффекты: snow (снегопад в четыре слоя глубины), rain, confetti, fireworks (ракеты со следом и залпы), hearts, bubbles, sparkles, leaves, warp, emoji.
             Параметры: intensity от 0.1 до 3 (сколько частиц), speed и size от 0.25 до 3, wind от -1 до 1 (плюс сносит вправо), color или colors в формате RRGGBB, emoji и rising для emoji и leaves, x и y от 0 до 1 для burst и ripple, duration в миллисекундах (0 значит «пока не остановят», иначе до десяти минут). Числа ограничиваются, а не отклоняются.
-            Ответ { ok, shown, reason, id }. shown: false — не ошибка, а причина в reason: reduceMotion (залпы, волны и тряска при «Уменьшении движения»), thermal (телефон перегрет), background и noScreen (эффект начнётся сам, когда приложение откроют), rateLimited (вспышка чаще раза в треть секунды), tooMany (три эффекта на плагин, шесть на все), notRunning (stop для эффекта, которого нет).
+            Ответ { ok, shown, reason, id }. shown: false — не ошибка, а причина в reason: reduceMotion (залпы, волны и тряска при «Уменьшении движения»), thermal (телефон перегрет), background и noScreen (эффект начнётся сам, когда приложение откроют), rateLimited (вспышка чаще раза в треть секунды), tooMany (три эффекта на плагин, шесть на все), notRunning (stop для эффекта, которого нет). Если эффект не показан, в консоли плагина появляется предупреждение с причиной, например aorus.effects: start snow not shown: thermal (для notRunning его нет).
             При «Уменьшении движения» непрерывный эффект идёт спокойнее: один слой, медленнее, без покачивания и вращения. При экономии заряда частиц вдвое меньше, при перегреве они редеют. Всё нарисованное исчезает, когда плагин останавливается. Нужно разрешение «Эффекты на экране».
 
             Цвета
@@ -1708,7 +1708,7 @@ private enum AorusPluginDocumentation {
     Haptics: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
     Screen effects
-    An animation over the whole app, above every window and the keyboard. Touches pass straight through it.
+    An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears the moment it is turned on, with no restart of the app, and running effects are drawn again by themselves when the app comes back from the background.
     A continuous effect is turned on with start and off with stop. You choose the id; start again with the same id changes the settings instead of adding a second effect:
     await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
     await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
@@ -1737,7 +1737,7 @@ private enum AorusPluginDocumentation {
     aorus.effects.presets()
     Effects: snow (a snowfall in four layers of depth), rain, confetti, fireworks (rockets with trails and bursts), hearts, bubbles, sparkles, leaves, warp, emoji.
     Options: intensity 0.1 to 3 (how many particles), speed and size 0.25 to 3, wind -1 to 1 (positive drifts right), color or colors as RRGGBB, emoji and rising for emoji and leaves, x and y 0 to 1 for burst and ripple, duration in milliseconds (0 means until stopped, otherwise up to ten minutes). Numbers are clamped, not rejected.
-    The answer is { ok, shown, reason, id }. shown: false is not an error; reason says why: reduceMotion (bursts, ripples and shakes under Reduce Motion), thermal (the phone is hot), background and noScreen (the effect starts by itself when the app is opened), rateLimited (a flash more often than every third of a second), tooMany (three effects per plugin, six in total), notRunning (stop for an effect that is not there).
+    The answer is { ok, shown, reason, id }. shown: false is not an error; reason says why: reduceMotion (bursts, ripples and shakes under Reduce Motion), thermal (the phone is hot), background and noScreen (the effect starts by itself when the app is opened), rateLimited (a flash more often than every third of a second), tooMany (three effects per plugin, six in total), notRunning (stop for an effect that is not there). When an effect is not shown, a warning with the reason appears in the plugin's console, for example aorus.effects: start snow not shown: thermal (none for notRunning).
     Under Reduce Motion a continuous effect runs calm: one layer, slower, no sway and no spin. Low Power Mode halves the particles and a hot phone thins them. Everything drawn disappears when the plugin stops. Needs the Screen effects permission.
 
     Colours

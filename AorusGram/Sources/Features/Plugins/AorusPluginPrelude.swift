@@ -2267,7 +2267,14 @@ public enum AorusPluginPrelude {
                 payload.preset = preset;
             }
             if (id !== null) { payload.id = requireString(id, 'id'); }
-            return request(kind, payload);
+            // An effect the app decided not to show is not an error, but a plugin author
+            // looking at an empty screen needs to know why: the console says, with the reason.
+            return request(kind, payload).then(function (answer) {
+                if (answer && answer.shown === false && answer.reason && answer.reason !== 'notRunning') {
+                    log('warn', ['aorus.effects: ' + kind.replace('effects.', '') + (payload.preset ? ' ' + payload.preset : '') + ' not shown: ' + answer.reason]);
+                }
+                return answer;
+            });
         }
         var effectsApi = freeze({
             presets: function () { return EFFECT_PRESETS.slice(); },

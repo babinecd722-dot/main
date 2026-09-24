@@ -6,19 +6,21 @@ import QuartzCore
 //
 // Everything here is drawn by Core Animation: particles are CAEmitterLayer cells simulated on
 // the render server, not views moved by a timer, so a screen full of snow costs the app's own
-// thread next to nothing. It all lives in one window of its own, above every other window the
-// app puts up — the keyboard's included — that never takes a touch: an effect is something to
-// look at, and a person must be able to go on using the app through it.
+// thread next to nothing. It all lives in one window of its own at the level the performance
+// statistics use, above the app and its alerts, made the way that window is made and let go
+// when the app goes to the background the way that one is. The window never takes a touch: an
+// effect is something to look at, and a person must be able to go on using the app through it.
 //
 // What makes an effect look like weather rather than a screensaver:
 //
 //   Depth. Snow falls in several layers at once, small and slow far away, large and quick up
 //   close, each layer swaying on its own period, so the field has parallax instead of moving
 //   as one sheet.
-//   No empty first seconds. A falling effect opens with the whole screen seeded — every
-//   particle fading in where it was born — and only then streams in from the edge, so snow
-//   is on the screen the moment it is asked for instead of twenty seconds later.
-//   No cuts. Particles fade in, a stopped effect stops being born and thins out.
+//   No empty first seconds. A falling effect opens with the whole screen seeded while the
+//   layer itself fades in, and only then streams in from the edge, so snow is on the screen
+//   the moment it is asked for instead of twenty seconds later.
+//   No cuts. A layer fades in, a stopped effect stops being born and thins out. The fade in is
+//   the layer's and never a particle's: a particle born at alpha zero may never be drawn.
 //
 // The rules a screen effect has to keep, whatever a plugin asks for:
 //
@@ -41,9 +43,14 @@ public final class AorusPluginEffectsRenderer {
     public static let maximumPerPlugin = 3
     public static let maximumTotal = 6
 
-    /// Above the keyboard, which is the highest window an app normally has. Any window that
-    /// turns up higher still is answered by moving this one above it.
-    static let baseWindowLevel = UIWindow.Level(rawValue: 10_000_100)
+    /// The level the performance statistics are drawn at, and the one effects are drawn at: the
+    /// two overlays the app lays over itself sit together, above the app and its alerts.
+    static let windowLevel = UIWindow.Level(rawValue: UIWindow.Level.alert.rawValue + 1.0)
+
+    /// When to try again for a window that could not be made yet, the way the statistics do: a
+    /// plugin that starts snow as the app launches can get there before the app's own window is
+    /// on screen, and the snow must appear the moment it is, not at the next launch.
+    private static let retryDelays: [TimeInterval] = [0.15, 0.35, 0.75, 1.5, 3.0, 6.0, 10.0]
 
     /// The scale sprites are drawn at, and the one every cell is told they were drawn at, so a
     /// cell's `scale` of 1 is the sprite's size in points on every screen.
@@ -68,18 +75,29 @@ public final class AorusPluginEffectsRenderer {
         }
     }
 
+    /// A continuous effect: what was asked for, and the layers drawing it right now.
+    ///
+    /// The request is kept, not only the layers, because the layers belong to a window and the
+    /// window does not outlive the app going to the background — an overlay window kept across
+    /// that stops being drawn. So the window is let go, and when the app is back a new one is
+    /// made and every running effect is drawn in it again from its own request.
     private final class Running {
         let pluginId: String
         let id: String
-        let streams: [Stream]
-        var isFilling: Bool
+        let preset: AorusPluginEffectPreset
+        let request: AorusPluginEffectRequest
+        var streams: [Stream] = []
+        var isFilling = false
+        /// Moves on whenever the layers are rebuilt or dropped, so that a seeding timer set for
+        /// one set of layers never acts on the next.
+        var generation = 0
         var expiry: DispatchWorkItem?
 
-        init(pluginId: String, id: String, streams: [Stream], isFilling: Bool) {
+        init(pluginId: String, id: String, preset: AorusPluginEffectPreset, request: AorusPluginEffectRequest) {
             self.pluginId = pluginId
             self.id = id
-            self.streams = streams
-            self.isFilling = isFilling
+            self.preset = preset
+            self.request = request
         }
     }
 
@@ -99,20 +117,24 @@ public final class AorusPluginEffectsRenderer {
     private var lastFlash: [String: CFTimeInterval] = [:]
     private var images: [String: CGImage] = [:]
     private var observers: [NSObjectProtocol] = []
+    private var retryCount = 0
 
     private init() {
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.startPending()
+            self?.resume(restartingRetries: true)
+        })
+        observers.append(center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.resume(restartingRetries: true)
+        })
+        observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.suspend()
         })
         observers.append(center.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.applyBudget()
         })
         observers.append(center.addObserver(forName: Notification.Name.NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.applyBudget()
-        })
-        observers.append(center.addObserver(forName: UIWindow.didBecomeVisibleNotification, object: nil, queue: .main) { [weak self] notification in
-            self?.stayOnTop(of: notification.object as? UIWindow)
         })
     }
 
@@ -193,7 +215,9 @@ public final class AorusPluginEffectsRenderer {
 
         if case .shake = request.action { return shake(request) }
         guard let host = ensureWindow() else {
-            return deferIfContinuous(request, pluginId: pluginId, reason: "noScreen")
+            let result = deferIfContinuous(request, pluginId: pluginId, reason: "noScreen")
+            scheduleRetry()
+            return result
         }
         let budget: Float = ProcessInfo.processInfo.isLowPowerModeEnabled ? 0.5 : 1
 
@@ -207,14 +231,9 @@ public final class AorusPluginEffectsRenderer {
                 hideWindowIfIdle()
                 return answer(false, reason: "tooMany", id: id)
             }
-            let item = makeContinuous(preset, request: request, pluginId: pluginId, id: id, in: host, calm: calm)
+            let item = Running(pluginId: pluginId, id: id, preset: preset, request: request)
             running[key] = item
-            if item.isFilling {
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.fillDuration) { [weak self] in
-                    guard let self, let current = self.running[key], current === item else { return }
-                    self.endFill(item)
-                }
-            }
+            build(item, in: host, calm: calm)
             if request.duration > 0 {
                 let expiry = DispatchWorkItem { [weak self] in
                     guard let self, let current = self.running[key], current === item else { return }
@@ -248,6 +267,21 @@ public final class AorusPluginEffectsRenderer {
         }
     }
 
+    /// Draws a running effect in the current window: its layers, and the seeding that fills the
+    /// screen before the effect streams in from the edge.
+    private func build(_ item: Running, in host: UIView, calm: Bool) {
+        for stream in item.streams { stream.emitter.removeFromSuperlayer() }
+        item.generation += 1
+        let generation = item.generation
+        item.streams = makeStreams(item.preset, request: item.request, in: host, calm: calm)
+        item.isFilling = item.streams.contains { $0.fillRate > 0 }
+        guard item.isFilling else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.fillDuration) { [weak self, weak item] in
+            guard let self, let item, item.generation == generation else { return }
+            self.endFill(item)
+        }
+    }
+
     /// A continuous effect is kept and started as soon as there is a screen; anything else is a
     /// moment, and a moment nobody was there to see is simply not shown.
     private func deferIfContinuous(_ request: AorusPluginEffectRequest, pluginId: String, reason: String) -> [String: Any] {
@@ -272,51 +306,104 @@ public final class AorusPluginEffectsRenderer {
 
     private static func key(_ pluginId: String, _ id: String) -> String { pluginId + "\u{1}" + id }
 
+    /// The scene the statistics would draw in: the one in front with a window of the app's own
+    /// on screen, the key one first.
     private func activeScene() -> UIWindowScene? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        return scenes.first { $0.activationState == .foregroundActive }
-            ?? scenes.first { $0.activationState == .foregroundInactive }
-            ?? scenes.first
+        func showsApp(_ scene: UIWindowScene, keyOnly: Bool) -> Bool {
+            return scene.windows.contains { window in
+                !(window is AorusPluginEffectsWindow) && !window.isHidden && (!keyOnly || window.isKeyWindow)
+            }
+        }
+        return scenes.first { $0.activationState == .foregroundActive && showsApp($0, keyOnly: true) }
+            ?? scenes.first { $0.activationState == .foregroundActive && showsApp($0, keyOnly: false) }
+            ?? scenes.first { $0.activationState == .foregroundActive }
+    }
+
+    /// A window is only used while it is on screen in a scene that is in front. One kept from
+    /// before the app went to the background can be perfectly well configured and never drawn
+    /// again — which is an effect that "started" with nothing on the screen. A scene that is
+    /// only inactive (Control Center pulled down, a system prompt over the app) is still on
+    /// screen, and the snow in it stays; a new window is only ever made in an active one.
+    private func isUsable(_ window: UIWindow) -> Bool {
+        guard !window.isHidden, window.rootViewController != nil else { return false }
+        if let scene = window.windowScene {
+            return scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive
+        }
+        return false
     }
 
     private func ensureWindow() -> UIView? {
-        if let window, !window.isHidden, let view = window.rootViewController?.view { return view }
+        if let window, isUsable(window), let view = window.rootViewController?.view { return view }
+        discardWindow()
         guard let scene = activeScene() else { return nil }
-        let window = self.window ?? AorusPluginEffectsWindow(windowScene: scene)
-        if window.windowScene !== scene { window.windowScene = scene }
+        let window = AorusPluginEffectsWindow(windowScene: scene)
+        let controller = AorusPluginEffectsController()
+        controller.onLayout = { [weak self] bounds in self?.relayout(bounds) }
+        window.rootViewController = controller
         window.backgroundColor = .clear
         window.isUserInteractionEnabled = false
-        if window.rootViewController == nil {
-            let controller = AorusPluginEffectsController()
-            controller.onLayout = { [weak self] bounds in self?.relayout(bounds) }
-            window.rootViewController = controller
-        }
+        window.windowLevel = Self.windowLevel
         window.frame = scene.coordinateSpace.bounds
-        window.windowLevel = topLevel(in: scene)
         window.isHidden = false
         self.window = window
+        guard let view = controller.view else { return nil }
         // Laid out now rather than on the next pass: the effect being started is sized from
         // these bounds, and a root view that has not been laid out yet is zero by zero.
-        let view = window.rootViewController?.view
-        view?.frame = window.bounds
+        view.frame = window.bounds
         bounds = window.bounds
+        retryCount = 0
+        // Whatever was running when the last window went away is drawn again in this one.
+        let calm = UIAccessibility.isReduceMotionEnabled
+        for item in running.values {
+            build(item, in: view, calm: calm)
+        }
         return view
     }
 
-    private func topLevel(in scene: UIWindowScene) -> UIWindow.Level {
-        var level = Self.baseWindowLevel.rawValue
-        for other in scene.windows where !(other is AorusPluginEffectsWindow) && !other.isHidden {
-            level = max(level, other.windowLevel.rawValue + 1)
+    /// Lets the window go, and every layer in it. Running effects keep their requests and are
+    /// drawn again in the next window.
+    private func discardWindow() {
+        for item in running.values {
+            for stream in item.streams { stream.emitter.removeFromSuperlayer() }
+            item.streams = []
+            item.isFilling = false
+            item.generation += 1
         }
-        return UIWindow.Level(rawValue: level)
+        for (_, layers) in transient {
+            for layer in layers { layer.removeFromSuperlayer() }
+        }
+        transient.removeAll()
+        window?.isHidden = true
+        window?.rootViewController = nil
+        window = nil
     }
 
-    /// Keeps the effects above a window that has just appeared over them — the keyboard coming
-    /// up is the usual one.
-    private func stayOnTop(of other: UIWindow?) {
-        guard let other, !(other is AorusPluginEffectsWindow), let window, !window.isHidden else { return }
-        if other.windowLevel.rawValue >= window.windowLevel.rawValue {
-            window.windowLevel = UIWindow.Level(rawValue: other.windowLevel.rawValue + 1)
+    /// The app went to the background. The window goes with it; the effects do not.
+    private func suspend() {
+        discardWindow()
+    }
+
+    /// The app is in front again, or its scene has just become active: draw what is running
+    /// and start what was waiting. A system activation starts the retries over; a retry does not.
+    private func resume(restartingRetries: Bool = false) {
+        if restartingRetries { retryCount = 0 }
+        guard !running.isEmpty || !pending.isEmpty else { return }
+        if !running.isEmpty {
+            _ = ensureWindow()
+        }
+        startPending()
+        if window == nil || !pending.isEmpty {
+            scheduleRetry()
+        }
+    }
+
+    private func scheduleRetry() {
+        guard retryCount < Self.retryDelays.count else { return }
+        let delay = Self.retryDelays[retryCount]
+        retryCount += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.resume()
         }
     }
 
@@ -332,7 +419,7 @@ public final class AorusPluginEffectsRenderer {
     }
 
     private func hideWindowIfIdle() {
-        guard running.isEmpty, transient.values.allSatisfy({ $0.isEmpty }) else { return }
+        guard running.isEmpty, pending.isEmpty, transient.values.allSatisfy({ $0.isEmpty }) else { return }
         window?.isHidden = true
     }
 
@@ -382,6 +469,7 @@ public final class AorusPluginEffectsRenderer {
     private func finish(key: String, item: Running, animated: Bool) {
         running[key] = nil
         item.expiry?.cancel()
+        item.generation += 1
         for stream in item.streams {
             let layer = stream.emitter
             layer.birthRate = 0
@@ -400,6 +488,7 @@ public final class AorusPluginEffectsRenderer {
             layer.add(fade, forKey: "aorusFade")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) { [weak layer] in layer?.removeFromSuperlayer() }
         }
+        item.streams = []
         DispatchQueue.main.asyncAfter(deadline: .now() + (animated ? 1.8 : 0)) { [weak self] in self?.hideWindowIfIdle() }
     }
 
@@ -762,7 +851,7 @@ public final class AorusPluginEffectsRenderer {
         return Float(min(90, crossing(height, velocity: max(velocity - range, velocity * 0.3)) + 1))
     }
 
-    private func makeContinuous(_ preset: AorusPluginEffectPreset, request: AorusPluginEffectRequest, pluginId: String, id: String, in host: UIView, calm: Bool) -> Running {
+    private func makeStreams(_ preset: AorusPluginEffectPreset, request: AorusPluginEffectRequest, in host: UIView, calm: Bool) -> [Stream] {
         let height = host.bounds.height
         let rate = Float(request.intensity) * (calm ? 0.6 : 1)
         let speed = CGFloat(request.speed) * (calm ? 0.55 : 1)
@@ -804,11 +893,12 @@ public final class AorusPluginEffectsRenderer {
                         flake.spin = 0.25
                         flake.spinRange = 0.9
                     }
-                    // Born invisible and fading in over most of a second: the seeding puts
-                    // flakes in the middle of the screen, and one that popped into being there
-                    // would give the trick away.
-                    flake.color = tint.withAlphaComponent(0).cgColor
-                    flake.alphaSpeed = 1.3
+                    // Born visible. A particle born at alpha zero and meant to fade in with a
+                    // positive alphaSpeed is not something Core Animation draws reliably — the
+                    // snow that never showed was born that way — and Telegram's own emitters
+                    // only ever fade out. The flakes seeded mid-screen do not pop in anyway:
+                    // the layer itself fades in over those same seconds.
+                    flake.color = tint.cgColor
                 }
                 streams.append(stream(
                     in: host, source: .top, cells: [flakes], opacity: depth.opacity,
@@ -855,8 +945,7 @@ public final class AorusPluginEffectsRenderer {
                     item.scale = (isHearts ? 0.8 : 0.72) * scale
                     item.scaleRange = 0.3 * scale
                     if !calm { item.spinRange = isHearts ? 0.5 : 0.2 }
-                    item.color = Self.color(hex, alpha: 0).cgColor
-                    item.alphaSpeed = 1.2
+                    item.color = Self.color(hex).cgColor
                 }
             }
             streams.append(stream(
@@ -894,8 +983,7 @@ public final class AorusPluginEffectsRenderer {
                 star.emissionRange = CGFloat.pi * 2
                 star.scale = 0.1 * scale
                 star.scaleSpeed = 0.45 * scale
-                star.color = tint.withAlphaComponent(0).cgColor
-                star.alphaSpeed = 0.9
+                star.color = tint.cgColor
             }
             streams.append(stream(in: host, source: .center, cells: [stars], opacity: 1, crossing: 0, sway: 0, swayPeriod: 0, additive: true))
         case .confetti:
@@ -917,8 +1005,7 @@ public final class AorusPluginEffectsRenderer {
                         piece.spinRange = calm ? 0.8 : 7
                         piece.scale = scale
                         piece.scaleRange = 0.25 * scale
-                        piece.color = Self.color(hex, alpha: 0).cgColor
-                        piece.alphaSpeed = 1.6
+                        piece.color = Self.color(hex).cgColor
                     })
                 }
             }
@@ -946,8 +1033,7 @@ public final class AorusPluginEffectsRenderer {
                     }
                     item.scale = 0.42 * scale
                     item.scaleRange = 0.14 * scale
-                    item.color = UIColor(white: 1, alpha: 0).cgColor
-                    item.alphaSpeed = 1.3
+                    item.color = UIColor.white.cgColor
                 }
             }
             streams.append(stream(
@@ -959,8 +1045,7 @@ public final class AorusPluginEffectsRenderer {
             streams.append(fireworks(request: request, in: host, rate: rate, calm: calm))
         }
 
-        let filling = streams.contains { $0.fillRate > 0 }
-        return Running(pluginId: pluginId, id: id, streams: streams, isFilling: filling)
+        return streams
     }
 
     /// Rockets that climb from the bottom of the screen and burst, all of it on the render
@@ -1332,6 +1417,31 @@ final class AorusPluginEffectsController: UIViewController {
 
     override var shouldAutorotate: Bool {
         return underlying?.shouldAutorotate ?? true
+    }
+
+    // The app decides its status bar from view controllers, and the one asked is the root of
+    // the topmost window that covers the screen — this one while an effect is on. Left to
+    // itself it would answer with UIKit's defaults: dark text over a dark theme, and a status
+    // bar that shows over a full-screen video. So it answers with the app's own controller,
+    // the way it already does for orientation, and snow on the screen changes nothing else.
+    override var childForStatusBarStyle: UIViewController? {
+        return underlying
+    }
+
+    override var childForStatusBarHidden: UIViewController? {
+        return underlying
+    }
+
+    override var childForHomeIndicatorAutoHidden: UIViewController? {
+        return underlying
+    }
+
+    override var childForScreenEdgesDeferringSystemGestures: UIViewController? {
+        return underlying
+    }
+
+    override var preferredStatusBarUpdateAnimation: UIStatusBarAnimation {
+        return underlying?.preferredStatusBarUpdateAnimation ?? .fade
     }
 
     override func loadView() {

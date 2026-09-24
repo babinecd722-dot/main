@@ -933,13 +933,6 @@ def _patch_personal_colors(tg: Path) -> None:
 
     if "import AorusGramUI\n" not in text:
         text = _replace_once(text, "import UIKit\n", "import UIKit\nimport AorusGramUI\n", "Personal Colors Aorus import")
-    if "import ListSwitchItemComponent\n" not in text:
-        text = _replace_once(
-            text,
-            "import ListActionItemComponent\n",
-            "import ListActionItemComponent\nimport ListSwitchItemComponent\n",
-            "Personal Colors switch import",
-        )
 
     controls = '''                // AorusGram: animated profile background controls
                 let aorusProfileAccountId = component.context.account.peerId.id._internalGetInt64Value()
@@ -947,11 +940,18 @@ def _patch_personal_colors(tg: Path) -> None:
                 let aorusAnimatedBackgroundEnabled = AorusAnimatedProfileBackgroundStore.isEnabled(accountId: aorusProfileAccountId)
                 let aorusAnimatedBackgroundHasMedia = AorusAnimatedProfileBackgroundStore.hasMedia(accountId: aorusProfileAccountId)
                 var aorusAnimatedProfileItems: [AnyComponentWithIdentity<Empty>] = [
-                    AnyComponentWithIdentity(id: 100, component: AnyComponent(ListSwitchItemComponent(
+                    AnyComponentWithIdentity(id: 100, component: AnyComponent(ListActionItemComponent(
                         theme: environment.theme,
-                        title: aorusL10n.animatedProfileBackground,
-                        value: aorusAnimatedBackgroundEnabled,
-                        valueUpdated: { [weak self] value in
+                        style: .glass,
+                        title: AnyComponent(MultilineTextComponent(
+                            text: .plain(NSAttributedString(
+                                string: aorusL10n.animatedProfileBackground,
+                                font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                textColor: environment.theme.list.itemPrimaryTextColor
+                            )),
+                            maximumNumberOfLines: 1
+                        )),
+                        accessory: .toggle(ListActionItemComponent.Toggle(style: .regular, isOn: aorusAnimatedBackgroundEnabled, action: { [weak self] value in
                             AorusAnimatedProfileBackgroundStore.setEnabled(value, accountId: aorusProfileAccountId) { [weak self] result in
                                 self?.state?.updated(transition: .spring(duration: 0.4))
                                 if case let .failure(error) = result,
@@ -963,7 +963,8 @@ def _patch_personal_colors(tg: Path) -> None:
                                     )
                                 }
                             }
-                        },
+                        })),
+                        action: nil,
                         tag: aorusAnimatedBackgroundTag
                     )))
                 ]
@@ -1196,58 +1197,6 @@ def _patch_personal_colors_shortcut(tg: Path) -> None:
     print("ProfilePersonalization: patched animated banner shortcut focus")
 
 
-def _patch_list_switch_tag_support(tg: Path) -> None:
-    path = tg / "submodules/TelegramUI/Components/ListSwitchItemComponent/Sources/ListSwitchItemComponent.swift"
-    if not path.is_file():
-        raise RuntimeError("ProfilePersonalization: ListSwitchItemComponent.swift is missing")
-    text = path.read_text(encoding="utf-8")
-    marker = "// AorusGram: component tag support"
-    if marker in text:
-        print("ProfilePersonalization: ListSwitch tag support already patched")
-        return
-
-    text = _replace_once(
-        text,
-        "    let valueUpdated: (Bool) -> Void\n",
-        "    let valueUpdated: (Bool) -> Void\n"
-        "    // AorusGram: component tag support\n"
-        "    let tag: AnyObject?\n",
-        "ListSwitch tag property",
-    )
-    text = _replace_once(
-        text,
-        "        value: Bool,\n        valueUpdated: @escaping (Bool) -> Void\n",
-        "        value: Bool,\n        valueUpdated: @escaping (Bool) -> Void,\n        tag: AnyObject? = nil\n",
-        "ListSwitch tag initializer parameter",
-    )
-    text = _replace_once(
-        text,
-        "        self.valueUpdated = valueUpdated\n",
-        "        self.valueUpdated = valueUpdated\n        self.tag = tag\n",
-        "ListSwitch tag assignment",
-    )
-    text = _replace_once(
-        text,
-        "        if lhs.value != rhs.value {\n            return false\n        }\n        return true\n",
-        "        if lhs.value != rhs.value {\n            return false\n        }\n"
-        "        if lhs.tag !== rhs.tag {\n            return false\n        }\n"
-        "        return true\n",
-        "ListSwitch tag equality",
-    )
-    text = _replace_once(
-        text,
-        "    public final class View: UIView {\n",
-        "    public final class View: UIView, ComponentTaggedView {\n"
-        "        public func matches(tag: Any) -> Bool {\n"
-        "            guard let componentTag = self.component?.tag else { return false }\n"
-        "            return componentTag === (tag as AnyObject)\n"
-        "        }\n\n",
-        "ListSwitch tagged view",
-    )
-    path.write_text(text, encoding="utf-8")
-    print("ProfilePersonalization: patched ListSwitch tag support")
-
-
 def _patch_settings_shortcut_routes(tg: Path) -> None:
     path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreenSettingsActions.swift"
     if not path.is_file():
@@ -1308,10 +1257,6 @@ def _patch_build(tg: Path) -> None:
     text = personal_colors_build.read_text(encoding="utf-8")
     deps = [
         ("//submodules/AorusGramUI", "//submodules/AorusGramUI"),
-        (
-            "//submodules/TelegramUI/Components/ListSwitchItemComponent",
-            "//submodules/TelegramUI/Components/ListSwitchItemComponent",
-        ),
     ]
     missing = [label for marker, label in deps if marker not in text]
     if missing:
@@ -1359,7 +1304,6 @@ def patch_profile_personalization(tg: Path) -> None:
     _patch_avatar_renderer(tg)
     _patch_editing_avatar(tg)
     _patch_profile_preview(tg)
-    _patch_list_switch_tag_support(tg)
     _patch_personal_colors(tg)
     _patch_personal_colors_shortcut(tg)
     _patch_settings_shortcut_routes(tg)

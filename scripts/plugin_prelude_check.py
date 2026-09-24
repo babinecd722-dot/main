@@ -786,6 +786,18 @@ aorus.chat.current().then(function (value) {
             return call.name === 'log' && call.args[0] === 'error' && /boom at the top/.test(call.args[1]);
         });
         check('a rejection at the top level did not reach the console', logged);
+        // An effect the app did not show says why in the console, so an empty screen has an
+        // explanation next to it.
+        globalThis.__answers['effects.start'] = { ok: true, shown: false, reason: 'reduceMotion', id: 'winter' };
+        const beforeHidden = globalThis.__calls.length;
+        return aorus.effects.start('winter', 'snow').then(function (answer) {
+            check('a hidden effect lost its answer', answer && answer.shown === false && answer.reason === 'reduceMotion');
+            const warned = globalThis.__calls.slice(beforeHidden).some(function (call) {
+                return call.name === 'log' && call.args[0] === 'warn' && /snow not shown: reduceMotion/.test(call.args[1]);
+            });
+            check('a hidden effect did not say why in the console', warned);
+            delete globalThis.__answers['effects.start'];
+        });
     });
 }).then(function () {
 VERDICT_TAIL
