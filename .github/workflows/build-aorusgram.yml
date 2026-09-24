@@ -226,6 +226,7 @@ jobs:
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginModel.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginStore.swift \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginMarket.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginPrelude.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSandbox.swift \
@@ -257,21 +258,37 @@ jobs:
           sed -E '/^import AorusGram$/d' \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginSiteIcons.swift \
             > /tmp/aorus-plugin-ui/AorusPluginSiteIcons.swift
+          # The Market screens, publishing and AorusAI generation. Their Telegram side is in
+          # AorusPluginMarketBridge.swift, which is only parsed; these are checked for real.
+          sed -E '/^import (Display|AccountContext|TelegramPresentationData|AorusGram)$/d' \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketControllers.swift \
+            > /tmp/aorus-plugin-ui/AorusPluginMarketControllers.swift
+          sed -E '/^import (Display|AccountContext|TelegramPresentationData|AorusGram)$/d' \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginPublishing.swift \
+            > /tmp/aorus-plugin-ui/AorusPluginPublishing.swift
+          sed -E '/^import (Display|AccountContext|TelegramPresentationData|AorusGram)$/d' \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginGenerate.swift \
+            > /tmp/aorus-plugin-ui/AorusPluginGenerate.swift
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
             -target arm64-apple-ios13.0 \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginModel.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginStore.swift \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginMarket.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginPrelude.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSandbox.swift \
             aorusgram/scripts/tests/AorusPluginUIStubs.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginChatBridge.swift \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketHost.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/AI/AorusAITimelineStrings.swift \
             /tmp/aorus-plugin-ui/AorusPluginControllers.swift \
             /tmp/aorus-plugin-ui/AorusPluginWebPageController.swift \
-            /tmp/aorus-plugin-ui/AorusPluginSiteIcons.swift
+            /tmp/aorus-plugin-ui/AorusPluginSiteIcons.swift \
+            /tmp/aorus-plugin-ui/AorusPluginMarketControllers.swift \
+            /tmp/aorus-plugin-ui/AorusPluginPublishing.swift \
+            /tmp/aorus-plugin-ui/AorusPluginGenerate.swift
           swiftc -frontend -parse \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusBuildKeyProvider.swift \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusUpdateManifest.swift \
@@ -296,6 +313,11 @@ jobs:
           # models above and by the timeline tests, which exercise the parsing directly.
           swiftc -frontend -parse \
             aorusgram/AorusGram/Sources/Features/AI/AorusAIClient.swift
+          # The Market transport signs its writes with the same licence stack, for the same
+          # reason parsed here and not type-checked; the screens are type-checked against a
+          # stand-in whose signatures release_security_check.py holds to this file.
+          swiftc -frontend -parse \
+            aorusgram/AorusGram/Sources/Features/Market/AorusPluginMarketClient.swift
           # Every AorusGramUI source under Features/AI, discovered rather than listed: a
           # file added to the feature and left out of this list would be parsed for the
           # first time by Bazel, an hour in.

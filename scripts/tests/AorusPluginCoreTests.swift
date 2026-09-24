@@ -1644,6 +1644,72 @@ expect(!AorusPluginEffectRequest.isValidIdentifier(""), "an empty id is not")
 expect(!AorusPluginEffectRequest.isValidIdentifier("a/b"), "a slash is not allowed in an id")
 expect(!AorusPluginEffectRequest.isValidIdentifier(String(repeating: "a", count: 65)), "an over-long id is refused")
 
+// MARK: Market contract (2026-09-24.4)
+
+// Ids and versions keep the contract's patterns; versions compare as numbers.
+expect(AorusPluginMarketID.isValid("com.example.ping") && !AorusPluginMarketID.isValid("Com.example") && !AorusPluginMarketID.isValid("1abc") && !AorusPluginMarketID.isValid("a"), "market ids follow ^[a-z][a-z0-9._-]{1,79}$")
+expect(AorusPluginMarketID.isValid(AorusPluginMarketID.suggested(from: "Мой Плагин 2")), "an id suggested from a Cyrillic name is valid")
+expect(AorusPluginMarketID.suggested(from: "FunPay Helper!") == "funpay-helper", "a suggested id is the name in lower-case Latin with dashes")
+expect(AorusPluginMarketID.isValid(AorusPluginMarketID.suggested(from: "123")), "a name without letters still gives a valid id")
+expect(AorusPluginSemVer("1.10.0")! > AorusPluginSemVer("1.9.9")!, "versions compare as numbers, not text")
+expect(AorusPluginSemVer("1.0") == nil && AorusPluginSemVer("1.0.0-beta") == nil && AorusPluginSemVer("v1.0.0") == nil, "only MAJOR.MINOR.PATCH is a version")
+expect(AorusPluginSemVer("1.2.3")!.nextPatch.description == "1.2.4", "the next patch release bumps the last number")
+expect(AorusPluginSemVer.isNewer("1.0.1", than: "1.0.0") && !AorusPluginSemVer.isNewer("1.0.0", than: "1.0.0") && !AorusPluginSemVer.isNewer("oops", than: "1.0.0"), "only a newer well-formed version is an update")
+
+// A card: author is a Telegram id, permissions are keys, and unknown keys are ignored.
+let cardJSON = Data("""
+{"ok":true,"plugins":[
+ {"id":"com.example.ping","version":"1.2.0","name":"Ping","description":"short","author":{"telegram_id":123456789},"permissions":["plugin.perm.commands","plugin.perm.unknown","plugin.perm.http","plugin.perm.http"],"status":"approved","updated_at":1780000000,"has_icon":true},
+ {"id":"Bad Id","version":"1.0.0","name":"Bad","status":"approved"},
+ {"id":"com.example.anon","version":"0.1.0","name":"Anon","author":null,"status":"approved","updated_at":1780000000,"has_icon":false}
+]}
+""".utf8)
+let cards = AorusPluginMarketCard.list(from: cardJSON) ?? []
+expect(cards.count == 2, "a card that breaks the contract is dropped, the rest are kept")
+expect(cards.first?.authorId == 123456789 && cards.last?.authorId == nil, "the author is a Telegram id, or nobody")
+expect(cards.first?.permissions == ["plugin.perm.commands", "plugin.perm.http"], "permission keys are deduplicated and unknown ones ignored")
+expect(cards.first?.hasIcon == true && cards.first?.updatedAt.timeIntervalSince1970 == 1780000000, "icon flag and update time are read")
+
+// My plugins: grouped per id, live is the highest approved, pending is the review row.
+let mineJSON = Data("""
+{"ok":true,"plugins":[
+ {"id":"com.me.a","version":"1.2.0","name":"A new","status":"review","reason":"","updated_at":3},
+ {"id":"com.me.a","version":"1.1.5","name":"A","status":"rejected","reason":"uses eval","updated_at":2},
+ {"id":"com.me.a","version":"1.1.0","name":"A","status":"approved","reason":"","updated_at":1},
+ {"id":"com.me.a","version":"1.0.0","name":"A","status":"approved","reason":"","updated_at":0},
+ {"id":"com.me.b","version":"0.9.0","name":"B","status":"taken_down","reason":"reported","updated_at":1}
+]}
+""".utf8)
+let owned = AorusPluginMarketOwnedPlugin.group(AorusPluginMarketCard.list(from: mineJSON) ?? [])
+expect(owned.map { $0.id } == ["com.me.a", "com.me.b"], "owned plugins keep the server's newest-first order")
+expect(owned.first?.live?.version == "1.1.0" && owned.first?.pending?.version == "1.2.0", "live is the highest approved version, pending the one in review")
+expect(owned.first?.rejected?.reason == "uses eval", "the latest rejection keeps the server's reason")
+expect(owned.first?.highestVersion == "1.2.0", "the next publish has to be above every version the server holds")
+expect(owned.last?.live == nil && owned.last?.takenDown?.version == "0.9.0", "a taken-down plugin has nothing live")
+
+// Publish answers: 200 is not "published"; only approved is live.
+let reviewAnswer = AorusPluginMarketPublishResult(data: Data("{\"ok\":false,\"status\":\"review\",\"reason\":\"\",\"id\":\"com.me.a\",\"version\":\"1.2.0\",\"sha256\":\"ab\",\"permissions\":[]}".utf8))
+expect(reviewAnswer?.status == .review && reviewAnswer?.isLive == false, "a publish that went to review is not live")
+expect(AorusPluginMarketError.from(status: 409, body: Data("{\"detail\":\"version_exists\"}".utf8)) == .versionExists, "409 version_exists asks for a bump")
+expect(AorusPluginMarketError.from(status: 403, body: Data("{\"detail\":\"author_banned\"}".utf8)) == .authorBanned, "author_banned is the owner lock")
+expect(AorusPluginMarketError.from(status: 403, body: Data("{\"detail\":\"publish_banned\"}".utf8)) == .authorBanned, "publish_banned is the same lock")
+expect(AorusPluginMarketError.from(status: 403, body: Data("{\"detail\":\"not_owner\"}".utf8)) == .notOwner, "someone else's id is not_owner")
+expect(AorusPluginMarketError.from(status: 422, body: Data("{\"detail\":\"invalid_source:eval is not allowed\"}".utf8)) == .invalidSource("eval is not allowed"), "invalid_source carries the server's reason")
+
+// A generated draft is code first; an invalid id in it is dropped, not trusted.
+let draft = AorusPluginMarketDraft(data: Data("{\"ok\":true,\"id\":\"BAD ID\",\"name\":\"Ping\",\"description\":\"d\",\"code\":\"aorus.on('start', () => {});\",\"permissions\":[\"plugin.perm.commands\"]}".utf8))
+expect(draft?.code.hasPrefix("aorus.on") == true && draft?.id == nil && draft?.name == "Ping", "a draft keeps its code and drops an id that breaks the contract")
+expect(AorusPluginMarketDraft(data: Data("{\"ok\":true,\"code\":\"   \"}".utf8)) == nil, "a draft with no code is no draft")
+
+// The keys a source asks for, for the publish body.
+let publishKeys = AorusPluginMarketPermission.keys(forSource: "aorus.http.fetch('https://example.com'); aorus.effects.start('w', 'snow'); aorus.clipboard.read();")
+expect(publishKeys.contains("plugin.perm.http") && publishKeys.contains("plugin.perm.effects") && publishKeys.contains("plugin.perm.clipboard"), "a source's permissions are sent as the server's keys")
+expect(AorusPluginMarketPermission.keys.allSatisfy { AorusPluginMarketPermission.local($0) != nil || $0 == "plugin.perm.commands" || $0 == "plugin.perm.clipboard" }, "every key but commands and clipboard reads as a local permission")
+
+// The store keeps a valid market link and drops one that breaks the contract.
+expect(AorusPluginStore.validatedMarketLink(AorusPluginMarketLink(id: "com.me.a", version: "1.0.0", isOwn: true)) != nil, "a valid market link is kept")
+expect(AorusPluginStore.validatedMarketLink(AorusPluginMarketLink(id: "Bad", version: "1.0.0", isOwn: true)) == nil, "a market link with a bad id is dropped")
+
 if failures == 0 {
     print("Aorus plugin core tests: OK")
 } else {

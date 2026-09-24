@@ -70,6 +70,9 @@ public final class AorusPluginStore {
     private func storageURL(for id: String) -> URL { directory(for: id).appendingPathComponent("storage.json") }
     private func permissionsURL(for id: String) -> URL { directory(for: id).appendingPathComponent("permissions.json") }
     private func schemaURL(for id: String) -> URL { directory(for: id).appendingPathComponent("schema.json") }
+    /// The picture the author chose to stand for the plugin in the Market — the icon a
+    /// publish uploads. Inside the plugin's directory, so it goes when the plugin does.
+    private func bannerURL(for id: String) -> URL { directory(for: id).appendingPathComponent("banner.jpg") }
 
     /// The plugin's own file directory, `Plugins/<id>/files`. Inside the plugin's directory
     /// on purpose: deleting the plugin removes it, so there is no bookkeeping that could
@@ -107,6 +110,7 @@ public final class AorusPluginStore {
         copy.manifest.author = String(copy.manifest.author.prefix(80))
         copy.manifest.icon = AorusPluginIcon.normalized(copy.manifest.icon)
         copy.manifest.accent = AorusPluginAccent.normalized(copy.manifest.accent)
+        copy.manifest.market = AorusPluginStore.validatedMarketLink(copy.manifest.market)
         guard !copy.manifest.name.isEmpty,
               copy.manifest.apiVersion == AorusPluginManifest.currentApiVersion else {
             throw AorusPluginStoreError.invalidManifest
@@ -228,6 +232,7 @@ public final class AorusPluginStore {
         manifest.name = manifest.name.trimmingCharacters(in: .whitespacesAndNewlines)
         manifest.icon = AorusPluginIcon.normalized(manifest.icon)
         manifest.accent = AorusPluginAccent.normalized(manifest.accent)
+        manifest.market = AorusPluginStore.validatedMarketLink(manifest.market)
         guard !manifest.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               manifest.name.count <= 80,
               manifest.summary.count <= 2_000,
@@ -248,6 +253,44 @@ public final class AorusPluginStore {
                 throw AorusPluginStoreError.io(error.localizedDescription)
             }
             try write(data, to: manifestURL(for: manifest.id))
+        }
+        notifyChanged()
+    }
+
+    /// A link whose id or version breaks the contract is not a link.
+    static func validatedMarketLink(_ link: AorusPluginMarketLink?) -> AorusPluginMarketLink? {
+        guard let link, AorusPluginMarketID.isValid(link.id), AorusPluginSemVer(link.version) != nil else { return nil }
+        return link
+    }
+
+    /// The installed plugin that is this Market id, if there is one — the author's own copy
+    /// first, since that is the one that publishes.
+    public func plugin(marketId: String) -> AorusPluginManifest? {
+        let linked = list().filter { $0.market?.id == marketId }
+        return linked.first { $0.market?.isOwn == true } ?? linked.first
+    }
+
+    // MARK: - Banner
+
+    public func banner(for id: String) -> Data? {
+        guard let id = AorusPluginStore.normalizedIdentifier(id) else { return nil }
+        return queue.sync { try? Data(contentsOf: bannerURL(for: id)) }
+    }
+
+    /// Keeps the Market picture, or removes it for nil. JPEG or PNG within the icon limit the
+    /// Market accepts, so what is stored is always something a publish can send.
+    public func setBanner(_ data: Data?, for id: String) throws {
+        let id = try validatedIdentifier(id)
+        if let data {
+            guard AorusPluginMarketLimits.iconBytes.contains(data.count) else { throw AorusPluginStoreError.sourceLimit }
+        }
+        try queue.sync {
+            guard FileManager.default.fileExists(atPath: manifestURL(for: id).path) else { throw AorusPluginStoreError.notFound }
+            if let data {
+                try write(data, to: bannerURL(for: id))
+            } else {
+                try? FileManager.default.removeItem(at: bannerURL(for: id))
+            }
         }
         notifyChanged()
     }

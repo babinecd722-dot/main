@@ -215,7 +215,7 @@ public protocol AccountContext: AnyObject {
 
 // MARK: - AorusGramUI's own module surface
 
-public enum AorusLang {
+public enum AorusLang: String {
     case ru
     case en
 
@@ -249,4 +249,46 @@ public final class AorusPluginRuntimeManager {
     public func performSettingsShortcut(pluginId: String, id: String) {}
     public func openURL(pluginId: String, url: String, completion: ((Error?) -> Void)? = nil) {}
     public func dispatchUIAction(pluginId: String, pageId: String, rowId: String, value: AorusPluginJSONValue?) {}
+}
+
+// MARK: - Plugin Market
+
+/// The Market transport. The real one signs its writes with the licence stack, which cannot be
+/// type-checked here, so only what the screens call is stood in for. Every signature is
+/// checked against `AorusPluginMarketClient.swift` by `release_security_check.py`.
+public final class AorusPluginMarketClient {
+    public static let shared = AorusPluginMarketClient()
+
+    public func catalog(completion: @escaping (Result<[AorusPluginMarketCard], AorusPluginMarketError>) -> Void) {}
+    public func card(id: String, completion: @escaping (Result<AorusPluginMarketCard, AorusPluginMarketError>) -> Void) {}
+    public func source(id: String, version: String, completion: @escaping (Result<String, AorusPluginMarketError>) -> Void) {}
+    public func icon(id: String, completion: @escaping (UIImage?) -> Void) {}
+    public func cachedIcon(id: String) -> UIImage? { return nil }
+    public func generate(prompt: String, code: String?, locale: String, completion: @escaping (Result<AorusPluginMarketDraft, AorusPluginMarketError>) -> Void) {}
+    public func publish(id: String, version: String, name: String, description: String, code: String, permissions: [String], completion: @escaping (Result<AorusPluginMarketPublishResult, AorusPluginMarketError>) -> Void) {}
+    public func uploadIcon(id: String, data: Data, contentType: String, completion: @escaping (Result<Void, AorusPluginMarketError>) -> Void) {}
+    public func mine(completion: @escaping (Result<[AorusPluginMarketOwnedPlugin], AorusPluginMarketError>) -> Void) {}
+    public func forgetIcon(id: String) {}
+}
+
+/// The Market's Telegram side (`AorusPluginMarketBridge.swift`): its glass, avatars, names,
+/// badges and profiles. The entry point's signature is checked against the real one.
+func aorusPluginMarketHost(context: AccountContext, controller: UIViewController) -> AorusPluginMarketHost {
+    return AorusPluginMarketStubHost()
+}
+
+private final class AorusPluginMarketStubHost: AorusPluginMarketHost {
+    func makeGlassBackground() -> UIView & AorusPluginGlassBackground { return AorusPluginStubGlass() }
+    func makeAvatarView(size: CGFloat) -> UIView & AorusPluginMarketAvatar { return AorusPluginStubAvatar() }
+    func loadAuthor(telegramId: Int64, completion: @escaping (AorusPluginMarketAuthor?) -> Void) { completion(nil) }
+    func badge(telegramId: Int64, height: CGFloat, accent: UIColor) -> UIImage? { return nil }
+    func openProfile(telegramId: Int64, dismissing presenter: UIViewController?) {}
+}
+
+private final class AorusPluginStubGlass: UIView, AorusPluginGlassBackground {
+    func updateGlass(size: CGSize, cornerRadius: CGFloat, isDark: Bool) {}
+}
+
+private final class AorusPluginStubAvatar: UIView, AorusPluginMarketAvatar {
+    func show(author: AorusPluginMarketAuthor?, fallbackName: String) {}
 }

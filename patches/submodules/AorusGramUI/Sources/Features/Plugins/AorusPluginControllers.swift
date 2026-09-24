@@ -85,14 +85,31 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
     private let emptyView = AorusPluginsEmptyView()
     private var manifests: [AorusPluginManifest] = []
     private var observer: NSObjectProtocol?
+    private var marketHost: AorusPluginMarketHost?
+    private var modeSwitch: AorusPluginModeSwitch?
+    private var marketView: AorusPluginMarketView?
+    private var addButton: UIBarButtonItem?
+    private var currentLayout: ContainerViewLayout?
 
     init(context: AccountContext) {
         self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
-        title = AorusPluginUIString.plugins.text
         statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
-        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addPlugin))
+        let addButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addPlugin))
+        self.addButton = addButton
+        navigationItem.rightBarButtonItem = addButton
+        // Where the title was: Plugins and Market on Telegram's own glass. `title` stays unset,
+        // because the navigation bar draws either the string or the custom view, never both.
+        let host = aorusPluginMarketHost(context: context, controller: self)
+        marketHost = host
+        let modeSwitch = AorusPluginModeSwitch(host: host, items: [
+            (AorusPluginUIString.plugins.text, "puzzlepiece.fill"),
+            (AorusPluginMarketText.market, "bag.fill"),
+        ], theme: presentationData.theme)
+        modeSwitch.onChange = { [weak self] index in self?.showMarket(index == 1) }
+        self.modeSwitch = modeSwitch
+        navigationItem.titleView = modeSwitch
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -121,15 +138,109 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
+        currentLayout = layout
         let top = navigationLayout(layout: layout).navigationFrame.maxY
-        transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        let frame = CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)
+        transition.updateFrame(view: tableView, frame: frame)
         tableView.contentInset.bottom = layout.intrinsicInsets.bottom
+        if let marketView {
+            transition.updateFrame(view: marketView, frame: frame)
+            marketView.setInsets(top: 0, bottom: layout.intrinsicInsets.bottom)
+        }
     }
 
     private func reload() {
         manifests = AorusPluginStore.shared.list()
         emptyView.isHidden = !manifests.isEmpty
         tableView.reloadData()
+    }
+
+    // MARK: Market
+
+    /// Plugins or Market, crossfaded in place. The add button belongs to the plugins here.
+    private func showMarket(_ on: Bool) {
+        if on, marketView == nil, let host = marketHost {
+            let view = AorusPluginMarketView(theme: presentationData.theme)
+            view.onOpen = { [weak self] card in self?.openMarketCard(card, host: host) }
+            view.onOpenMine = { [weak self] owned in self?.openMine(owned) }
+            view.onError = { [weak self] message in self?.showError(AorusPluginRequestError(message)) }
+            view.isHidden = true
+            displayNode.view.addSubview(view)
+            marketView = view
+            if let currentLayout { containerLayoutUpdated(currentLayout, transition: .immediate) }
+        }
+        let incoming: UIView? = on ? marketView : tableView
+        let outgoing: UIView? = on ? tableView : marketView
+        incoming?.alpha = 0
+        incoming?.isHidden = false
+        UIView.animate(withDuration: 0.22, animations: {
+            incoming?.alpha = 1
+            outgoing?.alpha = 0
+        }, completion: { _ in
+            outgoing?.isHidden = true
+            outgoing?.alpha = 1
+        })
+        navigationItem.rightBarButtonItem = on ? nil : addButton
+        if on { marketView?.appear() }
+    }
+
+    private func openMarketCard(_ card: AorusPluginMarketCard, host: AorusPluginMarketHost) {
+        let detail = AorusPluginMarketDetailController(card: card, theme: presentationData.theme, host: host)
+        detail.onOpenOwn = { [weak self] manifest in self?.openAppearance(pluginId: manifest.id) }
+        detail.onReviewAndEnable = { [weak self] manifest in self?.setEnabled(true, manifest: manifest) }
+        present(detail, animated: true)
+    }
+
+    private func openMine(_ owned: [AorusPluginMarketOwnedPlugin]) {
+        let mine = AorusPluginMarketMineController(presentationData: presentationData, owned: owned)
+        mine.openWorkingCopy = { [weak self, weak mine] plugin in
+            guard let self, let mine else { return }
+            self.openWorkingCopy(plugin, from: mine)
+        }
+        (navigationController as? NavigationController)?.pushViewController(mine)
+    }
+
+    private func openAppearance(pluginId: String) {
+        guard let record = AorusPluginStore.shared.load(id: pluginId) else { return }
+        (navigationController as? NavigationController)?.pushViewController(AorusPluginMetadataController(context: context, record: record))
+    }
+
+    /// The author's copy of a published plugin: the one on this phone, or one made from the live
+    /// version. Its version starts at the highest the Market holds, so the next publish is an
+    /// update and not a clash.
+    private func openWorkingCopy(_ plugin: AorusPluginMarketOwnedPlugin, from controller: UIViewController) {
+        if let manifest = AorusPluginStore.shared.plugin(marketId: plugin.id), manifest.market?.isOwn == true {
+            openAppearance(pluginId: manifest.id)
+            return
+        }
+        guard let live = plugin.live else {
+            showError(AorusPluginRequestError(AorusPluginMarketText.codeOnlyOnDevice))
+            return
+        }
+        let progress = AorusPluginProgressOverlay.show(in: controller.view, text: AorusPluginMarketText.loading)
+        AorusPluginMarketClient.shared.source(id: plugin.id, version: live.version) { [weak self] result in
+            progress.hide()
+            guard let self else { return }
+            switch result {
+            case let .success(source):
+                var manifest = AorusPluginManifest(
+                    name: plugin.newest.name,
+                    summary: plugin.newest.description,
+                    version: plugin.highestVersion,
+                    accent: AorusPluginMarketInstaller.accent(for: plugin.id),
+                    isEnabled: false
+                )
+                manifest.market = AorusPluginMarketLink(id: plugin.id, version: plugin.highestVersion, authorId: live.authorId, isOwn: true, hasIcon: live.hasIcon)
+                do {
+                    try AorusPluginStore.shared.save(AorusPluginRecord(manifest: manifest, source: source))
+                    self.openAppearance(pluginId: manifest.id)
+                } catch {
+                    self.showError(error)
+                }
+            case let .failure(error):
+                self.showError(AorusPluginRequestError(AorusPluginMarketText.message(for: error)))
+            }
+        }
     }
 
     @objc private func addPlugin() {
@@ -444,12 +555,41 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
     private func show(_ error: Error) { let alert = UIAlertController(title: AorusPluginUIString.plugins.text, message: error.localizedDescription, preferredStyle: .alert); alert.addAction(UIAlertAction(title: "OK", style: .default)); present(alert, animated: true) }
 }
 
+/// A plugin's Appearance: the banner the Market shows it with, its name, description and
+/// version, its glyph and colour — and, for a plugin of one's own, publishing it.
+///
+/// Publishing is here because this is where everything the Market shows about a plugin is
+/// decided. A plugin installed from the Market is someone else's and is not published from
+/// here; its Market section only says where it came from.
 private final class AorusPluginMetadataController: ViewController, UITableViewDataSource, UITableViewDelegate {
+    private enum Row {
+        case banner
+        case name
+        case description
+        case version
+        case icon
+        case accent
+        case source
+        case status(String, UIColor)
+        case editor
+        case publish
+
+        var isBanner: Bool {
+            if case .banner = self { return true }
+            return false
+        }
+    }
+
+    private let context: AccountContext
     private let presentationData: PresentationData
     private var record: AorusPluginRecord
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
+    private var observer: NSObjectProtocol?
+    /// Where this plugin stands in the Market, for the author's own copy.
+    private var owned: AorusPluginMarketOwnedPlugin?
 
     init(context: AccountContext, record: AorusPluginRecord) {
+        self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.record = record
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
@@ -458,6 +598,10 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
+
     override func loadDisplayNode() {
         displayNode = ViewControllerTracingNode()
         displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
@@ -465,38 +609,102 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         tableView.dataSource = self
         tableView.delegate = self
         displayNode.view.addSubview(tableView)
+        observer = NotificationCenter.default.addObserver(forName: AorusPluginStore.changedNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self, let saved = AorusPluginStore.shared.load(id: self.record.manifest.id) else { return }
+            self.record = saved
+            self.tableView.reloadData()
+        }
         displayNodeDidLoad()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        loadMarketStatus()
     }
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
         super.containerLayoutUpdated(layout, transition: transition)
         let top = navigationLayout(layout: layout).navigationFrame.maxY
         transition.updateFrame(view: tableView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top))
+        tableView.contentInset.bottom = layout.intrinsicInsets.bottom
     }
 
-    func numberOfSections(in tableView: UITableView) -> Int { 2 }
-    // Name, description and version. There is no author field: who wrote a plugin is not
-    // something a person types about themselves, it is who published it, and the Market says
-    // that from the account that did.
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { section == 0 ? 3 : 2 }
+    /// Installed from the Market: someone else's plugin.
+    private var isInstalledCopy: Bool {
+        return record.manifest.market.map { !$0.isOwn } ?? false
+    }
+
+    private func loadMarketStatus() {
+        guard let link = record.manifest.market, link.isOwn else { return }
+        AorusPluginMarketClient.shared.mine { [weak self] result in
+            guard let self, case let .success(owned) = result else { return }
+            self.owned = owned.first { $0.id == link.id }
+            self.tableView.reloadData()
+        }
+    }
+
+    private var sections: [[Row]] {
+        var first: [Row] = []
+        if !isInstalledCopy { first.append(.banner) }
+        first += [.name, .description, .version]
+        var market: [Row] = []
+        if let link = record.manifest.market, !link.isOwn {
+            market.append(.source)
+        } else {
+            if let owned {
+                if let live = owned.live { market.append(.status(AorusPluginMarketText.published(live.version), .systemGreen)) }
+                if let pending = owned.pending { market.append(.status(AorusPluginMarketText.underReview + " · " + pending.version, .systemOrange)) }
+                if let rejected = owned.rejected, rejected.version != owned.live?.version {
+                    market.append(.status(AorusPluginMarketText.rejected + " · " + rejected.version + (rejected.reason.isEmpty ? "" : " — " + rejected.reason), presentationData.theme.list.itemDestructiveColor))
+                }
+                if owned.live == nil, owned.takenDown != nil { market.append(.status(AorusPluginMarketText.takenDown, presentationData.theme.list.itemSecondaryTextColor)) }
+            }
+            market += [.editor, .publish]
+        }
+        return [first, [.icon, .accent], market]
+    }
+
+    func numberOfSections(in tableView: UITableView) -> Int { sections.count }
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { sections[section].count }
+
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        return section == 2 ? AorusPluginMarketText.market : nil
+    }
+
+    func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        guard section == 2, let link = record.manifest.market, link.isOwn else { return nil }
+        return AorusPluginPublishText.marketId + ": " + link.id
+    }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
-        cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
-        cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
-        cell.detailTextLabel?.textColor = presentationData.theme.list.itemSecondaryTextColor
+        let theme = presentationData.theme
+        let row = sections[indexPath.section][indexPath.row]
+        let cell = UITableViewCell(style: row.isBanner ? .subtitle : .value1, reuseIdentifier: nil)
+        cell.backgroundColor = theme.list.itemBlocksBackgroundColor
+        cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
+        cell.detailTextLabel?.textColor = theme.list.itemSecondaryTextColor
         cell.accessoryType = .disclosureIndicator
-        if indexPath.section == 0 {
-            let labels = [AorusPluginUIString.name.text, AorusPluginUIString.description.text, AorusPluginUIString.version.text]
-            let values = [record.manifest.name, record.manifest.summary, record.manifest.version]
-            cell.textLabel?.text = labels[indexPath.row]
-            cell.detailTextLabel?.text = values[indexPath.row]
-        } else if indexPath.row == 0 {
+        switch row {
+        case .banner:
+            cell.textLabel?.text = AorusPluginPublishText.banner
+            cell.textLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+            cell.detailTextLabel?.text = AorusPluginPublishText.bannerHint
+            cell.imageView?.image = bannerThumbnail()
+        case .name:
+            cell.textLabel?.text = AorusPluginUIString.name.text
+            cell.detailTextLabel?.text = record.manifest.name
+        case .description:
+            cell.textLabel?.text = AorusPluginUIString.description.text
+            cell.detailTextLabel?.text = record.manifest.summary
+        case .version:
+            cell.textLabel?.text = AorusPluginUIString.version.text
+            cell.detailTextLabel?.text = record.manifest.version
+        case .icon:
             cell.textLabel?.text = AorusPluginUIString.icon.text
             cell.detailTextLabel?.text = record.manifest.icon
-            cell.imageView?.image = UIImage(systemName: AorusPluginIcon.normalized(record.manifest.icon))
-            cell.imageView?.tintColor = presentationData.theme.list.itemAccentColor
-        } else {
+            cell.imageView?.image = UIImage(systemName: AorusPluginIcon.normalized(record.manifest.icon)) ?? UIImage(systemName: AorusPluginIcon.fallback)
+            cell.imageView?.tintColor = theme.list.itemAccentColor
+        case .accent:
             cell.textLabel?.text = AorusPluginUIString.accent.text
             cell.detailTextLabel?.text = "#\(record.manifest.accent)"
             let swatch = UIView(frame: CGRect(x: 0, y: 0, width: 24, height: 24))
@@ -505,58 +713,152 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             swatch.layer.borderWidth = 1.0 / UIScreen.main.scale
             swatch.layer.borderColor = UIColor.separator.cgColor
             cell.accessoryView = swatch
+        case .source:
+            cell.textLabel?.text = AorusPluginPublishText.fromMarket(record.manifest.market?.version ?? record.manifest.version)
+            cell.textLabel?.textColor = theme.list.itemSecondaryTextColor
+            cell.accessoryType = .none
+            cell.selectionStyle = .none
+        case let .status(text, color):
+            cell.textLabel?.text = text
+            cell.textLabel?.textColor = color
+            cell.textLabel?.numberOfLines = 0
+            cell.textLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+            cell.accessoryType = .none
+            cell.selectionStyle = .none
+        case .editor:
+            cell.textLabel?.text = AorusPluginUIString.editCode.text
+        case .publish:
+            cell.textLabel?.text = AorusPluginPublishText.publish
+            cell.textLabel?.textColor = theme.list.itemAccentColor
+            cell.textLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+            cell.textLabel?.textAlignment = .center
+            cell.accessoryType = .none
         }
         return cell
     }
 
+    /// The banner as a rounded 44pt square, or a placeholder that says a picture goes here.
+    private func bannerThumbnail() -> UIImage? {
+        let side = CGSize(width: 44, height: 44)
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        let banner = AorusPluginStore.shared.banner(for: record.manifest.id).flatMap { UIImage(data: $0) }
+        let accent = presentationData.theme.list.itemAccentColor
+        return UIGraphicsImageRenderer(size: side, format: format).image { context in
+            let rect = CGRect(origin: .zero, size: side)
+            UIBezierPath(roundedRect: rect, cornerRadius: 10).addClip()
+            if let banner {
+                banner.draw(in: rect)
+            } else {
+                context.cgContext.setFillColor(accent.withAlphaComponent(0.14).cgColor)
+                context.cgContext.fill(rect)
+                let glyph = UIImage(systemName: "photo.on.rectangle", withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold))?
+                    .withTintColor(accent, renderingMode: .alwaysOriginal)
+                if let glyph {
+                    glyph.draw(at: CGPoint(x: (side.width - glyph.size.width) / 2, y: (side.height - glyph.size.height) / 2))
+                }
+            }
+        }
+    }
+
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        if indexPath.section == 0 {
-            if indexPath.row == 1 {
-                (navigationController as? NavigationController)?.pushViewController(AorusPluginLongTextController(
-                    presentationData: presentationData,
-                    title: AorusPluginUIString.description.text,
-                    text: record.manifest.summary,
-                    saved: { [weak self] value in self?.record.manifest.summary = value; self?.persist() }
-                ))
-            } else {
-                editText(row: indexPath.row)
-            }
-            return
-        }
-        if indexPath.row == 0 {
+        switch sections[indexPath.section][indexPath.row] {
+        case .banner:
+            chooseBanner()
+        case .name:
+            editText(field: 0)
+        case .description:
+            (navigationController as? NavigationController)?.pushViewController(AorusPluginLongTextController(
+                presentationData: presentationData,
+                title: AorusPluginUIString.description.text,
+                text: record.manifest.summary,
+                saved: { [weak self] value in self?.record.manifest.summary = value; self?.persist() }
+            ))
+        case .version:
+            editText(field: 2)
+        case .icon:
             (navigationController as? NavigationController)?.pushViewController(AorusPluginVisualPickerController(
                 presentationData: presentationData,
                 mode: .icons(accent: record.manifest.accent),
                 selected: record.manifest.icon,
                 changed: { [weak self] value in self?.record.manifest.icon = value; self?.persist() }
             ))
-        } else {
+        case .accent:
             (navigationController as? NavigationController)?.pushViewController(AorusPluginVisualPickerController(
                 presentationData: presentationData,
                 mode: .colors(icon: record.manifest.icon),
                 selected: record.manifest.accent,
                 changed: { [weak self] value in self?.record.manifest.accent = value; self?.persist() }
             ))
+        case .editor:
+            guard let current = AorusPluginStore.shared.load(id: record.manifest.id) else { return }
+            (navigationController as? NavigationController)?.pushViewController(AorusPluginEditorController(context: context, record: current))
+        case .publish:
+            AorusPluginPublisher.publish(pluginId: record.manifest.id, from: self) { [weak self] in
+                guard let self else { return }
+                if let saved = AorusPluginStore.shared.load(id: self.record.manifest.id) { self.record = saved }
+                self.tableView.reloadData()
+                self.loadMarketStatus()
+            }
+        case .source, .status:
+            break
         }
     }
 
-    private func editText(row: Int) {
-        guard row != 1 else { return }
+    /// Picks and frames the banner, or takes it away. A plugin already in the Market gets the
+    /// new picture at once; one that is not yet takes it with its first publish.
+    private func chooseBanner() {
+        let hasBanner = AorusPluginStore.shared.banner(for: record.manifest.id) != nil
+        let pick = { [weak self] in
+            guard let self else { return }
+            AorusPluginBanner.pick(from: self, theme: self.presentationData.theme) { [weak self] data in
+                guard let self else { return }
+                guard let data else { return }
+                do {
+                    try AorusPluginStore.shared.setBanner(data, for: self.record.manifest.id)
+                } catch {
+                    self.show(AorusPluginPublishText.bannerTooLarge)
+                    return
+                }
+                self.tableView.reloadData()
+                if let link = self.record.manifest.market, link.isOwn {
+                    AorusPluginMarketClient.shared.uploadIcon(id: link.id, data: data, contentType: AorusPluginBanner.contentType(of: data)) { _ in }
+                }
+            }
+        }
+        guard hasBanner else { return pick() }
+        let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: AorusPluginPublishText.choosePhoto, style: .default) { _ in pick() })
+        sheet.addAction(UIAlertAction(title: AorusPluginPublishText.removeBanner, style: .destructive) { [weak self] _ in
+            guard let self else { return }
+            try? AorusPluginStore.shared.setBanner(nil, for: self.record.manifest.id)
+            self.tableView.reloadData()
+        })
+        sheet.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = tableView
+            popover.sourceRect = tableView.rectForRow(at: IndexPath(row: 0, section: 0))
+        }
+        present(sheet, animated: true)
+    }
+
+    private func editText(field: Int) {
         let labels = [AorusPluginUIString.name.text, AorusPluginUIString.description.text, AorusPluginUIString.version.text]
         let values = [record.manifest.name, record.manifest.summary, record.manifest.version]
-        let alert = UIAlertController(title: labels[row], message: nil, preferredStyle: .alert)
-        alert.addTextField { field in
-            field.text = values[row]
-            field.clearButtonMode = .whileEditing
+        let alert = UIAlertController(title: labels[field], message: nil, preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.text = values[field]
+            textField.clearButtonMode = .whileEditing
+            if field == 2 { textField.keyboardType = .numbersAndPunctuation }
         }
         alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
         alert.addAction(UIAlertAction(title: AorusPluginUIString.save.text, style: .default) { _ in
             let value = alert.textFields?.first?.text ?? ""
-            switch row {
+            switch field {
             case 0: self.record.manifest.name = value
             case 1: self.record.manifest.summary = value
-            default: self.record.manifest.version = value
+            default: self.record.manifest.version = value.trimmingCharacters(in: .whitespaces)
             }
             self.persist()
         })
@@ -569,10 +871,14 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             if let saved = AorusPluginStore.shared.load(id: record.manifest.id) { record = saved }
             tableView.reloadData()
         } catch {
-            let alert = UIAlertController(title: AorusPluginUIString.configure.text, message: error.localizedDescription, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "OK", style: .default))
-            present(alert, animated: true)
+            show(error.localizedDescription)
         }
+    }
+
+    private func show(_ message: String) {
+        let alert = UIAlertController(title: AorusPluginUIString.configure.text, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
 
@@ -846,8 +1152,12 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         self.context = context; self.record = record; self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = record.manifest.name
+        // Save · AI · ⋯. AI writes or rewrites the plugin from a description, into this editor.
+        let aiButton = UIBarButtonItem(title: "AI", style: .plain, target: self, action: #selector(openGenerate))
+        aiButton.accessibilityLabel = "AorusAI"
         navigationItem.rightBarButtonItems = [
             UIBarButtonItem(title: AorusPluginUIString.save.text, style: .done, target: self, action: #selector(save)),
+            aiButton,
             UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"), style: .plain, target: self, action: #selector(editMetadata))
         ]
     }
@@ -1023,6 +1333,40 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         observedSandbox = nil
         AorusPluginRuntimeManager.shared.stop(id: record.manifest.id)
     }
+    @objc private func openGenerate() {
+        editor.resignFirstResponder()
+        let sheet = AorusPluginGenerateController(
+            theme: presentationData.theme,
+            languageCode: presentationData.strings.baseLanguageCode,
+            currentCode: { [weak self] in self?.editor.text ?? "" },
+            onDraft: { [weak self] draft in self?.apply(draft) }
+        )
+        present(sheet, animated: true)
+    }
+
+    /// The generated code, typed in. It is not saved: Save does that, as for anything typed by
+    /// hand. A plugin still called by its default name takes the draft's name and description.
+    private func apply(_ draft: AorusPluginMarketDraft) {
+        highlightWork?.cancel()
+        AorusPluginCodeTyper.type(draft.code, into: editor, progress: { [weak self] in
+            self?.updateLineNumbers()
+        }, completion: { [weak self] in
+            guard let self else { return }
+            self.updateLineNumbers()
+            self.highlight()
+        })
+        if let name = draft.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+           record.manifest.name == AorusPluginUIString.plugins.text {
+            var manifest = record.manifest
+            manifest.name = name
+            if manifest.summary.isEmpty, let summary = draft.description { manifest.summary = summary }
+            if (try? AorusPluginStore.shared.updateManifest(manifest)) != nil {
+                record.manifest = manifest
+                title = name
+            }
+        }
+    }
+
     @objc private func toggleConsole() { console.isHidden.toggle(); updateConsolePlaceholder(); updateLayout(animated: true) }
     @objc private func openDocs() { (navigationController as? NavigationController)?.pushViewController(AorusPluginDocsController(context: context)) }
     @objc private func editMetadata() {
@@ -1634,6 +1978,13 @@ private enum AorusPluginDocumentation {
             Безопасность
             Импортированный плагин всегда выключен. Разрешения и значения настроек принадлежат конкретной установке, не экспортируются, а разрешения отзываются при любом изменении исходника. Доступ к AorusAI идет только через ограниченный метод ask. Плагин не имеет API для файловой системы, Keychain, лицензии, VLESS/REALITY credentials, HMAC, сырых настроек или внутренних доменов AorusGram. Защищенные операции повторно проверяют активную лицензию и permission в нативном host.
 
+            Маркет и публикация
+            Вверху экрана плагинов стеклянный переключатель «Плагины» и «Маркет». В Маркете плагины авторов: «Установить» и «Обновить» работают прямо из списка, а нажатие на строку открывает страницу плагина с иконкой, описанием, автором (имя, аватарка и бейдж из Telegram по его id) и разрешениями, с кнопкой внизу, которая остаётся на месте при прокрутке. Установленный плагин появляется в «Плагинах» выключенным, с названием и версией из Маркета; включение показывает его разрешения. Обновление заменяет код, выключает плагин и отзывает разрешения.
+            Публикация — из «Оформления» плагина: «Баннер» над названием (фото из галереи, кадрируется в квадрат, уходит в Маркет иконкой) и кнопка «Опубликовать». При первой публикации приложение спрашивает идентификатор в Маркете: латиница, цифры, точка, дефис, начинается с буквы, потом не меняется. Автором считается владелец лицензии устройства. Ответ: «Опубликовано», «Ваш плагин на модерации» (обновление всегда проходит модерацию, до одобрения в Маркете остаётся прежняя версия), «Плагин отклонён» с причиной, «Плагин снят с публикации». Одобренную версию нельзя отправить повторно — приложение предложит поднять номер. «Мои плагины» в Маркете появляются, когда у вас есть опубликованные плагины, и открывают «Оформление» рабочей копии.
+
+            AorusAI в редакторе
+            В редакторе кнопки «Сохранить», «AI» и «⋯». «AI» принимает запрос от 8 до 4000 символов — что должен делать плагин или что изменить в открытом коде. Текущий код уходит как контекст, а ответ — только код — печатается прямо в редакторе. Сохраняет его «Сохранить».
+
             Ограничения
             Код: 512 КБ. Хранилище: 1 МБ. HTTP-ответ: 5 МБ. Один вход в JavaScript прерывается через 3 секунды. На плагин разрешено до 64 таймеров и 32 незавершённых запросов к приложению.
             """
@@ -1876,6 +2227,13 @@ private enum AorusPluginDocumentation {
 
     Security
     Imported plugins always start disabled. Grants and setting values belong to this installation and are never exported; grants are revoked after every source edit. AorusAI is exposed only through the bounded ask method. There is no plugin API for the file system, Keychain, licensing, VLESS/REALITY credentials, raw settings, HMAC or private AorusGram domains. Protected operations re-check both the active license and permission in the native host.
+
+    Market and publishing
+    At the top of the plugins screen a glass switch holds Plugins and Market. The Market lists authors' plugins: Install and Update work straight from the list, and a row opens the plugin's page with its icon, description, author (name, avatar and badge from Telegram, by their id) and permissions, and a button at the bottom that stays put while the page scrolls. An installed plugin appears in Plugins switched off, under the Market's name and version; turning it on shows its permissions. An update replaces the code, switches the plugin off and revokes its permissions.
+    Publishing is in the plugin's Appearance: Banner above the name (a photo from the library, framed as a square, sent to the Market as the icon) and a Publish button. The first publish asks for the Market ID: Latin letters, digits, dots and dashes, starting with a letter, and fixed from then on. The author is whoever owns the licence on this device. The answer is Published, Your plugin is under review (every update is moderated and the previous version stays in the Market until it is approved), Plugin rejected with the reason, or Plugin taken down. An approved version cannot be sent again; the app offers to raise the number. My Plugins appears in the Market once you have published something and opens the working copy's Appearance.
+
+    AorusAI in the editor
+    The editor has Save, AI and ⋯. AI takes a request of 8 to 4000 characters: what the plugin should do, or what to change in the open code. The current code goes along as context, and the answer, code only, is typed straight into the editor. Save keeps it.
 
     Limits
     Source: 512 KB. Storage: 1 MB. HTTP response: 5 MB. A JavaScript entry is terminated after 3 seconds. Up to 64 timers and 32 pending host requests are allowed per plugin.
@@ -2450,14 +2808,51 @@ private final class AorusPluginCell: UITableViewCell {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    private var representedId: String?
+
     func configure(manifest: AorusPluginManifest, record: AorusPluginRecord?, theme: PresentationTheme) {
+        representedId = manifest.id
         textLabel?.text = manifest.name
-        detailTextLabel?.text = manifest.summary.isEmpty ? manifest.version : manifest.summary
         textLabel?.textColor = theme.list.itemPrimaryTextColor
         detailTextLabel?.textColor = theme.list.itemSecondaryTextColor
-        imageView?.image = UIImage(systemName: AorusPluginIcon.normalized(manifest.icon))
-        imageView?.tintColor = pluginColor(manifest.accent)
+        // A Market plugin with a newer version in the catalog says so where its description is.
+        if let link = manifest.market, !link.isOwn,
+           let card = AorusPluginMarketCatalog.shared.card(id: link.id),
+           AorusPluginSemVer.isNewer(card.version, than: link.version) {
+            detailTextLabel?.text = AorusPluginMarketText.updateAvailable(card.version)
+            detailTextLabel?.textColor = theme.list.itemAccentColor
+        } else {
+            detailTextLabel?.text = manifest.summary.isEmpty ? manifest.version : manifest.summary
+        }
+        imageView?.image = AorusPluginCell.tile(AorusPluginMarketDrawing.permissionTile(symbol: AorusPluginIcon.normalized(manifest.icon), color: pluginColor(manifest.accent)))
+        // The picture that stands for it: the author's own banner, or the Market's icon.
+        if let banner = AorusPluginStore.shared.banner(for: manifest.id), let image = UIImage(data: banner) {
+            imageView?.image = AorusPluginCell.tile(image)
+        } else if let link = manifest.market, link.hasIcon {
+            let id = manifest.id
+            if let cached = AorusPluginMarketClient.shared.cachedIcon(id: link.id) {
+                imageView?.image = AorusPluginCell.tile(cached)
+            } else {
+                AorusPluginMarketClient.shared.icon(id: link.id) { [weak self] image in
+                    guard let self, self.representedId == id, let image else { return }
+                    self.imageView?.image = AorusPluginCell.tile(image)
+                    self.setNeedsLayout()
+                }
+            }
+        }
         toggle.isOn = manifest.isEnabled
+    }
+
+    /// Any picture as the 30pt rounded tile every row draws.
+    private static func tile(_ image: UIImage?) -> UIImage? {
+        guard let image else { return nil }
+        let side = CGSize(width: 30, height: 30)
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        return UIGraphicsImageRenderer(size: side, format: format).image { _ in
+            UIBezierPath(roundedRect: CGRect(origin: .zero, size: side), cornerRadius: 8).addClip()
+            image.draw(in: CGRect(origin: .zero, size: side))
+        }
     }
 
     @objc private func changed() { onToggle?(toggle.isOn) }
@@ -2475,7 +2870,7 @@ private final class AorusPluginsEmptyView: UIView {
 // The permission names and what each one lets a plugin do. This is the text someone reads
 // before granting a script access to their account, so it goes through the shared table like
 // everything else: the one screen where an untranslated line would matter most.
-private func permissionTitle(_ permission: AorusPluginPermission) -> String {
+func permissionTitle(_ permission: AorusPluginPermission) -> String {
     switch permission {
     case .network: return aorusL("Доступ к сети", "Network")
     case .sendMessages: return aorusL("Отправка сообщений", "Send messages")
@@ -2511,61 +2906,67 @@ private func permissionDescription(_ permission: AorusPluginPermission, requeste
     let marker = requested
         ? aorusL("Используется текущим кодом. ", "Used by the current source. ")
         : aorusL("Не обнаружено в текущем коде. ", "Not detected in the current source. ")
+    return marker + permissionSummary(permission)
+}
+
+/// What a permission lets a plugin do, on its own: the Market shows it without the line about
+/// the current source, which is about code that is not installed yet.
+func permissionSummary(_ permission: AorusPluginPermission) -> String {
     switch permission {
     case .network:
-        return marker + aorusL("Разрешает HTTPS-запросы к внешним публичным адресам.", "Allows HTTPS requests to public external hosts.")
+        return aorusL("Разрешает HTTPS-запросы к внешним публичным адресам.", "Allows HTTPS requests to public external hosts.")
     case .sendMessages:
-        return marker + aorusL("Разрешает отправлять сообщения от текущего аккаунта.", "Allows sending messages from the current account.")
+        return aorusL("Разрешает отправлять сообщения от текущего аккаунта.", "Allows sending messages from the current account.")
     case .chatMetadata:
-        return marker + aorusL("Разрешает получать название и идентификатор чата.", "Allows reading a chat title and identifier.")
+        return aorusL("Разрешает получать название и идентификатор чата.", "Allows reading a chat title and identifier.")
     case .openChats:
-        return marker + aorusL("Разрешает открывать чаты в интерфейсе приложения.", "Allows opening chats in the app.")
+        return aorusL("Разрешает открывать чаты в интерфейсе приложения.", "Allows opening chats in the app.")
     case .accountProfile:
-        return marker + aorusL("Разрешает читать имя и идентификатор текущего аккаунта.", "Allows reading the current account name and identifier.")
+        return aorusL("Разрешает читать имя и идентификатор текущего аккаунта.", "Allows reading the current account name and identifier.")
     case .dialogs:
-        return marker + aorusL("Разрешает показывать уведомления и запрашивать ввод.", "Allows notifications and input prompts.")
+        return aorusL("Разрешает показывать уведомления и запрашивать ввод.", "Allows notifications and input prompts.")
     case .clipboardRead:
-        return marker + aorusL("Разрешает читать содержимое буфера обмена.", "Allows reading the clipboard.")
+        return aorusL("Разрешает читать содержимое буфера обмена.", "Allows reading the clipboard.")
     case .clipboardWrite:
-        return marker + aorusL("Разрешает изменять содержимое буфера обмена.", "Allows changing the clipboard.")
+        return aorusL("Разрешает изменять содержимое буфера обмена.", "Allows changing the clipboard.")
     case .incomingMessages:
-        return marker + aorusL("Разрешает получать события новых сообщений.", "Allows receiving new-message events.")
+        return aorusL("Разрешает получать события новых сообщений.", "Allows receiving new-message events.")
     case .messageHistory:
-        return marker + aorusL("Разрешает читать до 100 последних сообщений выбранного чата.", "Allows reading up to 100 recent messages from a selected chat.")
+        return aorusL("Разрешает читать до 100 последних сообщений выбранного чата.", "Allows reading up to 100 recent messages from a selected chat.")
     case .outgoingMessages:
-        return marker + aorusL("Разрешает изменять или отменять отправляемый текст.", "Allows changing or consuming outgoing text.")
+        return aorusL("Разрешает изменять или отменять отправляемый текст.", "Allows changing or consuming outgoing text.")
     case .customUI:
-        return marker + aorusL("Разрешает создавать нативные страницы из проверенных элементов.", "Allows native pages made from validated controls.")
+        return aorusL("Разрешает создавать нативные страницы из проверенных элементов.", "Allows native pages made from validated controls.")
     case .settingsIntegration:
-        return marker + aorusL("Разрешает добавлять ярлыки в раздел плагинов.", "Allows shortcuts in the Plugins section.")
+        return aorusL("Разрешает добавлять ярлыки в раздел плагинов.", "Allows shortcuts in the Plugins section.")
     case .contextMenu:
-        return marker + aorusL("Разрешает добавлять действия в меню сообщения без доступа к его содержимому.", "Allows message-menu actions without implicit access to message contents.")
+        return aorusL("Разрешает добавлять действия в меню сообщения без доступа к его содержимому.", "Allows message-menu actions without implicit access to message contents.")
     case .inAppBrowser:
-        return marker + aorusL("Разрешает открывать публичные сайты во встроенном браузере.", "Allows public websites in the in-app browser.")
+        return aorusL("Разрешает открывать публичные сайты во встроенном браузере.", "Allows public websites in the in-app browser.")
     case .artificialIntelligence:
-        return marker + aorusL("Разрешает отправлять запросы AorusAI через защищенный клиентский шлюз.", "Allows AorusAI requests through the protected client gateway.")
+        return aorusL("Разрешает отправлять запросы AorusAI через защищенный клиентский шлюз.", "Allows AorusAI requests through the protected client gateway.")
     case .appCustomization:
-        return marker + aorusL("Разрешает изменять функции и оформление AorusGram из проверенного списка.", "Allows changing AorusGram features and appearance from a verified catalog.")
+        return aorusL("Разрешает изменять функции и оформление AorusGram из проверенного списка.", "Allows changing AorusGram features and appearance from a verified catalog.")
     case .connectionControl:
-        return marker + aorusL("Разрешает читать состояние маршрута, менять пользовательские переключатели и запускать перепроверку без доступа к ключам серверов.", "Allows reading route status, changing user switches and refreshing the route without access to server credentials.")
+        return aorusL("Разрешает читать состояние маршрута, менять пользовательские переключатели и запускать перепроверку без доступа к ключам серверов.", "Allows reading route status, changing user switches and refreshing the route without access to server credentials.")
     case .accountSwitching:
-        return marker + aorusL("Разрешает видеть локальные аккаунты и переключать активный аккаунт без доступа к ключам авторизации.", "Allows listing local accounts and switching the active account without access to authorization keys.")
+        return aorusL("Разрешает видеть локальные аккаунты и переключать активный аккаунт без доступа к ключам авторизации.", "Allows listing local accounts and switching the active account without access to authorization keys.")
     case .telegramProxy:
-        return marker + aorusL("Разрешает управлять штатными прокси Telegram. Сохранённые пароли и секреты плагину не раскрываются.", "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.")
+        return aorusL("Разрешает управлять штатными прокси Telegram. Сохранённые пароли и секреты плагину не раскрываются.", "Allows managing Telegram proxies. Saved passwords and secrets are never exposed to the plugin.")
     case .manageMessages:
-        return marker + aorusL("Разрешает редактировать, удалять, пересылать сообщения и менять реакции от имени текущего аккаунта.", "Allows editing, deleting and forwarding messages and changing reactions as the current account.")
+        return aorusL("Разрешает редактировать, удалять, пересылать сообщения и менять реакции от имени текущего аккаунта.", "Allows editing, deleting and forwarding messages and changing reactions as the current account.")
     case .pluginMessaging:
-        return marker + aorusL("Разрешает обмениваться сообщениями с другими установленными плагинами. Каждое сообщение несет идентификатор отправителя, и плагины без этого разрешения ничего не получают и ничего не отправляют.", "Allows exchanging messages with other installed plugins. Every message carries the sender's identifier, and plugins without this permission neither send nor receive anything.")
+        return aorusL("Разрешает обмениваться сообщениями с другими установленными плагинами. Каждое сообщение несет идентификатор отправителя, и плагины без этого разрешения ничего не получают и ничего не отправляют.", "Allows exchanging messages with other installed plugins. Every message carries the sender's identifier, and plugins without this permission neither send nor receive anything.")
     case .composer:
-        return marker + aorusL("Разрешает менять текст в поле ввода открытого чата, видеть, как он меняется при наборе, показывать статус печати и прокручивать историю. Отправку сообщений это разрешение не дает.", "Allows changing the text in the open chat composer, seeing it change as it is typed, showing the typing status and scrolling the history. It does not allow sending messages.")
+        return aorusL("Разрешает менять текст в поле ввода открытого чата, видеть, как он меняется при наборе, показывать статус печати и прокручивать историю. Отправку сообщений это разрешение не дает.", "Allows changing the text in the open chat composer, seeing it change as it is typed, showing the typing status and scrolling the history. It does not allow sending messages.")
     case .notifications:
-        return marker + aorusL("Разрешает показывать уведомления от имени приложения, в том числе когда оно закрыто. Уведомление всегда подписано именем плагина, и плагин не видит и не трогает уведомления Telegram.", "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.")
+        return aorusL("Разрешает показывать уведомления от имени приложения, в том числе когда оно закрыто. Уведомление всегда подписано именем плагина, и плагин не видит и не трогает уведомления Telegram.", "Allows showing notifications from the app, including while it is closed. Every notification is signed with the plugin's name, and the plugin can neither see nor touch Telegram's own notifications.")
     case .screenEffects:
-        return marker + aorusL("Разрешает рисовать анимации поверх приложения: снег, конфетти, фейерверки, вспышки и дрожание экрана. Эффекты не перехватывают касания, учитывают настройку «Уменьшение движения» и исчезают, когда плагин останавливается.", "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.")
+        return aorusL("Разрешает рисовать анимации поверх приложения: снег, конфетти, фейерверки, вспышки и дрожание экрана. Эффекты не перехватывают касания, учитывают настройку «Уменьшение движения» и исчезают, когда плагин останавливается.", "Allows the plugin to draw animations over the app: snow, confetti, fireworks, flashes and screen shakes. Effects never take a touch, follow the Reduce Motion setting and disappear when the plugin stops.")
     case .appInternals:
-        return marker + aorusL("Разрешает плагину видеть, что делает приложение: тапы по сообщениям и профилям, открытие меню, реакции, а также читать дерево экрана. Только чтение: изменить ничего нельзя.", "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.")
+        return aorusL("Разрешает плагину видеть, что делает приложение: тапы по сообщениям и профилям, открытие меню, реакции, а также читать дерево экрана. Только чтение: изменить ничего нельзя.", "Allows the plugin to see what the app is doing: taps on messages and profiles, menus opening, reactions, and to read the screen tree. Reading only: it cannot change anything.")
     case .appInternalsWrite:
-        return marker + aorusL("Разрешает плагину менять поведение приложения: отменять и подменять его действия, менять свойства элементов на экране и вызывать методы среды выполнения. Это самое широкое разрешение здесь: плагин с ним может заставить приложение делать то, чего в нем не написано. Ключи, MTProto, Postbox и хранилище паролей закрыты всегда.", "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.")
+        return aorusL("Разрешает плагину менять поведение приложения: отменять и подменять его действия, менять свойства элементов на экране и вызывать методы среды выполнения. Это самое широкое разрешение здесь: плагин с ним может заставить приложение делать то, чего в нем не написано. Ключи, MTProto, Postbox и хранилище паролей закрыты всегда.", "Allows the plugin to change what the app does: cancelling and replacing its actions, changing properties of things on screen and calling into the runtime. This is the widest permission here: a plugin with it can make the app do something nobody wrote. Keys, MTProto, Postbox and the keychain are closed off always.")
     }
 }
 

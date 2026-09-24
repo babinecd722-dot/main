@@ -1367,6 +1367,33 @@ def check_plugin_ui_stubs(root: Path, errors: list[str]) -> None:
     if declared == 0:
         fail(errors, "plugin UI stubs declare no runtime methods to check")
 
+    # The Market transport and its Telegram side are stood in for the same way, and held to
+    # the real files the same way: a stub that has drifted type-checks the screens against an
+    # API that no longer exists.
+    client = root / "AorusGram/Sources/Features/Market/AorusPluginMarketClient.swift"
+    bridge = root / "patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketBridge.swift"
+    client_block = re.search(r"public final class AorusPluginMarketClient \{(.*?)\n\}", stub_text, re.S)
+    if client_block is None or not client.is_file():
+        fail(errors, "plugin UI stubs no longer stand in for AorusPluginMarketClient")
+    else:
+        real_client = {normalized(line) for line in client.read_text(encoding="utf-8").split("\n")}
+        checked = 0
+        for line in client_block.group(1).split("\n"):
+            text = normalized(line)
+            if not text.startswith("public func "):
+                continue
+            checked += 1
+            signature = text.split(" {")[0]
+            if not any(candidate.startswith(signature + " {") for candidate in real_client):
+                fail(errors, f"plugin UI stub has drifted from AorusPluginMarketClient: {signature}")
+        if checked == 0:
+            fail(errors, "plugin UI stubs declare no Market client methods to check")
+    host_stub = re.search(r"^func aorusPluginMarketHost\(.*?\) -> AorusPluginMarketHost", stub_text, re.M)
+    if host_stub is None or not bridge.is_file():
+        fail(errors, "plugin UI stubs no longer declare the Market host entry point")
+    elif host_stub.group(0) + " {" not in bridge.read_text(encoding="utf-8"):
+        fail(errors, f"plugin UI stub has drifted from AorusPluginMarketBridge: {host_stub.group(0)}")
+
 
 # Files that exist under both `AorusGram/Sources` (the core module) and
 # `patches/submodules/AorusGramUI/Sources` (the UI module) and are *allowed* to differ,

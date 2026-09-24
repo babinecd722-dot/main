@@ -116,6 +116,9 @@ public struct AorusPluginManifest: Codable, Equatable {
     /// plugin from starting at launch — the switch on, nothing running, and snow gone every
     /// time the system closed the app in the background.
     public var autostart: Bool
+    /// Where the plugin stands with the Market: installed from it, or the author's own copy
+    /// published to it. Nil for a plugin that has never been either.
+    public var market: AorusPluginMarketLink?
     public var apiVersion: Int
     public var createdAt: Date
     public var updatedAt: Date
@@ -159,9 +162,34 @@ public struct AorusPluginManifest: Codable, Equatable {
         self.accent = AorusPluginAccent.normalized(try container.decodeIfPresent(String.self, forKey: .accent) ?? AorusPluginAccent.fallback)
         self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
         self.autostart = try container.decodeIfPresent(Bool.self, forKey: .autostart) ?? true
+        self.market = try container.decodeIfPresent(AorusPluginMarketLink.self, forKey: .market)
         self.apiVersion = try container.decodeIfPresent(Int.self, forKey: .apiVersion) ?? AorusPluginManifest.currentApiVersion
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? now
         self.updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? self.createdAt
+    }
+}
+
+/// Where a local plugin stands with the Market, kept in its manifest.
+public struct AorusPluginMarketLink: Codable, Equatable {
+    /// The plugin's Market id.
+    public var id: String
+    /// For a copy installed from the store: the version installed. For the author's own copy:
+    /// the version last sent to the Market.
+    public var version: String
+    /// Who published it, as the catalog said.
+    public var authorId: Int64?
+    /// True when this copy is the author's own, published from this phone; false for a copy
+    /// installed from the store. Only an own copy offers to publish.
+    public var isOwn: Bool
+    /// Whether the catalog has an icon for it, so the list can show it without asking.
+    public var hasIcon: Bool
+
+    public init(id: String, version: String, authorId: Int64? = nil, isOwn: Bool, hasIcon: Bool = false) {
+        self.id = id
+        self.version = version
+        self.authorId = authorId
+        self.isOwn = isOwn
+        self.hasIcon = hasIcon
     }
 }
 
