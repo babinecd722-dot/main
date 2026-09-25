@@ -1029,16 +1029,24 @@ public final class AorusPluginEffectsRenderer {
                 return
             }
             switch source {
+            // A thin band just past the edge rather than a line. Core Animation measures a cell's
+            // emission angle from the natural orientation of the shape it is born on, and a line's
+            // is its normal: every "straight down" given to a cell came out a quarter turn off, so
+            // what streamed from the top edge went sideways along it and away off the screen --
+            // the snow that went into a corner, the confetti and emoji that flew up and out to the
+            // right once the seeded ones had fallen, and rain, which is never seeded, not showing
+            // at all. A rectangle's surface is measured the way the seeding is, and the seeding
+            // was always right.
             case .top:
-                emitter.emitterShape = .line
-                emitter.emitterMode = .outline
+                emitter.emitterShape = .rectangle
+                emitter.emitterMode = .surface
                 emitter.emitterPosition = CGPoint(x: size.width / 2, y: -30)
-                emitter.emitterSize = CGSize(width: size.width * 1.4, height: 1)
+                emitter.emitterSize = CGSize(width: size.width * 1.4, height: 2)
             case .bottom:
-                emitter.emitterShape = .line
-                emitter.emitterMode = .outline
+                emitter.emitterShape = .rectangle
+                emitter.emitterMode = .surface
                 emitter.emitterPosition = CGPoint(x: size.width / 2, y: size.height + 30)
-                emitter.emitterSize = CGSize(width: size.width * 1.2, height: 1)
+                emitter.emitterSize = CGSize(width: size.width * 1.2, height: 2)
             case .surface:
                 emitter.emitterShape = .rectangle
                 emitter.emitterMode = .surface
@@ -1374,7 +1382,7 @@ public final class AorusPluginEffectsRenderer {
         let emitter = launcher.emitter
         let result = Stream(emitter: emitter, fillRate: 0) { bounds, filling in
             place(bounds, filling)
-            emitter.emitterSize = CGSize(width: bounds.width * 0.6, height: 1)
+            emitter.emitterSize = CGSize(width: bounds.width * 0.6, height: 2)
             emitter.emitterPosition = CGPoint(x: bounds.width / 2, y: bounds.height + 8)
         }
         CATransaction.begin()
@@ -1473,10 +1481,11 @@ public final class AorusPluginEffectsRenderer {
         case .rain:
             // A shower that passes: drops across the whole width for a moment, falling through.
             let tint = request.colors.first.map { Self.color($0) } ?? Self.rainTint
-            emitter.emitterShape = .line
-            emitter.emitterMode = .outline
+            // A band, not a line, for the reason the continuous effects use one.
+            emitter.emitterShape = .rectangle
+            emitter.emitterMode = .surface
             emitter.emitterPosition = CGPoint(x: bounds.midX, y: -30)
-            emitter.emitterSize = CGSize(width: bounds.width * 1.2, height: 1)
+            emitter.emitterSize = CGSize(width: bounds.width * 1.2, height: 2)
             let velocity = 1100 * speed
             let drops = cell(streak()) { drop in
                 drop.birthRate = 260 * amount
@@ -1668,18 +1677,35 @@ final class AorusPluginEffectsWindow: UIWindow {
 final class AorusPluginEffectsController: UIViewController {
     var onLayout: ((CGRect) -> Void)?
 
+    /// The app's own window's root: the key one at the normal level, or failing that any app
+    /// window at that level on screen. Not simply the key window -- a keyboard or a sheet's
+    /// window can be key and has opinions about rotation the app does not share.
     private var underlying: UIViewController? {
         guard let scene = view.window?.windowScene else { return nil }
-        let windows = scene.windows.filter { !($0 is AorusPluginEffectsWindow) }
-        return (windows.first(where: { $0.isKeyWindow }) ?? windows.first)?.rootViewController
+        let windows = scene.windows.filter { !($0 is AorusPluginEffectsWindow) && $0.rootViewController != nil }
+        let app = windows.filter { $0.windowLevel == .normal }
+        return (app.first(where: { $0.isKeyWindow }) ?? app.first(where: { !$0.isHidden }) ?? windows.first(where: { $0.isKeyWindow }))?.rootViewController
+    }
+
+    /// Whichever way the screen is turned now. The answer when there is no app window to ask,
+    /// so an overlay above everything never turns the screen on its own: answering "every way"
+    /// there let the effects turn to landscape over an app that stayed upright, and what was
+    /// falling went off sideways.
+    private var currentOrientations: UIInterfaceOrientationMask {
+        switch view.window?.windowScene?.interfaceOrientation {
+        case .landscapeLeft?: return .landscapeLeft
+        case .landscapeRight?: return .landscapeRight
+        case .portraitUpsideDown?: return .portraitUpsideDown
+        default: return .portrait
+        }
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        return underlying?.supportedInterfaceOrientations ?? .all
+        return underlying?.supportedInterfaceOrientations ?? currentOrientations
     }
 
     override var shouldAutorotate: Bool {
-        return underlying?.shouldAutorotate ?? true
+        return underlying?.shouldAutorotate ?? false
     }
 
     // The app decides its status bar from view controllers, and the one asked is the root of

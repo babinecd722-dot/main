@@ -2011,7 +2011,19 @@ private final class AorusPluginLineGutter: UIView {
         isOpaque = false
         backgroundColor = .clear
         isUserInteractionEnabled = false
-        contentMode = .redraw
+        // Pinned to the top and never stretched. The gutter changes height with the code beside
+        // it -- the console coming up, the keyboard -- and does it animated; drawn to be scaled,
+        // the numbers already drawn for the new height were squashed and stretched with the
+        // frame for the length of the animation, a jump in numbers the console never reached.
+        // The editor asks for a redraw whenever the numbers could have moved.
+        contentMode = .topLeft
+        clipsToBounds = true
+    }
+
+    override var bounds: CGRect {
+        didSet {
+            if bounds.size != oldValue.size { setNeedsDisplay() }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
