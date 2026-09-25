@@ -50,22 +50,24 @@ final class StreakManager: ObservableObject {
         return streaks[peerId]
     }
 
-    // Call once on app foreground to expire any broken streaks
+    // Call once on app foreground to expire any broken streaks. A streak already at zero is
+    // left alone, and the table is published and saved once, only when one actually broke.
     func tick() {
         guard AorusGramConfig.isEnabled(.streaks) else { return }
         let today = calendar.startOfDay(for: Date())
+        var updated = streaks
         var changed = false
-        for (peerId, rec) in streaks {
+        for (peerId, rec) in streaks where rec.currentStreak != 0 {
             let lastDay = calendar.startOfDay(for: rec.lastMessageDate)
             let diff = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
             if diff > 1 {
-                var updated = rec
-                updated.currentStreak = 0
-                streaks[peerId] = updated
+                updated[peerId]?.currentStreak = 0
                 changed = true
             }
         }
-        if changed { save() }
+        guard changed else { return }
+        streaks = updated
+        save()
     }
 
     // MARK: - Persistence
