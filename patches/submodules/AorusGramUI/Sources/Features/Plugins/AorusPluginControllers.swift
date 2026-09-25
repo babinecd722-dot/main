@@ -649,8 +649,9 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
     private var record: AorusPluginRecord
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var observer: NSObjectProtocol?
-    /// Where this plugin stands in the Market, for the author's own copy. Known on the way in
-    /// when the screen is opened from My Plugins, and brought up to date once it is open.
+    /// Where this plugin stands in the Market, for the author's own copy. What My Plugins knew
+    /// comes along and is shown only if the Market cannot be asked; otherwise the status place
+    /// says "Updating…" until the answer is in.
     private var owned: AorusPluginMarketOwnedPlugin?
     /// The Market is being asked where the plugin stands; the status section says so.
     private var isLoadingStatus = false
@@ -772,8 +773,9 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         switch mode {
         case .management:
             var result: [Section] = []
-            var status = statusRows
-            if isLoadingStatus { status.append(.updating) }
+            // Until the Market answers, the place of the status says it is being brought up to
+            // date; what was known before is not shown as if it were current.
+            let status: [Row] = isLoadingStatus ? [.updating] : statusRows
             if !status.isEmpty { result.append(Section(rows: status, header: AorusPluginMarketText.market)) }
             result.append(Section(rows: [.banner, .name, .description, .version, .editor]))
             if isPublished {
@@ -866,11 +868,18 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             cell.textLabel?.text = AorusPluginUIString.editCode.text
         case .manage:
             cell.textLabel?.text = AorusPluginMarketText.manageInMarket
-            cell.detailTextLabel?.text = owned?.live.map { AorusPluginMarketText.published($0.version) }
-                ?? (owned?.pending != nil ? AorusPluginMarketText.underReview : (isLoadingStatus ? AorusPluginMarketText.updating : nil))
+            if isLoadingStatus {
+                cell.detailTextLabel?.text = AorusPluginMarketText.updating
+            } else {
+                cell.detailTextLabel?.text = owned?.live.map { AorusPluginMarketText.published($0.version) }
+                    ?? (owned?.pending != nil ? AorusPluginMarketText.underReview : nil)
+            }
         case .updating:
+            // Drawn like the status line it stands in for, so the answer takes its place without
+            // the row changing size.
             cell.textLabel?.text = AorusPluginMarketText.updating
             cell.textLabel?.textColor = theme.list.itemSecondaryTextColor
+            cell.textLabel?.numberOfLines = 0
             cell.textLabel?.font = .systemFont(ofSize: 15, weight: .medium)
             cell.accessoryType = .none
             cell.selectionStyle = .none
