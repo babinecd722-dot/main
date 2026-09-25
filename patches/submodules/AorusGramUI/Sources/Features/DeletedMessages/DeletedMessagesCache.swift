@@ -60,6 +60,47 @@ final class DeletedMessagesCache {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         dbPath = dir.appendingPathComponent("deleted_messages.sqlite").path
         queue.sync { self.openDB(); self.createTable() }
+        // Well after launch and on the cache's own background queue: the first pass over a
+        // file that has grown for months is a long one.
+        queue.asyncAfter(deadline: .now() + 30) { [weak self] in self?.pruneIfDue() }
+    }
+
+    /// What is kept of messages nobody deleted or edited: the recent ones, and not without
+    /// end. Every incoming message is written here in case it is deleted later, and nothing
+    /// was ever taken out again — the file grew with every message of every chat for as long
+    /// as the app was installed. Deleted and edited messages, which are what the file is for,
+    /// are kept until the person clears them.
+    private static let undeletedLifetime: Int64 = 90 * 24 * 60 * 60
+    private static let undeletedLimit = 200_000
+    private static let pruneInterval: TimeInterval = 24 * 60 * 60
+    private static let lastPruneKey = "aorusgram_dmc_last_prune"
+
+    /// On `queue`.
+    private func pruneIfDue() {
+        guard let db else { return }
+        let now = Date()
+        let last = UserDefaults.standard.double(forKey: Self.lastPruneKey)
+        guard now.timeIntervalSince1970 - last >= Self.pruneInterval else { return }
+        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.lastPruneKey)
+        var stmt: OpaquePointer?
+        let expired = "DELETE FROM messages WHERE status=0 AND original_text IS NULL AND cached_at < ?;"
+        if sqlite3_prepare_v2(db, expired, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_int64(stmt, 1, Int64(now.timeIntervalSince1970) - Self.undeletedLifetime)
+            sqlite3_step(stmt)
+        }
+        sqlite3_finalize(stmt)
+        stmt = nil
+        let overflow = """
+        DELETE FROM messages WHERE rowid IN (
+            SELECT rowid FROM messages WHERE status=0 AND original_text IS NULL
+            ORDER BY cached_at DESC LIMIT -1 OFFSET ?
+        );
+        """
+        if sqlite3_prepare_v2(db, overflow, -1, &stmt, nil) == SQLITE_OK {
+            sqlite3_bind_int(stmt, 1, Int32(Self.undeletedLimit))
+            sqlite3_step(stmt)
+        }
+        sqlite3_finalize(stmt)
     }
 
     private func openDB() {
@@ -422,8 +463,9 @@ final class DeletedMessagesCache {
     private func handleBGTask(_ task: BGAppRefreshTask) {
         scheduleBackgroundSync()
         task.expirationHandler = { task.setTaskCompleted(success: false) }
-        // Flush any pending ops and compact the WAL
+        // Flush any pending ops, drop what has aged out and compact the WAL
         queue.async { [weak self] in
+            self?.pruneIfDue()
             sqlite3_exec(self?.db, "PRAGMA wal_checkpoint(PASSIVE);", nil, nil, nil)
             task.setTaskCompleted(success: true)
         }

@@ -907,6 +907,208 @@ for (const problem of sourceProblems) { problems.push(problem); }
 """
 
 
+SANDBOX = "AorusGram/Sources/Features/Plugins/AorusPluginSandbox.swift"
+
+
+def probe_block(model: str) -> str:
+    """The `sourceProbes` table and nothing after it."""
+    start = model.index("public static let sourceProbes")
+    return model[start:model.index("public static let eventPermissions", start)]
+
+
+def swift_strings(text: str) -> list[str]:
+    return [value.replace('\\"', '"') for value in re.findall(r'"((?:[^"\\]|\\.)*)"', text)]
+
+
+def source_probes(model: str) -> list[tuple[str, list[str]]]:
+    return [
+        (match.group(1), swift_strings(match.group(2)))
+        for match in re.finditer(r"\(\.(\w+),\s*\[(.*?)\]\)", probe_block(model), re.S)
+    ]
+
+
+def event_permissions(model: str) -> dict[str, str]:
+    start = model.index("= [", model.index("public static let eventPermissions"))
+    table = model[start:model.index("\n    ]", start)]
+    entries = dict(re.findall(r'"([A-Za-z.]+)":\s*\.(\w+)', table))
+    if not entries:
+        raise SystemExit("prelude: could not read eventPermissions")
+    return entries
+
+
+def requested_by_source(model: str, source: str) -> set[str]:
+    """`AorusPluginPermission.requestedBySource`, the same three steps in the same order."""
+    text = re.sub(r"\s*\??\.\s*(?=[A-Za-z_$])", ".", source)
+    text = re.sub(r"\(\s+", "(", text)
+    requested = {permission for permission, needles in source_probes(model) if any(n in text for n in needles)}
+    table = event_permissions(model)
+    for event in re.findall(r"aorus\s*\.\s*(?:events\s*\.\s*)?(?:on|once|waitFor)\s*\(\s*['\"`]([A-Za-z.]+)['\"`]", source):
+        if event in table:
+            requested.add(table[event])
+    return requested
+
+
+def request_gates(sandbox: str) -> dict[str, set[str]]:
+    """What each request kind is refused without, read off `handleRequest`.
+
+    Three shapes appear there: `require(.x)` for the whole case, `require(writes ? .w : .r)`
+    where `writes` names the kinds that change something, and `if kind == "a" || …,
+    !permissions.contains(.x)` for some kinds of a shared case.
+    """
+    start = sandbox.index("private func handleRequest(")
+    body = sandbox[start:]
+    matches = list(re.finditer(r'\n        case ("[^:]*?"(?:,\s*"[^"]*")*)\s*:', body, re.S))
+    gates: dict[str, set[str]] = {}
+    for index, match in enumerate(matches):
+        kinds = re.findall(r'"([^"]+)"', match.group(1))
+        end = matches[index + 1].start() if index + 1 < len(matches) else body.index("\n        default:", match.end())
+        segment = body[match.end():end]
+        common = set(re.findall(r"require\(\.(\w+)", segment))
+        writes = re.search(r"let writes = (.*?)\n\s*guard", segment, re.S)
+        write_kinds = set()
+        if writes:
+            write_kinds = {kind for kind in kinds if ('kind == "%s"' % kind) in writes.group(1)
+                           or any(kind.startswith(prefix) for prefix in re.findall(r'kind\.hasPrefix\("([^"]+)"\)', writes.group(1)))}
+        ternary = re.findall(r"require\(\w+ \? \.(\w+) : \.(\w+)", segment)
+        for kind in kinds:
+            needed = set(common)
+            for when_true, when_false in ternary:
+                needed.add(when_true if kind in write_kinds else when_false)
+            for condition, permission in re.findall(r"if ([^\n{]*?)!permissions\.contains\(\.(\w+)\)", segment):
+                if ('kind == "%s"' % kind) in condition:
+                    needed.add(permission)
+            gates[kind] = needed
+    return gates
+
+
+def block_gates(sandbox: str) -> dict[str, set[str]]:
+    """What each synchronous host block needs, from the guard it opens with."""
+    gates: dict[str, set[str]] = {}
+    for match in re.finditer(r"let (\w+): @convention\(block\)[^\n]*\n(.*?)hostObject\.setObject\(\1,", sandbox, re.S):
+        guard = re.search(r"guard ([^\n]*) else", match.group(2))
+        gates[match.group(1)] = set(re.findall(r"permissions\.contains\(\.(\w+)\)", guard.group(1))) if guard else set()
+    return gates
+
+
+# Every public function, called with arguments shaped like what plugins pass, while the host
+# records what reaches it. Objects a call hands back (a page builder, an AI chat) are called
+# in turn, and what they send counts for the call that made them.
+AUDIT = r"""
+const auditPaths = [];
+(function walk(object, path, seen) {
+    if (seen.has(object)) { return; }
+    seen.add(object);
+    for (const key of Object.keys(object)) {
+        const value = object[key];
+        if (typeof value === 'function') { auditPaths.push(path + '.' + key); }
+        else if (value && typeof value === 'object') { walk(value, path + '.' + key, seen); }
+    }
+})(aorus, 'aorus', new Set());
+const auditHandler = function () { return 'ok'; };
+const auditRef = { peerId: '123', namespace: 0, messageId: 5 };
+const auditArguments = [
+    [], ['123'], ['123', 'text'], [auditRef], [auditRef, 'text'], [auditRef, '456'], ['https://example.com'],
+    ['https://example.com', {}], ['key', 'value'], [auditHandler], ['name', auditHandler], ['text'],
+    [{ title: 'T', text: 'x', id: 'x', url: 'https://example.com' }], [{ id: 'x', title: 'T' }, auditHandler],
+    ['a.txt', 'text'], ['a.txt'], ['snow'], [1000], ['-100123', '42'], ['42', { chatPeerId: '-100123' }],
+    ['ab'], ['123', 'text', {}], [{ title: 'T' }], ['#FF0000'], [true], ['topic', {}], ['mail', 3],
+    [{ prompt: 'x' }], [[{ key: 'k', type: 'toggle', title: 'T' }]], ['wss://example.com'],
+    ['calls', true], [{ type: 'socks5', host: 'example.com', port: 1080 }], [0], ['me'],
+    [{ title: 'S', actions: [{ title: 'A' }] }, auditHandler], [{ id: 'p', title: 'P' }], [{ history: [] }],
+];
+const auditSkip = new Set(['aorus.on', 'aorus.once', 'aorus.off', 'aorus.waitFor', 'aorus.events.on', 'aorus.events.once', 'aorus.events.off', 'aorus.events.waitFor']);
+const auditIgnored = new Set(['log', 'storageWrite', 'timerSchedule', 'timerCancel', 'settingsWrite', 'settingsDefine', 'haptic', 'crypto', 'listening']);
+(async function () {
+    const result = {};
+    for (const path of auditPaths) {
+        if (auditSkip.has(path)) { continue; }
+        const parts = path.split('.').slice(1);
+        let owner = aorus;
+        for (let i = 0; i < parts.length - 1; i++) { owner = owner[parts[i]]; }
+        const fn = owner[parts[parts.length - 1]];
+        const reached = [];
+        for (const args of auditArguments) {
+            const calls = {};
+            globalThis.__calls.length = 0;
+            try {
+                const value = fn.apply(owner, args);
+                if (value && typeof value.then === 'function') { value.then(undefined, function () {}); }
+                else if (value && typeof value === 'object') {
+                    (function inner(object, depth) {
+                        for (const key of Object.keys(object)) {
+                            if (typeof object[key] !== 'function') { continue; }
+                            for (const innerArgs of [[], ['x'], [{ id: 'r', title: 'R' }]]) {
+                                try {
+                                    const answer = object[key].apply(object, innerArgs);
+                                    if (answer && typeof answer.then === 'function') { answer.then(undefined, function () {}); }
+                                    else if (answer && typeof answer === 'object' && answer !== object && depth < 2) { inner(answer, depth + 1); }
+                                } catch (error) { /* a shape this call does not take */ }
+                            }
+                        }
+                    })(value, 0);
+                }
+            } catch (error) { /* a shape this call does not take */ }
+            await new Promise(function (resolve) { globalThis.__nodeSetTimeout(resolve, 0); });
+            for (const call of globalThis.__calls) {
+                if (auditIgnored.has(call.name)) { continue; }
+                calls[call.name === 'request' ? 'request:' + call.args[0] : call.name] = true;
+            }
+            // The first argument goes with the calls it led to: `users.get('me')` is the
+            // account, `users.get('42')` somebody else, and the scanner reads the difference.
+            const first = typeof args[0] === 'string' ? "'" + args[0] + "'" : '';
+            if (Object.keys(calls).length > 0) { reached.push([first, Object.keys(calls).sort()]); }
+        }
+        result[path] = reached;
+    }
+    __nodeLog('AUDIT ' + JSON.stringify(result));
+})();
+"""
+
+
+def permission_coverage(root: Path, prelude: str, model: str) -> list[str]:
+    """Calls whose host side needs a permission the scanner never asks for.
+
+    Such a call is refused on every device: the person is never asked, so it is never
+    granted. `.doc` failing on every use was one — a command's answer sent with a grant the
+    command did not ask for.
+    """
+    sandbox = (root / SANDBOX).read_text(encoding="utf-8")
+    requests = request_gates(sandbox)
+    blocks = block_gates(sandbox)
+    script = "\n".join([HARNESS, prelude, AUDIT])
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "permission-audit.js"
+        path.write_text(script, encoding="utf-8")
+        result = subprocess.run(["node", str(path)], capture_output=True, text=True, timeout=300)
+    lines = [line for line in (result.stderr or "").split("\n") if line.startswith("AUDIT ")]
+    if result.returncode != 0 or not lines:
+        return ["the permission audit did not run: " + (result.stderr or result.stdout).strip()[:500]]
+    problems = []
+    for path, attempts in sorted(json.loads(lines[-1][len("AUDIT "):]).items()):
+        for first, reached in attempts:
+            needed: set[str] = set()
+            for name in reached:
+                if name.startswith("request:"):
+                    kind = name[len("request:"):]
+                    if kind not in requests:
+                        problem = "%s sends %s, which the sandbox does not handle" % (path, kind)
+                        if problem not in problems:
+                            problems.append(problem)
+                        continue
+                    needed |= requests[kind]
+                elif name in blocks:
+                    needed |= blocks[name]
+            # `hooksChanged` is the prelude saying a command or a send handler exists. It
+            # needs nothing itself; the verdict is asked of it only under outgoingMessages.
+            call = path + "(" + first
+            missing = needed - requested_by_source(model, call)
+            if missing:
+                problem = "%s needs %s, which the scanner does not ask for" % (call, ", ".join(sorted(missing)))
+                if problem not in problems:
+                    problems.append(problem)
+    return problems
+
+
 def main() -> int:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
     prelude, events, version = extract(root)
@@ -914,7 +1116,7 @@ def main() -> int:
     # Every namespace the permission scanner names has to exist, or a plugin asking for that
     # capability is granted something it can never call.
     model = (root / "AorusGram/Sources/Features/Plugins/AorusPluginModel.swift").read_text(encoding="utf-8")
-    block = model[model.index("sourceProbes"):model.index("public static func requestedBySource")]
+    block = probe_block(model)
     # Only needles that name an API path contribute a namespace. A subscription needle is a
     # call with a quoted event inside it — `aorus.events.waitFor('message` — and reading its
     # second component as a namespace asks whether the prelude publishes `waitFor('message`.
@@ -936,18 +1138,19 @@ def main() -> int:
         # Any needle that opens a call with a quoted event name is a subscription needle,
         # whichever of the six spellings it uses. Listing the prefixes by hand meant one
         # added later was read as an API path and checked against the wrong thing.
-        if "(" in needle and ("'" in needle or '"' in needle):
-            quote = needle[needle.index("(") + 1]
-            rest = needle[needle.index(quote) + 1:]
-            event = rest.split(quote)[0]
-            if event not in events:
-                needle_problems.append("%s watches an event the prelude does not accept" % needle)
-            continue
+        if "(" in needle and needle.startswith("aorus."):
+            # A call with its first argument: `aorus.users.get('me'`. The path is checked like
+            # any other; subscriptions are the event table's business now, not a needle's.
+            needle = needle[:needle.index("(")]
         if not needle.startswith("aorus."):
             continue
         for member in needle.split(".")[1:]:
             if ("%s:" % member) not in prelude:
                 needle_problems.append("%s names %s, which the prelude does not publish" % (needle, member))
+    for event in event_permissions(model):
+        if event not in events:
+            needle_problems.append("eventPermissions gates %s, which the prelude does not accept" % event)
+    needle_problems.extend(permission_coverage(root, prelude, model))
     if needle_problems:
         print("Plugin prelude check FAILED:")
         for problem in needle_problems:

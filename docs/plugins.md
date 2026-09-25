@@ -124,28 +124,36 @@ aorus.on('stop', () => console.log('плагин остановлен'));
 запрошенное. Во время выполнения каждый вызов проверяется ещё раз — сканер только строит
 лист, решает всегда рантайм.
 
+Вызов узнаётся, как бы он ни был записан: `aorus.messages.send(…)`, цепочка через переносы
+строк (`aorus` на одной строке, `.messages.send(…)` на следующей) и `aorus.ui?.toast(…)` —
+одно и то же. Подписка на событие по имени — `aorus.on('chatOpened', …)`, `aorus.once`,
+`aorus.events.on`, `aorus.waitFor`, в любых кавычках — запрашивает разрешение, без которого
+событие не приходит (см. [раздел 5](#5-события)). Не узнаётся только обращение к API через
+переменную (`const { messages } = aorus`): такой плагин получит отказ с названием
+разрешения, и его можно выдать вручную на экране разрешений плагина.
+
 | Разрешение | Что открывает | По какому вызову запрашивается |
 |---|---|---|
 | `network` | HTTP-запросы, сокеты, загрузка и выгрузка файлов | `aorus.http`, `aorus.ws.` |
 | `sendMessages` | Отправка сообщений, в том числе отложенных | `aorus.messages.send`, `aorus.messages.schedule`, `aorus.messages.reply`, `aorus.chat.sendText`, `aorus.chat.replyText` |
 | `manageMessages` | Правка, удаление, пересылка, реакции, модерация | `aorus.messages.edit/delete/deleteLocal/forward/react`, `aorus.moderation.` |
 | `messageHistory` | Чтение истории чата и вложений | `aorus.chats.history`, `aorus.media.` |
-| `chatMetadata` | Название и идентификатор чата, что видно на экране, сведения о людях | `aorus.chats.resolve/get`, `aorus.chat.current/currentPeerId/messages`, `aorus.messages.visible`, `aorus.users.get/resolve/search` |
+| `chatMetadata` | Название и идентификатор чата, что видно на экране, сведения о людях | `aorus.chats.resolve/get`, `aorus.chat.current/currentPeerId/messages`, `aorus.messages.visible`, `aorus.users.get/resolve/search`, события `chatOpened` и `chatClosed` |
 | `composer` | Поле ввода открытого чата: чтение, запись, статус печати, прокрутка | `aorus.chat.draft/setDraft/insert/clear/setTyping/markRead/scrollTo`, `aorus.messages.beginEdit`, `aorus.on('inputChanged'…)` |
 | `openChats` | Открытие чатов, профилей и ссылок Telegram | `aorus.chats.open`, `aorus.app.openChat`, `aorus.telegram.openLink`, `aorus.navigation.openChat/openProfile/openTelegramLink` |
-| `accountProfile` | Имя и идентификатор текущего аккаунта | `aorus.account.current`, `aorus.app.currentAccount`, `aorus.users.me` |
+| `accountProfile` | Имя и идентификатор текущего аккаунта | `aorus.account.current`, `aorus.app.currentAccount`, `aorus.users.me`, `aorus.users.get('me')` |
 | `accountSwitching` | Список аккаунтов и переключение | `aorus.accounts.` |
-| `dialogs` | Тосты, алерты, подтверждения, ввод, share, выбор человека и файла | `aorus.ui.toast/showToast/alert/confirm/prompt/share/showSheet`, `aorus.app.share/restartHint`, `aorus.users.select`, `aorus.files.pick/share` |
+| `dialogs` | Тосты, алерты, подтверждения, ввод, share, выбор человека и файла | `aorus.ui.toast/showToast/alert/confirm/prompt/share/showSheet`, `aorus.app.share/restartHint`, `aorus.users.select`, `aorus.files.pick/share`, `aorus.media.share/saveToFiles` |
 | `clipboardRead` / `clipboardWrite` | Буфер обмена | `aorus.clipboard.read` / `.write` |
 | `incomingMessages` | События входящих, удалённых, изменённых | `aorus.on('message'…)` и родственные, `aorus.messages.onIncoming` |
-| `outgoingMessages` | Команды и перехват исходящего текста | `aorus.commands`, `aorus.on('send'…)`, `aorus.chat.onBeforeSend/transformOutgoing` |
-| `customUI` | Свои экраны, кнопки и панели поверх чата, строки в профиле | `aorus.ui.definePages/createPage/openPage/presentPage`, `aorus.ui.addFloatingButton/addChatPanel/addInputAccessory/addChatListHeaderButton/setChatHeaderBadge`, `aorus.profile.addAction/addSection` |
+| `outgoingMessages` | Команды, их ответы и перехват исходящего текста | `aorus.commands`, `aorus.on('send'…)`, `aorus.chat.onBeforeSend/transformOutgoing` |
+| `customUI` | Свои экраны, кнопки и панели поверх чата, строки в профиле | `aorus.ui.definePages/createPage/openPage/presentPage`, `aorus.ui.addFloatingButton/addChatPanel/addInputAccessory/addChatListHeaderButton/setChatHeaderBadge`, `aorus.profile.addAction/addSection`, события `overlayAction` и `nativeButtonAction` |
 | `settingsIntegration` | Ярлык в настройках | `aorus.integrations.settings.register` |
 | `contextMenu` | Действие в меню сообщения | `aorus.integrations.contextMenu.register`, `aorus.ui.addMessageContextAction` |
 | `inAppBrowser` | Открытие сайтов страницей внутри приложения | `aorus.browser.open`, `aorus.ui.openURL`, `aorus.app.openURL`, `aorus.navigation.openUrl`, `aorus.tabs.register` с `url`, строки с ссылками |
 | `artificialIntelligence` | Запросы к AorusAI | `aorus.ai.` |
-| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки и акцент | `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings` |
-| `connectionControl` | Состояние соединения AorusGram | `aorus.proxy.` |
+| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки и акцент | `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings`, событие `appSettingsChanged` |
+| `connectionControl` | Состояние соединения AorusGram | `aorus.proxy.`, событие `connectionChanged` |
 | `telegramProxy` | Список и переключение прокси Telegram | `aorus.telegramProxy.` |
 | `pluginMessaging` | Сообщения другим плагинам и от них | `aorus.plugins.emit/on`, `aorus.on('pluginMessage'…)` |
 | `notifications` | Системные уведомления, в том числе отложенные | `aorus.notifications.` |
@@ -154,7 +162,12 @@ aorus.on('stop', () => console.log('плагин остановлен'));
 | `appInternalsWrite` | Замена действий приложения, изменение дерева вью, Objective-C | `aorus.hook.replace`, `aorus.tree.mutate`, `aorus.objc.` |
 
 Отказ выдать разрешение не ломает приложение: вызов возвращает ошибку с названием
-недостающего разрешения, и она видна в консоли плагина. Плагин может спросить заранее —
+недостающего разрешения, и она видна в консоли плагина. В ошибке, которую вернуло
+приложение, только текст отказа и строки вашего кода, без внутренних строк самого API.
+
+Если новая версия AorusGram находит в том же коде вызов, о котором раньше не спрашивала,
+плагин выключается и в списке показывает «Проверьте разрешения». При включении открывается
+лист согласия с полным списком. Плагин может спросить заранее —
 `aorus.runtime.hasPermission('network')`, см. [раздел 33](#33-язык-плагина-и-сведения-о-себе).
 
 Кэш, утилиты, Markdown, расписания, файлы плагина и его переводы разрешений не требуют:
@@ -227,9 +240,17 @@ aorus.commands.prefix();                 // '.'
 Что возвращает обработчик:
 
 - **строка** — заменяет введённый текст, сообщение уходит;
-- **`false` или ничего** — команда поглощена, сообщение не отправляется;
-- **промис** — команда поглощается сразу, а когда промис завершится строкой, она уходит
-  отдельным сообщением.
+- **`false`, `true` или ничего** — команда поглощена, сообщение не отправляется;
+- **промис** — команда поглощается сразу, а строка, которой промис завершится, уходит туда,
+  где команду написали: в тот же чат, в ту же тему форума и ответом на то же сообщение, если
+  команда была ответом.
+
+Ответ промиса отправляется по праву самой команды — `outgoingMessages`; разрешение
+`sendMessages` для него не нужно. Он принимается один раз и не позже чем через 10 минут после
+команды; строка, пришедшая позже, отклоняется с ошибкой в консоли. Если промис завершился не
+строкой, а числом или объектом, ничего не отправляется и в консоли появляется
+предупреждение. То же — для синхронного результата не строкой. Ссылки, упоминания и хэштеги
+в ответе становятся активными так же, как в написанном вручную тексте.
 
 `args` — всё, что написано после имени команды, одной строкой. `context.argv` — то же самое,
 разобранное так, как это делает командная строка: слова, фразы в кавычках `"…"`, `'…'` или
@@ -305,6 +326,11 @@ await aorus.messages.react(ref, '🔥');
 
 `messages.reply(ref, text, options)` — это `send` в чат сообщения с заполненным `replyTo`.
 `messages.schedule(peerId, text, when, options)` — `send` с заполненным `scheduleAt`.
+
+Текст длиннее одного сообщения Telegram (4096 символов) уходит несколькими сообщениями
+подряд: каждое разрезается по последнему переносу строки, иначе по пробелу, эмодзи
+пополам не режутся. Оформление остаётся на своих местах, `replyTo` получает первое
+сообщение, остальные опции — все. Так же отправляется длинный ответ команды.
 
 `edit` принимает и строку, и форматированный текст — ссылки и оформление в сообщении не
 теряются. `beginEdit` открывает собственный редактор Telegram с текстом сообщения в поле
@@ -956,6 +982,23 @@ aorus.settings.all();
 
 Секция появляется подэкраном в карточке плагина. Если плагин не объявил ни одной настройки,
 строки «Настройки» в карточке просто нет.
+
+`aorus.settings.define(fields)` задаёт весь список настроек одним массивом, без заголовка
+секции, и заменяет то, что было объявлено раньше; `addSection` добавляет секцию к уже
+объявленному. Поля те же: `key`, `type`, `title`, `default`, для `select` — `options`.
+Элемент без `key` или `type` пропускается.
+
+```js
+aorus.settings.define([
+    { key: 'enabled', type: 'toggle', title: 'Включено', default: true }
+]);
+
+aorus.settings.get('enabled');          // значение или default из объявления
+aorus.settings.set('enabled', false);
+aorus.settings.remove('enabled');       // снова default
+```
+
+`getPlugin` и `setPlugin` — те же `get` и `set` под другими именами.
 
 ## 19. Хранилище
 

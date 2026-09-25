@@ -7,6 +7,7 @@ import SwiftSignalKit
 import Display
 import TelegramPresentationData
 import TelegramUIPreferences
+import TextFormat
 import ContextUI
 import UndoUI
 import QuickLook
@@ -279,8 +280,22 @@ public final class AorusPluginRuntimeManager {
         return AorusPluginStore.shared.schema(for: id, source: record.source)
     }
 
-    public func processOutgoing(text: String, peerId: Int64, accountId: Int64) -> AorusPluginOutgoingVerdict {
+    /// A command's immediate answer as the messages it goes out as: one, unless it is longer
+    /// than Telegram takes in one.
+    public static func messagePieces(_ text: String) -> [String] {
+        return AorusPluginTextEntity.split(text, entities: []).map { $0.text }
+    }
+
+    /// `threadId` and `replyTo` are where the typed message was going, for a command that
+    /// answers later to answer there.
+    public func processOutgoing(text: String, peerId: Int64, accountId: Int64, threadId: Int64? = nil, replyTo: EngineMessageReplySubject? = nil) -> AorusPluginOutgoingVerdict {
         guard AorusPluginEntitlement.isAllowed else { return .passThrough }
+        let outgoing = AorusPluginOutgoingContext(
+            peerId: peerId,
+            accountId: accountId,
+            threadId: threadId,
+            replyTo: replyTo.map { AorusPluginOutgoingContext.ReplyTarget(peerId: $0.messageId.peerId.toInt64(), namespace: $0.messageId.namespace, messageId: $0.messageId.id) }
+        )
         lock.lock()
         let active = Array(sandboxes.values)
         lock.unlock()
@@ -289,7 +304,7 @@ public final class AorusPluginRuntimeManager {
         for sandbox in active where sandbox.hasOutgoingHooks {
             let remaining = deadline.timeIntervalSinceNow
             guard remaining > 0 else { break }
-            let result = sandbox.processOutgoing(text: replacement, peerId: peerId, accountId: accountId, timeout: remaining)
+            let result = sandbox.processOutgoing(text: replacement, context: outgoing, timeout: remaining)
             if result.consumed { return result }
             if let value = result.replacement { replacement = value }
         }
@@ -665,11 +680,39 @@ public final class AorusPluginRuntimeManager {
         return host
     }
 
+    /// What a plugin may do, as the store said at one generation of it.
+    private struct GrantSnapshot {
+        let generation: Int
+        let enabled: Bool
+        let granted: Set<AorusPluginPermission>
+    }
+    private let grantLock = NSLock()
+    private var grantSnapshots: [String: GrantSnapshot] = [:]
+
+    /// Asked on every call a plugin makes into the app. Reading the manifest, the whole
+    /// source, its digest and the grants from disk each time was the cost of a toast; the
+    /// answer is now read once per change to the store and kept until the store's generation
+    /// moves, which it does before a change is announced.
     fileprivate func isPermissionGranted(_ permission: AorusPluginPermission, pluginId: String) -> Bool {
-        guard AorusPluginEntitlement.isAllowed,
-              let record = AorusPluginStore.shared.load(id: pluginId), record.manifest.isEnabled else { return false }
-        let state = AorusPluginStore.shared.permissionState(for: pluginId)
-        return state.sourceDigest == AorusPluginStore.sourceDigest(record.source) && state.granted.contains(permission)
+        guard AorusPluginEntitlement.isAllowed else { return false }
+        let store = AorusPluginStore.shared
+        // Read before the files, so what is kept can only ever be older than its label.
+        let generation = store.generation
+        grantLock.lock()
+        let cached = grantSnapshots[pluginId]
+        grantLock.unlock()
+        if let cached, cached.generation == generation {
+            return cached.enabled && cached.granted.contains(permission)
+        }
+        // A read that failed is not kept: the next call reads again.
+        guard let record = store.load(id: pluginId) else { return false }
+        let state = store.permissionState(for: pluginId)
+        let granted = state.sourceDigest == AorusPluginStore.sourceDigest(record.source) ? state.granted : []
+        let snapshot = GrantSnapshot(generation: generation, enabled: record.manifest.isEnabled, granted: granted)
+        grantLock.lock()
+        grantSnapshots[pluginId] = snapshot
+        grantLock.unlock()
+        return snapshot.enabled && snapshot.granted.contains(permission)
     }
 
     private func stopAll() {
@@ -1709,27 +1752,56 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             completion(.failure(AorusPluginRequestError("peerId is required")))
             return
         }
-        var attributes: [MessageAttribute] = []
-        let converted = aorusPluginMessageEntities(entities)
-        if !converted.isEmpty {
-            attributes.append(TextEntitiesMessageAttribute(entities: converted))
-        }
-        // The same attributes Telegram's own composer attaches for a silent and for a
-        // scheduled send, in the same order (TelegramEngineMessages.enqueueOutgoingMessage).
-        if options.silent {
-            attributes.append(NotificationInfoMessageAttribute(flags: .muted))
-        }
-        if let scheduleAt = options.scheduleAt {
-            attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: scheduleAt, repeatPeriod: nil))
-        }
         // `replyTo` used to be read and then dropped here, so every reply a plugin sent
         // arrived as a plain message. A reply is to a message in the chat being written to.
         let replySubject = options.replyTo.map {
             EngineMessageReplySubject(messageId: MessageId(peerId: target, namespace: Namespaces.Message.Cloud, id: $0), quote: nil, innerSubject: nil)
         }
-        let signal = enqueueMessages(account: context.account, peerId: target, messages: [
-            .message(text: text, attributes: attributes, inlineStickers: [:], mediaReference: nil, threadId: options.threadId, replyToMessageId: replySubject, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
-        ])
+        // A text longer than Telegram takes goes out as consecutive messages, the first one
+        // answering what the whole text answers.
+        let messages: [EnqueueMessage] = AorusPluginTextEntity.split(text, entities: entities).enumerated().map { (index, piece) -> EnqueueMessage in
+            var attributes: [MessageAttribute] = []
+            let converted = aorusPluginMessageEntities(piece.entities)
+            if !converted.isEmpty {
+                attributes.append(TextEntitiesMessageAttribute(entities: converted))
+            }
+            // The same attributes Telegram's own composer attaches for a silent and for a
+            // scheduled send, in the same order (TelegramEngineMessages.enqueueOutgoingMessage).
+            if options.silent {
+                attributes.append(NotificationInfoMessageAttribute(flags: .muted))
+            }
+            if let scheduleAt = options.scheduleAt {
+                attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: scheduleAt, repeatPeriod: nil))
+            }
+            return .message(text: piece.text, attributes: attributes, inlineStickers: [:], mediaReference: nil, threadId: options.threadId, replyToMessageId: index == 0 ? replySubject : nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+        }
+        let signal = enqueueMessages(account: context.account, peerId: target, messages: messages)
+        let _ = signal.start(completed: { completion(.success(())) })
+    }
+
+    func pluginSendCommandResult(_ pluginId: String, context outgoing: AorusPluginOutgoingContext, text: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        guard manager?.isPermissionGranted(.outgoingMessages, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Outgoing messages permission is not granted")))
+            return
+        }
+        guard outgoing.accountId == context.account.id.int64 else {
+            completion(.failure(AorusPluginRequestError("The chat the command was typed in belongs to another account")))
+            return
+        }
+        let replySubject = outgoing.replyTo.map {
+            EngineMessageReplySubject(messageId: MessageId(peerId: PeerId($0.peerId), namespace: $0.namespace, id: $0.messageId), quote: nil, innerSubject: nil)
+        }
+        // As many messages as the text needs, each with the links, mentions and hashtags the
+        // composer would find in it, as in an answer a command gives at once.
+        let messages: [EnqueueMessage] = AorusPluginTextEntity.split(text, entities: []).enumerated().map { (index, piece) -> EnqueueMessage in
+            var attributes: [MessageAttribute] = []
+            let entities = generateTextEntities(piece.text, enabledTypes: .all)
+            if !entities.isEmpty {
+                attributes.append(TextEntitiesMessageAttribute(entities: entities))
+            }
+            return .message(text: piece.text, attributes: attributes, inlineStickers: [:], mediaReference: nil, threadId: outgoing.threadId, replyToMessageId: index == 0 ? replySubject : nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
+        }
+        let signal = enqueueMessages(account: context.account, peerId: PeerId(outgoing.peerId), messages: messages)
         let _ = signal.start(completed: { completion(.success(())) })
     }
 
@@ -1873,11 +1945,16 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                         return
                     }
                     // A copy with the message's own name, because the share sheet shows the
-                    // file name and the media box stores everything under a hash.
-                    let temporary = FileManager.default.temporaryDirectory
-                        .appendingPathComponent(described.suggestedName)
-                    try? FileManager.default.removeItem(at: temporary)
+                    // file name and the media box stores everything under a hash. The name is
+                    // whatever the sender typed, so only its last component is used, in a
+                    // folder of its own: "../Library/…" was a path out of the temporary
+                    // directory, and the copy removed whatever was there first.
+                    let folder = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("aorus-plugin-share", isDirectory: true)
+                        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                    let temporary = folder.appendingPathComponent(AorusPluginMediaDescription.safeFileName(described.suggestedName))
                     do {
+                        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                         try FileManager.default.copyItem(at: URL(fileURLWithPath: source), to: temporary)
                     } catch {
                         completion(.failure(AorusPluginRequestError((error as NSError).localizedDescription)))
@@ -1903,12 +1980,17 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         let member = PeerId(userPeerId)
         let engine = context.engine
         // Telegram's own rights decide. Without them the request comes back refused, and
-        // that is an answer to the question rather than an error in the plugin.
+        // that is an answer to the question rather than an error in the plugin. The signals
+        // below finish after their answer too, so the first of the two is the one given.
         let refused: [String: Any] = ["ok": NSNumber(value: false)]
+        let answered = Atomic<Bool>(value: false)
+        let respond: (Result<[String: Any], Error>) -> Void = { result in
+            if !answered.swap(true) { completion(result) }
+        }
         switch action {
         case "kick":
             let _ = (engine.peers.removePeerMember(peerId: chat, memberId: member) |> take(1)).start(completed: {
-                completion(.success(["ok": NSNumber(value: true)]))
+                respond(.success(["ok": NSNumber(value: true)]))
             })
         case "ban":
             let _ = (engine.peers.updateChannelMemberBannedRights(
@@ -1916,9 +1998,9 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                 memberId: member,
                 rights: TelegramChatBannedRights(flags: [.banReadMessages], untilDate: Int32.max)
             ) |> take(1)).start(next: { _, _, _ in
-                completion(.success(["ok": NSNumber(value: true)]))
+                respond(.success(["ok": NSNumber(value: true)]))
             }, completed: {
-                completion(.success(refused))
+                respond(.success(refused))
             })
         case "restrict":
             let _ = (engine.peers.updateChannelMemberBannedRights(
@@ -1929,20 +2011,20 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                     untilDate: Int32.max
                 )
             ) |> take(1)).start(next: { _, _, _ in
-                completion(.success(["ok": NSNumber(value: true)]))
+                respond(.success(["ok": NSNumber(value: true)]))
             }, completed: {
-                completion(.success(refused))
+                respond(.success(refused))
             })
         case "unban":
             let _ = (engine.peers.updateChannelMemberBannedRights(
                 peerId: chat, memberId: member, rights: nil
             ) |> take(1)).start(next: { _, _, _ in
-                completion(.success(["ok": NSNumber(value: true)]))
+                respond(.success(["ok": NSNumber(value: true)]))
             }, completed: {
-                completion(.success(refused))
+                respond(.success(refused))
             })
         default:
-            completion(.success(refused))
+            respond(.success(refused))
         }
     }
 
@@ -2640,8 +2722,8 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     /// The name on the plugin's card, so a message says which plugin is talking. Falls back
     /// to nothing rather than to an identifier nobody recognises.
     private func pluginName(_ pluginId: String) -> String? {
-        guard let record = AorusPluginStore.shared.load(id: pluginId) else { return nil }
-        let name = record.manifest.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let manifest = AorusPluginStore.shared.manifest(id: pluginId) else { return nil }
+        let name = manifest.name.trimmingCharacters(in: .whitespacesAndNewlines)
         return name.isEmpty ? nil : name
     }
 
@@ -3188,6 +3270,16 @@ private func aorusPluginMessageEntities(_ entities: [AorusPluginTextEntity]) -> 
 /// three things: what it is, where it is on disk if it has been downloaded, and what to call
 /// it when it leaves the app.
 struct AorusPluginMediaDescription {
+    /// A file name somebody else chose, made safe to put in a folder: its last component,
+    /// without the dots and slashes that would make it a path.
+    static func safeFileName(_ name: String) -> String {
+        let last = (name as NSString).lastPathComponent
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: ":", with: "_")
+            .trimmingCharacters(in: CharacterSet(charactersIn: ". ").union(.whitespacesAndNewlines))
+        return last.isEmpty ? "attachment" : String(last.prefix(128))
+    }
+
     let kind: String
     let payload: [String: Any]
     let path: String?

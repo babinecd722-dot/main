@@ -424,12 +424,18 @@ def main():
             paths.extend(sorted(base.rglob("*.swift")))
     sources, layout, by_type, free, nested, parents, written = collect(paths)
     failures = check(sources, layout, by_type, free, nested, parents, written)
+    # `generateTextEntities` lives in TextFormat, which AorusGramUI depends on but does not
+    # import everywhere. A call without the import is "cannot find in scope" an hour into
+    # Bazel — the failure that once had it removed from the runtime altogether.
     plugin_runtime = root / "patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginRuntime.swift"
-    if plugin_runtime.is_file() and "generateTextEntities(" in plugin_runtime.read_text(encoding="utf-8"):
-        failures.append(
-            f"{plugin_runtime}: generateTextEntities is private to TelegramUI and cannot be "
-            "called from the AorusGramUI module"
-        )
+    ui_build = root / "patches/submodules/AorusGramUI/BUILD"
+    if plugin_runtime.is_file():
+        runtime_text = plugin_runtime.read_text(encoding="utf-8")
+        if "generateTextEntities(" in runtime_text:
+            if "\nimport TextFormat\n" not in runtime_text:
+                failures.append(f"{plugin_runtime}: generateTextEntities is called without import TextFormat")
+            if not ui_build.is_file() or '"//submodules/TextFormat:TextFormat"' not in ui_build.read_text(encoding="utf-8"):
+                failures.append(f"{plugin_runtime}: generateTextEntities needs TextFormat in AorusGramUI's deps")
     if failures:
         print("Swift call label check: FAILED")
         for failure in failures:

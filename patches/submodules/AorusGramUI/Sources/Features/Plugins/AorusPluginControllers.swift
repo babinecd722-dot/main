@@ -388,7 +388,7 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
         alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel) { _ in self.reload() })
         alert.addAction(UIAlertAction(title: AorusPluginUIString.grantAndEnable.text, style: .default) { _ in
             do {
-                try AorusPluginStore.shared.setPermissionState(AorusPluginPermissionState(sourceDigest: AorusPluginStore.sourceDigest(record.source), granted: requested), for: record.manifest.id)
+                try AorusPluginStore.shared.grantRequested(requested, source: record.source, for: record.manifest.id)
                 var manifest = record.manifest
                 manifest.isEnabled = true
                 try AorusPluginStore.shared.updateManifest(manifest)
@@ -557,7 +557,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
             alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel) { _ in sender.setOn(false, animated: true) })
             alert.addAction(UIAlertAction(title: AorusPluginUIString.grantAndEnable.text, style: .default) { _ in
                 do {
-                    try AorusPluginStore.shared.setPermissionState(AorusPluginPermissionState(sourceDigest: AorusPluginStore.sourceDigest(self.record.source), granted: requested), for: self.record.manifest.id)
+                    try AorusPluginStore.shared.grantRequested(requested, source: self.record.source, for: self.record.manifest.id)
                     self.record.manifest.isEnabled = true; try AorusPluginStore.shared.updateManifest(self.record.manifest)
                     AorusPluginRuntimeManager.shared.start(id: self.record.manifest.id) { error in
                         guard let error else { return }
@@ -1357,6 +1357,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     private var runAfterReview = false
     private var licenseObserver: NSObjectProtocol?
     private var highlightWork: DispatchWorkItem?
+    private lazy var codeStyle = AorusPluginCodeStyle(dark: presentationData.theme.overallDarkAppearance)
     private var currentLayout: ContainerViewLayout?
 
     // MARK: History
@@ -1414,7 +1415,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         displayNode.backgroundColor = background
         gutter.textView = editor
         gutter.configure(dark: dark)
-        editor.backgroundColor = .clear; editor.textColor = dark ? .white : .black; editor.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        editor.backgroundColor = .clear; editor.textColor = codeStyle.text; editor.font = codeStyle.font
         editor.autocorrectionType = .no; editor.autocapitalizationType = .none; editor.smartQuotesType = .no; editor.smartDashesType = .no
         editor.textContainerInset = UIEdgeInsets(top: 14, left: 8, bottom: 80, right: 12); editor.delegate = self; editor.text = record.source
         console.backgroundColor = background; console.textColor = dark ? UIColor(white: 0.86, alpha: 1) : .darkText; console.font = .monospacedSystemFont(ofSize: 12, weight: .regular); console.isEditable = false; console.isHidden = true
@@ -1480,7 +1481,8 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     }
 
     func textViewDidChange(_ textView: UITextView) {
-        updateLineNumbers(); highlightWork?.cancel(); let work = DispatchWorkItem { [weak self] in self?.highlight() }; highlightWork = work; DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
+        updateLineNumbers()
+        scheduleHighlight()
         recordEdit()
     }
 
@@ -1577,16 +1579,69 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         if gutter.preferredWidth != width { updateLayout(animated: false) }
     }
 
+    /// Colours, the font and the indent of wrapped rows, written only where the text does not
+    /// have them already. Rewriting every attribute of the whole file on each pause had the
+    /// layout manager lay the whole file out again, which a long plugin felt on every key.
     private func highlight() {
-        let selected = editor.selectedRange; let text = editor.text ?? ""; let storage = editor.textStorage
-        let dark = presentationData.theme.overallDarkAppearance
-        storage.beginEditing(); storage.setAttributes([.font: UIFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: dark ? UIColor.white : UIColor.black], range: NSRange(location: 0, length: storage.length))
-        for token in AorusJavaScriptTokenizer.tokenize(text) {
-            let color: UIColor
-            switch token.kind { case .keyword: color = .systemPink; case .string, .template: color = .systemGreen; case .comment: color = .systemGray; case .number, .literal: color = .systemOrange; case .api: color = .systemPurple; case .function: color = .systemBlue; case .regex: color = .systemTeal; default: continue }
-            if NSMaxRange(token.range) <= storage.length { storage.addAttribute(.foregroundColor, value: color, range: token.range) }
+        // Attributes changed under text the keyboard is still composing end the composition.
+        guard editor.markedTextRange == nil else {
+            scheduleHighlight()
+            return
         }
-        storage.endEditing(); editor.selectedRange = selected
+        let storage = editor.textStorage
+        let length = storage.length
+        guard length > 0 else { return }
+        let text = storage.string
+        let style = codeStyle
+        let selection = editor.selectedRange
+        storage.beginEditing()
+        style.ensure(.font, style.font, in: NSRange(location: 0, length: length), of: storage)
+        var covered = 0
+        for token in AorusJavaScriptTokenizer.tokenize(text) {
+            guard let color = style.color(for: token.kind) else { continue }
+            let range = token.range
+            guard range.location >= covered, NSMaxRange(range) <= length else { continue }
+            if range.location > covered {
+                style.ensure(.foregroundColor, style.text, in: NSRange(location: covered, length: range.location - covered), of: storage)
+            }
+            style.ensure(.foregroundColor, color, in: range, of: storage)
+            covered = NSMaxRange(range)
+        }
+        if covered < length {
+            style.ensure(.foregroundColor, style.text, in: NSRange(location: covered, length: length - covered), of: storage)
+        }
+        indentWrappedRows(of: storage)
+        storage.endEditing()
+        if editor.selectedRange != selection { editor.selectedRange = selection }
+    }
+
+    /// A line too long for the screen goes on under itself, indented past where it starts, so
+    /// a row without a number reads as the rest of the numbered line above it. Also run while
+    /// AorusAI types a plugin in, so its long lines wrap the way they will stay.
+    private func indentWrappedRows(of storage: NSTextStorage) {
+        let nsText = storage.string as NSString
+        let length = nsText.length
+        let style = codeStyle
+        var lineStart = 0
+        while lineStart < length {
+            let line = nsText.paragraphRange(for: NSRange(location: lineStart, length: 0))
+            var columns = 0
+            var index = line.location
+            while index < NSMaxRange(line) {
+                let unit = nsText.character(at: index)
+                if unit == 0x20 { columns += 1 } else if unit == 0x09 { columns += 4 } else { break }
+                index += 1
+            }
+            style.ensure(.paragraphStyle, style.paragraph(indent: columns), in: line, of: storage)
+            lineStart = max(NSMaxRange(line), lineStart + 1)
+        }
+    }
+
+    private func scheduleHighlight() {
+        highlightWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.highlight() }
+        highlightWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
     }
 
     @objc private func save() {
@@ -1629,10 +1684,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         alert.addAction(UIAlertAction(title: AorusPluginUIString.grantAndEnable.text, style: .default) { [weak self] _ in
             guard let self else { return }
             do {
-                try AorusPluginStore.shared.setPermissionState(
-                    AorusPluginPermissionState(sourceDigest: AorusPluginStore.sourceDigest(self.record.source), granted: requested),
-                    for: self.record.manifest.id
-                )
+                try AorusPluginStore.shared.grantRequested(requested, source: self.record.source, for: self.record.manifest.id)
                 var manifest = self.record.manifest
                 manifest.isEnabled = true
                 try AorusPluginStore.shared.updateManifest(manifest)
@@ -1725,7 +1777,12 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         pushHistory(currentSnapshot, onto: &undoStack)
         redoStack.removeAll()
         AorusPluginCodeTyper.type(draft.code, into: editor, progress: { [weak self] in
-            self?.updateLineNumbers()
+            guard let self else { return }
+            self.updateLineNumbers()
+            let storage = self.editor.textStorage
+            storage.beginEditing()
+            self.indentWrappedRows(of: storage)
+            storage.endEditing()
         }, completion: { [weak self] in
             guard let self else { return }
             self.updateLineNumbers()
@@ -1762,30 +1819,85 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         gutter.setNeedsDisplay()
     }
 
-    func textViewDidChangeSelection(_ textView: UITextView) {
-        gutter.selectionDidChange()
+}
+
+/// How the editor draws code: one font, one colour per kind of token, and the indent a wrapped
+/// row takes. Every value is made once, so telling whether a run of text already has it is
+/// comparing the same objects.
+private final class AorusPluginCodeStyle {
+    let font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+    let text: UIColor
+    private let keyword = UIColor.systemPink
+    private let string = UIColor.systemGreen
+    private let comment = UIColor.systemGray
+    private let number = UIColor.systemOrange
+    private let api = UIColor.systemPurple
+    private let function = UIColor.systemBlue
+    private let regex = UIColor.systemTeal
+    private let column: CGFloat
+    private var paragraphs: [Int: NSParagraphStyle] = [:]
+
+    /// How far past a line's own indent its wrapped rows start, in columns, and the most a
+    /// wrapped row is ever indented, so a deeply nested line still has room on a phone.
+    private static let wrapIndent = 4
+    private static let wrapIndentLimit = 20
+
+    init(dark: Bool) {
+        text = dark ? .white : .black
+        column = ("0" as NSString).size(withAttributes: [.font: font]).width
+    }
+
+    func color(for kind: AorusJSToken.Kind) -> UIColor? {
+        switch kind {
+        case .keyword: return keyword
+        case .string, .template: return string
+        case .comment: return comment
+        case .number, .literal: return number
+        case .api: return api
+        case .function: return function
+        case .regex: return regex
+        default: return nil
+        }
+    }
+
+    func paragraph(indent columns: Int) -> NSParagraphStyle {
+        let wrapped = min(columns + AorusPluginCodeStyle.wrapIndent, AorusPluginCodeStyle.wrapIndentLimit)
+        if let cached = paragraphs[wrapped] { return cached }
+        let style = NSMutableParagraphStyle()
+        style.firstLineHeadIndent = 0
+        style.headIndent = CGFloat(wrapped) * column
+        style.lineBreakMode = .byWordWrapping
+        paragraphs[wrapped] = style
+        return style
+    }
+
+    /// Sets `value` over `range` only if some of the range has something else.
+    func ensure(_ key: NSAttributedString.Key, _ value: NSObject, in range: NSRange, of storage: NSTextStorage) {
+        var differs = false
+        storage.enumerateAttribute(key, in: range, options: [.longestEffectiveRangeNotRequired]) { current, _, stop in
+            if let current = current as? NSObject, current === value || current.isEqual(value) { return }
+            differs = true
+            stop.pointee = true
+        }
+        if differs { storage.addAttribute(key, value: value, range: range) }
     }
 }
 
 /// The line numbers beside the code.
 ///
-/// Not a second text view scrolled along with the first — that one used another font, other
-/// insets and knew nothing of wrapping, so its numbers drifted away from their lines within a
-/// screen and a single line showed its "1" somewhere above it. The gutter asks the editor's own
-/// layout manager where each line starts and draws its number on that line's baseline: a
-/// wrapped line keeps one number, on its first row, an empty file shows 1 beside the cursor,
-/// and the line with the cursor is drawn brighter. Only the lines on the screen are drawn.
+/// The gutter asks the editor's own layout manager where each line starts and draws its
+/// number on that line's baseline, every number alike. A line longer than the screen keeps
+/// one number, on its first row; its other rows are indented past where it starts, so they
+/// read as the rest of it. An empty file shows 1 beside the cursor. Only the lines on the
+/// screen are drawn.
 private final class AorusPluginLineGutter: UIView {
     weak var textView: UITextView?
 
     private let font = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-    private let currentFont = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
     private var color = UIColor.secondaryLabel
-    private var currentColor = UIColor.label
     private var separator = UIColor.separator
     /// Where every line starts, in UTF-16 offsets, the first one at 0.
     private var lineStarts: [Int] = [0]
-    private var currentLine = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1798,8 +1910,7 @@ private final class AorusPluginLineGutter: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func configure(dark: Bool) {
-        color = dark ? UIColor(white: 1, alpha: 0.32) : UIColor(white: 0, alpha: 0.32)
-        currentColor = dark ? UIColor(white: 1, alpha: 0.85) : UIColor(white: 0, alpha: 0.75)
+        color = dark ? UIColor(white: 1, alpha: 0.36) : UIColor(white: 0, alpha: 0.36)
         separator = dark ? UIColor(white: 1, alpha: 0.08) : UIColor(white: 0, alpha: 0.08)
         textDidChange()
     }
@@ -1807,7 +1918,7 @@ private final class AorusPluginLineGutter: UIView {
     /// As wide as the longest number, two digits at least, with room either side.
     var preferredWidth: CGFloat {
         let digits = max(2, String(lineStarts.count).count)
-        let digit = ("0" as NSString).size(withAttributes: [.font: currentFont]).width
+        let digit = ("0" as NSString).size(withAttributes: [.font: font]).width
         return ceil(CGFloat(digits) * digit + 18)
     }
 
@@ -1820,19 +1931,7 @@ private final class AorusPluginLineGutter: UIView {
             if unit == 10 { starts.append(offset) }
         }
         lineStarts = starts
-        updateCurrentLine()
         setNeedsDisplay()
-    }
-
-    func selectionDidChange() {
-        let previous = currentLine
-        updateCurrentLine()
-        if currentLine != previous { setNeedsDisplay() }
-    }
-
-    private func updateCurrentLine() {
-        let location = textView?.selectedRange.location ?? 0
-        currentLine = line(containing: location)
     }
 
     /// The line a UTF-16 offset is on, by binary search over the line starts.
@@ -1857,6 +1956,7 @@ private final class AorusPluginLineGutter: UIView {
         let offset = textView.contentOffset.y
         let length = textView.textStorage.length
         let editorFont = textView.font ?? UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         // Where the numbers go, in the text container's own coordinates.
         let visible = CGRect(x: 0, y: offset - inset.top, width: container.size.width, height: bounds.height)
         var first = 0
@@ -1867,28 +1967,23 @@ private final class AorusPluginLineGutter: UIView {
         }
         for index in first ..< lineStarts.count {
             let start = lineStarts[index]
-            let fragment: CGRect
             let baseline: CGFloat
             if start >= length || layout.numberOfGlyphs == 0 {
                 // The empty line after a final new line, or an empty file: the extra line
                 // fragment is where the cursor sits.
                 let extra = layout.extraLineFragmentRect
-                fragment = extra.isEmpty ? CGRect(x: 0, y: 0, width: 0, height: editorFont.lineHeight) : extra
-                baseline = fragment.minY + editorFont.ascender
+                baseline = (extra.isEmpty ? 0 : extra.minY) + editorFont.ascender
             } else {
                 let glyph = layout.glyphIndexForCharacter(at: start)
-                fragment = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-                baseline = fragment.minY + layout.location(forGlyphAt: glyph).y
+                let row = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+                baseline = row.minY + layout.location(forGlyphAt: glyph).y
             }
             let y = baseline + inset.top - offset
             if y - editorFont.ascender > bounds.height { break }
             if y + editorFont.lineHeight < 0 { continue }
-            let isCurrent = index == currentLine
-            let numberFont = isCurrent ? currentFont : font
             let label = String(index + 1) as NSString
-            let attributes: [NSAttributedString.Key: Any] = [.font: numberFont, .foregroundColor: isCurrent ? currentColor : color]
             let size = label.size(withAttributes: attributes)
-            label.draw(at: CGPoint(x: bounds.width - 9 - size.width, y: y - numberFont.ascender), withAttributes: attributes)
+            label.draw(at: CGPoint(x: bounds.width - 9 - size.width, y: y - font.ascender), withAttributes: attributes)
         }
     }
 }
@@ -2349,15 +2444,15 @@ private enum AorusPluginDocumentation {
             messageDeleted: { accountId, peerId, msgId, msgNs }
             messageEdited: { accountId, peerId, msgId, msgNs, originalText, text, date }
             send: { accountId, peerId, text }
-            Идентификаторы аккаунтов и чатов — десятичные строки. События сообщений требуют отдельного разрешения и относятся только к текущему аккаунту. Обработчик send может вернуть новую строку, false для отмены или ничего для отправки без изменений. Promise из send не задерживает отправку.
+            Идентификаторы аккаунтов и чатов — десятичные строки. События сообщений требуют отдельного разрешения и относятся только к текущему аккаунту. Подписка по имени сама запрашивает разрешение, без которого событие не приходит: message, messageDeleted и messageEdited — входящие, send — исходящие, chatOpened и chatClosed — сведения о чате, inputChanged — поле ввода, appSettingsChanged — настройку приложения, connectionChanged — управление соединением, overlayAction и nativeButtonAction — свой интерфейс, pluginMessage — сообщения плагинов. Обработчик send может вернуть новую строку, false для отмены или ничего для отправки без изменений. Promise из send не задерживает отправку.
 
             Команды
             aorus.commands.register('name', (args, context) => result, { description, usage })
             aorus.commands.setPrefix('.')
-            Синхронная строка заменяет введённую команду. Promise поглощает команду и после завершения отправляет строковый результат. Контекст содержит peerId, accountId, raw и command.
+            Синхронная строка заменяет введённую команду. false, true или ничего — команда поглощена, сообщение не уходит. Promise поглощает команду сразу, а строка, которой он завершился, уходит туда, где команду написали: в тот же чат, в ту же тему и ответом на то же сообщение. Для этого хватает outgoingMessages — разрешение на отправку сообщений не нужно. Ответ принимается один раз и не позже чем через 10 минут. Число или объект вместо строки не отправляются, а в консоли появляется предупреждение. Контекст содержит peerId, accountId, raw и command.
 
             Сообщения и чаты
-            Идентификаторы peerId и accountId передаются десятичными строками без потери точности.
+            Идентификаторы peerId и accountId передаются десятичными строками без потери точности. Текст длиннее 4096 символов уходит несколькими сообщениями подряд, разрезанными по строкам.
             await aorus.messages.send(peerId, text)
             await aorus.messages.send(peerId, text, { replyTo: 123, threadId: 7, silent: true, scheduleAt: Date.now() + 3600000 })
             await aorus.messages.reply(message, 'Ответ')
@@ -2607,15 +2702,15 @@ private enum AorusPluginDocumentation {
     messageDeleted: { accountId, peerId, msgId, msgNs }
     messageEdited: { accountId, peerId, msgId, msgNs, originalText, text, date }
     send: { accountId, peerId, text }
-    Account and peer identifiers are decimal strings. Message events require their own permission and are scoped to the current account. A send handler may return replacement text, false to consume it, or nothing to leave it unchanged. A Promise from send never delays sending.
+    Account and peer identifiers are decimal strings. Message events require their own permission and are scoped to the current account. Subscribing by name asks for the permission an event is not delivered without: message, messageDeleted and messageEdited need incoming messages, send needs outgoing messages, chatOpened and chatClosed need chat metadata, inputChanged needs the composer, appSettingsChanged needs app customization, connectionChanged needs connection control, overlayAction and nativeButtonAction need custom UI, pluginMessage needs plugin messaging. A send handler may return replacement text, false to consume it, or nothing to leave it unchanged. A Promise from send never delays sending.
 
     Commands
     aorus.commands.register('name', (args, context) => result, { description, usage })
     aorus.commands.setPrefix('.')
-    A synchronous string replaces the typed command. A Promise consumes the command and sends a string result after it resolves. Context contains peerId, accountId, raw and command.
+    A synchronous string replaces the typed command. false, true or nothing consumes it and nothing is sent. A Promise consumes the command at once, and the string it resolves with goes where the command was typed: the same chat, the same topic, as a reply to the same message. outgoingMessages is enough for that; the send messages permission is not needed. The answer is accepted once and no later than 10 minutes on. A number or an object instead of a string is not sent and the console shows a warning. Context contains peerId, accountId, raw and command.
 
     Messages and chats
-    peerId and accountId values are decimal strings so 64-bit identifiers remain exact.
+    peerId and accountId values are decimal strings so 64-bit identifiers remain exact. A text longer than 4096 characters goes out as consecutive messages, cut at line breaks.
     await aorus.messages.send(peerId, text)
     await aorus.messages.send(peerId, text, { replyTo: 123, threadId: 7, silent: true, scheduleAt: Date.now() + 3600000 })
     await aorus.messages.reply(message, 'Reply')
@@ -3125,6 +3220,9 @@ private struct AorusPluginStatus {
         let granted = AorusPluginStore.shared.permissionState(for: pluginId)
         let requested = AorusPluginPermission.requestedBySource(record.source)
         let digestMatches = granted.sourceDigest == AorusPluginStore.sourceDigest(record.source)
+        // Switched off because the code the person approved reaches for something they were
+        // never asked about — found by a newer app reading the same code. Turning it on asks.
+        let outgrewGrant = digestMatches && !granted.granted.isEmpty && !requested.isSubset(of: granted.granted)
         if let error = sandbox?.lastError, !error.isEmpty {
             badge = AorusPluginUIString.failed.text
             detail = error
@@ -3140,7 +3238,7 @@ private struct AorusPluginStatus {
             detail = AorusPluginUIString.running.text
             color = .systemGreen
             isFailure = false
-        } else if !record.manifest.isEnabled {
+        } else if !record.manifest.isEnabled && !outgrewGrant {
             badge = AorusPluginUIString.stopped.text
             detail = AorusPluginUIString.stopped.text
             color = .systemGray

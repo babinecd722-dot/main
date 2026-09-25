@@ -1312,7 +1312,7 @@ def check_plugin_boundary(root: Path, errors: list[str]) -> None:
     for marker in (
         "def patch_plugin_outgoing_hook_composer",
         "self.chatDisplayNode.sendMessages = { [weak self] messages, silentPosting",
-        "aorusPluginMessages = messages.compactMap { message in",
+        "aorusPluginMessages = messages.flatMap { message -> [EnqueueMessage] in",
         "transformEnqueueMessages(aorusPluginMessages, silentPosting: effectiveSilentPosting",
     ):
         if marker not in branding:

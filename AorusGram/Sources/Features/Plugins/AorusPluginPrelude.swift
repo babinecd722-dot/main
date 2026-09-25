@@ -83,6 +83,18 @@ public enum AorusPluginPrelude {
             return { peerId: peerId, namespace: namespace, messageId: messageId };
         }
 
+        var PRELUDE_URL = 'aorus://prelude.js';
+
+        // The frames of an error's stack that are the plugin's own. A refusal from the app is
+        // made in here, and its whole stack is this file: lines that name nothing the plugin
+        // wrote, and a line number into code its author has never seen.
+        function pluginStack(error) {
+            if (typeof error.stack !== 'string') { return ''; }
+            return error.stack.split('\\n').filter(function (frame) {
+                return frame.length > 0 && frame.indexOf(PRELUDE_URL) === -1;
+            }).join('\\n');
+        }
+
         // What console.* prints for a value: JSON for objects, with cycles cut and the
         // whole thing capped so a runaway object cannot flood the log.
         function describe(value, depth, seen) {
@@ -91,7 +103,10 @@ public enum AorusPluginPrelude {
             if (type === 'string') { return depth === 0 ? value : JSON.stringify(value); }
             if (type === 'number' || type === 'boolean' || type === 'undefined' || type === 'bigint' || type === 'symbol') { return String(value); }
             if (type === 'function') { return '[Function' + (value.name ? ' ' + value.name : '') + ']'; }
-            if (value instanceof Error) { return (value.name || 'Error') + ': ' + value.message + (value.stack ? '\\n' + value.stack : ''); }
+            if (value instanceof Error) {
+                var stack = pluginStack(value);
+                return (value.name || 'Error') + ': ' + value.message + (stack ? '\\n' + stack : '');
+            }
             if (value instanceof Date) { return value.toISOString(); }
             if (value instanceof RegExp) { return String(value); }
             if (depth > 6) { return '[Object]'; }
@@ -128,7 +143,7 @@ public enum AorusPluginPrelude {
 
         function reportError(where, error) {
             var text = where + ': ' + describe(error, 0, []);
-            if (error && typeof error === 'object' && typeof error.line === 'number') {
+            if (error && typeof error === 'object' && typeof error.line === 'number' && error.sourceURL !== PRELUDE_URL) {
                 text += ' (line ' + error.line + ')';
             }
             host.log('error', text);
@@ -165,6 +180,7 @@ public enum AorusPluginPrelude {
             requireFunction(handler, 'handler');
             if (!handlers.hasOwnProperty(event)) { throw new Error('Unknown event: ' + event); }
             handlers[event].push(handler);
+            if (handlers[event].length === 1) { host.listening(event, true); }
             if (event === 'send') { notifyHooks(); }
             return function () { off(event, handler); };
         }
@@ -173,9 +189,13 @@ public enum AorusPluginPrelude {
             requireString(event, 'event');
             if (!handlers.hasOwnProperty(event)) { return; }
             var list = handlers[event];
+            var before = list.length;
             for (var i = list.length - 1; i >= 0; i--) {
                 if (list[i] === handler || list[i].__aorusOriginal === handler) { list.splice(i, 1); }
             }
+            // The app wakes a plugin for what someone types, or for every message, only
+            // while it has a handler for it.
+            if (before > 0 && list.length === 0) { host.listening(event, false); }
             if (event === 'send') { notifyHooks(); }
         }
 
@@ -1901,7 +1921,20 @@ public enum AorusPluginPrelude {
 
         // ---- the outgoing text hook -------------------------------------------------------
 
-        function runCommand(text, peerId, accountId) {
+        // What a handler's answer was, for the one line the console gets when it is none of
+        // the answers a command can give: a string is sent, and true, false or nothing mean
+        // it was handled.
+        function describeResult(value) {
+            if (value === null) { return 'null'; }
+            if (Array.isArray(value)) { return 'an array'; }
+            return typeof value === 'object' ? 'an object' : 'a ' + typeof value;
+        }
+
+        // `replyToken` is where the command was typed — the chat, the topic, the message it
+        // answered — held by the app for one answer. A command that answers later sends it
+        // back there with the same grant it runs under: finishing the send the person started
+        // is not the plugin sending something of its own.
+        function runCommand(text, peerId, accountId, replyToken) {
             var trimmed = text.replace(/^\\s+/, '');
             if (commandOrder.length === 0 || trimmed.slice(0, prefix.length) !== prefix) { return null; }
             var body = trimmed.slice(prefix.length);
@@ -1933,22 +1966,30 @@ public enum AorusPluginPrelude {
             if (result && typeof result.then === 'function') {
                 result.then(function (value) {
                     if (typeof value === 'string' && value.length > 0) {
-                        aorus.messages.send(peerId, value, { accountId: accountId }).then(undefined, function (error) {
+                        request('commands.reply', { token: typeof replyToken === 'string' ? replyToken : '', text: value }).then(function () {
+                            host.log('debug', 'Command ' + prefix + name + ' answered');
+                        }, function (error) {
                             reportError('Command ' + prefix + name + ' could not send its result', error);
                         });
+                    } else if (value !== undefined && value !== null && typeof value !== 'boolean' && value !== '') {
+                        host.log('warn', 'Command ' + prefix + name + ' resolved with ' + describeResult(value) + '; only a string is sent');
                     }
                 }, function (error) {
                     reportError('Command ' + prefix + name + ' rejected', error);
                 });
-                return { consumed: true, replacement: null };
+                return { consumed: true, replacement: null, pending: true };
             }
-            if (typeof result === 'string') { return { consumed: false, replacement: result }; }
-            host.log('debug', 'Command ' + prefix + name + ' handled');
+            if (typeof result === 'string' && result.length > 0) { return { consumed: false, replacement: result }; }
+            if (result !== undefined && result !== null && typeof result !== 'boolean' && result !== '') {
+                host.log('warn', 'Command ' + prefix + name + ' returned ' + describeResult(result) + '; the message was not sent. Return a string to send it');
+            } else {
+                host.log('debug', 'Command ' + prefix + name + ' handled');
+            }
             return { consumed: true, replacement: null };
         }
 
-        function runOutgoing(text, peerId, accountId) {
-            var verdict = runCommand(text, peerId, accountId);
+        function runOutgoing(text, peerId, accountId, replyToken) {
+            var verdict = runCommand(text, peerId, accountId, replyToken);
             if (verdict) { return verdict; }
             var current = text;
             var list = handlers.send.slice();

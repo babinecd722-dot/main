@@ -68,6 +68,44 @@ expect(
     AorusPluginPermission.requestedBySource("aorus.messages.edit(ref, 'x'); aorus.messages.delete(ref); aorus.messages.forward(ref, '2'); aorus.messages.react(ref, '👍');") == [.manageMessages],
     "message mutation methods require the manage-messages grant"
 )
+// A text longer than a message goes out as several, cut where a reader would cut it.
+let longText = String(repeating: "word ", count: 2_000)
+let longPieces = AorusPluginTextEntity.split(longText, entities: [])
+expect(longPieces.count == 3 && longPieces.allSatisfy { $0.text.utf16.count <= AorusPluginTextEntity.messageLengthLimit }, "a long text is cut into messages that fit")
+expect(longPieces.map { $0.text }.joined(separator: " ") == String(longText.dropLast()), "no word is lost or cut in two")
+let shortText = "aaaa bbbb\ncccc dddd"
+let acrossCut = AorusPluginTextEntity(kind: .bold, offset: 5, length: 9)
+let shortPieces = AorusPluginTextEntity.split(shortText, entities: [acrossCut], limit: 10)
+expect(shortPieces.map { $0.text } == ["aaaa bbbb", "cccc dddd"], "a text is cut at its line break")
+expect(
+    shortPieces.count == 2
+        && shortPieces[0].entities == [AorusPluginTextEntity(kind: .bold, offset: 5, length: 4)]
+        && shortPieces[1].entities == [AorusPluginTextEntity(kind: .bold, offset: 0, length: 4)],
+    "an entity across a cut is shared out between the pieces"
+)
+expect(AorusPluginTextEntity.split(String(repeating: "😀", count: 6), entities: [], limit: 5).allSatisfy { piece in piece.text.unicodeScalars.allSatisfy { $0 == "😀" } }, "no emoji is cut in half")
+expect(AorusPluginTextEntity.split("short", entities: []).map { $0.text } == ["short"], "a text that fits is sent as it is")
+
+// Events are asked for by the table the sandbox gates them with, however the name is quoted.
+expect(AorusPluginPermission.requestedBySource("aorus.on('chatOpened', function () {});") == [.chatMetadata], "listening for chatOpened asks for chat metadata")
+expect(AorusPluginPermission.requestedBySource("aorus.events.once(`connectionChanged`, f);") == [.connectionControl], "a template-quoted event is read")
+expect(AorusPluginPermission.requestedBySource("aorus.waitFor(\"appSettingsChanged\");") == [.appCustomization], "waitFor asks for what the event needs")
+expect(AorusPluginPermission.requestedBySource("aorus.on('nativeButtonAction', f);") == [.customUI], "button presses need the UI grant")
+expect(AorusPluginPermission.requestedBySource("aorus.on('start', f); aorus.on('uiAction', f);").isEmpty, "ungated events ask for nothing")
+for (event, permission) in AorusPluginPermission.eventPermissions {
+    expect(AorusPluginPermission.requestedBySource("aorus.on('\(event)', f)").contains(permission), "subscribing to \(event) asks for \(permission.rawValue)")
+    expect(AorusPluginPrelude.events.contains(event), "the gated event \(event) is one the prelude accepts")
+}
+// A call is read however it is spelled.
+expect(AorusPluginPermission.requestedBySource("aorus\n    .messages\n    .send('1', 'x');") == [.sendMessages], "a call split across lines is read")
+expect(AorusPluginPermission.requestedBySource("aorus.ui?.toast('x');") == [.dialogs], "an optional-chained call is read")
+expect(AorusPluginPermission.requestedBySource("aorus.users.get( 'me' );") == [.accountProfile, .chatMetadata], "users.get('me') asks for the account")
+expect(AorusPluginPermission.requestedBySource("aorus.users.get('42');") == [.chatMetadata], "users.get of someone else does not")
+expect(AorusPluginPermission.requestedBySource("aorus.media.share(ref);") == [.messageHistory, .dialogs], "sharing an attachment asks for the share sheet")
+expect(
+    AorusPluginPermission.requestedBySource("aorus.commands.register('doc', async function () { return 'x'; });") == [.outgoingMessages],
+    "a command answering later asks for nothing beyond the command"
+)
 // The consent sheet is built from the probe table, so a capability with no needle is one
 // nobody is ever asked about and the plugin is therefore never granted — its calls fail
 // silently forever. `aorus.ui.toast` was exactly that.
@@ -201,7 +239,9 @@ do {
     try store.save(record)
     expect(store.manifest(id: manifest.id)?.summary.count == 2_000, "long plugin description persists without truncation")
     let digest = AorusPluginStore.sourceDigest(record.source)
+    let generationBeforeGrant = store.generation
     try store.setPermissionState(AorusPluginPermissionState(sourceDigest: digest, granted: [.network]), for: manifest.id)
+    expect(store.generation != generationBeforeGrant, "a grant moves the store's generation before it is announced")
     let schema = [AorusPluginSettingField(key: "enabled", kind: .toggle, title: "Enabled", defaultValue: .bool(true))]
     try store.setSchema(schema, sourceDigest: digest, for: manifest.id)
     expect(store.permissionState(for: manifest.id).granted == [.network], "permission state persists")
@@ -212,6 +252,13 @@ do {
     expect(store.permissionState(for: manifest.id).granted.isEmpty, "source change revokes permission grants")
     expect(store.schema(for: manifest.id, source: changed.source).isEmpty, "source change revokes the stale settings schema")
     expect(store.manifest(id: manifest.id)?.isEnabled == false, "source change disables the plugin")
+    // Granting on enable keeps what was granted the same code by hand, and nothing for new code.
+    let changedDigest = AorusPluginStore.sourceDigest(changed.source)
+    try store.setPermissionState(AorusPluginPermissionState(sourceDigest: changedDigest, granted: [.sendMessages]), for: manifest.id)
+    try store.grantRequested([.dialogs], source: changed.source, for: manifest.id)
+    expect(store.permissionState(for: manifest.id).granted == [.dialogs, .sendMessages], "re-enabling keeps a grant given by hand")
+    try store.grantRequested([.dialogs], source: "console.log('newer');", for: manifest.id)
+    expect(store.permissionState(for: manifest.id).granted == [.dialogs], "new code keeps no earlier grant")
 } catch {
     expect(false, "store operations failed: \(error)")
 }
@@ -315,6 +362,31 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(eventStorage["edited"] == .string("updated"), "edit events reach a plugin with message permission")
     events.stop()
 
+    // A busy event goes only to a plugin with a handler for it, and stops when the handler goes.
+    let typingHost = AorusPluginNullHost()
+    var typed: [String] = []
+    typingHost.onStorageChanged = { _, values in if let text = values["typed"]?.stringValue { typed.append(text) } }
+    let typing = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Typing"),
+        source: """
+        var stop = aorus.on('inputChanged', function (event) {
+            aorus.storage.set('typed', event.text);
+            if (event.text === 'last') { stop(); }
+        });
+        """,
+        host: typingHost,
+        permissions: [.composer]
+    )
+    let typingStarted = DispatchSemaphore(value: 0)
+    typing.start { _ in typingStarted.signal() }
+    _ = typingStarted.wait(timeout: .now() + 2)
+    typing.dispatch(event: "inputChanged", payload: ["text": "last"])
+    Thread.sleep(forTimeInterval: 0.1)
+    typing.dispatch(event: "inputChanged", payload: ["text": "after"])
+    Thread.sleep(forTimeInterval: 0.1)
+    expect(typed == ["last"], "a plugin stops being woken for input once its handler is gone")
+    typing.stop()
+
     let deniedEventHost = AorusPluginNullHost()
     var deniedEventWrites = 0
     deniedEventHost.onStorageChanged = { _, _ in deniedEventWrites += 1 }
@@ -348,9 +420,12 @@ if AorusPluginSandbox.watchdogAvailable {
 
     let asyncHost = AorusPluginNullHost()
     var translatedMessages: [String] = []
+    var translatedContext: AorusPluginOutgoingContext?
+    var plainSends = 0
     let translated = DispatchSemaphore(value: 0)
     asyncHost.onAIAsk = { _, prompt, _ in ["text": "Translated: \(prompt)", "artifacts": []] }
-    asyncHost.onSendMessage = { _, _, _, _, text, _ in translatedMessages.append(text); translated.signal() }
+    asyncHost.onSendMessage = { _, _, _, _, _, _ in plainSends += 1 }
+    asyncHost.onCommandResult = { _, context, text in translatedMessages.append(text); translatedContext = context; translated.signal() }
     let asyncCommand = AorusPluginSandbox(
         manifest: AorusPluginManifest(name: "Translate command"),
         source: """
@@ -362,17 +437,62 @@ if AorusPluginSandbox.watchdogAvailable {
         });
         """,
         host: asyncHost,
-        permissions: [.outgoingMessages, .artificialIntelligence, .sendMessages]
+        // No sendMessages: the answer finishes the send the person started, under the grant
+        // the command runs with. Asking for more is how `.doc` failed on every call.
+        permissions: [.outgoingMessages, .artificialIntelligence]
     )
     let asyncStarted = DispatchSemaphore(value: 0)
     asyncCommand.start { error in expect(error == nil, "async command starts"); asyncStarted.signal() }
     _ = asyncStarted.wait(timeout: .now() + 2)
-    let asyncVerdict = asyncCommand.processOutgoing(text: ".tr hello", peerId: 100, accountId: 200, timeout: 0.5)
+    let typedAt = AorusPluginOutgoingContext(peerId: 100, accountId: 200, threadId: 7, replyTo: .init(peerId: 100, namespace: 0, messageId: 55))
+    let asyncVerdict = asyncCommand.processOutgoing(text: ".tr hello", context: typedAt, timeout: 0.5)
     expect(asyncVerdict.consumed, "async command consumes original text before Telegram enqueue")
     expect(translated.wait(timeout: .now() + 2) == .success, "async command completes its send")
     expect(translatedMessages == ["Translated: hello"], "async AI command sends the answer exactly once")
+    expect(translatedContext == typedAt, "an async answer goes to the chat, topic and reply it was typed in")
+    expect(plainSends == 0, "an async answer is not an ordinary send")
     expect(asyncCommand.storageSnapshot["phase"]?.stringValue == "Working", "AI progress events reach the plugin")
     asyncCommand.stop()
+
+    // An answer ready at once still counts as later: it comes back while the promise jobs are
+    // drained, before the verdict is read.
+    let readyHost = AorusPluginNullHost()
+    var readyAnswers: [String] = []
+    let readyAnswered = DispatchSemaphore(value: 0)
+    readyHost.onCommandResult = { _, _, text in readyAnswers.append(text); readyAnswered.signal() }
+    let readyCommand = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Ready command"),
+        source: "aorus.commands.register('now', async function () { return 'ready'; });",
+        host: readyHost,
+        permissions: [.outgoingMessages]
+    )
+    let readyStarted = DispatchSemaphore(value: 0)
+    readyCommand.start { _ in readyStarted.signal() }
+    _ = readyStarted.wait(timeout: .now() + 2)
+    _ = readyCommand.processOutgoing(text: ".now", peerId: 1, accountId: 2, timeout: 0.5)
+    expect(readyAnswered.wait(timeout: .now() + 2) == .success && readyAnswers == ["ready"], "an answer ready at once is sent")
+    readyCommand.stop()
+
+    // A refusal made by the app says what was refused, and not where in the prelude.
+    let refusalHost = AorusPluginNullHost()
+    var refusalLog: [String] = []
+    let refused = DispatchSemaphore(value: 0)
+    refusalHost.onLog = { _, level, text in
+        guard level == .error else { return }
+        refusalLog.append(text)
+        refused.signal()
+    }
+    let refusal = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Refusal"),
+        source: "aorus.messages.send('1', 'x').catch(function (error) { console.error(error); });",
+        host: refusalHost,
+        permissions: []
+    )
+    refusal.start { _ in }
+    expect(refused.wait(timeout: .now() + 2) == .success, "a refused call is reported")
+    expect(refusalLog.first?.hasPrefix("Error: Permission not granted: sendMessages") == true, "a refusal names the permission")
+    expect(refusalLog.allSatisfy { !$0.contains("prelude.js") }, "a refusal carries no prelude frames")
+    refusal.stop()
 
     let integrationHost = AorusPluginNullHost()
     var receivedPages: [AorusPluginUIPage] = []

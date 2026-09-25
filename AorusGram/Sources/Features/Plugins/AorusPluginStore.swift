@@ -134,7 +134,23 @@ public final class AorusPluginStore {
         }
     }
 
+    private let generationLock = NSLock()
+    private var generationValue = 0
+
+    /// Moves on with every change to a manifest, a source or a grant, before anyone is told.
+    /// Something read together with the generation read just before it is current for as long
+    /// as the generation has not moved — known at once, without waiting for the notification,
+    /// which arrives later and on the main queue.
+    public var generation: Int {
+        generationLock.lock()
+        defer { generationLock.unlock() }
+        return generationValue
+    }
+
     private func notifyChanged() {
+        generationLock.lock()
+        generationValue &+= 1
+        generationLock.unlock()
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: AorusPluginStore.changedNotification, object: nil)
         }
@@ -476,6 +492,17 @@ public final class AorusPluginStore {
             try write(try encoder.encode(state), to: permissionsURL(for: id))
         }
         notifyChanged()
+    }
+
+    /// Grants what the source asks for and keeps what the person granted the same code by
+    /// hand: a plugin that reaches the API through a variable gets the rest on its permissions
+    /// screen, and switching it off and on again must not take that away. New code keeps
+    /// nothing.
+    public func grantRequested(_ requested: Set<AorusPluginPermission>, source: String, for id: String) throws {
+        let digest = AorusPluginStore.sourceDigest(source)
+        let previous = permissionState(for: id)
+        let kept = previous.sourceDigest == digest ? previous.granted : []
+        try setPermissionState(AorusPluginPermissionState(sourceDigest: digest, granted: requested.union(kept)), for: id)
     }
 
     public func revokePermissions(for id: String) {

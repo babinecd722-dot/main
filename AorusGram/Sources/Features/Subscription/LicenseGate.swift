@@ -525,7 +525,10 @@ final class LicenseGate {
                     backup[key] = ud.bool(forKey: key)
                     changed = true
                 }
-                ud.set(false, forKey: key)
+                // Written only when it is not already off: a write every second of every
+                // flag posted a defaults change each time, and everything listening for
+                // settings redrew once a second for as long as the lock lasted.
+                if ud.bool(forKey: key) { ud.set(false, forKey: key) }
             }
             if changed { ud.set(backup, forKey: LicenseGate.lockBackupKey) }
         }

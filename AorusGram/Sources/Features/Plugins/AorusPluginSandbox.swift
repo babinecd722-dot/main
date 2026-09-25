@@ -25,6 +25,10 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginSettingsSchemaChanged(_ pluginId: String, fields: [AorusPluginSettingField])
     func pluginSettingsChanged(_ pluginId: String, values: [String: AorusPluginJSONValue])
     func pluginSendMessage(_ pluginId: String, peerId: Int64?, toSelf: Bool, accountId: Int64?, text: String, entities: [AorusPluginTextEntity], options: AorusPluginSendOptions, completion: @escaping (Result<Void, Error>) -> Void)
+    /// A command's answer that came after the send it was typed into, going back to where it
+    /// was typed. Needs `outgoingMessages`, the permission the command runs under, and never
+    /// `sendMessages`: it finishes the send the person started.
+    func pluginSendCommandResult(_ pluginId: String, context: AorusPluginOutgoingContext, text: String, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void)
     func pluginBeginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginDeleteMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, forEveryone: Bool, completion: @escaping (Result<Void, Error>) -> Void)
@@ -119,6 +123,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onSendMessage: ((String, Int64?, Bool, Int64?, String, Int32?) -> Void)?
     public var onSendEntities: ((String, [AorusPluginTextEntity]) -> Void)?
     public var onSendOptions: ((String, AorusPluginSendOptions) -> Void)?
+    public var onCommandResult: ((String, AorusPluginOutgoingContext, String) -> Void)?
     public var onMessageAction: ((String, String, Int64, Int32, Int32) -> Void)?
     public var onToast: ((String, String) -> Void)?
     public var onShare: ((String, String?, String?) -> Void)?
@@ -189,6 +194,10 @@ open class AorusPluginNullHost: AorusPluginHostServices {
         onSendEntities?(pluginId, entities)
         onSendOptions?(pluginId, options)
         onSendMessage?(pluginId, peerId, toSelf, accountId, text, options.replyTo)
+        completion(.success(()))
+    }
+    open func pluginSendCommandResult(_ pluginId: String, context: AorusPluginOutgoingContext, text: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        onCommandResult?(pluginId, context, text)
         completion(.success(()))
     }
     open func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void) { onMessageAction?(pluginId, "edit", peerId, namespace, messageId); onEditEntities?(pluginId, entities); completion(.success(())) }
@@ -477,6 +486,69 @@ public struct AorusPluginTextEntity: Equatable {
         }
         return result
     }
+
+    /// The longest message Telegram takes, in the UTF-16 units it counts. A longer one is
+    /// refused by the server and sits in the chat with a red mark — which is what a command
+    /// answering with a page of documentation got.
+    public static let messageLengthLimit = 4096
+
+    /// A text too long for one message, as the messages it goes out as: each cut at the last
+    /// line break in the second half of the limit, else at the last space, else at the limit
+    /// itself, never between the halves of a surrogate pair. The break a text is cut at is
+    /// dropped, and so is a piece that would be nothing but whitespace. Entities go with the
+    /// piece they are in, shortened where they cross a cut; a custom emoji cut in two is left
+    /// out.
+    public static func split(_ text: String, entities: [AorusPluginTextEntity], limit: Int = messageLengthLimit) -> [(text: String, entities: [AorusPluginTextEntity])] {
+        func isBlank(_ unit: UInt16) -> Bool { return unit == 0x20 || unit == 0x0A || unit == 0x0D || unit == 0x09 }
+        let units = Array(text.utf16)
+        guard units.count > limit, limit > 1 else { return [(text, entities)] }
+        var pieces: [(text: String, entities: [AorusPluginTextEntity])] = []
+        var start = 0
+        while start < units.count {
+            var end = min(start + limit, units.count)
+            var next = end
+            if end < units.count {
+                let floor = start + limit / 2
+                var cut: Int?
+                for separator: UInt16 in [0x0A, 0x20] where cut == nil {
+                    var index = end
+                    while index > floor {
+                        if units[index - 1] == separator { cut = index - 1; break }
+                        index -= 1
+                    }
+                }
+                if let cut {
+                    end = cut
+                    next = cut + 1
+                } else if UTF16.isLeadSurrogate(units[end - 1]) {
+                    end -= 1
+                    next = end
+                }
+            }
+            // Without the blank lines and spaces either side of a cut, which Telegram would
+            // trim and the entities after them would then be counted from the wrong place.
+            var first = start
+            while first < end, isBlank(units[first]) { first += 1 }
+            while end > first, isBlank(units[end - 1]) { end -= 1 }
+            if end > first {
+                var pieceEntities: [AorusPluginTextEntity] = []
+                for entity in entities {
+                    let lower = max(entity.offset, first)
+                    let upper = min(entity.offset + entity.length, end)
+                    guard upper > lower else { continue }
+                    let clipped = lower != entity.offset || upper != entity.offset + entity.length
+                    if clipped && entity.kind == .customEmoji { continue }
+                    var moved = entity
+                    moved.offset = lower - first
+                    moved.length = upper - lower
+                    pieceEntities.append(moved)
+                }
+                pieces.append((String(decoding: units[first ..< end], as: UTF16.self), pieceEntities))
+            }
+            start = next
+        }
+        return pieces
+    }
 }
 
 public enum AorusPluginRunError: Error, Equatable {
@@ -513,6 +585,36 @@ public struct AorusPluginOutgoingVerdict: Equatable {
     }
 
     public static let passThrough = AorusPluginOutgoingVerdict()
+}
+
+/// Where a typed message was going: its chat and account, the forum topic, and the message it
+/// answered. A command that answers later sends its answer back to exactly this place, the
+/// way an answer given at once takes the typed message's place.
+public struct AorusPluginOutgoingContext: Equatable {
+    /// A message a typed message answered. It can be in another chat: a reply can quote one.
+    public struct ReplyTarget: Equatable {
+        public var peerId: Int64
+        public var namespace: Int32
+        public var messageId: Int32
+
+        public init(peerId: Int64, namespace: Int32, messageId: Int32) {
+            self.peerId = peerId
+            self.namespace = namespace
+            self.messageId = messageId
+        }
+    }
+
+    public var peerId: Int64
+    public var accountId: Int64
+    public var threadId: Int64?
+    public var replyTo: ReplyTarget?
+
+    public init(peerId: Int64, accountId: Int64, threadId: Int64? = nil, replyTo: ReplyTarget? = nil) {
+        self.peerId = peerId
+        self.accountId = accountId
+        self.threadId = threadId
+        self.replyTo = replyTo
+    }
 }
 
 /// How a plugin's message goes out, beyond its text.
@@ -558,6 +660,11 @@ public final class AorusPluginSandbox {
     public static let noChatOpen = "No chat is open"
     /// How many log lines the sandbox keeps for the console panel.
     public static let recentLogLimit = 500
+    /// How long a command may take to answer. Its answer after that is refused: ten minutes
+    /// on, a message in a chat somebody has long moved on from is not an answer to anything.
+    public static let commandReplyLifetime: TimeInterval = 600
+    /// Commands owing an answer at once. The oldest gives way.
+    public static let commandReplyLimit = 16
     /// Hosts a plugin may not talk to: the app's own control plane.
     public static let blockedHostSuffixes: [String] = ["aorusgram.com"]
 
@@ -582,6 +689,9 @@ public final class AorusPluginSandbox {
     private var session: URLSession?
     private var networkDelegate: AorusPluginNetworkDelegate?
     private var pendingRequestIds = Set<Int32>()
+    /// Where each command still owing an answer was typed, by the token the answer comes back
+    /// with. On the plugin's queue, like everything the prelude calls.
+    private var commandReplies: [String: (context: AorusPluginOutgoingContext, expires: Date)] = [:]
     private let stateLock = NSLock()
     private var runningFlag = false
     /// When the plugin is allowed to be asked for an outgoing verdict again. A timeout is
@@ -611,6 +721,15 @@ public final class AorusPluginSandbox {
     private var recentEntries: [AorusPluginLogEntry] = []
     private var sendHooks = false
     private var commandHooks = false
+    /// The events the plugin has a handler for, as the prelude reports them.
+    private var listenedEvents: Set<String> = []
+    /// Events the app sends only to a plugin listening for them: they come with every key
+    /// someone types, every message and every chat opened, and waking each plugin for each
+    /// of them to find it has nothing to do was the cost of a busy chat.
+    public static let deliveredOnlyToListeners: Set<String> = [
+        "message", "messageDeleted", "messageEdited", "inputChanged", "chatOpened", "chatClosed",
+        "appSettingsChanged", "connectionChanged", "foreground", "background",
+    ]
 
     /// Called on the sandbox queue for every log line, after the host has been told. The
     /// editor's console attaches here.
@@ -879,10 +998,12 @@ public final class AorusPluginSandbox {
         session = nil
         networkDelegate = nil
         pendingRequestIds.removeAll()
+        commandReplies.removeAll()
         stateLock.lock()
         runningFlag = false
         sendHooks = false
         commandHooks = false
+        listenedEvents.removeAll()
         stateLock.unlock()
     }
 
@@ -890,17 +1011,15 @@ public final class AorusPluginSandbox {
 
     /// Delivers an event asynchronously on the plugin's queue.
     public func dispatch(event: String, payload: [String: Any]) {
-        if ["message", "messageDeleted", "messageEdited"].contains(event) && !permissions.contains(.incomingMessages) { return }
-        if event == "send" && !permissions.contains(.outgoingMessages) { return }
-        if event == "appSettingsChanged" && !permissions.contains(.appCustomization) { return }
-        if event == "connectionChanged" && !permissions.contains(.connectionControl) { return }
-        if ["chatOpened", "chatClosed"].contains(event) && !permissions.contains(.chatMetadata) { return }
-        // What someone is typing, keystroke by keystroke, before they have decided to send
-        // it. That is the composer, not chat metadata.
-        if event == "inputChanged" && !permissions.contains(.composer) { return }
-        if event == "overlayAction" && !permissions.contains(.customUI) { return }
-        if event == "nativeButtonAction" && !permissions.contains(.customUI) { return }
-        if event == "pluginMessage" && !permissions.contains(.pluginMessaging) { return }
+        // The same table the scanner asks from, so an event a plugin listens for is one it
+        // was asked to be granted.
+        if let permission = AorusPluginPermission.eventPermissions[event], !permissions.contains(permission) { return }
+        if AorusPluginSandbox.deliveredOnlyToListeners.contains(event) {
+            stateLock.lock()
+            let listening = listenedEvents.contains(event)
+            stateLock.unlock()
+            guard listening else { return }
+        }
         queue.async {
             self.deliver(event: event, payload: payload)
         }
@@ -965,6 +1084,12 @@ public final class AorusPluginSandbox {
     /// caller for at most `timeout`; a plugin that does not answer in time is marked hung and
     /// never waited on again.
     public func processOutgoing(text: String, peerId: Int64, accountId: Int64, timeout: TimeInterval) -> AorusPluginOutgoingVerdict {
+        return processOutgoing(text: text, context: AorusPluginOutgoingContext(peerId: peerId, accountId: accountId), timeout: timeout)
+    }
+
+    /// The same, knowing where the text was going, so that a command answering later can
+    /// answer there.
+    public func processOutgoing(text: String, context outgoing: AorusPluginOutgoingContext, timeout: TimeInterval) -> AorusPluginOutgoingVerdict {
         guard hasOutgoingHooks else { return .passThrough }
         final class Box {
             let lock = NSLock()
@@ -977,13 +1102,28 @@ public final class AorusPluginSandbox {
             var verdict = AorusPluginOutgoingVerdict.passThrough
             if let dispatcher = self.dispatcher, self.context != nil {
                 self.pendingException = nil
-                if let result = dispatcher.invokeMethod("runOutgoing", withArguments: [text, String(peerId), String(accountId)]),
+                // Registered before the command runs: an answer that is ready at once comes
+                // back while the promise jobs are drained, which is before this call returns.
+                let token = UUID().uuidString
+                self.rememberCommandReply(token, context: outgoing)
+                var pending = false
+                if let result = dispatcher.invokeMethod("runOutgoing", withArguments: [text, String(outgoing.peerId), String(outgoing.accountId), token]),
                    result.isObject {
                     verdict.consumed = result.forProperty("consumed").toBool()
+                    pending = result.forProperty("pending").toBool()
                     let replacement = result.forProperty("replacement")
                     if let replacement = replacement, replacement.isString {
                         verdict.replacement = replacement.toString()
                     }
+                }
+                box.lock.lock()
+                let wentOutUnchanged = box.abandoned
+                box.lock.unlock()
+                // Kept only for a command that answers later, and only when the chat waited for
+                // the verdict: after a timeout the typed text went out as it was, and an answer
+                // following it would be a message nobody asked for.
+                if !pending || wentOutUnchanged {
+                    self.commandReplies[token] = nil
                 }
             }
             box.lock.lock()
@@ -1002,6 +1142,16 @@ public final class AorusPluginSandbox {
         }
         box.lock.lock(); defer { box.lock.unlock() }
         return box.verdict
+    }
+
+    private func rememberCommandReply(_ token: String, context: AorusPluginOutgoingContext) {
+        let now = Date()
+        commandReplies = commandReplies.filter { $0.value.expires > now }
+        while commandReplies.count >= AorusPluginSandbox.commandReplyLimit,
+              let oldest = commandReplies.min(by: { $0.value.expires < $1.value.expires })?.key {
+            commandReplies[oldest] = nil
+        }
+        commandReplies[token] = (context, now.addingTimeInterval(AorusPluginSandbox.commandReplyLifetime))
     }
 
     /// What the running plugin registered: the command prefix, the command names and the
@@ -1217,6 +1367,14 @@ public final class AorusPluginSandbox {
             self.stateLock.unlock()
         }
         hostObject.setObject(hooksChanged, forKeyedSubscript: "hooksChanged" as NSString)
+
+        let listening: @convention(block) (String, Bool) -> Void = { [weak self] event, active in
+            guard let self = self else { return }
+            self.stateLock.lock()
+            if active { self.listenedEvents.insert(event) } else { self.listenedEvents.remove(event) }
+            self.stateLock.unlock()
+        }
+        hostObject.setObject(listening, forKeyedSubscript: "listening" as NSString)
 
         let registerDispatcher: @convention(block) (JSValue) -> Void = { [weak self] value in
             self?.dispatcher = value
@@ -1681,6 +1839,22 @@ public final class AorusPluginSandbox {
             )
             let entities = AorusPluginTextEntity.validated(payload["entities"] as? [[String: Any]] ?? [], text: text)
             host.pluginSendMessage(pluginId, peerId: int64("peerId"), toSelf: toSelf, accountId: int64("accountId"), text: text, entities: entities, options: options) { [weak self] result in
+                self?.settle(id, with: result.map { _ -> Any? in nil })
+            }
+        case "commands.reply":
+            // A command's answer that came later than the send it was typed into. It goes
+            // where the command was typed, once, under the permission the command itself runs
+            // with.
+            guard require(.outgoingMessages, id: id) else { return }
+            guard let token = string("token"), let reply = commandReplies.removeValue(forKey: token), reply.expires > Date() else {
+                settle(id, with: .failure(AorusPluginRequestError("A command answers once, within \(Int(AorusPluginSandbox.commandReplyLifetime / 60)) minutes, in the chat it was typed in")))
+                return
+            }
+            guard let text = string("text"), !text.isEmpty, text.count <= 32_768 else {
+                settle(id, with: .failure(AorusPluginRequestError("Message is empty or too long")))
+                return
+            }
+            host.pluginSendCommandResult(pluginId, context: reply.context, text: text) { [weak self] result in
                 self?.settle(id, with: result.map { _ -> Any? in nil })
             }
         case "messages.edit":

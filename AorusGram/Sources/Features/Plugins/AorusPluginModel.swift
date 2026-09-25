@@ -268,68 +268,25 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 "aorus.chats.open", "aorus.app.openChat", "aorus.telegram.openLink",
                 "aorus.navigation.openChat", "aorus.navigation.openProfile", "aorus.navigation.openTelegramLink",
             ]),
-            (.accountProfile, ["aorus.account.current", "aorus.app.currentAccount", "aorus.users.me"]),
+            // `users.get('me')` is the account itself, answered from the account.
+            (.accountProfile, ["aorus.account.current", "aorus.app.currentAccount", "aorus.users.me", "aorus.users.get('me'", "aorus.users.get(\"me\"", "aorus.users.get(`me`"]),
             // `toast` is gated on the same permission as the other dialogs and had no
             // needle, so a plugin whose only visible output is a toast was granted nothing
             // and every message it showed went nowhere, silently.
-            (.dialogs, ["aorus.ui.alert", "aorus.ui.confirm", "aorus.ui.prompt", "aorus.ui.share", "aorus.app.share", "aorus.ui.toast", "aorus.ui.showToast", "aorus.ui.showSheet", "aorus.users.select", "aorus.files.pick", "aorus.files.share", "aorus.app.restartHint"]),
+            (.dialogs, ["aorus.ui.alert", "aorus.ui.confirm", "aorus.ui.prompt", "aorus.ui.share", "aorus.app.share", "aorus.ui.toast", "aorus.ui.showToast", "aorus.ui.showSheet", "aorus.users.select", "aorus.files.pick", "aorus.files.share", "aorus.app.restartHint",
+                // Handing an attachment to the share sheet or the Files picker is a sheet the
+                // person answers, on top of reading the message it is in.
+                "aorus.media.share", "aorus.media.saveToFiles"]),
             (.clipboardRead, ["aorus.clipboard.read"]),
             (.clipboardWrite, ["aorus.clipboard.write"]),
+            // The events themselves are in `eventPermissions`.
             (.incomingMessages, [
                 // The same event, filtered before it reaches the handler.
                 "aorus.messages.onIncoming",
-                "aorus.on('message",
-                "aorus.on(\"message",
-                "aorus.once('message",
-                "aorus.once(\"message",
-                "aorus.events.on('message",
-                "aorus.events.on(\"message",
-                "aorus.events.once('message",
-                "aorus.events.once(\"message",
-                "aorus.events.waitFor('message",
-                "aorus.events.waitFor(\"message",
-                "aorus.waitFor('message",
-                "aorus.waitFor(\"message",
-                "aorus.on('messageDeleted",
-                "aorus.on(\"messageDeleted",
-                "aorus.once('messageDeleted",
-                "aorus.once(\"messageDeleted",
-                "aorus.events.on('messageDeleted",
-                "aorus.events.on(\"messageDeleted",
-                "aorus.events.once('messageDeleted",
-                "aorus.events.once(\"messageDeleted",
-                "aorus.events.waitFor('messageDeleted",
-                "aorus.events.waitFor(\"messageDeleted",
-                "aorus.waitFor('messageDeleted",
-                "aorus.waitFor(\"messageDeleted",
-                "aorus.on('messageEdited",
-                "aorus.on(\"messageEdited",
-                "aorus.once('messageEdited",
-                "aorus.once(\"messageEdited",
-                "aorus.events.on('messageEdited",
-                "aorus.events.on(\"messageEdited",
-                "aorus.events.once('messageEdited",
-                "aorus.events.once(\"messageEdited",
-                "aorus.events.waitFor('messageEdited",
-                "aorus.events.waitFor(\"messageEdited",
-                "aorus.waitFor('messageEdited",
-                "aorus.waitFor(\"messageEdited",
             ]),
             // Reading a message's text, and reading what is attached to it.
             (.messageHistory, ["aorus.chats.history", "aorus.media."]),
             (.outgoingMessages, [
-                "aorus.on('send",
-                "aorus.on(\"send",
-                "aorus.once('send",
-                "aorus.once(\"send",
-                "aorus.events.on('send",
-                "aorus.events.on(\"send",
-                "aorus.events.once('send",
-                "aorus.events.once(\"send",
-                "aorus.events.waitFor('send",
-                "aorus.events.waitFor(\"send",
-                "aorus.waitFor('send",
-                "aorus.waitFor(\"send",
                 "aorus.commands",
                 // The document's two names for the same hook. A plugin that registers it
                 // under either one is asking for the same thing.
@@ -382,18 +339,6 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             (.appInternalsWrite, ["aorus.hook.replace", "aorus.tree.mutate", "aorus.objc."]),
             (.pluginMessaging, [
                 "aorus.plugins.emit", "aorus.plugins.on",
-                "aorus.on('pluginMessage",
-                "aorus.on(\"pluginMessage",
-                "aorus.once('pluginMessage",
-                "aorus.once(\"pluginMessage",
-                "aorus.events.on('pluginMessage",
-                "aorus.events.on(\"pluginMessage",
-                "aorus.events.once('pluginMessage",
-                "aorus.events.once(\"pluginMessage",
-                "aorus.events.waitFor('pluginMessage",
-                "aorus.events.waitFor(\"pluginMessage",
-                "aorus.waitFor('pluginMessage",
-                "aorus.waitFor(\"pluginMessage",
             ]),
             // Writing into the box someone is typing in, and watching them type. Reading the
             // open chat is `chatMetadata`; changing what is in it is this.
@@ -403,25 +348,94 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 // Opening the editor puts a message into the composer, which is this
                 // grant. Rewriting one outright is `messages.edit` and `manageMessages`.
                 "aorus.messages.beginEdit",
-                "aorus.on('inputChanged",
-                "aorus.on(\"inputChanged",
-                "aorus.once('inputChanged",
-                "aorus.once(\"inputChanged",
-                "aorus.events.on('inputChanged",
-                "aorus.events.on(\"inputChanged",
-                "aorus.events.once('inputChanged",
-                "aorus.events.once(\"inputChanged",
-                "aorus.events.waitFor('inputChanged",
-                "aorus.events.waitFor(\"inputChanged",
-                "aorus.waitFor('inputChanged",
-                "aorus.waitFor(\"inputChanged",
             ]),
     ]
 
+    /// The events the app delivers only with a permission. The sandbox drops such an event
+    /// for a plugin without it, and the scanner asks for it wherever the source subscribes to
+    /// the event by name — one table for both, so that a plugin listening for `chatOpened` is
+    /// asked for what `chatOpened` needs instead of waiting for an event that never comes.
+    public static let eventPermissions: [String: AorusPluginPermission] = [
+        "message": .incomingMessages,
+        "messageDeleted": .incomingMessages,
+        "messageEdited": .incomingMessages,
+        "send": .outgoingMessages,
+        "appSettingsChanged": .appCustomization,
+        "connectionChanged": .connectionControl,
+        "chatOpened": .chatMetadata,
+        "chatClosed": .chatMetadata,
+        // What someone is typing, keystroke by keystroke, before they have decided to send
+        // it. That is the composer, not chat metadata.
+        "inputChanged": .composer,
+        "overlayAction": .customUI,
+        "nativeButtonAction": .customUI,
+        "pluginMessage": .pluginMessaging,
+    ]
+
+    private static let subscription = try? NSRegularExpression(
+        pattern: "aorus\\s*\\.\\s*(?:events\\s*\\.\\s*)?(?:on|once|waitFor)\\s*\\(\\s*['\"`]([A-Za-z.]+)['\"`]"
+    )
+    // A member access however it is written: across lines, with spaces, optionally chained;
+    // and a call's opening parenthesis with space after it.
+    private static let spelling: [(NSRegularExpression, String)] = {
+        let patterns: [(String, String)] = [
+            ("\\s*\\??\\.\\s*(?=[A-Za-z_$])", "."),
+            ("\\(\\s+", "("),
+        ]
+        return patterns.compactMap { pattern, replacement in
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { return nil }
+            return (expression, replacement)
+        }
+    }()
+
+    /// The source as the needles read it. `aorus` on one line and `.messages.send(` on the
+    /// next, `aorus.ui?.toast(` and `aorus.users.get( 'me' )` are the calls the needles name,
+    /// written another way.
+    static func probeText(_ source: String) -> String {
+        var text = source
+        for (expression, replacement) in spelling {
+            text = expression.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: replacement)
+        }
+        return text
+    }
+
+    /// The events the source subscribes to by name, with any quotes.
+    public static func subscribedEvents(_ source: String) -> Set<String> {
+        guard let subscription else { return [] }
+        let nsSource = source as NSString
+        var events = Set<String>()
+        for match in subscription.matches(in: source, range: NSRange(location: 0, length: nsSource.length)) where match.numberOfRanges > 1 {
+            events.insert(nsSource.substring(with: match.range(at: 1)))
+        }
+        return events
+    }
+
+    private final class Requested {
+        let permissions: Set<AorusPluginPermission>
+        init(_ permissions: Set<AorusPluginPermission>) { self.permissions = permissions }
+    }
+
+    /// The answer for a source already read. Every list row, status line and start asks, and
+    /// reading a large plugin for a hundred and fifty needles each time is work on the main
+    /// thread for an answer that cannot have changed.
+    private static let requestedCache: NSCache<NSString, Requested> = {
+        let cache = NSCache<NSString, Requested>()
+        cache.countLimit = 64
+        return cache
+    }()
+
     public static func requestedBySource(_ source: String) -> Set<AorusPluginPermission> {
-        return Set(sourceProbes.compactMap { permission, needles in
-            needles.contains(where: source.contains) ? permission : nil
+        let key = source as NSString
+        if let cached = requestedCache.object(forKey: key) { return cached.permissions }
+        let text = probeText(source)
+        var requested = Set(sourceProbes.compactMap { permission, needles in
+            needles.contains(where: text.contains) ? permission : nil
         })
+        for event in subscribedEvents(source) {
+            if let permission = eventPermissions[event] { requested.insert(permission) }
+        }
+        requestedCache.setObject(Requested(requested), forKey: key)
+        return requested
     }
 }
 
