@@ -1767,6 +1767,14 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         present(sheet, animated: true)
     }
 
+    /// Still called what a new plugin is called, in whichever language the app spoke when it
+    /// was made. Compared only with the current language, a plugin created in English kept
+    /// "Plugins" through every generation once the app was in Russian.
+    static func hasDefaultName(_ manifest: AorusPluginManifest) -> Bool {
+        let name = manifest.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty || AorusLang.allCases.contains { aorusL("Плагины", "Plugins", $0) == name }
+    }
+
     /// The generated code, typed in over what was there. It is not saved: Save does that, as for
     /// anything typed by hand, and the back arrow brings the previous code back in one step. A
     /// plugin still called by its default name takes the draft's name and description.
@@ -1792,7 +1800,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         })
         updateHistoryControl(animated: true)
         if let name = draft.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
-           record.manifest.name == AorusPluginUIString.plugins.text {
+           AorusPluginEditorController.hasDefaultName(record.manifest) {
             var manifest = record.manifest
             manifest.name = name
             if manifest.summary.isEmpty, let summary = draft.description { manifest.summary = summary }

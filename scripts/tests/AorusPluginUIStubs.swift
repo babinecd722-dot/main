@@ -222,7 +222,7 @@ public protocol AccountContext: AnyObject {
 
 // MARK: - AorusGramUI's own module surface
 
-public enum AorusLang: String {
+public enum AorusLang: String, CaseIterable {
     case ru
     case en
 
@@ -230,7 +230,11 @@ public enum AorusLang: String {
 }
 
 public func aorusL(_ ru: String, _ en: String) -> String {
-    return AorusLang.current == .ru ? ru : en
+    return aorusL(ru, en, AorusLang.current)
+}
+
+public func aorusL(_ ru: String, _ en: String, _ lang: AorusLang) -> String {
+    return lang == .ru ? ru : en
 }
 
 /// The entitlement verdict, read by the editor's debug host. The real one is in the core
