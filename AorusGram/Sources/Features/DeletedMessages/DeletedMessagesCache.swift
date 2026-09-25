@@ -77,30 +77,54 @@ final class DeletedMessagesCache {
 
     /// On `queue`.
     private func pruneIfDue() {
-        guard let db else { return }
-        let now = Date()
+        guard db != nil else { return }
+        let now = Date().timeIntervalSince1970
         let last = UserDefaults.standard.double(forKey: Self.lastPruneKey)
-        guard now.timeIntervalSince1970 - last >= Self.pruneInterval else { return }
-        UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.lastPruneKey)
+        guard now - last >= Self.pruneInterval else { return }
+        UserDefaults.standard.set(now, forKey: Self.lastPruneKey)
+        pruneBatch(cutoff: Int64(now) - Self.undeletedLifetime)
+    }
+
+    /// A few thousand rows at a time, each pass queued behind whatever arrived meanwhile, so
+    /// the first prune of a file that grew for months never holds up a message being cached
+    /// or the deleted-messages screen asking for its list.
+    private static let pruneBatchSize: Int32 = 2_000
+
+    /// On `queue`.
+    private func pruneBatch(cutoff: Int64) {
+        guard let db else { return }
         var stmt: OpaquePointer?
-        let expired = "DELETE FROM messages WHERE status=0 AND original_text IS NULL AND cached_at < ?;"
+        var removed: Int32 = 0
+        let expired = """
+        DELETE FROM messages WHERE rowid IN (
+            SELECT rowid FROM messages WHERE status=0 AND original_text IS NULL AND cached_at < ? LIMIT ?
+        );
+        """
         if sqlite3_prepare_v2(db, expired, -1, &stmt, nil) == SQLITE_OK {
-            sqlite3_bind_int64(stmt, 1, Int64(now.timeIntervalSince1970) - Self.undeletedLifetime)
-            sqlite3_step(stmt)
+            sqlite3_bind_int64(stmt, 1, cutoff)
+            sqlite3_bind_int(stmt, 2, Self.pruneBatchSize)
+            if sqlite3_step(stmt) == SQLITE_DONE { removed = sqlite3_changes(db) }
         }
         sqlite3_finalize(stmt)
         stmt = nil
-        let overflow = """
-        DELETE FROM messages WHERE rowid IN (
-            SELECT rowid FROM messages WHERE status=0 AND original_text IS NULL
-            ORDER BY cached_at DESC LIMIT -1 OFFSET ?
-        );
-        """
-        if sqlite3_prepare_v2(db, overflow, -1, &stmt, nil) == SQLITE_OK {
-            sqlite3_bind_int(stmt, 1, Int32(Self.undeletedLimit))
-            sqlite3_step(stmt)
+        if removed < Self.pruneBatchSize {
+            // Past the lifetime nothing is left; what remains is kept up to the limit, the
+            // newest first.
+            let overflow = """
+            DELETE FROM messages WHERE rowid IN (
+                SELECT rowid FROM messages WHERE status=0 AND original_text IS NULL
+                ORDER BY cached_at DESC LIMIT ? OFFSET ?
+            );
+            """
+            if sqlite3_prepare_v2(db, overflow, -1, &stmt, nil) == SQLITE_OK {
+                sqlite3_bind_int(stmt, 1, Self.pruneBatchSize)
+                sqlite3_bind_int(stmt, 2, Int32(Self.undeletedLimit))
+                if sqlite3_step(stmt) == SQLITE_DONE { removed = sqlite3_changes(db) }
+            }
+            sqlite3_finalize(stmt)
         }
-        sqlite3_finalize(stmt)
+        guard removed >= Self.pruneBatchSize else { return }
+        queue.async { [weak self] in self?.pruneBatch(cutoff: cutoff) }
     }
 
     private func openDB() {

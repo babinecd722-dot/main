@@ -48,6 +48,8 @@ public final class AntiScreenshotManager {
                        name: UIApplication.userDidTakeScreenshotNotification, object: nil)
         nc.addObserver(self, selector: #selector(appDidBecomeActive),
                        name: UIApplication.didBecomeActiveNotification, object: nil)
+        nc.addObserver(self, selector: #selector(appDidBecomeActive),
+                       name: UIApplication.willEnterForegroundNotification, object: nil)
         retryCount = 0
         // A settings toggle happens with an existing key window, so install in
         // the same run-loop turn. The bounded retry remains for early startup.
@@ -81,10 +83,16 @@ public final class AntiScreenshotManager {
     // teardown is exactly what produced the black screen. Here we only confirm
     // the protection survived (iOS can rebuild layer trees) and reinstall it if
     // it was knocked out or the root view controller was replaced.
+    //
+    // More than once: after a long time in the background iOS rebuilds a text field's layers
+    // on the first layout passes after return, not before the notification, and a check made
+    // only at that instant found everything in place a moment before it was gone.
     @objc private func appDidBecomeActive() {
         guard isEnabled else { return }
         retryCount = 0
-        scheduleVerify(delay: 0.0)
+        for delay in [0.0, 0.35, 1.2] {
+            scheduleVerify(delay: delay)
+        }
     }
 
     // MARK: - Install / verify
@@ -110,10 +118,7 @@ public final class AntiScreenshotManager {
 
         // Already protecting the current root view and still attached — the
         // secure field auto-resizes itself, so there is nothing to rebuild.
-        if let field = protectedField,
-           field.superview === keyWindow,
-           protectedRootView === rootView,
-           rootView.layer.superlayer != nil {
+        if protectionIsIntact(keyWindow: keyWindow, rootView: rootView) {
             brandingWindow?.isHidden = false
             return
         }
@@ -122,6 +127,31 @@ public final class AntiScreenshotManager {
         // controller changed — rebuild from a clean state.
         uninstall()
         install(keyWindow: keyWindow, rootView: rootView, scene: scene)
+    }
+
+    /// What the user sees is still what is protected: the root view's layer inside the field's
+    /// secure canvas, the canvas inside the field, the field in the key window — all the way up.
+    ///
+    /// Asking only whether the root layer had a parent was not enough. When iOS rebuilds the
+    /// field's layers, the root layer is left in a canvas that is no longer anywhere in the
+    /// window: it still has a parent, nothing of it reaches the screen, and the app stops
+    /// changing on screen while it goes on working underneath — frozen, until it was killed.
+    private func protectionIsIntact(keyWindow: UIWindow, rootView: UIView) -> Bool {
+        guard let field = protectedField,
+              field.superview === keyWindow,
+              protectedRootView === rootView,
+              let canvas = rootView.layer.superlayer,
+              canvas !== field.layer.superlayer else {
+            return false
+        }
+        var passedField = false
+        var layer: CALayer? = canvas
+        while let current = layer {
+            if current === field.layer { passedField = true }
+            if current === keyWindow.layer { return passedField }
+            layer = current.superlayer
+        }
+        return false
     }
 
     private func install(keyWindow: UIWindow, rootView: UIView, scene: UIWindowScene) {

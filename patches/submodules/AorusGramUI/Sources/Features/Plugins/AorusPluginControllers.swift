@@ -1350,6 +1350,9 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     private var record: AorusPluginRecord
     private let editor = UITextView()
     private let gutter = AorusPluginLineGutter()
+    /// The row band behind the line the cursor is on, inside the text view so it scrolls with
+    /// the text.
+    private let currentLineBand = UIView()
     private let console = UITextView()
     private let consolePlaceholder = UILabel()
     private let editorTools = UIStackView()
@@ -1415,6 +1418,8 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         displayNode.backgroundColor = background
         gutter.textView = editor
         gutter.configure(dark: dark)
+        currentLineBand.isUserInteractionEnabled = false
+        currentLineBand.backgroundColor = AorusPluginLineGutter.bandColor(dark: dark)
         editor.backgroundColor = .clear; editor.textColor = codeStyle.text; editor.font = codeStyle.font
         editor.autocorrectionType = .no; editor.autocapitalizationType = .none; editor.smartQuotesType = .no; editor.smartDashesType = .no
         editor.textContainerInset = UIEdgeInsets(top: 14, left: 8, bottom: 80, right: 12); editor.delegate = self; editor.text = record.source
@@ -1438,7 +1443,8 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
             guard !AorusLicenseAccess.isAllowed else { return }
             self?.stopPlugin()
         }
-        updateLineNumbers(); highlight(); displayNodeDidLoad()
+        editor.insertSubview(currentLineBand, at: 0)
+        updateLineNumbers(); highlight(); updateCurrentLine(); displayNodeDidLoad()
     }
 
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -1457,6 +1463,8 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         transition.updateFrame(view: gutter, frame: CGRect(x: layout.safeInsets.left, y: top, width: gutterWidth, height: codeHeight))
         transition.updateFrame(view: editor, frame: CGRect(x: layout.safeInsets.left + gutterWidth, y: top, width: max(0, layout.size.width - layout.safeInsets.left - gutterWidth), height: codeHeight))
         gutter.setNeedsDisplay()
+        // A new width wraps the lines anew, and the text view lays them out on its next pass.
+        DispatchQueue.main.async { [weak self] in self?.updateCurrentLine() }
         transition.updateFrame(view: console, frame: CGRect(x: 0, y: layout.size.height - bottom - consoleHeight, width: layout.size.width, height: consoleHeight))
         transition.updateFrame(view: consolePlaceholder, frame: CGRect(x: 20, y: layout.size.height - bottom - consoleHeight + 12, width: layout.size.width - 40, height: 22))
         transition.updateFrame(view: editorTools, frame: CGRect(x: 0, y: layout.size.height - toolbarHeight, width: layout.size.width, height: toolbarHeight))
@@ -1482,6 +1490,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
 
     func textViewDidChange(_ textView: UITextView) {
         updateLineNumbers()
+        updateCurrentLine()
         scheduleHighlight()
         recordEdit()
     }
@@ -1613,6 +1622,44 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         indentWrappedRows(of: storage)
         storage.endEditing()
         if editor.selectedRange != selection { editor.selectedRange = selection }
+        updateCurrentLine()
+    }
+
+    /// The line the cursor is on: its number brighter in the gutter and a band behind all of
+    /// its rows, a wrapped line included.
+    private func updateCurrentLine() {
+        let layout = editor.layoutManager
+        let container = editor.textContainer
+        let text = editor.textStorage.string as NSString
+        let caret = min(editor.selectedRange.location, text.length)
+        var rows = CGRect.null
+        if caret == text.length, text.length == 0 || text.character(at: text.length - 1) == 0x0A {
+            // The empty line after a final new line, or an empty file: the cursor is on the
+            // extra line fragment.
+            rows = layout.extraLineFragmentRect
+            if rows.isEmpty {
+                rows = CGRect(x: 0, y: 0, width: container.size.width, height: codeStyle.font.lineHeight)
+            }
+        } else {
+            let paragraph = text.paragraphRange(for: NSRange(location: caret, length: 0))
+            let glyphs = layout.glyphRange(forCharacterRange: paragraph, actualCharacterRange: nil)
+            layout.enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
+                rows = rows.union(rect)
+            }
+        }
+        guard !rows.isNull, rows.height > 0 else {
+            currentLineBand.isHidden = true
+            gutter.currentRows = nil
+            return
+        }
+        currentLineBand.isHidden = false
+        currentLineBand.frame = CGRect(
+            x: 0,
+            y: rows.minY + editor.textContainerInset.top,
+            width: max(editor.bounds.width, editor.contentSize.width),
+            height: rows.height
+        )
+        gutter.currentRows = rows
     }
 
     /// A line too long for the screen goes on under itself, indented past where it starts, so
@@ -1827,6 +1874,9 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         gutter.setNeedsDisplay()
     }
 
+    func textViewDidChangeSelection(_ textView: UITextView) {
+        updateCurrentLine()
+    }
 }
 
 /// How the editor draws code: one font, one colour per kind of token, and the indent a wrapped
@@ -1896,18 +1946,33 @@ private final class AorusPluginCodeStyle {
 /// The line numbers beside the code.
 ///
 /// The gutter asks the editor's own layout manager where each line starts and draws its
-/// number on that line's baseline, every number alike. A line longer than the screen keeps
-/// one number, on its first row; its other rows are indented past where it starts, so they
-/// read as the rest of it. An empty file shows 1 beside the cursor. Only the lines on the
-/// screen are drawn.
+/// number on that line's baseline. A line longer than the screen keeps one number, on its
+/// first row; its other rows are indented past where it starts, so they read as the rest of
+/// it. The line with the cursor has its number brighter and a band behind it, across the
+/// gutter and the code, as tall as all of its rows. An empty file shows 1 beside the cursor.
+/// Only the lines on the screen are drawn.
 private final class AorusPluginLineGutter: UIView {
     weak var textView: UITextView?
 
     private let font = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+    private let currentFont = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
     private var color = UIColor.secondaryLabel
+    private var currentColor = UIColor.label
+    private var band = UIColor.clear
     private var separator = UIColor.separator
     /// Where every line starts, in UTF-16 offsets, the first one at 0.
     private var lineStarts: [Int] = [0]
+    /// The rows of the line with the cursor, in the text container's coordinates.
+    var currentRows: CGRect? {
+        didSet {
+            if currentRows != oldValue { setNeedsDisplay() }
+        }
+    }
+
+    /// The band behind the current line, the same in the gutter and behind the code.
+    static func bandColor(dark: Bool) -> UIColor {
+        return dark ? UIColor(white: 1, alpha: 0.06) : UIColor(white: 0, alpha: 0.045)
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1921,6 +1986,8 @@ private final class AorusPluginLineGutter: UIView {
 
     func configure(dark: Bool) {
         color = dark ? UIColor(white: 1, alpha: 0.36) : UIColor(white: 0, alpha: 0.36)
+        currentColor = dark ? UIColor(white: 1, alpha: 0.88) : UIColor(white: 0, alpha: 0.78)
+        band = AorusPluginLineGutter.bandColor(dark: dark)
         separator = dark ? UIColor(white: 1, alpha: 0.08) : UIColor(white: 0, alpha: 0.08)
         textDidChange()
     }
@@ -1928,7 +1995,7 @@ private final class AorusPluginLineGutter: UIView {
     /// As wide as the longest number, two digits at least, with room either side.
     var preferredWidth: CGFloat {
         let digits = max(2, String(lineStarts.count).count)
-        let digit = ("0" as NSString).size(withAttributes: [.font: font]).width
+        let digit = ("0" as NSString).size(withAttributes: [.font: currentFont]).width
         return ceil(CGFloat(digits) * digit + 18)
     }
 
@@ -1967,6 +2034,14 @@ private final class AorusPluginLineGutter: UIView {
         let length = textView.textStorage.length
         let editorFont = textView.font ?? UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let currentAttributes: [NSAttributedString.Key: Any] = [.font: currentFont, .foregroundColor: currentColor]
+        var currentLine: Int?
+        if let rows = currentRows {
+            context.setFillColor(band.cgColor)
+            context.fill(CGRect(x: 0, y: rows.minY + inset.top - offset, width: bounds.width - 1 / UIScreen.main.scale, height: rows.height))
+            let caret = min(textView.selectedRange.location, length)
+            currentLine = line(containing: caret)
+        }
         // Where the numbers go, in the text container's own coordinates.
         let visible = CGRect(x: 0, y: offset - inset.top, width: container.size.width, height: bounds.height)
         var first = 0
@@ -1992,8 +2067,10 @@ private final class AorusPluginLineGutter: UIView {
             if y - editorFont.ascender > bounds.height { break }
             if y + editorFont.lineHeight < 0 { continue }
             let label = String(index + 1) as NSString
-            let size = label.size(withAttributes: attributes)
-            label.draw(at: CGPoint(x: bounds.width - 9 - size.width, y: y - font.ascender), withAttributes: attributes)
+            let isCurrent = index == currentLine
+            let numberAttributes = isCurrent ? currentAttributes : attributes
+            let size = label.size(withAttributes: numberAttributes)
+            label.draw(at: CGPoint(x: bounds.width - 9 - size.width, y: y - (isCurrent ? currentFont : font).ascender), withAttributes: numberAttributes)
         }
     }
 }

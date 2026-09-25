@@ -72,18 +72,32 @@ public final class AntiSpoofManager {
     // фиксируем время последнего события (typing, message, reaction)
     // даже если у него скрыт last seen.
 
+    // Written on `activityQueue`, read from the main thread by the chat header. The lock is
+    // what makes that safe: a dictionary read while another thread writes it is a crash.
     private var peerActivity: [Int64: PeerActivityRecord] = [:]
-    private let activityQueue = DispatchQueue(label: "aorusgram.peer_activity")
+    private let activityLock = NSLock()
+    private let activityQueue = DispatchQueue(label: "aorusgram.peer_activity", qos: .utility)
+    /// How often one person's "last seen" is written to disk. Every message of every chat
+    /// wrote it — hundreds at once when the app came back after a long time away.
+    private let persistInterval: TimeInterval = 30
+    /// When each person's time was last written. On `activityQueue`.
+    private var persistedAt: [Int64: Date] = [:]
 
     public func recordActivity(peerId: Int64, kind: ActivityKind) {
         guard antiSpoofOnline else { return }
         activityQueue.async { [weak self] in
+            guard let self else { return }
             let record = PeerActivityRecord(peerId: peerId, kind: kind, date: Date())
-            self?.peerActivity[peerId] = record
-            UserDefaults.standard.set(
-                record.date.timeIntervalSince1970,
-                forKey: "aorusgram_peer_last_seen_\(peerId)"
-            )
+            self.activityLock.lock()
+            self.peerActivity[peerId] = record
+            self.activityLock.unlock()
+            if self.persistedAt[peerId].map({ record.date.timeIntervalSince($0) >= self.persistInterval }) ?? true {
+                self.persistedAt[peerId] = record.date
+                UserDefaults.standard.set(
+                    record.date.timeIntervalSince1970,
+                    forKey: "aorusgram_peer_last_seen_\(peerId)"
+                )
+            }
             NotificationCenter.default.post(
                 name: .aorusPeerActivityUpdated,
                 object: nil,
@@ -97,7 +111,10 @@ public final class AntiSpoofManager {
         guard antiSpoofOnline else { return .unknown }
 
         // Проверяем свежую активность в памяти
-        if let record = peerActivity[peerId] {
+        activityLock.lock()
+        let fresh = peerActivity[peerId]
+        activityLock.unlock()
+        if let record = fresh {
             let ago = Date().timeIntervalSince(record.date)
             if ago < 60  { return .online }
             if ago < 300 { return .recently(record.date, record.kind) }

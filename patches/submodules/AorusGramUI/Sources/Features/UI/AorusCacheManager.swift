@@ -16,6 +16,7 @@ public final class AorusCacheManager {
     private init() {}
 
     private var cleanTimer: Timer?
+    private var cleanTimerHours: Int?
     private var observing = false
 
     /// Reclaims the Wall's media. Installed by the Wall itself, which is the only place with
@@ -61,12 +62,21 @@ public final class AorusCacheManager {
     // MARK: - Scheduling
 
     private func _applyAutoClean(enabled: Bool, intervalHours: Int) {
-        cleanTimer?.invalidate(); cleanTimer = nil
-        guard AorusLicenseAccess.isAllowed, enabled else { return }
         let hours = max(1, intervalHours)
-        let t = Timer.scheduledTimer(withTimeInterval: TimeInterval(hours * 3600),
-                                     repeats: true) { [weak self] _ in self?.performCleanup() }
+        guard AorusLicenseAccess.isAllowed, enabled else {
+            cleanTimer?.invalidate(); cleanTimer = nil
+            cleanTimerHours = nil
+            return
+        }
+        // Left alone when nothing about it changed. This runs every time the app comes to the
+        // front, and starting the countdown over each time meant a clean every six hours never
+        // came for anyone who opened the app more often than that.
+        if let timer = cleanTimer, timer.isValid, cleanTimerHours == hours { return }
+        cleanTimer?.invalidate()
+        let t = Timer(timeInterval: TimeInterval(hours * 3600), repeats: true) { [weak self] _ in self?.performCleanup() }
+        t.tolerance = 60
         cleanTimer = t
+        cleanTimerHours = hours
         RunLoop.main.add(t, forMode: .common)
     }
 

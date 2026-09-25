@@ -23912,10 +23912,7 @@ private final class AorusGifCarouselVideoView: UIView {
         // the session to .playback / .playAndRecord before its own voice messages and
         // calls, so leaving those categories untouched means real audio is never
         // disturbed; we only soften the otherwise-interrupting default.
-        let aorusAudioSession = AVAudioSession.sharedInstance()
-        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
-            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
-        }
+        Self.aorusRelaxAudioSession()
         if #available(iOS 13.0, *) {
             self.layer.cornerCurve = .continuous
         }
@@ -23932,10 +23929,28 @@ private final class AorusGifCarouselVideoView: UIView {
     }
 
     @objc private func resume() {
+        // Only a video on screen that nobody paused. Every one the app still held started
+        // decoding again at once on each return to the app.
+        guard self.window != nil, !self.aorusPaused else { return }
         self.queuePlayer.play()
     }
 
+    private var aorusPaused = false
+    private static var aorusAudioSessionRelaxed = false
+
+    /// Once per process rather than once per view: the call waits on the media server, and
+    /// a chat list holding many of these asked it again for every one.
+    private static func aorusRelaxAudioSession() {
+        guard !aorusAudioSessionRelaxed else { return }
+        aorusAudioSessionRelaxed = true
+        let aorusAudioSession = AVAudioSession.sharedInstance()
+        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
+            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
+        }
+    }
+
     func play(path: String) {
+        self.aorusPaused = false
         if self.currentPath == path {
             if self.queuePlayer.timeControlStatus != .playing {
                 self.queuePlayer.play()
@@ -23950,6 +23965,7 @@ private final class AorusGifCarouselVideoView: UIView {
     }
 
     func pause() {
+        self.aorusPaused = true
         self.queuePlayer.pause()
     }
 }
@@ -24038,10 +24054,7 @@ final class AorusGifGridVideoView: UIView {
         // the session to .playback / .playAndRecord before its own voice messages and
         // calls, so leaving those categories untouched means real audio is never
         // disturbed; we only soften the otherwise-interrupting default.
-        let aorusAudioSession = AVAudioSession.sharedInstance()
-        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
-            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
-        }
+        Self.aorusRelaxAudioSession()
         NotificationCenter.default.addObserver(self, selector: #selector(self.resume), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
@@ -24055,10 +24068,28 @@ final class AorusGifGridVideoView: UIView {
     }
 
     @objc private func resume() {
+        // Only a video on screen that nobody paused. Every one the app still held started
+        // decoding again at once on each return to the app.
+        guard self.window != nil, !self.aorusPaused else { return }
         self.queuePlayer.play()
     }
 
+    private var aorusPaused = false
+    private static var aorusAudioSessionRelaxed = false
+
+    /// Once per process rather than once per view: the call waits on the media server, and
+    /// a chat list holding many of these asked it again for every one.
+    private static func aorusRelaxAudioSession() {
+        guard !aorusAudioSessionRelaxed else { return }
+        aorusAudioSessionRelaxed = true
+        let aorusAudioSession = AVAudioSession.sharedInstance()
+        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
+            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
+        }
+    }
+
     func play(path: String) {
+        self.aorusPaused = false
         if self.currentPath == path {
             if self.queuePlayer.timeControlStatus != .playing {
                 self.queuePlayer.play()
@@ -24113,10 +24144,7 @@ final class AorusGifWallpaperHost: UIView {
         // the session to .playback / .playAndRecord before its own voice messages and
         // calls, so leaving those categories untouched means real audio is never
         // disturbed; we only soften the otherwise-interrupting default.
-        let aorusAudioSession = AVAudioSession.sharedInstance()
-        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
-            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
-        }
+        Self.aorusRelaxAudioSession()
         let item = AVPlayerItem(url: url)
         self.looper = AVPlayerLooper(player: self.queuePlayer, templateItem: item)
         self.queuePlayer.play()
@@ -24133,7 +24161,24 @@ final class AorusGifWallpaperHost: UIView {
     }
 
     @objc private func resume() {
+        // Only a video on screen that nobody paused. Every one the app still held started
+        // decoding again at once on each return to the app.
+        guard self.window != nil, !self.aorusPaused else { return }
         self.queuePlayer.play()
+    }
+
+    private var aorusPaused = false
+    private static var aorusAudioSessionRelaxed = false
+
+    /// Once per process rather than once per view: the call waits on the media server, and
+    /// a chat list holding many of these asked it again for every one.
+    private static func aorusRelaxAudioSession() {
+        guard !aorusAudioSessionRelaxed else { return }
+        aorusAudioSessionRelaxed = true
+        let aorusAudioSession = AVAudioSession.sharedInstance()
+        if aorusAudioSession.category == .soloAmbient || aorusAudioSession.category == .ambient {
+            try? aorusAudioSession.setCategory(.ambient, options: [.mixWithOthers])
+        }
     }
 
     static func clearStore() {

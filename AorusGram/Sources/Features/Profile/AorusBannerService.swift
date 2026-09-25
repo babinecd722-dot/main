@@ -351,8 +351,16 @@ public final class AorusBannerService {
         body: Data,
         contentType: String?,
         callerId: Int64,
-        completion: @escaping (Result<(Data, HTTPURLResponse), AorusBannerServiceError>) -> Void
+        completion answer: @escaping (Result<(Data, HTTPURLResponse), AorusBannerServiceError>) -> Void
     ) {
+        // Always answered later and elsewhere, never on the caller's stack. A lookup starts on
+        // `stateQueue`, and its completion reads the cache with `stateQueue.sync`: a refusal
+        // given at once — the licence locked, the key missing — ran that sync on the queue it
+        // was already on, which is a deadlock libdispatch stops by killing the app. It came
+        // with every return to the app, from the banner warm-up there.
+        let completion: (Result<(Data, HTTPURLResponse), AorusBannerServiceError>) -> Void = { result in
+            DispatchQueue.global(qos: .utility).async { answer(result) }
+        }
         guard AorusLicenseAccess.isAllowed else {
             completion(.failure(.notProvisioned))
             return

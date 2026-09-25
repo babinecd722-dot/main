@@ -779,6 +779,20 @@ public final class AorusPluginRuntimeManager {
         }
     }
 
+    private var foregroundReloadScheduled = false
+
+    /// The two notifications usually arrive together, and the first frames after a return
+    /// belong to the screen: one reload, a moment later, reads the plugins from disk once.
+    private func scheduleForegroundReload() {
+        guard !foregroundReloadScheduled else { return }
+        foregroundReloadScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self else { return }
+            self.foregroundReloadScheduled = false
+            self.reloadAutostart(startingMissingOnly: true)
+        }
+    }
+
     private func installObservers() {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
@@ -803,7 +817,7 @@ public final class AorusPluginRuntimeManager {
         for name in [UIApplication.didBecomeActiveNotification, UIApplication.protectedDataDidBecomeAvailableNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 AorusPluginEntitlement.invalidate()
-                self?.reloadAutostart(startingMissingOnly: true)
+                self?.scheduleForegroundReload()
             })
         }
         observers.append(center.addObserver(forName: NSNotification.Name("aorusgram.didReceiveMessage"), object: nil, queue: nil) { [weak self] note in
