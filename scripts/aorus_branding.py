@@ -23935,6 +23935,17 @@ private final class AorusGifCarouselVideoView: UIView {
         self.queuePlayer.play()
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Off screen it stops, so a chat or a list out of sight decodes nothing; back on
+        // screen it goes on, as it would have on a return to the app while it was showing.
+        if self.window == nil {
+            self.queuePlayer.pause()
+        } else {
+            self.resume()
+        }
+    }
+
     private var aorusPaused = false
     private static var aorusAudioSessionRelaxed = false
 
@@ -24074,6 +24085,17 @@ final class AorusGifGridVideoView: UIView {
         self.queuePlayer.play()
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Off screen it stops, so a chat or a list out of sight decodes nothing; back on
+        // screen it goes on, as it would have on a return to the app while it was showing.
+        if self.window == nil {
+            self.queuePlayer.pause()
+        } else {
+            self.resume()
+        }
+    }
+
     private var aorusPaused = false
     private static var aorusAudioSessionRelaxed = false
 
@@ -24165,6 +24187,17 @@ final class AorusGifWallpaperHost: UIView {
         // decoding again at once on each return to the app.
         guard self.window != nil, !self.aorusPaused else { return }
         self.queuePlayer.play()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // Off screen it stops, so a chat or a list out of sight decodes nothing; back on
+        // screen it goes on, as it would have on a return to the app while it was showing.
+        if self.window == nil {
+            self.queuePlayer.pause()
+        } else {
+            self.resume()
+        }
     }
 
     private var aorusPaused = false
