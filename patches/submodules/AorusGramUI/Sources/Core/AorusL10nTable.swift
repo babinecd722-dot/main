@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Salvato. Al codice modificato i permessi vengono concessi di nuovo, quindi la versione precedente è stata fermata. Esegui mostra i permessi e avvia quella nuova.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Il codice scaricato non corrisponde alla versione approvata dal Market. Riprova più tardi.",
         "Updating…": "Aggiornamento…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Questo è il tuo plugin. Modificalo e pubblica una nuova versione da I miei plugin.",
@@ -905,6 +906,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Zapisano. Zmieniony kod otrzymuje uprawnienia od nowa, więc poprzednia wersja została zatrzymana. Uruchom pokaże uprawnienia i uruchomi nową.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Pobrany kod nie zgadza się z wersją zatwierdzoną w Markecie. Spróbuj później.",
         "Updating…": "Aktualizowanie…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "To Twoja wtyczka. Zmień ją i opublikuj nową wersję w sekcji Moje wtyczki.",
@@ -1757,6 +1759,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Opgeslagen. Gewijzigde code krijgt opnieuw toestemmingen, dus de vorige versie is gestopt. Uitvoeren toont de toestemmingen en start de nieuwe.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "De gedownloade code komt niet overeen met de versie die de Market heeft goedgekeurd. Probeer het later opnieuw.",
         "Updating…": "Bijwerken…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Dit is je plug-in. Wijzig hem en publiceer een nieuwe versie via Mijn plug-ins.",
@@ -2609,6 +2612,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Desat. El codi canviat rep els permisos de nou, així que la versió anterior s’ha aturat. Executa mostra els permisos i inicia la nova.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "El codi baixat no coincideix amb la versió aprovada al Market. Torna-ho a provar més tard.",
         "Updating…": "S’està actualitzant…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Aquest és el teu connector. Canvia’l i publica’n una versió nova des d’Els meus connectors.",
@@ -3461,6 +3465,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Tersimpan. Kode yang diubah diberi izin dari awal, jadi versi sebelumnya dihentikan. Jalankan menampilkan izin dan memulai versi baru.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Kode yang diunduh tidak cocok dengan versi yang disetujui Market. Coba lagi nanti.",
         "Updating…": "Memperbarui…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ini plugin Anda. Ubah dan terbitkan versi baru dari Plugin Saya.",
@@ -4313,6 +4318,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Disimpan. Kod yang diubah diberi kebenaran semula, jadi versi sebelumnya dihentikan. Jalankan menunjukkan kebenaran dan memulakan versi baharu.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Kod yang dimuat turun tidak sepadan dengan versi yang diluluskan Pasaran. Cuba lagi nanti.",
         "Updating…": "Mengemas kini…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ini pemalam anda. Ubah dan terbitkan versi baharu daripada Pemalam Saya.",
@@ -5165,6 +5171,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Захавана. Змененаму коду дазволы выдаюцца нанова, таму папярэдняя версія спынена. «Запусціць» пакажа дазволы і запусціць новую.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Спампаваны код не супадае з версіяй, адобранай у Маркеце. Паспрабуйце пазней.",
         "Updating…": "Абнаўленне…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Гэта ваш плагін. Змяніць яго і апублікаваць новую версію можна ў «Мае плагіны».",
@@ -6017,6 +6024,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Saqlandi. O‘zgartirilgan kodga ruxsatlar qaytadan beriladi, shuning uchun oldingi versiya to‘xtatildi. Ishga tushirish ruxsatlarni ko‘rsatadi va yangisini ishga tushiradi.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Yuklab olingan kod Marketda tasdiqlangan versiyaga mos kelmaydi. Keyinroq urinib ko‘ring.",
         "Updating…": "Yangilanmoqda…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Bu sizning plaginingiz. Uni o‘zgartirish va yangi versiyasini chop etish Mening plaginlarim bo‘limida.",
@@ -6869,6 +6877,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "저장되었습니다. 변경된 코드는 권한을 새로 받으므로 이전 버전은 중지되었습니다. 실행을 누르면 권한을 보여 주고 새 버전을 시작합니다.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "다운로드한 코드가 마켓에서 승인된 버전과 일치하지 않습니다. 나중에 다시 시도하세요.",
         "Updating…": "업데이트 중…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "내 플러그인입니다. 내 플러그인에서 수정하고 새 버전을 게시하세요.",
@@ -7721,6 +7730,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "تم الحفظ. تُمنح الشيفرة المعدّلة أذوناتها من جديد، لذلك أُوقف الإصدار السابق. يعرض «تشغيل» الأذونات ويبدأ الإصدار الجديد.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "الشيفرة التي تم تنزيلها لا تطابق الإصدار الذي وافق عليه المتجر. حاول لاحقًا.",
         "Updating…": "جارٍ التحديث…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "هذه إضافتك. عدّلها وانشر إصدارًا جديدًا من «إضافاتي».",
@@ -8573,6 +8583,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "ذخیره شد. به کد تغییریافته دسترسی‌ها از نو داده می‌شود، پس نسخه قبلی متوقف شد. «اجرا» دسترسی‌ها را نشان می‌دهد و نسخه جدید را اجرا می‌کند.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "کد دانلودشده با نسخه تأییدشده در بازار مطابقت ندارد. بعداً دوباره تلاش کنید.",
         "Updating…": "در حال به‌روزرسانی…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "این افزونه شماست. آن را در «افزونه‌های من» تغییر دهید و نسخه تازه منتشر کنید.",
@@ -9425,6 +9436,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Сақталды. Өзгертілген кодқа рұқсаттар қайтадан беріледі, сондықтан алдыңғы нұсқа тоқтатылды. «Іске қосу» рұқсаттарды көрсетіп, жаңасын іске қосады.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Жүктелген код Маркетте мақұлданған нұсқаға сәйкес келмейді. Кейінірек қайталап көріңіз.",
         "Updating…": "Жаңартылуда…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Бұл сіздің плагиніңіз. Оны өзгертіп, жаңа нұсқасын «Менің плагиндерім» бөлімінде жариялаңыз.",
@@ -10277,6 +10289,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "已保存。修改后的代码需要重新授予权限，因此之前的版本已停止。点按“运行”会显示权限并启动新版本。",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "下载的代码与市场批准的版本不一致。请稍后再试。",
         "Updating…": "正在更新…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "这是你的插件。可在“我的插件”中修改并发布新版本。",
@@ -11130,6 +11143,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "已儲存。修改後的程式碼需要重新授予權限，因此先前的版本已停止。點一下「執行」會顯示權限並啟動新版本。",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "下載的程式碼與市集核准的版本不一致。請稍後再試。",
         "Updating…": "正在更新…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "這是你的外掛。可在「我的外掛」中修改並發佈新版本。",
@@ -11982,6 +11996,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "保存しました。変更したコードには権限が改めて付与されるため、以前のバージョンは停止しました。「実行」で権限を確認し、新しいバージョンを開始します。",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "ダウンロードしたコードがマーケットで承認されたバージョンと一致しません。後でもう一度お試しください。",
         "Updating…": "更新中…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "これはあなたのプラグインです。マイプラグインで変更して新しいバージョンを公開できます。",
@@ -12834,6 +12849,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Tallennettu. Muutettu koodi saa oikeutensa uudelleen, joten edellinen versio pysäytettiin. Suorita näyttää oikeudet ja käynnistää uuden.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Ladattu koodi ei vastaa Marketin hyväksymää versiota. Yritä myöhemmin uudelleen.",
         "Updating…": "Päivitetään…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Tämä on oma laajennuksesi. Muokkaa sitä ja julkaise uusi versio kohdassa Omat laajennukset.",
@@ -13686,6 +13702,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "נשמר. לקוד ששונה ניתנות ההרשאות מחדש, ולכן הגרסה הקודמת נעצרה. «הפעלה» מציגה את ההרשאות ומפעילה את החדשה.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "הקוד שהורד אינו תואם לגרסה שאושרה בחנות. נסו שוב מאוחר יותר.",
         "Updating…": "מעדכן…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "זה התוסף שלך. אפשר לשנות אותו ולפרסם גרסה חדשה מ„התוספים שלי”.",
@@ -14538,6 +14555,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Spremljeno. Promijenjeni kôd dobiva dopuštenja iznova, pa je prethodna verzija zaustavljena. Pokreni prikazuje dopuštenja i pokreće novu.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Preuzeti kôd ne odgovara verziji koju je odobrio Market. Pokušaj kasnije.",
         "Updating…": "Ažuriranje…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ovo je tvoj dodatak. Promijeni ga i objavi novu verziju u Mojim dodacima.",
@@ -15390,6 +15408,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Сачувано. Измењеном коду дозволе се дају изнова, па је претходна верзија заустављена. „Покрени“ приказује дозволе и покреће нову.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Преузети код се не поклапа са верзијом коју је одобрио Маркет. Покушај касније.",
         "Updating…": "Ажурирање…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ово је твој додатак. Промени га и објави нову верзију у Мојим додацима.",
@@ -16242,6 +16261,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Uloženo. Změněný kód dostává oprávnění znovu, proto byla předchozí verze zastavena. Spustit zobrazí oprávnění a spustí novou.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Stažený kód neodpovídá verzi schválené v Marketu. Zkuste to později.",
         "Updating…": "Aktualizace…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Toto je váš plugin. Upravit ho a vydat novou verzi můžete v sekci Moje pluginy.",
@@ -17094,6 +17114,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Uložené. Zmenený kód dostáva povolenia znova, preto bola predchádzajúca verzia zastavená. Spustiť zobrazí povolenia a spustí novú.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Stiahnutý kód nezodpovedá verzii schválenej v Markete. Skúste to neskôr.",
         "Updating…": "Aktualizácia…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Toto je váš plugin. Upraviť ho a vydať novú verziu môžete v sekcii Moje pluginy.",
@@ -17946,6 +17967,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Salvat. Codului modificat i se acordă permisiunile din nou, așa că versiunea anterioară a fost oprită. Rulează afișează permisiunile și pornește versiunea nouă.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Codul descărcat nu corespunde versiunii aprobate în Market. Încearcă mai târziu.",
         "Updating…": "Se actualizează…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Acesta este pluginul tău. Modifică-l și publică o versiune nouă din Pluginurile mele.",
@@ -18798,6 +18820,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Mentve. A módosított kód újra megkapja az engedélyeit, ezért az előző verzió leállt. A Futtatás megmutatja az engedélyeket, és elindítja az újat.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "A letöltött kód nem egyezik a Market által jóváhagyott verzióval. Próbáld újra később.",
         "Updating…": "Frissítés…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ez a saját bővítményed. A Saját bővítményekben módosíthatod, és ott tehetsz közzé új verziót.",
@@ -19650,6 +19673,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Lagret. Endret kode får tillatelsene sine på nytt, så den forrige versjonen ble stoppet. Kjør viser tillatelsene og starter den nye.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Den nedlastede koden stemmer ikke med versjonen Market har godkjent. Prøv igjen senere.",
         "Updating…": "Oppdaterer …",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Dette er din utvidelse. Endre den og publiser en ny versjon fra Mine utvidelser.",
@@ -20502,6 +20526,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Sparat. Ändrad kod får sina behörigheter på nytt, så den tidigare versionen stoppades. Kör visar behörigheterna och startar den nya.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Den hämtade koden stämmer inte med versionen som Market har godkänt. Försök igen senare.",
         "Updating…": "Uppdaterar …",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Det här är ditt tillägg. Ändra det och publicera en ny version från Mina tillägg.",
@@ -21354,6 +21379,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Đã lưu. Mã đã thay đổi được cấp quyền lại từ đầu, nên phiên bản trước đã dừng. Chạy sẽ hiển thị các quyền và khởi động phiên bản mới.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Mã đã tải xuống không khớp với phiên bản được Chợ phê duyệt. Hãy thử lại sau.",
         "Updating…": "Đang cập nhật…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Đây là plugin của bạn. Hãy chỉnh sửa và phát hành phiên bản mới trong Plugin của tôi.",
@@ -22206,6 +22232,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Збережено. Зміненому коду дозволи надаються наново, тому попередню версію зупинено. «Запустити» покаже дозволи й запустить нову.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Завантажений код не збігається з версією, схваленою в Маркеті. Спробуйте пізніше.",
         "Updating…": "Оновлення…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Це ваш плагін. Змінити його й опублікувати нову версію можна в «Мої плагіни».",
@@ -23067,6 +23094,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Guardado. Al código modificado se le conceden los permisos de nuevo, así que la versión anterior se detuvo. Ejecutar muestra los permisos e inicia la nueva.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "El código descargado no coincide con la versión aprobada en el Market. Inténtalo más tarde.",
         "Updating…": "Actualizando…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Este es tu plugin. Cámbialo y publica una nueva versión desde Mis plugins.",
@@ -23928,6 +23956,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Salvo. O código alterado recebe as permissões de novo, por isso a versão anterior foi parada. Executar mostra as permissões e inicia a nova.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "O código baixado não corresponde à versão aprovada no Market. Tente novamente mais tarde.",
         "Updating…": "Atualizando…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Este é o seu plugin. Altere-o e publique uma nova versão em Meus plugins.",
@@ -24789,6 +24818,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Gespeichert. Geänderter Code erhält seine Berechtigungen neu, daher wurde die vorherige Version gestoppt. „Starten“ zeigt die Berechtigungen und startet die neue.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Der heruntergeladene Code stimmt nicht mit der im Market freigegebenen Version überein. Versuche es später erneut.",
         "Updating…": "Wird aktualisiert …",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Das ist dein Plugin. Ändere es und veröffentliche eine neue Version unter „Meine Plugins“.",
@@ -25650,6 +25680,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Enregistré. Le code modifié reçoit ses autorisations à nouveau, la version précédente a donc été arrêtée. Exécuter affiche les autorisations et lance la nouvelle.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "Le code téléchargé ne correspond pas à la version approuvée par le Market. Réessayez plus tard.",
         "Updating…": "Mise à jour…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "C’est votre plugin. Modifiez-le et publiez une nouvelle version depuis Mes plugins.",
@@ -26511,6 +26542,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.": "Kaydedildi. Değiştirilen koda izinler yeniden verilir, bu yüzden önceki sürüm durduruldu. Çalıştır izinleri gösterir ve yenisini başlatır.",
         "The downloaded code doesn't match the version the Market approved. Try again later.": "İndirilen kod, Market’in onayladığı sürümle eşleşmiyor. Daha sonra yeniden deneyin.",
         "Updating…": "Güncelleniyor…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Bu sizin eklentiniz. Değiştirip yeni sürümünü Eklentilerim bölümünden yayımlayın.",

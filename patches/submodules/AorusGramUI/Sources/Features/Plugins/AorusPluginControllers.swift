@@ -24,7 +24,7 @@ private enum AorusPluginUIString {
     case name, description, version, author, icon, accent, reviewPermissions, grantAndEnable, noPermissions, syntaxReady
     case status, running, stopped, failed, diagnostics, commands, events, noCommands
     case isolation, available, unavailable, granted, outgoingHook, active, inactive, customColor
-    case sourceChangedDisabled, consoleEmpty
+    case sourceChangedDisabled, savedStopped, consoleEmpty
 
     var text: String {
         switch self {
@@ -73,6 +73,7 @@ private enum AorusPluginUIString {
         case .inactive: return aorusL("Неактивен", "Inactive")
         case .customColor: return aorusL("Свой цвет", "Custom color")
         case .sourceChangedDisabled: return aorusL("Код изменился, поэтому плагин выключен, а выданные разрешения отозваны.", "The code changed, so the plugin was switched off and the permissions it had were revoked.")
+        case .savedStopped: return aorusL("Сохранено. Изменённому коду разрешения выдаются заново, поэтому прежняя версия остановлена. «Запустить» покажет разрешения и запустит новую.", "Saved. Changed code is granted its permissions anew, so the previous version was stopped. Run shows the permissions and starts the new one.")
         case .consoleEmpty: return aorusL("Пока пусто. Здесь появится всё, что плагин пишет через console, и всё, что приложение сообщает о нём.", "Nothing yet. Everything the plugin writes through console, and everything the app reports about it, appears here.")
         }
     }
@@ -1358,6 +1359,8 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     private let editorTools = UIStackView()
     private weak var observedSandbox: AorusPluginSandbox?
     private var runAfterReview = false
+    /// The code was saved changed and has not been granted since: the review says why it asks.
+    private var awaitingReviewOfChange = false
     private var licenseObserver: NSObjectProtocol?
     private var highlightWork: DispatchWorkItem?
     private lazy var codeStyle = AorusPluginCodeStyle(dark: presentationData.theme.overallDarkAppearance)
@@ -1691,14 +1694,29 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
     }
 
+    /// Save writes the code and does nothing else: running is what Run does.
     @objc private func save() {
+        saveSource()
+    }
+
+    /// Writes what the editor holds and answers whether it was written.
+    ///
+    /// Changed code is never run with the grants its previous version had: the store takes
+    /// them back and switches the plugin off until they are given again, and that review
+    /// belongs to Run (or the switch in the list), not to Save. A previous version still
+    /// running is stopped, since it would go on with grants that no longer exist; saved from
+    /// Save, the console says so, while Run goes straight on to the review.
+    @discardableResult
+    private func saveSource(explainingStop: Bool = true) -> Bool {
         // A generation still being typed is finished first: what is saved is the whole plugin.
         AorusPluginCodeTyper.finishTyping(in: editor)
         let source = editor.text ?? ""
         let sourceChanged = source != record.source
+        let wasRunning = AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id) != nil
+        let previous = record
         record.source = source
         do {
-            if sourceChanged {
+            if sourceChanged, wasRunning {
                 stopPlugin()
             }
             try AorusPluginStore.shared.save(record)
@@ -1707,14 +1725,21 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
             }
             title = record.manifest.name
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            // New or changed code never inherits grants. Review it immediately after save,
-            // including the first save, so a freshly-created command cannot look enabled
-            // while the secure runtime has correctly refused to start it.
             if sourceChanged, !record.manifest.isEnabled {
-                offerReenable()
+                // Only a plugin that had something to take back is told it was taken back.
+                if previous.manifest.isEnabled || wasRunning {
+                    awaitingReviewOfChange = true
+                }
+                if wasRunning, explainingStop {
+                    showConsole()
+                    appendConsole(AorusPluginUIString.savedStopped.text)
+                }
             }
+            return true
         } catch {
+            record = previous
             appendConsole("ERROR: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -1724,7 +1749,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         let detail = lines.isEmpty ? AorusPluginUIString.noPermissions.text : lines.joined(separator: "\n")
         let alert = UIAlertController(
             title: AorusPluginUIString.reviewPermissions.text,
-            message: AorusPluginUIString.sourceChangedDisabled.text + "\n\n" + detail,
+            message: awaitingReviewOfChange ? AorusPluginUIString.sourceChangedDisabled.text + "\n\n" + detail : detail,
             preferredStyle: .alert
         )
         alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel) { [weak self] _ in self?.runAfterReview = false })
@@ -1736,6 +1761,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
                 manifest.isEnabled = true
                 try AorusPluginStore.shared.updateManifest(manifest)
                 self.record.manifest = manifest
+                self.awaitingReviewOfChange = false
                 AorusPluginRuntimeManager.shared.start(id: manifest.id) { [weak self] error in
                     DispatchQueue.main.async {
                         guard let self else { return }
@@ -1765,10 +1791,10 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         console.text = ""
         updateConsolePlaceholder()
         updateLayout(animated: true)
+        // Run runs what is on screen: unsaved code is saved first, then goes through the
+        // same review as any changed code before it starts.
         if source != record.source {
-            runAfterReview = true
-            save()
-            return
+            guard saveSource(explainingStop: false) else { return }
         }
         if !record.manifest.isEnabled {
             runAfterReview = true
@@ -1859,6 +1885,12 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
     }
 
     @objc private func toggleConsole() { console.isHidden.toggle(); updateConsolePlaceholder(); updateLayout(animated: true) }
+    private func showConsole() {
+        guard console.isHidden else { return }
+        console.isHidden = false
+        updateConsolePlaceholder()
+        updateLayout(animated: true)
+    }
     @objc private func openDocs() { (navigationController as? NavigationController)?.pushViewController(AorusPluginDocsController(context: context)) }
     @objc private func editMetadata() {
         (navigationController as? NavigationController)?.pushViewController(AorusPluginMetadataController(context: context, record: record))
@@ -2585,7 +2617,7 @@ private enum AorusPluginDocumentation {
             Вибрация: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
             Эффекты на экране
-            Анимация поверх всего приложения и его алертов, на том же уровне, что и статистика производительности (CPU, RAM). Касания проходят сквозь неё. Эффект появляется сразу после start и идёт, пока его не выключат: сворачивание приложения его не прерывает, а включённый плагин запускается при каждом открытии приложения, так что эффект из обработчика start возвращается сам. Повторный start с тем же id не начинает эффект заново — новые параметры подхватываются, а летящие частицы долетают до края; stop прекращает появление новых частиц, оставшиеся уходят сами. При перезапуске плагина stop старого запуска действует только на то, что нарисовал он сам. Эффект пропадает, только если его выключили, выключили плагин, истёк duration или телефон перегрелся.
+            Анимация поверх всего приложения и его алертов, на том же уровне, что и статистика производительности (CPU, RAM). Касания проходят сквозь неё. Эффект появляется сразу после start и идёт, пока его не выключат: сворачивание приложения его не прерывает, а включённый плагин запускается при каждом открытии приложения, так что эффект из обработчика start возвращается сам. Повторный start с тем же id и теми же параметрами ничего не меняет на экране, а duration отсчитывается заново; с другими параметрами новый эффект за секунду сменяет прежний, сразу заполняя экран, поэтому экран не пустеет. stop прекращает появление новых частиц, оставшиеся уходят сами. При перезапуске плагина stop старого запуска действует только на то, что нарисовал он сам. Эффект пропадает, только если его выключили, выключили плагин или истёк duration; на горячем телефоне он редеет, но не пропадает.
             Непрерывный эффект включается start и выключается stop. id выбираете вы; повторный start с тем же id меняет параметры, а не добавляет второй эффект:
             await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
             await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
@@ -2614,7 +2646,7 @@ private enum AorusPluginDocumentation {
             aorus.effects.presets()
             Эффекты: snow (снегопад в четыре слоя глубины), rain, confetti, fireworks (ракеты со следом и залпы), hearts, bubbles, sparkles, leaves, warp, emoji.
             Параметры: intensity от 0.1 до 3 (сколько частиц), speed и size от 0.25 до 3, wind от -1 до 1 (плюс сносит вправо), color или colors в формате RRGGBB, emoji и rising для emoji и leaves, x и y от 0 до 1 для burst и ripple, duration в миллисекундах (0 значит «пока не остановят», иначе до десяти минут). Числа ограничиваются, а не отклоняются.
-            Ответ { ok, shown, reason, id }. shown: false — не ошибка, а причина в reason: reduceMotion (залпы, волны и тряска при «Уменьшении движения»), thermal (телефон перегрет), background и noScreen (эффект начнётся сам, когда приложение откроют), rateLimited (вспышка чаще раза в треть секунды), tooMany (три эффекта на плагин, шесть на все), notRunning (stop для эффекта, которого нет). Если эффект не показан, в консоли плагина появляется предупреждение с причиной, например aorus.effects: start snow not shown: thermal (для notRunning его нет).
+            Ответ { ok, shown, reason, id }. shown: false — не ошибка, а причина в reason: reduceMotion (залпы, волны и тряска при «Уменьшении движения»), thermal (разовый эффект при критическом перегреве), background и noScreen (эффект начнётся сам, когда приложение откроют), rateLimited (вспышка чаще раза в треть секунды), tooMany (три эффекта на плагин, шесть на все), notRunning (stop для эффекта, которого нет). Если эффект не показан, в консоли плагина появляется предупреждение с причиной, например aorus.effects: burst confetti not shown: thermal (для notRunning его нет).
             При «Уменьшении движения» непрерывный эффект идёт спокойнее: один слой, медленнее, без покачивания и вращения. При экономии заряда частиц вдвое меньше, при перегреве они редеют. Всё нарисованное исчезает, когда плагин останавливается. Нужно разрешение «Эффекты на экране».
 
             Цвета
@@ -2697,7 +2729,7 @@ private enum AorusPluginDocumentation {
 
             Интеграции
             aorus.integrations.settings.register({ id: 'youtube', title: 'YouTube', icon: 'play.rectangle.fill', url: 'https://youtube.com', placement: 'interface' })
-            Ярлык содержит ровно одно из полей pageId или url и показывается ровно в одном месте, по placement: plugins (по умолчанию) — основные настройки Telegram рядом со входом в AorusGram; privacy, interface, tabs, messages, calls, wall, aorusCode или other — соответствующий блок настроек AorusGram, и только он. В списке плагинов ярлыков нет. Ярлык с url открывает сайт страницей внутри приложения и требует разрешения встроенного браузера. loopback, локальная сеть и служебные домены AorusGram заблокированы. icon — любой из двух с лишним сотен значков каталога (выбор в «Оформлении» плагина показывает их все по группам), color — свой цвет плитки RRGGBB для этого ярлыка. siteIcon: true рисует вместо значка иконку самого сайта: приложение находит её на странице (apple-touch-icon или favicon), сохраняет и рисует плиткой. Работает только для ярлыка с url в основных настройках Telegram; в настройках AorusGram и во вкладках всегда значок.
+            Ярлык содержит ровно одно из полей pageId или url и показывается ровно в одном месте, по placement: plugins (по умолчанию) — основные настройки Telegram рядом со входом в AorusGram; privacy, interface, tabs, messages, calls, wall, aorusCode или other — соответствующий блок настроек AorusGram, и только он. В списке плагинов ярлыков нет. Ярлык с url открывает сайт страницей внутри приложения и требует разрешения встроенного браузера. loopback, локальная сеть и служебные домены AorusGram заблокированы. icon — любой из двух с лишним сотен значков каталога (выбор в «Оформлении» плагина показывает их все по группам), color — свой цвет плитки RRGGBB для этого ярлыка. siteIcon: true рисует вместо значка иконку самого сайта: приложение находит её на странице (apple-touch-icon или favicon), сохраняет и рисует на всю плитку, без полей; знак без своего фона — крупно на белой плитке, белый знак — на тёмной. Работает только для ярлыка с url в основных настройках Telegram; в настройках AorusGram и во вкладках всегда значок.
             aorus.integrations.contextMenu.register({ id: 'reply', title: 'Подготовить ответ', icon: 'message.fill' })
             При выборе приходит aorus.on('contextAction', event) с actionId, source и, когда выбрано одно сообщение, peerId, namespace, messageId и text. События новых сообщений требуют отдельного разрешения. В меню одновременно показываются не более четырёх действий плагинов.
 
@@ -2843,7 +2875,7 @@ private enum AorusPluginDocumentation {
     Haptics: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
     Screen effects
-    An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears as soon as start is called and runs until it is turned off: leaving the app does not end it, and an enabled plugin starts every time the app opens, so an effect started in the start handler comes back by itself. Calling start again with the same id does not start the effect over: the new options are taken up and particles already in the air finish their fall; stop ends the birth of new particles and the rest leave on their own. When a plugin restarts, the old run's stop only affects what that run drew. An effect only goes away when it is stopped, its plugin is switched off, its duration runs out or the phone overheats.
+    An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears as soon as start is called and runs until it is turned off: leaving the app does not end it, and an enabled plugin starts every time the app opens, so an effect started in the start handler comes back by itself. Calling start again with the same id and the same options changes nothing on the screen and counts the duration from then; with other options the new effect takes the old one's place within a second, filling the screen at once, so the screen never empties. stop ends the birth of new particles and the rest leave on their own. When a plugin restarts, the old run's stop only affects what that run drew. An effect only goes away when it is stopped, its plugin is switched off or its duration runs out; a hot phone thins it but never takes it away.
     A continuous effect is turned on with start and off with stop. You choose the id; start again with the same id changes the settings instead of adding a second effect:
     await aorus.effects.start('winter', 'snow', { intensity: 0.7 })
     await aorus.effects.start('winter', 'snow', { intensity: 1.4, wind: 0.5 })
@@ -2872,7 +2904,7 @@ private enum AorusPluginDocumentation {
     aorus.effects.presets()
     Effects: snow (a snowfall in four layers of depth), rain, confetti, fireworks (rockets with trails and bursts), hearts, bubbles, sparkles, leaves, warp, emoji.
     Options: intensity 0.1 to 3 (how many particles), speed and size 0.25 to 3, wind -1 to 1 (positive drifts right), color or colors as RRGGBB, emoji and rising for emoji and leaves, x and y 0 to 1 for burst and ripple, duration in milliseconds (0 means until stopped, otherwise up to ten minutes). Numbers are clamped, not rejected.
-    The answer is { ok, shown, reason, id }. shown: false is not an error; reason says why: reduceMotion (bursts, ripples and shakes under Reduce Motion), thermal (the phone is hot), background and noScreen (the effect starts by itself when the app is opened), rateLimited (a flash more often than every third of a second), tooMany (three effects per plugin, six in total), notRunning (stop for an effect that is not there). When an effect is not shown, a warning with the reason appears in the plugin's console, for example aorus.effects: start snow not shown: thermal (none for notRunning).
+    The answer is { ok, shown, reason, id }. shown: false is not an error; reason says why: reduceMotion (bursts, ripples and shakes under Reduce Motion), thermal (a one-shot effect while the phone is critically hot), background and noScreen (the effect starts by itself when the app is opened), rateLimited (a flash more often than every third of a second), tooMany (three effects per plugin, six in total), notRunning (stop for an effect that is not there). When an effect is not shown, a warning with the reason appears in the plugin's console, for example aorus.effects: burst confetti not shown: thermal (none for notRunning).
     Under Reduce Motion a continuous effect runs calm: one layer, slower, no sway and no spin. Low Power Mode halves the particles and a hot phone thins them. Everything drawn disappears when the plugin stops. Needs the Screen effects permission.
 
     Colours
@@ -2955,7 +2987,7 @@ private enum AorusPluginDocumentation {
 
     Integrations
     aorus.integrations.settings.register({ id: 'youtube', title: 'YouTube', icon: 'play.rectangle.fill', url: 'https://youtube.com', placement: 'interface' })
-    A shortcut has exactly one of pageId or url and is shown in exactly one place, by placement: plugins (default) is Telegram's own settings list next to the AorusGram entry; privacy, interface, tabs, messages, calls, wall, aorusCode or other is that section of the AorusGram settings, and only that. Shortcuts never appear in the plugin library. A url shortcut opens the site as a page of the app and needs the in-app browser permission. Loopback, local networks and AorusGram control-plane domains are blocked. icon is any of the two hundred and more glyphs in the catalogue (the picker in the plugin's Appearance shows them all by group), color is the tile's own RRGGBB for this shortcut. siteIcon: true draws the site's own icon instead of a glyph: the app finds it on the page (apple-touch-icon or favicon), keeps it and draws it as the tile. Only for a url shortcut in Telegram's own settings; the AorusGram settings and tabs always draw a glyph.
+    A shortcut has exactly one of pageId or url and is shown in exactly one place, by placement: plugins (default) is Telegram's own settings list next to the AorusGram entry; privacy, interface, tabs, messages, calls, wall, aorusCode or other is that section of the AorusGram settings, and only that. Shortcuts never appear in the plugin library. A url shortcut opens the site as a page of the app and needs the in-app browser permission. Loopback, local networks and AorusGram control-plane domains are blocked. icon is any of the two hundred and more glyphs in the catalogue (the picker in the plugin's Appearance shows them all by group), color is the tile's own RRGGBB for this shortcut. siteIcon: true draws the site's own icon instead of a glyph: the app finds it on the page (apple-touch-icon or favicon), keeps it and draws it across the whole tile, with no margin; a mark with no background of its own is drawn large on a white tile, a white mark on a dark one. Only for a url shortcut in Telegram's own settings; the AorusGram settings and tabs always draw a glyph.
     aorus.integrations.contextMenu.register({ id: 'reply', title: 'Prepare reply', icon: 'message.fill' })
     Selection emits aorus.on('contextAction', event) with actionId and source. For a single selected message it also includes peerId, namespace, messageId and text. New-message events require a separate permission. At most four plugin actions appear at once.
 
