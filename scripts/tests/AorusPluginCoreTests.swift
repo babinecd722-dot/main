@@ -1774,6 +1774,16 @@ let cardJSON = Data("""
 let cards = AorusPluginMarketCard.list(from: cardJSON) ?? []
 expect(cards.count == 2, "a card that breaks the contract is dropped, the rest are kept")
 expect(cards.first?.authorId == 123456789 && cards.last?.authorId == nil, "the author is a Telegram id, or nobody")
+// Downloaded code is installed only when it is the code the Market approved.
+let approvedCode = "aorus.commands.register('ping', function () { return 'pong'; });"
+let approvedDigest = AorusPluginStore.sourceDigest(approvedCode)
+let signedCardJSON = Data("{\"ok\":true,\"plugin\":{\"id\":\"com.example.ping\",\"version\":\"1.0.0\",\"name\":\"Ping\",\"status\":\"approved\",\"sha256\":\"\(approvedDigest.uppercased())\",\"bytes\":\(approvedCode.utf8.count)}}".utf8)
+let signedCard = AorusPluginMarketCard.single(from: signedCardJSON)
+expect(signedCard?.sha256 == approvedDigest && signedCard?.bytes == approvedCode.utf8.count, "a card keeps the approved code's digest and size")
+expect(signedCard?.matches(source: approvedCode) == true, "the approved code matches its card")
+expect(signedCard?.matches(source: approvedCode + " ") == false, "code that differs by a byte does not")
+let unsignedCard = AorusPluginMarketCard.single(from: Data("{\"ok\":true,\"plugin\":{\"id\":\"com.example.ping\",\"version\":\"1.0.0\",\"name\":\"Ping\",\"status\":\"approved\",\"sha256\":\"not-hex\",\"bytes\":-5}}".utf8))
+expect(unsignedCard?.sha256 == "" && unsignedCard?.bytes == 0 && unsignedCard?.matches(source: "anything") == true, "a card without a valid digest says nothing either way")
 expect(cards.first?.permissions == ["plugin.perm.commands", "plugin.perm.http"], "permission keys are deduplicated and unknown ones ignored")
 expect(cards.first?.hasIcon == true && cards.first?.updatedAt.timeIntervalSince1970 == 1780000000, "icon flag and update time are read")
 

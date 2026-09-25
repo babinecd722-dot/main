@@ -19,8 +19,14 @@ import QuartzCore
 //   No empty first seconds. A falling effect opens with the whole screen seeded while the
 //   layer itself fades in, and only then streams in from the edge, so snow is on the screen
 //   the moment it is asked for instead of twenty seconds later.
-//   No cuts. A layer fades in, a stopped effect stops being born and thins out. The fade in is
-//   the layer's and never a particle's: a particle born at alpha zero may never be drawn.
+//   No cuts. A layer fades in, a stopped effect stops being born and what is already falling
+//   goes on falling out of the screen. The fade in is the layer's and never a particle's: a
+//   particle born at alpha zero may never be drawn.
+//   No resets. An effect started again — the same id with other options, a plugin that starts
+//   it on a timer, one whose duration ran out and that starts it once more — carries on from
+//   what is on the screen: the old layers stop being born and fall out, and the new ones stream
+//   in from the edge without seeding the screen a second time, so the picture never visibly
+//   starts over.
 //
 // The rules a screen effect has to keep, whatever a plugin asks for:
 //
@@ -54,6 +60,10 @@ public final class AorusPluginEffectsRenderer {
     /// plugin that starts snow as the app launches can get there before the app's own window is
     /// on screen, and the snow must appear the moment it is, not at the next launch.
     private static let retryDelays: [TimeInterval] = [0.15, 0.35, 0.75, 1.5, 3.0, 6.0, 10.0]
+
+    /// The longest a stopped or replaced effect's particles are left to fall out of the screen on
+    /// their own before whatever is still there fades.
+    private static let retireLinger: Double = 9
 
     /// When the drawing is looked at again after the app comes back, the way the statistics
     /// look at their window: the first minute after a return is when a window made on the way
@@ -126,6 +136,13 @@ public final class AorusPluginEffectsRenderer {
     /// One-shot layers still animating, so a stopped plugin takes those with it too.
     private var transient: [String: [CALayer]] = [:]
     private var lastFlash: [String: CFTimeInterval] = [:]
+    /// Layers of effects that were stopped or replaced, by effect key, still showing what they
+    /// had already let fall. Nothing new is born in them, and they go once that has had time to
+    /// leave the screen.
+    private var retiring: [String: [CAEmitterLayer]] = [:]
+    /// Set while an effect is drawn over particles of its own that are still falling: no second
+    /// seeding of the screen and no fade-in, the new layers simply stream in from the edge.
+    private var continuing = false
     private var images: [String: CGImage] = [:]
     private var observers: [NSObjectProtocol] = []
     private var retryCount = 0
@@ -176,6 +193,9 @@ public final class AorusPluginEffectsRenderer {
         let work = { [weak self] in
             guard let self else { return }
             self.removeAll(pluginId: pluginId, owner: nil, animated: false)
+            for key in self.retiring.keys where key.hasPrefix(pluginId + "\u{1}") {
+                for layer in self.retiring.removeValue(forKey: key) ?? [] { layer.removeFromSuperlayer() }
+            }
             for layer in self.transient.removeValue(forKey: pluginId) ?? [] {
                 layer.removeFromSuperlayer()
             }
@@ -293,7 +313,11 @@ public final class AorusPluginEffectsRenderer {
                     existing.request = request
                     return answer(true, id: id)
                 }
-                finish(key: key, item: existing, animated: false)
+                // Anything else asked of the same effect takes over from it rather than starting
+                // over: what is falling keeps falling, and the new layers carry on from there.
+                running[key] = nil
+                existing.expiry?.cancel()
+                retire(existing, key: key)
             }
             let mine = running.values.filter { $0.pluginId == pluginId }.count
             if mine >= Self.maximumPerPlugin || running.count >= Self.maximumTotal {
@@ -302,7 +326,9 @@ public final class AorusPluginEffectsRenderer {
             }
             let item = Running(pluginId: pluginId, id: id, preset: preset, request: request)
             running[key] = item
+            continuing = retiring[key]?.isEmpty == false
             build(item, in: host, calm: calm)
+            continuing = false
             if request.duration > 0 {
                 let expiry = DispatchWorkItem { [weak self] in
                     guard let self, let current = self.running[key], current === item else { return }
@@ -441,6 +467,10 @@ public final class AorusPluginEffectsRenderer {
             for layer in layers { layer.removeFromSuperlayer() }
         }
         transient.removeAll()
+        for (_, layers) in retiring {
+            for layer in layers { layer.removeFromSuperlayer() }
+        }
+        retiring.removeAll()
         window?.isHidden = true
         window?.rootViewController = nil
         window = nil
@@ -499,8 +529,12 @@ public final class AorusPluginEffectsRenderer {
     private func redrawAll() {
         guard !running.isEmpty, let view = ensureWindow() else { return }
         let calm = UIAccessibility.isReduceMotionEnabled
-        for item in running.values {
+        for (key, item) in running {
+            // The old look falls out while the new one streams in, rather than a cut.
+            retire(item, key: key)
+            continuing = true
             build(item, in: view, calm: calm)
+            continuing = false
         }
     }
 
@@ -525,7 +559,7 @@ public final class AorusPluginEffectsRenderer {
     }
 
     private func hideWindowIfIdle() {
-        guard running.isEmpty, pending.isEmpty, transient.values.allSatisfy({ $0.isEmpty }) else { return }
+        guard running.isEmpty, pending.isEmpty, retiring.isEmpty, transient.values.allSatisfy({ $0.isEmpty }) else { return }
         window?.isHidden = true
     }
 
@@ -575,27 +609,55 @@ public final class AorusPluginEffectsRenderer {
     private func finish(key: String, item: Running, animated: Bool) {
         running[key] = nil
         item.expiry?.cancel()
-        item.generation += 1
-        for stream in item.streams {
-            let layer = stream.emitter
-            layer.birthRate = 0
-            guard animated else {
-                layer.removeFromSuperlayer()
-                continue
-            }
-            // Nothing new is born and what is already falling thins out: snow that vanishes in
-            // one frame reads as a glitch, snow that eases off reads as the snow stopping.
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
-            fade.toValue = 0
-            fade.duration = 1.6
-            fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            layer.opacity = 0
-            layer.add(fade, forKey: "aorusFade")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) { [weak layer] in layer?.removeFromSuperlayer() }
+        guard animated else {
+            item.generation += 1
+            for stream in item.streams { stream.emitter.removeFromSuperlayer() }
+            item.streams = []
+            for layer in retiring.removeValue(forKey: key) ?? [] { layer.removeFromSuperlayer() }
+            hideWindowIfIdle()
+            return
         }
+        // Nothing new is born and what is already falling falls out of the screen: snow that
+        // vanishes in one frame reads as a glitch, snow that stops coming reads as the snow
+        // stopping.
+        retire(item, key: key)
+    }
+
+    /// Stops `item` being born and leaves what it already let fall to leave the screen, then
+    /// takes its layers away. Whatever is still on the screen after `retireLinger` fades.
+    private func retire(_ item: Running, key: String) {
+        let layers = item.streams.map { $0.emitter }
         item.streams = []
-        DispatchQueue.main.asyncAfter(deadline: .now() + (animated ? 1.8 : 0)) { [weak self] in self?.hideWindowIfIdle() }
+        item.isFilling = false
+        item.generation += 1
+        guard !layers.isEmpty else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for layer in layers { layer.birthRate = 0 }
+        CATransaction.commit()
+        retiring[key, default: []].append(contentsOf: layers)
+        let lifetime = layers.compactMap { layer in
+            layer.emitterCells?.map { Double($0.lifetime + $0.lifetimeRange) }.max()
+        }.max() ?? 0
+        let linger = min(max(lifetime, 0.5), Self.retireLinger)
+        DispatchQueue.main.asyncAfter(deadline: .now() + linger) { [weak self] in
+            for layer in layers where layer.superlayer != nil {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = layer.presentation()?.opacity ?? layer.opacity
+                fade.toValue = 0
+                fade.duration = 1
+                fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                layer.opacity = 0
+                layer.add(fade, forKey: "aorusFade")
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.05) { [weak self] in
+                for layer in layers { layer.removeFromSuperlayer() }
+                guard let self else { return }
+                self.retiring[key]?.removeAll { candidate in layers.contains { $0 === candidate } }
+                if self.retiring[key]?.isEmpty == true { self.retiring[key] = nil }
+                self.hideWindowIfIdle()
+            }
+        }
     }
 
     // MARK: - Sprites
@@ -871,7 +933,8 @@ public final class AorusPluginEffectsRenderer {
         // A falling or rising effect seeds the screen first. The birth rate is raised for the
         // seeding so that it puts on the screen about as many particles as the stream keeps
         // there: the stream's rate times the time a particle takes to cross.
-        let seeds = (source == .top || source == .bottom) && crossing > Self.fillDuration * 2
+        let seeds = !continuing && (source == .top || source == .bottom) && crossing > Self.fillDuration * 2
+        let fadesIn = !continuing
         let fillRate: Float = seeds ? Float(min(60, max(1, crossing / Self.fillDuration))) : 0
         let rotation = tilt
 
@@ -921,12 +984,14 @@ public final class AorusPluginEffectsRenderer {
         CATransaction.commit()
         host.layer.addSublayer(emitter)
 
-        let fadeIn = CABasicAnimation(keyPath: "opacity")
-        fadeIn.fromValue = NSNumber(value: 0)
-        fadeIn.toValue = NSNumber(value: opacity)
-        fadeIn.duration = 1.2
-        fadeIn.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        emitter.add(fadeIn, forKey: "aorusFadeIn")
+        if fadesIn {
+            let fadeIn = CABasicAnimation(keyPath: "opacity")
+            fadeIn.fromValue = NSNumber(value: 0)
+            fadeIn.toValue = NSNumber(value: opacity)
+            fadeIn.duration = 1.2
+            fadeIn.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            emitter.add(fadeIn, forKey: "aorusFadeIn")
+        }
 
         if sway > 0 && swayPeriod > 0 {
             // The whole layer drifts from side to side on its own period. Layers at different

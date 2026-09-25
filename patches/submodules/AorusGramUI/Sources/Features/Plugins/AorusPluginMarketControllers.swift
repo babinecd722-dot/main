@@ -49,6 +49,8 @@ enum AorusPluginMarketText {
     static func deleteFromMarket(_ name: String) -> String { aorusL("Все версии «%@» будут удалены из Маркета вместе с иконкой. Копия на этом телефоне останется.", "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.").replacingOccurrences(of: "%@", with: name) }
     static var pluginDeleted: String { aorusL("Плагин удалён", "Plugin deleted") }
     static var deleting: String { aorusL("Удаление…", "Deleting…") }
+    static var updating: String { aorusL("Обновление…", "Updating…") }
+    static var integrityFailed: String { aorusL("Загруженный код не совпадает с одобренным в Маркете. Попробуйте позже.", "The downloaded code doesn't match the version the Market approved. Try again later.") }
     static var turnOn: String { aorusL("Включить", "Turn On") }
     static var deleteConfirm: String { aorusL("Удалить плагин?", "Delete the plugin?") }
     static var installFailed: String { aorusL("Не удалось установить", "Couldn't install") }
@@ -77,6 +79,7 @@ enum AorusPluginMarketText {
         case .authorBanned: return banned
         case .unauthorized, .unavailable: return unavailable
         case .tooLarge: return tooLarge
+        case .integrity: return integrityFailed
         case let .invalidSource(reason): return codeRejected(reason.isEmpty ? "invalid_source" : reason)
         case .notFound: return serverUnavailable
         case .versionExists, .notOwner, .invalid, .server, .malformedResponse: return serverUnavailable
@@ -138,6 +141,11 @@ enum AorusPluginMarketInstaller {
             case let .failure(error):
                 completion(.failure(error))
             case let .success(source):
+                // Only the code the Market reviewed is installed, byte for byte.
+                guard card.matches(source: source) else {
+                    completion(.failure(AorusPluginMarketError.integrity))
+                    return
+                }
                 var manifest = AorusPluginManifest(
                     name: card.name,
                     summary: card.description,
@@ -163,6 +171,10 @@ enum AorusPluginMarketInstaller {
             case let .failure(error):
                 completion(.failure(error))
             case let .success(source):
+                guard card.matches(source: source) else {
+                    completion(.failure(AorusPluginMarketError.integrity))
+                    return
+                }
                 guard var record = AorusPluginStore.shared.load(id: manifest.id) else {
                     completion(.failure(AorusPluginStoreError.notFound))
                     return
@@ -777,6 +789,57 @@ final class AorusPluginPillButton: UIButton {
     }
 }
 
+/// A round button on Telegram's own glass holding one glyph: the plugins list's "+" and the
+/// Market sheet's close button. A press shrinks it a little and lets it spring back, the way
+/// the system's glass buttons answer a touch.
+final class AorusPluginGlassCircleButton: UIControl {
+    private let glass: UIView & AorusPluginGlassBackground
+    private let glyph = UIImageView()
+    private let isDark: Bool
+
+    init(glass: UIView & AorusPluginGlassBackground, symbol: String, pointSize: CGFloat, weight: UIImage.SymbolWeight, tint: UIColor, isDark: Bool, shadow: Bool) {
+        self.glass = glass
+        self.isDark = isDark
+        super.init(frame: .zero)
+        glass.isUserInteractionEnabled = false
+        addSubview(glass)
+        glyph.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight))?.withRenderingMode(.alwaysTemplate)
+        glyph.tintColor = tint
+        glyph.contentMode = .center
+        glyph.isUserInteractionEnabled = false
+        addSubview(glyph)
+        if shadow {
+            layer.shadowColor = UIColor.black.cgColor
+            layer.shadowOpacity = isDark ? 0.32 : 0.12
+            layer.shadowRadius = 14
+            layer.shadowOffset = CGSize(width: 0, height: 5)
+        }
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        glass.frame = bounds
+        glass.updateGlass(size: bounds.size, cornerRadius: bounds.height / 2, isDark: isDark)
+        glyph.frame = bounds
+        if layer.shadowOpacity > 0 { layer.shadowPath = UIBezierPath(ovalIn: bounds).cgPath }
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            guard isHighlighted != oldValue else { return }
+            let pressed = isHighlighted
+            UIView.animate(withDuration: pressed ? 0.12 : 0.45, delay: 0, usingSpringWithDamping: pressed ? 1 : 0.55, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+                self.transform = pressed ? CGAffineTransform(scaleX: 0.9, y: 0.9) : .identity
+                self.glyph.alpha = pressed ? 0.7 : 1
+            }, completion: nil)
+        }
+    }
+}
+
 final class AorusPluginMarketCell: UITableViewCell {
     private let icon = UIImageView()
     private let nameLabel = UILabel()
@@ -902,7 +965,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
     private let primaryButton = AorusPluginPillButton()
     private let secondaryButton = AorusPluginPillButton()
     private let captionLabel = UILabel()
-    private let closeButton = UIButton(type: .system)
+    private var closeButton: AorusPluginGlassCircleButton?
     private var authorAvatar: (UIView & AorusPluginMarketAvatar)?
     private let authorName = UILabel()
     private let authorUsername = UILabel()
@@ -977,7 +1040,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         let fitted = content.systemLayoutSizeFitting(CGSize(width: width, height: UIView.layoutFittingCompressedSize.height), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
         content.frame = CGRect(x: (bounds.width - width) / 2, y: 0, width: width, height: fitted.height)
         scrollView.contentSize = CGSize(width: bounds.width, height: fitted.height + barHeight + 12)
-        closeButton.frame = CGRect(x: bounds.width - 16 - 32, y: 16, width: 32, height: 32)
+        closeButton?.frame = CGRect(x: bounds.width - 16 - 30, y: 16, width: 30, height: 30)
         updateWash()
     }
 
@@ -1254,13 +1317,21 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
     }
 
     private func buildCloseButton() {
-        closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)), for: .normal)
-        closeButton.tintColor = theme.list.itemSecondaryTextColor
-        closeButton.backgroundColor = theme.list.itemBlocksBackgroundColor.withAlphaComponent(0.85)
-        closeButton.layer.cornerRadius = 16
-        closeButton.accessibilityLabel = aorusL("Закрыть", "Close")
-        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-        view.addSubview(closeButton)
+        // Telegram's own glass, round, with the cross drawn at the weight of the sheet's other
+        // controls — not a flat grey disc that showed the header through its edge.
+        let button = AorusPluginGlassCircleButton(
+            glass: host.makeGlassBackground(),
+            symbol: "xmark",
+            pointSize: 12,
+            weight: .bold,
+            tint: theme.list.itemPrimaryTextColor.withAlphaComponent(0.72),
+            isDark: theme.overallDarkAppearance,
+            shadow: false
+        )
+        button.accessibilityLabel = aorusL("Закрыть", "Close")
+        button.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        view.addSubview(button)
+        closeButton = button
     }
 
     @objc private func closeTapped() { dismiss(animated: true) }

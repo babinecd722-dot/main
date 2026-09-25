@@ -31,6 +31,46 @@ def _guarded_background_geometry() -> str:
     )
 
 
+def _synced_background_sequence() -> str:
+    """The media moves in the header's own transition, not ahead of it.
+
+    `contentFrame` set directly jumped the banner to its final place while the header was
+    still animating there, which left its old place uncovered for the length of the
+    animation. `updateContentFrame` takes the same transition as the cover beside it.
+    """
+    return (
+        "            // Cover Telegram's complete 2000 pt backing view. The media itself\n"
+        "            // stays in the native cover viewport, and moves in the same transition\n"
+        "            // as the stock cover, so neither arrives before the other.\n"
+        "            let aorusBackgroundFrame = CGRect(origin: .zero, size: bannerFrame.size)\n"
+        "            let aorusBackgroundContentFrame = CGRect(\n"
+        "                x: -bannerInset,\n"
+        "                y: bannerFrame.height - backgroundCoverSize.height,\n"
+        "                width: backgroundCoverSize.width,\n"
+        "                height: backgroundCoverSize.height\n"
+        "            )\n"
+        "            // Prepare the first frame synchronously before inserting the view.\n"
+        "            // This prevents Telegram's stock cover from winning one render pass.\n"
+        "            if self.aorusAnimatedProfileBackgroundView.superview == nil {\n"
+        "                self.aorusAnimatedProfileBackgroundView.frame = aorusBackgroundFrame\n"
+        "                self.aorusAnimatedProfileBackgroundView.updateContentFrame(aorusBackgroundContentFrame, transition: .immediate, additive: false)\n"
+        "                self.aorusAnimatedProfileBackgroundView.layoutIfNeeded()\n"
+        "            }\n"
+        "            self.aorusAnimatedProfileBackgroundView.configure(\n"
+        "                viewerAccountId: aorusProfileAccountId,\n"
+        "                targetId: aorusTargetProfileId,\n"
+        "                visible: aorusTargetProfileId != nil\n"
+        "            )\n"
+        "            self.backgroundBannerView.insertSubview(self.aorusAnimatedProfileBackgroundView, aboveSubview: backgroundCoverView)\n"
+        "            if additive {\n"
+        "                transition.updateFrameAdditive(view: self.aorusAnimatedProfileBackgroundView, frame: aorusBackgroundFrame)\n"
+        "            } else {\n"
+        "                transition.updateFrame(view: self.aorusAnimatedProfileBackgroundView, frame: aorusBackgroundFrame)\n"
+        "            }\n"
+        "            self.aorusAnimatedProfileBackgroundView.updateContentFrame(aorusBackgroundContentFrame, transition: transition, additive: additive)\n"
+    )
+
+
 def _configured_background_sequence() -> str:
     return (
         _guarded_background_geometry()
@@ -99,10 +139,14 @@ def _patch_profile_header(tg: Path) -> None:
         if legacy_order in text:
             text = text.replace(legacy_order, _configured_background_sequence(), 1)
             changed = True
+        configured = _configured_background_sequence()
+        if configured in text:
+            text = text.replace(configured, _synced_background_sequence(), 1)
+            changed = True
         if changed:
             path.write_text(text, encoding="utf-8")
-            print("ProfilePersonalization: upgraded cached profile first-frame guard")
-        elif "Prepare the first frame synchronously" in text:
+            print("ProfilePersonalization: upgraded cached profile banner to the header's transition")
+        elif "updateContentFrame(aorusBackgroundContentFrame, transition: transition" in text:
             print("ProfilePersonalization: PeerInfoHeaderNode already patched")
         else:
             raise RuntimeError("ProfilePersonalization: unknown cached animated-cover layout")
@@ -150,7 +194,7 @@ def _patch_profile_header(tg: Path) -> None:
         "            } else {\n"
         "                aorusTargetProfileId = nil\n"
         "            }\n"
-        + _configured_background_sequence()
+        + _synced_background_sequence()
         + "            if backgroundCoverAnimateIn {\n"
     )
     text = _replace_once(text, anchor, replacement, "profile header cover frame")

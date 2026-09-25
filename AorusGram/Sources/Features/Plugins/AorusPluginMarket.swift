@@ -110,8 +110,12 @@ public struct AorusPluginMarketCard: Equatable {
     public let hasIcon: Bool
     /// Only in `/v1/mine`: why a row was rejected or taken down, as the server wrote it.
     public let reason: String
+    /// The SHA-256 of the approved code, lowercase hex, and its size in bytes, as the Market
+    /// states them. Empty and zero when a server does not say.
+    public let sha256: String
+    public let bytes: Int
 
-    public init(id: String, version: String, name: String, description: String, authorId: Int64?, permissions: [String], status: AorusPluginMarketStatus, updatedAt: Date, hasIcon: Bool, reason: String = "") {
+    public init(id: String, version: String, name: String, description: String, authorId: Int64?, permissions: [String], status: AorusPluginMarketStatus, updatedAt: Date, hasIcon: Bool, reason: String = "", sha256: String = "", bytes: Int = 0) {
         self.id = id
         self.version = version
         self.name = name
@@ -122,6 +126,17 @@ public struct AorusPluginMarketCard: Equatable {
         self.updatedAt = updatedAt
         self.hasIcon = hasIcon
         self.reason = reason
+        self.sha256 = sha256
+        self.bytes = bytes
+    }
+
+    /// Whether downloaded code is the code the Market approved for this card: the same size and
+    /// the same SHA-256, where the card states them. The host is not certificate-pinned, and
+    /// code is the one thing that must arrive exactly as it was reviewed.
+    public func matches(source: String) -> Bool {
+        if bytes > 0, source.utf8.count != bytes { return false }
+        if !sha256.isEmpty, AorusPluginStore.sourceDigest(source) != sha256 { return false }
+        return true
     }
 
     /// A card from its JSON object. A row that breaks the contract — an id or version that
@@ -157,6 +172,10 @@ public struct AorusPluginMarketCard: Equatable {
         self.updatedAt = Date(timeIntervalSince1970: stamp)
         self.hasIcon = (json["has_icon"] as? Bool) ?? ((json["has_icon"] as? NSNumber)?.boolValue ?? false)
         self.reason = String(((json["reason"] as? String) ?? "").prefix(500))
+        let digest = ((json["sha256"] as? String) ?? "").lowercased()
+        self.sha256 = digest.count == 64 && digest.allSatisfy({ $0.isHexDigit }) ? digest : ""
+        let size = (json["bytes"] as? NSNumber)?.intValue ?? 0
+        self.bytes = (1 ... AorusPluginMarketLimits.codeBytes).contains(size) ? size : 0
     }
 
     /// The cards in a `{"ok": true, "plugins": [...]}` body, in the server's order.
@@ -305,6 +324,8 @@ public enum AorusPluginMarketError: Error, Equatable {
     case invalid(String)
     case invalidSource(String)
     case tooLarge
+    /// The code that arrived is not the code the Market approved.
+    case integrity
     /// The request could not be made at all: no licence, or the build is not provisioned.
     case unavailable
     case network

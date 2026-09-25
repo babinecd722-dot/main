@@ -449,8 +449,8 @@ def main() -> None:
             err.append(f"ProfilePersonalization: {profile_path.name} is missing")
         elif sentinel not in profile_path.read_text(encoding="utf-8"):
             err.append(f"ProfilePersonalization: {profile_path.name} patch is missing")
-    if profile_header.is_file() and "aorusAnimatedProfileBackgroundView.contentFrame" not in profile_header.read_text(encoding="utf-8"):
-        err.append("ProfilePersonalization: full-height animated cover guard is missing")
+    if profile_header.is_file() and "aorusAnimatedProfileBackgroundView.updateContentFrame(aorusBackgroundContentFrame, transition: transition, additive: additive)" not in profile_header.read_text(encoding="utf-8"):
+        err.append("ProfilePersonalization: the animated cover must move in the header's own transition")
     if profile_header.is_file():
         profile_header_text = profile_header.read_text(encoding="utf-8")
         if "Prepare the first frame synchronously" not in profile_header_text:

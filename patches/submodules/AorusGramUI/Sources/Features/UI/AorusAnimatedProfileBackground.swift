@@ -331,8 +331,19 @@ public enum AorusAnimatedProfileBackgroundFeedback {
 
 // MARK: - Video-only playback
 
+/// A view whose own layer is the display layer. A display layer added as a bare sublayer
+/// animates every frame change implicitly, a quarter of a second behind the header, which is
+/// exactly how a fast scroll showed what was behind the banner; a view's own layer moves when
+/// the view does, and in the header's own animations.
+private final class AorusSampleBufferView: UIView {
+    override class var layerClass: AnyClass { AVSampleBufferDisplayLayer.self }
+}
+
 private final class AorusVideoOnlyLoopRenderer {
-    let layer = AVSampleBufferDisplayLayer()
+    let view = AorusSampleBufferView()
+    /// The view's layer, taken once on the main thread: the render queue works with the layer
+    /// and never touches the view.
+    let layer: AVSampleBufferDisplayLayer
     var firstFrameEnqueued: (() -> Void)?
 
     private let queue = DispatchQueue(label: "com.aorusgram.profile-background.renderer", qos: .userInitiated)
@@ -346,6 +357,9 @@ private final class AorusVideoOnlyLoopRenderer {
     private var url: URL?
 
     init() {
+        self.layer = (self.view.layer as? AVSampleBufferDisplayLayer) ?? AVSampleBufferDisplayLayer()
+        self.view.isUserInteractionEnabled = false
+        self.view.backgroundColor = .clear
         self.layer.videoGravity = .resizeAspectFill
         self.layer.backgroundColor = UIColor.clear.cgColor
     }
@@ -487,9 +501,29 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
     /// visible cover inside that view while the user pulls the profile. Keep
     /// our outer view full-size, but render the media in Telegram's cover
     /// viewport so aggressive overscroll can never expose the stock cover.
+    ///
+    /// `updateContentFrame(_:transition:additive:)` moves it in the header's own animation;
+    /// setting the property moves it at once.
     public var contentFrame: CGRect? {
         didSet {
             self.setNeedsLayout()
+        }
+    }
+
+    /// Moves the media to Telegram's cover viewport in the same transition the header uses,
+    /// so while the header animates — the photo expanding, a snap after a pull — the banner
+    /// travels with it instead of arriving first and leaving its old place empty.
+    public func updateContentFrame(_ frame: CGRect, transition: ContainedViewLayoutTransition, additive: Bool) {
+        self.contentFrame = frame
+        let media = self.mediaFrame(for: frame)
+        if additive {
+            transition.updateFrameAdditive(view: self.contentView, frame: frame)
+        } else {
+            transition.updateFrame(view: self.contentView, frame: frame)
+        }
+        transition.updateFrame(view: self.posterView, frame: media)
+        if let renderer = self.renderer {
+            transition.updateFrame(view: renderer.view, frame: media)
         }
     }
 
@@ -630,18 +664,36 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
 
     public override func layoutSubviews() {
         super.layoutSubviews()
-        self.backdropView.frame = self.bounds
+        // The colour guard reaches past every edge, so a header that shrinks in an animation
+        // never uncovers a strip of what is behind it before this view catches up.
+        self.backdropView.frame = self.bounds.insetBy(dx: -24.0, dy: -320.0)
         let viewportFrame = self.contentFrame ?? self.bounds
         self.contentView.transform = .identity
-        self.contentView.frame = viewportFrame
+        if self.contentView.frame != viewportFrame {
+            self.contentView.frame = viewportFrame
+        }
+        let mediaFrame = self.mediaFrame(for: viewportFrame)
+        if self.posterView.frame != mediaFrame {
+            self.posterView.frame = mediaFrame
+        }
+        if let renderer = self.renderer, renderer.view.frame != mediaFrame {
+            renderer.view.frame = mediaFrame
+        }
+        // The view is created before Telegram assigns its final header frame.
+        // Re-evaluate playback after layout, but updatePlayback de-duplicates
+        // the request so profile scrolling does not flood the renderer queue.
+        self.updatePlayback()
+    }
 
-        // Telegram expands the native cover viewport during pull-to-stretch. Do
-        // not feed that transient height into AVSampleBufferDisplayLayer: doing
-        // so continuously changes aspect-fill scale and makes the banner appear
-        // to stretch under aggressive swipes. Capture the resting viewport once
-        // per profile/width and keep the media bottom-anchored inside the dynamic
-        // clipped viewport. The full 2000 pt backdrop remains behind it, so the
-        // stock Telegram cover is never exposed during extreme overscroll.
+    /// Where the media sits inside the viewport.
+    ///
+    /// Telegram expands the native cover viewport during pull-to-stretch. That transient
+    /// height is not fed to the display layer: it would continuously change the aspect-fill
+    /// scale and make the banner appear to stretch under aggressive swipes. The resting
+    /// viewport is captured once per profile and width, and the media stays bottom-anchored
+    /// inside the dynamic clipped viewport. The backdrop remains behind it, so the stock
+    /// Telegram cover is never exposed during extreme overscroll.
+    private func mediaFrame(for viewportFrame: CGRect) -> CGRect {
         let viewportWidth = max(1.0, viewportFrame.width)
         if let stableWidth = self.stableMediaViewportWidth,
            abs(stableWidth - viewportWidth) > 1.0 {
@@ -654,18 +706,12 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
             self.stableMediaViewportHeight = viewportFrame.height
         }
         let mediaHeight = max(1.0, self.stableMediaViewportHeight ?? viewportFrame.height)
-        let mediaFrame = CGRect(
+        return CGRect(
             x: 0.0,
             y: viewportFrame.height - mediaHeight,
             width: viewportWidth,
             height: mediaHeight
         )
-        self.posterView.frame = mediaFrame
-        self.renderer?.layer.frame = mediaFrame
-        // The view is created before Telegram assigns its final header frame.
-        // Re-evaluate playback after layout, but updatePlayback de-duplicates
-        // the request so profile scrolling does not flood the renderer queue.
-        self.updatePlayback()
     }
 
     private func reload(force: Bool, requestRemote: Bool) {
@@ -823,18 +869,19 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         let renderer = AorusVideoOnlyLoopRenderer()
         self.rendererHasDisplayedFrame = false
         self.lastPlaybackRequest = nil
-        renderer.layer.frame = self.contentView.bounds
+        renderer.view.frame = self.posterView.frame
+        // The first frame is the poster, so it lands on it without a seam. The poster stays
+        // underneath for as long as the video plays: a frame that is late, a loop restarting,
+        // a display layer recovering after the background, all show the banner and never
+        // what is behind it.
         renderer.firstFrameEnqueued = { [weak self, weak renderer] in
             guard let self,
                   let renderer,
                   self.renderer === renderer,
                   self.representedAssetKey == key else { return }
             self.rendererHasDisplayedFrame = true
-            UIView.animate(withDuration: 0.16, delay: 0.05, options: [.beginFromCurrentState, .allowUserInteraction]) {
-                self.posterView.alpha = 0.0
-            }
         }
-        self.contentView.layer.insertSublayer(renderer.layer, at: 0)
+        self.contentView.insertSubview(renderer.view, aboveSubview: self.posterView)
         self.renderer = renderer
         renderer.load(url: mediaURL)
         self.isHidden = false
@@ -864,9 +911,7 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
 
     private func prepareForLifecyclePause() {
         self.posterView.layer.removeAllAnimations()
-        if self.posterView.image != nil {
-            self.posterView.alpha = 1.0
-        }
+        self.posterView.alpha = 1.0
         // Keep the de-duplicated playback state in sync with the direct pause.
         // Otherwise didBecomeActive considers playback already requested and
         // leaves the display layer's timebase paused after Control Center.
@@ -880,23 +925,11 @@ public final class AorusAnimatedProfileBackgroundView: UIView {
         // failed, so restoring the playback rate alone keeps the frame frozen.
         // Re-arm the read cycle so the loop actually moves again.
         self.renderer?.recover()
-        guard self.rendererHasDisplayedFrame,
-              self.posterView.image != nil,
-              !self.isHidden else {
-            return
-        }
-        UIView.animate(
-            withDuration: 0.18,
-            delay: 0.08,
-            options: [.beginFromCurrentState, .allowUserInteraction]
-        ) {
-            self.posterView.alpha = 0.0
-        }
     }
 
     private func teardownRenderer(clearVisuals: Bool = true) {
         self.renderer?.invalidate()
-        self.renderer?.layer.removeFromSuperlayer()
+        self.renderer?.view.removeFromSuperview()
         self.renderer = nil
         self.rendererHasDisplayedFrame = false
         self.lastPlaybackRequest = nil

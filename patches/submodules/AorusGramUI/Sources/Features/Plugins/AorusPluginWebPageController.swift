@@ -164,13 +164,26 @@ final class AorusPluginWebPageController: ViewController {
         displayNode.backgroundColor = pageBackground
 
         let configuration = Self.makeConfiguration()
+        if isTab {
+            // A tab's page loads before anyone opens it, so that its count is there. It may
+            // not start sound or video on its own while nobody is looking.
+            configuration.mediaTypesRequiringUserActionForPlayback = .all
+        }
         if onBadge != nil {
             configuration.userContentController.addUserScript(WKUserScript(source: Self.badgeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
             configuration.userContentController.add(badgeHandler, name: Self.badgeHandlerName)
         }
         // The size of the screen until the first layout, so a tab's page that loads before the
         // tab is ever opened lays itself out for a phone and not for a width of zero.
-        let webView = WKWebView(frame: UIScreen.main.bounds, configuration: configuration)
+        let webView = AorusPluginWebView(frame: UIScreen.main.bounds, configuration: configuration)
+        webView.onWindowChange = { [weak webView] onScreen in
+            // Off the screen — another tab, a screen pushed over it, the app in the background —
+            // whatever the page was playing stops.
+            guard !onScreen, let webView else { return }
+            if #available(iOS 15.0, *) {
+                webView.pauseAllMediaPlayback(completionHandler: nil)
+            }
+        }
         webView.navigationDelegate = events
         webView.uiDelegate = events
         webView.allowsBackForwardNavigationGestures = true
@@ -348,7 +361,10 @@ final class AorusPluginWebPageController: ViewController {
     fileprivate func decide(_ action: WKNavigationAction) -> WKNavigationActionPolicy {
         guard let url = action.request.url, let scheme = url.scheme?.lowercased() else { return .allow }
         if Self.isTelegramLink(url) {
-            if action.navigationType == .linkActivated || action.targetFrame?.isMainFrame != false {
+            // A chat, a bot or a prompt opens over the app, so only for a tap, or for a page the
+            // person is looking at. A page loading in a tab nobody has opened does not get to
+            // redirect itself into Telegram.
+            if action.navigationType == .linkActivated || (action.targetFrame?.isMainFrame != false && viewIfLoaded?.window != nil) {
                 openTelegramLink(url)
             }
             return .cancel
@@ -387,6 +403,17 @@ final class AorusPluginWebPageController: ViewController {
 
     fileprivate var cancelTitle: String {
         return presentationData.strings.Common_Cancel
+    }
+}
+
+/// The page's web view, telling the controller when it leaves the screen: a page nobody can see
+/// is not a page that may go on playing sound.
+private final class AorusPluginWebView: WKWebView {
+    var onWindowChange: ((Bool) -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        onWindowChange?(window != nil)
     }
 }
 

@@ -53,6 +53,8 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Il codice scaricato non corrisponde alla versione approvata dal Market. Riprova più tardi.",
+        "Updating…": "Aggiornamento…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Questo è il tuo plugin. Modificalo e pubblica una nuova versione da I miei plugin.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Tutte le versioni di «%@» saranno rimosse dal Market insieme all’icona. La copia su questo telefono resta.",
         "Manage in Market": "Gestisci nel Market",
@@ -903,6 +905,8 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Pobrany kod nie zgadza się z wersją zatwierdzoną w Markecie. Spróbuj później.",
+        "Updating…": "Aktualizowanie…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "To Twoja wtyczka. Zmień ją i opublikuj nową wersję w sekcji Moje wtyczki.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Wszystkie wersje „%@” zostaną usunięte z Marketu razem z ikoną. Kopia na tym telefonie pozostanie.",
         "Manage in Market": "Zarządzaj w Markecie",
@@ -1753,6 +1757,8 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "De gedownloade code komt niet overeen met de versie die de Market heeft goedgekeurd. Probeer het later opnieuw.",
+        "Updating…": "Bijwerken…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Dit is je plug-in. Wijzig hem en publiceer een nieuwe versie via Mijn plug-ins.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alle versies van ‘%@’ worden met het icoon uit de Market verwijderd. De kopie op deze telefoon blijft.",
         "Manage in Market": "Beheren in Market",
@@ -2603,6 +2609,8 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "El codi baixat no coincideix amb la versió aprovada al Market. Torna-ho a provar més tard.",
+        "Updating…": "S’està actualitzant…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Aquest és el teu connector. Canvia’l i publica’n una versió nova des d’Els meus connectors.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Totes les versions de «%@» se suprimiran del Market juntament amb la icona. La còpia d’aquest telèfon es conserva.",
         "Manage in Market": "Gestiona al Market",
@@ -3453,6 +3461,8 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Kode yang diunduh tidak cocok dengan versi yang disetujui Market. Coba lagi nanti.",
+        "Updating…": "Memperbarui…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ini plugin Anda. Ubah dan terbitkan versi baru dari Plugin Saya.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Semua versi “%@” akan dihapus dari Market beserta ikonnya. Salinan di ponsel ini tetap ada.",
         "Manage in Market": "Kelola di Market",
@@ -4303,6 +4313,8 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Kod yang dimuat turun tidak sepadan dengan versi yang diluluskan Pasaran. Cuba lagi nanti.",
+        "Updating…": "Mengemas kini…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ini pemalam anda. Ubah dan terbitkan versi baharu daripada Pemalam Saya.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Setiap versi “%@” akan dialih keluar daripada Pasaran bersama ikonnya. Salinan pada telefon ini kekal.",
         "Manage in Market": "Urus di Pasaran",
@@ -5153,6 +5165,8 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Спампаваны код не супадае з версіяй, адобранай у Маркеце. Паспрабуйце пазней.",
+        "Updating…": "Абнаўленне…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Гэта ваш плагін. Змяніць яго і апублікаваць новую версію можна ў «Мае плагіны».",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Усе версіі «%@» будуць выдалены з Маркета разам са значком. Копія на гэтым тэлефоне застанецца.",
         "Manage in Market": "Кіраванне ў Маркеце",
@@ -6003,6 +6017,8 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Yuklab olingan kod Marketda tasdiqlangan versiyaga mos kelmaydi. Keyinroq urinib ko‘ring.",
+        "Updating…": "Yangilanmoqda…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Bu sizning plaginingiz. Uni o‘zgartirish va yangi versiyasini chop etish Mening plaginlarim bo‘limida.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@” ning barcha versiyalari belgisi bilan birga Marketdan o‘chiriladi. Ushbu telefondagi nusxa qoladi.",
         "Manage in Market": "Marketda boshqarish",
@@ -6853,6 +6869,8 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "다운로드한 코드가 마켓에서 승인된 버전과 일치하지 않습니다. 나중에 다시 시도하세요.",
+        "Updating…": "업데이트 중…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "내 플러그인입니다. 내 플러그인에서 수정하고 새 버전을 게시하세요.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@”의 모든 버전이 아이콘과 함께 마켓에서 삭제됩니다. 이 휴대폰의 사본은 그대로 남습니다.",
         "Manage in Market": "마켓에서 관리",
@@ -7703,6 +7721,8 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "الشيفرة التي تم تنزيلها لا تطابق الإصدار الذي وافق عليه المتجر. حاول لاحقًا.",
+        "Updating…": "جارٍ التحديث…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "هذه إضافتك. عدّلها وانشر إصدارًا جديدًا من «إضافاتي».",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "ستُزال كل إصدارات «%@» من المتجر مع أيقونتها. تبقى النسخة الموجودة على هذا الهاتف.",
         "Manage in Market": "الإدارة في المتجر",
@@ -8553,6 +8573,8 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "کد دانلودشده با نسخه تأییدشده در بازار مطابقت ندارد. بعداً دوباره تلاش کنید.",
+        "Updating…": "در حال به‌روزرسانی…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "این افزونه شماست. آن را در «افزونه‌های من» تغییر دهید و نسخه تازه منتشر کنید.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "همه نسخه‌های «%@» همراه با نمادش از بازار حذف می‌شوند. نسخه روی این تلفن باقی می‌ماند.",
         "Manage in Market": "مدیریت در بازار",
@@ -9403,6 +9425,8 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Жүктелген код Маркетте мақұлданған нұсқаға сәйкес келмейді. Кейінірек қайталап көріңіз.",
+        "Updating…": "Жаңартылуда…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Бұл сіздің плагиніңіз. Оны өзгертіп, жаңа нұсқасын «Менің плагиндерім» бөлімінде жариялаңыз.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "«%@» барлық нұсқалары белгішесімен бірге Маркеттен жойылады. Осы телефондағы көшірме қалады.",
         "Manage in Market": "Маркетте басқару",
@@ -10253,6 +10277,8 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "下载的代码与市场批准的版本不一致。请稍后再试。",
+        "Updating…": "正在更新…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "这是你的插件。可在“我的插件”中修改并发布新版本。",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@”的所有版本将连同图标一起从市场中移除。此手机上的副本会保留。",
         "Manage in Market": "在市场中管理",
@@ -11104,6 +11130,8 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "下載的程式碼與市集核准的版本不一致。請稍後再試。",
+        "Updating…": "正在更新…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "這是你的外掛。可在「我的外掛」中修改並發佈新版本。",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "「%@」的所有版本將連同圖示一起從市集中移除。這支手機上的副本會保留。",
         "Manage in Market": "在市集中管理",
@@ -11954,6 +11982,8 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "ダウンロードしたコードがマーケットで承認されたバージョンと一致しません。後でもう一度お試しください。",
+        "Updating…": "更新中…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "これはあなたのプラグインです。マイプラグインで変更して新しいバージョンを公開できます。",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "「%@」のすべてのバージョンがアイコンとともにマーケットから削除されます。このスマートフォン上のコピーは残ります。",
         "Manage in Market": "マーケットで管理",
@@ -12804,6 +12834,8 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Ladattu koodi ei vastaa Marketin hyväksymää versiota. Yritä myöhemmin uudelleen.",
+        "Updating…": "Päivitetään…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Tämä on oma laajennuksesi. Muokkaa sitä ja julkaise uusi versio kohdassa Omat laajennukset.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Kaikki laajennuksen ”%@” versiot poistetaan Marketista kuvakkeineen. Tämän puhelimen kopio säilyy.",
         "Manage in Market": "Hallitse Marketissa",
@@ -13654,6 +13686,8 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "הקוד שהורד אינו תואם לגרסה שאושרה בחנות. נסו שוב מאוחר יותר.",
+        "Updating…": "מעדכן…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "זה התוסף שלך. אפשר לשנות אותו ולפרסם גרסה חדשה מ„התוספים שלי”.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "כל הגרסאות של „%@” יוסרו מהחנות יחד עם הסמל. העותק בטלפון הזה יישאר.",
         "Manage in Market": "ניהול בחנות",
@@ -14504,6 +14538,8 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Preuzeti kôd ne odgovara verziji koju je odobrio Market. Pokušaj kasnije.",
+        "Updating…": "Ažuriranje…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ovo je tvoj dodatak. Promijeni ga i objavi novu verziju u Mojim dodacima.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Sve verzije „%@” bit će uklonjene iz Marketa zajedno s ikonom. Kopija na ovom telefonu ostaje.",
         "Manage in Market": "Upravljaj u Marketu",
@@ -15354,6 +15390,8 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Преузети код се не поклапа са верзијом коју је одобрио Маркет. Покушај касније.",
+        "Updating…": "Ажурирање…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ово је твој додатак. Промени га и објави нову верзију у Мојим додацима.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Све верзије „%@” биће уклоњене из Маркета заједно са иконом. Копија на овом телефону остаје.",
         "Manage in Market": "Управљај у Маркету",
@@ -16204,6 +16242,8 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Stažený kód neodpovídá verzi schválené v Marketu. Zkuste to později.",
+        "Updating…": "Aktualizace…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Toto je váš plugin. Upravit ho a vydat novou verzi můžete v sekci Moje pluginy.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Všechny verze „%@“ budou z Marketu odstraněny i s ikonou. Kopie v tomto telefonu zůstane.",
         "Manage in Market": "Spravovat v Marketu",
@@ -17054,6 +17094,8 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Stiahnutý kód nezodpovedá verzii schválenej v Markete. Skúste to neskôr.",
+        "Updating…": "Aktualizácia…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Toto je váš plugin. Upraviť ho a vydať novú verziu môžete v sekcii Moje pluginy.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Všetky verzie „%@“ budú z Marketu odstránené aj s ikonou. Kópia v tomto telefóne zostane.",
         "Manage in Market": "Spravovať v Markete",
@@ -17904,6 +17946,8 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Codul descărcat nu corespunde versiunii aprobate în Market. Încearcă mai târziu.",
+        "Updating…": "Se actualizează…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Acesta este pluginul tău. Modifică-l și publică o versiune nouă din Pluginurile mele.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Toate versiunile „%@” vor fi eliminate din Market împreună cu pictograma. Copia de pe acest telefon rămâne.",
         "Manage in Market": "Gestionează în Market",
@@ -18754,6 +18798,8 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "A letöltött kód nem egyezik a Market által jóváhagyott verzióval. Próbáld újra később.",
+        "Updating…": "Frissítés…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Ez a saját bővítményed. A Saját bővítményekben módosíthatod, és ott tehetsz közzé új verziót.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "A(z) „%@” minden verziója eltűnik a Marketből az ikonjával együtt. A telefonon lévő példány megmarad.",
         "Manage in Market": "Kezelés a Marketben",
@@ -19604,6 +19650,8 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Den nedlastede koden stemmer ikke med versjonen Market har godkjent. Prøv igjen senere.",
+        "Updating…": "Oppdaterer …",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Dette er din utvidelse. Endre den og publiser en ny versjon fra Mine utvidelser.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alle versjoner av «%@» fjernes fra Market sammen med ikonet. Kopien på denne telefonen blir værende.",
         "Manage in Market": "Administrer i Market",
@@ -20454,6 +20502,8 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Den hämtade koden stämmer inte med versionen som Market har godkänt. Försök igen senare.",
+        "Updating…": "Uppdaterar …",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Det här är ditt tillägg. Ändra det och publicera en ny version från Mina tillägg.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alla versioner av ”%@” tas bort från Market tillsammans med ikonen. Kopian på den här telefonen finns kvar.",
         "Manage in Market": "Hantera i Market",
@@ -21304,6 +21354,8 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Mã đã tải xuống không khớp với phiên bản được Chợ phê duyệt. Hãy thử lại sau.",
+        "Updating…": "Đang cập nhật…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Đây là plugin của bạn. Hãy chỉnh sửa và phát hành phiên bản mới trong Plugin của tôi.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Mọi phiên bản của “%@” sẽ bị xóa khỏi Chợ cùng biểu tượng. Bản sao trên điện thoại này vẫn được giữ lại.",
         "Manage in Market": "Quản lý trên Chợ",
@@ -22154,6 +22206,8 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Завантажений код не збігається з версією, схваленою в Маркеті. Спробуйте пізніше.",
+        "Updating…": "Оновлення…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Це ваш плагін. Змінити його й опублікувати нову версію можна в «Мої плагіни».",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Усі версії «%@» буде видалено з Маркету разом зі значком. Копія на цьому телефоні залишиться.",
         "Manage in Market": "Керування в Маркеті",
@@ -23013,6 +23067,8 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "El código descargado no coincide con la versión aprobada en el Market. Inténtalo más tarde.",
+        "Updating…": "Actualizando…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Este es tu plugin. Cámbialo y publica una nueva versión desde Mis plugins.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Todas las versiones de «%@» se eliminarán del Market junto con su icono. La copia de este teléfono se conserva.",
         "Manage in Market": "Gestionar en el Market",
@@ -23872,6 +23928,8 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "O código baixado não corresponde à versão aprovada no Market. Tente novamente mais tarde.",
+        "Updating…": "Atualizando…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Este é o seu plugin. Altere-o e publique uma nova versão em Meus plugins.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Todas as versões de “%@” serão removidas do Market com o ícone. A cópia neste telefone permanece.",
         "Manage in Market": "Gerenciar no Market",
@@ -24731,6 +24789,8 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Der heruntergeladene Code stimmt nicht mit der im Market freigegebenen Version überein. Versuche es später erneut.",
+        "Updating…": "Wird aktualisiert …",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Das ist dein Plugin. Ändere es und veröffentliche eine neue Version unter „Meine Plugins“.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Alle Versionen von „%@“ werden samt Symbol aus dem Market entfernt. Die Kopie auf diesem Telefon bleibt.",
         "Manage in Market": "Im Market verwalten",
@@ -25590,6 +25650,8 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "Le code téléchargé ne correspond pas à la version approuvée par le Market. Réessayez plus tard.",
+        "Updating…": "Mise à jour…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "C’est votre plugin. Modifiez-le et publiez une nouvelle version depuis Mes plugins.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "Toutes les versions de « %@ » seront retirées du Market avec leur icône. La copie sur ce téléphone est conservée.",
         "Manage in Market": "Gérer dans le Market",
@@ -26449,6 +26511,8 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "The downloaded code doesn't match the version the Market approved. Try again later.": "İndirilen kod, Market’in onayladığı sürümle eşleşmiyor. Daha sonra yeniden deneyin.",
+        "Updating…": "Güncelleniyor…",
         "This is your plugin. Change it and publish a new version from My Plugins.": "Bu sizin eklentiniz. Değiştirip yeni sürümünü Eklentilerim bölümünden yayımlayın.",
         "Every version of “%@” will be removed from the Market along with its icon. The copy on this phone stays.": "“%@” eklentisinin tüm sürümleri simgesiyle birlikte Market’ten kaldırılacak. Bu telefondaki kopya kalır.",
         "Manage in Market": "Market’te yönet",
