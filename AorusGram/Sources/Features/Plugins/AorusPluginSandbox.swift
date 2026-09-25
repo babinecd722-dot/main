@@ -665,6 +665,13 @@ public final class AorusPluginSandbox {
     public static let commandReplyLifetime: TimeInterval = 600
     /// Commands owing an answer at once. The oldest gives way.
     public static let commandReplyLimit = 16
+    /// How many messages a plugin may send to one chat in `sendBurstWindow`, and to all
+    /// chats in a minute. Two people in a group running a plugin that answers a word with
+    /// a message containing that word answer each other without end, and Telegram's answer
+    /// to that is to restrict the accounts; a plugin with a bug in a loop is the same.
+    public static let sendBurstLimit = 5
+    public static let sendBurstWindow: TimeInterval = 10
+    public static let sendMinuteLimit = 60
     /// Hosts a plugin may not talk to: the app's own control plane.
     public static let blockedHostSuffixes: [String] = ["aorusgram.com"]
 
@@ -692,6 +699,9 @@ public final class AorusPluginSandbox {
     /// Where each command still owing an answer was typed, by the token the answer comes back
     /// with. On the plugin's queue, like everything the prelude calls.
     private var commandReplies: [String: (context: AorusPluginOutgoingContext, expires: Date)] = [:]
+    /// When the plugin's recent messages went out, by chat and in all. On the plugin's queue.
+    private var recentSends: [Int64: [Date]] = [:]
+    private var recentSendsAll: [Date] = []
     private let stateLock = NSLock()
     private var runningFlag = false
     /// When the plugin is allowed to be asked for an outgoing verdict again. A timeout is
@@ -999,6 +1009,8 @@ public final class AorusPluginSandbox {
         networkDelegate = nil
         pendingRequestIds.removeAll()
         commandReplies.removeAll()
+        recentSends.removeAll()
+        recentSendsAll.removeAll()
         stateLock.lock()
         runningFlag = false
         sendHooks = false
@@ -1142,6 +1154,27 @@ public final class AorusPluginSandbox {
         }
         box.lock.lock(); defer { box.lock.unlock() }
         return box.verdict
+    }
+
+    /// Counts a message to `peer` against the limits, or answers why it cannot go.
+    private func admitSend(to peer: Int64) -> String? {
+        let now = Date()
+        recentSendsAll = recentSendsAll.filter { now.timeIntervalSince($0) < 60 }
+        var sends = (recentSends[peer] ?? []).filter { now.timeIntervalSince($0) < AorusPluginSandbox.sendBurstWindow }
+        if sends.count >= AorusPluginSandbox.sendBurstLimit {
+            recentSends[peer] = sends
+            return "Too many messages to one chat: at most \(AorusPluginSandbox.sendBurstLimit) in \(Int(AorusPluginSandbox.sendBurstWindow)) seconds"
+        }
+        if recentSendsAll.count >= AorusPluginSandbox.sendMinuteLimit {
+            return "Too many messages: at most \(AorusPluginSandbox.sendMinuteLimit) a minute"
+        }
+        sends.append(now)
+        recentSends[peer] = sends
+        recentSendsAll.append(now)
+        if recentSends.count > 64 {
+            recentSends = recentSends.filter { entry in entry.value.contains { now.timeIntervalSince($0) < AorusPluginSandbox.sendBurstWindow } }
+        }
+        return nil
     }
 
     private func rememberCommandReply(_ token: String, context: AorusPluginOutgoingContext) {
@@ -1838,6 +1871,11 @@ public final class AorusPluginSandbox {
                 scheduleAt: scheduleAt
             )
             let entities = AorusPluginTextEntity.validated(payload["entities"] as? [[String: Any]] ?? [], text: text)
+            if let refusal = admitSend(to: toSelf ? 0 : (int64("peerId") ?? 0)) {
+                record(.warn, refusal)
+                settle(id, with: .failure(AorusPluginRequestError(refusal)))
+                return
+            }
             host.pluginSendMessage(pluginId, peerId: int64("peerId"), toSelf: toSelf, accountId: int64("accountId"), text: text, entities: entities, options: options) { [weak self] result in
                 self?.settle(id, with: result.map { _ -> Any? in nil })
             }
@@ -1897,6 +1935,12 @@ public final class AorusPluginSandbox {
             guard require(.manageMessages, id: id) else { return }
             guard let peerId = int64("peerId"), let namespace = int32("namespace"), let messageId = int32("messageId"), let toPeerId = int64("toPeerId") else {
                 settle(id, with: .failure(AorusPluginRequestError("A valid source message and destination peer are required")))
+                return
+            }
+            // A forward puts a message in a chat like a send does, and counts like one.
+            if let refusal = admitSend(to: toPeerId) {
+                record(.warn, refusal)
+                settle(id, with: .failure(AorusPluginRequestError(refusal)))
                 return
             }
             host.pluginForwardMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, toPeerId: toPeerId) { [weak self] result in

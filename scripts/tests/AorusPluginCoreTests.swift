@@ -115,26 +115,15 @@ for permission in AorusPluginPermission.allCases {
         "permission \(permission.rawValue) has no way to be requested from a source"
     )
 }
-// And a needle that names an API the prelude does not publish can never match. The last
-// component has to exist as a member of the public API, and a subscribed event has to be
-// one the prelude accepts.
+// And a needle that names an API the prelude does not publish can never match. Every
+// component has to exist as a member of the public API. Events are not needles any more:
+// `eventPermissions` holds them, and each is checked above against the prelude's list.
 for (permission, needles) in AorusPluginPermission.sourceProbes {
     for needle in needles {
-        // Any needle that opens a call with a quoted event name is a subscription needle,
-        // whichever of the six spellings it uses — `aorus.on(`, `aorus.events.once(`,
-        // `aorus.events.waitFor(` and so on. Matching on the prefixes by hand meant a
-        // spelling added later was read as an API path and checked against the wrong thing.
-        if needle.contains("("), needle.contains("'") || needle.contains("\"") {
-            let quoted = needle.drop(while: { $0 != "'" && $0 != "\"" }).dropFirst()
-            let event = String(quoted.prefix(while: { $0 != "'" && $0 != "\"" }))
-            expect(
-                AorusPluginPrelude.events.contains(event),
-                "\(permission.rawValue) watches for an event the prelude does not accept: \(needle)"
-            )
-            continue
-        }
         guard needle.hasPrefix("aorus.") else { continue }
-        for member in needle.split(separator: ".").dropFirst() {
+        // A call with its first argument — `aorus.users.get('me'` — names the path before it.
+        let path = needle.prefix(while: { $0 != "(" })
+        for member in path.split(separator: ".").dropFirst() {
             expect(
                 AorusPluginPrelude.source.contains("\(member):"),
                 "\(permission.rawValue) watches for an API the prelude does not publish: \(needle)"
@@ -857,6 +846,36 @@ if AorusPluginSandbox.watchdogAvailable {
     Thread.sleep(forTimeInterval: 0.1)
     expect(effectOwners.last == secondRun.runId, "the new run's snow is the new run's")
     secondRun.stop()
+
+    // A plugin sending in a loop is stopped at the chat's limit, not by Telegram at the
+    // account's expense.
+    let burstHost = AorusPluginNullHost()
+    var burstSends = 0
+    var burstRefusals = 0
+    let burstDone = DispatchSemaphore(value: 0)
+    burstHost.onSendMessage = { _, _, _, _, _, _ in burstSends += 1 }
+    burstHost.onStorageChanged = { _, values in
+        if let refused = values["refused"]?.doubleValue { burstRefusals = Int(refused); burstDone.signal() }
+    }
+    let burst = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Burst"),
+        source: """
+        aorus.on('start', async function () {
+            var refused = 0;
+            for (var i = 0; i < 8; i++) {
+                try { await aorus.messages.send('-1001', 'again ' + i); } catch (error) { refused += 1; }
+            }
+            await aorus.messages.send('-1002', 'another chat');
+            aorus.storage.set('refused', refused);
+        });
+        """,
+        host: burstHost,
+        permissions: [.sendMessages]
+    )
+    burst.start { _ in }
+    expect(burstDone.wait(timeout: .now() + 3) == .success, "a burst of sends finishes")
+    expect(burstSends == AorusPluginSandbox.sendBurstLimit + 1 && burstRefusals == 8 - AorusPluginSandbox.sendBurstLimit, "one chat takes the burst limit and another chat still takes its own")
+    burst.stop()
 
     // Formatted text. Telegram counts entity offsets in UTF-16 code units, which is not
     // what a character count gives once an emoji is in the string — get it wrong and the
