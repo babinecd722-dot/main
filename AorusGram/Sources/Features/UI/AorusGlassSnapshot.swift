@@ -91,8 +91,13 @@ public enum AorusGlassSnapshot {
         center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
             self.refit()
         }
-        center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
-            self.thaw()
+        // Live again the moment the app is on its way back, not only once it is active: a
+        // passcode or Face ID prompt on return can keep it inactive for a while, and the
+        // copies from before it left are pictures of a screen that has since moved on.
+        for name in [UIApplication.willEnterForegroundNotification, UIApplication.didBecomeActiveNotification] {
+            center.addObserver(forName: name, object: nil, queue: .main) { _ in
+                self.thaw()
+            }
         }
     }
 
