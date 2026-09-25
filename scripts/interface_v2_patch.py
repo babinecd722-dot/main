@@ -1204,8 +1204,12 @@ def _patch_avatar_tint_publish(tg: Path) -> None:
             "        // disagree on a shape where the container is wider than it is tall.\n"
             "        if aorusCentredHeader {\n"
             "            self.aorusMirroredTail = expandedAvatarListSize.height - min(expandedAvatarListSize.width, expandedAvatarListSize.height)\n"
+            "            self.aorusPictureSide = min(expandedAvatarListSize.width, expandedAvatarListSize.height)\n"
             "            self.aorusPublishAvatarTint(peer: peer)\n"
-            "        }\n",
+            "        }\n"
+            "        // AorusGram: every photo sent for once the photos are shown, and each read into its\n"
+            "        // page as it arrives. See aorusPrepareAvatarPages.\n"
+            "        self.aorusPrepareAvatarPages(peer: peer)\n",
             "avatar tint publish",
         )
         text = _replace_once(
@@ -1228,6 +1232,88 @@ def _patch_avatar_tint_publish(tg: Path) -> None:
             "    // publishes from a callback that has neither. Ninety-eight is what a phone in portrait\n"
             "    // computes, so a first publish that somehow preceded a layout would still be right.\n"
             "    var aorusMirroredTail: CGFloat = 98.0\n"
+            "    // How wide the square picture is, from the same layout pass as the tail: the page of a\n"
+            "    // photo read from its file is read off a square this wide, as the node draws it.\n"
+            "    var aorusPictureSide: CGFloat = 0.0\n"
+            "    // The photos already sent for, so a layout pass that finds the same set does nothing.\n"
+            "    private var aorusPreparedAvatarIds: [AvatarGalleryEntryId] = []\n"
+            "    private let aorusAvatarPreparation = MetaDisposable()\n"
+            "\n"
+            "    // AorusGram: every photo of this peer sent for as soon as the photos are shown, rather\n"
+            "    // than only the two either side of the one on the screen, and -- under Interface 2.0 --\n"
+            "    // each read into its page from the photo itself the moment its file is complete.\n"
+            "    //\n"
+            "    // The pager builds nodes, and so fetches, two photos either way of the current one; a\n"
+            "    // reader swiping on quickly outran that and landed on a photo still arriving over its\n"
+            "    // blurred placeholder, which then changed all at once. And the page under the profile\n"
+            "    // was read off the photo on the screen, so it could only change after the swipe had\n"
+            "    // landed: a new photo over the previous photo's page, then the page jumping to it. With\n"
+            "    // every photo here and every page known ahead of time, the page follows the drag.\n"
+            "    //\n"
+            "    // Sixteen at most: more than the pager shows dots for, and a bound on what one visit to\n"
+            "    // a profile asks the network for. Dropped when the header goes, with the profile.\n"
+            "    func aorusPrepareAvatarPages(peer: EnginePeer?) {\n"
+            "        guard let peer, self.isAvatarExpanded else {\n"
+            "            return\n"
+            "        }\n"
+            "        let entries = self.avatarListNode.listContainerNode.galleryEntries\n"
+            "        let ids = entries.map { $0.id }\n"
+            "        guard !ids.isEmpty, ids != self.aorusPreparedAvatarIds else {\n"
+            "            return\n"
+            "        }\n"
+            "        self.aorusPreparedAvatarIds = ids\n"
+            "        let mediaBox = self.context.account.postbox.mediaBox\n"
+            "        let peerId = peer.id.id._internalGetInt64Value()\n"
+            "        let side = self.aorusPictureSide\n"
+            "        let tail = self.aorusMirroredTail\n"
+            "        let count = entries.count\n"
+            "        let requestLayout: () -> Void = { [weak self] in\n"
+            "            self?.requestUpdateLayout?(false)\n"
+            "        }\n"
+            "        let preparation = DisposableSet()\n"
+            "        for (index, entry) in entries.prefix(16).enumerated() {\n"
+            "            let representations = entry.representations\n"
+            "            guard let largest = largestImageRepresentation(representations.map { $0.representation }),\n"
+            "                  let largestIndex = representations.firstIndex(where: { $0.representation == largest }) else {\n"
+            "                continue\n"
+            "            }\n"
+            "            // The same request the pager's own node makes for the same photo, so the two are\n"
+            "            // one download and the node finds the photo already on disk.\n"
+            "            preparation.add(fetchedMediaResource(mediaBox: mediaBox, userLocation: .other, userContentType: .avatar, reference: representations[largestIndex].reference).start())\n"
+            "            preparation.add((mediaBox.resourceData(largest.resource)\n"
+            "            |> filter { $0.complete }\n"
+            "            |> take(1)\n"
+            "            |> deliverOnMainQueue).start(next: { data in\n"
+            "                // Under Interface 2.0 only: the side is the picture's, and it is only laid\n"
+            "                // out as the page's photo there. Elsewhere this was only ever the download.\n"
+            "                guard side > 0.0 else {\n"
+            "                    return\n"
+            "                }\n"
+            "                AorusGlassProfileTint.prepareAvatarPage(for: peerId, photo: index, photoCount: count, path: data.path, side: side, mirroredTail: tail, onUpdate: requestLayout)\n"
+            "            }))\n"
+            "        }\n"
+            "        self.aorusAvatarPreparation.set(preparation)\n"
+            "    }\n"
+            "\n"
+            "    // AorusGram: the pager has been dragged `fraction` of a page from photo `index` -- to the\n"
+            "    // left brings the next photo in, to the right the previous one -- and the page follows.\n"
+            "    func aorusFollowAvatarPage(index: Int, fraction: CGFloat) {\n"
+            "        guard let peer = self.avatarListNode.listContainerNode.peer else {\n"
+            "            return\n"
+            "        }\n"
+            "        let count = self.avatarListNode.listContainerNode.galleryEntries.count\n"
+            "        let target = fraction < 0.0 ? index + 1 : index - 1\n"
+            "        let photo: Int? = fraction != 0.0 && target >= 0 && target < count ? target : nil\n"
+            "        AorusGlassProfileTint.followPage(for: peer.id.id._internalGetInt64Value(), photo: photo, photoCount: count, progress: abs(fraction))\n"
+            "    }\n"
+            "\n"
+            "    // AorusGram: the drag let go, from photo `from` onto photo `to`.\n"
+            "    func aorusReleaseAvatarPage(from: Int, to: Int) {\n"
+            "        guard let peer = self.avatarListNode.listContainerNode.peer else {\n"
+            "            return\n"
+            "        }\n"
+            "        AorusGlassProfileTint.releasePage(for: peer.id.id._internalGetInt64Value(), changed: from != to)\n"
+            "    }\n"
             "\n"
             "    func aorusPublishAvatarTint(peer: EnginePeer?) {\n"
             "        guard let peer, UserDefaults.standard.bool(forKey: \"" + INTERFACE_V2_KEY + "\") else {\n"
@@ -1395,11 +1481,23 @@ def _patch_avatar_tint_publish(tg: Path) -> None:
             "            shadowView.bringSubviewToFront(fadeView)\n"
             "        }\n"
             "        transition.updateFrame(view: fadeView, frame: CGRect(origin: CGPoint(), size: size))\n"
-            "        fadeView.update(image: image)\n"
+            "        fadeView.update(image: image, peerId: peer.id.id._internalGetInt64Value())\n"
             "    }\n"
             "\n"
             "    func aorusPublishAvatarTint(peer: EnginePeer?) {\n",
             "header fade method",
+        )
+        text = _replace_once(
+            text,
+            "    deinit {\n"
+            "        self.emojiStatusPackDisposable.dispose()\n"
+            "    }\n",
+            "    deinit {\n"
+            "        self.emojiStatusPackDisposable.dispose()\n"
+            "        // AorusGram: photos still being sent for stop with the profile that asked for them.\n"
+            "        self.aorusAvatarPreparation.dispose()\n"
+            "    }\n",
+            "avatar preparation teardown",
         )
         path.write_text(text, encoding="utf-8")
         print("InterfaceV2: published the avatar tint")
@@ -1424,11 +1522,69 @@ def _patch_avatar_tint_publish(tg: Path) -> None:
         "            // AorusGram: the page under the profile follows the photo being paged to.\n"
         "            self.headerNode.aorusPublishAvatarTint(peer: self.headerNode.avatarListNode.listContainerNode.peer)\n"
         "            self.updateNavigation(transition: .immediate, additive: true, animateHeader: true)\n"
+        "        }\n"
+        "        // AorusGram: and follows it while it is being dragged, not only once it has landed.\n"
+        "        self.headerNode.avatarListNode.listContainerNode.aorusPageProgressUpdated = { [weak self] index, fraction in\n"
+        "            self?.headerNode.aorusFollowAvatarPage(index: index, fraction: fraction)\n"
+        "        }\n"
+        "        self.headerNode.avatarListNode.listContainerNode.aorusPageReleased = { [weak self] from, to in\n"
+        "            self?.headerNode.aorusReleaseAvatarPage(from: from, to: to)\n"
         "        }\n",
         "paged avatar tint",
     )
     screen_path.write_text(screen, encoding="utf-8")
     print("InterfaceV2: hooked the paged avatar tint")
+
+
+def _patch_avatar_pager_progress(tg: Path) -> None:
+    """Let the page under a profile follow the avatar pager while it is being dragged.
+
+    The pager keeps how far it has been dragged to itself and says nothing until the drag has
+    let go and the index has changed, so the page could only ever change after the photo had.
+    Two callbacks say it as it happens: how far towards the next or previous photo on every
+    frame of the drag, and where it let go, just ahead of the index changing.
+    """
+    path = tg / "submodules/PeerInfoAvatarListNode/Sources/PeerInfoAvatarListNode.swift"
+    text = _read(path, "PeerInfoAvatarListNode.swift")
+    if "aorusPageProgressUpdated" in text:
+        print("InterfaceV2: avatar pager progress already published")
+        return
+    text = _replace_once(
+        text,
+        "    public var currentIndexUpdated: (() -> Void)?\n",
+        "    public var currentIndexUpdated: (() -> Void)?\n"
+        "    // AorusGram: the photo being dragged from and how far, as a fraction of the page: below\n"
+        "    // zero the next photo is coming in, above it the previous one.\n"
+        "    public var aorusPageProgressUpdated: ((Int, CGFloat) -> Void)?\n"
+        "    // AorusGram: the drag let go, from one photo onto another -- or onto the same one.\n"
+        "    public var aorusPageReleased: ((Int, Int) -> Void)?\n",
+        "pager progress callbacks",
+    )
+    text = _replace_once(
+        text,
+        "            self.transitionFraction = transitionFraction\n"
+        "            if let size = self.validLayout {\n",
+        "            self.transitionFraction = transitionFraction\n"
+        "            self.aorusPageProgressUpdated?(self.currentIndex, transitionFraction)\n"
+        "            if let size = self.validLayout {\n",
+        "pager progress",
+    )
+    text = _replace_once(
+        text,
+        "            let previousIndex = self.currentIndex\n"
+        "            self.currentIndex = updatedIndex\n"
+        "            if self.currentIndex != previousIndex {\n"
+        "                self.pageChangedByPan = true\n",
+        "            let previousIndex = self.currentIndex\n"
+        "            // AorusGram: before the index changes, so what follows the drag knows it let go.\n"
+        "            self.aorusPageReleased?(previousIndex, updatedIndex)\n"
+        "            self.currentIndex = updatedIndex\n"
+        "            if self.currentIndex != previousIndex {\n"
+        "                self.pageChangedByPan = true\n",
+        "pager release",
+    )
+    path.write_text(text, encoding="utf-8")
+    print("InterfaceV2: published the avatar pager progress")
 
 
 def _patch_avatar_placeholder(tg: Path) -> None:
@@ -3634,7 +3790,7 @@ def _patch_members_pane_glass(tg: Path) -> None:
         "        } else {\n"
         "            fillView = UIView()\n"
         "            fillView.isUserInteractionEnabled = false\n"
-        "            imageView = UIImageView()\n"
+        "            imageView = AorusProfilePageImageView(peerId: self.aorusPeerId)\n"
         "            imageView.contentMode = .scaleToFill\n"
         "            imageView.layer.magnificationFilter = .linear\n"
         "            imageView.isUserInteractionEnabled = false\n"
@@ -4070,7 +4226,7 @@ def _patch_groups_pane_glass(tg: Path) -> None:
         "        } else {\n"
         "            fillView = UIView()\n"
         "            fillView.isUserInteractionEnabled = false\n"
-        "            imageView = UIImageView()\n"
+        "            imageView = AorusProfilePageImageView(peerId: self.aorusPeerId)\n"
         "            imageView.contentMode = .scaleToFill\n"
         "            imageView.layer.magnificationFilter = .linear\n"
         "            imageView.isUserInteractionEnabled = false\n"
@@ -6544,6 +6700,7 @@ def patch_interface_v2(tg: Path) -> None:
     _patch_glass_action_buttons(tg)
     _patch_subtitle_button_glass(tg)
     _patch_avatar_tint_publish(tg)
+    _patch_avatar_pager_progress(tg)
     _patch_avatar_placeholder(tg)
     _patch_glass_placeholder_avatar(tg)
     _patch_avatar_expansion(tg)

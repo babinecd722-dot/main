@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import ImageIO
 import TelegramPresentationData
 
 // AorusGram Interface 2.0: the avatar's colours, published for the rest of the profile screen.
@@ -214,6 +215,207 @@ public enum AorusGlassProfileTint {
             return
         }
         AorusGlassProfileTint.sampleAndSettle(key: key, view: view, tail: mirroredTail, read: 1, onUpdate: onUpdate)
+    }
+
+    /// Read one of a peer's photos into its page from the photo itself, ahead of the reader
+    /// getting to it.
+    ///
+    /// The header sends for every photo as soon as the photos are shown and hands each one over
+    /// here the moment its file is complete. Reading it off the screen instead, as
+    /// `publishAvatarTint` does, can only happen once the photo is on the screen -- after the
+    /// swipe to it -- and until then the page is the previous photo's: a new photo over an old
+    /// page, which then changed all at once when the reading came back. Read from the file, every
+    /// photo's page is known before anyone swipes to it, and the page can follow the drag.
+    ///
+    /// The photo is drawn the way the header draws it, filling a square `side` points across, and
+    /// goes through the same band as a node on the screen would. It is the full photo by
+    /// construction -- the file is only handed over complete -- so the result is final: marked
+    /// settled, which also ends any reading of the same photo off the screen.
+    public static func prepareAvatarPage(for peerId: Int64, photo: Int, photoCount: Int, path: String, side: CGFloat, mirroredTail: CGFloat, onUpdate: @escaping () -> Void) {
+        guard Thread.isMainThread, AorusInterfaceV2.isEnabled, side >= 8.0 else {
+            return
+        }
+        let key = PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)
+        // Only a reading of the file itself is final. A photo the screen reader gave up on after
+        // its sixteen readings -- a slow line, the placeholder still up -- is settled too, but on a
+        // picture that may never have been the photo, and the file replaces it.
+        guard !AorusGlassProfileTint.finalKeys.contains(key), !AorusGlassProfileTint.preparingKeys.contains(key) else {
+            return
+        }
+        AorusGlassProfileTint.preparingKeys.insert(key)
+        AorusGlassProfileTint.preparationQueue.async {
+            let sample = AorusGlassProfileTint.fileSample(path: path, side: side, tail: mirroredTail)
+            DispatchQueue.main.async {
+                AorusGlassProfileTint.preparingKeys.remove(key)
+                guard let sample, sample.image != nil else {
+                    return
+                }
+                AorusGlassProfileTint.record(sample, for: key)
+                AorusGlassProfileTint.finalKeys.insert(key)
+                AorusGlassProfileTint.settledKeys.insert(key)
+                AorusGlassProfileTint.pendingKeys.remove(key)
+                if AorusGlassProfileTint.currentKeys[peerId] == key {
+                    AorusGlassProfileTint.adopt(sample, for: peerId, onUpdate: onUpdate)
+                }
+            }
+        }
+    }
+
+    /// Readings made from photo files, one at a time and off the main thread. Everything they
+    /// call is arithmetic on buffers of their own.
+    private static let preparationQueue = DispatchQueue(label: "aorusgram.profile.pages", qos: .userInitiated)
+    /// Photos being read from their files right now.
+    private static var preparingKeys = Set<PhotoKey>()
+    /// Photos whose page was read from the file: the full photo, and the last word on it.
+    private static var finalKeys = Set<PhotoKey>()
+
+    /// A photo file read into its page: decoded small, laid over a square `side` points across
+    /// the way the header's image node fills it, and sampled exactly as that node would be.
+    private static func fileSample(path: String, side: CGFloat, tail: CGFloat) -> Sample? {
+        guard side >= 8.0, let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else {
+            return nil
+        }
+        // The band is a few dozen points of the picture sampled at ninety-six pixels, so a photo
+        // decoded at 720 is already finer than anything the sample can keep.
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: 720
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary), image.width > 0, image.height > 0 else {
+            return nil
+        }
+        let picture = UIImage(cgImage: image)
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
+        let scale = max(side / width, side / height)
+        let drawn = CGSize(width: width * scale, height: height * scale)
+        let rect = CGRect(x: (side - drawn.width) / 2.0, y: (side - drawn.height) / 2.0, width: drawn.width, height: drawn.height)
+        return AorusGlassProfileTint.bottomBandSample(size: CGSize(width: side, height: side), tail: tail) { context in
+            // UIKit draws upright into a context whose y runs down, which is how the band's is set
+            // up; drawing the CGImage directly would put the photo on its head.
+            UIGraphicsPushContext(context)
+            picture.draw(in: rect)
+            UIGraphicsPopContext()
+        }
+    }
+
+    /// Keep what a photo samples to, within the cap that stops a session of profiles growing this
+    /// without bound. A dropped entry only costs one reading.
+    private static func record(_ sample: Sample, for key: PhotoKey) {
+        if AorusGlassProfileTint.sampledColors[key] == nil, AorusGlassProfileTint.sampledColors.count > 96 {
+            AorusGlassProfileTint.sampledColors.removeAll()
+            AorusGlassProfileTint.contentSignatures.removeAll()
+            AorusGlassProfileTint.settledKeys.removeAll()
+            AorusGlassProfileTint.finalKeys.removeAll()
+        }
+        AorusGlassProfileTint.sampledColors[key] = sample
+    }
+
+    // MARK: - Following the pager
+
+    /// Posted, on the main thread, while the reader drags from one photo towards another and
+    /// when the drag lets go. `userInfo` holds the peer ("peerId") and how long the change should
+    /// take ("duration", zero for at once). Every `AorusProfilePageImageView` of that peer answers
+    /// it, so the screen's backdrop, the fade under the header and every pane move together.
+    public static let pageBlendNotification = Notification.Name("AorusGramProfilePageBlend")
+
+    /// How long the page takes to settle when the photo it follows does: the pager's own spring.
+    public static let settleDuration: Double = 0.3
+    /// How long a change of page takes when nothing is being dragged -- a tap to the next photo,
+    /// the full photo arriving over its placeholder.
+    public static let refreshDuration: Double = 0.25
+
+    /// The page of the photo being dragged in, laid over the page at the share of it on screen.
+    private struct Blend {
+        let image: UIImage
+        let alpha: CGFloat
+    }
+
+    /// How the next change of a peer's page comes in, for a short while after a drag let go onto
+    /// another photo: the page left behind kept over the new one at the share of it still showing.
+    private struct Handover {
+        let alpha: CGFloat
+        let duration: Double
+        let until: CFTimeInterval
+    }
+
+    private static var blends: [Int64: Blend] = [:]
+    private static var handovers: [Int64: Handover] = [:]
+
+    /// What is laid over a peer's page right now, if anything.
+    public static func pageBlend(for peerId: Int64) -> (image: UIImage, alpha: CGFloat)? {
+        return AorusGlassProfileTint.blends[peerId].map { ($0.image, $0.alpha) }
+    }
+
+    /// How a change of this peer's page arriving now should come in: from what share of the old
+    /// page, and over how long. Nil for the ordinary crossfade.
+    public static func pageHandover(for peerId: Int64) -> (alpha: CGFloat, duration: Double)? {
+        guard let handover = AorusGlassProfileTint.handovers[peerId], CACurrentMediaTime() < handover.until else {
+            return nil
+        }
+        return (handover.alpha, handover.duration)
+    }
+
+    /// The pager has been dragged `progress` of the way towards `photo`, or back to where it
+    /// started when `photo` is nil. The page of that photo is laid over the page at that share, so
+    /// the background moves with the finger rather than after it. Nothing is laid over when that
+    /// page is not known yet; the change then comes once it is.
+    public static func followPage(for peerId: Int64, photo: Int?, photoCount: Int, progress: CGFloat) {
+        guard Thread.isMainThread, AorusInterfaceV2.isEnabled else {
+            return
+        }
+        var blend: Blend?
+        if let photo, progress > 0.0,
+           let image = AorusGlassProfileTint.sampledColors[PhotoKey(peerId: peerId, photo: photo, photoCount: photoCount)]?.image,
+           image !== AorusGlassProfileTint.pageImages[peerId] {
+            blend = Blend(image: image, alpha: min(1.0, progress))
+        }
+        if blend == nil, AorusGlassProfileTint.blends[peerId] == nil {
+            return
+        }
+        AorusGlassProfileTint.blends[peerId] = blend
+        AorusGlassProfileTint.handovers[peerId] = nil
+        AorusGlassProfileTint.postBlend(for: peerId, duration: 0.0)
+    }
+
+    /// The drag let go. Back on the photo it started from, what it laid over the page goes with
+    /// the photo's slide back. Onto another photo, that photo's page becomes the page as the index
+    /// changes, and the one it replaces is kept over it at the share still showing and goes with
+    /// the photo's own slide -- the same picture on the screen before and after, and then the
+    /// rest of the way at the pager's pace.
+    public static func releasePage(for peerId: Int64, changed: Bool) {
+        guard Thread.isMainThread, AorusInterfaceV2.isEnabled else {
+            return
+        }
+        guard let blend = AorusGlassProfileTint.blends.removeValue(forKey: peerId) else {
+            if changed {
+                AorusGlassProfileTint.handovers[peerId] = Handover(alpha: 1.0, duration: AorusGlassProfileTint.settleDuration, until: CACurrentMediaTime() + 0.6)
+            }
+            return
+        }
+        guard changed else {
+            AorusGlassProfileTint.postBlend(for: peerId, duration: AorusGlassProfileTint.settleDuration)
+            return
+        }
+        AorusGlassProfileTint.handovers[peerId] = Handover(alpha: 1.0 - blend.alpha, duration: AorusGlassProfileTint.settleDuration, until: CACurrentMediaTime() + 0.6)
+        // The views keep what the drag laid over them until the new page replaces it. Should that
+        // not come -- the photo landed on had no page yet -- it goes the ordinary way instead.
+        let image = blend.image
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            if AorusGlassProfileTint.pageImages[peerId] !== image {
+                AorusGlassProfileTint.postBlend(for: peerId, duration: AorusGlassProfileTint.refreshDuration)
+            }
+        }
+    }
+
+    private static func postBlend(for peerId: Int64, duration: Double) {
+        NotificationCenter.default.post(
+            name: AorusGlassProfileTint.pageBlendNotification,
+            object: nil,
+            userInfo: ["peerId": NSNumber(value: peerId), "duration": NSNumber(value: duration)]
+        )
     }
 
     /// Make `sample` the page for this peer, and ask for a repaint if that is a change.
@@ -474,17 +676,17 @@ public enum AorusGlassProfileTint {
             AorusGlassProfileTint.scheduleRead(key: key, view: view, tail: tail, read: read, onUpdate: onUpdate)
             return
         }
+        // A reading of the photo file may have settled this photo while the snapshot was being
+        // taken: that one is the full photo, and a reading off the screen must not replace it.
+        guard !AorusGlassProfileTint.settledKeys.contains(key) else {
+            AorusGlassProfileTint.pendingKeys.remove(key)
+            return
+        }
         AorusGlassProfileTint.contentSignatures[key] = signature
         let previous = AorusGlassProfileTint.sampledColors[key]
         let unchanged = previous?.color == sample.color && (previous?.image != nil) == (sample.image != nil)
         if !unchanged {
-            // Capped for the same reason as pageColors, with room for a few photos per peer.
-            if AorusGlassProfileTint.sampledColors.count > 96 {
-                AorusGlassProfileTint.sampledColors.removeAll()
-                AorusGlassProfileTint.contentSignatures.removeAll()
-                AorusGlassProfileTint.settledKeys.removeAll()
-            }
-            AorusGlassProfileTint.sampledColors[key] = sample
+            AorusGlassProfileTint.record(sample, for: key)
             AorusGlassProfileTint.adopt(sample, for: key.peerId, onUpdate: onUpdate)
         }
         AorusGlassProfileTint.scheduleRead(key: key, view: view, tail: tail, read: read, onUpdate: onUpdate)
@@ -557,7 +759,18 @@ public enum AorusGlassProfileTint {
     /// Returns nil when the view has drawn next to nothing, which is how a photo that is still
     /// loading is told apart from one that is genuinely dark -- a dark photo is still opaque.
     private static func bottomBandSample(of view: UIView, tail: CGFloat) -> Sample? {
-        let bounds = view.bounds
+        // render(in:) rather than drawHierarchy(in:afterScreenUpdates:): the avatar is a layer
+        // with an image in it, this stays on the current thread without a screen update, and it
+        // is the cheaper of the two by a wide margin.
+        return AorusGlassProfileTint.bottomBandSample(size: view.bounds.size, tail: tail) { context in
+            view.layer.render(in: context)
+        }
+    }
+
+    /// The same band, from whatever `draw` puts into a context laid out in the picture's own
+    /// points -- its top left at the origin and y running down, the way a layer counts -- over a
+    /// picture of `bounds`. The view above draws its layer; `fileSample` draws the photo itself.
+    private static func bottomBandSample(size bounds: CGSize, tail: CGFloat, draw: (CGContext) -> Void) -> Sample? {
         guard bounds.width >= 8.0, bounds.height >= 8.0 else {
             return nil
         }
@@ -617,10 +830,7 @@ public enum AorusGlassProfileTint {
         context.translateBy(x: 0.0, y: CGFloat(size))
         context.scaleBy(x: CGFloat(size) / bounds.width, y: -CGFloat(size) / bandHeight)
         context.translateBy(x: 0.0, y: -bandTop)
-        // render(in:) rather than drawHierarchy(in:afterScreenUpdates:): the avatar is a layer
-        // with an image in it, this stays on the current thread without a screen update, and it
-        // is the cheaper of the two by a wide margin.
-        view.layer.render(in: context)
+        draw(context)
 
         var totalRed = 0.0
         var totalGreen = 0.0
@@ -975,7 +1185,8 @@ public enum AorusGlassProfileTint {
 /// it does is stop the bottom of the header varying down the screen a little sooner than it otherwise
 /// would, which is exactly what "the block carried the rest of the way down" means.
 public final class AorusProfileHeaderFadeView: UIView {
-    private let imageView = UIImageView()
+    /// Made for the peer on the first update, because the page it draws is that peer's.
+    private var imageView: AorusProfilePageImageView?
     private let fade = CAGradientLayer()
 
     public override init(frame: CGRect) {
@@ -985,11 +1196,6 @@ public final class AorusProfileHeaderFadeView: UIView {
         // that lands here belongs to one of them or to the avatar's own pager.
         self.isUserInteractionEnabled = false
         self.layer.allowsGroupOpacity = false
-
-        // One row stretched, the same way the page and every pane over it stretch it. `scaleToFill`
-        // rather than `scaleAspectFill` because the row is ninety-six by one and its aspect is not a
-        // property anything wants preserved.
-        self.imageView.contentMode = .scaleToFill
 
         // Cubed rather than linear. Linear would have a quarter of the page's colour showing half way
         // up the block, where the block still has most of its own gradient left to give; cubed, the
@@ -1007,8 +1213,6 @@ public final class AorusProfileHeaderFadeView: UIView {
         self.fade.startPoint = CGPoint(x: 0.0, y: 0.0)
         self.fade.endPoint = CGPoint(x: 0.0, y: 1.0)
         self.layer.mask = self.fade
-
-        self.addSubview(self.imageView)
     }
 
     required public init?(coder: NSCoder) {
@@ -1018,7 +1222,7 @@ public final class AorusProfileHeaderFadeView: UIView {
     public override func layoutSubviews() {
         super.layoutSubviews()
 
-        self.imageView.frame = self.bounds
+        self.imageView?.frame = self.bounds
         // A mask's frame is read in the masked layer's own coordinates, so it follows the bounds and
         // not the frame. Kept in step here rather than in the setter because the block is resized by
         // the header's layout, which does not go through the setter.
@@ -1027,10 +1231,126 @@ public final class AorusProfileHeaderFadeView: UIView {
 
     /// The page's own row, or nil to draw nothing at all -- a peer with no photo has no page, and the
     /// block is then Telegram's unaltered.
-    public func update(image: UIImage?) {
-        if self.imageView.image !== image {
-            self.imageView.image = image
+    ///
+    /// Drawn by the same kind of view as the page itself, stretched the same way -- one row, so
+    /// `scaleToFill` -- and following a swipe the same way, so the fade and the page it fades into
+    /// never show two different photos.
+    public func update(image: UIImage?, peerId: Int64) {
+        let imageView: AorusProfilePageImageView
+        if let current = self.imageView, current.peerId == peerId {
+            imageView = current
+        } else {
+            self.imageView?.removeFromSuperview()
+            imageView = AorusProfilePageImageView(peerId: peerId)
+            imageView.frame = self.bounds
+            self.addSubview(imageView)
+            self.imageView = imageView
+        }
+        if imageView.image !== image {
+            imageView.image = image
         }
         self.isHidden = image == nil
+    }
+}
+
+/// The page's row as it is drawn behind a profile: the screen's backdrop, the fade under the
+/// header and the page inside every pane are each one of these, so a photo paged to repaints all
+/// of them the same way at the same moment.
+///
+/// It holds the page, and over it, while the reader drags towards another photo, that photo's
+/// page at the share of the photo that has slid in, so the background moves with the finger. When
+/// the drag lets go onto the other photo, the page left behind stays over the new one at the share
+/// still showing and goes at the pager's own pace. Any other change of page -- a tap to the next
+/// photo, the full photo arriving over its placeholder -- crossfades rather than cutting.
+public final class AorusProfilePageImageView: UIImageView {
+    public let peerId: Int64
+    private let overlay = UIImageView()
+    private var observer: NSObjectProtocol?
+
+    public init(peerId: Int64) {
+        self.peerId = peerId
+        super.init(frame: CGRect())
+        self.isUserInteractionEnabled = false
+        self.contentMode = .scaleToFill
+        self.layer.magnificationFilter = .linear
+        self.overlay.isUserInteractionEnabled = false
+        self.overlay.contentMode = .scaleToFill
+        self.overlay.layer.magnificationFilter = .linear
+        self.overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.overlay.alpha = 0.0
+        self.addSubview(self.overlay)
+        self.observer = NotificationCenter.default.addObserver(forName: AorusGlassProfileTint.pageBlendNotification, object: nil, queue: .main) { [weak self] notification in
+            guard let self, (notification.userInfo?["peerId"] as? NSNumber)?.int64Value == self.peerId else {
+                return
+            }
+            self.applyBlend(duration: (notification.userInfo?["duration"] as? NSNumber)?.doubleValue ?? 0.0)
+        }
+        self.applyBlend(duration: 0.0)
+    }
+
+    required public init?(coder: NSCoder) {
+        preconditionFailure("AorusProfilePageImageView is not built from a coder")
+    }
+
+    deinit {
+        if let observer = self.observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+        self.overlay.frame = self.bounds
+    }
+
+    public override var image: UIImage? {
+        didSet {
+            guard self.image !== oldValue else {
+                return
+            }
+            self.overlay.layer.removeAllAnimations()
+            guard let previous = oldValue, self.image != nil else {
+                // The first page, or none: there is nothing on the screen to carry on from.
+                self.overlay.image = nil
+                self.overlay.alpha = 0.0
+                return
+            }
+            // What was the page stays over the new one and goes: from the share of it still showing
+            // when a drag has just let go onto this photo, from all of it otherwise. This also
+            // replaces whatever the drag had laid over the page, which is the photo this now is.
+            let handover = AorusGlassProfileTint.pageHandover(for: self.peerId)
+            self.overlay.image = previous
+            self.overlay.alpha = handover?.alpha ?? 1.0
+            AorusProfilePageImageView.animate(duration: handover?.duration ?? AorusGlassProfileTint.refreshDuration) { [weak self] in
+                self?.overlay.alpha = 0.0
+            }
+        }
+    }
+
+    private func applyBlend(duration: Double) {
+        if let blend = AorusGlassProfileTint.pageBlend(for: self.peerId) {
+            self.overlay.layer.removeAllAnimations()
+            self.overlay.image = blend.image
+            self.overlay.alpha = blend.alpha
+        } else if duration > 0.0 {
+            AorusProfilePageImageView.animate(duration: duration) { [weak self] in
+                self?.overlay.alpha = 0.0
+            }
+        } else {
+            self.overlay.layer.removeAllAnimations()
+            self.overlay.alpha = 0.0
+        }
+    }
+
+    /// The pager's own motion: a spring with no overshoot over the same time.
+    private static func animate(duration: Double, _ changes: @escaping () -> Void) {
+        UIView.animate(
+            withDuration: duration,
+            delay: 0.0,
+            usingSpringWithDamping: 1.0,
+            initialSpringVelocity: 0.0,
+            options: [.beginFromCurrentState, .allowUserInteraction],
+            animations: changes
+        )
     }
 }
