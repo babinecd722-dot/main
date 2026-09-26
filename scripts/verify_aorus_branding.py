@@ -4011,6 +4011,22 @@ def main() -> None:
             if "aorusAIMessageMenuIconName()" not in ai_menu_block:
                 err.append("AorusAI: message menu row does not use the native AorusAI bundle icon")
 
+    # Poll results seen before voting: Telegram's own results, faint, until the vote is in.
+    poll_bubble = tg / "submodules/TelegramUI/Components/Chat/ChatMessagePollBubbleContentNode/Sources/ChatMessagePollBubbleContentNode.swift"
+    if not poll_bubble.is_file():
+        err.append("PollPreview: missing ChatMessagePollBubbleContentNode.swift")
+    else:
+        poll_text = poll_bubble.read_text(encoding="utf-8")
+        for marker in (
+            "var aorusPreviewPressed: (() -> Void)?",
+            "isPreview: aorusPreview)",
+            "|| isRestricted || aorusPreview {",
+            "optionResult?.isPreview == true ? ChatMessagePollOptionNode.aorusPreviewAlpha : 1.0",
+            "$0.count != nil",
+        ):
+            if marker not in poll_text:
+                err.append(f"PollPreview: poll bubble is missing {marker!r}")
+
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"
     bgtask_val = "com.aorusgram.dmc.sync"

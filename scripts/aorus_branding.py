@@ -24283,6 +24283,249 @@ extension WallpaperBackgroundNodeImpl {
 
 
 
+def patch_poll_results_preview(tg: Path) -> None:
+    """Poll results shown before voting, faint, whenever the counts are already here.
+
+    The server hands a poll's per-answer counts to this account in the updates it sends to
+    everyone, and Telegram only draws them once the account has voted. They are drawn before
+    that as well now: Telegram's own results -- percentages, bars, counts -- at a fraction of
+    their strength, so they read as a look at the poll rather than as a vote cast. Nothing is
+    invented: an answer whose count the server did not send keeps the poll as Telegram draws
+    it, and a poll whose results are hidden until it closes never has any.
+
+    It stays a poll to vote in. With one answer to give, tapping one votes, as on the stock
+    poll; with several, the first tap puts the boxes back with that answer ticked. Once the
+    vote is in, the results take their full colour. There is no switch: it is how polls are.
+    """
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessagePollBubbleContentNode/Sources/ChatMessagePollBubbleContentNode.swift"
+    if not path.is_file():
+        raise RuntimeError("PollPreview: ChatMessagePollBubbleContentNode.swift is missing")
+    t = path.read_text(encoding="utf-8")
+    if "aorusPreviewPressed" in t:
+        print("PollPreview: already patched")
+        return
+
+    def rep(old: str, new: str, label: str) -> None:
+        nonlocal t
+        if t.count(old) != 1:
+            raise RuntimeError(f"PollPreview: anchor '{label}' found {t.count(old)} times")
+        t = t.replace(old, new, 1)
+
+    rep(
+        "private struct ChatMessagePollOptionResult: Equatable {\n"
+        "    let normalized: CGFloat\n"
+        "    let percent: Int\n"
+        "    let count: Int32\n"
+        "    let recentVoterPeerIds: [PeerId]\n"
+        "}\n",
+        "private struct ChatMessagePollOptionResult: Equatable {\n"
+        "    let normalized: CGFloat\n"
+        "    let percent: Int\n"
+        "    let count: Int32\n"
+        "    let recentVoterPeerIds: [PeerId]\n"
+        "    // AorusGram: counts drawn before this account has voted, faint, as a look at the poll.\n"
+        "    var isPreview: Bool = false\n"
+        "}\n",
+        "option result",
+    )
+    rep(
+        "    var resultPressed: (() -> Void)?\n",
+        "    var resultPressed: (() -> Void)?\n"
+        "    // AorusGram: a tap on an answer whose results are only a preview: still a vote to cast.\n"
+        "    var aorusPreviewPressed: (() -> Void)?\n"
+        "    // AorusGram: the strength a preview's results are drawn at.\n"
+        "    static let aorusPreviewAlpha: CGFloat = 0.42\n",
+        "preview tap handler",
+    )
+    rep(
+        "        if let _ = self.currentResult {\n"
+        "            self.resultPressed?()\n"
+        "            return\n"
+        "        }\n",
+        "        if let result = self.currentResult {\n"
+        "            // AorusGram: results shown before voting are a look at the poll, not results to open.\n"
+        "            if result.isPreview {\n"
+        "                self.aorusPreviewPressed?()\n"
+        "            } else {\n"
+        "                self.resultPressed?()\n"
+        "            }\n"
+        "            return\n"
+        "        }\n",
+        "option tap",
+    )
+    rep(
+        "                    node.resultBarBackgroundNode.alpha = optionResult != nil ? 1.0 : 0.0\n"
+        "                    node.resultBarNode.alpha = optionResult != nil ? 1.0 : 0.0\n"
+        "                    node.percentageNode.alpha = optionResult != nil ? 1.0 : 0.0\n"
+        "                    node.countNode.alpha = optionResult != nil ? 1.0 : 0.0\n"
+        "                    node.separatorNode.alpha = optionResult == nil ? 1.0 : 0.0\n"
+        "                    node.resultBarIconNode.alpha = optionResult != nil ? 1.0 : 0.0\n"
+        "                    if animated, currentResult != optionResult {\n"
+        "                        if (currentResult != nil) != (optionResult != nil) {\n"
+        "                            if optionResult != nil {\n"
+        "                                node.resultBarBackgroundNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.1)\n"
+        "                                node.resultBarNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.1)\n"
+        "                                node.percentageNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                                node.countNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n",
+        "                    // AorusGram: results seen before voting are Telegram's own, at a fraction of\n"
+        "                    // their strength; the vote brings them to full colour.\n"
+        "                    let aorusResultAlpha: CGFloat = optionResult?.isPreview == true ? ChatMessagePollOptionNode.aorusPreviewAlpha : 1.0\n"
+        "                    let aorusPreviousResultAlpha: CGFloat = currentResult?.isPreview == true ? ChatMessagePollOptionNode.aorusPreviewAlpha : 1.0\n"
+        "                    node.resultBarBackgroundNode.alpha = optionResult != nil ? aorusResultAlpha : 0.0\n"
+        "                    node.resultBarNode.alpha = optionResult != nil ? aorusResultAlpha : 0.0\n"
+        "                    node.percentageNode.alpha = optionResult != nil ? aorusResultAlpha : 0.0\n"
+        "                    node.countNode.alpha = optionResult != nil ? aorusResultAlpha : 0.0\n"
+        "                    node.separatorNode.alpha = optionResult == nil ? 1.0 : 0.0\n"
+        "                    node.resultBarIconNode.alpha = optionResult != nil ? aorusResultAlpha : 0.0\n"
+        "                    if animated, currentResult != optionResult {\n"
+        "                        if (currentResult != nil) == (optionResult != nil), abs(aorusPreviousResultAlpha - aorusResultAlpha) > 0.01 {\n"
+        "                            // The vote has just gone in over a preview: the same results come up to full colour.\n"
+        "                            var aorusLayers = [node.resultBarBackgroundNode.layer, node.resultBarNode.layer, node.percentageNode.layer, node.countNode.layer, node.resultBarIconNode.layer]\n"
+        "                            if !recentVoterPeers.isEmpty {\n"
+        "                                aorusLayers.append(node.avatarsNode.layer)\n"
+        "                            }\n"
+        "                            for aorusLayer in aorusLayers {\n"
+        "                                aorusLayer.animateAlpha(from: aorusPreviousResultAlpha, to: aorusResultAlpha, duration: 0.3)\n"
+        "                            }\n"
+        "                        }\n"
+        "                        if (currentResult != nil) != (optionResult != nil) {\n"
+        "                            if optionResult != nil {\n"
+        "                                node.resultBarBackgroundNode.layer.animateAlpha(from: 0.0, to: aorusResultAlpha, duration: 0.1)\n"
+        "                                node.resultBarNode.layer.animateAlpha(from: 0.0, to: aorusResultAlpha, duration: 0.1)\n"
+        "                                node.percentageNode.layer.animateAlpha(from: 0.0, to: aorusResultAlpha, duration: 0.2)\n"
+        "                                node.countNode.layer.animateAlpha(from: 0.0, to: aorusResultAlpha, duration: 0.2)\n",
+        "result alpha",
+    )
+    rep(
+        "                                node.separatorNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.08)\n"
+        "                                node.resultBarIconNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                            } else {\n"
+        "                                node.resultBarBackgroundNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.4)\n"
+        "                                node.resultBarNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.4)\n"
+        "                                node.percentageNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)\n"
+        "                                node.countNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)\n",
+        "                                node.separatorNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.08)\n"
+        "                                node.resultBarIconNode.layer.animateAlpha(from: 0.0, to: aorusResultAlpha, duration: 0.2)\n"
+        "                            } else {\n"
+        "                                node.resultBarBackgroundNode.layer.animateAlpha(from: aorusPreviousResultAlpha, to: 0.0, duration: 0.4)\n"
+        "                                node.resultBarNode.layer.animateAlpha(from: aorusPreviousResultAlpha, to: 0.0, duration: 0.4)\n"
+        "                                node.percentageNode.layer.animateAlpha(from: aorusPreviousResultAlpha, to: 0.0, duration: 0.2)\n"
+        "                                node.countNode.layer.animateAlpha(from: aorusPreviousResultAlpha, to: 0.0, duration: 0.2)\n",
+        "result alpha out",
+    )
+    rep(
+        "                                node.separatorNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                                node.resultBarIconNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)\n",
+        "                                node.separatorNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n"
+        "                                node.resultBarIconNode.layer.animateAlpha(from: aorusPreviousResultAlpha, to: 0.0, duration: 0.2)\n",
+        "result icon out",
+    )
+    rep(
+        "                        node.avatarsNode.alpha = 1.0\n",
+        "                        node.avatarsNode.alpha = optionResult?.isPreview == true ? ChatMessagePollOptionNode.aorusPreviewAlpha : 1.0\n",
+        "voter avatars alpha",
+    )
+    rep(
+        "                                    node.avatarsNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)\n",
+        "                                    node.avatarsNode.layer.animateAlpha(from: 0.0, to: aorusResultAlpha, duration: 0.2)\n",
+        "voter avatars in",
+    )
+    rep(
+        "                                node.avatarsNode.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2)\n",
+        "                                node.avatarsNode.layer.animateAlpha(from: aorusPreviousResultAlpha, to: 0.0, duration: 0.2)\n",
+        "voter avatars out",
+    )
+    rep(
+        "    private var isPreviewingResults = false\n",
+        "    private var isPreviewingResults = false\n"
+        "    // AorusGram: polls with several answers whose preview gave way to the boxes to tick, and the\n"
+        "    // answer tapped to get there, ticked once its box is back.\n"
+        "    fileprivate static var aorusDismissedPreviews = Set<MessageId>()\n"
+        "    fileprivate var aorusPendingCheck: Data?\n",
+        "preview state",
+    )
+    rep(
+        "        let isPreviewingResults = self.isPreviewingResults\n",
+        "        let isPreviewingResults = self.isPreviewingResults\n"
+        "        // AorusGram: read here, on the thread the layout is asked for from, and handed to it as values.\n"
+        "        let aorusDismissedPreviews = ChatMessagePollBubbleContentNode.aorusDismissedPreviews\n"
+        "        let aorusPreviewAllowed = !UserDefaults.standard.bool(forKey: \"" + _AG_LICENSE_LOCK_KEY + "\")\n",
+        "preview capture",
+    )
+    rep(
+        "                    var votedFor = Set<Data>()\n"
+        "                    if let voters = voters, let totalVoters = poll.results.totalVoters {\n",
+        "                    var votedFor = Set<Data>()\n"
+        "                    var aorusPreview = false\n"
+        "                    if let voters = voters, let totalVoters = poll.results.totalVoters {\n",
+        "preview flag",
+    )
+    rep(
+        "                        totalVoterCount = totalVoters\n"
+        "                        if didVote || isClosed || isPreviewingResults || isRestricted {\n",
+        "                        totalVoterCount = totalVoters\n"
+        "                        // AorusGram: a poll not yet voted in shows the counts the server already sent\n"
+        "                        // -- every answer's, or none -- faint. A poll that can be voted in, and not\n"
+        "                        // one whose results wait for it to close: those counts never come.\n"
+        "                        aorusPreview = aorusPreviewAllowed && !didVote && !isClosed && !isPreviewingResults && !isRestricted\n"
+        "                            && totalVoters > 0\n"
+        "                            && poll.pollId.namespace == Namespaces.Media.CloudPoll\n"
+        "                            && !Namespaces.Message.allNonRegular.contains(item.message.id.namespace)\n"
+        "                            && !aorusDismissedPreviews.contains(item.message.id)\n"
+        "                            && poll.options.allSatisfy({ option in voters.contains(where: { $0.opaqueIdentifier == option.opaqueIdentifier && $0.count != nil }) })\n"
+        "                        if didVote || isClosed || isPreviewingResults || isRestricted || aorusPreview {\n",
+        "preview gate",
+    )
+    rep(
+        "                                optionResult = ChatMessagePollOptionResult(normalized: CGFloat(count) / CGFloat(maxOptionVoterCount), percent: optionVoterCounts[i], count: count, recentVoterPeerIds: recentVoterPeerIds)\n",
+        "                                optionResult = ChatMessagePollOptionResult(normalized: CGFloat(count) / CGFloat(maxOptionVoterCount), percent: optionVoterCounts[i], count: count, recentVoterPeerIds: recentVoterPeerIds, isPreview: aorusPreview)\n",
+        "preview result",
+    )
+    rep(
+        "                                    optionNode.resultPressed = { [weak self] in\n",
+        "                                    optionNode.aorusPreviewPressed = { [weak self] in\n"
+        "                                        guard let self,\n"
+        "                                              let item = self.item,\n"
+        "                                              let option else {\n"
+        "                                            return\n"
+        "                                        }\n"
+        "                                        if let poll, poll.kind.multipleAnswers {\n"
+        "                                            // Several answers to give: the boxes come back, this one ticked.\n"
+        "                                            ChatMessagePollBubbleContentNode.aorusDismissedPreviews.insert(item.message.id)\n"
+        "                                            self.aorusPendingCheck = option.opaqueIdentifier\n"
+        "                                            item.controllerInteraction.requestMessageUpdate(item.message.id, false, nil)\n"
+        "                                        } else {\n"
+        "                                            // One answer: tapping it votes, as on Telegram's own poll.\n"
+        "                                            item.controllerInteraction.requestSelectMessagePollOptions(item.message.id, [option.opaqueIdentifier])\n"
+        "                                        }\n"
+        "                                    }\n"
+        "                                    optionNode.resultPressed = { [weak self] in\n",
+        "preview tap wiring",
+    )
+    rep(
+        "                            strongSelf.optionNodes = updatedOptionNodes\n",
+        "                            strongSelf.optionNodes = updatedOptionNodes\n"
+        "                            // AorusGram: the answer tapped on a preview, ticked once its box is back. A\n"
+        "                            // layout that still shows the preview waits; one showing results for real ends it.\n"
+        "                            if let aorusPendingCheck = strongSelf.aorusPendingCheck {\n"
+        "                                for optionNode in updatedOptionNodes where optionNode.option?.opaqueIdentifier == aorusPendingCheck {\n"
+        "                                    if let radioNode = optionNode.radioNode {\n"
+        "                                        strongSelf.aorusPendingCheck = nil\n"
+        "                                        if radioNode.isChecked == false {\n"
+        "                                            radioNode.updateIsChecked(true, animated: true)\n"
+        "                                            strongSelf.updateSelection()\n"
+        "                                        }\n"
+        "                                    } else if optionNode.currentResult?.isPreview != true {\n"
+        "                                        strongSelf.aorusPendingCheck = nil\n"
+        "                                    }\n"
+        "                                }\n"
+        "                            }\n",
+        "preview pending check",
+    )
+    path.write_text(t, encoding="utf-8")
+    print("PollPreview: results shown faint before voting")
+
+
 def patch_share_button_translate(tg: Path) -> None:
     """Add an aorusIsTranslate mode to ChatMessageShareButton so the same native node renders a
     translate (文A) glyph, using the share button's own themed icon colour."""
@@ -27510,6 +27753,7 @@ def main() -> None:
     patch_status_edit_delete_icons(tg)
     patch_chat_context_menu_translate_transcribe(tg)
     patch_share_button_translate(tg)
+    patch_poll_results_preview(tg)
     patch_message_translate_button(tg)
     patch_action_confirmation(tg)
     patch_wall_postbox_paging(tg)
