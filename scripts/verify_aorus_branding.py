@@ -4020,12 +4020,20 @@ def main() -> None:
         for marker in (
             "var aorusPreviewPressed: (() -> Void)?",
             "isPreview: aorusPreview)",
-            "|| isRestricted || aorusPreview {",
+            "AorusPollResultsStore.shared.preview(for: poll)",
+            "!poll.hideResultsUntilClose",
             "optionResult?.isPreview == true ? ChatMessagePollOptionNode.aorusPreviewAlpha : 1.0",
-            "$0.count != nil",
         ):
             if marker not in poll_text:
                 err.append(f"PollPreview: poll bubble is missing {marker!r}")
+    # The counts a poll comes with before this account votes are kept as every poll update is
+    # applied; without that, each refresh of the poll takes them away again.
+    poll_store = tg / "submodules/TelegramCore/Sources/AorusPollResultsStore.swift"
+    if not poll_store.is_file() or "public func preview(for poll: TelegramMediaPoll)" not in poll_store.read_text(encoding="utf-8"):
+        err.append("PollPreview: TelegramCore is missing AorusPollResultsStore")
+    poll_updates = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    if "AorusPollResultsStore.shared.record(pollId: pollId" not in poll_updates.read_text(encoding="utf-8"):
+        err.append("PollPreview: poll updates are applied without keeping their counts")
 
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"

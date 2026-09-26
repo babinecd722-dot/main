@@ -24283,20 +24283,309 @@ extension WallpaperBackgroundNodeImpl {
 
 
 
+AORUS_POLL_RESULTS_STORE_SWIFT = '''import Foundation
+import Postbox
+
+// AorusGram: the per-answer counts of polls, as the server last sent them.
+//
+// Telegram sends a poll's per-answer counts to every reader in the update it broadcasts when
+// the poll changes. A reader who has not voted gets the poll without them whenever it is
+// fetched for that reader alone: with a chat's history on opening it, and with the refresh of
+// the polls on screen. Each of those replaces the poll the broadcast brought, and its counts
+// with it. The counts are kept here as they arrive, and on disk, so a poll can be shown with the
+// latest the server sent for it however it has been fetched since.
+public final class AorusPollResultsStore {
+    public struct Snapshot: Equatable {
+        /// Voters for each answer, by the answer's opaque identifier.
+        public let counts: [Data: Int32]
+        /// Voters in the poll when these counts were sent: what the counts are shares of.
+        public let totalVoters: Int32
+
+        /// The counts in `results`, when it carries one for every answer it lists.
+        public init?(results: TelegramMediaPollResults) {
+            guard let voters = results.voters, !voters.isEmpty, let totalVoters = results.totalVoters, totalVoters > 0 else {
+                return nil
+            }
+            var counts: [Data: Int32] = [:]
+            for option in voters {
+                guard let count = option.count else {
+                    return nil
+                }
+                counts[option.opaqueIdentifier] = count
+            }
+            self.counts = counts
+            self.totalVoters = totalVoters
+        }
+
+        fileprivate init(counts: [Data: Int32], totalVoters: Int32) {
+            self.counts = counts
+            self.totalVoters = totalVoters
+        }
+
+        /// Whether there is a count for every answer of `poll`. An answer added since has none.
+        public func covers(_ poll: TelegramMediaPoll) -> Bool {
+            return !poll.options.isEmpty && poll.options.allSatisfy({ self.counts[$0.opaqueIdentifier] != nil })
+        }
+    }
+
+    private struct Entry {
+        let snapshot: Snapshot
+        /// When the snapshot was stored, in seconds since 1970: the oldest go first when full.
+        let date: Int32
+    }
+
+    public static let shared = AorusPollResultsStore()
+
+    private static let capacity = 3000
+    private static let retainedWhenFull = 2500
+    private static let saveDelay: Double = 1.0
+    // "APR1", little-endian.
+    private static let magic: UInt32 = 0x31525041
+
+    private let lock = NSLock()
+    private var entries: [Int64: Entry] = [:]
+    private var isLoaded = false
+    private var saveGeneration = 0
+    private let saveQueue = DispatchQueue(label: "org.aorusgram.poll-results", qos: .utility)
+
+    private init() {
+    }
+
+    /// Keeps the counts in `results`, when it has one for every answer it lists. Called with
+    /// every poll update as it is applied, in the order they come.
+    public func record(pollId: MediaId, results: TelegramMediaPollResults) {
+        guard pollId.namespace == Namespaces.Media.CloudPoll, let snapshot = Snapshot(results: results) else {
+            return
+        }
+        self.store(snapshot, pollId: pollId.id, replacing: true)
+    }
+
+    /// The counts to show `poll` with before this account has voted in it: the poll's own when
+    /// it carries one for every answer, and otherwise the last the server sent for it, when
+    /// those cover every answer. None for a poll that has no votes.
+    public func preview(for poll: TelegramMediaPoll) -> Snapshot? {
+        guard poll.pollId.namespace == Namespaces.Media.CloudPoll else {
+            return nil
+        }
+        if let totalVoters = poll.results.totalVoters, totalVoters == 0 {
+            return nil
+        }
+        if let own = Snapshot(results: poll.results), own.covers(poll) {
+            // Counts that reached the poll before they were kept here are kept now; ones already
+            // kept are left alone, being no older than these.
+            self.store(own, pollId: poll.pollId.id, replacing: false)
+            return own
+        }
+        self.lock.lock()
+        self.loadIfNeeded()
+        let stored = self.entries[poll.pollId.id]?.snapshot
+        self.lock.unlock()
+        guard let stored, stored.covers(poll) else {
+            return nil
+        }
+        return stored
+    }
+
+    private func store(_ snapshot: Snapshot, pollId: Int64, replacing: Bool) {
+        self.lock.lock()
+        defer {
+            self.lock.unlock()
+        }
+        self.loadIfNeeded()
+        if let current = self.entries[pollId], !replacing || current.snapshot == snapshot {
+            return
+        }
+        self.entries[pollId] = Entry(snapshot: snapshot, date: Int32(Date().timeIntervalSince1970))
+        if self.entries.count > AorusPollResultsStore.capacity {
+            let retained = self.entries.sorted(by: { $0.value.date > $1.value.date }).prefix(AorusPollResultsStore.retainedWhenFull)
+            self.entries = Dictionary(uniqueKeysWithValues: retained.map({ ($0.key, $0.value) }))
+        }
+        self.saveGeneration += 1
+        let generation = self.saveGeneration
+        self.saveQueue.asyncAfter(deadline: .now() + AorusPollResultsStore.saveDelay, execute: { [weak self] in
+            self?.save(generation: generation)
+        })
+    }
+
+    // MARK: - On disk
+
+    private static var fileURL: URL? {
+        guard let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        return directory.appendingPathComponent("AorusGram", isDirectory: true).appendingPathComponent("PollResults.bin", isDirectory: false)
+    }
+
+    /// Reads the file the first time the store is used. Called with the lock held.
+    private func loadIfNeeded() {
+        if self.isLoaded {
+            return
+        }
+        self.isLoaded = true
+        guard let url = AorusPollResultsStore.fileURL, let data = try? Data(contentsOf: url) else {
+            return
+        }
+        self.entries = AorusPollResultsStore.decode(data)
+    }
+
+    /// Writes the store, unless a later change has asked for a write of its own.
+    private func save(generation: Int) {
+        self.lock.lock()
+        let isLatest = generation == self.saveGeneration
+        let entries = self.entries
+        self.lock.unlock()
+        guard isLatest, var url = AorusPollResultsStore.fileURL else {
+            return
+        }
+        let data = AorusPollResultsStore.encode(entries)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: nil)
+            try data.write(to: url, options: [.atomic])
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try url.setResourceValues(values)
+        } catch {
+        }
+    }
+
+    // Each entry: poll id (Int64), date (Int32), total voters (Int32), number of answers
+    // (UInt16), then for each answer its identifier's length (UInt8), the identifier and its
+    // count (Int32). Integers are little-endian.
+    private static func encode(_ entries: [Int64: Entry]) -> Data {
+        var data = Data()
+        func append<T: FixedWidthInteger>(_ value: T) {
+            var remaining = UInt64(truncatingIfNeeded: value)
+            for _ in 0 ..< MemoryLayout<T>.size {
+                data.append(UInt8(truncatingIfNeeded: remaining))
+                remaining >>= 8
+            }
+        }
+        let storable = entries.filter({ entry in
+            entry.value.snapshot.counts.count <= Int(UInt16.max) && entry.value.snapshot.counts.keys.allSatisfy({ $0.count <= Int(UInt8.max) })
+        })
+        append(AorusPollResultsStore.magic)
+        append(UInt32(storable.count))
+        for (pollId, entry) in storable {
+            append(pollId)
+            append(entry.date)
+            append(entry.snapshot.totalVoters)
+            append(UInt16(entry.snapshot.counts.count))
+            for (identifier, count) in entry.snapshot.counts {
+                append(UInt8(identifier.count))
+                data.append(identifier)
+                append(count)
+            }
+        }
+        return data
+    }
+
+    private static func decode(_ data: Data) -> [Int64: Entry] {
+        var reader = Reader(data: data)
+        guard reader.read(UInt32.self) == AorusPollResultsStore.magic, let count = reader.read(UInt32.self) else {
+            return [:]
+        }
+        var entries: [Int64: Entry] = [:]
+        for _ in 0 ..< count {
+            guard let pollId = reader.read(Int64.self), let date = reader.read(Int32.self), let totalVoters = reader.read(Int32.self), let answerCount = reader.read(UInt16.self) else {
+                break
+            }
+            var counts: [Data: Int32] = [:]
+            for _ in 0 ..< answerCount {
+                guard let length = reader.read(UInt8.self), let identifier = reader.bytes(Int(length)), let value = reader.read(Int32.self) else {
+                    return entries
+                }
+                counts[identifier] = value
+            }
+            if totalVoters > 0, !counts.isEmpty {
+                entries[pollId] = Entry(snapshot: Snapshot(counts: counts, totalVoters: totalVoters), date: date)
+            }
+        }
+        return entries
+    }
+
+    private struct Reader {
+        let data: Data
+        var offset = 0
+
+        init(data: Data) {
+            self.data = data
+        }
+
+        mutating func read<T: FixedWidthInteger>(_ type: T.Type) -> T? {
+            let size = MemoryLayout<T>.size
+            guard self.offset + size <= self.data.count else {
+                return nil
+            }
+            var value: UInt64 = 0
+            for index in 0 ..< size {
+                value |= UInt64(self.data[self.data.startIndex + self.offset + index]) << UInt64(8 * index)
+            }
+            self.offset += size
+            return T(truncatingIfNeeded: value)
+        }
+
+        mutating func bytes(_ count: Int) -> Data? {
+            guard self.offset + count <= self.data.count else {
+                return nil
+            }
+            let start = self.data.startIndex + self.offset
+            self.offset += count
+            return Data(self.data[start ..< start + count])
+        }
+    }
+}
+'''
+
+
 def patch_poll_results_preview(tg: Path) -> None:
-    """Poll results shown before voting, faint, whenever the counts are already here.
+    """Poll results shown before voting, faint, with the counts the server last sent.
 
-    The server hands a poll's per-answer counts to this account in the updates it sends to
-    everyone, and Telegram only draws them once the account has voted. They are drawn before
-    that as well now: Telegram's own results -- percentages, bars, counts -- at a fraction of
-    their strength, so they read as a look at the poll rather than as a vote cast. Nothing is
-    invented: an answer whose count the server did not send keeps the poll as Telegram draws
-    it, and a poll whose results are hidden until it closes never has any.
+    The server hands a poll's per-answer counts to every reader in the update it broadcasts
+    when the poll changes (min results), and Telegram only draws them once the account has
+    voted. A reader who has not voted gets the poll without them whenever it is fetched for
+    that reader alone -- the history loaded on opening the chat, the refresh of the polls on
+    screen -- and each of those replaced the counts the broadcast had brought. So the counts
+    are kept, in TelegramCore, as every poll update is applied (AorusPollResultsStore, on
+    disk), whether or not the chat is open, and the poll is drawn with its own counts when it
+    carries them and with the last ones sent otherwise. Nothing is invented: an answer with
+    no count sent keeps the poll as Telegram draws it, and a poll whose results are hidden
+    until it closes never shows any.
 
-    It stays a poll to vote in. With one answer to give, tapping one votes, as on the stock
-    poll; with several, the first tap puts the boxes back with that answer ticked. Once the
-    vote is in, the results take their full colour. There is no switch: it is how polls are.
+    Telegram's own results -- percentages, bars, counts, voters' faces -- are drawn at a
+    fraction of their strength, so they read as a look at the poll rather than as a vote
+    cast. It stays a poll to vote in: with one answer to give, tapping one votes, as on the
+    stock poll; with several, the first tap puts the boxes back with that answer ticked. Once
+    the vote is in, the results take their full colour. There is no switch: it is how polls are.
     """
+    store = tg / "submodules/TelegramCore/Sources/AorusPollResultsStore.swift"
+    if not store.parent.is_dir():
+        raise RuntimeError("PollPreview: TelegramCore/Sources is missing")
+    store.write_text(AORUS_POLL_RESULTS_STORE_SWIFT, encoding="utf-8")
+    print("PollPreview: wrote AorusPollResultsStore.swift")
+
+    # Every poll update is applied here: the broadcasts, the refreshes and the answer to a vote.
+    # The counts are kept before the stored poll is looked up, so they are kept for a poll whose
+    # chat has not been loaded yet as well.
+    utils = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
+    if not utils.is_file():
+        raise RuntimeError("PollPreview: AccountStateManagementUtils.swift is missing")
+    u = utils.read_text(encoding="utf-8")
+    if "AorusPollResultsStore.shared.record(" not in u:
+        anchor = (
+            "            case let .UpdateMessagePoll(pollId, apiPoll, results):\n"
+            "                if let poll = transaction.getMedia(pollId) as? TelegramMediaPoll {\n"
+        )
+        if u.count(anchor) != 1:
+            raise RuntimeError(f"PollPreview: poll update anchor found {u.count(anchor)} times")
+        u = u.replace(anchor, (
+            "            case let .UpdateMessagePoll(pollId, apiPoll, results):\n"
+            "                // AorusGram: the per-answer counts, kept as they come for polls not yet voted in.\n"
+            "                AorusPollResultsStore.shared.record(pollId: pollId, results: TelegramMediaPollResults(apiResults: results))\n"
+            "                if let poll = transaction.getMedia(pollId) as? TelegramMediaPoll {\n"
+        ), 1)
+        utils.write_text(u, encoding="utf-8")
+        print("PollPreview: poll updates keep their counts")
+
     path = tg / "submodules/TelegramUI/Components/Chat/ChatMessagePollBubbleContentNode/Sources/ChatMessagePollBubbleContentNode.swift"
     if not path.is_file():
         raise RuntimeError("PollPreview: ChatMessagePollBubbleContentNode.swift is missing")
@@ -24456,25 +24745,28 @@ def patch_poll_results_preview(tg: Path) -> None:
         "                    var votedFor = Set<Data>()\n"
         "                    if let voters = voters, let totalVoters = poll.results.totalVoters {\n",
         "                    var votedFor = Set<Data>()\n"
-        "                    var aorusPreview = false\n"
-        "                    if let voters = voters, let totalVoters = poll.results.totalVoters {\n",
-        "preview flag",
-    )
-    rep(
-        "                        totalVoterCount = totalVoters\n"
-        "                        if didVote || isClosed || isPreviewingResults || isRestricted {\n",
-        "                        totalVoterCount = totalVoters\n"
-        "                        // AorusGram: a poll not yet voted in shows the counts the server already sent\n"
-        "                        // -- every answer's, or none -- faint. A poll that can be voted in, and not\n"
-        "                        // one whose results wait for it to close: those counts never come.\n"
-        "                        aorusPreview = aorusPreviewAllowed && !didVote && !isClosed && !isPreviewingResults && !isRestricted\n"
-        "                            && totalVoters > 0\n"
-        "                            && poll.pollId.namespace == Namespaces.Media.CloudPoll\n"
-        "                            && !Namespaces.Message.allNonRegular.contains(item.message.id.namespace)\n"
-        "                            && !aorusDismissedPreviews.contains(item.message.id)\n"
-        "                            && poll.options.allSatisfy({ option in voters.contains(where: { $0.opaqueIdentifier == option.opaqueIdentifier && $0.count != nil }) })\n"
-        "                        if didVote || isClosed || isPreviewingResults || isRestricted || aorusPreview {\n",
-        "preview gate",
+        "                    // AorusGram: a poll not yet voted in is drawn with the counts the server sent for it,\n"
+        "                    // faint: its own, or the last that came with the updates it broadcasts. Not one\n"
+        "                    // whose results wait for it to close, and not one that cannot be voted in.\n"
+        "                    var aorusPreviewCounts: AorusPollResultsStore.Snapshot?\n"
+        "                    if aorusPreviewAllowed, !isClosed, !isPreviewingResults, !isRestricted, !poll.hideResultsUntilClose,\n"
+        "                       poll.pollId.namespace == Namespaces.Media.CloudPoll,\n"
+        "                       !Namespaces.Message.allNonRegular.contains(item.message.id.namespace),\n"
+        "                       !aorusDismissedPreviews.contains(item.message.id),\n"
+        "                       !(voters ?? []).contains(where: { $0.selected }) {\n"
+        "                        aorusPreviewCounts = AorusPollResultsStore.shared.preview(for: poll)\n"
+        "                    }\n"
+        "                    let aorusPreview = aorusPreviewCounts != nil\n"
+        "                    if let aorusPreviewCounts {\n"
+        "                        for i in 0 ..< poll.options.count {\n"
+        "                            let count = aorusPreviewCounts.counts[poll.options[i].opaqueIdentifier] ?? 0\n"
+        "                            optionVoterCount[i] = count\n"
+        "                            maxOptionVoterCount = max(maxOptionVoterCount, count)\n"
+        "                        }\n"
+        "                        // Shares of the voters these counts were sent with.\n"
+        "                        totalVoterCount = aorusPreviewCounts.totalVoters\n"
+        "                    } else if let voters = voters, let totalVoters = poll.results.totalVoters {\n",
+        "preview counts",
     )
     rep(
         "                                optionResult = ChatMessagePollOptionResult(normalized: CGFloat(count) / CGFloat(maxOptionVoterCount), percent: optionVoterCounts[i], count: count, recentVoterPeerIds: recentVoterPeerIds)\n",
