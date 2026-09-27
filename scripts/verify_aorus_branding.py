@@ -22,6 +22,12 @@ def main() -> None:
         for marker in ("containerEffectName", '"UIGlassContainerEffect"'):
             if marker not in glass_snapshot_text:
                 err.append(f"GlassSnapshot: container-effect exclusion lost {marker}")
+        # The pictures wait out of sight until the app is in the background: under a system
+        # panel the app is only inactive, its glass still live, and a picture over it is a
+        # frozen, square copy of the pane.
+        for marker in ("picture.isHidden = true", "self.reveal()", "picture.cornerConfiguration = pane.cornerConfiguration"):
+            if marker not in glass_snapshot_text:
+                err.append(f"GlassSnapshot: pictures shown over a live app ({marker} is missing)")
     for marker in (
         "patch_tgcalls_v2_set_proxy(tg)",
         "patch_tgcalls_reflector_socks5_udp(tg)",
@@ -4034,6 +4040,21 @@ def main() -> None:
     poll_updates = tg / "submodules/TelegramCore/Sources/State/AccountStateManagementUtils.swift"
     if "AorusPollResultsStore.shared.record(pollId: pollId" not in poll_updates.read_text(encoding="utf-8"):
         err.append("PollPreview: poll updates are applied without keeping their counts")
+
+    # Fake gifts: a gift bought for oneself upgrades from its Saved Messages card, and an
+    # upgrade draws a number from the copies issued instead of always the last one.
+    gift_view = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift"
+    if not gift_view.is_file() or "AorusFakeGiftsStore.savedMessagesGift(" not in gift_view.read_text(encoding="utf-8"):
+        err.append("FakeGifts: Saved Messages gift cards cannot upgrade local gifts")
+    gift_store = tg / "submodules/TelegramCore/Sources/AorusFakeGiftsStore.swift"
+    gift_store_text = gift_store.read_text(encoding="utf-8") if gift_store.is_file() else ""
+    for marker in (
+        "public static func savedMessagesGift(",
+        "AorusFakeGiftsStore.recordLocalUpgrade(",
+        "var number = Int32.random(in: 1 ... issued)",
+    ):
+        if marker not in gift_store_text:
+            err.append(f"FakeGifts: gift store is missing {marker!r}")
 
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"

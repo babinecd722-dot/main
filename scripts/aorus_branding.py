@@ -10478,8 +10478,10 @@ public enum AorusFakeGiftsStore {
     // A local Stars purchase. Own-profile purchases use the legacy owner value so
     // they remain fully compatible with the existing Fake Gifts manager; gifts for
     // another peer are namespaced by that peer and only rendered on that profile.
-    public static func addPurchasedGift(_ gift: StarGift, accountPeerId: Int64, ownerPeerId: Int64, date: Int32, comment: String, hideName: Bool) {
-        guard let baseData = try? JSONEncoder().encode(gift) else { return }
+    /// Stores a gift bought locally, and answers the instance it was stored as.
+    @discardableResult
+    public static func addPurchasedGift(_ gift: StarGift, accountPeerId: Int64, ownerPeerId: Int64, date: Int32, comment: String, hideName: Bool) -> Int64? {
+        guard let baseData = try? JSONEncoder().encode(gift) else { return nil }
         let ownedData = dataWithOwner(baseData, ownerPeerId: ownerPeerId) ?? baseData
         let storedOwner = ownerPeerId == accountPeerId ? 0 : ownerPeerId
         let isCollectiblePurchase: Bool
@@ -10511,6 +10513,7 @@ public enum AorusFakeGiftsStore {
         if storedOwner == 0 && !isEnabled {
             setEnabled(true)
         }
+        return stored.instanceId
     }
 
     public static func profileWrappers(ownerPeerId: Int64, senderPeer: EnginePeer? = nil) -> [ProfileGiftsContext.State.StarGift] {
@@ -10527,7 +10530,7 @@ public enum AorusFakeGiftsStore {
     public static func recordLocalGiftMessage(account: Account, recipientPeerId: PeerId, gift: StarGift, stars: Int64, text: String, entities: [MessageTextEntity], hideName: Bool) {
         let accountPeerId = account.peerId
         let timestamp = Int32(Date().timeIntervalSince1970)
-        addPurchasedGift(
+        let instanceId = addPurchasedGift(
             gift,
             accountPeerId: accountPeerId.toInt64(),
             ownerPeerId: recipientPeerId.toInt64(),
@@ -10546,7 +10549,13 @@ public enum AorusFakeGiftsStore {
         case .unique:
             action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: CurrencyAmount(amount: StarsAmount(value: stars, nanos: 0), currency: .stars), canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
         case .generic:
-            action = .starGift(gift: ownedGift, convertStars: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: false, upgradeStars: nil, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
+            // A gift bought for oneself is one's own to upgrade, from its card as from the
+            // profile: the card names the stored instance, which is the reference the gift
+            // screen builds from a card's peer and saved id, and states the upgrade price the
+            // way the profile's own entry does. A gift for someone else is theirs, not ours.
+            let isOwnGift = recipientPeerId == accountPeerId
+            let upgradeStars = isOwnGift ? upgradePrice(ownedGift) : nil
+            action = .starGift(gift: ownedGift, convertStars: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: upgradeStars != nil, upgradeStars: upgradeStars, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: isOwnGift ? instanceId : nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
         }
         let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
         let _ = account.postbox.transaction { transaction -> Void in
@@ -11304,6 +11313,73 @@ extension AorusFakeGiftsStore {
         }
     }
 
+    /// The stored gift behind a card in Saved Messages, when it is one bought locally for
+    /// oneself and can still be upgraded: the reference to upgrade it by and the price.
+    ///
+    /// Cards posted since they carry the instance are matched by it. An older card carries
+    /// nothing of the kind, so it is matched by its gift and the moment it was bought — the
+    /// card and the stored entry were given the same timestamp when they were made. A gift
+    /// that has been upgraded already is ordinary no longer and matches nothing.
+    public static func savedMessagesGift(messageId: MessageId, timestamp: Int32, gift: StarGift, savedId: Int64?) -> (reference: StarGiftReference, upgradeStars: Int64)? {
+        guard messageId.namespace == Namespaces.Message.Local, case let .generic(generic) = gift else { return nil }
+        let rawPeerId = messageId.peerId.toInt64()
+        let candidates = all().filter { $0.ownerPeerId == 0 && $0.purchasedLocally && $0.referencePeerId == rawPeerId }
+        let match: AorusStoredGift?
+        if let savedId {
+            match = candidates.first(where: { $0.instanceId == savedId })
+        } else {
+            match = candidates.first(where: { stored in
+                guard stored.date == timestamp, case let .generic(value)? = stored.gift else { return false }
+                return value.id == generic.id
+            })
+        }
+        guard let match, let current = match.gift, let price = upgradePrice(current) else { return nil }
+        return (.peer(peerId: messageId.peerId, id: match.instanceId), price)
+    }
+
+    /// What the chat shows once a gift bought for oneself is upgraded, as Telegram shows it: a
+    /// card for the collectible, and the card of the gift it was marked upgraded and pointing
+    /// at the new one. A gift with no card of its own in Saved Messages is left as it is.
+    static func recordLocalUpgrade(account: Account, stored: AorusStoredGift, generic: StarGift.Gift, unique: StarGift.UniqueGift) {
+        let accountPeerId = account.peerId
+        guard stored.ownerPeerId == 0, stored.purchasedLocally, stored.referencePeerId == accountPeerId.toInt64() else { return }
+        let instanceId = stored.instanceId
+        let purchaseDate = stored.date
+        let savedToProfile = stored.showInProfile
+        let _ = account.postbox.transaction { transaction -> Void in
+            var original: Message?
+            transaction.scanTopMessages(peerId: accountPeerId, namespace: Namespaces.Message.Local, limit: 1000, { message in
+                for media in message.media {
+                    guard let action = media as? TelegramMediaAction,
+                          case let .starGift(gift, _, _, _, _, _, _, upgraded, _, _, _, _, _, _, _, savedId, _, _, _, _, _, _) = action.action,
+                          !upgraded,
+                          case let .generic(value) = gift,
+                          value.id == generic.id else { continue }
+                    if savedId == instanceId || (savedId == nil && message.timestamp == purchaseDate) {
+                        original = message
+                        return false
+                    }
+                }
+                return true
+            })
+            guard let original else { return }
+            let upgradeAction = TelegramMediaActionType.starGiftUnique(gift: .unique(unique), isUpgrade: true, isTransferred: false, savedToProfile: savedToProfile, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: accountPeerId, senderId: accountPeerId, savedId: instanceId, resaleAmount: nil, canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
+            let globallyUniqueId = Int64.random(in: Int64.min ... Int64.max)
+            let upgradeMessage = StoreMessage(peerId: accountPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: globallyUniqueId, groupingKey: nil, threadId: nil, timestamp: Int32(Date().timeIntervalSince1970), flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: upgradeAction)])
+            guard let upgradeMessageId = transaction.addMessages([upgradeMessage], location: .Random)[globallyUniqueId] else { return }
+            transaction.updateMessage(original.id, update: { current -> PostboxUpdateMessage in
+                let media = current.media.map { media -> Media in
+                    guard let action = media as? TelegramMediaAction,
+                          case let .starGift(gift, convertStars, text, entities, nameHidden, savedToProfile, converted, _, _, _, isRefunded, isPrepaidUpgrade, _, peerId, senderId, savedId, prepaidUpgradeHash, giftMessageId, upgradeSeparate, isAuctionAcquired, toPeerId, number) = action.action else {
+                        return media
+                    }
+                    return TelegramMediaAction(action: .starGift(gift: gift, convertStars: convertStars, text: text, entities: entities, nameHidden: nameHidden, savedToProfile: savedToProfile, converted: converted, upgraded: true, canUpgrade: false, upgradeStars: nil, isRefunded: isRefunded, isPrepaidUpgrade: isPrepaidUpgrade, upgradeMessageId: upgradeMessageId.id, peerId: peerId, senderId: senderId, savedId: savedId, prepaidUpgradeHash: prepaidUpgradeHash, giftMessageId: giftMessageId, upgradeSeparate: upgradeSeparate, isAuctionAcquired: isAuctionAcquired, toPeerId: toPeerId, number: number))
+                }
+                return .update(StoreMessage(id: current.id, customStableId: nil, globallyUniqueId: current.globallyUniqueId, groupingKey: current.groupingKey, threadId: current.threadId, timestamp: current.timestamp, flags: StoreMessageFlags(current.flags), tags: current.tags, globalTags: current.globalTags, localTags: current.localTags, forwardInfo: current.forwardInfo.flatMap(StoreMessageForwardInfo.init), authorId: current.author?.id, text: current.text, attributes: current.attributes, media: media))
+            })
+        }.startStandalone()
+    }
+
     /// What an ordinary gift costs to upgrade, as the gift itself states. Nil when it has no
     /// upgrade — a gift with no `upgradeStars` is one that was never meant to become a
     /// collectible, and offering the button anyway would be a button that cannot work.
@@ -11375,6 +11451,7 @@ extension AorusFakeGiftsStore {
                   let value = AorusFakeGiftsStore.wrapper(for: upgraded) else {
                 return .fail(.generic)
             }
+            AorusFakeGiftsStore.recordLocalUpgrade(account: account, stored: stored, generic: generic, unique: unique)
             return .single(value)
         }
     }
@@ -11401,11 +11478,30 @@ extension AorusFakeGiftsStore {
         }
         let total = generic.availability?.total ?? 0
         let issued = total > 0 ? max(1, total - (generic.availability?.remains ?? 0)) : 1
+        // A collectible's number is where it falls among its gift's copies, and an upgrade lands
+        // anywhere among those issued -- not, as it used to, on the last of them every time. A
+        // number another local copy of the same gift already wears is passed over while any is
+        // left.
+        let taken = Set(all().compactMap { stored -> Int32? in
+            guard case let .unique(value)? = stored.gift, value.giftId == generic.id else { return nil }
+            return value.number
+        })
+        var number = Int32.random(in: 1 ... issued)
+        if taken.contains(number), taken.count < Int(issued) {
+            var attempts = 0
+            repeat {
+                number = Int32.random(in: 1 ... issued)
+                attempts += 1
+            } while taken.contains(number) && attempts < 64
+            if taken.contains(number), let free = (1 ... issued).first(where: { !taken.contains($0) }) {
+                number = free
+            }
+        }
         return StarGift.UniqueGift(
             id: Int64.random(in: 1 ... Int64.max),
             giftId: generic.id,
             title: generic.title ?? "",
-            number: issued,
+            number: number,
             // Local and obviously local. The slug is what the reference is keyed on, so it
             // has to be unique across repeated upgrades of the same gift.
             slug: "aorus-" + String(UInt64.random(in: 1 ... UInt64.max), radix: 36),
@@ -13046,6 +13142,84 @@ def patch_local_gift_upgrade(tg: Path) -> None:
     )
     path.write_text(source.replace(anchor, replacement, 1), encoding="utf-8")
     print("LocalGiftUpgrade: local gifts upgrade without the server")
+
+
+def patch_saved_messages_gift_upgrade(tg: Path) -> None:
+    """A gift bought locally for oneself upgrades from its card in Saved Messages as well.
+
+    Buying a gift for oneself posts its card to Saved Messages, the chat whose peer is the
+    account, and the card said `canUpgrade: false` with no instance behind it -- so the gift
+    screen opened from it built a `.message` reference to a local message the store could not
+    resolve, and offered no Upgrade at all. The profile's entry for the very same gift could.
+
+    Cards posted now carry the instance and the price themselves (`recordLocalGiftMessage`).
+    For the cards already in Saved Messages the gift screen asks the store, which matches a
+    card to its entry by gift and moment of purchase, and takes the reference and the price
+    from there; the upgrade then runs through `_internal_upgradeStarGift` like any other
+    local one, and the card is marked upgraded with the collectible's card posted after it.
+
+    Showing or hiding such a gift on the profile, from the same screen, is the store's to do
+    too: the server has never heard of the gift, so asking it could only fail.
+    """
+    gv = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift"
+    if not gv.is_file():
+        raise RuntimeError("SavedGiftUpgrade: GiftViewScreen.swift is missing")
+    t = gv.read_text(encoding="utf-8")
+    if "AorusFakeGiftsStore.savedMessagesGift(" not in t:
+        anchor = (
+            "                        } else {\n"
+            "                            reference = .message(messageId: message.id)\n"
+            "                        }\n"
+            "                        \n"
+            "                        let fromPeerId = senderId ?? message.author?.id\n"
+        )
+        if t.count(anchor) != 1:
+            raise RuntimeError(f"SavedGiftUpgrade: card reference anchor found {t.count(anchor)} times")
+        t = t.replace(anchor, (
+            "                        } else {\n"
+            "                            reference = .message(messageId: message.id)\n"
+            "                        }\n"
+            "                        // AorusGram: a gift bought locally for oneself is the local store's, and its\n"
+            "                        // card upgrades through it the way the profile's entry for it does.\n"
+            "                        var aorusCanUpgrade = canUpgrade\n"
+            "                        var aorusUpgradeStars = upgradeStars\n"
+            "                        if !upgraded, let aorusLocal = AorusFakeGiftsStore.savedMessagesGift(messageId: message.id, timestamp: message.timestamp, gift: gift, savedId: savedId) {\n"
+            "                            reference = aorusLocal.reference\n"
+            "                            aorusCanUpgrade = true\n"
+            "                            aorusUpgradeStars = aorusLocal.upgradeStars\n"
+            "                        }\n"
+            "                        \n"
+            "                        let fromPeerId = senderId ?? message.author?.id\n"
+        ), 1)
+        ret_old = "isRefunded, canUpgrade, upgradeStars, nil, nil, nil, upgradeMessageId, nil, nil, prepaidUpgradeHash, upgradeSeparate, nil, toPeerId, number, nil)"
+        ret_new = "isRefunded, aorusCanUpgrade, aorusUpgradeStars, nil, nil, nil, upgradeMessageId, nil, nil, prepaidUpgradeHash, upgradeSeparate, nil, toPeerId, number, nil)"
+        if t.count(ret_old) != 1:
+            raise RuntimeError(f"SavedGiftUpgrade: card arguments anchor found {t.count(ret_old)} times")
+        t = t.replace(ret_old, ret_new, 1)
+        gv.write_text(t, encoding="utf-8")
+        print("SavedGiftUpgrade: cards in Saved Messages upgrade local gifts")
+    else:
+        print("SavedGiftUpgrade: GiftViewScreen already patched")
+
+    gifts = tg / "submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift"
+    s = gifts.read_text(encoding="utf-8")
+    if "AorusFakeGiftsStore.setProfileVisibility(reference: reference, added)" not in s:
+        anchor = (
+            "func _internal_updateStarGiftAddedToProfile(account: Account, reference: StarGiftReference, added: Bool) -> Signal<Never, NoError> {\n"
+            "    var flags: Int32 = 0\n"
+        )
+        if s.count(anchor) != 1:
+            raise RuntimeError(f"SavedGiftUpgrade: profile toggle anchor found {s.count(anchor)} times")
+        s = s.replace(anchor, (
+            "func _internal_updateStarGiftAddedToProfile(account: Account, reference: StarGiftReference, added: Bool) -> Signal<Never, NoError> {\n"
+            "    // AorusGram: a local gift is shown or hidden locally; the server has never heard of it.\n"
+            "    if AorusFakeGiftsStore.setProfileVisibility(reference: reference, added) {\n"
+            "        return .complete()\n"
+            "    }\n"
+            "    var flags: Int32 = 0\n"
+        ), 1)
+        gifts.write_text(s, encoding="utf-8")
+        print("SavedGiftUpgrade: local gifts shown and hidden locally")
 
 
 def patch_fake_stars_all_gifts(tg: Path) -> None:
@@ -28091,6 +28265,7 @@ def main() -> None:
     patch_local_premium(tg)
     patch_fake_gifts(tg)
     patch_local_gift_upgrade(tg)
+    patch_saved_messages_gift_upgrade(tg)
     patch_fake_stars(tg)
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)

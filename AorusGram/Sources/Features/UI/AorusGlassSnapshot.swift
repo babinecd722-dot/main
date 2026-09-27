@@ -50,6 +50,22 @@ import UIKit
 // Each photograph goes INSIDE its own pane, underneath that pane's own content, so nothing is
 // covered that the pane was not already covering, and nothing is ever added above anything — a
 // passcode cover, when one is put up, is the window's own and stays over everything.
+//
+// Taken on the way out, shown only once out
+// -----------------------------------------
+// `willResignActive` is not only the way to the switcher. Control Center, the notification
+// shade, a Face ID prompt and the system's own panels — the microphone modes a group call opens
+// among them — all send it while the app stays on screen underneath, still drawing its glass
+// live. Pictures put up at that moment sat over live panes for as long as the panel was open:
+// frozen while the call behind them moved on, and square where the pane is a capsule, since an
+// iOS 26 glass pane is shaped by its corner configuration and not by its layer's radius. That
+// was the square panel behind the microphone modes.
+//
+// So the photograph is still taken there, while there is material to take, but the pictures
+// wait out of sight. They are shown when the app actually goes to the background, which is
+// before the switcher's picture of it is taken, and an app that only went inactive under a
+// panel gets them taken down again, never having shown them. Each one is also cut to the shape
+// its pane is drawn in, whichever of the two ways that shape was given.
 public enum AorusGlassSnapshot {
     /// One pane, the picture standing in for its material, and the photograph that picture was
     /// cut from — kept so the cut can be made again if the pane moves.
@@ -87,9 +103,11 @@ public enum AorusGlassSnapshot {
             self.freeze()
         }
         // The going-away transition moves things. Every copy is re-cut at its pane's new place
-        // before the picture the switcher shows is taken.
+        // before the picture the switcher shows is taken, and only now shown: until here the
+        // app may merely be under a system panel, with its own glass still live.
         center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
             self.refit()
+            self.reveal()
         }
         // Live again the moment the app is on its way back, not only once it is active: a
         // passcode or Face ID prompt on return can keep it inactive for a while, and the
@@ -144,6 +162,8 @@ public enum AorusGlassSnapshot {
         // picture's frame is the rect it was cut at.
         picture.frame = host.convert(rect, from: window)
         picture.contentMode = .scaleToFill
+        // Out of sight until the app is in the background; see `reveal()`.
+        picture.isHidden = true
         self.applyShape(of: pane, to: picture)
         host.insertSubview(picture, at: 0)
         self.frozen.append(Frozen(pane: pane, window: window, host: host, picture: picture,
@@ -202,10 +222,29 @@ public enum AorusGlassSnapshot {
     }
 
     /// The corners the pane is cut to, given to the picture as well.
+    ///
+    /// A pane is shaped one of two ways. Telegram's own glass rounds its layer; glass given a
+    /// corner configuration on iOS 26 — a capsule, or corners of their own — leaves the layer's
+    /// radius at zero and is shaped by the configuration alone. Reading only the layer made
+    /// every picture of that second kind a rectangle.
     private static func applyShape(of pane: UIView, to picture: UIImageView) {
         picture.layer.cornerCurve = pane.layer.cornerCurve
         picture.layer.cornerRadius = pane.layer.cornerRadius
+        picture.layer.maskedCorners = pane.layer.maskedCorners
         picture.layer.masksToBounds = pane.layer.cornerRadius > 0.0
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *), pane.layer.cornerRadius <= 0.0 {
+            picture.cornerConfiguration = pane.cornerConfiguration
+            picture.clipsToBounds = true
+        }
+        #endif
+    }
+
+    /// Puts the pictures up, once the app is in the background.
+    private static func reveal() {
+        for entry in self.frozen {
+            entry.picture.isHidden = false
+        }
     }
 
     // MARK: - Thawing
