@@ -619,7 +619,7 @@ final class AorusPluginStatView: UIView {
         trend.alignment = .center
         let trendColor: UIColor
         let symbol: String
-        switch row.style {
+        switch row.style ?? "" {
         case "up":
             trendColor = .systemGreen
             symbol = "arrow.up.right"

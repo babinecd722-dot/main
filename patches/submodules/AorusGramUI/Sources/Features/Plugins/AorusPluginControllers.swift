@@ -1292,7 +1292,7 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
     private var items: [String] {
         switch mode {
         case .icons:
-            return AorusPluginIcons.available
+            return AorusPluginSymbolGlyphs.available
         case .colors:
             var values = AorusPluginAccent.all
             if !values.contains(selected) { values.insert(selected, at: 0) }
@@ -1303,7 +1303,7 @@ private final class AorusPluginVisualPickerController: ViewController, UICollect
 
 /// The glyphs this device can draw, in the catalogue's order. A symbol from a newer SF Symbols
 /// than the one on the phone would be an empty square in the picker.
-private enum AorusPluginIcons {
+private enum AorusPluginSymbolGlyphs {
     static let available: [String] = AorusPluginIcon.all.filter { UIImage(systemName: $0) != nil }
 }
 
@@ -2696,7 +2696,7 @@ private enum AorusPluginDocumentation {
               .code({ id: 'token', title: 'Код', value: 'A1B2-C3D4' })
               .image({ id: 'cover', title: 'Обложка', image: 'base64 PNG', height: 160 })
             page.set('week', { values: [4, 6, 5, 9] })
-            hero — карточка с градиентом, progress и ring — полоса и кольцо, которые перетекают к новому значению, chart — линия, столбцы или область, прорисовывающиеся при появлении, stat — крупная цифра со стрелкой роста, segmented — сегменты, chips — пилюли, color — системный выбор цвета, date — компактный выбор даты, rating — звёзды, code — моноширинный блок, копирующийся по нажатию, image — картинка PNG или JPEG до 96 КБ. colors даёт строке свои цвета, два цвета — градиент; badge — метка справа у обычной строки. Выбор приходит в uiAction, нажатие на карточку, полосу, кольцо, график, цифру, код и картинку тоже. page.set меняет у строки несколько полей сразу; изменение, которое нельзя нарисовать, отклоняется, и строка остаётся прежней.
+            hero — карточка с градиентом, progress и ring — полоса и кольцо, которые перетекают к новому значению, chart — линия, столбцы или область, прорисовывающиеся при появлении, stat — крупная цифра со стрелкой роста, segmented — сегменты, chips — пилюли, color — системный выбор цвета, date — компактный выбор даты (на iOS 13 — барабан в отдельном листе), rating — звёзды, code — моноширинный блок, копирующийся по нажатию, image — картинка PNG или JPEG до 96 КБ. colors даёт строке свои цвета, два цвета — градиент; badge — метка справа у обычной строки. Выбор приходит в uiAction, нажатие на карточку, полосу, кольцо, график, цифру, код и картинку тоже. page.set меняет у строки несколько полей сразу; изменение, которое нельзя нарисовать, отклоняется, и строка остаётся прежней.
 
             Интеграции приложения:
             const app = aorus.app.info()
@@ -2990,7 +2990,7 @@ private enum AorusPluginDocumentation {
       .code({ id: 'token', title: 'Code', value: 'A1B2-C3D4' })
       .image({ id: 'cover', title: 'Cover', image: 'base64 PNG', height: 160 })
     page.set('week', { values: [4, 6, 5, 9] })
-    hero is a card with a gradient; progress and ring are a bar and a ring that move to a new value; chart is a line, bars or an area drawn in as it appears; stat is a large figure with a trend arrow; segmented is segments; chips are pills; color opens the system colour picker; date is a compact date picker; rating is stars; code is a monospaced block that copies on a tap; image is a PNG or JPEG of up to 96 KB. colors gives a row colours of its own, two of them a gradient; badge is a tag on the right of an ordinary row. A choice arrives as uiAction, and so does a tap on a card, bar, ring, chart, figure, code or picture. page.set changes several fields of a row at once; a change that cannot be drawn is refused and the row stays as it was.
+    hero is a card with a gradient; progress and ring are a bar and a ring that move to a new value; chart is a line, bars or an area drawn in as it appears; stat is a large figure with a trend arrow; segmented is segments; chips are pills; color opens the system colour picker; date is a compact date picker (on iOS 13, wheels in a sheet of their own); rating is stars; code is a monospaced block that copies on a tap; image is a PNG or JPEG of up to 96 KB. colors gives a row colours of its own, two of them a gradient; badge is a tag on the right of an ordinary row. A choice arrives as uiAction, and so does a tap on a card, bar, ring, chart, figure, code or picture. page.set changes several fields of a row at once; a change that cannot be drawn is refused and the row stays as it was.
 
     App integrations:
     const app = aorus.app.info()
@@ -3159,6 +3159,8 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     /// How far each row of pills was scrolled, kept across the redraw a tap on one causes.
     private var chipOffsets: [String: CGFloat] = [:]
     private var colorPickerDelegate: AnyObject?
+    /// The row and the wheels of the date sheet shown on iOS 13, until Done or Cancel.
+    private var dateSheet: (rowId: String, picker: UIDatePicker, sheet: UIViewController)?
 
     private var palette: AorusPluginPagePalette {
         let list = presentationData.theme.list
@@ -3304,28 +3306,18 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             swatch.layer.borderColor = presentationData.theme.list.itemBlocksSeparatorColor.cgColor
             cell.accessoryView = swatch
         case .date:
-            cell.selectionStyle = .none
-            if #available(iOS 13.4, *) {
-                let picker = UIDatePicker()
+            if #available(iOS 14.0, *) {
+                cell.selectionStyle = .none
+                let picker = datePicker(for: row)
                 picker.preferredDatePickerStyle = .compact
-                switch row.style {
-                case "date":
-                    picker.datePickerMode = .date
-                case "time":
-                    picker.datePickerMode = .time
-                default:
-                    picker.datePickerMode = .dateAndTime
-                }
-                if let value = row.value?.doubleValue {
-                    picker.date = Date(timeIntervalSince1970: value / 1000.0)
-                }
-                picker.minimumDate = row.minimum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
-                picker.maximumDate = row.maximum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
-                picker.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor
                 picker.accessibilityIdentifier = "\(indexPath.section):\(indexPath.row)"
                 picker.addTarget(self, action: #selector(dateChanged(_:)), for: .valueChanged)
                 picker.sizeToFit()
                 cell.accessoryView = picker
+            } else {
+                // No compact picker before iOS 14: the date is the detail line and a tap opens
+                // the wheels.
+                cell.accessoryType = .disclosureIndicator
             }
         case .hero, .progress, .ring, .chart, .stat, .segmented, .chips, .image, .code, .rating:
             break
@@ -3488,6 +3480,70 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         update(rowId: row.id, value: .number((sender.date.timeIntervalSince1970 * 1000.0).rounded()), reload: false)
     }
 
+    /// A picker set to the row: its mode, its date, its bounds and its colour. Dates are
+    /// milliseconds since 1970, as JavaScript counts them.
+    private func datePicker(for row: AorusPluginUIPage.Row) -> UIDatePicker {
+        let picker = UIDatePicker()
+        switch row.style ?? "" {
+        case "date":
+            picker.datePickerMode = .date
+        case "time":
+            picker.datePickerMode = .time
+        default:
+            picker.datePickerMode = .dateAndTime
+        }
+        if let value = row.value?.doubleValue {
+            picker.date = Date(timeIntervalSince1970: value / 1000.0)
+        }
+        picker.minimumDate = row.minimum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
+        picker.maximumDate = row.maximum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
+        picker.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor
+        return picker
+    }
+
+    /// The wheels in a sheet of their own, for iOS 13: the date is kept on Done and dropped
+    /// on Cancel.
+    private func presentDateSheet(row: AorusPluginUIPage.Row) {
+        let picker = datePicker(for: row)
+        picker.translatesAutoresizingMaskIntoConstraints = false
+        let sheet = UIViewController()
+        sheet.view.backgroundColor = presentationData.theme.list.plainBackgroundColor
+        sheet.view.addSubview(picker)
+        NSLayoutConstraint.activate([
+            picker.leadingAnchor.constraint(equalTo: sheet.view.leadingAnchor),
+            picker.trailingAnchor.constraint(equalTo: sheet.view.trailingAnchor),
+            picker.centerYAnchor.constraint(equalTo: sheet.view.centerYAnchor),
+        ])
+        sheet.title = row.title
+        sheet.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(dateSheetCancelled))
+        sheet.navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(dateSheetDone))
+        let navigation = UINavigationController(rootViewController: sheet)
+        navigation.navigationBar.tintColor = presentationData.theme.list.itemAccentColor
+        // Only Done and Cancel close it, so the date is never half kept.
+        navigation.isModalInPresentation = true
+        dateSheet = (row.id, picker, navigation)
+        present(navigation, animated: true)
+    }
+
+    @objc private func dateSheetDone() {
+        if let current = dateSheet {
+            update(rowId: current.rowId, value: .number((current.picker.date.timeIntervalSince1970 * 1000.0).rounded()))
+        }
+        closeDateSheet()
+    }
+
+    @objc private func dateSheetCancelled() {
+        closeDateSheet()
+    }
+
+    /// The sheet itself is dismissed: this controller's own dismiss takes the page off
+    /// Telegram's stack.
+    private func closeDateSheet() {
+        let sheet = dateSheet?.sheet
+        dateSheet = nil
+        sheet?.dismiss(animated: true)
+    }
+
     private func presentColorPicker(row: AorusPluginUIPage.Row) {
         let rowId = row.id
         if #available(iOS 14.0, *) {
@@ -3593,7 +3649,13 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             send(row: row, value: row.value)
         case .color:
             presentColorPicker(row: row)
-        case .text, .toggle, .slider, .stepper, .segmented, .chips, .date, .rating:
+        case .date:
+            if #available(iOS 14.0, *) {
+                // The compact picker in the cell is the control.
+            } else {
+                presentDateSheet(row: row)
+            }
+        case .text, .toggle, .slider, .stepper, .segmented, .chips, .rating:
             break
         }
     }
@@ -3653,6 +3715,12 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         }
         if [.number, .slider, .stepper].contains(row.kind), let value = row.value?.doubleValue {
             return value.rounded() == value ? String(Int(value)) : String(value)
+        }
+        if row.kind == .date {
+            if #available(iOS 14.0, *) {
+                // The compact picker beside the title already shows the date.
+                return row.subtitle
+            }
         }
         if row.kind == .date, let value = row.value?.doubleValue {
             // What the compact picker shows, for a phone too old to have one.

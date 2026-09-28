@@ -17,6 +17,12 @@ scope: those come from `-sdk` and from Bazel, and guessing at that list is how a
 reporting things that are fine. Our types are the ones that have to be passed in by hand, and
 they are exactly the ones that were missing.
 
+The same bookkeeping answers the opposite question too. Run 529 died on a name declared
+twice: a new public `AorusPluginIcons` in the plugin core and an older private enum of the
+same name in the plugin screens, compiled together by the UI type-check. Each file was fine
+on its own. So every top-level type or value is also checked against the other files of its
+command: two files may share a name only when both keep it `private` to themselves.
+
 Usage: swift_compile_unit_check.py <repo root>
 """
 from __future__ import annotations
@@ -49,6 +55,18 @@ TOP_LEVEL_VALUE = re.compile(
 )
 
 REFERENCE = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\b")
+
+# A declaration at the start of a line is a file-scope one: everything nested is indented.
+# Functions are left out, because two files may overload one name with different signatures.
+TOP_LEVEL = re.compile(
+    r"^((?:@\w+(?:\([^)\n]*\))?\s+)*(?:(?:public|private|fileprivate|internal|open|final|indirect)\s+)*)"
+    r"(?:class|struct|enum|protocol|actor|typealias|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)",
+    re.M,
+)
+
+# The UI type-check compiles copies of the plugin screens with their Telegram imports cut out
+# by `sed`. The copy is what swiftc sees, and the source it was made from is what to read.
+SED_COPY = re.compile(r"aorusgram/(\S+\.swift)\s*\\\s*\n\s*>\s*(/tmp/\S+\.swift)")
 
 
 def strip_comments_and_strings(text: str) -> str:
@@ -94,12 +112,25 @@ def declarations(path: Path) -> set[str]:
 
 def references(path: Path) -> set[str]:
     text = strip_comments_and_strings(path.read_text(encoding="utf-8", errors="replace"))
+    # An import names a module, and the ones the type-checks cannot see are cut out by `sed`.
+    text = re.sub(r"^\s*(?:@\w+\s+)?import\s+.*$", "", text, flags=re.M)
     return {name for name in REFERENCE.findall(text) if OURS.match(name)}
+
+
+def top_level(path: Path) -> dict[str, bool]:
+    """Every file-scope type or value, and whether the file keeps it to itself."""
+    text = strip_comments_and_strings(path.read_text(encoding="utf-8", errors="replace"))
+    result: dict[str, bool] = {}
+    for modifiers, name in TOP_LEVEL.findall(text):
+        private = bool(re.search(r"\b(?:private|fileprivate)\b", modifiers))
+        result[name] = result.get(name, True) and private
+    return result
 
 
 def commands(workflow: str) -> list[tuple[int, list[str]]]:
     """Every `swiftc` invocation and the repository files it lists, with its line number."""
     lines = workflow.split("\n")
+    copies = {copy: source for source, copy in SED_COPY.findall(workflow)}
     result: list[tuple[int, list[str]]] = []
     index = 0
     while index < len(lines):
@@ -121,7 +152,10 @@ def commands(workflow: str) -> list[tuple[int, list[str]]]:
         if "-frontend -parse" in joined:
             index += 1
             continue
-        files = re.findall(r"aorusgram/(\S+\.swift)", joined)
+        files = [
+            copies.get(name, name[len("aorusgram/"):] if name.startswith("aorusgram/") else name)
+            for name in re.findall(r"((?:aorusgram|/tmp)/\S+\.swift)", joined)
+        ]
         if files:
             result.append((start + 1, files))
         index += 1
@@ -148,6 +182,18 @@ def main() -> int:
                 errors.append(
                     f"{WORKFLOW}:{line}: {name} names {reference}, which no file in this "
                     f"swiftc command declares"
+                )
+        owners: dict[str, list[tuple[str, bool]]] = {}
+        for name, path in zip(files, paths):
+            for declared, private in top_level(path).items():
+                owners.setdefault(declared, []).append((name, private))
+        for declared, found in sorted(owners.items()):
+            if len(found) > 1 and not all(private for _, private in found):
+                listed = ", ".join(name for name, _ in found)
+                errors.append(
+                    f"{WORKFLOW}:{line}: {declared} is declared at file scope in more than "
+                    f"one file of this swiftc command ({listed}); swiftc reports an invalid "
+                    f"redeclaration"
                 )
         checked += 1
 
