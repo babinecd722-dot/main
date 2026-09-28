@@ -18371,7 +18371,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     }
     let chatListBackground = c("chatList.background")
     let chatListHighlight = c("chatList.highlight")
-    let searchBar = c("chatList.searchBar")
+    let chatListSearchBar = c("chatList.searchBar")
     let chatList = theme.chatList.withUpdated(
         backgroundColor: chatListBackground,
         itemSeparatorColor: c("chatList.separator"),
@@ -18396,8 +18396,8 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         unreadBadgeInactiveTextColor: c("badge.mutedText"),
         reactionBadgeActiveBackgroundColor: c("badge.reaction"),
         pinnedBadgeColor: c("badge.pinned"),
-        pinnedSearchBarColor: searchBar,
-        regularSearchBarColor: searchBar,
+        pinnedSearchBarColor: chatListSearchBar,
+        regularSearchBarColor: chatListSearchBar,
         sectionHeaderFillColor: c("chatList.sectionHeader"),
         sectionHeaderTextColor: c("chatList.sectionHeaderText"),
         verifiedIconFillColor: c("chatList.verified"),

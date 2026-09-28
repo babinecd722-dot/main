@@ -4132,6 +4132,57 @@ def main() -> None:
     else:
         err.append("PluginIcons: the icon catalogue is missing")
 
+    # A helper the branding writes into Telegram's sources is compiled for the first time half
+    # an hour into Bazel. Run 530 died there on `let searchBar` declared twice in one function
+    # body, which parses perfectly. Every `aorus` function in the patched tree is read for a
+    # name its body declares twice at the same level; the branches of one #if may share one.
+    _re_dup = re
+    helper_func = _re_dup.compile(r"^( *)(?:(?:public|private|fileprivate|internal|static|final|@\w+)\s+)*func (aorus\w*)\b")
+    for swift_file in sorted((tg / "submodules").rglob("*.swift")):
+        try:
+            lines = swift_file.read_text(encoding="utf-8", errors="replace").split("\n")
+        except OSError:
+            continue
+        if not any("func aorus" in line for line in lines):
+            continue
+        index = 0
+        while index < len(lines):
+            match = helper_func.match(lines[index])
+            if not match or not lines[index].rstrip().endswith("{"):
+                index += 1
+                continue
+            indent = match.group(1)
+            body = indent + "    "
+            declaration = _re_dup.compile("^" + body + r"(?:let|var) ([A-Za-z_][A-Za-z0-9_]*)\b")
+            seen: dict[str, list[tuple[tuple[int, int], ...]]] = {}
+            conditions: list[list[int]] = []
+            opened = 0
+            cursor = index + 1
+            while cursor < len(lines) and lines[cursor] != indent + "}":
+                line = lines[cursor]
+                stripped = line.strip()
+                if line.startswith(body) and not line.startswith(body + " "):
+                    if stripped.startswith("#if"):
+                        opened += 1
+                        conditions.append([opened, 0])
+                    elif stripped.startswith(("#else", "#elseif")) and conditions:
+                        conditions[-1][1] += 1
+                    elif stripped.startswith("#endif") and conditions:
+                        conditions.pop()
+                found = declaration.match(line)
+                if found:
+                    name = found.group(1)
+                    here_now = tuple((a, b) for a, b in conditions)
+                    for other in seen.get(name, []):
+                        branches = dict(other)
+                        if all(branches.get(a, b) == b for a, b in here_now):
+                            relative_path = swift_file.relative_to(tg)
+                            err.append(f"Helpers: {relative_path}:{cursor + 1} declares {name} twice in {match.group(2)}")
+                            break
+                    seen.setdefault(name, []).append(here_now)
+                cursor += 1
+            index = cursor + 1
+
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"
     bgtask_val = "com.aorusgram.dmc.sync"
