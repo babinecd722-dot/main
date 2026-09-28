@@ -230,6 +230,7 @@ jobs:
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginPrelude.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSandbox.swift \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginAppearance.swift \
             aorusgram/AorusGram/Sources/Features/UI/AorusStringOverrides.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginObjCDenylist.swift \
             aorusgram/scripts/tests/AorusPluginCoreTests.swift \
@@ -279,6 +280,7 @@ jobs:
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginPrelude.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSandbox.swift \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginAppearance.swift \
             aorusgram/scripts/tests/AorusPluginUIStubs.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginChatBridge.swift \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginMarketHost.swift \

@@ -2722,6 +2722,15 @@ private enum AorusPluginDocumentation {
             aorus.tabs.setBadge('feed', null)
             Вкладка встаёт в нижнюю панель после «Настроек»: с url — сайт страницей приложения, с pageId — экран плагина из definePages, одно из двух. Вкладок до двух на все плагины, заголовок до 24 символов, иконка — глиф из каталога. Бейдж — родной красный кружок Telegram: число (больше 99 — «99+»), true — точка, короткий текст или null, чтобы убрать. Пока плагин бейдж не ставил, вкладка сайта показывает счётчик самого сайта: из navigator.setAppBadge или из «(3)» в начале заголовка. Сайт загружается, как только вкладка появилась, так что счётчик виден до первого открытия. Сайт во вкладке не запускает звук и видео сам и ставит их на паузу, когда вкладка уходит с экрана; ссылки Telegram он открывает только по нажатию или пока вкладка на экране. Нужны appCustomization, для сайта — ещё inAppBrowser, для экрана — customUI. Когда плагин останавливается, его вкладки уходят из панели.
 
+            Оформление
+            aorus.appearance.set({ 'bubble.outgoing.fill': ['5B4DFF', '8E7CFF'], 'bubble.radius': 20, 'header.background': '0B0B0FCC', 'badge.unread': 'FF2D55', 'glass.tint': 'FFFFFF22', 'font.chat': 'large' })
+            aorus.appearance.set({ 'bubble.incoming.fill@dark': '1C1C1E', 'badge.unread': null })
+            aorus.appearance.reset('bubble.radius')
+            aorus.appearance.reset()
+            const layer = aorus.appearance.get()
+            const catalog = aorus.appearance.keys()
+            Вид приложения описывается значениями, а рисует его сам Telegram: цвета пузырей, текста, ссылок, реакций и кнопок под сообщениями, обои и служебные сообщения чата, поле ввода и кнопка отправки, клавиатура бота, панель эмодзи, шапки, поиск, нижняя панель, список чатов, счётчики и значки, экраны настроек, контекстные меню, листы действий, баннеры уведомлений, стекло, форма пузырей и размер текста. Полный список ключей с типами и допустимыми значениями возвращает keys(). Цвет — RRGGBB или RRGGBBAA, где последние две цифры — прозрачность; ключ с градиентом принимает список до четырёх цветов. Приписка @dark или @light ограничивает цвет или стиль стекла одной темой и там главнее ключа без приписки. set дописывает ключи в слой плагина, null убирает ключ, reset убирает перечисленные ключи или весь слой. Одно неверное значение отклоняет изменение целиком, слой остаётся прежним, а ошибка называет ключ и причину. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином. Где два плагина задали один ключ, действует значение плагина, чей идентификатор дальше по алфавиту. Нужно разрешение appCustomization; get и keys его не требуют.
+
             Соединение
             const state = await aorus.proxy.status()
             await aorus.proxy.setEnabled(true)
@@ -2979,6 +2988,15 @@ private enum AorusPluginDocumentation {
     aorus.tabs.setBadge('feed', 3)
     aorus.tabs.setBadge('feed', null)
     A tab goes into the bottom bar after Settings: with url it is a site drawn as a page of the app, with pageId one of the plugin's screens from definePages, one or the other. Two tabs across all plugins, a title of up to 24 characters, a glyph from the catalogue. The badge is Telegram's own red circle: a count (over 99 is "99+"), true for a dot, a short text, or null to clear it. Until the plugin sets one, a site's tab shows the site's own count, from navigator.setAppBadge or a "(3)" at the start of its title. The site loads as soon as its tab appears, so the count is there before the first visit. A site in a tab does not start sound or video by itself and pauses them when the tab leaves the screen; it opens Telegram links only on a tap or while its tab is on screen. Needs appCustomization, plus inAppBrowser for a site and customUI for a screen. When the plugin stops, its tabs leave the bar.
+
+    Appearance
+    aorus.appearance.set({ 'bubble.outgoing.fill': ['5B4DFF', '8E7CFF'], 'bubble.radius': 20, 'header.background': '0B0B0FCC', 'badge.unread': 'FF2D55', 'glass.tint': 'FFFFFF22', 'font.chat': 'large' })
+    aorus.appearance.set({ 'bubble.incoming.fill@dark': '1C1C1E', 'badge.unread': null })
+    aorus.appearance.reset('bubble.radius')
+    aorus.appearance.reset()
+    const layer = aorus.appearance.get()
+    const catalog = aorus.appearance.keys()
+    The look of the app is described in values and drawn by Telegram itself: the colours of bubbles, text, links, reactions and the buttons under messages, the chat wallpaper and service messages, the input panel and send button, the bot keyboard, the emoji panel, navigation bars, search, the tab bar, the chat list, counters and marks, settings screens, context menus, action sheets, notification banners, the glass, the bubble's shape and the text size. keys() returns every key with its type and allowed values. A colour is RRGGBB or RRGGBBAA, the last two digits being its alpha; a gradient key takes a list of up to four colours. An @dark or @light suffix limits a colour or the glass style to one appearance, where it wins over the plain key. set adds keys to the plugin's layer, null removes a key, reset removes the keys named or the whole layer. One invalid value rejects the whole change, the layer stays as it was, and the error names the key and the reason. Changes show at once, are kept until the next launch and leave with the plugin. Where two plugins set the same key, the one whose id sorts later wins. Needs appCustomization; get and keys need nothing.
 
     Connection
     const state = await aorus.proxy.status()

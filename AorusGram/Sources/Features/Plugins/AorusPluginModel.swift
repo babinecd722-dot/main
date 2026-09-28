@@ -317,6 +317,9 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             (.appCustomization, [
                 "aorus.features.", "aorus.interface.", "aorus.tabs.", "aorus.avatars.", "aorus.wall.",
                 "aorus.strings.override", "aorus.strings.restore",
+                // The look of the app. Reading the catalogue or the plugin's own layer asks for
+                // nothing; changing the look is the same capability as the rest of this list.
+                "aorus.appearance.set", "aorus.appearance.reset",
                 "aorus.theme.setAccentColor", "aorus.theme.resetAccentColor",
                 "aorus.navigation.openSettings", "aorus.app.openSettings",
             ]),

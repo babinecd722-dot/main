@@ -88,6 +88,9 @@ public final class AorusPluginRuntimeManager {
     private var overlays: [String: [AorusPluginOverlay]] = [:]
     private var nativeButtons: [String: [AorusPluginNativeButton]] = [:]
     private var stringOverrides: [String: [String: String]] = [:]
+    /// The look each plugin describes, by plugin. Started from what was kept at the last
+    /// launch, so the look is in place before any plugin has started again.
+    private var appearanceLayers: [String: [String: Any]] = AorusPluginAppearance.storedLayers()
     private var tabs: [String: [AorusPluginTab]] = [:]
     /// Badges plugins set on their tabs, by `pluginId + "\u{1}" + tabId`.
     private var tabBadges: [String: String] = [:]
@@ -158,6 +161,18 @@ public final class AorusPluginRuntimeManager {
         let desired = records.filter { $0.manifest.isEnabled }
         let enabledIds = Set(desired.map { $0.manifest.id })
         let listedIds = Set(records.map { $0.manifest.id })
+
+        // A look kept from the last launch stays only for a plugin that is still on and may still
+        // change the look. One whose files could not be read just now keeps it, like its run.
+        let lookIds = Set(desired.filter { store.permissionState(for: $0.manifest.id).granted.contains(.appCustomization) }.map { $0.manifest.id })
+        lock.lock()
+        let keptLooks = appearanceLayers.filter { id, _ in
+            lookIds.contains(id) || (!listedIds.contains(id) && store.contains(id: id))
+        }
+        let prunedLooks = keptLooks.count != appearanceLayers.count
+        appearanceLayers = keptLooks
+        lock.unlock()
+        if prunedLooks { publishAppearance() }
 
         // Stale is a plugin whose manifest was read and says off, or one that is gone. One whose
         // manifest could not be read just now goes on running: a read that failed is not
@@ -244,11 +259,13 @@ public final class AorusPluginRuntimeManager {
             overlays[id] = nil
             nativeButtons[id] = nil
             stringOverrides[id] = nil
+            appearanceLayers[id] = nil
             tabs[id] = nil
             tabBadges = tabBadges.filter { key, _ in key.components(separatedBy: "\u{1}").first != id }
         }
         lock.unlock()
         publishTabsIfChanged()
+        publishAppearance()
         for id in ids {
             AorusPluginHookBroker.shared.removePlugin(id)
             // A socket that outlived its plugin is a connection nobody can see.
@@ -499,6 +516,21 @@ public final class AorusPluginRuntimeManager {
         publishStringOverrides()
     }
 
+    fileprivate func setAppearance(_ values: [String: Any], id: String) {
+        lock.lock(); appearanceLayers[id] = values.isEmpty ? nil : values; lock.unlock()
+        publishAppearance()
+    }
+
+    /// Every plugin's look merged into the table the theme is built from. Two plugins that set
+    /// the same key are resolved by plugin id, like the words they replace; the table is only
+    /// rewritten, and the app only redraws, when it actually changed.
+    private func publishAppearance() {
+        lock.lock()
+        let layers = appearanceLayers
+        lock.unlock()
+        AorusPluginAppearance.publish(layers: layers)
+    }
+
     /// Every override every running plugin has asked for, merged into the one table the
     /// string lookup reads.
     ///
@@ -724,6 +756,13 @@ public final class AorusPluginRuntimeManager {
         lock.unlock()
         releaseResources(of: active.map { $0.manifest.id })
         active.forEach { $0.stop() }
+        // A look kept for a plugin that never got to start goes too: with every plugin stopped,
+        // none of them is there to answer for it.
+        lock.lock()
+        let hadLooks = !appearanceLayers.isEmpty
+        appearanceLayers.removeAll()
+        lock.unlock()
+        if hadLooks { publishAppearance() }
     }
 
     private func start(record: AorusPluginRecord, host: AorusPluginTelegramHost, permissions: Set<AorusPluginPermission>, completion: ((AorusPluginRunError?) -> Void)? = nil) {
@@ -737,6 +776,15 @@ public final class AorusPluginRuntimeManager {
         guard AorusPluginEntitlement.isAllowed else {
             completion?(.runtime(message: "AorusGram subscription is not active, so plugins do not run", line: nil))
             return
+        }
+        // Code that no longer describes a look has none: the look kept from its last run goes.
+        // Code that does keeps it until the run publishes its own, so a launch does not flash
+        // the plain theme between the kept look and the same look published again.
+        if !record.source.contains("aorus.appearance") {
+            lock.lock()
+            let hadLook = appearanceLayers.removeValue(forKey: record.manifest.id) != nil
+            lock.unlock()
+            if hadLook { publishAppearance() }
         }
         let sandbox = AorusPluginSandbox(
             manifest: record.manifest,
@@ -2090,6 +2138,12 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         guard AorusPluginEntitlement.isAllowed,
               manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
         manager?.setStringOverrides(overrides, id: pluginId)
+    }
+
+    func pluginAppearanceChanged(_ pluginId: String, values: [String: Any]) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
+        manager?.setAppearance(values, id: pluginId)
     }
 
     /// A notification, from a plugin, to somebody who is not looking at the screen.

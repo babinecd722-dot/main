@@ -4064,6 +4064,30 @@ def main() -> None:
         if marker not in gift_store_text:
             err.append(f"FakeGifts: gift store is missing {marker!r}")
 
+    # Plugin appearance: every key the catalogue accepts is drawn by Telegram's code. A key the
+    # check takes but nothing reads is a plugin told its look applied when it did not.
+    appearance_core = here.parent / "AorusGram" / "Sources" / "Features" / "Plugins" / "AorusPluginAppearance.swift"
+    presentation_data = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
+    glass_component = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
+    display_values = tg / "submodules/Display/Source/AorusPluginAppearanceValues.swift"
+    if not appearance_core.is_file() or not display_values.is_file():
+        err.append("PluginAppearance: the appearance catalogue or its reader is missing")
+    else:
+        import re as _re_look
+        core_text = appearance_core.read_text(encoding="utf-8")
+        drawn = presentation_data.read_text(encoding="utf-8") + glass_component.read_text(encoding="utf-8")
+        if "aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme))" not in drawn or "aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue))" not in drawn:
+            err.append("PluginAppearance: the theme is built without the plugin look")
+        if "aorusgram.pluginAppearanceChanged" not in drawn:
+            err.append("PluginAppearance: a changed look does not rebuild the theme")
+        for name in _re_look.findall(r'Key\("([^"]+)"', core_text):
+            if "\\(side)" in name:
+                tail = name.split(".", 2)[2]
+                if f'pc("{tail}")' not in drawn and f'prefix + "{tail}"' not in drawn:
+                    err.append(f"PluginAppearance: bubble key {tail} is accepted but not drawn")
+            elif f'"{name}"' not in drawn:
+                err.append(f"PluginAppearance: {name} is accepted but not drawn")
+
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"
     bgtask_val = "com.aorusgram.dmc.sync"

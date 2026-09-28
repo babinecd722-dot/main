@@ -88,6 +88,8 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginDeleteLocalMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginSetAutoSwitch(_ pluginId: String, enabled: Bool, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginStringOverridesChanged(_ pluginId: String, overrides: [String: String])
+    /// The plugin's whole appearance layer, already checked against the catalogue.
+    func pluginAppearanceChanged(_ pluginId: String, values: [String: Any])
     /// `action` is `info`, `download`, `save`, `saveToFiles` or `share`.
     func pluginMedia(_ pluginId: String, action: String, peerId: Int64, namespace: Int32, messageId: Int32, directory: URL?, completion: @escaping (Result<[String: Any]?, Error>) -> Void)
     /// `action` is `ban`, `kick`, `restrict` or `unban`.
@@ -145,6 +147,7 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onDeleteLocalMessage: ((String, Int64, Int32, Int32) -> Void)?
     public var onSetAutoSwitch: ((String, Bool) -> Void)?
     public var onStringOverridesChanged: ((String, [String: String]) -> Void)?
+    public var onAppearanceChanged: ((String, [String: Any]) -> Void)?
     public var onMedia: ((String, String, Int64, Int32, Int32) -> [String: Any]?)?
     public var onModerate: ((String, String, Int64, Int64) -> [String: Any])?
     public var onPickFile: ((String) -> [String: Any]?)?
@@ -253,6 +256,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginStringOverridesChanged(_ pluginId: String, overrides: [String: String]) {
         onStringOverridesChanged?(pluginId, overrides)
+    }
+    open func pluginAppearanceChanged(_ pluginId: String, values: [String: Any]) {
+        onAppearanceChanged?(pluginId, values)
     }
     open func pluginBroadcast(_ pluginId: String, topic: String, json: String) {
         onBroadcast?(pluginId, topic, json)
@@ -1543,6 +1549,32 @@ public final class AorusPluginSandbox {
             return true
         }
         hostObject.setObject(stringsDefine, forKeyedSubscript: "stringsDefine" as NSString)
+
+        // The look a plugin describes: its whole layer each time, checked here against the
+        // catalogue before anything reaches the app. The answer is empty when the layer was
+        // taken, `denied` without the permission, and otherwise the list of what was wrong, so
+        // the plugin is told which key and why instead of a look that half applied.
+        let appearanceDefine: @convention(block) (String) -> String = { [weak self] json in
+            guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.appCustomization) else { return "denied" }
+            guard let raw = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] else {
+                return "[{\"key\":\"*\",\"reason\":\"expected an object of keys and values\"}]"
+            }
+            let checked = AorusPluginAppearance.validate(raw)
+            if !checked.rejections.isEmpty {
+                let list = checked.rejections.map { ["key": $0.key, "reason": $0.reason] }
+                guard let data = try? JSONSerialization.data(withJSONObject: list), let text = String(data: data, encoding: .utf8) else {
+                    return "[]"
+                }
+                return text
+            }
+            if self.publishes { self.hostServices.pluginAppearanceChanged(pluginId, values: checked.values) }
+            return ""
+        }
+        hostObject.setObject(appearanceDefine, forKeyedSubscript: "appearanceDefine" as NSString)
+        let appearanceCatalog: @convention(block) () -> String = {
+            return AorusPluginAppearance.catalogJSON()
+        }
+        hostObject.setObject(appearanceCatalog, forKeyedSubscript: "appearanceCatalog" as NSString)
 
         // A word in the chat's title bar. One at a time across every plugin: two labels
         // stacked there would leave a chat nobody can read the name of.

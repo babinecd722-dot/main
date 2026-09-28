@@ -18040,9 +18040,14 @@ _AORUS_AMOLED_HELPER = (
     "        let badgeObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram.serverBadgesChanged\"), object: nil, queue: OperationQueue.main) { _ in\n"
     "            subscriber.putNext(Void())\n"
     "        }\n"
+    "        // The look a plugin describes: posted only when the merged table actually changed.\n"
+    "        let appearanceObserver = NotificationCenter.default.addObserver(forName: Notification.Name(\"aorusgram.pluginAppearanceChanged\"), object: nil, queue: OperationQueue.main) { _ in\n"
+    "            subscriber.putNext(Void())\n"
+    "        }\n"
     "        return ActionDisposable {\n"
     "            NotificationCenter.default.removeObserver(observer)\n"
     "            NotificationCenter.default.removeObserver(badgeObserver)\n"
+    "            NotificationCenter.default.removeObserver(appearanceObserver)\n"
     "        }\n"
     "    }\n"
     "}\n"
@@ -18111,6 +18116,472 @@ def patch_amoled_theme(tg: Path) -> None:
         print("Amoled: injected helper, applied at 2 PresentationData sites, wired live trigger")
     else:
         print(f"Amoled: WARNING — applied {n}/2 sites, trigger {trig}/1")
+
+
+AORUS_PLUGIN_APPEARANCE_VALUES_SWIFT = r'''import Foundation
+import UIKit
+
+/// AorusGram: the look plugins have asked for, as the drawing code reads it.
+///
+/// The plugin runtime publishes one merged table into standard defaults and announces it with
+/// a notification (`AorusPluginAppearance`, in a module this one cannot see). The theme is built
+/// from it and the glass reads it when it draws a pane. The values arrive already checked:
+/// colours as `RRGGBB` or `RRGGBBAA`, lists of them for gradients, numbers, booleans and names.
+/// A key may carry `@dark` or `@light`, and then wins over the plain key in that appearance.
+public enum AorusPluginAppearanceValues {
+    public static let defaultsKey = "aorusgram_plugin_appearance"
+    public static let didChangeNotification = Notification.Name("aorusgram.pluginAppearanceChanged")
+
+    private static let lock = NSLock()
+    private static var cached: [String: Any]?
+    private static var cachedRevision = 0
+    private static var observer: NSObjectProtocol?
+
+    /// The table in force, and a number that changes whenever the table does.
+    public static func snapshot() -> (values: [String: Any], revision: Int) {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        if observer == nil {
+            // Delivered on the posting thread, so the table is stale for no longer than it takes
+            // the notification to be posted -- before anything it wakes rebuilds a theme.
+            observer = NotificationCenter.default.addObserver(forName: didChangeNotification, object: nil, queue: nil, using: { _ in
+                AorusPluginAppearanceValues.invalidate()
+            })
+        }
+        if let cached {
+            return (cached, cachedRevision)
+        }
+        var values = UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]
+        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
+            values = [:]
+        }
+        cached = values
+        return (values, cachedRevision)
+    }
+
+    public static func current() -> [String: Any] {
+        return snapshot().values
+    }
+
+    private static func invalidate() {
+        lock.lock()
+        cached = nil
+        cachedRevision += 1
+        lock.unlock()
+    }
+
+    public static func value(_ key: String, dark: Bool, in values: [String: Any]) -> Any? {
+        return values[key + (dark ? "@dark" : "@light")] ?? values[key]
+    }
+
+    public static func color(_ key: String, dark: Bool, in values: [String: Any]) -> UIColor? {
+        guard let text = value(key, dark: dark, in: values) as? String else {
+            return nil
+        }
+        return parseColor(text)
+    }
+
+    public static func colors(_ key: String, dark: Bool, in values: [String: Any]) -> [UIColor]? {
+        let list: [String]
+        if let many = value(key, dark: dark, in: values) as? [String] {
+            list = many
+        } else if let one = value(key, dark: dark, in: values) as? String {
+            list = [one]
+        } else {
+            return nil
+        }
+        let colors = list.compactMap { parseColor($0) }
+        return colors.isEmpty ? nil : colors
+    }
+
+    /// Colours as Telegram keeps them in a wallpaper: `0xRRGGBB`, the alpha dropped.
+    public static func rgbColors(_ key: String, dark: Bool, in values: [String: Any]) -> [UInt32]? {
+        let list: [String]
+        if let many = value(key, dark: dark, in: values) as? [String] {
+            list = many
+        } else if let one = value(key, dark: dark, in: values) as? String {
+            list = [one]
+        } else {
+            return nil
+        }
+        let colors = list.compactMap { text -> UInt32? in
+            guard text.count >= 6 else {
+                return nil
+            }
+            return UInt32(String(text.prefix(6)), radix: 16)
+        }
+        return colors.isEmpty ? nil : colors
+    }
+
+    public static func number(_ key: String, in values: [String: Any]) -> CGFloat? {
+        guard let number = values[key] as? NSNumber else {
+            return nil
+        }
+        return CGFloat(number.doubleValue)
+    }
+
+    public static func flag(_ key: String, in values: [String: Any]) -> Bool? {
+        return (values[key] as? NSNumber)?.boolValue
+    }
+
+    public static func string(_ key: String, dark: Bool, in values: [String: Any]) -> String? {
+        return value(key, dark: dark, in: values) as? String
+    }
+
+    private static func parseColor(_ text: String) -> UIColor? {
+        guard text.count == 6 || text.count == 8, let raw = UInt64(text, radix: 16) else {
+            return nil
+        }
+        let value = text.count == 6 ? (raw << 8) | 0xff : raw
+        let red = CGFloat((value >> 24) & 0xff) / 255.0
+        let green = CGFloat((value >> 16) & 0xff) / 255.0
+        let blue = CGFloat((value >> 8) & 0xff) / 255.0
+        let alpha = CGFloat(value & 0xff) / 255.0
+        return UIColor(red: red, green: green, blue: blue, alpha: alpha)
+    }
+}
+'''
+
+
+_AORUS_PLUGIN_THEME_HELPER = r'''
+// MARK: - AorusGram plugin appearance
+
+// The look plugins have asked for, laid over the theme last: after the accent, AMOLED and
+// Interface 2.0, so a plugin's colour is the colour drawn. Every key maps onto a colour
+// Telegram's own theme already has, through the theme's own `withUpdated`, which is why there
+// is nothing here a theme file could not also say. The derived theme is kept, keyed on the
+// theme it came from and the table's revision, so the same theme with the same table hands out
+// the same instance -- the rest of the app compares themes by identity.
+private final class AorusPluginThemeCache {
+    let lock = NSLock()
+    weak var source: PresentationTheme?
+    var revision = -1
+    var result: PresentationTheme?
+}
+
+private let aorusPluginThemeCache = AorusPluginThemeCache()
+
+func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme {
+    let (values, revision) = AorusPluginAppearanceValues.snapshot()
+    if values.isEmpty {
+        return theme
+    }
+    let cache = aorusPluginThemeCache
+    cache.lock.lock()
+    if cache.source === theme, cache.revision == revision, let result = cache.result {
+        cache.lock.unlock()
+        return result
+    }
+    cache.lock.unlock()
+
+    let dark = theme.overallDarkAppearance
+    func c(_ key: String) -> UIColor? {
+        return AorusPluginAppearanceValues.color(key, dark: dark, in: values)
+    }
+    func v(_ key: String) -> PresentationThemeVariableColor? {
+        return c(key).map { PresentationThemeVariableColor(color: $0) }
+    }
+
+    let root = theme.rootController
+    let tabBar = root.tabBar.withUpdated(backgroundColor: c("tabBar.background"), separatorColor: c("tabBar.separator"), iconColor: c("tabBar.icon"), selectedIconColor: c("tabBar.selected"), textColor: c("tabBar.text"), selectedTextColor: c("tabBar.selectedText"), badgeBackgroundColor: c("tabBar.badge"), badgeTextColor: c("tabBar.badgeText"))
+    let headerBackground = c("header.background")
+    let navigationBar = root.navigationBar.withUpdated(buttonColor: c("header.buttons"), primaryTextColor: c("header.title"), secondaryTextColor: c("header.subtitle"), controlColor: c("header.controls"), accentTextColor: c("header.accent"), blurredBackgroundColor: headerBackground, opaqueBackgroundColor: headerBackground, separatorColor: c("header.separator"), badgeBackgroundColor: c("header.badge"), badgeTextColor: c("header.badgeText"), segmentedBackgroundColor: c("header.segment"), segmentedForegroundColor: c("header.segmentSelected"), segmentedTextColor: c("header.segmentText"))
+    let searchBar = root.navigationSearchBar.withUpdated(backgroundColor: c("search.background"), accentColor: c("search.accent"), inputFillColor: c("search.field"), inputTextColor: c("search.text"), inputPlaceholderTextColor: c("search.placeholder"), inputIconColor: c("search.icon"))
+    let rootController = root.withUpdated(tabBar: tabBar, navigationBar: navigationBar, navigationSearchBar: searchBar)
+
+    let listBackground = c("list.background")
+    let listItem = c("list.item")
+    let listSeparator = c("list.separator")
+    let list = theme.list.withUpdated(
+        blocksBackgroundColor: listBackground,
+        modalBlocksBackgroundColor: listBackground,
+        plainBackgroundColor: listBackground,
+        modalPlainBackgroundColor: listBackground,
+        itemPrimaryTextColor: c("list.text"),
+        itemSecondaryTextColor: c("list.secondaryText"),
+        itemAccentColor: c("list.accent"),
+        itemDestructiveColor: c("list.destructive"),
+        itemBlocksBackgroundColor: listItem,
+        itemModalBlocksBackgroundColor: listItem,
+        itemHighlightedBackgroundColor: c("list.pressed"),
+        itemBlocksSeparatorColor: listSeparator,
+        itemPlainSeparatorColor: listSeparator,
+        disclosureArrowColor: c("list.arrow"),
+        sectionHeaderTextColor: c("list.sectionHeader"),
+        freeTextColor: c("list.footer"),
+        itemSwitchColors: c("list.switch").map { theme.list.itemSwitchColors.withUpdated(contentColor: $0) },
+        itemCheckColors: c("list.check").map { theme.list.itemCheckColors.withUpdated(fillColor: $0, strokeColor: $0) }
+    )
+
+    var storyRing: PresentationThemeGradientColors?
+    if let ring = AorusPluginAppearanceValues.colors("chatList.storyRing", dark: dark, in: values) {
+        storyRing = theme.chatList.storyUnseenColors.withUpdated(topColor: ring[0], bottomColor: ring.count > 1 ? ring[1] : ring[0])
+    }
+    let chatListBackground = c("chatList.background")
+    let chatListHighlight = c("chatList.highlight")
+    let chatList = theme.chatList.withUpdated(
+        backgroundColor: chatListBackground,
+        itemSeparatorColor: c("chatList.separator"),
+        itemBackgroundColor: chatListBackground,
+        pinnedItemBackgroundColor: c("chatList.pinned"),
+        itemHighlightedBackgroundColor: chatListHighlight,
+        pinnedItemHighlightedBackgroundColor: chatListHighlight,
+        titleColor: c("chatList.title"),
+        dateTextColor: c("chatList.date"),
+        authorNameColor: c("chatList.author"),
+        messageTextColor: c("chatList.text"),
+        messageDraftTextColor: c("chatList.draft"),
+        checkmarkColor: c("chatList.checks"),
+        muteIconColor: c("chatList.muteIcon"),
+        unreadBadgeActiveBackgroundColor: c("badge.unread"),
+        unreadBadgeActiveTextColor: c("badge.unreadText"),
+        unreadBadgeInactiveBackgroundColor: c("badge.muted"),
+        unreadBadgeInactiveTextColor: c("badge.mutedText"),
+        reactionBadgeActiveBackgroundColor: c("badge.reaction"),
+        pinnedBadgeColor: c("badge.pinned"),
+        sectionHeaderFillColor: c("chatList.sectionHeader"),
+        sectionHeaderTextColor: c("chatList.sectionHeaderText"),
+        verifiedIconFillColor: c("chatList.verified"),
+        onlineDotColor: c("chatList.online"),
+        storyUnseenColors: storyRing
+    )
+
+    func parted(_ side: String, _ base: PresentationThemePartedColors) -> PresentationThemePartedColors {
+        let prefix = "bubble." + side + "."
+        func pc(_ name: String) -> UIColor? {
+            return c(prefix + name)
+        }
+        let fill = AorusPluginAppearanceValues.colors(prefix + "fill", dark: dark, in: values)
+        func components(_ source: PresentationThemeBubbleColorComponents) -> PresentationThemeBubbleColorComponents {
+            return source.withUpdated(fill: fill, highlightedFill: pc("highlight"), stroke: pc("stroke"), reactionInactiveBackground: pc("reaction"), reactionInactiveForeground: pc("reactionText"), reactionActiveBackground: pc("reactionSelected"), reactionActiveForeground: pc("reactionSelectedText"))
+        }
+        let bubble = base.bubble.withUpdated(withWallpaper: components(base.bubble.withWallpaper), withoutWallpaper: components(base.bubble.withoutWallpaper))
+        let accent = pc("accent")
+        let fileDescription = pc("fileDescription")
+        return base.withUpdated(
+            bubble: bubble,
+            primaryTextColor: pc("text"),
+            secondaryTextColor: pc("secondaryText"),
+            linkTextColor: pc("link"),
+            accentTextColor: accent,
+            accentControlColor: accent,
+            mediaActiveControlColor: pc("mediaControl"),
+            fileTitleColor: pc("fileTitle"),
+            fileDescriptionColor: fileDescription,
+            fileDurationColor: fileDescription,
+            polls: pc("pollBar").map { base.polls.withUpdated(bar: $0) },
+            actionButtonsFillColor: pc("button").map { PresentationThemeVariableColor(color: $0) },
+            actionButtonsStrokeColor: pc("buttonStroke").map { PresentationThemeVariableColor(color: $0) },
+            actionButtonsTextColor: pc("buttonText").map { PresentationThemeVariableColor(color: $0) },
+            textSelectionColor: pc("selection")
+        )
+    }
+
+    let message = theme.chat.message
+    let freeform = c("bubble.freeform").map { color in
+        message.freeform.withUpdated(withWallpaper: message.freeform.withWallpaper.withUpdated(fill: [color]), withoutWallpaper: message.freeform.withoutWallpaper.withUpdated(fill: [color]))
+    }
+    let updatedMessage = message.withUpdated(incoming: parted("incoming", message.incoming), outgoing: parted("outgoing", message.outgoing), freeform: freeform, outgoingCheckColor: c("bubble.checks"), mediaDateAndStatusFillColor: c("bubble.mediaStatus"), mediaDateAndStatusTextColor: c("bubble.mediaStatusText"), shareButtonFillColor: v("bubble.shareButton"), shareButtonForegroundColor: v("bubble.shareButtonIcon"))
+
+    let service = theme.chat.serviceMessage
+    let serviceFill = c("chat.service")
+    let serviceText = c("chat.serviceText")
+    let dateFill = c("chat.date")
+    func serviceComponents(_ source: PresentationThemeServiceMessageColorComponents) -> PresentationThemeServiceMessageColorComponents {
+        return source.withUpdated(fill: serviceFill, primaryText: serviceText, dateFillStatic: dateFill, dateFillFloating: dateFill)
+    }
+    let updatedService = service.withUpdated(components: service.components.withUpdated(withDefaultWallpaper: serviceComponents(service.components.withDefaultWallpaper), withCustomWallpaper: serviceComponents(service.components.withCustomWallpaper)), unreadBarFillColor: c("chat.unreadBar"), unreadBarTextColor: c("chat.unreadBarText"), dateTextColor: v("chat.dateText"))
+
+    let input = theme.chat.inputPanel
+    let inputBackground = c("input.background")
+    let recording = c("input.recording")
+    let inputPanel = input.withUpdated(
+        panelBackgroundColor: inputBackground,
+        panelBackgroundColorNoWallpaper: inputBackground,
+        panelSeparatorColor: c("input.separator"),
+        panelControlAccentColor: c("input.accent"),
+        panelControlColor: c("input.icons"),
+        inputBackgroundColor: c("input.field"),
+        inputStrokeColor: c("input.fieldStroke"),
+        inputPlaceholderColor: c("input.placeholder"),
+        inputTextColor: c("input.text"),
+        inputControlColor: c("input.fieldIcons"),
+        actionControlFillColor: c("input.send"),
+        actionControlForegroundColor: c("input.sendIcon"),
+        mediaRecordingDotColor: recording,
+        mediaRecordingControl: input.mediaRecordingControl.withUpdated(buttonColor: recording, activeIconColor: c("input.recordingIcon"))
+    )
+    let keyboard = theme.chat.inputButtonPanel.withUpdated(panelBackgroundColor: c("keyboard.background"), buttonFillColor: c("keyboard.button"), buttonStrokeColor: c("keyboard.buttonStroke"), buttonHighlightedFillColor: c("keyboard.buttonPressed"), buttonTextColor: c("keyboard.buttonText"))
+    let emojiBackground = c("emojiPanel.background")
+    let mediaPanel = theme.chat.inputMediaPanel.withUpdated(panelSeparatorColor: c("emojiPanel.separator"), panelIconColor: c("emojiPanel.icons"), panelHighlightedIconBackgroundColor: c("emojiPanel.selectedBackground"), panelHighlightedIconColor: c("emojiPanel.selectedIcon"), stickersBackgroundColor: emojiBackground, stickersSectionTextColor: c("emojiPanel.sectionText"), gifsBackgroundColor: emojiBackground, backgroundColor: emojiBackground)
+    let navigation = theme.chat.historyNavigation.withUpdated(fillColor: c("chat.scrollButton"), strokeColor: c("chat.scrollButtonStroke"), foregroundColor: c("chat.scrollButtonIcon"), badgeBackgroundColor: c("chat.scrollBadge"), badgeTextColor: c("chat.scrollBadgeText"))
+    let chat = theme.chat.withUpdated(message: updatedMessage, serviceMessage: updatedService, inputPanel: inputPanel, inputMediaPanel: mediaPanel, inputButtonPanel: keyboard, historyNavigation: navigation)
+
+    let sheetBackground = c("sheet.background")
+    let sheetPressed = c("sheet.pressed")
+    let actionSheet = theme.actionSheet.withUpdated(dimColor: c("sheet.dim"), opaqueItemBackgroundColor: sheetBackground, itemBackgroundColor: sheetBackground, opaqueItemHighlightedBackgroundColor: sheetPressed, itemHighlightedBackgroundColor: sheetPressed, opaqueItemSeparatorColor: c("sheet.separator"), standardActionTextColor: c("sheet.action"), destructiveActionTextColor: c("sheet.destructive"), primaryTextColor: c("sheet.text"), secondaryTextColor: c("sheet.secondaryText"), controlAccentColor: c("sheet.accent"))
+    let menuSeparator = c("menu.separator")
+    let contextMenu = theme.contextMenu.withUpdated(dimColor: c("menu.dim"), backgroundColor: c("menu.background"), itemSeparatorColor: menuSeparator, sectionSeparatorColor: menuSeparator, itemBackgroundColor: c("menu.item"), itemHighlightedBackgroundColor: c("menu.pressed"), primaryColor: c("menu.text"), secondaryColor: c("menu.secondaryText"), destructiveColor: c("menu.destructive"))
+    let inAppNotification = theme.inAppNotification.withUpdated(fillColor: c("notification.background"), primaryTextColor: c("notification.text"))
+
+    let result = PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: actionSheet, contextMenu: contextMenu, inAppNotification: inAppNotification, chart: theme.chart, preview: theme.preview)
+    cache.lock.lock()
+    cache.source = theme
+    cache.revision = revision
+    cache.result = result
+    cache.lock.unlock()
+    return result
+}
+
+// A plain colour or a gradient of up to four, in place of the wallpaper -- the chat background
+// a plugin asked for, over the one the theme or the person chose.
+func aorusPluginWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool) -> TelegramWallpaper {
+    let values = AorusPluginAppearanceValues.current()
+    guard !values.isEmpty, let colors = AorusPluginAppearanceValues.rgbColors("chat.wallpaper", dark: dark, in: values) else {
+        return wallpaper
+    }
+    if colors.count == 1 {
+        return .color(colors[0])
+    }
+    return .gradient(TelegramWallpaper.Gradient(id: nil, colors: colors, settings: WallpaperSettings()))
+}
+
+// The bubble's shape: its corners, how consecutive bubbles join, and the tail.
+func aorusPluginBubbleCorners(_ corners: PresentationChatBubbleCorners) -> PresentationChatBubbleCorners {
+    let values = AorusPluginAppearanceValues.current()
+    if values.isEmpty {
+        return corners
+    }
+    var result = corners
+    if let radius = AorusPluginAppearanceValues.number("bubble.radius", in: values) {
+        result.mainRadius = radius
+    }
+    if let radius = AorusPluginAppearanceValues.number("bubble.radiusSmall", in: values) {
+        result.auxiliaryRadius = radius
+    }
+    if let merge = AorusPluginAppearanceValues.flag("bubble.mergeCorners", in: values) {
+        result.mergeBubbleCorners = merge
+    }
+    if let tails = AorusPluginAppearanceValues.flag("bubble.tails", in: values) {
+        result.hasTails = tails
+    }
+    return result
+}
+
+// Text sizes, by the names of Telegram's own steps.
+func aorusPluginFontSizes(_ sizes: (chat: PresentationFontSize, lists: PresentationFontSize)) -> (chat: PresentationFontSize, lists: PresentationFontSize) {
+    let values = AorusPluginAppearanceValues.current()
+    if values.isEmpty {
+        return sizes
+    }
+    func size(_ key: String) -> PresentationFontSize? {
+        switch AorusPluginAppearanceValues.string(key, dark: false, in: values) {
+        case "extraSmall":
+            return .extraSmall
+        case "small":
+            return .small
+        case "medium":
+            return .medium
+        case "regular":
+            return .regular
+        case "large":
+            return .large
+        case "extraLarge":
+            return .extraLarge
+        case "extraLargeX2":
+            return .extraLargeX2
+        default:
+            return nil
+        }
+    }
+    return (chat: size("font.chat") ?? sizes.chat, lists: size("font.lists") ?? sizes.lists)
+}
+
+'''
+
+
+def patch_plugin_appearance(tg: Path) -> None:
+    """The look plugins describe with `aorus.appearance`, drawn by Telegram's own code.
+
+    Three places, each where the app already decides the thing a plugin changes:
+
+      * Display gets `AorusPluginAppearanceValues`, the reader of the table the plugin runtime
+        publishes. Both modules below depend on Display and neither can see the runtime.
+      * TelegramPresentationData lays the table over the theme when it builds one -- after the
+        accent colour, AMOLED and Interface 2.0 -- and over the wallpaper, the bubble's corners
+        and tail and the two text sizes, at both places the presentation data is assembled.
+        The refresh trigger the AMOLED switch already uses re-emits on the table's
+        notification, so the look changes while the app is open.
+      * GlassBackgroundComponent reads the glass style and tint for the panes the app draws
+        plainly. A pane Telegram gives a colour of its own keeps it: that colour means
+        something.
+    """
+    display = tg / "submodules/Display/Source/AorusPluginAppearanceValues.swift"
+    display.write_text(AORUS_PLUGIN_APPEARANCE_VALUES_SWIFT.replace("__LOCK_KEY__", _AG_LICENSE_LOCK_KEY), encoding="utf-8")
+    print("PluginAppearance: wrote Display/AorusPluginAppearanceValues.swift")
+
+    path = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
+    t = path.read_text(encoding="utf-8")
+    if "aorusApplyPluginAppearance" not in t:
+        def rep(old: str, new: str, label: str, count: int = 1) -> None:
+            nonlocal t
+            if t.count(old) != count:
+                raise RuntimeError(f"PluginAppearance: anchor '{label}' found {t.count(old)} times, expected {count}")
+            t = t.replace(old, new)
+
+        anchor = "public func currentPresentationDataAndSettings("
+        rep(anchor, _AORUS_PLUGIN_THEME_HELPER + anchor, "helper")
+        rep(
+            "theme: aorusApplyAmoledTheme(theme), autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: aorusAmoledWallpaper(effectiveChatWallpaper, dark: theme.overallDarkAppearance, settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered),",
+            "theme: aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme)), autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: aorusPluginWallpaper(aorusAmoledWallpaper(effectiveChatWallpaper, dark: theme.overallDarkAppearance, settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered), dark: theme.overallDarkAppearance),",
+            "initial presentation data",
+        )
+        rep(
+            "theme: aorusApplyAmoledTheme(themeValue), autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: aorusAmoledWallpaper(effectiveChatWallpaper, dark: themeValue.overallDarkAppearance, settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered),",
+            "theme: aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue)), autoNightModeTriggered: autoNightModeTriggered, chatWallpaper: aorusPluginWallpaper(aorusAmoledWallpaper(effectiveChatWallpaper, dark: themeValue.overallDarkAppearance, settings: themeSettings, autoNightModeTriggered: autoNightModeTriggered), dark: themeValue.overallDarkAppearance),",
+            "live presentation data",
+        )
+        corners = "PresentationChatBubbleCorners(mainRadius: CGFloat(themeSettings.chatBubbleSettings.mainRadius), auxiliaryRadius: CGFloat(themeSettings.chatBubbleSettings.auxiliaryRadius), mergeBubbleCorners: themeSettings.chatBubbleSettings.mergeBubbleCorners)"
+        rep(corners, "aorusPluginBubbleCorners(" + corners + ")", "bubble corners", count=3)
+        rep("= resolveFontSize(settings: themeSettings)", "= aorusPluginFontSizes(resolveFontSize(settings: themeSettings))", "font sizes", count=3)
+        path.write_text(t, encoding="utf-8")
+        print("PluginAppearance: theme, wallpaper, bubble shape and text sizes follow plugins")
+
+    glass = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
+    g = glass.read_text(encoding="utf-8")
+    if "AorusPluginAppearanceValues" not in g:
+        old_decl = "                            let glassEffectValue: UIGlassEffect\n"
+        old_apply = (
+            "                            glassEffectValue.isInteractive = isInteractive\n"
+            "                            glassEffect = glassEffectValue\n"
+        )
+        if g.count(old_decl) != 1 or g.count(old_apply) != 1:
+            raise RuntimeError("PluginAppearance: glass effect anchors are missing")
+        g = g.replace(old_decl, "                            var glassEffectValue: UIGlassEffect\n", 1)
+        g = g.replace(old_apply, (
+            "                            glassEffectValue.isInteractive = isInteractive\n"
+            "                            // AorusGram: the glass a plugin styled, for the panes the app draws plainly.\n"
+            "                            // A pane Telegram gives a colour of its own keeps it: that colour means something.\n"
+            "                            if tintColor.kind == .panel || tintColor.kind == .clear {\n"
+            "                                let aorusValues = AorusPluginAppearanceValues.current()\n"
+            "                                if !aorusValues.isEmpty {\n"
+            "                                    if let aorusStyle = AorusPluginAppearanceValues.string(\"glass.style\", dark: isDark, in: aorusValues) {\n"
+            "                                        let aorusTint = glassEffectValue.tintColor\n"
+            "                                        glassEffectValue = UIGlassEffect(style: aorusStyle == \"clear\" ? .clear : .regular)\n"
+            "                                        glassEffectValue.tintColor = aorusTint\n"
+            "                                        glassEffectValue.isInteractive = isInteractive\n"
+            "                                    }\n"
+            "                                    if let aorusTint = AorusPluginAppearanceValues.color(\"glass.tint\", dark: isDark, in: aorusValues) {\n"
+            "                                        glassEffectValue.tintColor = aorusTint\n"
+            "                                    }\n"
+            "                                }\n"
+            "                            }\n"
+            "                            glassEffect = glassEffectValue\n"
+        ), 1)
+        glass.write_text(g, encoding="utf-8")
+        print("PluginAppearance: glass panes follow the plugin style and tint")
 
 
 def patch_hide_tabs(tg: Path) -> None:
@@ -28426,6 +28897,7 @@ def main() -> None:
     patch_chat_lock(tg)
     patch_bypass_story_screenshot(tg)
     patch_amoled_theme(tg)
+    patch_plugin_appearance(tg)
     patch_plugin_runtime(tg)
     patch_plugin_outgoing_messages(tg)
     patch_plugin_outgoing_hook_composer(tg)

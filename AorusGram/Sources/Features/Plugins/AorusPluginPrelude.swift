@@ -2218,6 +2218,62 @@ public enum AorusPluginPrelude {
             all: function () { return freeze(JSON.parse(JSON.stringify(stringOverrides))); }
         });
 
+        // The look of the app, described in values: colours of every surface, the bubble's
+        // shape, text sizes and the glass. The plugin keeps a layer of its own and the whole
+        // layer is published each time, so resetting a key is publishing the rest. The app
+        // checks every value against its catalogue; one bad value rejects the change, and the
+        // error names the key and what was wrong with it.
+        var appearanceLayer = {};
+        function appearanceCopy() { return JSON.parse(JSON.stringify(appearanceLayer)); }
+        function publishAppearance(next) {
+            var verdict = host.appearanceDefine(JSON.stringify(next));
+            if (verdict === 'denied' || verdict === false) {
+                throw new Error('App customization permission is not granted');
+            }
+            if (typeof verdict === 'string' && verdict.charAt(0) === '[') {
+                var problems = [];
+                try { problems = JSON.parse(verdict); } catch (ignored) { problems = []; }
+                var described = problems.map(function (problem) { return problem.key + ': ' + problem.reason; });
+                throw new TypeError('aorus.appearance: ' + (described.length ? described.join('; ') : 'the values were not accepted'));
+            }
+            appearanceLayer = next;
+        }
+        var appearanceApi = freeze({
+            set: function (values) {
+                if (values === null || typeof values !== 'object' || Array.isArray(values)) {
+                    throw new TypeError('values must be an object of keys and values');
+                }
+                var next = appearanceCopy();
+                var names = Object.keys(values);
+                for (var i = 0; i < names.length; i++) {
+                    var value = values[names[i]];
+                    if (value === null || value === undefined) { delete next[names[i]]; } else { next[names[i]] = value; }
+                }
+                publishAppearance(next);
+                return Object.keys(appearanceLayer).length;
+            },
+            reset: function (keys) {
+                var next = {};
+                if (keys !== undefined && keys !== null) {
+                    var list = typeof keys === 'string' ? [keys] : keys;
+                    if (!Array.isArray(list)) { throw new TypeError('keys must be a key or a list of keys'); }
+                    next = appearanceCopy();
+                    for (var i = 0; i < list.length; i++) { delete next[String(list[i])]; }
+                }
+                publishAppearance(next);
+                return Object.keys(appearanceLayer).length;
+            },
+            get: function () { return freeze(appearanceCopy()); },
+            keys: function () {
+                var raw = host.appearanceCatalog();
+                var list = [];
+                if (typeof raw === 'string') {
+                    try { list = JSON.parse(raw); } catch (ignored) { list = []; }
+                }
+                return freeze(list.map(function (entry) { return freeze(entry); }));
+            }
+        });
+
         // Plugins talking to each other, through the app. A message carries the sender's id,
         // so a plugin always knows who is talking to it, and topics are filtered here rather
         // than making every plugin do it.
@@ -2832,6 +2888,7 @@ public enum AorusPluginPrelude {
             // middle of its own start handler with nothing to say why.
             console: console,
             strings: stringsApi,
+            appearance: appearanceApi,
             plugins: pluginsApi,
             // A message's attachment: what it is, and the four things anyone ever wants to
             // do with one. `selected` is the message a context action was invoked on, which

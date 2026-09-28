@@ -1653,6 +1653,103 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(deniedStringsResults["override"] == .string("refused"), "and the plugin is told, rather than believing it worked")
     deniedStrings.stop()
 
+    // The look of the app: the catalogue, the check every value passes, and the layers.
+    let appearanceCatalogNames = AorusPluginAppearance.catalog.map { $0.name }
+    expect(appearanceCatalogNames.count >= 150, "the appearance catalogue covers the interface")
+    expect(Set(appearanceCatalogNames).count == appearanceCatalogNames.count, "every appearance key is named once")
+    let appearanceCatalogParsed = (try? JSONSerialization.jsonObject(with: Data(AorusPluginAppearance.catalogJSON().utf8))) as? [[String: Any]]
+    expect(appearanceCatalogParsed?.count == appearanceCatalogNames.count, "the catalogue a plugin reads lists every key")
+    let appearanceGood = AorusPluginAppearance.validate([
+        "bubble.outgoing.fill": ["#5b4dff", "8E7CFF"],
+        "bubble.incoming.fill@dark": "1C1C1E",
+        "header.background": "#000000CC",
+        "bubble.radius": NSNumber(value: 20),
+        "bubble.tails": NSNumber(value: false),
+        "font.chat": "large",
+        "glass.style@light": "clear",
+    ])
+    expect(appearanceGood.rejections.isEmpty, "a well-formed layer is taken whole")
+    expect((appearanceGood.values["bubble.outgoing.fill"] as? [String]) == ["5B4DFF", "8E7CFF"], "colours are kept in capitals without the hash")
+    expect((appearanceGood.values["bubble.incoming.fill@dark"] as? [String]) == ["1C1C1E"], "one colour for a gradient key is a gradient of one")
+    expect((appearanceGood.values["header.background"] as? String) == "000000CC", "a colour keeps its alpha")
+    expect((appearanceGood.values["bubble.radius"] as? Double) == 20, "a number in range is kept")
+    expect((appearanceGood.values["bubble.tails"] as? Bool) == false, "a flag is kept as a flag")
+    let appearanceBad = AorusPluginAppearance.validate([
+        "bubble.outgoing.fill": "blue",
+        "bubble.radius": NSNumber(value: 64),
+        "bubble.tails": NSNumber(value: 1),
+        "font.chat": "huge",
+        "bubble.radius@dark": NSNumber(value: 10),
+        "not.a.key": "FFFFFF",
+        "header.title": "FFFFFF",
+    ])
+    let appearanceBadKeys = Set(appearanceBad.rejections.map { $0.key })
+    expect(appearanceBadKeys == ["bubble.outgoing.fill", "bubble.radius", "bubble.tails", "font.chat", "bubble.radius@dark", "not.a.key"], "every bad value is named, and the good one among them is not")
+    expect(appearanceBad.values.isEmpty, "one bad value rejects the whole layer")
+    expect(AorusPluginAppearance.validate(["bubble.outgoing.fill": ["A", "B", "C", "D", "E"]]).rejections.count == 1, "a gradient has at most four colours")
+    let appearanceMerged = AorusPluginAppearance.merge([
+        "b.plugin": ["header.title": "222222"],
+        "a.plugin": ["header.title": "111111", "header.subtitle": "333333"],
+    ])
+    expect((appearanceMerged["header.title"] as? String) == "222222" && (appearanceMerged["header.subtitle"] as? String) == "333333", "layers merge in plugin id order")
+
+    let appearanceHost = AorusPluginNullHost()
+    var publishedLooks: [[String: Any]] = []
+    appearanceHost.onAppearanceChanged = { _, values in publishedLooks.append(values) }
+    var appearanceResults: [String: AorusPluginJSONValue] = [:]
+    appearanceHost.onStorageChanged = { _, values in appearanceResults = values }
+    let appearanceSource = """
+    aorus.on('start', function () {
+        aorus.appearance.set({ 'bubble.outgoing.fill': ['5B4DFF', '8E7CFF'], 'header.title': 'FFFFFF', 'bubble.radius': 18 });
+        aorus.appearance.set({ 'header.title': null, 'badge.unread': 'FF3B30' });
+        try {
+            aorus.appearance.set({ 'badge.unread': 'red', 'tabBar.selected': '5B4DFF' });
+            aorus.storage.set('bad', 'accepted');
+        } catch (error) {
+            aorus.storage.set('bad', error.message.indexOf('badge.unread') >= 0 ? 'named' : error.message);
+        }
+        aorus.storage.set('layer', Object.keys(aorus.appearance.get()).sort().join(','));
+        aorus.storage.set('keys', aorus.appearance.keys().length > 100 ? 'many' : 'few');
+        aorus.storage.set('left', String(aorus.appearance.reset('bubble.radius')));
+    });
+    """
+    let appearanceSandbox = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Appearance"),
+        source: appearanceSource,
+        host: appearanceHost,
+        permissions: [.appCustomization]
+    )
+    let appearanceStarted = DispatchSemaphore(value: 0)
+    appearanceSandbox.start { error in expect(error == nil, "appearance plugin starts"); appearanceStarted.signal() }
+    _ = appearanceStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.3)
+    expect(appearanceResults["bad"] == .string("named"), "a rejected value throws and names its key")
+    expect(appearanceResults["layer"] == .string("badge.unread,bubble.outgoing.fill,bubble.radius"), "null removes a key and a rejected change leaves the layer as it was")
+    expect(appearanceResults["keys"] == .string("many"), "a plugin can read the catalogue")
+    expect(appearanceResults["left"] == .string("2"), "reset answers how many keys remain")
+    expect(publishedLooks.count == 3, "every accepted change publishes the whole layer, and a rejected one publishes nothing")
+    expect((publishedLooks.last?["bubble.outgoing.fill"] as? [String]) == ["5B4DFF", "8E7CFF"] && publishedLooks.last?["bubble.radius"] == nil, "the last layer published is the one left after the reset")
+    appearanceSandbox.stop()
+
+    let deniedAppearanceHost = AorusPluginNullHost()
+    var deniedLooks = 0
+    deniedAppearanceHost.onAppearanceChanged = { _, _ in deniedLooks += 1 }
+    var deniedAppearanceResults: [String: AorusPluginJSONValue] = [:]
+    deniedAppearanceHost.onStorageChanged = { _, values in deniedAppearanceResults = values }
+    let deniedAppearance = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Denied appearance"),
+        source: "aorus.on('start', function () { try { aorus.appearance.set({ 'header.title': 'FFFFFF' }); } catch (error) { aorus.storage.set('look', 'refused'); } });",
+        host: deniedAppearanceHost,
+        permissions: []
+    )
+    let deniedAppearanceStarted = DispatchSemaphore(value: 0)
+    deniedAppearance.start { error in expect(error == nil, "denied appearance plugin starts"); deniedAppearanceStarted.signal() }
+    _ = deniedAppearanceStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.2)
+    expect(deniedLooks == 0, "a look from an ungranted plugin never reaches the app")
+    expect(deniedAppearanceResults["look"] == .string("refused"), "and the plugin is told")
+    deniedAppearance.stop()
+
     // One plugin talking to another, through the app.
     let busHost = AorusPluginNullHost()
     var broadcast: (topic: String, json: String)?

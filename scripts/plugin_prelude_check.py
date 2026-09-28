@@ -156,6 +156,15 @@ const host = new Proxy({}, {
             if (globalThis.__defineVerdict[name] !== undefined) { return globalThis.__defineVerdict[name]; }
             return true;
         };
+        case 'appearanceDefine': return (json) => {
+            record(name, [JSON.parse(json)]);
+            if (globalThis.__defineVerdict[name] !== undefined) { return globalThis.__defineVerdict[name]; }
+            return '';
+        };
+        case 'appearanceCatalog': return () => {
+            record(name, []);
+            return '[]';
+        };
         case 'overlaysDefine':
         case 'nativeButtonsDefine': return (json) => {
             record(name, [json]);
