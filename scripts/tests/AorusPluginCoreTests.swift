@@ -1750,6 +1750,199 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(deniedAppearanceResults["look"] == .string("refused"), "and the plugin is told")
     deniedAppearance.stop()
 
+    // The keys added for switches, buttons, swipe actions, the profile and the settings tiles.
+    for key in ["list.switchOff", "list.switchKnob", "button.fill", "button.text", "swipe.destructive", "swipe.text", "profile.button", "profile.buttonText", "settings.iconBackground", "settings.iconGlyph", "settings.iconRadius", "chatList.storySeen", "bubble.selectCheck", "sheet.check"] {
+        expect(AorusPluginAppearance.catalogByName[key] != nil, "the appearance catalogue has \(key)")
+    }
+    let tileLook = AorusPluginAppearance.validate([
+        "settings.iconBackground@dark": ["00000000"],
+        "settings.iconGlyph": "#FFD60A",
+        "settings.iconRadius": NSNumber(value: 15),
+        "swipe.destructive": "FF453A",
+    ])
+    expect(tileLook.rejections.isEmpty, "settings tiles and swipe actions take a look")
+    expect((tileLook.values["settings.iconBackground@dark"] as? [String]) == ["00000000"], "a tile with no alpha is kept, to take the tile away")
+    expect(AorusPluginAppearance.validate(["settings.iconRadius": NSNumber(value: 16)]).rejections.count == 1, "a tile corner past round is refused")
+    expect(AorusPluginAppearance.validate(["settings.iconRadius@dark": NSNumber(value: 4)]).rejections.count == 1, "a tile corner is the same in dark and light")
+
+    // Icons in place of Telegram's: the catalogue, the check, the merge, and a plugin using them.
+    expect(AorusPluginPermission.requestedBySource("aorus.icons.set({ 'tab.chats': 'star' });").contains(.appCustomization), "replacing an icon asks for app customization")
+    expect(AorusPluginPermission.requestedBySource("aorus.icons.style('pixel');").contains(.appCustomization), "styling the icons asks for app customization")
+    expect(AorusPluginPermission.requestedBySource("aorus.icons.reset();").contains(.appCustomization), "resetting the icons asks for app customization")
+    expect(!AorusPluginPermission.requestedBySource("aorus.icons.slots(); aorus.icons.assets('Chat List/');").contains(.appCustomization), "listing the icons asks for nothing")
+    let iconSlotNames = AorusPluginIcons.catalog.map { $0.name }
+    expect(iconSlotNames.count >= 120, "the icon catalogue covers the interface")
+    expect(Set(iconSlotNames).count == iconSlotNames.count, "every slot is named once")
+    let iconSlotAssets = AorusPluginIcons.catalog.flatMap { $0.assets }
+    expect(Set(iconSlotAssets).count == iconSlotAssets.count, "an icon belongs to one slot")
+    expect(AorusPluginIcons.groups.contains("tab") && AorusPluginIcons.groups.contains("plus") && AorusPluginIcons.groups.contains("settings"), "slots come in groups")
+    let iconCatalogParsed = (try? JSONSerialization.jsonObject(with: Data(AorusPluginIcons.catalogJSON().utf8))) as? [[String: Any]]
+    expect(iconCatalogParsed?.count == iconSlotNames.count && (iconCatalogParsed?.first?["animated"] as? Bool) == true, "the catalogue lists every slot and says which animate")
+    let knownIcons: Set<String> = ["Chat List/Tabs/IconChats", "Navigation/Back", "Chat/Input/Text/SendIcon"]
+    let iconExists: (String) -> Bool = { knownIcons.contains($0) }
+    // A PNG of one pixel.
+    let tinyPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    let iconsGood = AorusPluginIcons.validate([
+        "tab.chats": "bubble.left.and.bubble.right.fill",
+        "input.send": ["pixels": ["..#..", ".###.", "#####"], "palette": ["#": "#ff3b30"]],
+        "header.back": ["path": "M15 4 L7 12 L15 20", "stroke": NSNumber(value: 2.5)],
+        "plus.plain": ["text": "+", "font": "rounded", "weight": "bold"],
+        "Navigation/Back": ["image": "data:image/png;base64," + tinyPNG, "scale": NSNumber(value: 0.8)],
+        "profile.more": ["asset": "Chat List/Tabs/IconChats", "flip": "x", "offset": [NSNumber(value: 1), NSNumber(value: -2)]],
+        "tab.calls": ["hidden": NSNumber(value: true)],
+        "*": ["look": "pixel", "amount": NSNumber(value: 2), "only": ["tab", "Chat/Input/"]],
+    ], iconExists: iconExists)
+    expect(iconsGood.rejections.isEmpty, "well-formed icons are taken whole")
+    let chatsSpec = iconsGood.layer["tab.chats"] as? [String: Any]
+    expect(chatsSpec?["kind"] as? String == "symbol" && chatsSpec?["symbol"] as? String == "bubble.left.and.bubble.right.fill", "a string is an SF Symbol")
+    expect((chatsSpec?["targets"] as? [String]) == ["Chat List/Tabs/IconChats"], "a slot names the icons it replaces")
+    expect(((iconsGood.layer["input.send"] as? [String: Any])?["palette"] as? [String: String]) == ["#": "FF3B30"], "palette colours are kept in capitals")
+    expect((iconsGood.layer["Navigation/Back"] as? [String: Any])?["image"] is Data, "a PNG is kept as its bytes")
+    expect(iconsGood.layer["header.back"] == nil, "a slot whose only icon is also named directly is left out")
+    let pathSpec = AorusPluginIcons.validate(["header.close": ["path": "M4 4 L20 20 M20 4 L4 20", "stroke": NSNumber(value: 2)]], iconExists: iconExists).layer["header.close"] as? [String: Any]
+    expect((pathSpec?["viewBox"] as? [Double]) == [0, 0, 24, 24], "a path without a viewBox is on a 24 point grid")
+    let iconStyle = iconsGood.layer["*"] as? [String: Any]
+    expect(iconStyle?["look"] as? String == "pixel" && iconStyle?["amount"] as? Double == 2, "the style keeps its look and amount")
+    expect((iconStyle?["names"] as? [String])?.contains("Chat List/Tabs/IconChats") == true && (iconStyle?["prefixes"] as? [String]) == ["Chat/Input/"], "a group becomes its icons and a folder stays a folder")
+    let defaultStyle = AorusPluginIcons.validate(["*": "glow"], iconExists: iconExists).layer["*"] as? [String: Any]
+    expect(defaultStyle?["amount"] as? Double == 3 && (defaultStyle?["names"] as? [String])?.isEmpty == true, "a look alone reaches every icon at its standard strength")
+    let iconsBad = AorusPluginIcons.validate([
+        "tab.chats": ["symbol": "Not A Symbol"],
+        "input.send": ["pixels": ["##", "#"]],
+        "header.back": ["path": "L 1 2"],
+        "plus.plain": ["text": "much too long for an icon"],
+        "Navigation/Back": ["image": "aGVsbG8="],
+        "profile.more": ["symbol": "star", "text": "x"],
+        "tab.calls": ["symbol": "phone", "glow": NSNumber(value: 1)],
+        "No/Such Icon": "star",
+        "made.up": "star",
+        "*": ["look": "sparkle"],
+        "tab.settings": ["symbol": "gear", "scale": NSNumber(value: 9)],
+        "input.attach": ["pixels": ["ab"], "palette": ["a": "FF0000"]],
+    ], iconExists: iconExists)
+    let iconsBadKeys = Set(iconsBad.rejections.map { $0.key })
+    expect(iconsBadKeys == ["tab.chats", "input.send", "header.back", "plus.plain", "Navigation/Back", "profile.more", "tab.calls", "No/Such Icon", "made.up", "*", "tab.settings", "input.attach"], "every bad icon is named")
+    expect(iconsBad.layer.isEmpty, "one bad icon rejects the whole layer")
+    expect(AorusPluginIconPath.isValid("M0 0h24v24H0z") && AorusPluginIconPath.isValid("m1.5-2.25 3e1,4.5 a2 2 0 1 0 4 0z"), "compact SVG paths are read")
+    expect(!AorusPluginIconPath.isValid("M0 0 C1 2 3") && !AorusPluginIconPath.isValid("M0 0 X 1 2") && !AorusPluginIconPath.isValid("M0 0 \u{df} 1 2"), "a path with missing numbers or a stray letter is refused")
+    expect(AorusPluginIcons.pngSize(Data(base64Encoded: tinyPNG) ?? Data())?.width == 1, "a PNG's size is read from its header")
+    let iconsMerged = AorusPluginIcons.merge([
+        "b.plugin": ["tab.chats": ["kind": "symbol", "symbol": "b", "targets": ["Chat List/Tabs/IconChats"]], "*": ["look": "bold"]],
+        "a.plugin": ["tab.chats": ["kind": "symbol", "symbol": "a", "targets": ["Chat List/Tabs/IconChats"]], "*": ["look": "pixel"]],
+    ])
+    expect(iconsMerged.icons["Chat List/Tabs/IconChats"]?["symbol"] as? String == "b" && iconsMerged.style?["look"] as? String == "bold", "icon layers merge in plugin id order")
+
+    let iconsHost = AorusPluginNullHost()
+    iconsHost.iconNames = ["Chat List/Tabs/IconChats", "Chat List/Tabs/IconCalls", "Navigation/Back"]
+    var publishedIcons: [[String: Any]] = []
+    iconsHost.onIconsChanged = { _, layer in publishedIcons.append(layer) }
+    var iconsResults: [String: AorusPluginJSONValue] = [:]
+    iconsHost.onStorageChanged = { _, values in iconsResults = values }
+    let iconsSource = """
+    aorus.on('start', function () {
+        aorus.icons.set({ 'tab.chats': 'message.fill', 'Navigation/Back': { symbol: 'chevron.left', weight: 'bold' } });
+        aorus.icons.style({ look: 'glow', only: ['tab'] });
+        try {
+            aorus.icons.set({ 'Chat List/Nope': 'star' });
+            aorus.storage.set('bad', 'accepted');
+        } catch (error) {
+            aorus.storage.set('bad', error.message.indexOf('Chat List/Nope') >= 0 ? 'named' : error.message);
+        }
+        aorus.storage.set('layer', Object.keys(aorus.icons.get()).sort().join(','));
+        aorus.storage.set('slots', aorus.icons.slots().length > 100 ? 'many' : 'few');
+        aorus.storage.set('assets', aorus.icons.assets('Chat List/').join(','));
+        aorus.storage.set('left', String(aorus.icons.reset('tab.chats')));
+    });
+    """
+    let iconsSandbox = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Icons"),
+        source: iconsSource,
+        host: iconsHost,
+        permissions: [.appCustomization]
+    )
+    let iconsStarted = DispatchSemaphore(value: 0)
+    iconsSandbox.start { error in expect(error == nil, "icons plugin starts"); iconsStarted.signal() }
+    _ = iconsStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.3)
+    expect(iconsResults["bad"] == .string("named"), "an icon Telegram does not have is refused by name")
+    expect(iconsResults["layer"] == .string("*,Navigation/Back,tab.chats"), "a refused change leaves the layer as it was")
+    expect(iconsResults["slots"] == .string("many"), "a plugin can read the slots")
+    expect(iconsResults["assets"] == .string("Chat List/Tabs/IconCalls,Chat List/Tabs/IconChats"), "a plugin can list Telegram's icons by folder")
+    expect(iconsResults["left"] == .string("1"), "reset answers how many icons remain")
+    expect(publishedIcons.count == 3, "every accepted change publishes the whole layer, and a rejected one publishes nothing")
+    let lastIconLayer = publishedIcons.last
+    expect(lastIconLayer?["tab.chats"] == nil && (lastIconLayer?["*"] as? [String: Any])?["look"] as? String == "glow", "the layer left after the reset keeps the style")
+    expect(((lastIconLayer?["Navigation/Back"] as? [String: Any])?["targets"] as? [String]) == ["Navigation/Back"], "an icon named directly replaces itself")
+    iconsSandbox.stop()
+
+    let deniedIconsHost = AorusPluginNullHost()
+    var deniedIcons = 0
+    deniedIconsHost.onIconsChanged = { _, _ in deniedIcons += 1 }
+    var deniedIconsResults: [String: AorusPluginJSONValue] = [:]
+    deniedIconsHost.onStorageChanged = { _, values in deniedIconsResults = values }
+    let deniedIconsSandbox = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Denied icons"),
+        source: "aorus.on('start', function () { try { aorus.icons.style('pixel'); } catch (error) { aorus.storage.set('icons', 'refused'); } });",
+        host: deniedIconsHost,
+        permissions: []
+    )
+    let deniedIconsStarted = DispatchSemaphore(value: 0)
+    deniedIconsSandbox.start { error in expect(error == nil, "denied icons plugin starts"); deniedIconsStarted.signal() }
+    _ = deniedIconsStarted.wait(timeout: .now() + 2)
+    Thread.sleep(forTimeInterval: 0.2)
+    expect(deniedIcons == 0, "icons from an ungranted plugin never reach the app")
+    expect(deniedIconsResults["icons"] == .string("refused"), "and the plugin is told")
+    deniedIconsSandbox.stop()
+
+    // Drawn page rows: each kind is put in the form the screen draws, and one it could not
+    // draw rejects the page.
+    let drawnPageJSON = Data("""
+    [{"id":"dash","title":"Dashboard","sections":[{"rows":[
+      {"id":"card","type":"hero","title":"Hello","colors":["#6a5cff","9B6BFF"],"value":"123456789"},
+      {"id":"load","type":"progress","title":"Load","value":7,"max":5},
+      {"id":"cpu","type":"ring","title":"CPU","value":0.25},
+      {"id":"week","type":"chart","title":"Week","values":[1,4,2],"height":1000},
+      {"id":"users","type":"stat","title":"Users","value":1200,"subtitle":"+12%","style":"up"},
+      {"id":"mode","type":"segmented","title":"Mode","options":[{"value":"a","title":"A"},{"value":"b","title":"B"}]},
+      {"id":"tint","type":"color","title":"Tint","value":"#ff9500"},
+      {"id":"when","type":"date","title":"When","value":1700000000000,"style":"date"},
+      {"id":"tags","type":"chips","title":"Tags","multiple":true,"options":[{"value":"x","title":"X"},{"value":"y","title":"Y"}],"value":["y","y"]},
+      {"id":"pic","type":"image","title":"Picture","image":"TINY"},
+      {"id":"snippet","type":"code","title":"Code","value":"let x = 1"},
+      {"id":"stars","type":"rating","title":"Stars","value":9,"max":5},
+      {"id":"note","type":"text","title":"Note","badge":"NEW","colors":["34C759"]}
+    ]}]}]
+    """.replacingOccurrences(of: "TINY", with: tinyPNG).utf8)
+    let drawnRows = AorusPluginUIPage.validated(from: drawnPageJSON)?.first?.sections.first?.rows ?? []
+    expect(drawnRows.count == 13, "every drawn kind is accepted")
+    if drawnRows.count == 13 {
+        expect(drawnRows[0].value == .string("12345678") && drawnRows[0].colors == ["6A5CFF", "9B6BFF"], "a card's glyph is cut short and its colours kept in capitals")
+        expect(drawnRows[1].value == .number(5) && drawnRows[1].fraction == 1, "a bar is held to its range")
+        expect(drawnRows[2].minimum == 0 && drawnRows[2].maximum == 1 && drawnRows[2].fraction == 0.25, "a ring runs from 0 to 1 unless it says")
+        expect(drawnRows[3].style == "line" && drawnRows[3].height == 320, "a chart is a line unless it says, and no taller than the screen allows")
+        expect(drawnRows[4].style == "up", "a figure keeps its trend")
+        expect(drawnRows[5].value == .string("a"), "segments start on the first")
+        expect(drawnRows[6].value == .string("FF9500"), "a colour is kept in capitals")
+        expect(drawnRows[7].style == "date", "a date keeps its mode")
+        expect(drawnRows[8].value == .array([.string("y")]), "chosen pills are kept once each")
+        expect(drawnRows[9].imageData != nil && drawnRows[9].height == 180, "a picture is read and given a height")
+        expect(drawnRows[11].value == .number(5) && drawnRows[11].maximum == 5, "a rating is held to its stars")
+        expect(drawnRows[12].badge == "NEW", "a row keeps its badge")
+    }
+    func drawnPage(_ row: String) -> Data {
+        return Data("[{\"id\":\"p\",\"title\":\"P\",\"sections\":[{\"rows\":[\(row)]}]}]".utf8)
+    }
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"c\",\"type\":\"chart\",\"title\":\"C\",\"values\":[]}")) == nil, "a chart needs values")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"c\",\"type\":\"chart\",\"title\":\"C\",\"values\":[1],\"style\":\"pie\"}")) == nil, "a chart style is one the screen draws")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"s\",\"type\":\"segmented\",\"title\":\"S\",\"options\":[{\"value\":\"a\",\"title\":\"A\"}]}")) == nil, "segments need two options")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"s\",\"type\":\"segmented\",\"title\":\"S\",\"value\":\"z\",\"options\":[{\"value\":\"a\",\"title\":\"A\"},{\"value\":\"b\",\"title\":\"B\"}]}")) == nil, "a segment chosen is one of them")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"t\",\"type\":\"chips\",\"title\":\"T\",\"value\":[\"a\"],\"options\":[{\"value\":\"a\",\"title\":\"A\"}]}")) == nil, "a list of pills is chosen only where several may be")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"i\",\"type\":\"image\",\"title\":\"I\",\"image\":\"aGVsbG8=\"}")) == nil, "a picture is a PNG or a JPEG")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"r\",\"type\":\"rating\",\"title\":\"R\",\"max\":11}")) == nil, "a rating has at most ten stars")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"x\",\"type\":\"text\",\"title\":\"X\",\"colors\":[\"blue\"]}")) == nil, "a row's colours are colours")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"b\",\"type\":\"progress\",\"title\":\"B\",\"min\":2,\"max\":1}")) == nil, "a range runs upwards")
+    expect(AorusPluginUIPage.validated(from: drawnPage("{\"id\":\"x\",\"type\":\"text\",\"title\":\"X\",\"value\":[1]}")) == nil, "a list is a value only for pills")
+
     // One plugin talking to another, through the app.
     let busHost = AorusPluginNullHost()
     var broadcast: (topic: String, json: String)?

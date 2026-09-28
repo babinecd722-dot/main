@@ -4070,12 +4070,17 @@ def main() -> None:
     presentation_data = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
     glass_component = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
     display_values = tg / "submodules/Display/Source/AorusPluginAppearanceValues.swift"
+    settings_resources = tg / "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift"
+    profile_header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
     if not appearance_core.is_file() or not display_values.is_file():
         err.append("PluginAppearance: the appearance catalogue or its reader is missing")
     else:
         import re as _re_look
         core_text = appearance_core.read_text(encoding="utf-8")
-        drawn = presentation_data.read_text(encoding="utf-8") + glass_component.read_text(encoding="utf-8")
+        drawn = "".join(
+            path.read_text(encoding="utf-8")
+            for path in (presentation_data, glass_component, settings_resources, profile_header)
+        )
         if "aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme))" not in drawn or "aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue))" not in drawn:
             err.append("PluginAppearance: the theme is built without the plugin look")
         if "aorusgram.pluginAppearanceChanged" not in drawn:
@@ -4087,6 +4092,45 @@ def main() -> None:
                     err.append(f"PluginAppearance: bubble key {tail} is accepted but not drawn")
             elif f'"{name}"' not in drawn:
                 err.append(f"PluginAppearance: {name} is accepted but not drawn")
+
+    # Plugin icons: every icon comes through AppBundle's initializer, which asks the resolver
+    # Display installs at launch; a replaced icon reaches the theme's cache, the settings icons
+    # and the four places that animate an icon; and every icon a slot names is one the
+    # catalogue has, or the slot would be accepted and draw nothing.
+    icons_core = here.parent / "AorusGram" / "Sources" / "Features" / "Plugins" / "AorusPluginIcons.swift"
+    icon_checks = [
+        ("submodules/AppBundle/Sources/AppBundle/AppBundle.m", "[resolver resolveBundleImageNamed:bundleImageName original:image]"),
+        ("submodules/AppBundle/PublicHeaders/AppBundle/AppBundle.h", "void setAppBundleImageResolver("),
+        ("submodules/Display/Source/AorusPluginIconValues.swift", "setAppBundleImageResolver(AorusBundleIconResolver())"),
+        ("submodules/TelegramUI/Sources/AppDelegate.swift", "AorusPluginIconValues.install()"),
+        ("submodules/TelegramPresentationData/Sources/PresentationsResourceCache.swift", "holder.aorusClearIfIconsChanged(aorusRevision)"),
+        ("submodules/TelegramPresentationData/Sources/PresentationData.swift", "!AorusPluginIconValues.isActive"),
+        ("submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift", "return aorusSettingsIcon(\"savedMessages\""),
+        ("submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift", "aorusTabBarStillImage(animationName: $0)"),
+        ("submodules/TelegramUI/Components/ChatTextInputMediaRecordingButton/Sources/ChatTextInputMediaRecordingButton.swift", "AorusPluginIconValues.stillImage(aorusName)"),
+        ("submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AccessoryItemIconButton.swift", "AccessoryItemIconButton.aorusStillImage(item: item)"),
+        ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift", "AorusPluginIconValues.affects(\"Peer Info/ButtonMore\") ? nil : \"anim_profilemore\""),
+        ("submodules/AorusGramUI/Sources/Features/Plugins/AorusBundleIconNames.swift", "static let all: [String] = ["),
+    ]
+    for relative, marker in icon_checks:
+        target = tg / relative
+        if not target.is_file() or marker not in target.read_text(encoding="utf-8"):
+            err.append(f"PluginIcons: {relative} is missing {marker!r}")
+    if settings_resources.is_file() and "    public static let " in settings_resources.read_text(encoding="utf-8"):
+        err.append("PluginIcons: a settings icon is still drawn once and kept")
+    if icons_core.is_file():
+        import re as _re_icons
+        catalogue_root = tg / "submodules/TelegramUI/Images.xcassets"
+        slot_assets: list[str] = []
+        for body in _re_icons.findall(r'Slot\("[^"]+", \[([^\]]*)\]', icons_core.read_text(encoding="utf-8")):
+            slot_assets += _re_icons.findall(r'"([^"]+)"', body)
+        if len(slot_assets) != len(set(slot_assets)):
+            err.append("PluginIcons: an icon belongs to two slots")
+        for asset in slot_assets:
+            if not (catalogue_root / f"{asset}.imageset").is_dir():
+                err.append(f"PluginIcons: slot icon {asset} is not in Telegram's catalogue")
+    else:
+        err.append("PluginIcons: the icon catalogue is missing")
 
     # BGTask identifier in plist
     bgtask_key = "BGTaskSchedulerPermittedIdentifiers"

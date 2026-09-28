@@ -91,6 +91,8 @@ public final class AorusPluginRuntimeManager {
     /// The look each plugin describes, by plugin. Started from what was kept at the last
     /// launch, so the look is in place before any plugin has started again.
     private var appearanceLayers: [String: [String: Any]] = AorusPluginAppearance.storedLayers()
+    /// The icons each plugin draws, by plugin, kept across launches the same way as the look.
+    private var iconLayers: [String: [String: Any]] = AorusPluginIcons.storedLayers()
     private var tabs: [String: [AorusPluginTab]] = [:]
     /// Badges plugins set on their tabs, by `pluginId + "\u{1}" + tabId`.
     private var tabBadges: [String: String] = [:]
@@ -171,8 +173,14 @@ public final class AorusPluginRuntimeManager {
         }
         let prunedLooks = keptLooks.count != appearanceLayers.count
         appearanceLayers = keptLooks
+        let keptIcons = iconLayers.filter { id, _ in
+            lookIds.contains(id) || (!listedIds.contains(id) && store.contains(id: id))
+        }
+        let prunedIcons = keptIcons.count != iconLayers.count
+        iconLayers = keptIcons
         lock.unlock()
         if prunedLooks { publishAppearance() }
+        if prunedIcons { publishIcons() }
 
         // Stale is a plugin whose manifest was read and says off, or one that is gone. One whose
         // manifest could not be read just now goes on running: a read that failed is not
@@ -260,12 +268,14 @@ public final class AorusPluginRuntimeManager {
             nativeButtons[id] = nil
             stringOverrides[id] = nil
             appearanceLayers[id] = nil
+            iconLayers[id] = nil
             tabs[id] = nil
             tabBadges = tabBadges.filter { key, _ in key.components(separatedBy: "\u{1}").first != id }
         }
         lock.unlock()
         publishTabsIfChanged()
         publishAppearance()
+        publishIcons()
         for id in ids {
             AorusPluginHookBroker.shared.removePlugin(id)
             // A socket that outlived its plugin is a connection nobody can see.
@@ -531,6 +541,20 @@ public final class AorusPluginRuntimeManager {
         AorusPluginAppearance.publish(layers: layers)
     }
 
+    fileprivate func setIcons(_ layer: [String: Any], id: String) {
+        lock.lock(); iconLayers[id] = layer.isEmpty ? nil : layer; lock.unlock()
+        publishIcons()
+    }
+
+    /// Every plugin's icons, kept as layers: the drawing code merges them by plugin id, and
+    /// they are only rewritten, and the app only redraws, when they actually changed.
+    private func publishIcons() {
+        lock.lock()
+        let layers = iconLayers
+        lock.unlock()
+        AorusPluginIcons.publish(layers: layers)
+    }
+
     /// Every override every running plugin has asked for, merged into the one table the
     /// string lookup reads.
     ///
@@ -761,8 +785,11 @@ public final class AorusPluginRuntimeManager {
         lock.lock()
         let hadLooks = !appearanceLayers.isEmpty
         appearanceLayers.removeAll()
+        let hadIcons = !iconLayers.isEmpty
+        iconLayers.removeAll()
         lock.unlock()
         if hadLooks { publishAppearance() }
+        if hadIcons { publishIcons() }
     }
 
     private func start(record: AorusPluginRecord, host: AorusPluginTelegramHost, permissions: Set<AorusPluginPermission>, completion: ((AorusPluginRunError?) -> Void)? = nil) {
@@ -785,6 +812,12 @@ public final class AorusPluginRuntimeManager {
             let hadLook = appearanceLayers.removeValue(forKey: record.manifest.id) != nil
             lock.unlock()
             if hadLook { publishAppearance() }
+        }
+        if !record.source.contains("aorus.icons") {
+            lock.lock()
+            let hadIcons = iconLayers.removeValue(forKey: record.manifest.id) != nil
+            lock.unlock()
+            if hadIcons { publishIcons() }
         }
         let sandbox = AorusPluginSandbox(
             manifest: record.manifest,
@@ -2145,6 +2178,15 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
               manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
         manager?.setAppearance(values, id: pluginId)
     }
+
+    func pluginIconsChanged(_ pluginId: String, layer: [String: Any]) {
+        guard AorusPluginEntitlement.isAllowed,
+              manager?.isPermissionGranted(.appCustomization, pluginId: pluginId) == true else { return }
+        manager?.setIcons(layer, id: pluginId)
+    }
+
+    /// Every icon in Telegram's asset catalogue, listed when the app was built.
+    var pluginIconNames: [String] { AorusBundleIconNames.all }
 
     /// A notification, from a plugin, to somebody who is not looking at the screen.
     ///

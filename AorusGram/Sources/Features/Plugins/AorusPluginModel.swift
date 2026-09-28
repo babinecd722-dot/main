@@ -320,6 +320,9 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 // The look of the app. Reading the catalogue or the plugin's own layer asks for
                 // nothing; changing the look is the same capability as the rest of this list.
                 "aorus.appearance.set", "aorus.appearance.reset",
+                // Icons in place of Telegram's and the style over them: listing the slots and the
+                // icons asks for nothing, drawing any of it is changing the app.
+                "aorus.icons.set", "aorus.icons.style", "aorus.icons.reset",
                 "aorus.theme.setAccentColor", "aorus.theme.resetAccentColor",
                 "aorus.navigation.openSettings", "aorus.app.openSettings",
             ]),
@@ -469,7 +472,38 @@ public struct AorusPluginUIPage: Codable, Equatable {
             case link
             case slider
             case stepper
+            /// A card across the section: a gradient, a glyph or an emoji, a title and a line.
+            case hero
+            /// A bar filled to `value` between `min` and `max`, 0 and 1 unless said.
+            case progress
+            /// A ring filled the same way, with a word in the middle.
+            case ring
+            /// A line, bars or an area over `values`.
+            case chart
+            /// A figure large, with a trend beside it.
+            case stat
+            /// Two to five options side by side, one chosen.
+            case segmented
+            /// A colour, chosen with the system's picker.
+            case color
+            /// A date, a time or both.
+            case date
+            /// Pills to choose one or several of.
+            case chips
+            /// A picture the plugin carries, in base64.
+            case image
+            /// Text in a monospaced block that copies itself when tapped.
+            case code
+            /// Stars, from none to `max`.
+            case rating
         }
+
+        public static let chartStyles = ["line", "bar", "area"]
+        public static let dateStyles = ["date", "time", "dateTime"]
+        public static let trends = ["up", "down", "flat"]
+        /// A picture on a page, before base64: small enough that a page republished for every
+        /// change of a value does not carry megabytes across.
+        public static let maximumImageBytes = 96 * 1024
 
         public var id: String
         public var kind: Kind
@@ -483,8 +517,15 @@ public struct AorusPluginUIPage: Codable, Equatable {
         public var maximum: Double?
         public var step: Double?
         public var destructive: Bool
+        public var values: [Double]?
+        public var colors: [String]?
+        public var style: String?
+        public var image: String?
+        public var height: Double?
+        public var badge: String?
+        public var multiple: Bool?
 
-        public init(id: String, kind: Kind, title: String, subtitle: String? = nil, icon: String? = nil, value: AorusPluginJSONValue? = nil, options: [AorusPluginSettingField.Option]? = nil, url: String? = nil, minimum: Double? = nil, maximum: Double? = nil, step: Double? = nil, destructive: Bool = false) {
+        public init(id: String, kind: Kind, title: String, subtitle: String? = nil, icon: String? = nil, value: AorusPluginJSONValue? = nil, options: [AorusPluginSettingField.Option]? = nil, url: String? = nil, minimum: Double? = nil, maximum: Double? = nil, step: Double? = nil, destructive: Bool = false, values: [Double]? = nil, colors: [String]? = nil, style: String? = nil, image: String? = nil, height: Double? = nil, badge: String? = nil, multiple: Bool? = nil) {
             self.id = id
             self.kind = kind
             self.title = title
@@ -497,6 +538,13 @@ public struct AorusPluginUIPage: Codable, Equatable {
             self.maximum = maximum
             self.step = step
             self.destructive = destructive
+            self.values = values
+            self.colors = colors
+            self.style = style
+            self.image = image
+            self.height = height
+            self.badge = badge
+            self.multiple = multiple
         }
 
         private enum CodingKeys: String, CodingKey {
@@ -512,6 +560,13 @@ public struct AorusPluginUIPage: Codable, Equatable {
             case maximum = "max"
             case step
             case destructive
+            case values
+            case colors
+            case style
+            case image
+            case height
+            case badge
+            case multiple
         }
 
         public init(from decoder: Decoder) throws {
@@ -528,6 +583,38 @@ public struct AorusPluginUIPage: Codable, Equatable {
             maximum = try container.decodeIfPresent(Double.self, forKey: .maximum)
             step = try container.decodeIfPresent(Double.self, forKey: .step)
             destructive = try container.decodeIfPresent(Bool.self, forKey: .destructive) ?? false
+            values = try container.decodeIfPresent([Double].self, forKey: .values)
+            colors = try container.decodeIfPresent([String].self, forKey: .colors)
+            style = try container.decodeIfPresent(String.self, forKey: .style)
+            image = try container.decodeIfPresent(String.self, forKey: .image)
+            height = try container.decodeIfPresent(Double.self, forKey: .height)
+            badge = try container.decodeIfPresent(String.self, forKey: .badge)
+            multiple = try container.decodeIfPresent(Bool.self, forKey: .multiple)
+        }
+
+        /// The picture's bytes, when the row carries a PNG or a JPEG.
+        public var imageData: Data? {
+            guard var text = image else { return nil }
+            if text.hasPrefix("data:"), let comma = text.firstIndex(of: ",") {
+                text = String(text[text.index(after: comma)...])
+            }
+            guard let data = Data(base64Encoded: text, options: [.ignoreUnknownCharacters]), data.count <= Row.maximumImageBytes else {
+                return nil
+            }
+            let bytes = [UInt8](data.prefix(8))
+            let png: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+            if bytes == png || (bytes.count >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
+                return data
+            }
+            return nil
+        }
+
+        /// Where `value` sits between `min` and `max`, from 0 to 1.
+        public var fraction: Double {
+            let minimum = self.minimum ?? 0
+            let maximum = self.maximum ?? 1
+            guard maximum > minimum, let current = value?.doubleValue else { return 0 }
+            return min(1, max(0, (current - minimum) / (maximum - minimum)))
         }
     }
 
@@ -542,7 +629,8 @@ public struct AorusPluginUIPage: Codable, Equatable {
     }
 
     public static func validated(from data: Data) -> [AorusPluginUIPage]? {
-        guard data.count <= 128 * 1024,
+        // Room for a few pictures; each is held to `Row.maximumImageBytes` below.
+        guard data.count <= 512 * 1024,
               var pages = try? JSONDecoder().decode([AorusPluginUIPage].self, from: data),
               pages.count <= 12 else {
             return nil
@@ -583,11 +671,22 @@ public struct AorusPluginUIPage: Codable, Equatable {
                     } }
                     if case let .string(value)? = row.value {
                         row.value = .string(String(value.prefix(16_384)))
-                    } else if case .array? = row.value {
+                    } else if case .array? = row.value, row.kind != .chips {
                         return nil
                     } else if case .object? = row.value {
                         return nil
                     }
+                    row.badge = row.badge.map { String($0.prefix(24)) }
+                    if let colors = row.colors {
+                        guard colors.count <= 4 else { return nil }
+                        var normalized: [String] = []
+                        for color in colors {
+                            guard let hex = AorusPluginOverlay.normalizedColor(color) else { return nil }
+                            normalized.append(hex)
+                        }
+                        row.colors = normalized.isEmpty ? nil : normalized
+                    }
+                    guard validateKind(&row) else { return nil }
                     if row.kind == .link {
                         guard let value = row.url, let url = URL(string: value),
                               let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https"),
@@ -613,6 +712,90 @@ public struct AorusPluginUIPage: Codable, Equatable {
             pages[pageIndex] = page
         }
         return pages
+    }
+
+    /// What each of the drawn kinds needs, put in the form the screen draws: numbers inside
+    /// their range, a choice among the options, a known style. False for a row that could not
+    /// be drawn, which rejects the page like any other bad row.
+    private static func validateKind(_ row: inout Row) -> Bool {
+        func finite(_ value: Double?) -> Bool {
+            guard let value else { return true }
+            return value.isFinite && abs(value) <= 1_000_000_000_000_000
+        }
+        guard finite(row.minimum), finite(row.maximum), finite(row.height) else { return false }
+        switch row.kind {
+        case .progress, .ring:
+            let minimum = row.minimum ?? 0
+            let maximum = row.maximum ?? 1
+            guard minimum < maximum else { return false }
+            row.minimum = minimum
+            row.maximum = maximum
+            let current = row.value?.doubleValue ?? minimum
+            guard current.isFinite else { return false }
+            row.value = .number(min(maximum, max(minimum, current)))
+        case .chart:
+            guard let values = row.values, !values.isEmpty, values.count <= 64, values.allSatisfy({ $0.isFinite && abs($0) <= 1_000_000_000_000 }) else { return false }
+            let style = row.style ?? "line"
+            guard Row.chartStyles.contains(style) else { return false }
+            row.style = style
+            row.height = min(320, max(80, row.height ?? 140))
+        case .stat:
+            if let style = row.style, !Row.trends.contains(style) { return false }
+            if case .bool? = row.value { return false }
+        case .segmented:
+            guard let options = row.options, options.count >= 2, options.count <= 5 else { return false }
+            if let value = row.value?.stringValue {
+                guard options.contains(where: { $0.value == value }) else { return false }
+            } else {
+                row.value = .string(options[0].value)
+            }
+        case .chips:
+            guard let options = row.options, !options.isEmpty, options.count <= 24 else { return false }
+            let known = Set(options.map(\.value))
+            if row.multiple == true {
+                var chosen: [AorusPluginJSONValue] = []
+                if case let .array(items)? = row.value {
+                    for item in items {
+                        guard let value = item.stringValue, known.contains(value) else { return false }
+                        if !chosen.contains(.string(value)) { chosen.append(.string(value)) }
+                    }
+                } else if let value = row.value?.stringValue {
+                    guard known.contains(value) else { return false }
+                    chosen = [.string(value)]
+                }
+                row.value = .array(chosen)
+            } else {
+                row.multiple = false
+                if case .array? = row.value { return false }
+                if let value = row.value?.stringValue, !known.contains(value) { return false }
+            }
+        case .color:
+            let hex = row.value?.stringValue.flatMap { AorusPluginOverlay.normalizedColor($0) } ?? "007AFF"
+            row.value = .string(hex)
+        case .date:
+            let style = row.style ?? "dateTime"
+            guard Row.dateStyles.contains(style) else { return false }
+            row.style = style
+            if let minimum = row.minimum, let maximum = row.maximum, minimum >= maximum { return false }
+            if let current = row.value?.doubleValue, !current.isFinite { return false }
+        case .image:
+            guard let text = row.image, text.count <= (Row.maximumImageBytes * 4) / 3 + 64, row.imageData != nil else { return false }
+            row.height = min(400, max(60, row.height ?? 180))
+        case .rating:
+            let maximum = row.maximum ?? 5
+            guard maximum >= 3, maximum <= 10, maximum.rounded() == maximum else { return false }
+            row.minimum = 0
+            row.maximum = maximum
+            let current = (row.value?.doubleValue ?? 0).rounded()
+            row.value = .number(min(maximum, max(0, current.isFinite ? current : 0)))
+        case .hero:
+            if let text = row.value?.stringValue {
+                row.value = .string(String(text.prefix(8)))
+            }
+        case .code, .text, .button, .toggle, .input, .multiline, .number, .select, .link, .slider, .stepper:
+            break
+        }
+        return true
     }
 }
 

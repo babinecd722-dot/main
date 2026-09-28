@@ -39,6 +39,7 @@
 27. [AorusAI](#27-aorusai)
 28. [Интерфейс приложения](#28-интерфейс-приложения)
 28a. [Оформление](#28a-оформление)
+28b. [Иконки](#28b-иконки)
 29. [Соединение и прокси](#29-соединение-и-прокси)
 30. [Хуки, дерево вью и Objective-C](#30-хуки-дерево-вью-и-objective-c)
 31. [Утилиты](#31-утилиты)
@@ -153,7 +154,7 @@ aorus.on('stop', () => console.log('плагин остановлен'));
 | `contextMenu` | Действие в меню сообщения | `aorus.integrations.contextMenu.register`, `aorus.ui.addMessageContextAction` |
 | `inAppBrowser` | Открытие сайтов страницей внутри приложения | `aorus.browser.open`, `aorus.ui.openURL`, `aorus.app.openURL`, `aorus.navigation.openUrl`, `aorus.tabs.register` с `url`, строки с ссылками |
 | `artificialIntelligence` | Запросы к AorusAI | `aorus.ai.` |
-| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки, акцент и оформление всего приложения | `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.appearance.set/reset`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings`, событие `appSettingsChanged` |
+| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки, акцент, оформление и иконки всего приложения | `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.appearance.set/reset`, `aorus.icons.set/style/reset`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings`, событие `appSettingsChanged` |
 | `connectionControl` | Состояние соединения AorusGram | `aorus.proxy.`, событие `connectionChanged` |
 | `telegramProxy` | Список и переключение прокси Telegram | `aorus.telegramProxy.` |
 | `pluginMessaging` | Сообщения другим плагинам и от них | `aorus.plugins.emit/on`, `aorus.on('pluginMessage'…)` |
@@ -601,15 +602,70 @@ page.update('prompt', 'новое значение');
 ```
 
 Типы строк: `text`, `button`, `toggle`, `input`, `multiline`, `number`, `select`, `link`,
-`slider`, `stepper`.
+`slider`, `stepper`, а также рисованные строки ниже.
 
 Взаимодействие приходит событием `uiAction` с `{ pageId, rowId, value }`. Строка `link`
 открывает сайт страницей внутри приложения (раздел 12) и требует `inAppBrowser`.
 
+### Рисованные строки
+
+```js
+const dash = aorus.ui.createPage({ id: 'dash', title: 'Сводка' });
+dash.section()
+    .hero({ id: 'hello', title: 'Доброе утро', subtitle: '3 новых задачи', value: '☀️', colors: ['FF9F0A', 'FF375F'] })
+    .end()
+    .section({ title: 'Сегодня' })
+    .stat({ id: 'done', title: 'Сделано', value: 128, subtitle: '+12%', style: 'up' })
+    .progress({ id: 'plan', title: 'План дня', value: 0.64, colors: ['34C759', '30D158'] })
+    .ring({ id: 'focus', title: 'Фокус', subtitle: '4 ч из 6', value: 4, max: 6 })
+    .chart({ id: 'week', title: 'Неделя', values: [3, 5, 4, 8, 6, 9, 7], style: 'area' })
+    .end()
+    .section({ title: 'Фильтры' })
+    .segmented({ id: 'range', title: 'Период', options: [{ value: 'day', title: 'День' }, { value: 'week', title: 'Неделя' }], value: 'week' })
+    .chips({ id: 'tags', title: 'Метки', multiple: true, options: [{ value: 'work', title: 'Работа' }, { value: 'home', title: 'Дом' }], value: ['work'] })
+    .color({ id: 'tint', title: 'Цвет', value: '5E5CE6' })
+    .date({ id: 'due', title: 'Срок', style: 'date', value: Date.now() })
+    .rating({ id: 'mood', title: 'Настроение', value: 4 })
+    .code({ id: 'token', title: 'Код', value: 'A1B2-C3D4' })
+    .image({ id: 'cover', title: 'Обложка', image: 'iVBORw0KGgo…', height: 160 })
+    .text({ id: 'beta', title: 'Новая функция', badge: 'NEW', icon: 'sparkles', colors: ['FF375F'] })
+    .end()
+    .publish();
+
+dash.set('week', { values: [4, 6, 5, 9, 7, 10, 8] });   // несколько полей строки сразу
+dash.update('plan', 0.8);                               // только value
+```
+
+| Тип | Поля | Что показывает | `value` в `uiAction` |
+|---|---|---|---|
+| `hero` | `title`, `subtitle`, `icon` или `value` (до 8 символов, например эмодзи), `colors` | Карточку во всю ширину с градиентом | по нажатию |
+| `progress` | `value`, `min` и `max` (по умолчанию 0 и 1), `subtitle`, `colors` | Полосу с процентом; новое значение перетекает от прежнего | по нажатию |
+| `ring` | как у `progress` | Кольцо с процентом внутри и подписью рядом | по нажатию |
+| `chart` | `values` (1–64 числа), `style`: `line`, `bar`, `area`, `height` (80–320), `colors` | График, который прорисовывается при появлении | по нажатию |
+| `stat` | `value` (число или строка), `subtitle`, `style`: `up`, `down`, `flat`, `colors` | Крупную цифру с подписью и стрелкой роста или падения | по нажатию |
+| `segmented` | `options` (2–5), `value`, `colors` | Переключатель сегментов | выбранное `value` |
+| `chips` | `options` (до 24), `multiple`, `value` | Пилюли в прокручиваемой строке; `multiple: true` — несколько сразу | строка или `null`; при `multiple` список |
+| `color` | `value` (`RRGGBB`) | Образец цвета; нажатие открывает системный выбор цвета | `RRGGBB` |
+| `date` | `value` (миллисекунды), `style`: `date`, `time`, `dateTime`, `min`, `max`, `colors` | Компактный выбор даты и времени | миллисекунды |
+| `rating` | `value`, `max` (3–10, по умолчанию 5), `colors` | Звёзды | число звёзд |
+| `code` | `value` | Моноширинный блок; нажатие копирует текст | по нажатию |
+| `image` | `image` (PNG или JPEG в base64 до 96 КБ), `height` (60–400), `subtitle` | Картинку со скруглёнными углами и подписью | по нажатию |
+
+`colors` — один или несколько цветов `RRGGBB`, до четырёх: у карточек, полос, колец и
+графиков два цвета дают градиент. `badge` — короткая метка до 24 символов справа у строк
+`text`, `button`, `link` и других обычных строк, а первый цвет из `colors` красит у них значок
+и метку. Всё рисуется в цветах темы и следит за ней.
+
+`page.set(rowId, fields)` меняет у строки сразу несколько полей: новые данные графика, текст
+карточки, цвета. `id` и тип строки не меняются, `null` убирает поле. Если приложение не
+может нарисовать строку с новыми полями, изменение отклоняется, а строка остаётся прежней;
+так же ведёт себя `update`.
+
 Границы: до 12 экранов, 16 секций на экран, 32 строки в секции и 128 строк всего;
 идентификаторы — латиница, цифры, `_`, `.`, `-`, до 64 символов, и они должны быть
-уникальными. Ссылка принимает только `http` и `https`, а адрес проверяется перед открытием:
-loopback, локальная сеть и служебные домены AorusGram отклоняются.
+уникальными. Описание всех экранов плагина — до 512 КБ. Ссылка принимает только `http` и
+`https`, а адрес проверяется перед открытием: loopback, локальная сеть и служебные домены
+AorusGram отклоняются.
 
 Короткие диалоги не требуют своего экрана: `aorus.ui.alert(title, text)`,
 `aorus.ui.confirm(title, text, { ok, cancel })`, `aorus.ui.prompt(title, text, { placeholder,
@@ -1372,10 +1428,11 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 сразу, а не несколько переключателей из настроек.
 
 Цвет — `RRGGBB` или `RRGGBBAA`, с `#` или без; последние две цифры задают прозрачность.
-Ключ с градиентом принимает один цвет или список: до четырёх цветов, у `chatList.storyRing`
-— до двух. К ключу цвета и к `glass.style` можно дописать `@dark` или `@light`: такой ключ
-действует только в тёмной или только в светлой теме и там главнее ключа без приписки.
-Форма пузырей и размер текста одинаковы в обеих темах и приписки не принимают.
+Ключ с градиентом принимает один цвет или список: до четырёх цветов, у колец историй — до
+двух, у `settings.iconBackground` — до трёх. К ключу цвета и к `glass.style` можно дописать
+`@dark` или `@light`: такой ключ действует только в тёмной или только в светлой теме и там
+главнее ключа без приписки. Форма пузырей, скругление плиток настроек и размер текста
+одинаковы в обеих темах и приписки не принимают.
 
 `set` дописывает переданные ключи в слой плагина, `null` в значении убирает ключ, `reset`
 убирает перечисленные ключи или, без аргумента, весь слой; оба возвращают, сколько ключей
@@ -1440,6 +1497,11 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `bubble.mediaStatusText` | цвет | Время на фото и видео |
 | `bubble.shareButton` | цвет | Кнопка «Поделиться» рядом с сообщением |
 | `bubble.shareButtonIcon` | цвет | Значок кнопки «Поделиться» |
+| `bubble.mediaOverlay` | цвет | Кнопки воспроизведения и загрузки поверх фото и видео |
+| `bubble.selectCheck` | цвет | Кружки выбора, когда сообщения выделяют |
+| `bubble.failed` | цвет | Значок сообщения, которое не отправилось |
+| `bubble.infoText` | цвет | Текст приветствия бота |
+| `bubble.infoLink` | цвет | Ссылки в приветствии бота |
 | `bubble.radius` | число 0–32 | Радиус углов пузыря |
 | `bubble.radiusSmall` | число 0–32 | Радиус углов в месте стыка пузырей |
 | `bubble.mergeCorners` | true или false | Сращивать углы соседних пузырей |
@@ -1479,6 +1541,9 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `input.sendIcon` | цвет | Значок кнопки отправки |
 | `input.recording` | цвет | Кнопка записи голосового и кружка |
 | `input.recordingIcon` | цвет | Значок кнопки записи |
+| `input.disabled` | цвет | Недоступные элементы панели |
+| `input.destructive` | цвет | Отмена и удаление в панели |
+| `input.panelText` | цвет | Текст на панели вместо поля: «Разблокировать», «Вступить» |
 
 ### Клавиатура бота
 
@@ -1517,6 +1582,8 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `header.segment` | цвет | Подложка переключателя разделов |
 | `header.segmentSelected` | цвет | Выбранный раздел переключателя |
 | `header.segmentText` | цвет | Текст переключателя разделов |
+| `header.segmentDivider` | цвет | Линии между разделами переключателя |
+| `header.disabled` | цвет | Недоступные кнопки в шапке |
 
 ### Поиск
 
@@ -1562,6 +1629,31 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `chatList.sectionHeader` | цвет | Заголовки разделов в поиске |
 | `chatList.sectionHeaderText` | цвет | Текст заголовков разделов |
 | `chatList.storyRing` | цвет или список до 2 | Кольцо непросмотренной истории; два цвета дают градиент |
+| `chatList.storyCloseFriends` | цвет или список до 2 | Кольцо непросмотренной истории для близких друзей |
+| `chatList.storySeen` | цвет или список до 2 | Кольцо просмотренной истории |
+| `chatList.selected` | цвет | Чат, открытый рядом со списком на iPad |
+| `chatList.secretTitle` | цвет | Названия секретных чатов |
+| `chatList.secretIcon` | цвет | Замок секретных чатов |
+| `chatList.pending` | цвет | Часы у сообщения, которое ещё отправляется |
+| `chatList.failed` | цвет | Значок чата, где сообщение не отправилось |
+| `chatList.searchBar` | цвет | Поле поиска над списком чатов |
+| `chatList.verifiedCheck` | цвет | Галочка внутри значка верификации |
+
+### Свайп-действия в списке чатов
+
+Цвет подложки каждого действия, которое появляется при свайпе по чату, и общий цвет их
+значков и подписей.
+
+| Ключ | Значение | Что меняет |
+|---|---|---|
+| `swipe.neutral` | цвет | Нейтральное действие, например «Без звука» |
+| `swipe.neutralAlt` | цвет | Второе нейтральное действие, например «В архив» |
+| `swipe.accent` | цвет | Акцентное действие, например «Закрепить» |
+| `swipe.constructive` | цвет | Действие «вернуть», например «Из архива» |
+| `swipe.destructive` | цвет | Удаление |
+| `swipe.warning` | цвет | Предупреждение, например «Очистить» |
+| `swipe.inactive` | цвет | Недоступное действие |
+| `swipe.text` | цвет | Значки и подписи всех действий |
 
 ### Счётчики и значки
 
@@ -1590,7 +1682,48 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `list.footer` | цвет | Пояснения под разделами |
 | `list.arrow` | цвет | Стрелки перехода |
 | `list.switch` | цвет | Включённые переключатели |
+| `list.switchOff` | цвет | Дорожка выключенных переключателей |
+| `list.switchKnob` | цвет | Бегунок всех переключателей |
 | `list.check` | цвет | Галочки и кружки выбора |
+| `list.disabledText` | цвет | Недоступные строки |
+| `list.placeholder` | цвет | Подсказки в полях этих экранов |
+| `list.inputField` | цвет | Поля на этих экранах |
+| `list.errorText` | цвет | Сообщения об ошибке под полями |
+| `list.successText` | цвет | Сообщения об успехе под полями |
+| `list.mediaPlaceholder` | цвет | Фото и видео, пока они загружаются |
+| `list.scrollIndicator` | цвет | Полосы прокрутки |
+| `list.pageIndicator` | цвет | Точки страниц, которые не показаны |
+
+### Кнопки
+
+Большие залитые кнопки Telegram («Продолжить», «Подписаться», «Сохранить») и галочки
+выбора рисуются одними цветами. `button.fill` главнее `list.check` для заливки.
+
+| Ключ | Значение | Что меняет |
+|---|---|---|
+| `button.fill` | цвет | Заливка больших кнопок |
+| `button.text` | цвет | Текст на этих кнопках и галочка внутри кружка выбора |
+
+### Профиль
+
+Кнопки под фотографией профиля: «Сообщение», «Звонок», «Без звука» и остальные. Профиль со
+своим цветом или коллекционным подарком оставляет свои кнопки: они нарисованы из его цвета.
+
+| Ключ | Значение | Что меняет |
+|---|---|---|
+| `profile.button` | цвет | Подложка кнопок под фотографией |
+| `profile.buttonText` | цвет | Значки и подписи этих кнопок |
+
+### Плитки настроек
+
+Цветные квадраты под значками на экране настроек. Меняют все плитки сразу; сами значки на
+плитках меняются через `aorus.icons` (раздел 28b).
+
+| Ключ | Значение | Что меняет |
+|---|---|---|
+| `settings.iconBackground` | цвет или список до 3 | Заливка плиток; список даёт градиент, цвет без прозрачности (`00000000`) убирает плитку и оставляет один значок |
+| `settings.iconGlyph` | цвет | Значок на плитке; без плитки по умолчанию берётся акцентный цвет |
+| `settings.iconRadius` | число 0–15 | Скругление плиток; 15 делает их круглыми |
 
 ### Контекстные меню
 
@@ -1618,6 +1751,10 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `sheet.accent` | цвет | Элементы управления в листе |
 | `sheet.separator` | цвет | Разделители листа |
 | `sheet.dim` | цвет | Затемнение под листом |
+| `sheet.disabled` | цвет | Недоступные кнопки листа |
+| `sheet.input` | цвет | Поля в листах |
+| `sheet.inputText` | цвет | Текст в этих полях |
+| `sheet.check` | цвет | Галочки в листах |
 
 ### Уведомления в приложении
 
@@ -1639,6 +1776,298 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 |---|---|---|
 | `font.chat` | `extraSmall`, `small`, `medium`, `regular`, `large`, `extraLarge`, `extraLargeX2` | Размер текста сообщений |
 | `font.lists` | `extraSmall`, `small`, `medium`, `regular`, `large`, `extraLarge`, `extraLargeX2` | Размер текста списков и настроек |
+
+## 28b. Иконки
+
+```js
+aorus.icons.set({
+    'tab.chats': 'bubble.left.and.bubble.right.fill',            // строка — SF Symbol
+    'tab.settings': { symbol: 'gearshape.2.fill', weight: 'bold' },
+    'input.send': { pixels: [                                    // пиксельная иконка
+        '....##....',
+        '...####...',
+        '..######..',
+        '.##.##.##.',
+        '....##....',
+        '....##....'
+    ] },
+    'input.microphone': { pixels: ['.rr.', 'rrrr', '.rr.'], palette: { r: 'FF3B30' } },
+    'plus.plain': { text: '✚', font: 'rounded', weight: 'bold' },
+    'header.back': { path: 'M15 4 L7 12 L15 20', stroke: 2.5 },  // SVG path в сетке 24×24
+    'profile.message': { image: 'iVBORw0KGgo…' },                 // PNG в base64
+    'Chat List/ComposeIcon': { asset: 'Navigation/Add', rotate: 45 },
+    'tab.calls': { hidden: true }
+});
+aorus.icons.style('pixel');                                      // все иконки пиксельные
+aorus.icons.style({ look: 'glow', amount: 4, only: ['tab', 'input', 'Chat List/'] });
+aorus.icons.style(null);                                         // без стиля
+aorus.icons.set({ 'tab.chats': null });                          // null возвращает иконку Telegram
+aorus.icons.reset('input.send');                                 // ключ или список ключей
+aorus.icons.reset();                                             // все иконки и стиль
+const mine = aorus.icons.get();                                  // слой этого плагина
+const slots = aorus.icons.slots();                               // [{ name, group, summary, icons, animated }]
+const names = aorus.icons.assets('Chat List/');                  // имена иконок Telegram
+```
+
+Любую иконку Telegram можно заменить. Плагин называет место — слот из таблиц ниже — или саму
+иконку по имени из каталога Telegram (`aorus.icons.assets()` перечисляет все, аргумент —
+начало имени). Слот может объединять несколько иконок: `plus.plain`, например, это все
+простые плюсы приложения сразу.
+
+Замена рисуется в рамке иконки, которую она заменяет: того же размера и масштаба, с тем же
+режимом окраски. Сам значок вписывается в видимую часть исходной иконки и рисуется её цветом.
+Поэтому всё, что красит иконку, — тема, акцентный цвет, `aorus.appearance` — красит и
+замену, а кнопка, панель или список вокруг неё не сдвигаются.
+
+| Вид | Поля | Что рисует |
+|---|---|---|
+| строка | имя SF Symbol | То же, что `{ symbol }` |
+| `symbol` | `symbol`, `weight` | Системный символ iOS. `weight`: `ultraLight`, `thin`, `light`, `regular`, `medium`, `semibold`, `bold`, `heavy`, `black` |
+| `pixels` | `pixels`, `palette` | Сетка до 64×64: строки одинаковой длины, `.` и пробел пусты, любой другой символ закрашен. Без `palette` закрашенное рисуется цветом иконки; с `palette` у каждого символа свой цвет, и для каждого символа сетки цвет обязателен |
+| `text` | `text`, `font`, `weight` | До 8 символов или эмодзи. `font`: `system`, `rounded`, `serif`, `mono` |
+| `path` | `path`, `viewBox`, `evenOdd`, `stroke` | Данные SVG path со всеми командами, дугами тоже. `viewBox` — `[x, y, ширина, высота]`, по умолчанию `[0, 0, 24, 24]`; `stroke` — толщина линии в единицах `viewBox`, без неё фигура заливается; `evenOdd` — правило заливки |
+| `image` | `image` | PNG в base64, с `data:`-префиксом или без, до 64 КБ и 512×512 точек |
+| `asset` | `asset` | Другая иконка Telegram по имени |
+| `hidden` | `hidden: true` | Иконки нет, место остаётся |
+
+У любого вида есть ещё четыре поля: `scale` от 0.25 до 2.5 меняет размер значка в рамке,
+`rotate` поворачивает на угол от −360 до 360 градусов, `flip` отражает (`x`, `y`, `xy`),
+`offset` — `[x, y]` в точках от −32 до 32 — сдвигает.
+
+### Стиль
+
+Стиль меняет сразу все иконки одним способом, и заменённые тоже. `only` ограничивает его
+группами слотов (`tab`, `input`, `settings` и остальные из таблиц), отдельными слотами,
+иконками по имени или папками каталога (`'Chat List/'`); без `only` стиль действует на все
+иконки до 64 точек — крупные иллюстрации он не трогает.
+
+| `look` | `amount`, точки | Что делает |
+|---|---|---|
+| `pixel` | 1–4, по умолчанию 1.5 | Пиксельные иконки: каждый блок — среднее того, что он закрывает, с жёсткими краями |
+| `bold` | 0.25–2, по умолчанию 0.6 | Линии толще |
+| `thin` | 0.25–1.5, по умолчанию 0.5 | Линии тоньше |
+| `outline` | 0.5–2.5, по умолчанию 1 | Залитые фигуры становятся контурами этой толщины |
+| `glow` | 1–8, по умолчанию 3 | Свечение цветом иконки вокруг неё |
+
+### Как это работает
+
+Четыре места Telegram показывают иконку анимацией: нижняя панель, кнопка голосового и
+видеосообщения, кнопки эмодзи, стикеров и клавиатуры в поле ввода и кнопки под фотографией
+профиля. Пока иконка такого места заменена или до неё дотягивается стиль, она показывается
+неподвижной, а когда замену убирают, анимация возвращается.
+
+Изменение видно сразу: тема собирается заново, и всё, что перерисовывается вместе с ней —
+панели, списки, настройки, кнопки, — рисует новые иконки. Экран, открытый раньше и не
+перерисованный с тех пор, покажет их, когда его откроют снова. Иконки сохраняются и при
+следующем запуске на месте с первого кадра, ещё до того, как плагин стартует; когда плагин
+останавливают, выключают или удаляют, его иконки уходят, как и оформление.
+
+Приложение проверяет весь слой целиком: одна неверная иконка отклоняет изменение, слой
+остаётся прежним, а ошибка называет каждый неверный ключ и причину. Иконка, названная по
+имени, главнее слота, в который она входит. Слои плагинов складываются в порядке их
+идентификаторов, стиль действует последнего. Если в системе нет названного SF Symbol,
+остаётся иконка Telegram.
+
+Нужно разрешение `appCustomization`; `get`, `slots` и `assets` разрешения не требуют. В слое
+до 512 ключей, картинки вместе — до 512 КБ, SVG path — до 8192 символов.
+
+### Иконки: Нижняя панель
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `tab.chats` | Вкладка «Чаты» (анимирована) | `Chat List/Tabs/IconChats` |
+| `tab.contacts` | Вкладка «Контакты» (анимирована) | `Chat List/Tabs/IconContacts` |
+| `tab.calls` | Вкладка «Звонки» (анимирована) | `Chat List/Tabs/IconCalls` |
+| `tab.settings` | Вкладка «Настройки» (анимирована) | `Chat List/Tabs/IconSettings` |
+
+### Иконки: Шапки экранов
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `header.back` | Стрелка «Назад» | `Navigation/Back` |
+| `header.close` | Крестик «Закрыть» | `Navigation/Close` |
+| `header.done` | Галочка «Готово» | `Navigation/Done` |
+| `header.search` | Лупа поиска | `Navigation/Search`, `Chat List/SearchIcon` |
+| `header.compose` | Новое сообщение | `Chat List/ComposeIcon` |
+| `header.share` | Поделиться | `Navigation/Share`, `Chat List/NavigationShare` |
+| `header.more` | Ещё | `Chat List/NavigationMore` |
+| `header.info` | Сведения | `Navigation/Info` |
+| `header.question` | Справка | `Navigation/Question` |
+| `header.newGroup` | Новая группа | `Navigation/CreateGroup` |
+| `header.expand` | Стрелка у заголовка, раскрывающая список | `Navigation/TitleExpand` |
+| `header.newCall` | Новый звонок | `Call List/NewCallListIcon` |
+
+### Иконки: Поле ввода
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `input.send` | Стрелка кнопки отправки | `Chat/Input/Text/SendIcon` |
+| `input.microphone` | Кнопка голосового сообщения (анимирована) | `Chat/Input/Text/IconMicrophone` |
+| `input.videoMessage` | Кнопка видеосообщения (анимирована) | `Chat/Input/Text/IconVideo` |
+| `input.attach` | Кнопка вложения | `Chat/Input/Text/IconAttachment` |
+| `input.stickers` | Кнопка стикеров в поле (анимирована) | `Chat/Input/Text/AccessoryIconStickers` |
+| `input.emoji` | Кнопка эмодзи в поле и вкладка эмодзи (анимирована) | `Chat/Input/Media/EntityInputEmojiIcon` |
+| `input.keyboard` | Кнопка клавиатуры в поле (анимирована) | `Chat/Input/Text/AccessoryIconKeyboard` |
+| `input.botKeyboard` | Кнопка клавиатуры бота (анимирована) | `Chat/Input/Text/AccessoryIconInputButtons` |
+| `input.commands` | Кнопка команд бота | `Chat/Input/Text/AccessoryIconCommands` |
+| `input.silentOn` | Тихая публикация включена (анимирована) | `Chat/Input/Text/AccessoryIconSilentPostOn` |
+| `input.silentOff` | Тихая публикация выключена (анимирована) | `Chat/Input/Text/AccessoryIconSilentPostOff` |
+| `input.timer` | Таймер самоуничтожения | `Chat/Input/Text/AccessoryIconTimer` |
+| `input.scheduled` | Отложенные сообщения | `Chat/Input/Text/AccessoryIconSchedule` |
+| `input.gift` | Кнопка подарка в поле | `Chat/Input/Text/AccessoryIconGift` |
+| `input.suggestPost` | Предложить пост | `Chat/Input/Text/AccessoryIconSuggestPost` |
+| `input.expand` | Развернуть поле | `Chat/Input/Text/IconExpandInput` |
+| `input.schedule` | Кнопка «Запланировать» | `Chat/Input/ScheduleIcon` |
+| `input.replaceMedia` | Заменить медиа при редактировании | `Chat/Input/Text/Replace` |
+| `input.forwardSend` | Отправить пересылку | `Chat/Input/Text/IconForwardSend` |
+| `input.ai` | Кнопка AI в поле | `Chat/Input/Text/InputAIIcon` |
+| `input.cancelArrow` | Стрелка «Смахните для отмены» | `Chat/Input/Text/AudioRecordingCancelArrow` |
+| `input.reply` | Панель ответа | `Chat/Input/Accessory Panels/ReplyIcon` |
+| `input.forward` | Панель пересылки | `Chat/Input/Accessory Panels/ForwardIcon` |
+| `input.edit` | Панель редактирования | `Chat/Input/Accessory Panels/EditIcon` |
+| `input.link` | Панель предпросмотра ссылки | `Chat/Input/Accessory Panels/WebpageIcon` |
+| `input.closePanel` | Закрыть панель над полем | `Chat/Input/Accessory Panels/EncircledCloseButton` |
+| `input.pinnedList` | Список закреплённых | `Chat/Input/Accessory Panels/PinnedList` |
+| `input.sendSilent` | Отправить без звука | `Chat/Input/Menu/SilentIcon` |
+| `input.sendWhenOnline` | Отправить, когда будет в сети | `Chat/Input/Menu/WhenOnlineIcon` |
+| `input.sendScheduled` | Запланировать сообщение | `Chat/Input/Menu/ScheduleIcon` |
+
+### Иконки: Чат
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `chat.mentions` | Кнопка непрочитанных упоминаний | `Chat/NavigateToMentions` |
+| `chat.reactions` | Кнопка непрочитанных реакций | `Chat/NavigateToReactions` |
+| `chat.pollVotes` | Кнопка новых голосов в опросе | `Chat/NavigateToPollVotes` |
+| `chat.selectionDelete` | Удалить выбранные | `Chat/Input/Accessory Panels/MessageSelectionTrash` |
+| `chat.selectionForward` | Переслать выбранные | `Chat/Input/Accessory Panels/MessageSelectionForward` |
+| `chat.selectionShare` | Поделиться выбранными | `Chat/Input/Accessory Panels/MessageSelectionAction` |
+| `chat.selectionReport` | Пожаловаться на выбранные | `Chat/Input/Accessory Panels/MessageSelectionReport` |
+| `chat.translate` | Панель перевода | `Chat/Title Panels/Translate` |
+| `chat.muted` | Значок без звука у названия чата | `Chat/Title Panels/MuteIcon` |
+
+### Иконки: Список чатов
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `chatList.pinned` | Закреплённый чат | `Chat List/PeerPinnedIcon` |
+| `chatList.muted` | Чат без звука | `Chat List/PeerMutedIcon` |
+| `chatList.mention` | Непрочитанное упоминание | `Chat List/MentionBadgeIcon` |
+| `chatList.reactions` | Непрочитанная реакция | `Chat List/ReactionsBadgeIcon` |
+| `chatList.archive` | Архив | `Chat List/ArchiveIconLarge` |
+| `chatList.forwarded` | Пересланное сообщение | `Chat List/ForwardedIcon` |
+| `chatList.voice` | Голосовое сообщение | `Chat List/VoiceMessageIcon` |
+| `chatList.premium` | Значок Premium | `Chat List/PeerPremiumIcon` |
+| `chatList.lock` | Замок секретного чата | `Chat List/StatusLockIcon` |
+| `chatList.proxy` | Состояние прокси | `Chat List/ProxyOnIcon`, `Chat List/ProxyShieldIcon` |
+
+### Иконки: Профиль
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `profile.message` | Кнопка «Сообщение» | `Peer Info/ButtonMessage` |
+| `profile.call` | Кнопка «Звонок» | `Peer Info/ButtonCall` |
+| `profile.video` | Кнопка «Видеозвонок» | `Peer Info/ButtonVideo` |
+| `profile.mute` | Кнопка «Без звука» (анимирована) | `Peer Info/ButtonMute` |
+| `profile.unmute` | Кнопка «Со звуком» (анимирована) | `Peer Info/ButtonUnmute` |
+| `profile.more` | Кнопка «Ещё» (анимирована) | `Peer Info/ButtonMore` |
+| `profile.leave` | Кнопка «Выйти» (анимирована) | `Peer Info/ButtonLeave` |
+| `profile.voiceChat` | Кнопка видеочата (анимирована) | `Peer Info/ButtonVoiceChat` |
+| `profile.addMember` | Кнопка «Добавить участника» | `Peer Info/ButtonAddMember` |
+| `profile.search` | Кнопка «Поиск» | `Peer Info/ButtonSearch` |
+| `profile.stop` | Кнопка «Остановить» | `Peer Info/ButtonStop` |
+| `profile.setAvatar` | Установить фото | `Settings/SetAvatar` |
+| `profile.setUsername` | Задать имя пользователя | `Settings/SetUsername` |
+| `profile.setStatus` | Задать эмодзи-статус | `Settings/SetEmojiStatus` |
+| `profile.qr` | QR-код | `Settings/QrIcon` |
+
+### Иконки: Значки на плитках настроек
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `settings.profile` | Мой профиль | `Item List/Icons/Profile` |
+| `settings.savedMessages` | Избранное | `Item List/Icons/SavedMessages` |
+| `settings.recentCalls` | Недавние звонки | `Item List/Icons/Phone` |
+| `settings.devices` | Устройства | `Item List/Icons/Devices` |
+| `settings.folders` | Папки с чатами | `Item List/Icons/Folder` |
+| `settings.notifications` | Уведомления и звуки | `Item List/Icons/Notifications` |
+| `settings.privacy` | Конфиденциальность | `Item List/Icons/Privacy` |
+| `settings.data` | Данные и память | `Item List/Icons/Data` |
+| `settings.appearance` | Оформление | `Item List/Icons/Appearance` |
+| `settings.powerSaving` | Энергосбережение | `Item List/Icons/PowerSaving` |
+| `settings.language` | Язык | `Item List/Icons/Language` |
+| `settings.stickers` | Стикеры и эмодзи | `Item List/Icons/Sticker` |
+| `settings.premium` | Telegram Premium | `Item List/Icons/Premium` |
+| `settings.stars` | Звёзды Telegram | `Item List/Icons/Stars` |
+| `settings.business` | Telegram для бизнеса | `Item List/Icons/Business` |
+| `settings.gift` | Подарить | `Item List/Icons/Gift` |
+| `settings.wallet` | Кошелёк | `Item List/Icons/Gram` |
+| `settings.support` | Задать вопрос | `Item List/Icons/Support` |
+| `settings.faq` | Вопросы о Telegram | `Item List/Icons/Faq` |
+| `settings.tips` | Возможности Telegram | `Item List/Icons/Tips` |
+| `settings.proxy` | Прокси | `Item List/Icons/Proxy` |
+| `settings.stories` | Истории | `Item List/Icons/Stories` |
+| `settings.bot` | Боты | `Item List/Icons/Bot` |
+| `settings.birthday` | День рождения | `Item List/Icons/Cake` |
+| `settings.aiTools` | Инструменты AI | `Item List/Icons/AITools` |
+| `settings.color` | Ваш цвет | `Item List/Icons/Brush` |
+
+### Иконки: Контекстные меню
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `menu.reply` | Ответить | `Chat/Context Menu/Reply` |
+| `menu.copy` | Копировать | `Chat/Context Menu/Copy` |
+| `menu.forward` | Переслать | `Chat/Context Menu/Forward` |
+| `menu.delete` | Удалить | `Chat/Context Menu/Delete` |
+| `menu.edit` | Изменить | `Chat/Context Menu/Edit` |
+| `menu.pin` | Закрепить | `Chat/Context Menu/Pin` |
+| `menu.unpin` | Открепить | `Chat/Context Menu/Unpin` |
+| `menu.select` | Выбрать | `Chat/Context Menu/Select` |
+| `menu.translate` | Перевести | `Chat/Context Menu/Translate` |
+| `menu.report` | Пожаловаться | `Chat/Context Menu/Report` |
+| `menu.info` | Сведения | `Chat/Context Menu/Info` |
+| `menu.search` | Поиск | `Chat/Context Menu/Search` |
+| `menu.share` | Поделиться | `Chat/Context Menu/Share` |
+| `menu.save` | Сохранить | `Chat/Context Menu/Save` |
+| `menu.download` | Загрузить | `Chat/Context Menu/Download` |
+| `menu.archive` | В архив | `Chat/Context Menu/Archive` |
+| `menu.unarchive` | Из архива | `Chat/Context Menu/Unarchive` |
+| `menu.read` | Прочитано | `Chat/Context Menu/Read` |
+| `menu.link` | Копировать ссылку | `Chat/Context Menu/Link` |
+| `menu.timer` | Таймер | `Chat/Context Menu/Timer` |
+| `menu.calendar` | Календарь | `Chat/Context Menu/Calendar` |
+| `menu.settings` | Настройки | `Chat/Context Menu/Settings` |
+| `menu.tag` | Метка | `Chat/Context Menu/Tag` |
+| `menu.folder` | Папка | `Chat/Context Menu/Folder` |
+| `menu.user` | Человек | `Chat/Context Menu/User` |
+| `menu.muted` | Без звука | `Chat/Context Menu/Muted` |
+| `menu.unmute` | Со звуком | `Chat/Context Menu/Unmute` |
+| `menu.gift` | Подарок | `Chat/Context Menu/Gift` |
+
+### Иконки: Плюсы
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `plus.plain` | Все простые плюсы | `Chat List/AddIcon`, `Navigation/Add`, `Item List/AddItemIcon`, `Item List/Icons/Add`, `Chat/Context Menu/Add`, `Media Editor/Add` |
+| `plus.circle` | Плюс в круге | `Chat List/AddRoundIcon`, `Chat/Context Menu/AddCircle` |
+| `plus.square` | Плюс в квадрате | `Chat/Context Menu/AddSquare` |
+| `plus.member` | Добавить человека | `Contact List/AddMemberIcon`, `Chat/Context Menu/AddUser` |
+| `plus.story` | Плюс на своей истории | `Chat List/AddStoryIcon` |
+| `plus.folder` | Добавить в папку | `Chat/Context Menu/AddFolder`, `Chat/Context Menu/AddToFolder` |
+| `plus.channel` | Новый канал или сообщество | `Item List/AddChannelIcon`, `Item List/AddCommunityIcon` |
+| `plus.link` | Новая ссылка | `Item List/AddLinkIcon` |
+| `plus.time` | Добавить время | `Item List/AddTimeIcon` |
+| `plus.badge` | Плюс на наборе стикеров | `Chat/Input/Media/PanelBadgeAdd` |
+
+### Иконки: Звонки
+
+| Слот | Что это | Иконки Telegram |
+|---|---|---|
+| `calls.outgoing` | Исходящий звонок | `Call List/OutgoingIcon` |
+| `calls.outgoingVideo` | Исходящий видеозвонок | `Call List/OutgoingVideoIcon` |
+| `calls.info` | Сведения о звонке | `Call List/InfoButton` |
+| `calls.call` | Звонок | `Call List/CallIcon` |
 
 ## 29. Соединение и прокси
 
@@ -1935,6 +2364,9 @@ AorusAI вернёт код. Каждая генерация создаёт пл
 - Исходник — до 512 КБ, импортируемый файл — до 2 МБ.
 - Хранилище, включая кэш и расписания, и настройки — по 1 МБ на плагин.
 - Оформление — до 256 ключей в слое плагина.
+- Иконки — до 512 ключей в слое плагина; картинка до 64 КБ и 512×512 точек, все картинки
+  слоя — до 512 КБ, пиксельная сетка до 64×64, SVG path до 8192 символов.
+- Экраны плагина — до 512 КБ описания; картинка на экране до 96 КБ.
 - До 32 незавершённых запросов к приложению одновременно, 64 таймеров, 32 расписаний,
   256 записей кэша, двух сокетов, трёх непрерывных эффектов на экране.
 - Сообщение — до 32 768 символов и 128 entity; длиннее 4096 символов оно уходит несколькими.
@@ -2070,6 +2502,30 @@ aorus.on('start', function () {
 
 Выключение плагина возвращает приложению прежний вид: писать обработчик `stop` для этого
 не нужно.
+
+### Свои иконки
+
+Пиксельный стиль для всего приложения и своя стрелка отправки поверх него.
+
+```js
+aorus.on('start', function () {
+    aorus.icons.style({ look: 'pixel', amount: 1.5 });
+    aorus.icons.set({
+        'input.send': { pixels: [
+            '....##....',
+            '...####...',
+            '..######..',
+            '.##.##.##.',
+            '....##....',
+            '....##....'
+        ] },
+        'tab.chats': 'bubble.left.and.bubble.right.fill',
+        'plus.plain': { text: '✚', font: 'rounded' }
+    });
+});
+```
+
+Выключение плагина возвращает иконки Telegram.
 
 ### Действие в меню сообщения
 

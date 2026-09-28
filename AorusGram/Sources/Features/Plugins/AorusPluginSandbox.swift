@@ -90,6 +90,10 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginStringOverridesChanged(_ pluginId: String, overrides: [String: String])
     /// The plugin's whole appearance layer, already checked against the catalogue.
     func pluginAppearanceChanged(_ pluginId: String, values: [String: Any])
+    /// The plugin's whole icon layer, already checked and in the form the app reads.
+    func pluginIconsChanged(_ pluginId: String, layer: [String: Any])
+    /// The names of Telegram's own icons: what a plugin may name, and what it can list.
+    var pluginIconNames: [String] { get }
     /// `action` is `info`, `download`, `save`, `saveToFiles` or `share`.
     func pluginMedia(_ pluginId: String, action: String, peerId: Int64, namespace: Int32, messageId: Int32, directory: URL?, completion: @escaping (Result<[String: Any]?, Error>) -> Void)
     /// `action` is `ban`, `kick`, `restrict` or `unban`.
@@ -148,6 +152,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     public var onSetAutoSwitch: ((String, Bool) -> Void)?
     public var onStringOverridesChanged: ((String, [String: String]) -> Void)?
     public var onAppearanceChanged: ((String, [String: Any]) -> Void)?
+    public var onIconsChanged: ((String, [String: Any]) -> Void)?
+    /// Telegram's icons as the tests see them. Empty accepts any well-formed name.
+    public var iconNames: [String] = []
     public var onMedia: ((String, String, Int64, Int32, Int32) -> [String: Any]?)?
     public var onModerate: ((String, String, Int64, Int64) -> [String: Any])?
     public var onPickFile: ((String) -> [String: Any]?)?
@@ -260,6 +267,10 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     open func pluginAppearanceChanged(_ pluginId: String, values: [String: Any]) {
         onAppearanceChanged?(pluginId, values)
     }
+    open func pluginIconsChanged(_ pluginId: String, layer: [String: Any]) {
+        onIconsChanged?(pluginId, layer)
+    }
+    open var pluginIconNames: [String] { iconNames }
     open func pluginBroadcast(_ pluginId: String, topic: String, json: String) {
         onBroadcast?(pluginId, topic, json)
     }
@@ -717,6 +728,16 @@ public final class AorusPluginSandbox {
     private var hungUntil: Date?
     /// The ids of the tabs the plugin last defined, so a badge can only be set on one of them.
     private var definedTabIds: Set<String> = []
+    /// Telegram's icon names, read from the host the first time a plugin names one. On the
+    /// plugin's queue, like everything the prelude calls.
+    private var knownIconNames: Set<String>?
+
+    private func iconNameSet() -> Set<String> {
+        if let known = knownIconNames { return known }
+        let names = Set(hostServices.pluginIconNames)
+        knownIconNames = names
+        return names
+    }
     /// This run of the plugin. What it puts on the screen is marked with it, so that when a
     /// new run of the same plugin replaces this one, a goodbye from this one cannot take down
     /// what the new one has drawn.
@@ -1575,6 +1596,41 @@ public final class AorusPluginSandbox {
             return AorusPluginAppearance.catalogJSON()
         }
         hostObject.setObject(appearanceCatalog, forKeyedSubscript: "appearanceCatalog" as NSString)
+
+        // The icons a plugin draws in place of Telegram's, and the style over all of them: the
+        // whole layer each time, answered the way the look is — empty when it was taken,
+        // `denied` without the permission, and otherwise the list of what was wrong.
+        let iconsDefine: @convention(block) (String) -> String = { [weak self] json in
+            guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.appCustomization) else { return "denied" }
+            guard let raw = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any] else {
+                return "[{\"key\":\"*\",\"reason\":\"expected an object of icons\"}]"
+            }
+            let known = self.iconNameSet()
+            let checked = AorusPluginIcons.validate(raw, iconExists: { name in known.isEmpty || known.contains(name) })
+            if !checked.rejections.isEmpty {
+                let list = checked.rejections.map { ["key": $0.key, "reason": $0.reason] }
+                guard let data = try? JSONSerialization.data(withJSONObject: list), let text = String(data: data, encoding: .utf8) else {
+                    return "[]"
+                }
+                return text
+            }
+            if self.publishes { self.hostServices.pluginIconsChanged(pluginId, layer: checked.layer) }
+            return ""
+        }
+        hostObject.setObject(iconsDefine, forKeyedSubscript: "iconsDefine" as NSString)
+        let iconsCatalog: @convention(block) () -> String = {
+            return AorusPluginIcons.catalogJSON()
+        }
+        hostObject.setObject(iconsCatalog, forKeyedSubscript: "iconsCatalog" as NSString)
+        let iconsAssets: @convention(block) (String) -> String = { [weak self] prefix in
+            guard let host = self?.hostServices else { return "[]" }
+            let names = host.pluginIconNames.filter { prefix.isEmpty || $0.hasPrefix(prefix) }.sorted()
+            guard let data = try? JSONSerialization.data(withJSONObject: Array(names.prefix(4000))), let text = String(data: data, encoding: .utf8) else {
+                return "[]"
+            }
+            return text
+        }
+        hostObject.setObject(iconsAssets, forKeyedSubscript: "iconsAssets" as NSString)
 
         // A word in the chat's title bar. One at a time across every plugin: two labels
         // stacked there would leave a chat nobody can read the name of.

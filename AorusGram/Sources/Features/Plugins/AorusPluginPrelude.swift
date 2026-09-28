@@ -870,23 +870,67 @@ public enum AorusPluginPrelude {
                     link: function (row) { return addRow('link', row); },
                     slider: function (row) { return addRow('slider', row); },
                     stepper: function (row) { return addRow('stepper', row); },
+                    hero: function (row) { return addRow('hero', row); },
+                    progress: function (row) { return addRow('progress', row); },
+                    ring: function (row) { return addRow('ring', row); },
+                    chart: function (row) { return addRow('chart', row); },
+                    stat: function (row) { return addRow('stat', row); },
+                    segmented: function (row) { return addRow('segmented', row); },
+                    color: function (row) { return addRow('color', row); },
+                    date: function (row) { return addRow('date', row); },
+                    chips: function (row) { return addRow('chips', row); },
+                    image: function (row) { return addRow('image', row); },
+                    code: function (row) { return addRow('code', row); },
+                    rating: function (row) { return addRow('rating', row); },
                     end: function () { return pageApi; }
                 });
                 return sectionApi;
             }
 
-            function update(rowId, value) {
+            function findRow(rowId) {
                 requireString(rowId, 'rowId');
                 for (var i = 0; i < page.sections.length; i++) {
                     for (var j = 0; j < page.sections[i].rows.length; j++) {
-                        if (page.sections[i].rows[j].id === rowId) {
-                            page.sections[i].rows[j].value = value;
-                            publishBuilderPage(page);
-                            return pageApi;
-                        }
+                        if (page.sections[i].rows[j].id === rowId) { return page.sections[i].rows[j]; }
                     }
                 }
                 throw new Error('Unknown row: ' + rowId);
+            }
+
+            function update(rowId, value) {
+                var row = findRow(rowId);
+                var previous = row.value;
+                row.value = value;
+                try {
+                    publishBuilderPage(page);
+                } catch (error) {
+                    row.value = previous;
+                    throw error;
+                }
+                return pageApi;
+            }
+
+            // Several fields of a row at once: new values for a chart, a new colour and line for
+            // a card. The row keeps its id and its kind; a change the app cannot draw is undone.
+            function set(rowId, fields) {
+                var row = findRow(rowId);
+                var changes = optionalObject(fields, 'fields');
+                var previous = JSON.parse(JSON.stringify(row));
+                var names = Object.keys(changes);
+                for (var i = 0; i < names.length; i++) {
+                    if (names[i] === 'id' || names[i] === 'type') { continue; }
+                    if (changes[names[i]] === undefined || changes[names[i]] === null) { delete row[names[i]]; } else { row[names[i]] = changes[names[i]]; }
+                }
+                try {
+                    publishBuilderPage(page);
+                } catch (error) {
+                    var keys = Object.keys(row);
+                    for (var k = 0; k < keys.length; k++) { delete row[keys[k]]; }
+                    var restored = Object.keys(previous);
+                    for (var r = 0; r < restored.length; r++) { row[restored[r]] = previous[restored[r]]; }
+                    throw error;
+                }
+                return pageApi;
             }
 
             var pageApi = freeze({
@@ -897,6 +941,7 @@ public enum AorusPluginPrelude {
                     return request('ui.openPage', { pageId: id, style: pageStyle(options) });
                 },
                 update: update,
+                set: set,
                 snapshot: function () { return JSON.parse(JSON.stringify(page)); }
             });
             return pageApi;
@@ -2274,6 +2319,82 @@ public enum AorusPluginPrelude {
             }
         });
 
+        // Icons in place of Telegram's own, and a style over all of them. Like the look, the
+        // plugin keeps a layer of its own and the whole layer is published each time; the app
+        // checks every icon and one bad icon rejects the change, naming the key and why.
+        var iconsLayer = {};
+        function iconsCopy() { return JSON.parse(JSON.stringify(iconsLayer)); }
+        function iconsCount() { return Object.keys(iconsLayer).filter(function (key) { return key !== '*'; }).length; }
+        function publishIcons(next) {
+            var verdict = host.iconsDefine(JSON.stringify(next));
+            if (verdict === 'denied' || verdict === false) {
+                throw new Error('App customization permission is not granted');
+            }
+            if (typeof verdict === 'string' && verdict.charAt(0) === '[') {
+                var problems = [];
+                try { problems = JSON.parse(verdict); } catch (ignored) { problems = []; }
+                var described = problems.map(function (problem) { return problem.key + ': ' + problem.reason; });
+                throw new TypeError('aorus.icons: ' + (described.length ? described.join('; ') : 'the icons were not accepted'));
+            }
+            iconsLayer = next;
+        }
+        function parsedList(raw) {
+            var list = [];
+            if (typeof raw === 'string') {
+                try { list = JSON.parse(raw); } catch (ignored) { list = []; }
+            }
+            return list;
+        }
+        var iconsApi = freeze({
+            set: function (icons) {
+                if (icons === null || typeof icons !== 'object' || Array.isArray(icons)) {
+                    throw new TypeError('icons must be an object of slots or icon names and icons');
+                }
+                var next = iconsCopy();
+                var names = Object.keys(icons);
+                for (var i = 0; i < names.length; i++) {
+                    if (names[i] === '*') { throw new TypeError('the style is set with aorus.icons.style'); }
+                    var value = icons[names[i]];
+                    if (value === null || value === undefined) { delete next[names[i]]; } else { next[names[i]] = value; }
+                }
+                publishIcons(next);
+                return iconsCount();
+            },
+            style: function (style) {
+                var next = iconsCopy();
+                if (style === null || style === undefined || style === 'none') {
+                    delete next['*'];
+                } else if (typeof style === 'string') {
+                    next['*'] = { look: style };
+                } else if (typeof style === 'object' && !Array.isArray(style)) {
+                    next['*'] = style;
+                } else {
+                    throw new TypeError('style must be a look such as \"pixel\", an object { look, amount, only } or null');
+                }
+                publishIcons(next);
+                return next.hasOwnProperty('*');
+            },
+            reset: function (keys) {
+                var next = {};
+                if (keys !== undefined && keys !== null) {
+                    var list = typeof keys === 'string' ? [keys] : keys;
+                    if (!Array.isArray(list)) { throw new TypeError('keys must be a key or a list of keys'); }
+                    next = iconsCopy();
+                    for (var i = 0; i < list.length; i++) { delete next[String(list[i])]; }
+                }
+                publishIcons(next);
+                return iconsCount();
+            },
+            get: function () { return freeze(iconsCopy()); },
+            slots: function () {
+                return freeze(parsedList(host.iconsCatalog()).map(function (entry) { return freeze(entry); }));
+            },
+            assets: function (prefix) {
+                var start = prefix === undefined || prefix === null ? '' : requireString(prefix, 'prefix');
+                return freeze(parsedList(host.iconsAssets(start)));
+            }
+        });
+
         // Plugins talking to each other, through the app. A message carries the sender's id,
         // so a plugin always knows who is talking to it, and topics are filtered here rather
         // than making every plugin do it.
@@ -2889,6 +3010,7 @@ public enum AorusPluginPrelude {
             console: console,
             strings: stringsApi,
             appearance: appearanceApi,
+            icons: iconsApi,
             plugins: pluginsApi,
             // A message's attachment: what it is, and the four things anyone ever wants to
             // do with one. `selected` is the message a context action was invoked on, which

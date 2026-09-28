@@ -18258,21 +18258,46 @@ private final class AorusPluginThemeCache {
     let lock = NSLock()
     weak var source: PresentationTheme?
     var revision = -1
+    var iconRevision = -1
     var result: PresentationTheme?
 }
 
 private let aorusPluginThemeCache = AorusPluginThemeCache()
 
+// What the theme in use looks like, for the few things drawn once and kept rather than drawn
+// from a theme: the settings icons.
+private let aorusCurrentThemeLock = NSLock()
+private var aorusCurrentThemeValue: (dark: Bool, accent: UIColor) = (false, UIColor(rgb: 0x007aff))
+
+func aorusCurrentThemeLook() -> (dark: Bool, accent: UIColor) {
+    aorusCurrentThemeLock.lock()
+    defer {
+        aorusCurrentThemeLock.unlock()
+    }
+    return aorusCurrentThemeValue
+}
+
+private func aorusRecordCurrentTheme(_ theme: PresentationTheme) -> PresentationTheme {
+    aorusCurrentThemeLock.lock()
+    aorusCurrentThemeValue = (theme.overallDarkAppearance, theme.list.itemAccentColor)
+    aorusCurrentThemeLock.unlock()
+    return theme
+}
+
 func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme {
     let (values, revision) = AorusPluginAppearanceValues.snapshot()
-    if values.isEmpty {
-        return theme
+    // Icons a plugin draws are cached by the theme they were drawn for, so while any are
+    // replaced the theme is a new one whenever they change: everything that redraws on a
+    // new theme draws them again.
+    let iconRevision = AorusPluginIconValues.revision
+    if values.isEmpty && !AorusPluginIconValues.isActive {
+        return aorusRecordCurrentTheme(theme)
     }
     let cache = aorusPluginThemeCache
     cache.lock.lock()
-    if cache.source === theme, cache.revision == revision, let result = cache.result {
+    if cache.source === theme, cache.revision == revision, cache.iconRevision == iconRevision, let result = cache.result {
         cache.lock.unlock()
-        return result
+        return aorusRecordCurrentTheme(result)
     }
     cache.lock.unlock()
 
@@ -18287,13 +18312,27 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     let root = theme.rootController
     let tabBar = root.tabBar.withUpdated(backgroundColor: c("tabBar.background"), separatorColor: c("tabBar.separator"), iconColor: c("tabBar.icon"), selectedIconColor: c("tabBar.selected"), textColor: c("tabBar.text"), selectedTextColor: c("tabBar.selectedText"), badgeBackgroundColor: c("tabBar.badge"), badgeTextColor: c("tabBar.badgeText"))
     let headerBackground = c("header.background")
-    let navigationBar = root.navigationBar.withUpdated(buttonColor: c("header.buttons"), primaryTextColor: c("header.title"), secondaryTextColor: c("header.subtitle"), controlColor: c("header.controls"), accentTextColor: c("header.accent"), blurredBackgroundColor: headerBackground, opaqueBackgroundColor: headerBackground, separatorColor: c("header.separator"), badgeBackgroundColor: c("header.badge"), badgeTextColor: c("header.badgeText"), segmentedBackgroundColor: c("header.segment"), segmentedForegroundColor: c("header.segmentSelected"), segmentedTextColor: c("header.segmentText"))
+    let navigationBar = root.navigationBar.withUpdated(buttonColor: c("header.buttons"), disabledButtonColor: c("header.disabled"), primaryTextColor: c("header.title"), secondaryTextColor: c("header.subtitle"), controlColor: c("header.controls"), accentTextColor: c("header.accent"), blurredBackgroundColor: headerBackground, opaqueBackgroundColor: headerBackground, separatorColor: c("header.separator"), badgeBackgroundColor: c("header.badge"), badgeTextColor: c("header.badgeText"), segmentedBackgroundColor: c("header.segment"), segmentedForegroundColor: c("header.segmentSelected"), segmentedTextColor: c("header.segmentText"), segmentedDividerColor: c("header.segmentDivider"))
     let searchBar = root.navigationSearchBar.withUpdated(backgroundColor: c("search.background"), accentColor: c("search.accent"), inputFillColor: c("search.field"), inputTextColor: c("search.text"), inputPlaceholderTextColor: c("search.placeholder"), inputIconColor: c("search.icon"))
     let rootController = root.withUpdated(tabBar: tabBar, navigationBar: navigationBar, navigationSearchBar: searchBar)
 
     let listBackground = c("list.background")
     let listItem = c("list.item")
     let listSeparator = c("list.separator")
+    // A switch is its track when on, its track when off and its knob; a check and a filled
+    // button are the same colours in Telegram, a button's fill winning over the check's.
+    let switchOn = c("list.switch")
+    let switchOff = c("list.switchOff")
+    let switchKnob = c("list.switchKnob")
+    let check = c("list.check")
+    let buttonFill = c("button.fill")
+    let buttonText = c("button.text")
+    let swipeText = c("swipe.text")
+    func swipe(_ key: String, _ base: PresentationThemeFillForeground) -> PresentationThemeFillForeground {
+        return base.withUpdated(fillColor: c(key), foregroundColor: swipeText)
+    }
+    let actions = theme.list.itemDisclosureActions
+    let disclosureActions = actions.withUpdated(neutral1: swipe("swipe.neutral", actions.neutral1), neutral2: swipe("swipe.neutralAlt", actions.neutral2), destructive: swipe("swipe.destructive", actions.destructive), constructive: swipe("swipe.constructive", actions.constructive), accent: swipe("swipe.accent", actions.accent), warning: swipe("swipe.warning", actions.warning), inactive: swipe("swipe.inactive", actions.inactive))
     let list = theme.list.withUpdated(
         blocksBackgroundColor: listBackground,
         modalBlocksBackgroundColor: listBackground,
@@ -18301,8 +18340,10 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         modalPlainBackgroundColor: listBackground,
         itemPrimaryTextColor: c("list.text"),
         itemSecondaryTextColor: c("list.secondaryText"),
+        itemDisabledTextColor: c("list.disabledText"),
         itemAccentColor: c("list.accent"),
         itemDestructiveColor: c("list.destructive"),
+        itemPlaceholderTextColor: c("list.placeholder"),
         itemBlocksBackgroundColor: listItem,
         itemModalBlocksBackgroundColor: listItem,
         itemHighlightedBackgroundColor: c("list.pressed"),
@@ -18311,16 +18352,26 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         disclosureArrowColor: c("list.arrow"),
         sectionHeaderTextColor: c("list.sectionHeader"),
         freeTextColor: c("list.footer"),
-        itemSwitchColors: c("list.switch").map { theme.list.itemSwitchColors.withUpdated(contentColor: $0) },
-        itemCheckColors: c("list.check").map { theme.list.itemCheckColors.withUpdated(fillColor: $0, strokeColor: $0) }
+        freeTextErrorColor: c("list.errorText"),
+        freeTextSuccessColor: c("list.successText"),
+        itemSwitchColors: (switchOn != nil || switchOff != nil || switchKnob != nil) ? theme.list.itemSwitchColors.withUpdated(frameColor: switchOff, handleColor: switchKnob, contentColor: switchOn) : nil,
+        itemDisclosureActions: disclosureActions,
+        itemCheckColors: (check != nil || buttonFill != nil || buttonText != nil) ? theme.list.itemCheckColors.withUpdated(fillColor: buttonFill ?? check, strokeColor: check, foregroundColor: buttonText) : nil,
+        mediaPlaceholderColor: c("list.mediaPlaceholder"),
+        scrollIndicatorColor: c("list.scrollIndicator"),
+        pageIndicatorInactiveColor: c("list.pageIndicator"),
+        itemInputField: c("list.inputField").map { theme.list.itemInputField.withUpdated(backgroundColor: $0) }
     )
 
-    var storyRing: PresentationThemeGradientColors?
-    if let ring = AorusPluginAppearanceValues.colors("chatList.storyRing", dark: dark, in: values) {
-        storyRing = theme.chatList.storyUnseenColors.withUpdated(topColor: ring[0], bottomColor: ring.count > 1 ? ring[1] : ring[0])
+    func ring(_ key: String, _ base: PresentationThemeGradientColors) -> PresentationThemeGradientColors? {
+        guard let colors = AorusPluginAppearanceValues.colors(key, dark: dark, in: values) else {
+            return nil
+        }
+        return base.withUpdated(topColor: colors[0], bottomColor: colors.count > 1 ? colors[1] : colors[0])
     }
     let chatListBackground = c("chatList.background")
     let chatListHighlight = c("chatList.highlight")
+    let searchBar = c("chatList.searchBar")
     let chatList = theme.chatList.withUpdated(
         backgroundColor: chatListBackground,
         itemSeparatorColor: c("chatList.separator"),
@@ -18328,12 +18379,16 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         pinnedItemBackgroundColor: c("chatList.pinned"),
         itemHighlightedBackgroundColor: chatListHighlight,
         pinnedItemHighlightedBackgroundColor: chatListHighlight,
+        itemSelectedBackgroundColor: c("chatList.selected"),
         titleColor: c("chatList.title"),
+        secretTitleColor: c("chatList.secretTitle"),
         dateTextColor: c("chatList.date"),
         authorNameColor: c("chatList.author"),
         messageTextColor: c("chatList.text"),
         messageDraftTextColor: c("chatList.draft"),
         checkmarkColor: c("chatList.checks"),
+        pendingIndicatorColor: c("chatList.pending"),
+        failedFillColor: c("chatList.failed"),
         muteIconColor: c("chatList.muteIcon"),
         unreadBadgeActiveBackgroundColor: c("badge.unread"),
         unreadBadgeActiveTextColor: c("badge.unreadText"),
@@ -18341,11 +18396,17 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         unreadBadgeInactiveTextColor: c("badge.mutedText"),
         reactionBadgeActiveBackgroundColor: c("badge.reaction"),
         pinnedBadgeColor: c("badge.pinned"),
+        pinnedSearchBarColor: searchBar,
+        regularSearchBarColor: searchBar,
         sectionHeaderFillColor: c("chatList.sectionHeader"),
         sectionHeaderTextColor: c("chatList.sectionHeaderText"),
         verifiedIconFillColor: c("chatList.verified"),
+        verifiedIconForegroundColor: c("chatList.verifiedCheck"),
+        secretIconColor: c("chatList.secretIcon"),
         onlineDotColor: c("chatList.online"),
-        storyUnseenColors: storyRing
+        storyUnseenColors: ring("chatList.storyRing", theme.chatList.storyUnseenColors),
+        storyUnseenPrivateColors: ring("chatList.storyCloseFriends", theme.chatList.storyUnseenPrivateColors),
+        storySeenColors: ring("chatList.storySeen", theme.chatList.storySeenColors)
     )
 
     func parted(_ side: String, _ base: PresentationThemePartedColors) -> PresentationThemePartedColors {
@@ -18383,7 +18444,22 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     let freeform = c("bubble.freeform").map { color in
         message.freeform.withUpdated(withWallpaper: message.freeform.withWallpaper.withUpdated(fill: [color]), withoutWallpaper: message.freeform.withoutWallpaper.withUpdated(fill: [color]))
     }
-    let updatedMessage = message.withUpdated(incoming: parted("incoming", message.incoming), outgoing: parted("outgoing", message.outgoing), freeform: freeform, outgoingCheckColor: c("bubble.checks"), mediaDateAndStatusFillColor: c("bubble.mediaStatus"), mediaDateAndStatusTextColor: c("bubble.mediaStatusText"), shareButtonFillColor: v("bubble.shareButton"), shareButtonForegroundColor: v("bubble.shareButtonIcon"))
+    let selectCheck = c("bubble.selectCheck")
+    let updatedMessage = message.withUpdated(
+        incoming: parted("incoming", message.incoming),
+        outgoing: parted("outgoing", message.outgoing),
+        freeform: freeform,
+        infoPrimaryTextColor: c("bubble.infoText"),
+        infoLinkTextColor: c("bubble.infoLink"),
+        outgoingCheckColor: c("bubble.checks"),
+        mediaDateAndStatusFillColor: c("bubble.mediaStatus"),
+        mediaDateAndStatusTextColor: c("bubble.mediaStatusText"),
+        shareButtonFillColor: v("bubble.shareButton"),
+        shareButtonForegroundColor: v("bubble.shareButtonIcon"),
+        mediaOverlayControlColors: c("bubble.mediaOverlay").map { message.mediaOverlayControlColors.withUpdated(fillColor: $0) },
+        selectionControlColors: selectCheck.map { message.selectionControlColors.withUpdated(fillColor: $0, strokeColor: $0) },
+        deliveryFailedColors: c("bubble.failed").map { message.deliveryFailedColors.withUpdated(fillColor: $0) }
+    )
 
     let service = theme.chat.serviceMessage
     let serviceFill = c("chat.service")
@@ -18403,6 +18479,8 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         panelSeparatorColor: c("input.separator"),
         panelControlAccentColor: c("input.accent"),
         panelControlColor: c("input.icons"),
+        panelControlDisabledColor: c("input.disabled"),
+        panelControlDestructiveColor: c("input.destructive"),
         inputBackgroundColor: c("input.field"),
         inputStrokeColor: c("input.fieldStroke"),
         inputPlaceholderColor: c("input.placeholder"),
@@ -18410,6 +18488,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
         inputControlColor: c("input.fieldIcons"),
         actionControlFillColor: c("input.send"),
         actionControlForegroundColor: c("input.sendIcon"),
+        primaryTextColor: c("input.panelText"),
         mediaRecordingDotColor: recording,
         mediaRecordingControl: input.mediaRecordingControl.withUpdated(buttonColor: recording, activeIconColor: c("input.recordingIcon"))
     )
@@ -18421,7 +18500,7 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
 
     let sheetBackground = c("sheet.background")
     let sheetPressed = c("sheet.pressed")
-    let actionSheet = theme.actionSheet.withUpdated(dimColor: c("sheet.dim"), opaqueItemBackgroundColor: sheetBackground, itemBackgroundColor: sheetBackground, opaqueItemHighlightedBackgroundColor: sheetPressed, itemHighlightedBackgroundColor: sheetPressed, opaqueItemSeparatorColor: c("sheet.separator"), standardActionTextColor: c("sheet.action"), destructiveActionTextColor: c("sheet.destructive"), primaryTextColor: c("sheet.text"), secondaryTextColor: c("sheet.secondaryText"), controlAccentColor: c("sheet.accent"))
+    let actionSheet = theme.actionSheet.withUpdated(dimColor: c("sheet.dim"), opaqueItemBackgroundColor: sheetBackground, itemBackgroundColor: sheetBackground, opaqueItemHighlightedBackgroundColor: sheetPressed, itemHighlightedBackgroundColor: sheetPressed, opaqueItemSeparatorColor: c("sheet.separator"), standardActionTextColor: c("sheet.action"), destructiveActionTextColor: c("sheet.destructive"), disabledActionTextColor: c("sheet.disabled"), primaryTextColor: c("sheet.text"), secondaryTextColor: c("sheet.secondaryText"), controlAccentColor: c("sheet.accent"), inputBackgroundColor: c("sheet.input"), inputTextColor: c("sheet.inputText"), checkContentColor: c("sheet.check"))
     let menuSeparator = c("menu.separator")
     let contextMenu = theme.contextMenu.withUpdated(dimColor: c("menu.dim"), backgroundColor: c("menu.background"), itemSeparatorColor: menuSeparator, sectionSeparatorColor: menuSeparator, itemBackgroundColor: c("menu.item"), itemHighlightedBackgroundColor: c("menu.pressed"), primaryColor: c("menu.text"), secondaryColor: c("menu.secondaryText"), destructiveColor: c("menu.destructive"))
     let inAppNotification = theme.inAppNotification.withUpdated(fillColor: c("notification.background"), primaryTextColor: c("notification.text"))
@@ -18430,9 +18509,10 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     cache.lock.lock()
     cache.source = theme
     cache.revision = revision
+    cache.iconRevision = iconRevision
     cache.result = result
     cache.lock.unlock()
-    return result
+    return aorusRecordCurrentTheme(result)
 }
 
 // A plain colour or a gradient of up to four, in place of the wallpaper -- the chat background
@@ -18582,6 +18662,620 @@ def patch_plugin_appearance(tg: Path) -> None:
         ), 1)
         glass.write_text(g, encoding="utf-8")
         print("PluginAppearance: glass panes follow the plugin style and tint")
+
+
+_AORUS_APP_BUNDLE_RESOLVER_H = '''
+/// AorusGram: consulted for every icon loaded by name. The one registered is asked with the
+/// icon Telegram would have used and answers with the one to use instead, or nil for that one.
+@protocol AppBundleImageResolver <NSObject>
+
+- (UIImage * _Nullable)resolveBundleImageNamed:(NSString * _Nonnull)name original:(UIImage * _Nonnull)original NS_SWIFT_NAME(resolveBundleImage(named:original:));
+
+@end
+
+void setAppBundleImageResolver(id<AppBundleImageResolver> _Nullable resolver);
+'''
+
+_AORUS_APP_BUNDLE_RESOLVER_M = '''
+static id<AppBundleImageResolver> appBundleImageResolver = nil;
+static os_unfair_lock appBundleImageResolverLock = OS_UNFAIR_LOCK_INIT;
+
+void setAppBundleImageResolver(id<AppBundleImageResolver> _Nullable resolver) {
+    os_unfair_lock_lock(&appBundleImageResolverLock);
+    appBundleImageResolver = resolver;
+    os_unfair_lock_unlock(&appBundleImageResolverLock);
+}
+'''
+
+_AORUS_APP_BUNDLE_INIT_OLD = '''- (instancetype _Nullable)initWithBundleImageName:(NSString * _Nonnull)bundleImageName {
+    return [UIImage imageNamed:bundleImageName inBundle:getAppBundle() compatibleWithTraitCollection:nil];
+}'''
+
+_AORUS_APP_BUNDLE_INIT_NEW = '''- (instancetype _Nullable)initWithBundleImageName:(NSString * _Nonnull)bundleImageName {
+    UIImage *image = [UIImage imageNamed:bundleImageName inBundle:getAppBundle() compatibleWithTraitCollection:nil];
+    if (image == nil) {
+        return nil;
+    }
+    // AorusGram: an icon a plugin replaced or styled comes back from the resolver instead.
+    os_unfair_lock_lock(&appBundleImageResolverLock);
+    id<AppBundleImageResolver> resolver = appBundleImageResolver;
+    os_unfair_lock_unlock(&appBundleImageResolverLock);
+    if (resolver != nil) {
+        UIImage *replaced = [resolver resolveBundleImageNamed:bundleImageName original:image];
+        if (replaced != nil) {
+            return replaced;
+        }
+    }
+    return image;
+}'''
+
+_AORUS_SETTINGS_ICON_HELPERS = r'''
+// MARK: - AorusGram settings icons
+
+// The icons on the settings screens were drawn once and kept for the life of the app. They are
+// kept here instead, stamped with what they were drawn from: the icons plugins replaced, the
+// look they described, and the dark or light theme with its accent. The first time one is asked
+// for after any of that changed, it is drawn again — so a list that redraws on a new theme
+// shows the new icons at once.
+private final class AorusSettingsIconCache {
+    let lock = NSLock()
+    var stamp = ""
+    var images: [String: UIImage] = [:]
+    var missing = Set<String>()
+}
+
+private let aorusSettingsIconCache = AorusSettingsIconCache()
+
+func aorusSettingsIcon(_ key: String, _ make: () -> UIImage?) -> UIImage? {
+    let look = aorusCurrentThemeLook()
+    let stamp = "\(AorusPluginIconValues.revision)|\(AorusPluginAppearanceValues.snapshot().revision)|\(look.dark)|\(look.accent.argb)"
+    let cache = aorusSettingsIconCache
+    cache.lock.lock()
+    if cache.stamp != stamp {
+        cache.stamp = stamp
+        cache.images.removeAll()
+        cache.missing.removeAll()
+    }
+    if let image = cache.images[key] {
+        cache.lock.unlock()
+        return image
+    }
+    if cache.missing.contains(key) {
+        cache.lock.unlock()
+        return nil
+    }
+    cache.lock.unlock()
+    // Drawn outside the lock: drawing loads icons, and an icon a plugin replaced is drawn
+    // on the way.
+    let image = make()
+    cache.lock.lock()
+    if cache.stamp == stamp {
+        if let image {
+            cache.images[key] = image
+        } else {
+            cache.missing.insert(key)
+        }
+    }
+    cache.lock.unlock()
+    return image
+}
+
+/// The corner of the settings tiles: Telegram's, or the one a plugin described.
+func aorusSettingsTileRadius() -> CGFloat {
+    let values = AorusPluginAppearanceValues.current()
+    guard !values.isEmpty, let radius = AorusPluginAppearanceValues.number("settings.iconRadius", in: values) else {
+        return 8.0
+    }
+    return min(15.0, max(0.0, radius))
+}
+
+/// A settings tile the way a plugin styled them — its fill, the colour of the glyph on it and
+/// its corner — or nil while no plugin styled them and Telegram's own is drawn. A fill with no
+/// alpha leaves the glyph on its own, in the accent unless the glyph has a colour of its own.
+func aorusSettingsTile(glyph name: String, colors: [UIColor], scaleFactor: CGFloat = 1.0) -> UIImage? {
+    let values = AorusPluginAppearanceValues.current()
+    if values.isEmpty {
+        return nil
+    }
+    let look = aorusCurrentThemeLook()
+    let background = AorusPluginAppearanceValues.colors("settings.iconBackground", dark: look.dark, in: values)
+    let glyph = AorusPluginAppearanceValues.color("settings.iconGlyph", dark: look.dark, in: values)
+    let radius = AorusPluginAppearanceValues.number("settings.iconRadius", in: values)
+    if background == nil && glyph == nil && radius == nil {
+        return nil
+    }
+    let fills = background ?? colors
+    let plain = !fills.contains(where: { $0.alpha > 0.0 })
+    let glyphColor = glyph ?? (plain ? look.accent : UIColor.white)
+    let cornerRadius = min(15.0, max(0.0, radius ?? 8.0))
+    return generateImage(CGSize(width: 30.0, height: 30.0), contextGenerator: { size, context in
+        let bounds = CGRect(origin: CGPoint(), size: size)
+        context.clear(bounds)
+        if !plain {
+            context.saveGState()
+            context.addPath(UIBezierPath(roundedRect: bounds, cornerRadius: cornerRadius).cgPath)
+            context.clip()
+            if fills.count == 1 {
+                context.setFillColor(fills[0].cgColor)
+                context.fill(bounds)
+            } else if let gradient = CGGradient(colorsSpace: deviceColorSpace, colors: fills.map(\.cgColor) as CFArray, locations: nil) {
+                context.drawLinearGradient(gradient, start: CGPoint(x: size.width, y: size.height), end: CGPoint(), options: CGGradientDrawingOptions())
+            }
+            if let gradientImage, let cgImage = gradientImage.cgImage {
+                context.setBlendMode(.plusLighter)
+                context.draw(cgImage, in: bounds)
+            }
+            if let backdropImage, let cgImage = backdropImage.cgImage {
+                context.setBlendMode(.overlay)
+                context.draw(cgImage, in: bounds)
+            }
+            context.restoreGState()
+        }
+        if let image = UIImage(bundleImageName: name), let mask = image.cgImage {
+            let imageSize = CGSize(width: image.size.width * scaleFactor, height: image.size.height * scaleFactor)
+            let imageRect = CGRect(origin: CGPoint(x: (bounds.width - imageSize.width) * 0.5, y: (bounds.height - imageSize.height) * 0.5), size: imageSize)
+            context.saveGState()
+            context.clip(to: imageRect, mask: mask)
+            context.setFillColor(glyphColor.cgColor)
+            context.fill(imageRect)
+            context.restoreGState()
+        }
+    })
+}
+'''
+
+_AORUS_TAB_BAR_ICON_HELPER = r'''
+
+/// AorusGram: the still icon a plugin put in place of an animated tab icon, or nil to keep the
+/// animation. Tinted like the title under it.
+private func aorusTabBarStillImage(animationName: String) -> UIImage? {
+    let name: String
+    switch animationName {
+    case "TabChats":
+        name = "Chat List/Tabs/IconChats"
+    case "TabContacts":
+        name = "Chat List/Tabs/IconContacts"
+    case "TabCalls":
+        name = "Chat List/Tabs/IconCalls"
+    case "TabSettings":
+        name = "Chat List/Tabs/IconSettings"
+    default:
+        return nil
+    }
+    return AorusPluginIconValues.stillImage(name)?.withRenderingMode(.alwaysTemplate)
+}
+'''
+
+
+def _aorus_settings_statics_dynamic(t: str) -> str:
+    """Every `public static let` icon of PresentationResourcesSettings, as a computed one.
+
+    The expression of each is kept as it is, inside a closure the cache calls; the three
+    tiles drawn inline with their own gradients try the plugin's tile style first.
+    """
+    anchor = "public struct PresentationResourcesSettings {\n"
+    start = t.index(anchor) + len(anchor)
+    inline_tiles = {
+        "premium": ('"Item List/Icons/Premium"', "[UIColor(rgb: 0x6b93ff), UIColor(rgb: 0x8d77ff), UIColor(rgb: 0xb56eec)]"),
+        "stars": ('"Item List/Icons/Stars"', "[UIColor(rgb: 0xfec80f), UIColor(rgb: 0xdd6f12)]"),
+        "premiumGift": ('"Item List/Icons/Gift"', "[UIColor(rgb: 0x3ba1f2), UIColor(rgb: 0x39b3b4), UIColor(rgb: 0x34c27d)]"),
+    }
+    out = [t[:start]]
+    index = start
+    prefix = "    public static let "
+    converted = 0
+    while True:
+        found = t.find(prefix, index)
+        if found == -1:
+            out.append(t[index:])
+            break
+        out.append(t[index:found])
+        name_start = found + len(prefix)
+        equals = t.index(" = ", name_start)
+        name = t[name_start:equals]
+        expression_start = equals + 3
+        depth = 0
+        position = expression_start
+        in_string = False
+        while position < len(t):
+            char = t[position]
+            if in_string:
+                if char == "\\":
+                    position += 2
+                    continue
+                if char == '"':
+                    in_string = False
+            elif char == '"':
+                in_string = True
+            elif char in "([{":
+                depth += 1
+            elif char in ")]}":
+                depth -= 1
+            elif char == "\n" and depth == 0:
+                break
+            position += 1
+        expression = t[expression_start:position]
+        if name in inline_tiles:
+            glyph, colors = inline_tiles[name]
+            expression = f"aorusSettingsTile(glyph: {glyph}, colors: {colors}) ?? " + expression
+        out.append(
+            f"    public static var {name}: UIImage? {{\n"
+            f"        return aorusSettingsIcon(\"{name}\", {{ () -> UIImage? in\n"
+            f"            return {expression}\n"
+            f"        }})\n"
+            f"    }}"
+        )
+        converted += 1
+        index = position
+    if converted < 60:
+        raise RuntimeError(f"PluginIcons: only {converted} settings icons found")
+    return "".join(out)
+
+
+def _aorus_generate_icon_names(tg: Path) -> None:
+    """The names of every icon in Telegram's asset catalogue, for plugins to name and list."""
+    catalogue = tg / "submodules/TelegramUI/Images.xcassets"
+    names = sorted(
+        str(path.relative_to(catalogue))[: -len(".imageset")]
+        for path in catalogue.rglob("*.imageset")
+        if path.is_dir()
+    )
+    if len(names) < 500:
+        raise RuntimeError(f"PluginIcons: only {len(names)} icons found in {catalogue}")
+    lines = ["// Generated by scripts/aorus_branding.py from Telegram's asset catalogue. Do not edit.", "", "enum AorusBundleIconNames {", "    static let all: [String] = ["]
+    for name in names:
+        escaped = name.replace("\\", "\\\\").replace('"', '\\"')
+        lines.append(f'        "{escaped}",')
+    lines += ["    ]", "}", ""]
+    target = tg / "submodules/AorusGramUI/Sources/Features/Plugins/AorusBundleIconNames.swift"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("\n".join(lines), encoding="utf-8")
+    print(f"PluginIcons: listed {len(names)} icons for plugins")
+
+
+def patch_plugin_icons(tg: Path) -> None:
+    """Icons plugins draw in place of Telegram's own, drawn where Telegram draws them.
+
+      * AppBundle's `UIImage(bundleImageName:)` — the one door every icon comes through —
+        asks a resolver first. Display gets the resolver: it reads the plugins' icon layers,
+        renders a replacement into the box of the original and lays a style over the icons
+        it reaches. The app delegate installs it before anything is drawn.
+      * The theme's image cache is stamped with the icons' revision and the theme is a new one
+        while icons are replaced, so everything that redraws on a theme draws them again. The
+        settings icons, drawn once and kept, are kept by the same stamp instead, and their
+        tiles take the plugin's fill, glyph colour and corner.
+      * The four places Telegram animates an icon — the tab bar, the microphone, the emoji and
+        keyboard buttons in the field, the profile's buttons — show a replaced or styled icon
+        still.
+      * Plugins get the names of every icon in the catalogue.
+    """
+    header = tg / "submodules/AppBundle/PublicHeaders/AppBundle/AppBundle.h"
+    source = tg / "submodules/AppBundle/Sources/AppBundle/AppBundle.m"
+    h = header.read_text(encoding="utf-8")
+    if "AppBundleImageResolver" not in h:
+        h = h.rstrip("\n") + "\n" + _AORUS_APP_BUNDLE_RESOLVER_H
+        header.write_text(h, encoding="utf-8")
+    m = source.read_text(encoding="utf-8")
+    if "appBundleImageResolver" not in m:
+        if _AORUS_APP_BUNDLE_INIT_OLD not in m:
+            raise RuntimeError("PluginIcons: AppBundle initializer anchor is missing")
+        m = m.replace("#import <AppBundle/AppBundle.h>\n", "#import <AppBundle/AppBundle.h>\n#import <os/lock.h>\n", 1)
+        m = m.replace("@implementation UIImage (AppBundle)\n", _AORUS_APP_BUNDLE_RESOLVER_M.lstrip("\n") + "\n@implementation UIImage (AppBundle)\n", 1)
+        m = m.replace(_AORUS_APP_BUNDLE_INIT_OLD, _AORUS_APP_BUNDLE_INIT_NEW, 1)
+        if "#import <os/lock.h>" not in m or "void setAppBundleImageResolver" not in m:
+            raise RuntimeError("PluginIcons: AppBundle anchors are missing")
+        source.write_text(m, encoding="utf-8")
+    print("PluginIcons: every icon loaded by name goes through the resolver")
+
+    engine = Path(__file__).resolve().parent.parent / "patches/submodules/Display/Source/AorusPluginIconValues.swift"
+    (tg / "submodules/Display/Source/AorusPluginIconValues.swift").write_text(
+        engine.read_text(encoding="utf-8").replace("__LOCK_KEY__", _AG_LICENSE_LOCK_KEY), encoding="utf-8"
+    )
+    print("PluginIcons: wrote Display/AorusPluginIconValues.swift")
+
+    delegate = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    d = delegate.read_text(encoding="utf-8")
+    if "AorusPluginIconValues.install()" not in d:
+        anchor = "        precondition(!testIsLaunched)\n        testIsLaunched = true\n"
+        if d.count(anchor) != 1:
+            raise RuntimeError("PluginIcons: AppDelegate launch anchor is missing")
+        d = d.replace(anchor, anchor + "        // AorusGram: icons plugins replaced, from the first one drawn.\n        AorusPluginIconValues.install()\n", 1)
+        delegate.write_text(d, encoding="utf-8")
+    print("PluginIcons: installed at launch")
+
+    cache_file = tg / "submodules/TelegramPresentationData/Sources/PresentationsResourceCache.swift"
+    c = cache_file.read_text(encoding="utf-8")
+    if "aorusIconRevision" not in c:
+        edits = [
+            ("import SwiftSignalKit\n", "import SwiftSignalKit\nimport Display\n"),
+            (
+                "    var parameterImages: [PresentationResourceParameterKey: UIImage] = [:]\n",
+                "    var parameterImages: [PresentationResourceParameterKey: UIImage] = [:]\n"
+                "    // AorusGram: the icons' revision these were drawn with.\n"
+                "    var aorusIconRevision = 0\n"
+                "\n"
+                "    func aorusClearIfIconsChanged(_ revision: Int) {\n"
+                "        if self.aorusIconRevision != revision {\n"
+                "            self.aorusIconRevision = revision\n"
+                "            self.images.removeAll()\n"
+                "            self.parameterImages.removeAll()\n"
+                "        }\n"
+                "    }\n",
+            ),
+            (
+                "    var parameterObjects: [PresentationResourceParameterKey: AnyObject] = [:]\n",
+                "    var parameterObjects: [PresentationResourceParameterKey: AnyObject] = [:]\n"
+                "    var aorusIconRevision = 0\n"
+                "\n"
+                "    func aorusClearIfIconsChanged(_ revision: Int) {\n"
+                "        if self.aorusIconRevision != revision {\n"
+                "            self.aorusIconRevision = revision\n"
+                "            self.objects.removeAll()\n"
+                "            self.parameterObjects.removeAll()\n"
+                "        }\n"
+                "    }\n",
+            ),
+            (
+                "        let result = self.imageCache.with { holder -> UIImage? in\n            return holder.images[key]\n",
+                "        let aorusRevision = AorusPluginIconValues.revision\n"
+                "        let result = self.imageCache.with { holder -> UIImage? in\n            holder.aorusClearIfIconsChanged(aorusRevision)\n            return holder.images[key]\n",
+            ),
+            (
+                "        let result = self.imageCache.with { holder -> UIImage? in\n            return holder.parameterImages[key]\n",
+                "        let aorusRevision = AorusPluginIconValues.revision\n"
+                "        let result = self.imageCache.with { holder -> UIImage? in\n            holder.aorusClearIfIconsChanged(aorusRevision)\n            return holder.parameterImages[key]\n",
+            ),
+            (
+                "        let result = self.objectCache.with { holder -> AnyObject? in\n            return holder.objects[key]\n",
+                "        let aorusRevision = AorusPluginIconValues.revision\n"
+                "        let result = self.objectCache.with { holder -> AnyObject? in\n            holder.aorusClearIfIconsChanged(aorusRevision)\n            return holder.objects[key]\n",
+            ),
+            (
+                "        let result = self.objectCache.with { holder -> AnyObject? in\n            return holder.parameterObjects[key]\n",
+                "        let aorusRevision = AorusPluginIconValues.revision\n"
+                "        let result = self.objectCache.with { holder -> AnyObject? in\n            holder.aorusClearIfIconsChanged(aorusRevision)\n            return holder.parameterObjects[key]\n",
+            ),
+        ]
+        for old, new in edits:
+            if c.count(old) != 1:
+                raise RuntimeError(f"PluginIcons: resource cache anchor found {c.count(old)} times: {old.splitlines()[0]!r}")
+            c = c.replace(old, new, 1)
+        cache_file.write_text(c, encoding="utf-8")
+    print("PluginIcons: the theme's image cache follows the icons")
+
+    settings_file = tg / "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift"
+    s = settings_file.read_text(encoding="utf-8")
+    if "aorusSettingsIcon(" not in s:
+        render_anchor = "public func renderSettingsIcon(name: String, scaleFactor: CGFloat = 1.0, backgroundColors: [UIColor]? = nil) -> UIImage? {\n"
+        if s.count(render_anchor) != 1:
+            raise RuntimeError("PluginIcons: renderSettingsIcon anchor is missing")
+        s = s.replace(render_anchor, render_anchor + (
+            "    if let backgroundColors, let aorusTile = aorusSettingsTile(glyph: name, colors: backgroundColors, scaleFactor: scaleFactor) {\n"
+            "        return aorusTile\n"
+            "    }\n"
+        ), 1)
+        if s.count("cornerRadius: 8.0)") < 5:
+            raise RuntimeError("PluginIcons: settings tile corners are missing")
+        s = s.replace("cornerRadius: 8.0)", "cornerRadius: aorusSettingsTileRadius())")
+        s = _aorus_settings_statics_dynamic(s)
+        colors_anchor = "let colorRed = UIColor(rgb: 0xFF453A)\n"
+        if s.count(colors_anchor) != 1:
+            raise RuntimeError("PluginIcons: settings colours anchor is missing")
+        s = s.replace(colors_anchor, _AORUS_SETTINGS_ICON_HELPERS.lstrip("\n") + "\n" + colors_anchor, 1)
+        settings_file.write_text(s, encoding="utf-8")
+    print("PluginIcons: settings icons follow plugins and are drawn again when they change")
+
+    tab_file = tg / "submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift"
+    tb = tab_file.read_text(encoding="utf-8")
+    if "aorusTabBarStillImage" not in tb:
+        edits = [
+            (
+                "                if let animationName = tabBarItem.animationName {\n",
+                "                let aorusStillImage = tabBarItem.animationName.flatMap { aorusTabBarStillImage(animationName: $0) }\n"
+                "                if let animationName = tabBarItem.animationName, aorusStillImage == nil {\n",
+            ),
+            (
+                "                            image: component.isSelected ? tabBarItem.selectedImage : tabBarItem.image,\n"
+                "                            tintColor: nil,\n",
+                "                            image: aorusStillImage ?? (component.isSelected ? tabBarItem.selectedImage : tabBarItem.image),\n"
+                "                            tintColor: aorusStillImage != nil ? iconTintColor : nil,\n",
+            ),
+        ]
+        for old, new in edits:
+            if tb.count(old) != 1:
+                raise RuntimeError(f"PluginIcons: tab bar anchor found {tb.count(old)} times: {old.splitlines()[0]!r}")
+            tb = tb.replace(old, new, 1)
+        tb = tb.rstrip("\n") + "\n" + _AORUS_TAB_BAR_ICON_HELPER
+        tab_file.write_text(tb, encoding="utf-8")
+    print("PluginIcons: tab icons a plugin replaced are shown still")
+
+    mic_file = tg / "submodules/TelegramUI/Components/ChatTextInputMediaRecordingButton/Sources/ChatTextInputMediaRecordingButton.swift"
+    mb = mic_file.read_text(encoding="utf-8")
+    if "aorusStillIconView" not in mb:
+        edits = [
+            (
+                "    private let animationView: ComponentView<Empty>\n",
+                "    private let animationView: ComponentView<Empty>\n"
+                "    /// AorusGram: the microphone or camera a plugin replaced, shown still over the\n"
+                "    /// animation, which is drawn clear while it is there.\n"
+                "    private var aorusStillIconView: UIImageView?\n",
+            ),
+            (
+                "        if let animationOutput = self.animationOutput {\n"
+                "            animationOutput.frame = animationFrame\n"
+                "        }\n",
+                "        if let animationOutput = self.animationOutput {\n"
+                "            animationOutput.frame = animationFrame\n"
+                "        }\n"
+                "\n"
+                "        // AorusGram: an icon a plugin replaced is shown still where the animation was,\n"
+                "        // and copied into the glass's mask the way the animation's frames are.\n"
+                "        if let view = self.animationView.view as? LottieComponent.View {\n"
+                "            let aorusName = self.mode == .audio ? \"Chat/Input/Text/IconMicrophone\" : \"Chat/Input/Text/IconVideo\"\n"
+                "            if let aorusIcon = AorusPluginIconValues.stillImage(aorusName), let aorusStill = generateTintedImage(image: aorusIcon, color: animationTintColor) {\n"
+                "                let aorusView: UIImageView\n"
+                "                if let current = self.aorusStillIconView {\n"
+                "                    aorusView = current\n"
+                "                } else {\n"
+                "                    aorusView = UIImageView()\n"
+                "                    aorusView.isUserInteractionEnabled = false\n"
+                "                    self.aorusStillIconView = aorusView\n"
+                "                }\n"
+                "                if aorusView.superview !== view {\n"
+                "                    view.addSubview(aorusView)\n"
+                "                }\n"
+                "                aorusView.image = aorusStill\n"
+                "                aorusView.frame = CGRect(origin: CGPoint(x: floor((animationFrame.width - aorusStill.size.width) / 2.0), y: floor((animationFrame.height - aorusStill.size.height) / 2.0)), size: aorusStill.size)\n"
+                "                view.setMonochromaticEffect(tintColor: .clear)\n"
+                "                view.output = nil\n"
+                "                self.animationOutput?.image = aorusStill\n"
+                "            } else if let aorusView = self.aorusStillIconView {\n"
+                "                self.aorusStillIconView = nil\n"
+                "                aorusView.removeFromSuperview()\n"
+                "                view.setMonochromaticEffect(tintColor: animationTintColor)\n"
+                "                view.output = self.animationOutput\n"
+                "                view.playOnce()\n"
+                "            }\n"
+                "        }\n",
+            ),
+        ]
+        for old, new in edits:
+            if mb.count(old) != 1:
+                raise RuntimeError(f"PluginIcons: microphone anchor found {mb.count(old)} times: {old.splitlines()[0]!r}")
+            mb = mb.replace(old, new, 1)
+        mic_file.write_text(mb, encoding="utf-8")
+    print("PluginIcons: a replaced microphone or camera is shown still")
+
+    accessory_file = tg / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AccessoryItemIconButton.swift"
+    ab = accessory_file.read_text(encoding="utf-8")
+    if "aorusStillImage(item:" not in ab:
+        edits = [
+            (
+                "            self.iconImageView.tintMask.frame = imageFrame\n",
+                "            self.iconImageView.tintMask.frame = imageFrame\n"
+                "\n"
+                "            // AorusGram: an icon a plugin replaced is shown still, in place of the animation\n"
+                "            // that turns one of these icons into another.\n"
+                "            let aorusStill = AccessoryItemIconButton.aorusStillImage(item: item)\n"
+                "            if let aorusStill {\n"
+                "                self.iconImageView.image = aorusStill\n"
+                "                var aorusFrame = CGRect(origin: CGPoint(x: floor((size.width - aorusStill.size.width) / 2.0), y: floor((size.height - aorusStill.size.height) / 2.0)), size: aorusStill.size)\n"
+                "                aorusFrame.origin.y += insets.top\n"
+                "                self.iconImageView.frame = aorusFrame\n"
+                "                self.iconImageView.tintMask.frame = aorusFrame\n"
+                "            }\n"
+                "            if self.animationView != nil {\n"
+                "                self.iconImageView.isHidden = aorusStill == nil\n"
+                "                self.iconImageView.tintMask.isHidden = aorusStill == nil\n"
+                "                self.animationView?.view?.isHidden = aorusStill != nil\n"
+                "                self.tintMaskAnimationView?.isHidden = aorusStill != nil\n"
+                "            }\n",
+            ),
+            (
+                "    var buttonWidth: CGFloat {\n",
+                "    /// AorusGram: the icon a plugin put in place of an animated one, or nil to animate.\n"
+                "    private static func aorusStillImage(item: ChatTextInputAccessoryItem) -> UIImage? {\n"
+                "        let name: String\n"
+                "        switch item {\n"
+                "        case let .input(_, inputMode), let .botInput(_, inputMode):\n"
+                "            switch inputMode {\n"
+                "            case .keyboard:\n"
+                "                name = \"Chat/Input/Text/AccessoryIconKeyboard\"\n"
+                "            case .stickers:\n"
+                "                name = \"Chat/Input/Text/AccessoryIconStickers\"\n"
+                "            case .emoji:\n"
+                "                name = \"Chat/Input/Media/EntityInputEmojiIcon\"\n"
+                "            case .bot:\n"
+                "                name = \"Chat/Input/Text/AccessoryIconInputButtons\"\n"
+                "            }\n"
+                "        case let .silentPost(value):\n"
+                "            name = value ? \"Chat/Input/Text/AccessoryIconSilentPostOn\" : \"Chat/Input/Text/AccessoryIconSilentPostOff\"\n"
+                "        default:\n"
+                "            return nil\n"
+                "        }\n"
+                "        return AorusPluginIconValues.stillImage(name)?.withRenderingMode(.alwaysTemplate)\n"
+                "    }\n"
+                "\n"
+                "    var buttonWidth: CGFloat {\n",
+            ),
+        ]
+        for old, new in edits:
+            if ab.count(old) != 1:
+                raise RuntimeError(f"PluginIcons: field button anchor found {ab.count(old)} times: {old.splitlines()[0]!r}")
+            ab = ab.replace(old, new, 1)
+        accessory_file.write_text(ab, encoding="utf-8")
+    print("PluginIcons: replaced emoji, sticker and keyboard buttons are shown still")
+
+    profile_file = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift"
+    pb = profile_file.read_text(encoding="utf-8")
+    if "AorusPluginIconValues" not in pb:
+        still = {
+            "voiceChat": ("Peer Info/ButtonVoiceChat", "anim_profilevc"),
+            "mute": ("Peer Info/ButtonMute", "anim_profileunmute"),
+            "unmute": ("Peer Info/ButtonUnmute", "anim_profilemute"),
+            "more": ("Peer Info/ButtonMore", "anim_profilemore"),
+            "leave": ("Peer Info/ButtonLeave", "anim_profileleave"),
+        }
+        for case, (asset, animation) in still.items():
+            old_image = f"                case .{case}:\n                    imageName = nil\n"
+            new_image = f"                case .{case}:\n                    imageName = AorusPluginIconValues.affects(\"{asset}\") ? \"{asset}\" : nil\n"
+            old_animation = f"animationName = \"{animation}\"\n"
+            new_animation = f"animationName = AorusPluginIconValues.affects(\"{asset}\") ? nil : \"{animation}\"\n"
+            if pb.count(old_image) != 1 or pb.count(old_animation) != 1:
+                raise RuntimeError(f"PluginIcons: profile button anchors for {case} are missing")
+            pb = pb.replace(old_image, new_image, 1).replace(old_animation, new_animation, 1)
+        profile_file.write_text(pb, encoding="utf-8")
+    print("PluginIcons: profile buttons a plugin replaced are shown still")
+
+    _aorus_generate_icon_names(tg)
+
+
+_AORUS_PROFILE_BUTTON_HELPER = r'''
+
+/// AorusGram: the colour a plugin gave the buttons under a profile's photo, or Telegram's. A
+/// profile with a colour or a collectible of its own keeps its buttons: they are drawn from it.
+private func aorusProfileButtonColor(_ key: String, _ color: UIColor, dark: Bool, cover: Bool) -> UIColor {
+    if cover {
+        return color
+    }
+    let values = AorusPluginAppearanceValues.current()
+    if values.isEmpty {
+        return color
+    }
+    return AorusPluginAppearanceValues.color(key, dark: dark, in: values) ?? color
+}
+'''
+
+
+def patch_plugin_profile_look(tg: Path) -> None:
+    """The profile's buttons in the colours a plugin described, where Telegram draws them from
+    the theme: a profile without a colour of its own, open or collapsed or being edited."""
+    path = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    t = path.read_text(encoding="utf-8")
+    if "aorusProfileButtonColor" in t:
+        print("PluginProfileLook: already patched")
+        return
+    edits = [
+        (
+            "            contentButtonBackgroundColor = collapsedHeaderContentButtonBackgroundColor\n"
+            "            contentButtonForegroundColor = collapsedHeaderContentButtonForegroundColor\n",
+            "            contentButtonBackgroundColor = aorusProfileButtonColor(\"profile.button\", collapsedHeaderContentButtonBackgroundColor, dark: presentationData.theme.overallDarkAppearance, cover: false)\n"
+            "            contentButtonForegroundColor = aorusProfileButtonColor(\"profile.buttonText\", collapsedHeaderContentButtonForegroundColor, dark: presentationData.theme.overallDarkAppearance, cover: false)\n",
+        ),
+        (
+            "            contentButtonBackgroundColor = regularContentButtonBackgroundColor\n"
+            "            contentButtonForegroundColor = regularContentButtonForegroundColor\n",
+            "            contentButtonBackgroundColor = aorusProfileButtonColor(\"profile.button\", regularContentButtonBackgroundColor, dark: presentationData.theme.overallDarkAppearance, cover: hasCoverColor)\n"
+            "            contentButtonForegroundColor = aorusProfileButtonColor(\"profile.buttonText\", regularContentButtonForegroundColor, dark: presentationData.theme.overallDarkAppearance, cover: hasCoverColor)\n",
+        ),
+    ]
+    for old, new in edits:
+        if t.count(old) != 1:
+            raise RuntimeError(f"PluginProfileLook: anchor found {t.count(old)} times: {old.splitlines()[0]!r}")
+        t = t.replace(old, new, 1)
+    t = t.rstrip("\n") + "\n" + _AORUS_PROFILE_BUTTON_HELPER
+    path.write_text(t, encoding="utf-8")
+    print("PluginProfileLook: profile buttons follow plugins")
 
 
 def patch_hide_tabs(tg: Path) -> None:
@@ -28920,6 +29614,9 @@ def main() -> None:
     patch_plugin_profile_section(tg)
     patch_plugin_hook_sites(tg)
     patch_plugin_chat_list_button(tg)
+    # After every patch of the tab bar and the profile: its anchors are lines those leave.
+    patch_plugin_icons(tg)
+    patch_plugin_profile_look(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

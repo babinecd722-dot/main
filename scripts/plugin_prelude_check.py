@@ -165,6 +165,24 @@ const host = new Proxy({}, {
             record(name, []);
             return '[]';
         };
+        case 'iconsDefine': return (json) => {
+            record(name, [JSON.parse(json)]);
+            if (globalThis.__defineVerdict[name] !== undefined) { return globalThis.__defineVerdict[name]; }
+            return '';
+        };
+        case 'iconsCatalog': return () => {
+            record(name, []);
+            return JSON.stringify([{ name: 'tab.chats', group: 'tab', summary: 'Chats tab', icons: ['Chat List/Tabs/IconChats'], animated: true }]);
+        };
+        case 'iconsAssets': return (prefix) => {
+            record(name, [prefix]);
+            return JSON.stringify(['Chat List/Tabs/IconChats', 'Navigation/Back'].filter((item) => item.startsWith(prefix)));
+        };
+        case 'pagesDefine': return (json) => {
+            record(name, [json]);
+            if (globalThis.__defineVerdict[name] !== undefined) { return globalThis.__defineVerdict[name]; }
+            return true;
+        };
         case 'overlaysDefine':
         case 'nativeButtonsDefine': return (json) => {
             record(name, [json]);
@@ -344,6 +362,55 @@ throws('a badge on an unknown tab did not throw', () => aorus.tabs.setBadge('nop
 globalThis.__defineVerdict.tabBadge = undefined;
 removeMailTab();
 check('removing a tab left it in the bar', lastTabs().length === 1 && lastTabs()[0].id === 'feed');
+
+// Icons: the plugin's whole layer goes to the app each time, the style under its own key,
+// and a refusal leaves the layer as it was.
+function lastIcons() {
+    for (let i = globalThis.__calls.length - 1; i >= 0; i--) {
+        if (globalThis.__calls[i].name === 'iconsDefine') { return globalThis.__calls[i].args[0]; }
+    }
+    return null;
+}
+check('icons is missing', typeof aorus.icons === 'object' && Object.isFrozen(aorus.icons));
+check('icons.set did not answer the count', aorus.icons.set({ 'tab.chats': 'message.fill', 'input.send': { pixels: ['#.', '.#'] } }) === 2);
+check('icons.set did not publish both', Object.keys(lastIcons()).sort().join(',') === 'input.send,tab.chats');
+check('icons.style did not answer', aorus.icons.style({ look: 'pixel', amount: 2 }) === true);
+check('icons.style did not go under its own key', lastIcons()['*'].look === 'pixel' && lastIcons()['tab.chats'] === 'message.fill');
+check('a style is counted as an icon', aorus.icons.set({ 'input.send': null }) === 1);
+check('a null icon was not removed', lastIcons()['input.send'] === undefined && lastIcons()['*'] !== undefined);
+check('the string form of a style was not a look', aorus.icons.style('glow') === true && lastIcons()['*'].look === 'glow');
+check('style(null) did not remove the style', aorus.icons.style(null) === false && lastIcons()['*'] === undefined);
+throws('the style could be set through icons.set', () => aorus.icons.set({ '*': { look: 'pixel' } }));
+globalThis.__defineVerdict.iconsDefine = '[{"key":"tab.calls","reason":"unknown"}]';
+throws('a rejected icon did not throw', () => aorus.icons.set({ 'tab.calls': { symbol: 'phone' } }));
+globalThis.__defineVerdict.iconsDefine = 'denied';
+throws('icons without the permission did not throw', () => aorus.icons.set({ 'tab.calls': 'phone' }));
+globalThis.__defineVerdict.iconsDefine = undefined;
+check('a refused change was kept', aorus.icons.get()['tab.calls'] === undefined && aorus.icons.get()['tab.chats'] === 'message.fill');
+check('icons.slots did not read the catalogue', aorus.icons.slots().length === 1 && aorus.icons.slots()[0].name === 'tab.chats');
+check('icons.assets did not filter by prefix', aorus.icons.assets('Navigation/').join(',') === 'Navigation/Back');
+check('icons.reset() did not clear everything', aorus.icons.reset() === 0 && Object.keys(lastIcons()).length === 0);
+
+// A page's row changed in place: several fields at once, kept only when the app took them.
+const dashboard = aorus.ui.createPage({ id: 'dash', title: 'Dashboard' });
+dashboard.section({ title: 'Now' })
+    .hero({ id: 'card', title: 'Hello', colors: ['6A5CFF', '9B6BFF'] })
+    .progress({ id: 'load', title: 'Load', value: 0.4 })
+    .chart({ id: 'week', title: 'Week', values: [1, 3, 2] })
+    .chips({ id: 'tags', title: 'Tags', options: [{ value: 'a', title: 'A' }], multiple: true });
+dashboard.publish();
+dashboard.set('week', { values: [4, 5, 6], style: 'bar' });
+const publishedRows = JSON.parse(globalThis.__calls.filter((call) => call.name === 'pagesDefine').pop().args[0]).pop().sections[0].rows;
+check('page.set did not publish the new values', publishedRows[2].values.join(',') === '4,5,6' && publishedRows[2].style === 'bar');
+check('the drawn kinds were not typed', publishedRows.map(function (row) { return row.type; }).join(',') === 'hero,progress,chart,chips');
+globalThis.__defineVerdict.pagesDefine = false;
+throws('a refused page.set did not throw', () => dashboard.set('week', { values: [] }));
+throws('a refused page.update did not throw', () => dashboard.update('load', 5));
+globalThis.__defineVerdict.pagesDefine = undefined;
+const kept = dashboard.snapshot().sections[0].rows;
+check('a refused page.set was kept', kept[2].values.join(',') === '4,5,6');
+check('a refused page.update was kept', kept[1].value === 0.4);
+throws('page.set took an unknown row', () => dashboard.set('nope', { title: 'x' }));
 
 // Handlers given to `add` are called directly, so a plugin with several does not have to
 // work out which one fired.

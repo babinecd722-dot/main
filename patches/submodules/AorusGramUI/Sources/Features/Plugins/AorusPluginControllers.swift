@@ -2681,6 +2681,23 @@ private enum AorusPluginDocumentation {
             await page.open({ style: 'sheet' })
             Стили окна: push, sheet и fullScreen. Типы строк: text, button, toggle, input, multiline, number, select, link, slider и stepper. Для select используется options: [{ value, title }], для link — url, для slider и stepper — min, max и step. update(rowId, value) меняет уже открытый экран. Плагин получает aorus.on('uiAction', event), где есть pageId, rowId и новое value. Клиент строит настоящий UIKit-экран и навигацию; внутренние объекты, UIApplication и селекторы в JavaScript не передаются.
 
+            Рисованные строки
+            page.section()
+              .hero({ id: 'hello', title: 'Доброе утро', subtitle: '3 задачи', value: '☀️', colors: ['FF9F0A', 'FF375F'] })
+              .stat({ id: 'done', title: 'Сделано', value: 128, subtitle: '+12%', style: 'up' })
+              .progress({ id: 'plan', title: 'План', value: 0.64 })
+              .ring({ id: 'focus', title: 'Фокус', value: 4, max: 6 })
+              .chart({ id: 'week', title: 'Неделя', values: [3, 5, 4, 8], style: 'area' })
+              .segmented({ id: 'range', title: 'Период', options: [{ value: 'day', title: 'День' }, { value: 'week', title: 'Неделя' }] })
+              .chips({ id: 'tags', title: 'Метки', multiple: true, options: [{ value: 'work', title: 'Работа' }] })
+              .color({ id: 'tint', title: 'Цвет', value: '5E5CE6' })
+              .date({ id: 'due', title: 'Срок', style: 'date' })
+              .rating({ id: 'mood', title: 'Настроение', value: 4 })
+              .code({ id: 'token', title: 'Код', value: 'A1B2-C3D4' })
+              .image({ id: 'cover', title: 'Обложка', image: 'base64 PNG', height: 160 })
+            page.set('week', { values: [4, 6, 5, 9] })
+            hero — карточка с градиентом, progress и ring — полоса и кольцо, которые перетекают к новому значению, chart — линия, столбцы или область, прорисовывающиеся при появлении, stat — крупная цифра со стрелкой роста, segmented — сегменты, chips — пилюли, color — системный выбор цвета, date — компактный выбор даты, rating — звёзды, code — моноширинный блок, копирующийся по нажатию, image — картинка PNG или JPEG до 96 КБ. colors даёт строке свои цвета, два цвета — градиент; badge — метка справа у обычной строки. Выбор приходит в uiAction, нажатие на карточку, полосу, кольцо, график, цифру, код и картинку тоже. page.set меняет у строки несколько полей сразу; изменение, которое нельзя нарисовать, отклоняется, и строка остаётся прежней.
+
             Интеграции приложения:
             const app = aorus.app.info()
             const account = await aorus.app.currentAccount()
@@ -2729,7 +2746,17 @@ private enum AorusPluginDocumentation {
             aorus.appearance.reset()
             const layer = aorus.appearance.get()
             const catalog = aorus.appearance.keys()
-            Вид приложения описывается значениями, а рисует его сам Telegram: цвета пузырей, текста, ссылок, реакций и кнопок под сообщениями, обои и служебные сообщения чата, поле ввода и кнопка отправки, клавиатура бота, панель эмодзи, шапки, поиск, нижняя панель, список чатов, счётчики и значки, экраны настроек, контекстные меню, листы действий, баннеры уведомлений, стекло, форма пузырей и размер текста. Полный список ключей с типами и допустимыми значениями возвращает keys(). Цвет — RRGGBB или RRGGBBAA, где последние две цифры — прозрачность; ключ с градиентом принимает список до четырёх цветов. Приписка @dark или @light ограничивает цвет или стиль стекла одной темой и там главнее ключа без приписки. set дописывает ключи в слой плагина, null убирает ключ, reset убирает перечисленные ключи или весь слой. Одно неверное значение отклоняет изменение целиком, слой остаётся прежним, а ошибка называет ключ и причину. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином. Где два плагина задали один ключ, действует значение плагина, чей идентификатор дальше по алфавиту. Нужно разрешение appCustomization; get и keys его не требуют.
+            Вид приложения описывается значениями, а рисует его сам Telegram: цвета пузырей, текста, ссылок, реакций и кнопок под сообщениями, обои и служебные сообщения чата, поле ввода и кнопка отправки, клавиатура бота, панель эмодзи, шапки, поиск, нижняя панель, список чатов, счётчики и значки, экраны настроек, контекстные меню, листы действий, баннеры уведомлений, стекло, форма пузырей и размер текста, а ещё переключатели, большие кнопки, свайп-действия списка чатов, кольца историй, кнопки профиля и плитки настроек — их заливка, цвет значка и скругление вплоть до круга. Полный список ключей с типами и допустимыми значениями возвращает keys(). Цвет — RRGGBB или RRGGBBAA, где последние две цифры — прозрачность; ключ с градиентом принимает список до четырёх цветов. Приписка @dark или @light ограничивает цвет или стиль стекла одной темой и там главнее ключа без приписки. set дописывает ключи в слой плагина, null убирает ключ, reset убирает перечисленные ключи или весь слой. Одно неверное значение отклоняет изменение целиком, слой остаётся прежним, а ошибка называет ключ и причину. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином. Где два плагина задали один ключ, действует значение плагина, чей идентификатор дальше по алфавиту. Нужно разрешение appCustomization; get и keys его не требуют.
+
+            Иконки
+            aorus.icons.set({ 'tab.chats': 'bubble.left.and.bubble.right.fill', 'input.send': { pixels: ['..##..', '.####.', '######'] } })
+            aorus.icons.set({ 'plus.plain': { text: '✚' }, 'header.back': { path: 'M15 4 L7 12 L15 20', stroke: 2.5 }, 'tab.calls': { hidden: true } })
+            aorus.icons.style('pixel')
+            aorus.icons.style({ look: 'glow', amount: 4, only: ['tab', 'input'] })
+            aorus.icons.reset()
+            const slots = aorus.icons.slots()
+            const names = aorus.icons.assets('Chat List/')
+            Любую иконку Telegram можно заменить: по слоту — таббар, поле ввода, шапки, профиль, значки настроек, меню, все плюсы, звонки — или по имени из каталога, который перечисляет assets(). Замена — SF Symbol, пиксельная сетка с палитрой, символы или эмодзи, SVG path, PNG, другая иконка Telegram или пустое место; scale, rotate, flip и offset подгоняют её. Она рисуется в рамке исходной иконки и её цветом, поэтому тема и оформление красят и её. Стиль меняет все иконки сразу: pixel, bold, thin, outline и glow, only ограничивает его группами, слотами или папками. Таббар, микрофон, кнопки эмодзи и клавиатуры и кнопки профиля, которые Telegram анимирует, с заменой показываются неподвижными. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином; одна неверная иконка отклоняет изменение, и ошибка называет её. Нужно разрешение appCustomization; get, slots и assets его не требуют.
 
             Соединение
             const state = await aorus.proxy.status()
@@ -2948,6 +2975,23 @@ private enum AorusPluginDocumentation {
     await page.open({ style: 'sheet' })
     Window styles are push, sheet and fullScreen. Row types are text, button, toggle, input, multiline, number, select, link, slider and stepper. select uses options: [{ value, title }]; link uses url; slider and stepper use min, max and step. update(rowId, value) updates a visible screen. The plugin receives aorus.on('uiAction', event) with pageId, rowId and the new value. The client builds the real UIKit screen and navigation; internal objects, UIApplication and selectors never enter JavaScript.
 
+    Drawn rows
+    page.section()
+      .hero({ id: 'hello', title: 'Good morning', subtitle: '3 tasks', value: '☀️', colors: ['FF9F0A', 'FF375F'] })
+      .stat({ id: 'done', title: 'Done', value: 128, subtitle: '+12%', style: 'up' })
+      .progress({ id: 'plan', title: 'Plan', value: 0.64 })
+      .ring({ id: 'focus', title: 'Focus', value: 4, max: 6 })
+      .chart({ id: 'week', title: 'Week', values: [3, 5, 4, 8], style: 'area' })
+      .segmented({ id: 'range', title: 'Range', options: [{ value: 'day', title: 'Day' }, { value: 'week', title: 'Week' }] })
+      .chips({ id: 'tags', title: 'Tags', multiple: true, options: [{ value: 'work', title: 'Work' }] })
+      .color({ id: 'tint', title: 'Colour', value: '5E5CE6' })
+      .date({ id: 'due', title: 'Due', style: 'date' })
+      .rating({ id: 'mood', title: 'Mood', value: 4 })
+      .code({ id: 'token', title: 'Code', value: 'A1B2-C3D4' })
+      .image({ id: 'cover', title: 'Cover', image: 'base64 PNG', height: 160 })
+    page.set('week', { values: [4, 6, 5, 9] })
+    hero is a card with a gradient; progress and ring are a bar and a ring that move to a new value; chart is a line, bars or an area drawn in as it appears; stat is a large figure with a trend arrow; segmented is segments; chips are pills; color opens the system colour picker; date is a compact date picker; rating is stars; code is a monospaced block that copies on a tap; image is a PNG or JPEG of up to 96 KB. colors gives a row colours of its own, two of them a gradient; badge is a tag on the right of an ordinary row. A choice arrives as uiAction, and so does a tap on a card, bar, ring, chart, figure, code or picture. page.set changes several fields of a row at once; a change that cannot be drawn is refused and the row stays as it was.
+
     App integrations:
     const app = aorus.app.info()
     const account = await aorus.app.currentAccount()
@@ -2996,7 +3040,17 @@ private enum AorusPluginDocumentation {
     aorus.appearance.reset()
     const layer = aorus.appearance.get()
     const catalog = aorus.appearance.keys()
-    The look of the app is described in values and drawn by Telegram itself: the colours of bubbles, text, links, reactions and the buttons under messages, the chat wallpaper and service messages, the input panel and send button, the bot keyboard, the emoji panel, navigation bars, search, the tab bar, the chat list, counters and marks, settings screens, context menus, action sheets, notification banners, the glass, the bubble's shape and the text size. keys() returns every key with its type and allowed values. A colour is RRGGBB or RRGGBBAA, the last two digits being its alpha; a gradient key takes a list of up to four colours. An @dark or @light suffix limits a colour or the glass style to one appearance, where it wins over the plain key. set adds keys to the plugin's layer, null removes a key, reset removes the keys named or the whole layer. One invalid value rejects the whole change, the layer stays as it was, and the error names the key and the reason. Changes show at once, are kept until the next launch and leave with the plugin. Where two plugins set the same key, the one whose id sorts later wins. Needs appCustomization; get and keys need nothing.
+    The look of the app is described in values and drawn by Telegram itself: the colours of bubbles, text, links, reactions and the buttons under messages, the chat wallpaper and service messages, the input panel and send button, the bot keyboard, the emoji panel, navigation bars, search, the tab bar, the chat list, counters and marks, settings screens, context menus, action sheets, notification banners, the glass, the bubble's shape and the text size, and also switches, large buttons, the chat list's swipe actions, story rings, the profile's buttons and the settings tiles — their fill, the colour of the symbol on them and their corner, all the way to a circle. keys() returns every key with its type and allowed values. A colour is RRGGBB or RRGGBBAA, the last two digits being its alpha; a gradient key takes a list of up to four colours. An @dark or @light suffix limits a colour or the glass style to one appearance, where it wins over the plain key. set adds keys to the plugin's layer, null removes a key, reset removes the keys named or the whole layer. One invalid value rejects the whole change, the layer stays as it was, and the error names the key and the reason. Changes show at once, are kept until the next launch and leave with the plugin. Where two plugins set the same key, the one whose id sorts later wins. Needs appCustomization; get and keys need nothing.
+
+    Icons
+    aorus.icons.set({ 'tab.chats': 'bubble.left.and.bubble.right.fill', 'input.send': { pixels: ['..##..', '.####.', '######'] } })
+    aorus.icons.set({ 'plus.plain': { text: '✚' }, 'header.back': { path: 'M15 4 L7 12 L15 20', stroke: 2.5 }, 'tab.calls': { hidden: true } })
+    aorus.icons.style('pixel')
+    aorus.icons.style({ look: 'glow', amount: 4, only: ['tab', 'input'] })
+    aorus.icons.reset()
+    const slots = aorus.icons.slots()
+    const names = aorus.icons.assets('Chat List/')
+    Any of Telegram's icons can be replaced: by slot — the tab bar, the input field, navigation bars, the profile, the settings symbols, menus, every plus, calls — or by name from the catalogue assets() lists. A replacement is an SF Symbol, a pixel grid with a palette, a few characters or an emoji, an SVG path, a PNG, another of Telegram's icons or an empty space; scale, rotate, flip and offset adjust it. It is drawn in the original's box and in its colour, so the theme and the look colour it too. A style changes every icon at once: pixel, bold, thin, outline and glow, with only limiting it to groups, slots or folders. The tab bar, the microphone, the emoji and keyboard buttons and the profile's buttons, which Telegram animates, are shown still while replaced. Changes show at once, are kept until the next launch and leave with the plugin; one invalid icon rejects the change and the error names it. Needs appCustomization; get, slots and assets need nothing.
 
     Connection
     const state = await aorus.proxy.status()
@@ -3099,6 +3153,17 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     /// The page is the root of a tab in the bottom bar. A tab whose page the plugin withdraws
     /// leaves the bar with it; there is nothing for the page to close.
     var isTab = false
+    /// Where each bar and ring was last drawn, so a new value moves it from there rather than
+    /// from empty.
+    private var lastFractions: [String: Double] = [:]
+    /// How far each row of pills was scrolled, kept across the redraw a tap on one causes.
+    private var chipOffsets: [String: CGFloat] = [:]
+    private var colorPickerDelegate: AnyObject?
+
+    private var palette: AorusPluginPagePalette {
+        let list = presentationData.theme.list
+        return AorusPluginPagePalette(accent: list.itemAccentColor, primary: list.itemPrimaryTextColor, secondary: list.itemSecondaryTextColor, background: list.itemBlocksBackgroundColor, groupBackground: list.blocksBackgroundColor)
+    }
 
     init(context: AccountContext, pluginId: String, page: AorusPluginUIPage) {
         self.context = context
@@ -3185,6 +3250,9 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let row = page.sections[indexPath.section].rows[indexPath.row]
+        if let drawn = drawnCell(row: row, indexPath: indexPath) {
+            return drawn
+        }
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
         cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
         cell.textLabel?.text = row.title
@@ -3194,7 +3262,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         cell.detailTextLabel?.numberOfLines = 0
         if let icon = row.icon {
             cell.imageView?.image = UIImage(systemName: AorusPluginIcon.normalized(icon))
-            cell.imageView?.tintColor = presentationData.theme.list.itemAccentColor
+            cell.imageView?.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor
         }
         switch row.kind {
         case .toggle:
@@ -3228,8 +3296,237 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             cell.accessoryType = row.kind == .button ? .none : .disclosureIndicator
         case .text:
             cell.selectionStyle = .none
+        case .color:
+            let swatch = UIView(frame: CGRect(x: 0.0, y: 0.0, width: 28.0, height: 28.0))
+            swatch.backgroundColor = aorusPageColor(row.value?.stringValue ?? "007AFF")
+            swatch.layer.cornerRadius = 14.0
+            swatch.layer.borderWidth = 1.0
+            swatch.layer.borderColor = presentationData.theme.list.itemBlocksSeparatorColor.cgColor
+            cell.accessoryView = swatch
+        case .date:
+            cell.selectionStyle = .none
+            if #available(iOS 13.4, *) {
+                let picker = UIDatePicker()
+                picker.preferredDatePickerStyle = .compact
+                switch row.style {
+                case "date":
+                    picker.datePickerMode = .date
+                case "time":
+                    picker.datePickerMode = .time
+                default:
+                    picker.datePickerMode = .dateAndTime
+                }
+                if let value = row.value?.doubleValue {
+                    picker.date = Date(timeIntervalSince1970: value / 1000.0)
+                }
+                picker.minimumDate = row.minimum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
+                picker.maximumDate = row.maximum.map { Date(timeIntervalSince1970: $0 / 1000.0) }
+                picker.tintColor = (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor
+                picker.accessibilityIdentifier = "\(indexPath.section):\(indexPath.row)"
+                picker.addTarget(self, action: #selector(dateChanged(_:)), for: .valueChanged)
+                picker.sizeToFit()
+                cell.accessoryView = picker
+            }
+        case .hero, .progress, .ring, .chart, .stat, .segmented, .chips, .image, .code, .rating:
+            break
+        }
+        if let badge = row.badge, !badge.isEmpty, cell.accessoryView == nil {
+            cell.accessoryView = AorusPluginBadgeView(text: badge, color: (row.colors?.first).map(aorusPageColor) ?? presentationData.theme.list.itemAccentColor)
         }
         return cell
+    }
+
+    /// The rows that are drawn rather than listed: cards, bars, rings, charts, figures,
+    /// segments, pills, pictures, code and stars, each in a cell of its own.
+    private func drawnCell(row: AorusPluginUIPage.Row, indexPath: IndexPath) -> UITableViewCell? {
+        let palette = self.palette
+        let content: UIView
+        var tappable = false
+        var bleeds = false
+        switch row.kind {
+        case .hero:
+            content = AorusPluginHeroView(row: row, palette: palette)
+            tappable = true
+            bleeds = true
+        case .progress:
+            content = AorusPluginProgressView(row: row, palette: palette, previous: lastFractions[row.id])
+            lastFractions[row.id] = row.fraction
+            tappable = true
+        case .ring:
+            content = AorusPluginRingView(row: row, palette: palette, previous: lastFractions[row.id])
+            lastFractions[row.id] = row.fraction
+            tappable = true
+        case .chart:
+            let chart = AorusPluginChartView(row: row, palette: palette)
+            chart.heightAnchor.constraint(equalToConstant: CGFloat(row.height ?? 140.0)).isActive = true
+            content = titled(chart, row: row, palette: palette)
+            tappable = true
+        case .stat:
+            content = AorusPluginStatView(row: row, palette: palette)
+            tappable = true
+        case .segmented:
+            let options = row.options ?? []
+            let control = UISegmentedControl(items: options.map(\.title))
+            control.selectedSegmentIndex = options.firstIndex(where: { $0.value == row.value?.stringValue }) ?? 0
+            control.selectedSegmentTintColor = (row.colors?.first).map(aorusPageColor)
+            control.accessibilityIdentifier = "\(indexPath.section):\(indexPath.row)"
+            control.addTarget(self, action: #selector(segmentChanged(_:)), for: .valueChanged)
+            content = titled(control, row: row, palette: palette)
+        case .chips:
+            let chips = AorusPluginChipsView(row: row, palette: palette, offset: chipOffsets[row.id] ?? 0.0)
+            let rowId = row.id
+            chips.toggled = { [weak self] value in
+                self?.toggleChip(rowId: rowId, value: value)
+            }
+            chips.scrolled = { [weak self] offset in
+                self?.chipOffsets[rowId] = offset
+            }
+            content = titled(chips, row: row, palette: palette)
+        case .image:
+            content = AorusPluginPictureView(row: row, palette: palette)
+            tappable = true
+        case .code:
+            content = AorusPluginCodeView(row: row, palette: palette)
+            tappable = true
+        case .rating:
+            let rating = AorusPluginRatingView(row: row, palette: palette)
+            let rowId = row.id
+            rating.rated = { [weak self] value in
+                self?.update(rowId: rowId, value: .number(Double(value)))
+            }
+            content = titled(rating, row: row, palette: palette)
+        case .text, .button, .toggle, .input, .multiline, .number, .select, .link, .slider, .stepper, .color, .date:
+            return nil
+        }
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        cell.backgroundColor = bleeds ? .clear : presentationData.theme.list.itemBlocksBackgroundColor
+        cell.selectionStyle = tappable && !bleeds ? .default : .none
+        content.translatesAutoresizingMaskIntoConstraints = false
+        cell.contentView.addSubview(content)
+        if bleeds {
+            NSLayoutConstraint.activate([
+                content.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor),
+                content.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor),
+                content.topAnchor.constraint(equalTo: cell.contentView.topAnchor),
+                content.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor),
+            ])
+        } else {
+            let margins = cell.contentView.layoutMarginsGuide
+            NSLayoutConstraint.activate([
+                content.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
+                content.trailingAnchor.constraint(equalTo: margins.trailingAnchor),
+                content.topAnchor.constraint(equalTo: margins.topAnchor),
+                content.bottomAnchor.constraint(equalTo: margins.bottomAnchor),
+            ])
+        }
+        return cell
+    }
+
+    /// A control with the row's title over it and its subtitle under the title.
+    private func titled(_ view: UIView, row: AorusPluginUIPage.Row, palette: AorusPluginPagePalette) -> UIView {
+        let titleLabel = UILabel()
+        titleLabel.text = row.title
+        titleLabel.font = .systemFont(ofSize: 16.0, weight: .semibold)
+        titleLabel.textColor = palette.primary
+        titleLabel.numberOfLines = 0
+        var parts: [UIView] = [titleLabel]
+        if let subtitle = row.subtitle, !subtitle.isEmpty {
+            let subtitleLabel = UILabel()
+            subtitleLabel.text = subtitle
+            subtitleLabel.font = .systemFont(ofSize: 13.0)
+            subtitleLabel.textColor = palette.secondary
+            subtitleLabel.numberOfLines = 0
+            parts.append(subtitleLabel)
+        }
+        parts.append(view)
+        let stack = UIStackView(arrangedSubviews: parts)
+        stack.axis = .vertical
+        stack.spacing = 8.0
+        stack.setCustomSpacing(12.0, after: parts[parts.count - 2])
+        return stack
+    }
+
+    private func row(withId rowId: String) -> AorusPluginUIPage.Row? {
+        for section in page.sections {
+            if let row = section.rows.first(where: { $0.id == rowId }) {
+                return row
+            }
+        }
+        return nil
+    }
+
+    private func toggleChip(rowId: String, value: String) {
+        guard let row = row(withId: rowId) else { return }
+        if row.multiple == true {
+            var chosen: [String] = []
+            if case let .array(items)? = row.value {
+                chosen = items.compactMap(\.stringValue)
+            }
+            if let index = chosen.firstIndex(of: value) {
+                chosen.remove(at: index)
+            } else {
+                chosen.append(value)
+            }
+            update(rowId: rowId, value: .array(chosen.map { AorusPluginJSONValue.string($0) }))
+        } else {
+            update(rowId: rowId, value: row.value?.stringValue == value ? .null : .string(value))
+        }
+    }
+
+    @objc private func segmentChanged(_ sender: UISegmentedControl) {
+        guard let indexPath = indexPath(for: sender) else { return }
+        let row = page.sections[indexPath.section].rows[indexPath.row]
+        guard let options = row.options, options.indices.contains(sender.selectedSegmentIndex) else { return }
+        // The control already shows the choice; redrawing it would only restart its animation.
+        update(rowId: row.id, value: .string(options[sender.selectedSegmentIndex].value), reload: false)
+    }
+
+    @objc private func dateChanged(_ sender: UIDatePicker) {
+        guard let indexPath = indexPath(for: sender) else { return }
+        let row = page.sections[indexPath.section].rows[indexPath.row]
+        // Not redrawn: the picker's own popover is open while this arrives.
+        update(rowId: row.id, value: .number((sender.date.timeIntervalSince1970 * 1000.0).rounded()), reload: false)
+    }
+
+    private func presentColorPicker(row: AorusPluginUIPage.Row) {
+        let rowId = row.id
+        if #available(iOS 14.0, *) {
+            let picker = UIColorPickerViewController()
+            picker.selectedColor = aorusPageColor(row.value?.stringValue ?? "007AFF")
+            picker.supportsAlpha = false
+            let delegate = AorusPluginColorPickerDelegate { [weak self] color in
+                self?.update(rowId: rowId, value: .string(aorusHexString(color)))
+            }
+            colorPickerDelegate = delegate
+            picker.delegate = delegate
+            present(picker, animated: true)
+        } else {
+            // iOS 13 has no system colour picker: the system's own colours, each shown as a
+            // coloured circle and its code, which read the same in every language.
+            let sheet = UIAlertController(title: row.title, message: nil, preferredStyle: .actionSheet)
+            let choices: [(String, String)] = [
+                ("🔴", "FF3B30"),
+                ("🟠", "FF9500"),
+                ("🟡", "FFCC00"),
+                ("🟢", "34C759"),
+                ("🔵", "007AFF"),
+                ("🟣", "AF52DE"),
+                ("🟤", "A2845E"),
+                ("⚫", "1C1C1E"),
+                ("⚪", "F2F2F7"),
+            ]
+            for (circle, hex) in choices {
+                sheet.addAction(UIAlertAction(title: circle + "  #" + hex, style: .default) { [weak self] _ in
+                    self?.update(rowId: rowId, value: .string(hex))
+                })
+            }
+            sheet.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+            if let popover = sheet.popoverPresentationController {
+                popover.sourceView = view
+                popover.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1.0, height: 1.0)
+            }
+            present(sheet, animated: true)
+        }
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
@@ -3287,7 +3584,16 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
                 }
             })
             present(alert, animated: true)
-        case .text, .toggle, .slider, .stepper:
+        case .hero, .progress, .ring, .chart, .stat, .image:
+            send(row: row, value: row.value)
+        case .code:
+            // The person's own tap copies what they see.
+            UIPasteboard.general.string = row.value?.stringValue ?? ""
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            send(row: row, value: row.value)
+        case .color:
+            presentColorPicker(row: row)
+        case .text, .toggle, .slider, .stepper, .segmented, .chips, .date, .rating:
             break
         }
     }
@@ -3322,13 +3628,15 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         return indexPath
     }
 
-    private func update(rowId: String, value: AorusPluginJSONValue) {
+    private func update(rowId: String, value: AorusPluginJSONValue, reload: Bool = true) {
         guard let section = page.sections.firstIndex(where: { section in section.rows.contains(where: { $0.id == rowId }) }),
               let rowIndex = page.sections[section].rows.firstIndex(where: { $0.id == rowId }) else { return }
         let indexPath = IndexPath(row: rowIndex, section: section)
         page.sections[indexPath.section].rows[indexPath.row].value = value
         let row = page.sections[indexPath.section].rows[indexPath.row]
-        tableView.reloadRows(at: [indexPath], with: .none)
+        if reload {
+            tableView.reloadRows(at: [indexPath], with: .none)
+        }
         send(row: row, value: value)
     }
 
@@ -3345,6 +3653,13 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         }
         if [.number, .slider, .stepper].contains(row.kind), let value = row.value?.doubleValue {
             return value.rounded() == value ? String(Int(value)) : String(value)
+        }
+        if row.kind == .date, let value = row.value?.doubleValue {
+            // What the compact picker shows, for a phone too old to have one.
+            let formatter = DateFormatter()
+            formatter.dateStyle = row.style == "time" ? .none : .medium
+            formatter.timeStyle = row.style == "date" ? .none : .short
+            return formatter.string(from: Date(timeIntervalSince1970: value / 1000.0))
         }
         return row.subtitle
     }
