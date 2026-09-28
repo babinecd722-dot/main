@@ -11573,10 +11573,6 @@ def patch_fake_gifts(tg: Path) -> None:
     ru_add = _swift_uescape("Добавить в профиль")
     ru_added = _swift_uescape("Подарок добавлен в профиль")
     ru_view = _swift_uescape("Перейти")
-    ru_pin = _swift_uescape("Закрепить")
-    ru_unpin = _swift_uescape("Открепить")
-    ru_pinned = _swift_uescape("Подарок закреплён")
-    ru_unpinned = _swift_uescape("Подарок откреплён")
     # Shared by the separate long-press Transfer route in the profile grid.
     ru_transfer_title = _swift_uescape("Передать подарок")
     ru_transferred = _swift_uescape("Подарок передан")
@@ -11593,24 +11589,34 @@ def patch_fake_gifts(tg: Path) -> None:
                 "                items.append(.action(ContextMenuActionItem(text: presentationData.strings.Gift_View_Context_CopyLink, icon: { theme in\n"
                 "                    return generateTintedImage(image: UIImage(bundleImageName: \"Chat/Context Menu/Link\"), color: theme.contextMenu.primaryColor)\n"
             )
+            # The same item Telegram shows for its own gifts, worded and answered the same way.
+            # Opened from the profile, the profile's own toggle holds the pinned list, its limit
+            # and its replacement sheet. Opened from anywhere else -- a card in Saved Messages,
+            # a link -- none of that is at hand, and pinning used to go straight to the store
+            # with no limit at all; `aorusPinLocalGift` reads the list and the limit the way the
+            # profile does and answers a full list with the same sheet.
             pin_injection = (
                 "                if AorusFakeGiftsStore.contains(arguments.gift, reference: arguments.reference) {\n"
-                "                    let aorusFakeIsRu = presentationData.strings.baseLanguageCode == \"ru\" || presentationData.strings.baseLanguageCode.hasPrefix(\"ru\")\n"
                 "                    let aorusPinned = AorusFakeGiftsStore.isPinned(arguments.gift, reference: arguments.reference)\n"
-                "                    items.append(.action(ContextMenuActionItem(text: aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpin + "\" : \"Unpin\") : (aorusFakeIsRu ? \"" + ru_pin + "\" : \"Pin\"), icon: { theme in\n"
+                "                    items.append(.action(ContextMenuActionItem(text: aorusPinned ? strings.PeerInfo_Gifts_Context_Unpin : strings.PeerInfo_Gifts_Context_Pin, icon: { theme in\n"
                 "                        return generateTintedImage(image: UIImage(bundleImageName: aorusPinned ? \"Chat/Context Menu/Unpin\" : \"Chat/Context Menu/Pin\"), color: theme.contextMenu.primaryColor)\n"
-                "                    }, action: { [weak controller] c, _ in\n"
+                "                    }, action: { [weak self, weak controller] c, _ in\n"
                 "                        c?.dismiss(completion: nil)\n"
-                "                        guard let aorusReference = arguments.reference else { return }\n"
-                "                        let aorusDidToggle: Bool\n"
-                "                        if let aorusToggle = controller?.togglePinnedToTop {\n"
-                "                            aorusDidToggle = aorusToggle(aorusReference, !aorusPinned)\n"
+                "                        guard let self, let controller, let aorusReference = arguments.reference else { return }\n"
+                "                        if let aorusToggle = controller.togglePinnedToTop {\n"
+                "                            guard aorusToggle(aorusReference, !aorusPinned) else { return }\n"
+                "                            if !aorusPinned {\n"
+                "                                // The profile announces a pin itself, as it does for Telegram's gifts.\n"
+                "                                controller.dismissAnimated()\n"
+                "                                return\n"
+                "                            }\n"
+                "                        } else if !aorusPinned {\n"
+                "                            aorusPinLocalGift(context: self.context, reference: aorusReference, controller: controller, presentationData: presentationData)\n"
+                "                            return\n"
                 "                        } else {\n"
-                "                            aorusDidToggle = AorusFakeGiftsStore.setPinned(reference: aorusReference, !aorusPinned)\n"
+                "                            guard AorusFakeGiftsStore.setPinned(reference: aorusReference, false) else { return }\n"
                 "                        }\n"
-                "                        guard aorusDidToggle else { return }\n"
-                "                        let aorusToast = aorusPinned ? (aorusFakeIsRu ? \"" + ru_unpinned + "\" : \"Gift unpinned\") : (aorusFakeIsRu ? \"" + ru_pinned + "\" : \"Gift pinned\")\n"
-                "                        controller?.present(UndoOverlayController(presentationData: presentationData, content: .actionSucceeded(title: nil, text: aorusToast, cancel: nil, destructive: false), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
+                "                        controller.present(UndoOverlayController(presentationData: presentationData, content: .universal(animation: \"anim_toastunpin\", scale: 0.06, colors: [:], title: nil, text: strings.PeerInfo_Gifts_ToastUnpinned_Text, customUndoText: nil, timeout: 5), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)\n"
                 "                    })))\n"
                 "                }\n"
             ) + copylink_anchor
@@ -13142,6 +13148,120 @@ def patch_local_gift_upgrade(tg: Path) -> None:
     )
     path.write_text(source.replace(anchor, replacement, 1), encoding="utf-8")
     print("LocalGiftUpgrade: local gifts upgrade without the server")
+
+
+AORUS_GIFT_PIN_LIMIT_SWIFT = r'''
+
+// MARK: - AorusGram
+
+/// Pins a local gift from a gift screen the profile did not open -- a card in Saved Messages, a
+/// link. The profile keeps the pinned list and its limit, and neither is at hand here, so both
+/// are read the way the profile reads them: Telegram's own pinned gifts from the account's gift
+/// list, the local ones from the store, the limit from the app configuration. A full list gets
+/// the profile's own sheet for choosing the gift to replace, instead of one pin too many.
+private func aorusPinLocalGift(context: AccountContext, reference: StarGiftReference, controller: GiftViewScreen, presentationData: PresentationData) {
+    guard let stored = AorusFakeGiftsStore.stored(reference: reference), let gift = AorusFakeGiftsStore.wrapper(for: stored) else {
+        return
+    }
+    var maxPinnedCount = 6
+    if let value = context.currentAppConfiguration.with({ $0 }).data?["stargifts_pinned_to_top_limit"] as? Double {
+        maxPinnedCount = Int(value)
+    }
+    let strings = presentationData.strings
+    func title(of gift: ProfileGiftsContext.State.StarGift) -> String {
+        switch gift.gift {
+        case let .unique(uniqueGift):
+            return "\(uniqueGift.title) #\(formatCollectibleNumber(uniqueGift.number, dateTimeFormat: presentationData.dateTimeFormat))"
+        case let .generic(genericGift):
+            return genericGift.title ?? ""
+        }
+    }
+    let profileGifts = ProfileGiftsContext(account: context.account, peerId: context.account.peerId)
+    let _ = (profileGifts.state
+    |> filter { state in
+        if case .ready = state.dataState {
+            return true
+        }
+        return false
+    }
+    |> take(1)
+    |> map(Optional.init)
+    |> timeout(5.0, queue: Queue.mainQueue(), alternate: .single(nil))
+    |> deliverOnMainQueue).startStandalone(next: { [weak controller] state in
+        guard let controller else {
+            return
+        }
+        // In the order the profile shows them: the local ones first, then Telegram's own.
+        let serverPinned = (state?.gifts ?? []).filter { gift in
+            guard gift.pinnedToTop, let reference = gift.reference else {
+                return false
+            }
+            return !AorusFakeGiftsStore.contains(reference: reference)
+        }
+        let pinned = (AorusFakeGiftsStore.pinnedProfileWrappers() + serverPinned).filter { $0.reference != nil }
+        if pinned.count < maxPinnedCount {
+            guard AorusFakeGiftsStore.setPinned(reference: reference, true) else {
+                return
+            }
+            controller.present(UndoOverlayController(presentationData: presentationData, content: .universal(animation: "anim_toastpin", scale: 0.06, colors: [:], title: strings.PeerInfo_Gifts_ToastPinned_TitleNew(title(of: gift)).string, text: strings.PeerInfo_Gifts_ToastPinned_Text, customUndoText: nil, timeout: 5), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+            controller.dismissAnimated()
+            return
+        }
+        let unpinScreen = GiftUnpinScreen(context: context, gift: gift, pinnedGifts: pinned, completion: { [weak controller] unpinnedReference in
+            var references = pinned.compactMap { $0.reference }
+            guard let index = references.firstIndex(of: unpinnedReference) else {
+                return
+            }
+            let replaced = pinned[index]
+            references[index] = reference
+            // Split where it is kept: the local order in the store, Telegram's own on the server.
+            AorusFakeGiftsStore.updatePinnedReferences(references, maxCount: maxPinnedCount)
+            let serverReferences = references.filter { !AorusFakeGiftsStore.contains(reference: $0) }
+            if serverReferences != serverPinned.compactMap({ $0.reference }) {
+                profileGifts.updatePinnedToTopStarGifts(references: serverReferences)
+            }
+            guard let controller else {
+                return
+            }
+            controller.present(UndoOverlayController(presentationData: presentationData, content: .universal(animation: "anim_toastpin", scale: 0.06, colors: [:], title: strings.PeerInfo_Gifts_ToastPinned_TitleNew(title(of: gift)).string, text: strings.PeerInfo_Gifts_ToastPinned_ReplacingText(title(of: replaced)).string, customUndoText: nil, timeout: 5), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
+            controller.dismissAnimated()
+        })
+        controller.push(unpinScreen)
+    })
+}
+'''
+
+
+def patch_local_gift_pin_limit(tg: Path) -> None:
+    """The pinned-gift limit, and its replacement sheet, wherever a local gift is pinned.
+
+    The profile enforces the limit on the list it shows -- Telegram's pinned gifts and the local
+    ones together -- and answers a full list with `GiftUnpinScreen`, Telegram's own "choose which
+    gift to replace". A gift screen opened from anywhere else, a card in Saved Messages among
+    them, has no profile behind it and was pinning straight into the store, so there any number
+    of gifts could be pinned. The Pin item there now calls `aorusPinLocalGift`, which reads the
+    same list and the same limit and presents the same sheet.
+    """
+    gv = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/Sources/GiftViewScreen.swift"
+    build = tg / "submodules/TelegramUI/Components/Gifts/GiftViewScreen/BUILD"
+    t = gv.read_text(encoding="utf-8")
+    if "aorusPinLocalGift(context: self.context" not in t:
+        raise RuntimeError("GiftPinLimit: the local Pin item does not call aorusPinLocalGift")
+    if "private func aorusPinLocalGift(" not in t:
+        if "import GlassBackgroundComponent\n" not in t:
+            raise RuntimeError("GiftPinLimit: GiftViewScreen import anchor is missing")
+        t = t.replace("import GlassBackgroundComponent\n", "import GlassBackgroundComponent\nimport GiftUnpinScreen\n", 1)
+        t = t.rstrip("\n") + "\n" + AORUS_GIFT_PIN_LIMIT_SWIFT
+        gv.write_text(t, encoding="utf-8")
+        print("GiftPinLimit: gift screens outside the profile keep the pinned limit")
+    b = build.read_text(encoding="utf-8")
+    dep = '        "//submodules/TelegramUI/Components/Gifts/GiftUnpinScreen",\n'
+    if dep not in b:
+        anchor = '        "//submodules/TelegramUI/Components/Gifts/GiftItemComponent",\n'
+        if b.count(anchor) != 1:
+            raise RuntimeError("GiftPinLimit: GiftViewScreen BUILD anchor is missing")
+        build.write_text(b.replace(anchor, anchor + dep, 1), encoding="utf-8")
+        print("GiftPinLimit: GiftViewScreen depends on GiftUnpinScreen")
 
 
 def patch_saved_messages_gift_upgrade(tg: Path) -> None:
@@ -28266,6 +28386,7 @@ def main() -> None:
     patch_fake_gifts(tg)
     patch_local_gift_upgrade(tg)
     patch_saved_messages_gift_upgrade(tg)
+    patch_local_gift_pin_limit(tg)
     patch_fake_stars(tg)
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)

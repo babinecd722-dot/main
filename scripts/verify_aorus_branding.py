@@ -777,8 +777,16 @@ def main() -> None:
             / "GiftViewScreen.swift"
         )
         fake_gift_view_text = fake_gift_view.read_text(encoding="utf-8") if fake_gift_view.is_file() else ""
-        if "if let aorusToggle = controller?.togglePinnedToTop" not in fake_gift_view_text:
+        # Opened from the profile, a local Pin goes through the profile's own toggle; opened from
+        # anywhere else it goes through aorusPinLocalGift, which keeps the same limit and the same
+        # replacement sheet. Neither may pin straight into the store.
+        if "if let aorusToggle = controller.togglePinnedToTop" not in fake_gift_view_text:
             err.append("FakeGifts: local Pin/Unpin no longer uses the established toggle route")
+        for marker in ("private func aorusPinLocalGift(", "GiftUnpinScreen(context: context, gift: gift, pinnedGifts: pinned"):
+            if marker not in fake_gift_view_text:
+                err.append("FakeGifts: a local gift pinned outside the profile skips the pinned limit")
+        if "AorusFakeGiftsStore.setPinned(reference: aorusReference, !aorusPinned)" in fake_gift_view_text:
+            err.append("FakeGifts: a local gift is pinned straight into the store with no limit")
         fake_gifts_list = (
             tg
             / "submodules"
