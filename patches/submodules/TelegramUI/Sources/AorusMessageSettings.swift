@@ -622,6 +622,10 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     private var item: AorusMessagePreviewItem?
     private var shuffleButton: UIButton?
     private var shuffleGlyph: UIImageView?
+    /// The size the wallpaper was last laid out at. It is the height of the list the screen
+    /// shows, not the row's: the wallpaper then looks as it does behind a chat, and it keeps
+    /// its scale while the row grows and shrinks instead of zooming with it.
+    private var backgroundSize: CGSize?
 
     init() {
         self.topStripeNode = ASDisplayNode()
@@ -898,13 +902,19 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners) : nil
             strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
             strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width, height: separatorHeight))
+            // The rounded card is exactly the row. The list gives a row its final size at once and
+            // only slides the rows around it, so the edges are placed there, not at a height that
+            // is still on its way.
+            strongSelf.maskNode.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset * 2.0), height: contentSize.height)
 
-            let backgroundFrame = CGRect(origin: CGPoint(), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-            if let backgroundNode = strongSelf.backgroundNode {
-                backgroundNode.frame = backgroundFrame
-                backgroundNode.updateLayout(size: backgroundNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
+            // Laid out again only when the screen itself changes size, so the wallpaper stands
+            // still under every change of the look.
+            let backgroundSize = CGSize(width: params.width, height: max(params.availableHeight, contentSize.height))
+            if let backgroundNode = strongSelf.backgroundNode, strongSelf.backgroundSize != backgroundSize {
+                strongSelf.backgroundSize = backgroundSize
+                backgroundNode.frame = CGRect(origin: CGPoint(), size: backgroundSize)
+                backgroundNode.updateLayout(size: backgroundSize, displayMode: .aspectFill, transition: .immediate)
             }
-            strongSelf.maskNode.frame = backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0)
             strongSelf.layoutShuffleButton()
             if let button = strongSelf.shuffleButton {
                 // Above the messages and the rounded edge of the card.
