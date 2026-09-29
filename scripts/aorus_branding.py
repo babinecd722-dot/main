@@ -18283,6 +18283,27 @@ private final class AorusPluginThemeCache {
 
 private let aorusPluginThemeCache = AorusPluginThemeCache()
 
+// A bubble's colours with another shadow. The theme's own `withUpdated` keeps the shadow it
+// has, so the components are built again around the one asked for.
+private func aorusBubbleComponents(_ c: PresentationThemeBubbleColorComponents, shadow: PresentationThemeBubbleShadow?) -> PresentationThemeBubbleColorComponents {
+    return PresentationThemeBubbleColorComponents(
+        fill: c.fill,
+        highlightedFill: c.highlightedFill,
+        stroke: c.stroke,
+        shadow: shadow,
+        reactionInactiveBackground: c.reactionInactiveBackground,
+        reactionInactiveForeground: c.reactionInactiveForeground,
+        reactionActiveBackground: c.reactionActiveBackground,
+        reactionActiveForeground: c.reactionActiveForeground,
+        reactionStarsInactiveBackground: c.reactionStarsInactiveBackground,
+        reactionStarsInactiveForeground: c.reactionStarsInactiveForeground,
+        reactionStarsActiveBackground: c.reactionStarsActiveBackground,
+        reactionStarsActiveForeground: c.reactionStarsActiveForeground,
+        reactionInactiveMediaPlaceholder: c.reactionInactiveMediaPlaceholder,
+        reactionActiveMediaPlaceholder: c.reactionActiveMediaPlaceholder
+    )
+}
+
 // What the theme in use looks like, for the few things drawn once and kept rather than drawn
 // from a theme: the settings icons.
 private let aorusCurrentThemeLock = NSLock()
@@ -18434,8 +18455,25 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
             return c(prefix + name)
         }
         let fill = AorusPluginAppearanceValues.colors(prefix + "fill", dark: dark, in: values)
+        // How much of the bubble lets the wallpaper through, and how far it stands off it.
+        let opacity = AorusPluginAppearanceValues.number(prefix + "opacity", in: values).map { max(0.1, min(1.0, $0)) }
+        let shadowStrength = AorusPluginAppearanceValues.number(prefix + "shadow", in: values).map { max(0.0, min(1.0, $0)) }
         func components(_ source: PresentationThemeBubbleColorComponents) -> PresentationThemeBubbleColorComponents {
-            return source.withUpdated(fill: fill, highlightedFill: pc("highlight"), stroke: pc("stroke"), reactionInactiveBackground: pc("reaction"), reactionInactiveForeground: pc("reactionText"), reactionActiveBackground: pc("reactionSelected"), reactionActiveForeground: pc("reactionSelectedText"))
+            var updated = source.withUpdated(fill: fill, highlightedFill: pc("highlight"), stroke: pc("stroke"), reactionInactiveBackground: pc("reaction"), reactionInactiveForeground: pc("reactionText"), reactionActiveBackground: pc("reactionSelected"), reactionActiveForeground: pc("reactionSelectedText"))
+            if let opacity, opacity < 1.0 {
+                updated = updated.withUpdated(fill: updated.fill.map { $0.withMultipliedAlpha(opacity) }, highlightedFill: updated.highlightedFill.withMultipliedAlpha(opacity))
+            }
+            if let shadowStrength {
+                // Soft and close under a light shadow, deeper and further under a strong one;
+                // never wider than the room Telegram leaves around a bubble for its shadow.
+                let shadow: PresentationThemeBubbleShadow? = shadowStrength > 0.0 ? PresentationThemeBubbleShadow(
+                    color: UIColor(white: 0.0, alpha: 0.1 + 0.32 * shadowStrength),
+                    radius: 1.0 + 5.0 * shadowStrength,
+                    verticalOffset: 0.5 + 1.5 * shadowStrength
+                ) : nil
+                updated = aorusBubbleComponents(updated, shadow: shadow)
+            }
+            return updated
         }
         let bubble = base.bubble.withUpdated(withWallpaper: components(base.bubble.withWallpaper), withoutWallpaper: components(base.bubble.withoutWallpaper))
         let accent = pc("accent")
@@ -18554,11 +18592,13 @@ func aorusPluginBubbleCorners(_ corners: PresentationChatBubbleCorners) -> Prese
         return corners
     }
     var result = corners
+    // Telegram draws a bubble from a 33-point shape stretched at its middle: a radius past 16
+    // folds that shape in on itself and the bubble buckles, so nothing rounder is drawn.
     if let radius = AorusPluginAppearanceValues.number("bubble.radius", in: values) {
-        result.mainRadius = radius
+        result.mainRadius = max(0.0, min(16.0, radius))
     }
     if let radius = AorusPluginAppearanceValues.number("bubble.radiusSmall", in: values) {
-        result.auxiliaryRadius = radius
+        result.auxiliaryRadius = max(0.0, min(16.0, radius))
     }
     if let merge = AorusPluginAppearanceValues.flag("bubble.mergeCorners", in: values) {
         result.mergeBubbleCorners = merge
@@ -19434,6 +19474,190 @@ def patch_message_look(tg: Path) -> None:
     t = t.rstrip("\n") + "\n" + _AORUS_MESSAGE_LOOK_HELPERS
     path.write_text(t, encoding="utf-8")
     print("MessageLook: names and titles over group messages follow Message Settings")
+
+
+_AORUS_MESSAGE_LAYOUT_HELPERS = r"""
+
+// MARK: - AorusGram message layout
+
+// How wide a message may grow and whether a group shows avatars beside it, as the person
+// set them in AorusGram → Interface → Message Settings, or a plugin through `aorus.appearance`.
+
+private func aorusMessageWidthShare() -> CGFloat? {
+    guard let share = AorusPluginAppearanceValues.number("bubble.width", in: AorusPluginAppearanceValues.current()) else {
+        return nil
+    }
+    return max(0.5, min(1.0, share))
+}
+
+private func aorusMessageHidesAvatar(_ message: Message) -> Bool {
+    guard AorusPluginAppearanceValues.flag("message.hideAvatar", in: AorusPluginAppearanceValues.current()) == true else {
+        return false
+    }
+    if message.peers[message.id.peerId] is TelegramGroup {
+        return true
+    }
+    if let channel = message.peers[message.id.peerId] as? TelegramChannel, case .group = channel.info {
+        return true
+    }
+    return false
+}
+"""
+
+_AORUS_MESSAGE_AVATAR_HELPER = r"""
+
+// AorusGram: no avatars beside messages in groups, when the person turned them off in
+// Message Settings or a plugin asked for it. The bubble leaves no room for one either.
+private func aorusHidesGroupAvatar(_ message: Message) -> Bool {
+    guard AorusPluginAppearanceValues.flag("message.hideAvatar", in: AorusPluginAppearanceValues.current()) == true else {
+        return false
+    }
+    if message.peers[message.id.peerId] is TelegramGroup {
+        return true
+    }
+    if let channel = message.peers[message.id.peerId] as? TelegramChannel, case .group = channel.info {
+        return true
+    }
+    return false
+}
+"""
+
+_AORUS_MESSAGE_TEXT_FONT_HELPER = r"""
+
+// AorusGram: the weight message text is set in, from Message Settings or a plugin.
+private func aorusMessageTextFont(_ size: CGFloat) -> UIFont {
+    switch AorusPluginAppearanceValues.string("message.textWeight", dark: false, in: AorusPluginAppearanceValues.current()) {
+    case "light":
+        return Font.with(size: size, weight: .light)
+    case "medium":
+        return Font.medium(size)
+    case "semibold":
+        return Font.semibold(size)
+    default:
+        return Font.regular(size)
+    }
+}
+"""
+
+
+def patch_message_shape_and_layout(tg: Path) -> None:
+    """The bubble's shape as it is set, and the rest of a message's layout.
+
+    Joined corners: Telegram only used the radius where consecutive bubbles join when the
+    outer radius was at least 10, so under a smaller radius the join slider did nothing. The
+    join now uses its own radius whenever corners are joined, never rounder than the outer
+    one; under Telegram's own settings (outer 8 to 16, join 8) nothing changes.
+
+    See-through gradients: a bubble filled with a gradient is drawn from an image made opaque,
+    which threw away the transparency a look gives it. The image keeps its alpha when the
+    colours have one.
+
+    Width, avatars and text weight: how wide a message may grow, whether a group shows avatars
+    beside messages, and the weight of message text, read where Telegram lays them out.
+    """
+    marker = "AorusGram: joined corners use their own radius"
+    graphics = tg / "submodules/TelegramPresentationData/Sources/PresentationThemeEssentialGraphics.swift"
+    g = graphics.read_text(encoding="utf-8")
+    if marker not in g:
+        edits = [
+            (
+                "        let minCornerRadius = (bubbleCorners.mergeBubbleCorners && maxCornerRadius >= 10.0) ? bubbleCorners.auxiliaryRadius : bubbleCorners.mainRadius\n",
+                "        // " + marker + ", never rounder than the outer ones.\n"
+                "        let minCornerRadius = bubbleCorners.mergeBubbleCorners ? min(bubbleCorners.auxiliaryRadius, maxCornerRadius) : bubbleCorners.mainRadius\n",
+            ),
+            (
+                "            self.incomingBubbleGradientImage = generateImage(CGSize(width: 1.0, height: 512.0), opaque: true, scale: 1.0, rotatedContext: { size, context in\n",
+                "            // AorusGram: a see-through gradient keeps its alpha.\n"
+                "            self.incomingBubbleGradientImage = generateImage(CGSize(width: 1.0, height: 512.0), opaque: incomingGradientColors.allSatisfy({ $0.cgColor.alpha >= 1.0 }), scale: 1.0, rotatedContext: { size, context in\n",
+            ),
+            (
+                "            self.outgoingBubbleGradientImage = generateImage(CGSize(width: 1.0, height: 512.0), opaque: true, scale: 1.0, rotatedContext: { size, context in\n",
+                "            // AorusGram: a see-through gradient keeps its alpha.\n"
+                "            self.outgoingBubbleGradientImage = generateImage(CGSize(width: 1.0, height: 512.0), opaque: outgoingGradientColors.allSatisfy({ $0.cgColor.alpha >= 1.0 }), scale: 1.0, rotatedContext: { size, context in\n",
+            ),
+        ]
+        for old, new in edits:
+            if g.count(old) != 1:
+                raise RuntimeError(f"MessageShape: anchor found {g.count(old)} times: {old.strip()[:80]!r}")
+            g = g.replace(old, new, 1)
+        graphics.write_text(g, encoding="utf-8")
+
+    images = tg / "submodules/TelegramPresentationData/Sources/ChatMessageBubbleImages.swift"
+    i = images.read_text(encoding="utf-8")
+    if marker not in i:
+        old = "    let smallRadius: CGFloat = (bubbleCorners.mergeBubbleCorners && largeRadius >= 10.0) ? bubbleCorners.auxiliaryRadius : bubbleCorners.mainRadius\n"
+        new = ("    // " + marker + ", never rounder than the outer ones.\n"
+               "    let smallRadius: CGFloat = bubbleCorners.mergeBubbleCorners ? min(bubbleCorners.auxiliaryRadius, largeRadius) : bubbleCorners.mainRadius\n")
+        if i.count(old) != 1:
+            raise RuntimeError(f"MessageShape: button corner anchor found {i.count(old)} times")
+        images.write_text(i.replace(old, new, 1), encoding="utf-8")
+
+    item_view = tg / "submodules/TelegramUI/Components/Chat/ChatMessageItemView/Sources/ChatMessageItemView.swift"
+    v = item_view.read_text(encoding="utf-8")
+    if marker not in v:
+        old = "    result.image.mergedCornerRadius = max(0.0, ((presentationData.chatBubbleCorners.mergeBubbleCorners && result.image.defaultCornerRadius >= 10.0) ? presentationData.chatBubbleCorners.auxiliaryRadius : presentationData.chatBubbleCorners.mainRadius) - 1.0)\n"
+        new = ("    // " + marker + ", never rounder than the outer ones.\n"
+               "    result.image.mergedCornerRadius = max(0.0, (presentationData.chatBubbleCorners.mergeBubbleCorners ? min(presentationData.chatBubbleCorners.auxiliaryRadius, presentationData.chatBubbleCorners.mainRadius) : presentationData.chatBubbleCorners.mainRadius) - 1.0)\n")
+        if v.count(old) != 1:
+            raise RuntimeError(f"MessageShape: media corner anchor found {v.count(old)} times")
+        item_view.write_text(v.replace(old, new, 1), encoding="utf-8")
+    print("MessageShape: joined corners follow their own radius; see-through gradients keep their alpha")
+
+    bubble = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
+    b = bubble.read_text(encoding="utf-8")
+    if "aorusMessageWidthShare()" not in b:
+        edits = [
+            (
+                "            tmpWidth = layoutConstants.bubble.maximumWidthFill.widthFor(baseWidth)\n",
+                "            tmpWidth = layoutConstants.bubble.maximumWidthFill.widthFor(baseWidth)\n"
+                "            // AorusGram: how wide a message may grow, as a share of the chat, when it is set.\n"
+                "            if let aorusShare = aorusMessageWidthShare() {\n"
+                "                tmpWidth = floor(baseWidth * aorusShare)\n"
+                "            }\n",
+            ),
+            (
+                "        if isPreview, let peer = firstMessage.peers[firstMessage.id.peerId] as? TelegramUser, peer.firstName == nil {\n"
+                "            hasAvatar = false\n"
+                "            effectiveAuthor = nil\n"
+                "        }\n",
+                "        if isPreview, let peer = firstMessage.peers[firstMessage.id.peerId] as? TelegramUser, peer.firstName == nil {\n"
+                "            hasAvatar = false\n"
+                "            effectiveAuthor = nil\n"
+                "        }\n"
+                "        // AorusGram: no room for an avatar in a group that shows none.\n"
+                "        if hasAvatar, aorusMessageHidesAvatar(firstMessage) {\n"
+                "            hasAvatar = false\n"
+                "        }\n",
+            ),
+        ]
+        for old, new in edits:
+            if b.count(old) != 1:
+                raise RuntimeError(f"MessageLayout: bubble anchor found {b.count(old)} times: {old.strip()[:80]!r}")
+            b = b.replace(old, new, 1)
+        b = b.rstrip("\n") + "\n" + _AORUS_MESSAGE_LAYOUT_HELPERS
+        bubble.write_text(b, encoding="utf-8")
+
+    item = tg / "submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatMessageItemImpl.swift"
+    m = item.read_text(encoding="utf-8")
+    if "aorusHidesGroupAvatar(" not in m:
+        old = "            if hasAvatar {\n                if let effectiveAuthor = effectiveAuthor {\n"
+        new = ("            if hasAvatar, !isBroadcastChannel, aorusHidesGroupAvatar(message) {\n"
+               "                hasAvatar = false\n"
+               "            }\n" + old)
+        if m.count(old) != 1:
+            raise RuntimeError(f"MessageLayout: avatar anchor found {m.count(old)} times")
+        m = m.replace(old, new, 1).rstrip("\n") + "\n" + _AORUS_MESSAGE_AVATAR_HELPER
+        item.write_text(m, encoding="utf-8")
+
+    presentation = tg / "submodules/TelegramPresentationData/Sources/ChatPresentationData.swift"
+    c = presentation.read_text(encoding="utf-8")
+    if "aorusMessageTextFont(" not in c:
+        old = "        self.messageFont = Font.regular(baseFontSize)\n"
+        if c.count(old) != 1:
+            raise RuntimeError(f"MessageLayout: message font anchor found {c.count(old)} times")
+        c = c.replace(old, "        self.messageFont = aorusMessageTextFont(baseFontSize)\n", 1).rstrip("\n") + "\n" + _AORUS_MESSAGE_TEXT_FONT_HELPER
+        presentation.write_text(c, encoding="utf-8")
+    print("MessageLayout: message width, group avatars and text weight follow Message Settings")
 
 
 def patch_message_settings(tg: Path) -> None:
@@ -29809,6 +30033,7 @@ def main() -> None:
     patch_plugin_profile_look(tg)
     patch_message_look(tg)
     patch_message_settings(tg)
+    patch_message_shape_and_layout(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

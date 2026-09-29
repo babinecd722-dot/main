@@ -4074,6 +4074,8 @@ def main() -> None:
     profile_header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
     # Names and titles over group messages are drawn by the bubble's own layout.
     bubble_node = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
+    # Message text is set where Telegram builds a chat's fonts.
+    chat_presentation = tg / "submodules/TelegramPresentationData/Sources/ChatPresentationData.swift"
     if not appearance_core.is_file() or not display_values.is_file():
         err.append("PluginAppearance: the appearance catalogue or its reader is missing")
     else:
@@ -4081,7 +4083,7 @@ def main() -> None:
         core_text = appearance_core.read_text(encoding="utf-8")
         drawn = "".join(
             path.read_text(encoding="utf-8")
-            for path in (presentation_data, glass_component, settings_resources, profile_header, bubble_node)
+            for path in (presentation_data, glass_component, settings_resources, profile_header, bubble_node, chat_presentation)
         )
         if "aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme))" not in drawn or "aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue))" not in drawn:
             err.append("PluginAppearance: the theme is built without the plugin look")
@@ -4106,6 +4108,19 @@ def main() -> None:
     # Interface row to open, and Telegram's preview item draws the words of its message
     # rather than the placeholder lines it draws under a title.
     message_settings_checks = [
+        # Joined corners use their own radius wherever Telegram decides it, and a see-through
+        # gradient keeps its alpha.
+        ("submodules/TelegramPresentationData/Sources/PresentationThemeEssentialGraphics.swift", "bubbleCorners.mergeBubbleCorners ? min(bubbleCorners.auxiliaryRadius, maxCornerRadius)"),
+        ("submodules/TelegramPresentationData/Sources/PresentationThemeEssentialGraphics.swift", "opaque: outgoingGradientColors.allSatisfy({ $0.cgColor.alpha >= 1.0 })"),
+        ("submodules/TelegramPresentationData/Sources/ChatMessageBubbleImages.swift", "bubbleCorners.mergeBubbleCorners ? min(bubbleCorners.auxiliaryRadius, largeRadius)"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageItemView/Sources/ChatMessageItemView.swift", "presentationData.chatBubbleCorners.mergeBubbleCorners ? min(presentationData.chatBubbleCorners.auxiliaryRadius"),
+        # No bubble rounder than it can be drawn.
+        ("submodules/TelegramPresentationData/Sources/PresentationData.swift", "result.mainRadius = max(0.0, min(16.0, radius))"),
+        # Width, avatars and the weight of message text.
+        ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "if let aorusShare = aorusMessageWidthShare() {"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "if hasAvatar, aorusMessageHidesAvatar(firstMessage) {"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatMessageItemImpl.swift", "if hasAvatar, !isBroadcastChannel, aorusHidesGroupAvatar(message) {"),
+        ("submodules/TelegramPresentationData/Sources/ChatPresentationData.swift", "self.messageFont = aorusMessageTextFont(baseFontSize)"),
         ("submodules/TelegramUI/Sources/AorusMessageSettings.swift", "AorusMessageSettingsRoute.register"),
         ("submodules/TelegramUI/Sources/AorusMessageSettings.swift", "func aorusMessagePreviewShowsText("),
         ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallMessageSettings()"),

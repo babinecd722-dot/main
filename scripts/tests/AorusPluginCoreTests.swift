@@ -1663,8 +1663,14 @@ if AorusPluginSandbox.watchdogAvailable {
         "bubble.outgoing.fill": ["#5b4dff", "8E7CFF"],
         "bubble.incoming.fill@dark": "1C1C1E",
         "header.background": "#000000CC",
-        "bubble.radius": NSNumber(value: 20),
+        "bubble.radius": NSNumber(value: 12),
+        "bubble.radiusSmall": NSNumber(value: 24),
         "bubble.tails": NSNumber(value: false),
+        "bubble.incoming.opacity": NSNumber(value: 0.6),
+        "bubble.outgoing.shadow": NSNumber(value: 0.5),
+        "bubble.width": NSNumber(value: 0.8),
+        "message.hideAvatar": NSNumber(value: true),
+        "message.textWeight": "medium",
         "font.chat": "large",
         "glass.style@light": "clear",
     ])
@@ -1672,7 +1678,13 @@ if AorusPluginSandbox.watchdogAvailable {
     expect((appearanceGood.values["bubble.outgoing.fill"] as? [String]) == ["5B4DFF", "8E7CFF"], "colours are kept in capitals without the hash")
     expect((appearanceGood.values["bubble.incoming.fill@dark"] as? [String]) == ["1C1C1E"], "one colour for a gradient key is a gradient of one")
     expect((appearanceGood.values["header.background"] as? String) == "000000CC", "a colour keeps its alpha")
-    expect((appearanceGood.values["bubble.radius"] as? Double) == 20, "a number in range is kept")
+    expect((appearanceGood.values["bubble.radius"] as? Double) == 12, "a number in range is kept")
+    expect((appearanceGood.values["bubble.radiusSmall"] as? Double) == AorusPluginAppearance.bubbleRadiusLimit, "a corner rounder than a bubble can be drawn is kept at the limit, not refused")
+    expect((appearanceGood.values["bubble.incoming.opacity"] as? Double) == 0.6 && (appearanceGood.values["bubble.outgoing.shadow"] as? Double) == 0.5, "a bubble's opacity and shadow are kept")
+    expect((appearanceGood.values["bubble.width"] as? Double) == 0.8 && (appearanceGood.values["message.textWeight"] as? String) == "medium", "the message width and text weight are kept")
+    expect(AorusPluginAppearance.validate(["bubble.incoming.opacity": NSNumber(value: 0.05)]).rejections.count == 1, "a bubble cannot be made invisible")
+    expect(AorusPluginAppearance.validate(["bubble.width": NSNumber(value: 0.3)]).rejections.count == 1, "a message cannot be squeezed below half the chat")
+    expect(AorusPluginAppearance.validate(["bubble.outgoing.shadow@dark": NSNumber(value: 0.5)]).rejections.count == 1, "a shadow's strength is the same in dark and light")
     expect((appearanceGood.values["bubble.tails"] as? Bool) == false, "a flag is kept as a flag")
     let appearanceBad = AorusPluginAppearance.validate([
         "bubble.outgoing.fill": "blue",

@@ -1408,7 +1408,7 @@ aorus.appearance.set({
     'bubble.outgoing.fill': ['5B4DFF', '8E7CFF'],   // градиент до четырёх цветов
     'bubble.outgoing.text': 'FFFFFF',
     'bubble.incoming.fill@dark': '1C1C1E',          // только в тёмной теме
-    'bubble.radius': 20,
+    'bubble.radius': 16,
     'bubble.tails': false,
     'header.background': '0B0B0FCC',                // последние две цифры — прозрачность
     'badge.unread': 'FF2D55',
@@ -1486,6 +1486,8 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `buttonStroke` | цвет | Обводка кнопок под сообщением |
 | `pollBar` | цвет | Полосы результатов опроса |
 | `selection` | цвет | Выделенный текст |
+| `opacity` | число 0.1–1 | Непрозрачность пузыря: меньше — сильнее видны обои, 1 — сплошной пузырь |
+| `shadow` | число 0–1 | Тень под пузырём: 0 — без тени, 1 — самая глубокая |
 
 ### Пузыри сообщений: форма и общее
 
@@ -1502,10 +1504,17 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `bubble.failed` | цвет | Значок сообщения, которое не отправилось |
 | `bubble.infoText` | цвет | Текст приветствия бота |
 | `bubble.infoLink` | цвет | Ссылки в приветствии бота |
-| `bubble.radius` | число 0–32 | Радиус углов пузыря |
-| `bubble.radiusSmall` | число 0–32 | Радиус углов в месте стыка пузырей |
+| `bubble.radius` | число 0–16 | Радиус углов пузыря |
+| `bubble.radiusSmall` | число 0–16 | Радиус углов там, где сообщения одного человека идут подряд; не больше `bubble.radius` |
+| `bubble.width` | число 0.5–1 | Самая большая ширина сообщения, доля ширины чата |
 | `bubble.mergeCorners` | true или false | Сращивать углы соседних пузырей |
 | `bubble.tails` | true или false | Хвостик у последнего пузыря группы |
+
+Telegram рисует пузырь из фигуры высотой 33 пункта, растянутой посередине, поэтому круглее 16 пузырь
+быть не может: на большем радиусе фигура складывается сама в себя. Значения от 16 до 32, которые
+ключи радиуса принимали раньше, по-прежнему принимаются и рисуются как 16. Радиус на стыке
+действует, пока включён `bubble.mergeCorners`, и не бывает круглее внешних углов. Прозрачность
+работает и на градиентной заливке.
 
 ### Имена и приписки в группах: `message.…`
 
@@ -1522,6 +1531,8 @@ const catalog = aorus.appearance.keys();             // [{ key, type, summary, �
 | `message.rankPlate` | true или false | Скруглённая подложка под припиской; по умолчанию есть |
 | `message.hideRank` | true или false | Не показывать приписки, имена остаются |
 | `message.rankCase` | `asIs`, `upper`, `lower` | Регистр приписок: как написано, прописными или строчными |
+| `message.hideAvatar` | true или false | Не показывать аватарки рядом с сообщениями в группах; сообщения встают к краю |
+| `message.textWeight` | `light`, `regular`, `medium`, `semibold` | Толщина текста сообщений во всех чатах |
 
 ```js
 aorus.appearance.set({
@@ -2543,7 +2554,7 @@ aorus.on('start', function () {
         'bubble.outgoing.secondaryText': 'FFFFFFB3',
         'bubble.incoming.fill@dark': '1E1E24',
         'bubble.incoming.fill@light': 'FFFFFF',
-        'bubble.radius': 22,
+        'bubble.radius': 16,
         'bubble.radiusSmall': 8,
         'chat.wallpaper@dark': ['0B0B12', '1A1030', '0B0B12'],
         'input.send': '6A5CFF',

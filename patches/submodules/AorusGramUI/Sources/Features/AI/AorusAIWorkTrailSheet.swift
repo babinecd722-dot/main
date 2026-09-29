@@ -14,18 +14,48 @@ import AorusGram
 /// state wants a glyph in a column of its own — a checkmark once it is behind us, a
 /// turning ring while it is the one running. The files a phase touched are a branch, and
 /// they are drawn as one, hanging off the phase that owns them.
-public func aorusAIPresentWorkTrail(phases: [AorusAIWorkPhase],
-                                    isRunning: Bool,
-                                    finishedAt: Date?,
+/// What the sheet shows at one moment: the phases so far, whether the turn is still
+/// running, and when it finished.
+public struct AorusAIWorkTrailSnapshot: Equatable {
+    public var phases: [AorusAIWorkPhase]
+    public var isRunning: Bool
+    public var finishedAt: Date?
+
+    public init(phases: [AorusAIWorkPhase], isRunning: Bool, finishedAt: Date?) {
+        self.phases = phases
+        self.isRunning = isRunning
+        self.finishedAt = finishedAt
+    }
+}
+
+/// The open sheet, for the chat to tell when the turn it shows has moved on. Holds the
+/// sheet weakly: once it is closed, telling it anything does nothing.
+public final class AorusAIWorkTrailHandle {
+    fileprivate weak var controller: AorusAIWorkTrailController?
+
+    fileprivate init(controller: AorusAIWorkTrailController) {
+        self.controller = controller
+    }
+
+    /// Reads the turn again and shows what changed.
+    public func refresh() {
+        controller?.refresh()
+    }
+}
+
+/// Opens the sheet on a turn and keeps it current.
+///
+/// The sheet reads the turn through `source` rather than being handed a copy of it: a
+/// running turn gains phases and files while the sheet is open, and a copy taken at the tap
+/// is what kept the sheet showing the moment it was opened while the chat behind it moved
+/// on. It asks again whenever the chat says the turn changed and, while the turn runs, a few
+/// times a second besides, so nothing that arrives by another path is missed.
+@discardableResult
+public func aorusAIPresentWorkTrail(source: @escaping () -> AorusAIWorkTrailSnapshot?,
                                     theme: PresentationTheme,
-                                    from presenter: UIViewController) {
-    guard !phases.isEmpty else { return }
-    let controller = AorusAIWorkTrailController(
-        phases: phases,
-        isRunning: isRunning,
-        finishedAt: finishedAt,
-        theme: theme
-    )
+                                    from presenter: UIViewController) -> AorusAIWorkTrailHandle? {
+    guard let snapshot = source(), !snapshot.phases.isEmpty else { return nil }
+    let controller = AorusAIWorkTrailController(snapshot: snapshot, source: source, theme: theme)
     controller.modalPresentationStyle = .pageSheet
     if #available(iOS 15.0, *) {
         controller.sheetPresentationController?.detents = [.medium(), .large()]
@@ -35,6 +65,7 @@ public func aorusAIPresentWorkTrail(phases: [AorusAIWorkPhase],
     }
     controller.preferredContentSize = CGSize(width: 420.0, height: 560.0)
     presenter.present(controller, animated: true)
+    return AorusAIWorkTrailHandle(controller: controller)
 }
 
 // MARK: - Controller
@@ -42,15 +73,18 @@ public func aorusAIPresentWorkTrail(phases: [AorusAIWorkPhase],
 private final class AorusAIWorkTrailController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     /// One line of the list. Phases are always present; a phase's files appear under it
     /// only while it is open.
-    private enum Row {
+    private enum Row: Equatable {
         case phase(Int)
         case file(phase: Int, file: Int)
     }
 
-    private let phases: [AorusAIWorkPhase]
-    private let isRunning: Bool
-    private let finishedAt: Date?
+    private var snapshot: AorusAIWorkTrailSnapshot
+    private let source: () -> AorusAIWorkTrailSnapshot?
     private let palette: AorusAIPalette
+
+    private var phases: [AorusAIWorkPhase] { return snapshot.phases }
+    private var isRunning: Bool { return snapshot.isRunning }
+    private var finishedAt: Date? { return snapshot.finishedAt }
 
     private let titleLabel = UILabel()
     private let tableView = UITableView(frame: .zero, style: .plain)
@@ -61,10 +95,9 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
     private var rows: [Row] = []
     private var ticker: Timer?
 
-    init(phases: [AorusAIWorkPhase], isRunning: Bool, finishedAt: Date?, theme: PresentationTheme) {
-        self.phases = phases
-        self.isRunning = isRunning
-        self.finishedAt = finishedAt
+    init(snapshot: AorusAIWorkTrailSnapshot, source: @escaping () -> AorusAIWorkTrailSnapshot?, theme: PresentationTheme) {
+        self.snapshot = snapshot
+        self.source = source
         self.palette = AorusAIPalette.resolve(theme)
         super.init(nibName: nil, bundle: nil)
         rebuildRows()
@@ -110,14 +143,70 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         ])
 
         updateTitle()
-        // A running turn's cost keeps climbing while the sheet is open, so the heading is
-        // re-read every second rather than frozen at the moment it was presented.
-        if isRunning {
-            let ticker = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                self?.updateTitle()
+        updateTicker()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // The turn may have moved between the tap and the sheet coming up.
+        refresh()
+    }
+
+    /// While the turn runs: its cost keeps climbing in the heading, and the list is read again
+    /// a few times a second so a phase that arrives shows up at once. Stopped when it ends.
+    private func updateTicker() {
+        guard isRunning else {
+            ticker?.invalidate()
+            ticker = nil
+            return
+        }
+        guard ticker == nil else { return }
+        let ticker = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.refresh()
+            self.updateTitle()
+        }
+        RunLoop.main.add(ticker, forMode: .common)
+        self.ticker = ticker
+    }
+
+    /// Reads the turn again and shows what changed: new phases and files slide in, the phase
+    /// that was running turns into a checkmark, and a finished turn gets its summary.
+    fileprivate func refresh() {
+        guard let next = source(), next != snapshot else { return }
+        let previousRows = rows
+        let previousPhases = snapshot.phases
+        snapshot = next
+        openPhases = openPhases.filter { $0 < next.phases.count && !renderableFiles($0).isEmpty }
+        rebuildRows()
+        guard isViewLoaded else { return }
+        updateTitle()
+        updateTicker()
+
+        // Follows the newest phase only while the reader is already at the end of the list.
+        let wasAtEnd = tableView.contentOffset.y + tableView.bounds.height >= tableView.contentSize.height - 8.0
+        let appendedOnly = rows.count >= previousRows.count
+            && Array(rows.prefix(previousRows.count)) == previousRows
+            && next.phases.count >= previousPhases.count
+        if appendedOnly, view.window != nil {
+            let inserted = (previousRows.count ..< rows.count).map { IndexPath(row: $0, section: 0) }
+            tableView.performBatchUpdates({
+                if !inserted.isEmpty {
+                    tableView.insertRows(at: inserted, with: .fade)
+                }
+            }, completion: nil)
+            // The rows already there keep their cells: they are told what changed rather than
+            // rebuilt, so the ring that turns does not restart and nothing blinks.
+            for indexPath in tableView.indexPathsForVisibleRows ?? [] where indexPath.row < previousRows.count {
+                if let cell = tableView.cellForRow(at: indexPath) {
+                    configure(cell, row: rows[indexPath.row])
+                }
             }
-            RunLoop.main.add(ticker, forMode: .common)
-            self.ticker = ticker
+        } else {
+            tableView.reloadData()
+        }
+        if wasAtEnd, !rows.isEmpty, rows.count != previousRows.count {
+            tableView.scrollToRow(at: IndexPath(row: rows.count - 1, section: 0), at: .bottom, animated: true)
         }
     }
 
@@ -152,18 +241,10 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         return isRunning && index == phases.count - 1
     }
 
-    // MARK: UITableViewDataSource
-
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return rows.count
-    }
-
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        switch rows[indexPath.row] {
+    private func configure(_ cell: UITableViewCell, row: Row) {
+        switch row {
         case let .phase(index):
-            guard let cell = tableView.dequeueReusableCell(withIdentifier: PhaseCell.reuseIdentifier, for: indexPath) as? PhaseCell else {
-                return UITableViewCell()
-            }
+            guard let cell = cell as? PhaseCell, phases.indices.contains(index) else { return }
             cell.configure(
                 text: phases[index].label,
                 palette: palette,
@@ -173,20 +254,36 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
                 // The rail joins this row to the next, so the last row has none.
                 continues: index < phases.count - 1 || openPhases.contains(index)
             )
-            return cell
         case let .file(phase, file):
-            guard let cell = tableView.dequeueReusableCell(withIdentifier: FileCell.reuseIdentifier, for: indexPath) as? FileCell else {
-                return UITableViewCell()
-            }
+            guard let cell = cell as? FileCell else { return }
             let files = renderableFiles(phase)
-            guard files.indices.contains(file) else { return cell }
+            guard files.indices.contains(file) else { return }
             cell.configure(
                 file: files[file],
                 palette: palette,
                 isLast: file == files.count - 1
             )
-            return cell
         }
+    }
+
+    // MARK: UITableViewDataSource
+
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return rows.count
+    }
+
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let row = rows[indexPath.row]
+        let identifier: String
+        switch row {
+        case .phase:
+            identifier = PhaseCell.reuseIdentifier
+        case .file:
+            identifier = FileCell.reuseIdentifier
+        }
+        let cell = tableView.dequeueReusableCell(withIdentifier: identifier, for: indexPath)
+        configure(cell, row: row)
+        return cell
     }
 
     // MARK: UITableViewDelegate

@@ -53,6 +53,13 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Text Weight": "Spessore del testo",
+        "Show Avatars": "Mostra gli avatar",
+        "Shadow": "Ombra",
+        "See-through bubbles with a shadow": "Bolle semitrasparenti con ombra",
+        "Message Width": "Larghezza dei messaggi",
+        "Glass": "Vetro",
+        "The join radius rounds the corners where one person's messages follow each other.": "Il raggio nel punto di unione arrotonda gli angoli dove i messaggi di una stessa persona si susseguono.",
         "Title Color": "Colore del titolo",
         "Time": "Ora",
         "The way Telegram draws them": "Come li disegna Telegram",
@@ -953,6 +960,13 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Text Weight": "Grubość tekstu",
+        "Show Avatars": "Pokazuj awatary",
+        "Shadow": "Cień",
+        "See-through bubbles with a shadow": "Półprzezroczyste dymki z cieniem",
+        "Message Width": "Szerokość wiadomości",
+        "Glass": "Szkło",
+        "The join radius rounds the corners where one person's messages follow each other.": "Zaokrąglenie na styku dotyczy rogów, w których wiadomości jednej osoby następują po sobie.",
         "Title Color": "Kolor tytułu",
         "Time": "Godzina",
         "The way Telegram draws them": "Tak, jak rysuje je Telegram",
@@ -1853,6 +1867,13 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Text Weight": "Tekstdikte",
+        "Show Avatars": "Avatars tonen",
+        "Shadow": "Schaduw",
+        "See-through bubbles with a shadow": "Doorzichtige bubbels met een schaduw",
+        "Message Width": "Berichtbreedte",
+        "Glass": "Glas",
+        "The join radius rounds the corners where one person's messages follow each other.": "De radius waar ze samenkomen rondt de hoeken af waar berichten van één persoon elkaar opvolgen.",
         "Title Color": "Kleur van de titel",
         "Time": "Tijd",
         "The way Telegram draws them": "Zoals Telegram ze tekent",
@@ -2753,6 +2774,13 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Text Weight": "Gruix del text",
+        "Show Avatars": "Mostra els avatars",
+        "Shadow": "Ombra",
+        "See-through bubbles with a shadow": "Bombolles translúcides amb ombra",
+        "Message Width": "Amplada dels missatges",
+        "Glass": "Vidre",
+        "The join radius rounds the corners where one person's messages follow each other.": "El radi a la unió arrodoneix les cantonades on els missatges d’una mateixa persona se succeeixen.",
         "Title Color": "Color del títol",
         "Time": "Hora",
         "The way Telegram draws them": "Com els dibuixa Telegram",
@@ -3653,6 +3681,13 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Text Weight": "Ketebalan Teks",
+        "Show Avatars": "Tampilkan Avatar",
+        "Shadow": "Bayangan",
+        "See-through bubbles with a shadow": "Gelembung tembus pandang dengan bayangan",
+        "Message Width": "Lebar Pesan",
+        "Glass": "Kaca",
+        "The join radius rounds the corners where one person's messages follow each other.": "Radius di sambungan membulatkan sudut tempat pesan-pesan dari satu orang berurutan.",
         "Title Color": "Warna Gelar",
         "Time": "Waktu",
         "The way Telegram draws them": "Seperti yang digambar Telegram",
@@ -4553,6 +4588,13 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Text Weight": "Ketebalan Teks",
+        "Show Avatars": "Tunjukkan Avatar",
+        "Shadow": "Bayang",
+        "See-through bubbles with a shadow": "Gelembung lut sinar dengan bayang",
+        "Message Width": "Lebar Mesej",
+        "Glass": "Kaca",
+        "The join radius rounds the corners where one person's messages follow each other.": "Jejari di sambungan membulatkan sudut tempat mesej daripada seorang berturutan.",
         "Title Color": "Warna Gelaran",
         "Time": "Masa",
         "The way Telegram draws them": "Seperti yang dilukis Telegram",
@@ -5453,6 +5495,13 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Text Weight": "Таўшчыня тэксту",
+        "Show Avatars": "Паказваць аватаркі",
+        "Shadow": "Цень",
+        "See-through bubbles with a shadow": "Паўпразрыстыя бурбалкі з ценем",
+        "Message Width": "Шырыня паведамленняў",
+        "Glass": "Шкло",
+        "The join radius rounds the corners where one person's messages follow each other.": "Скругленне на стыку — вуглы там, дзе паведамленні аднаго чалавека ідуць запар.",
         "Title Color": "Колер подпісу",
         "Time": "Час",
         "The way Telegram draws them": "Як малюе Telegram",
@@ -6353,6 +6402,13 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Text Weight": "Matn qalinligi",
+        "Show Avatars": "Avatarlarni ko‘rsatish",
+        "Shadow": "Soya",
+        "See-through bubbles with a shadow": "Soyali yarim shaffof pufakchalar",
+        "Message Width": "Xabarlar kengligi",
+        "Glass": "Shisha",
+        "The join radius rounds the corners where one person's messages follow each other.": "Tutashgan joy radiusi bir kishining ketma-ket xabarlari tutashgan burchaklarni yumaloqlaydi.",
         "Title Color": "Unvon rangi",
         "Time": "Vaqt",
         "The way Telegram draws them": "Telegram chizgandek",
@@ -7253,6 +7309,13 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Text Weight": "텍스트 굵기",
+        "Show Avatars": "아바타 표시",
+        "Shadow": "그림자",
+        "See-through bubbles with a shadow": "그림자가 있는 반투명 말풍선",
+        "Message Width": "메시지 너비",
+        "Glass": "유리",
+        "The join radius rounds the corners where one person's messages follow each other.": "이어지는 부분의 반경은 한 사람의 메시지가 연달아 올 때 맞닿는 모서리를 둥글게 합니다.",
         "Title Color": "칭호 색상",
         "Time": "시간",
         "The way Telegram draws them": "Telegram이 그리는 그대로",
@@ -8153,6 +8216,13 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Text Weight": "سُمك النص",
+        "Show Avatars": "إظهار الصور الرمزية",
+        "Shadow": "الظل",
+        "See-through bubbles with a shadow": "فقاعات شفافة مع ظل",
+        "Message Width": "عرض الرسائل",
+        "Glass": "زجاج",
+        "The join radius rounds the corners where one person's messages follow each other.": "نصف القطر عند الالتقاء يدوّر الزوايا حيث تتتابع رسائل الشخص نفسه.",
         "Title Color": "لون اللقب",
         "Time": "الوقت",
         "The way Telegram draws them": "كما يرسمها تيليجرام",
@@ -9053,6 +9123,13 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Text Weight": "ضخامت متن",
+        "Show Avatars": "نمایش آواتارها",
+        "Shadow": "سایه",
+        "See-through bubbles with a shadow": "حباب‌های نیمه‌شفاف با سایه",
+        "Message Width": "عرض پیام‌ها",
+        "Glass": "شیشه",
+        "The join radius rounds the corners where one person's messages follow each other.": "شعاع محل اتصال، گوشه‌هایی را گرد می‌کند که پیام‌های یک نفر پشت سر هم می‌آیند.",
         "Title Color": "رنگ عنوان",
         "Time": "زمان",
         "The way Telegram draws them": "همان‌طور که تلگرام می‌کشد",
@@ -9953,6 +10030,13 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Text Weight": "Мәтін жуандығы",
+        "Show Avatars": "Аватарларды көрсету",
+        "Shadow": "Көлеңке",
+        "See-through bubbles with a shadow": "Көлеңкесі бар жартылай мөлдір көпіршіктер",
+        "Message Width": "Хабарлама ені",
+        "Glass": "Шыны",
+        "The join radius rounds the corners where one person's messages follow each other.": "Түйіскен жердегі дөңгелектік бір адамның хабарламалары қатар келетін бұрыштарды дөңгелектейді.",
         "Title Color": "Атақ түсі",
         "Time": "Уақыт",
         "The way Telegram draws them": "Telegram салғандай",
@@ -10853,6 +10937,13 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Text Weight": "文字粗细",
+        "Show Avatars": "显示头像",
+        "Shadow": "阴影",
+        "See-through bubbles with a shadow": "带阴影的半透明气泡",
+        "Message Width": "消息宽度",
+        "Glass": "玻璃",
+        "The join radius rounds the corners where one person's messages follow each other.": "衔接处的圆角作用于同一个人连续发送的消息相接的角。",
         "Title Color": "头衔颜色",
         "Time": "时间",
         "The way Telegram draws them": "Telegram 默认的样子",
@@ -11754,6 +11845,13 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Text Weight": "文字粗細",
+        "Show Avatars": "顯示頭像",
+        "Shadow": "陰影",
+        "See-through bubbles with a shadow": "帶陰影的半透明氣泡",
+        "Message Width": "訊息寬度",
+        "Glass": "玻璃",
+        "The join radius rounds the corners where one person's messages follow each other.": "銜接處的圓角作用於同一個人連續傳送的訊息相接的角。",
         "Title Color": "頭銜顏色",
         "Time": "時間",
         "The way Telegram draws them": "Telegram 預設的樣子",
@@ -12654,6 +12752,13 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Text Weight": "文字の太さ",
+        "Show Avatars": "アバターを表示",
+        "Shadow": "影",
+        "See-through bubbles with a shadow": "影付きの半透明の吹き出し",
+        "Message Width": "メッセージの幅",
+        "Glass": "ガラス",
+        "The join radius rounds the corners where one person's messages follow each other.": "つなぎ目の丸みは、同じ人のメッセージが続けて並ぶところの角を丸めます。",
         "Title Color": "称号の色",
         "Time": "時刻",
         "The way Telegram draws them": "Telegram 本来の見た目",
@@ -13554,6 +13659,13 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Text Weight": "Tekstin paksuus",
+        "Show Avatars": "Näytä profiilikuvat",
+        "Shadow": "Varjo",
+        "See-through bubbles with a shadow": "Läpikuultavat kuplat varjolla",
+        "Message Width": "Viestien leveys",
+        "Glass": "Lasi",
+        "The join radius rounds the corners where one person's messages follow each other.": "Liitoskohdan pyöristys pyöristää kulmat, joissa saman henkilön viestit seuraavat toisiaan.",
         "Title Color": "Tittelin väri",
         "Time": "Aika",
         "The way Telegram draws them": "Niin kuin Telegram ne piirtää",
@@ -14454,6 +14566,13 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Text Weight": "עובי הטקסט",
+        "Show Avatars": "הצגת תמונות פרופיל",
+        "Shadow": "צל",
+        "See-through bubbles with a shadow": "בועות שקופות למחצה עם צל",
+        "Message Width": "רוחב ההודעות",
+        "Glass": "זכוכית",
+        "The join radius rounds the corners where one person's messages follow each other.": "הרדיוס בנקודת החיבור מעגל את הפינות שבהן הודעות של אותו אדם באות זו אחר זו.",
         "Title Color": "צבע התואר",
         "Time": "שעה",
         "The way Telegram draws them": "כפי שטלגרם מציירת אותן",
@@ -15354,6 +15473,13 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Text Weight": "Debljina teksta",
+        "Show Avatars": "Prikaži avatare",
+        "Shadow": "Sjena",
+        "See-through bubbles with a shadow": "Poluprozirni oblačići sa sjenom",
+        "Message Width": "Širina poruka",
+        "Glass": "Staklo",
+        "The join radius rounds the corners where one person's messages follow each other.": "Zaobljenost na spoju zaobljuje kutove gdje poruke iste osobe slijede jedna za drugom.",
         "Title Color": "Boja titule",
         "Time": "Vrijeme",
         "The way Telegram draws them": "Onako kako ih crta Telegram",
@@ -16254,6 +16380,13 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Text Weight": "Дебљина текста",
+        "Show Avatars": "Прикажи аватаре",
+        "Shadow": "Сенка",
+        "See-through bubbles with a shadow": "Полупровидни облачићи са сенком",
+        "Message Width": "Ширина порука",
+        "Glass": "Стакло",
+        "The join radius rounds the corners where one person's messages follow each other.": "Заобљеност на споју заобљава углове где поруке исте особе иду једна за другом.",
         "Title Color": "Боја титуле",
         "Time": "Време",
         "The way Telegram draws them": "Онако како их црта Telegram",
@@ -17154,6 +17287,13 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Text Weight": "Tloušťka textu",
+        "Show Avatars": "Zobrazovat avatary",
+        "Shadow": "Stín",
+        "See-through bubbles with a shadow": "Poloprůhledné bubliny se stínem",
+        "Message Width": "Šířka zpráv",
+        "Glass": "Sklo",
+        "The join radius rounds the corners where one person's messages follow each other.": "Zaoblení ve spoji zaobluje rohy tam, kde zprávy jednoho člověka jdou po sobě.",
         "Title Color": "Barva titulu",
         "Time": "Čas",
         "The way Telegram draws them": "Tak, jak je kreslí Telegram",
@@ -18054,6 +18194,13 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Text Weight": "Hrúbka textu",
+        "Show Avatars": "Zobrazovať avatary",
+        "Shadow": "Tieň",
+        "See-through bubbles with a shadow": "Polopriehľadné bubliny s tieňom",
+        "Message Width": "Šírka správ",
+        "Glass": "Sklo",
+        "The join radius rounds the corners where one person's messages follow each other.": "Zaoblenie v spoji zaobľuje rohy tam, kde správy jedného človeka idú po sebe.",
         "Title Color": "Farba titulu",
         "Time": "Čas",
         "The way Telegram draws them": "Tak, ako ich kreslí Telegram",
@@ -18954,6 +19101,13 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Text Weight": "Grosimea textului",
+        "Show Avatars": "Afișează avatarurile",
+        "Shadow": "Umbră",
+        "See-through bubbles with a shadow": "Baloane semitransparente cu umbră",
+        "Message Width": "Lățimea mesajelor",
+        "Glass": "Sticlă",
+        "The join radius rounds the corners where one person's messages follow each other.": "Raza la îmbinare rotunjește colțurile unde mesajele aceleiași persoane se succed.",
         "Title Color": "Culoarea titlului",
         "Time": "Ora",
         "The way Telegram draws them": "Așa cum le desenează Telegram",
@@ -19854,6 +20008,13 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Text Weight": "Szöveg vastagsága",
+        "Show Avatars": "Profilképek megjelenítése",
+        "Shadow": "Árnyék",
+        "See-through bubbles with a shadow": "Áttetsző buborékok árnyékkal",
+        "Message Width": "Üzenetek szélessége",
+        "Glass": "Üveg",
+        "The join radius rounds the corners where one person's messages follow each other.": "Az illesztésnél lévő lekerekítés azokat a sarkokat kerekíti, ahol ugyanannak az embernek az üzenetei egymás után jönnek.",
         "Title Color": "Cím színe",
         "Time": "Idő",
         "The way Telegram draws them": "Ahogy a Telegram rajzolja őket",
@@ -20754,6 +20915,13 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Text Weight": "Teksttykkelse",
+        "Show Avatars": "Vis profilbilder",
+        "Shadow": "Skygge",
+        "See-through bubbles with a shadow": "Gjennomsiktige bobler med skygge",
+        "Message Width": "Meldingsbredde",
+        "Glass": "Glass",
+        "The join radius rounds the corners where one person's messages follow each other.": "Radius der de møtes, runder hjørnene der meldingene fra én person følger etter hverandre.",
         "Title Color": "Tittelfarge",
         "Time": "Tid",
         "The way Telegram draws them": "Slik Telegram tegner dem",
@@ -21654,6 +21822,13 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Text Weight": "Texttjocklek",
+        "Show Avatars": "Visa profilbilder",
+        "Shadow": "Skugga",
+        "See-through bubbles with a shadow": "Genomskinliga bubblor med skugga",
+        "Message Width": "Meddelandebredd",
+        "Glass": "Glas",
+        "The join radius rounds the corners where one person's messages follow each other.": "Radien där de möts rundar hörnen där en persons meddelanden följer på varandra.",
         "Title Color": "Titelfärg",
         "Time": "Tid",
         "The way Telegram draws them": "Så som Telegram ritar dem",
@@ -22554,6 +22729,13 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Text Weight": "Độ đậm chữ",
+        "Show Avatars": "Hiện ảnh đại diện",
+        "Shadow": "Bóng đổ",
+        "See-through bubbles with a shadow": "Bong bóng trong mờ có bóng",
+        "Message Width": "Độ rộng tin nhắn",
+        "Glass": "Kính",
+        "The join radius rounds the corners where one person's messages follow each other.": "Bán kính ở chỗ nối bo tròn các góc nơi tin nhắn của cùng một người nối tiếp nhau.",
         "Title Color": "Màu danh hiệu",
         "Time": "Thời gian",
         "The way Telegram draws them": "Như Telegram vẽ",
@@ -23454,6 +23636,13 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Text Weight": "Товщина тексту",
+        "Show Avatars": "Показувати аватарки",
+        "Shadow": "Тінь",
+        "See-through bubbles with a shadow": "Напівпрозорі бульбашки з тінню",
+        "Message Width": "Ширина повідомлень",
+        "Glass": "Скло",
+        "The join radius rounds the corners where one person's messages follow each other.": "Заокруглення на стику — кути там, де повідомлення однієї людини йдуть поспіль.",
         "Title Color": "Колір підпису",
         "Time": "Час",
         "The way Telegram draws them": "Як малює Telegram",
@@ -24363,6 +24552,13 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Text Weight": "Grosor del texto",
+        "Show Avatars": "Mostrar avatares",
+        "Shadow": "Sombra",
+        "See-through bubbles with a shadow": "Burbujas translúcidas con sombra",
+        "Message Width": "Ancho de los mensajes",
+        "Glass": "Cristal",
+        "The join radius rounds the corners where one person's messages follow each other.": "El radio en la unión redondea las esquinas donde los mensajes de una misma persona se suceden.",
         "Title Color": "Color del título",
         "Time": "Hora",
         "The way Telegram draws them": "Como los dibuja Telegram",
@@ -25272,6 +25468,13 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Text Weight": "Espessura do texto",
+        "Show Avatars": "Mostrar avatares",
+        "Shadow": "Sombra",
+        "See-through bubbles with a shadow": "Balões translúcidos com sombra",
+        "Message Width": "Largura das mensagens",
+        "Glass": "Vidro",
+        "The join radius rounds the corners where one person's messages follow each other.": "O raio na junção arredonda os cantos onde as mensagens de uma mesma pessoa se seguem.",
         "Title Color": "Cor do título",
         "Time": "Hora",
         "The way Telegram draws them": "Como o Telegram desenha",
@@ -26181,6 +26384,13 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Text Weight": "Textstärke",
+        "Show Avatars": "Profilbilder anzeigen",
+        "Shadow": "Schatten",
+        "See-through bubbles with a shadow": "Durchscheinende Blasen mit Schatten",
+        "Message Width": "Nachrichtenbreite",
+        "Glass": "Glas",
+        "The join radius rounds the corners where one person's messages follow each other.": "Der Radius an der Verbindung rundet die Ecken, an denen Nachrichten derselben Person aufeinanderfolgen.",
         "Title Color": "Titelfarbe",
         "Time": "Uhrzeit",
         "The way Telegram draws them": "So, wie Telegram sie zeichnet",
@@ -27090,6 +27300,13 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Text Weight": "Graisse du texte",
+        "Show Avatars": "Afficher les avatars",
+        "Shadow": "Ombre",
+        "See-through bubbles with a shadow": "Bulles translucides avec une ombre",
+        "Message Width": "Largeur des messages",
+        "Glass": "Verre",
+        "The join radius rounds the corners where one person's messages follow each other.": "Le rayon à la jonction arrondit les coins où les messages d’une même personne se suivent.",
         "Title Color": "Couleur du titre",
         "Time": "Heure",
         "The way Telegram draws them": "Comme Telegram les dessine",
@@ -27999,6 +28216,13 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Text Weight": "Metin Kalınlığı",
+        "Show Avatars": "Avatarları Göster",
+        "Shadow": "Gölge",
+        "See-through bubbles with a shadow": "Gölgeli yarı saydam baloncuklar",
+        "Message Width": "Mesaj Genişliği",
+        "Glass": "Cam",
+        "The join radius rounds the corners where one person's messages follow each other.": "Birleşme yerindeki yarıçap, aynı kişinin mesajlarının art arda geldiği köşeleri yuvarlar.",
         "Title Color": "Unvan Rengi",
         "Time": "Saat",
         "The way Telegram draws them": "Telegram’ın çizdiği gibi",

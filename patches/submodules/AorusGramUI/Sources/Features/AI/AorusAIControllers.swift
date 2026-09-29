@@ -1418,6 +1418,8 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// Artifacts currently being fetched, by `artifactId`. Owned by the controller, not
     /// by the card, because every reload builds new cards.
     private var loadingArtifactIds: Set<String> = []
+    /// The work-trail sheet open on a turn, and which turn: told whenever that turn changes.
+    private var workTrail: (messageId: UUID, handle: AorusAIWorkTrailHandle)?
     /// Real heights of rows the table has laid out, by message id. Bounded by the length
     /// of this one conversation, and an entry for a message that no longer exists is
     /// simply never read again.
@@ -3742,6 +3744,11 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     }
 
     private func reloadMessage(id: UUID) {
+        // The work-trail sheet, when it is open on this turn, is told first: whatever happens
+        // to the row below, the sheet shows the turn as it now is.
+        if let workTrail, workTrail.messageId == id {
+            workTrail.handle.refresh()
+        }
         guard let row = conversation.messages.firstIndex(where: { $0.id == id }) else { return }
         // Same rule as `jumpToNewestMessage`: a row the table has not been told about cannot be
         // reloaded, it raises. A skipped update here is harmless — the caller that adds the
@@ -3943,19 +3950,29 @@ private final class AorusAIChatController: ViewController, UITableViewDataSource
     /// the reader and pushed the answer they were reading off the screen. The row is now a
     /// fixed one line and nothing about the list moves.
     ///
-    /// Read fresh from the conversation at the moment of the tap rather than captured: a
-    /// running turn gains phases while the line sits there, and the sheet has to show the
-    /// ones that arrived, not the ones that existed when the cell was configured.
+    /// Read from the conversation for as long as the sheet is open, not copied at the tap: a
+    /// running turn gains phases while the sheet is up, and it has to show them as they
+    /// arrive. Every update the chat makes to that message is passed on to the sheet at once.
     private func presentWorkTrail(messageId: UUID) {
-        guard let message = conversation.messages.first(where: { $0.id == messageId }) else { return }
-        guard !message.workPhases.isEmpty else { return }
-        aorusAIPresentWorkTrail(
-            phases: message.workPhases,
-            isRunning: message.state == .streaming,
-            finishedAt: message.workFinishedAt,
+        let handle = aorusAIPresentWorkTrail(
+            source: { [weak self] in
+                guard let self, let message = self.conversation.messages.first(where: { $0.id == messageId }) else {
+                    return nil
+                }
+                return AorusAIWorkTrailSnapshot(
+                    phases: message.workPhases,
+                    isRunning: message.state == .streaming,
+                    finishedAt: message.workFinishedAt
+                )
+            },
             theme: presentationData.theme,
             from: self
         )
+        if let handle {
+            workTrail = (messageId: messageId, handle: handle)
+        } else {
+            workTrail = nil
+        }
     }
 
     /// Sends the last question again, having taken it and its failed answer out of the

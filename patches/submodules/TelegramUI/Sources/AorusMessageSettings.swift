@@ -43,9 +43,11 @@ private struct AorusMessageSampleLanguage {
     let titles: [String]
 }
 
-/// One message for the preview: what it says, who wrote it, their title and when.
+/// The preview's two messages: a quote, then who said it, from one person with their title,
+/// at one time today.
 private struct AorusMessageSample: Equatable {
-    let text: String
+    let quote: String
+    let author: String
     let name: String
     let title: String
     let nameColor: Int32
@@ -76,7 +78,7 @@ private enum AorusMessageSamples {
         components.hour = hour
         components.minute = minute
         let date = calendar.date(from: components) ?? Date()
-        return AorusMessageSample(text: quote.0 + "\n— " + quote.1, name: name, title: title, nameColor: nameColor, timestamp: Int32(date.timeIntervalSince1970))
+        return AorusMessageSample(quote: quote.0, author: "— " + quote.1, name: name, title: title, nameColor: nameColor, timestamp: Int32(date.timeIntervalSince1970))
     }
 
     private static var english: AorusMessageSampleLanguage {
@@ -497,21 +499,24 @@ private enum AorusMessageSamples {
 
 // MARK: - The preview
 
-/// The preview's message carries this stable id. Telegram's preview item draws the text of a
-/// message with a title as grey placeholder lines -- its title editor shows the title, not the
-/// words -- and draws the words of this one.
+/// The preview's messages carry stable ids from here up. Telegram's preview item draws the
+/// text of a message with a title as grey placeholder lines -- its title editor shows the
+/// title, not the words -- and draws the words of these.
 private let aorusMessagePreviewStableId: UInt32 = 0xA05E7E57
 
 func aorusMessagePreviewShowsText(_ messages: [EngineRawMessage]) -> Bool {
-    return messages.first?.stableId == aorusMessagePreviewStableId
+    guard let stableId = messages.first?.stableId else {
+        return false
+    }
+    return stableId >= aorusMessagePreviewStableId && stableId < aorusMessagePreviewStableId + 4
 }
 
-/// The wallpaper and one message on it, the way Telegram's own theme and rank previews draw
-/// theirs: a message item from the chat's own code, laid out in a list row over a wallpaper
-/// node, with the author's avatar beside an incoming message.
+/// The wallpaper and two messages on it from one person, one after the other: the way a
+/// group shows a quote and then who said it. Two, so the corners where messages join, the
+/// radius there and the tail on the last one can all be seen.
 private final class AorusMessagePreviewItem: ListViewItem, ItemListItem {
     let context: AccountContext
-    /// The chat's theme, for the message and the wallpaper.
+    /// The chat's theme, for the messages and the wallpaper.
     let theme: PresentationTheme
     /// The list's, for the row's edges.
     let listTheme: PresentationTheme
@@ -524,8 +529,10 @@ private final class AorusMessagePreviewItem: ListViewItem, ItemListItem {
     let nameDisplayOrder: PresentationPersonNameOrder
     let sample: AorusMessageSample
     let outgoing: Bool
+    let shuffleTitle: String
+    let shuffle: () -> Void
 
-    init(context: AccountContext, theme: PresentationTheme, listTheme: PresentationTheme, strings: PresentationStrings, sectionId: ItemListSectionId, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, wallpaper: TelegramWallpaper, dateTimeFormat: PresentationDateTimeFormat, nameDisplayOrder: PresentationPersonNameOrder, sample: AorusMessageSample, outgoing: Bool) {
+    init(context: AccountContext, theme: PresentationTheme, listTheme: PresentationTheme, strings: PresentationStrings, sectionId: ItemListSectionId, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, wallpaper: TelegramWallpaper, dateTimeFormat: PresentationDateTimeFormat, nameDisplayOrder: PresentationPersonNameOrder, sample: AorusMessageSample, outgoing: Bool, shuffleTitle: String, shuffle: @escaping () -> Void) {
         self.context = context
         self.theme = theme
         self.listTheme = listTheme
@@ -538,42 +545,46 @@ private final class AorusMessagePreviewItem: ListViewItem, ItemListItem {
         self.nameDisplayOrder = nameDisplayOrder
         self.sample = sample
         self.outgoing = outgoing
+        self.shuffleTitle = shuffleTitle
+        self.shuffle = shuffle
     }
 
+    // Laid out on the main thread, all of it at once.
+    //
+    // Telegram's message item finishes its layout on the main queue: asked from anywhere
+    // else it hands back its size a moment later. Laid out from the list's background queue,
+    // the preview measured itself with the messages' old sizes, applied the new ones a moment
+    // after, and — when a message had to be made anew — found no node at all yet and showed
+    // nothing. That is what made the preview jump and blink on every change. On the main
+    // thread the message answers at once, so the row is measured with the sizes it draws.
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, previousItem: ListViewItem?, nextItem: ListViewItem?, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
-        async {
+        Queue.mainQueue().async {
             let node = AorusMessagePreviewItemNode()
-            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+            let (layout, apply) = node.layout(item: self, params: params, neighbors: itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
             node.contentSize = layout.contentSize
             node.insets = layout.insets
-            Queue.mainQueue().async {
-                completion(node, {
-                    return (nil, { _ in apply() })
-                })
-            }
+            completion(node, {
+                return (nil, { _ in apply() })
+            })
         }
     }
 
     func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, previousItem: ListViewItem?, nextItem: ListViewItem?, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
         Queue.mainQueue().async {
-            if let nodeValue = node() as? AorusMessagePreviewItemNode {
-                let makeLayout = nodeValue.asyncLayout()
-                async {
-                    let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
-                    Queue.mainQueue().async {
-                        completion(layout, { _ in
-                            apply()
-                        })
-                    }
-                }
+            guard let nodeValue = node() as? AorusMessagePreviewItemNode else {
+                return
             }
+            let (layout, apply) = nodeValue.layout(item: self, params: params, neighbors: itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+            completion(layout, { _ in
+                apply()
+            })
         }
     }
 }
 
-/// The message in a group: an incoming one from the sample's author with their title, or one
-/// of the person's own.
-private func aorusPreviewMessage(_ item: AorusMessagePreviewItem) -> EngineRawMessage {
+/// The preview's two messages, oldest first: the quote, then who said it — incoming from the
+/// sample's author, or the person's own.
+private func aorusPreviewMessages(_ item: AorusMessagePreviewItem) -> [EngineRawMessage] {
     let groupPeerId = EnginePeer.Id(namespace: Namespaces.Peer.CloudChannel, id: EnginePeer.Id.Id._internalFromInt64Value(1))
     let authorPeerId: EnginePeer.Id
     if item.outgoing {
@@ -587,19 +598,30 @@ private func aorusPreviewMessage(_ item: AorusMessagePreviewItem) -> EngineRawMe
     peers[authorPeerId] = author
     peers[groupPeerId] = group
     let flags: MessageFlags = item.outgoing ? [] : [.Incoming]
-    return EngineRawMessage(stableId: aorusMessagePreviewStableId, stableVersion: 0, id: EngineMessage.Id(peerId: groupPeerId, namespace: Namespaces.Message.Cloud, id: 1), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: item.sample.timestamp, flags: flags, tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: author, text: item.sample.text, attributes: [], media: [], peers: peers, associatedMessages: EngineSimpleDictionary(), associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:])
+    let texts = [item.sample.quote, item.sample.author]
+    var messages: [EngineRawMessage] = []
+    for (index, text) in texts.enumerated() {
+        let timestamp = item.sample.timestamp - Int32((texts.count - 1 - index) * 40)
+        messages.append(EngineRawMessage(stableId: aorusMessagePreviewStableId + UInt32(index), stableVersion: 0, id: EngineMessage.Id(peerId: groupPeerId, namespace: Namespaces.Message.Cloud, id: Int32(index + 1)), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: timestamp, flags: flags, tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: author, text: text, attributes: [], media: [], peers: peers, associatedMessages: EngineSimpleDictionary(), associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:]))
+    }
+    return messages
 }
 
 private final class AorusMessagePreviewItemNode: ListViewItemNode {
+    private static let verticalInset: CGFloat = 14.0
+
     private var backgroundNode: WallpaperBackgroundNode?
     private let topStripeNode: ASDisplayNode
     private let bottomStripeNode: ASDisplayNode
     private let maskNode: ASImageNode
     private let containerNode: ASDisplayNode
-    private var messageNodes: [ListViewItemNode]?
-    private var messagesOutgoing = false
+    /// Newest first, as the rotated container lays them out.
+    private var messageNodes: [ListViewItemNode] = []
+    private var messagesOutgoing: Bool?
     private var itemHeaderNodes: [ListViewItemNode.HeaderId: ListViewItemHeaderNode] = [:]
     private var item: AorusMessagePreviewItem?
+    private var shuffleButton: UIButton?
+    private var shuffleGlyph: UIImageView?
 
     init() {
         self.topStripeNode = ASDisplayNode()
@@ -608,183 +630,287 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
         self.bottomStripeNode.isLayerBacked = true
         self.maskNode = ASImageNode()
         self.containerNode = ASDisplayNode()
+        self.containerNode.isUserInteractionEnabled = false
         self.containerNode.subnodeTransform = CATransform3DMakeRotation(CGFloat.pi, 0.0, 0.0, 1.0)
 
         super.init(layerBacked: false)
 
         self.clipsToBounds = true
-        self.isUserInteractionEnabled = false
         self.addSubnode(self.containerNode)
     }
 
-    func asyncLayout() -> (_ item: AorusMessagePreviewItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        let currentNodes = self.messageNodes
-        let currentOutgoing = self.messagesOutgoing
-        var currentBackgroundNode = self.backgroundNode
+    override func didLoad() {
+        super.didLoad()
 
-        return { item, params, neighbors in
-            if currentBackgroundNode == nil {
-                currentBackgroundNode = createWallpaperBackgroundNode(context: item.context, forChatDisplay: false)
-                currentBackgroundNode?.update(wallpaper: item.wallpaper, animated: false)
-                currentBackgroundNode?.updateBubbleTheme(bubbleTheme: item.theme, bubbleCorners: item.chatBubbleCorners)
-            }
+        // A round button in the corner of the wallpaper, on the same dark glass Telegram puts
+        // its dates and service messages on, so it reads as part of the chat.
+        let button = UIButton(type: .custom)
+        button.layer.cornerRadius = 16.0
+        button.clipsToBounds = true
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+        blur.isUserInteractionEnabled = false
+        blur.frame = CGRect(x: 0.0, y: 0.0, width: 32.0, height: 32.0)
+        blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        button.addSubview(blur)
+        let tint = UIView(frame: blur.bounds)
+        tint.isUserInteractionEnabled = false
+        tint.backgroundColor = UIColor(white: 0.0, alpha: 0.12)
+        tint.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        button.addSubview(tint)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)
+        let glyph = UIImageView(image: (UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: configuration) ?? UIImage(systemName: "shuffle", withConfiguration: configuration))?.withRenderingMode(.alwaysTemplate))
+        glyph.tintColor = .white
+        glyph.contentMode = .center
+        glyph.isUserInteractionEnabled = false
+        glyph.frame = blur.bounds
+        glyph.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        button.addSubview(glyph)
+        button.addTarget(self, action: #selector(self.shuffleTapped), for: .touchUpInside)
+        button.addTarget(self, action: #selector(self.shuffleDown), for: .touchDown)
+        button.addTarget(self, action: #selector(self.shuffleUp), for: [.touchUpOutside, .touchCancel, .touchUpInside])
+        self.view.addSubview(button)
+        self.shuffleButton = button
+        self.shuffleGlyph = glyph
+        self.layoutShuffleButton()
+    }
 
-            let messageItem = item.context.sharedContext.makeChatMessagePreviewItem(context: item.context, messages: [aorusPreviewMessage(item)], theme: item.theme, strings: item.strings, wallpaper: item.wallpaper, fontSize: item.fontSize, chatBubbleCorners: item.chatBubbleCorners, dateTimeFormat: item.dateTimeFormat, nameOrder: item.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: currentBackgroundNode, availableReactions: nil, accountPeer: nil, isCentered: false, isPreview: true, isStandalone: false, rank: item.outgoing ? nil : item.sample.title, rankRole: item.outgoing ? nil : .admin)
-            let items: [ListViewItem] = [messageItem]
+    @objc private func shuffleDown() {
+        UIView.animate(withDuration: 0.12, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+            self.shuffleButton?.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+        }, completion: nil)
+    }
 
-            let itemParams = ListViewItemLayoutParams(width: params.width, leftInset: params.leftInset, rightInset: params.rightInset, availableHeight: params.availableHeight, isStandalone: params.isStandalone)
+    @objc private func shuffleUp() {
+        UIView.animate(withDuration: 0.3, delay: 0.0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+            self.shuffleButton?.transform = .identity
+        }, completion: nil)
+    }
 
-            var nodes: [ListViewItemNode] = []
-            if let messageNodes = currentNodes, currentOutgoing == item.outgoing, messageNodes.count == items.count {
-                // The same kind of message: its node is laid out again with the new look.
-                nodes = messageNodes
-                for index in 0 ..< items.count {
-                    let itemNode = messageNodes[index]
-                    items[index].updateNode(async: { $0() }, node: {
-                        return itemNode
-                    }, params: itemParams, previousItem: nil, nextItem: nil, animation: .None, completion: { layout, apply in
-                        itemNode.contentSize = layout.contentSize
-                        itemNode.insets = layout.insets
-                        itemNode.frame = CGRect(origin: itemNode.frame.origin, size: layout.size)
-                        itemNode.isUserInteractionEnabled = false
-                        Queue.mainQueue().after(0.01) {
-                            apply(ListViewItemApply(isOnScreen: true))
-                        }
-                    })
+    @objc private func shuffleTapped() {
+        guard let item = self.item else {
+            return
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        // A full turn of the arrows for every new message.
+        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
+        rotation.fromValue = 0.0
+        rotation.toValue = CGFloat.pi * 2.0
+        rotation.duration = 0.45
+        rotation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        self.shuffleGlyph?.layer.add(rotation, forKey: "aorusShuffle")
+        item.shuffle()
+    }
+
+    private func layoutShuffleButton() {
+        guard let button = self.shuffleButton, let item = self.item else {
+            return
+        }
+        let size: CGFloat = 32.0
+        let rightInset = self.params?.rightInset ?? 0.0
+        let width = self.params?.width ?? self.bounds.width
+        button.bounds = CGRect(x: 0.0, y: 0.0, width: size, height: size)
+        button.center = CGPoint(x: width - rightInset - 12.0 - size / 2.0, y: 12.0 + size / 2.0)
+        button.accessibilityLabel = item.shuffleTitle
+    }
+
+    private var params: ListViewItemLayoutParams?
+
+    /// Lays the messages out now and returns the row's size with what places them.
+    func layout(item: AorusMessagePreviewItem, params: ListViewItemLayoutParams, neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
+        if self.backgroundNode == nil {
+            let backgroundNode = createWallpaperBackgroundNode(context: item.context, forChatDisplay: false)
+            backgroundNode.update(wallpaper: item.wallpaper, animated: false)
+            backgroundNode.updateBubbleTheme(bubbleTheme: item.theme, bubbleCorners: item.chatBubbleCorners)
+            self.backgroundNode = backgroundNode
+            self.insertSubnode(backgroundNode, at: 0)
+        }
+        let backgroundNode = self.backgroundNode
+
+        let messages = aorusPreviewMessages(item)
+        let chatItems: [ListViewItem] = messages.reversed().map { message in
+            return item.context.sharedContext.makeChatMessagePreviewItem(context: item.context, messages: [message], theme: item.theme, strings: item.strings, wallpaper: item.wallpaper, fontSize: item.fontSize, chatBubbleCorners: item.chatBubbleCorners, dateTimeFormat: item.dateTimeFormat, nameOrder: item.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: backgroundNode, availableReactions: nil, accountPeer: nil, isCentered: false, isPreview: true, isStandalone: false, rank: item.outgoing ? nil : item.sample.title, rankRole: item.outgoing ? nil : .admin)
+        }
+        let itemParams = ListViewItemLayoutParams(width: params.width, leftInset: params.leftInset, rightInset: params.rightInset, availableHeight: params.availableHeight, isStandalone: params.isStandalone)
+
+        // The same side as before: the nodes there are laid out again in place. The other side
+        // is a different message, so its nodes are made anew.
+        let reuse = self.messagesOutgoing == item.outgoing && self.messageNodes.count == chatItems.count
+        var laidOut: [(node: ListViewItemNode, size: CGSize, apply: () -> Void)] = []
+        for index in chatItems.indices {
+            let previousItem: ListViewItem? = index == 0 ? nil : chatItems[index - 1]
+            let nextItem: ListViewItem? = index == chatItems.count - 1 ? nil : chatItems[index + 1]
+            if reuse {
+                let messageNode = self.messageNodes[index]
+                var result: (ListViewItemNodeLayout, (ListViewItemApply) -> Void)?
+                chatItems[index].updateNode(async: { $0() }, node: { return messageNode }, params: itemParams, previousItem: previousItem, nextItem: nextItem, animation: .None, completion: { layout, apply in
+                    result = (layout, apply)
+                })
+                if case let (layout, apply)? = result {
+                    laidOut.append((messageNode, layout.size, {
+                        messageNode.contentSize = layout.contentSize
+                        messageNode.insets = layout.insets
+                        apply(ListViewItemApply(isOnScreen: true))
+                    }))
+                } else {
+                    laidOut.append((messageNode, messageNode.frame.size, {}))
                 }
             } else {
-                // A message from the other side is a different node, made anew.
-                for index in 0 ..< items.count {
-                    var itemNode: ListViewItemNode?
-                    items[index].nodeConfiguredForParams(async: { $0() }, params: itemParams, synchronousLoads: false, previousItem: nil, nextItem: nil, completion: { node, apply in
-                        itemNode = node
+                var created: (ListViewItemNode, () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void))?
+                chatItems[index].nodeConfiguredForParams(async: { $0() }, params: itemParams, synchronousLoads: true, previousItem: previousItem, nextItem: nextItem, completion: { node, apply in
+                    created = (node, apply)
+                })
+                if case let (messageNode, apply)? = created {
+                    messageNode.isUserInteractionEnabled = false
+                    laidOut.append((messageNode, messageNode.frame.size, {
                         apply().1(ListViewItemApply(isOnScreen: true))
-                    })
-                    if let itemNode {
-                        itemNode.isUserInteractionEnabled = false
-                        nodes.append(itemNode)
-                    }
+                    }))
                 }
             }
-
-            let verticalInset: CGFloat = 14.0
-            var contentSize = CGSize(width: params.width, height: 8.0 + verticalInset * 2.0)
-            for node in nodes {
-                contentSize.height += node.frame.size.height
-            }
-            var insets = itemListNeighborsGroupedInsets(neighbors, params)
-            insets.top = 0.0
-            insets.bottom = 0.0
-            let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
-            let layoutSize = layout.size
-            let separatorHeight = UIScreenPixel
-
-            return (layout, { [weak self] in
-                guard let strongSelf = self else {
-                    return
-                }
-                strongSelf.item = item
-
-                if let currentBackgroundNode {
-                    currentBackgroundNode.update(wallpaper: item.wallpaper, animated: false)
-                    currentBackgroundNode.updateBubbleTheme(bubbleTheme: item.theme, bubbleCorners: item.chatBubbleCorners)
-                }
-
-                for old in strongSelf.messageNodes ?? [] where !nodes.contains(where: { $0 === old }) {
-                    old.removeFromSupernode()
-                }
-                if item.outgoing {
-                    for (_, headerNode) in strongSelf.itemHeaderNodes {
-                        headerNode.removeFromSupernode()
-                    }
-                    strongSelf.itemHeaderNodes.removeAll()
-                }
-                strongSelf.messageNodes = nodes
-                strongSelf.messagesOutgoing = item.outgoing
-                strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: contentSize)
-
-                var topOffset: CGFloat = 4.0 + verticalInset
-                for node in nodes {
-                    if node.supernode == nil {
-                        strongSelf.containerNode.addSubnode(node)
-                    }
-                    node.updateFrame(CGRect(origin: CGPoint(x: 0.0, y: topOffset), size: node.frame.size), within: layoutSize)
-                    topOffset += node.frame.size.height
-
-                    if let header = node.headers()?.first(where: { $0 is ChatMessageAvatarHeader }) {
-                        let headerFrame = CGRect(origin: CGPoint(x: 0.0, y: 3.0 + node.frame.minY), size: CGSize(width: layoutSize.width, height: header.height))
-                        let headerNode: ListViewItemHeaderNode
-                        if let current = strongSelf.itemHeaderNodes[header.id] {
-                            headerNode = current
-                            headerNode.updateFrame(headerFrame, within: layoutSize)
-                            if headerNode.item !== header {
-                                header.updateNode(headerNode, previous: nil, next: nil)
-                                headerNode.item = header
-                            }
-                        } else {
-                            headerNode = header.node(synchronousLoad: true)
-                            if headerNode.item !== header {
-                                header.updateNode(headerNode, previous: nil, next: nil)
-                                headerNode.item = header
-                            }
-                            headerNode.frame = headerFrame
-                            strongSelf.itemHeaderNodes[header.id] = headerNode
-                            strongSelf.containerNode.addSubnode(headerNode)
-                        }
-                        headerNode.updateLayoutInternal(size: headerFrame.size, leftInset: params.leftInset, rightInset: params.leftInset, transition: .immediate)
-                        headerNode.updateStickDistanceFactor(0.0, distance: 0.0, transition: .immediate)
-                    }
-                }
-
-                if let currentBackgroundNode, strongSelf.backgroundNode !== currentBackgroundNode {
-                    strongSelf.backgroundNode = currentBackgroundNode
-                    strongSelf.insertSubnode(currentBackgroundNode, at: 0)
-                }
-
-                strongSelf.topStripeNode.backgroundColor = item.listTheme.list.itemBlocksSeparatorColor
-                strongSelf.bottomStripeNode.backgroundColor = item.listTheme.list.itemBlocksSeparatorColor
-                if strongSelf.topStripeNode.supernode == nil {
-                    strongSelf.insertSubnode(strongSelf.topStripeNode, at: 1)
-                }
-                if strongSelf.bottomStripeNode.supernode == nil {
-                    strongSelf.insertSubnode(strongSelf.bottomStripeNode, at: 2)
-                }
-                if strongSelf.maskNode.supernode == nil {
-                    strongSelf.insertSubnode(strongSelf.maskNode, at: 3)
-                }
-
-                let hasCorners = itemListHasRoundedBlockLayout(params)
-                var hasTopCorners = false
-                var hasBottomCorners = false
-                switch neighbors.top {
-                case .sameSection(false):
-                    strongSelf.topStripeNode.isHidden = true
-                default:
-                    hasTopCorners = true
-                    strongSelf.topStripeNode.isHidden = hasCorners
-                }
-                let bottomStripeOffset: CGFloat
-                switch neighbors.bottom {
-                case .sameSection(false):
-                    bottomStripeOffset = -separatorHeight
-                    strongSelf.bottomStripeNode.isHidden = false
-                default:
-                    bottomStripeOffset = 0.0
-                    hasBottomCorners = true
-                    strongSelf.bottomStripeNode.isHidden = hasCorners
-                }
-                strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners) : nil
-                strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
-                strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width, height: separatorHeight))
-
-                let backgroundFrame = CGRect(origin: CGPoint(), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                if let backgroundNode = strongSelf.backgroundNode {
-                    backgroundNode.frame = backgroundFrame
-                    backgroundNode.updateLayout(size: backgroundNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
-                }
-                strongSelf.maskNode.frame = backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0)
-            })
         }
+
+        let verticalInset = AorusMessagePreviewItemNode.verticalInset
+        var contentSize = CGSize(width: params.width, height: 8.0 + verticalInset * 2.0)
+        for entry in laidOut {
+            contentSize.height += entry.size.height
+        }
+        var insets = itemListNeighborsGroupedInsets(neighbors, params)
+        insets.top = 0.0
+        insets.bottom = 0.0
+        let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
+        let layoutSize = layout.size
+        let separatorHeight = UIScreenPixel
+
+        return (layout, { [weak self] in
+            guard let strongSelf = self else {
+                return
+            }
+            let previousItem = strongSelf.item
+            strongSelf.item = item
+            strongSelf.params = params
+
+            // Another message, or the other side: what was there fades out over what comes,
+            // rather than the words or the bubbles jumping from one to the other.
+            let sampleChanged = previousItem.map { $0.sample != item.sample } ?? false
+            if (!reuse && !strongSelf.messageNodes.isEmpty) || sampleChanged, let snapshot = strongSelf.containerNode.view.snapshotView(afterScreenUpdates: false) {
+                snapshot.frame = strongSelf.containerNode.frame
+                snapshot.isUserInteractionEnabled = false
+                strongSelf.view.insertSubview(snapshot, aboveSubview: strongSelf.containerNode.view)
+                UIView.animate(withDuration: 0.25, delay: 0.0, options: [.curveEaseOut], animations: {
+                    snapshot.alpha = 0.0
+                }, completion: { _ in
+                    snapshot.removeFromSuperview()
+                })
+            }
+
+            if !reuse {
+                for node in strongSelf.messageNodes {
+                    node.removeFromSupernode()
+                }
+                for (_, headerNode) in strongSelf.itemHeaderNodes {
+                    headerNode.removeFromSupernode()
+                }
+                strongSelf.itemHeaderNodes.removeAll()
+            }
+            strongSelf.messageNodes = laidOut.map { $0.node }
+            strongSelf.messagesOutgoing = item.outgoing
+
+            if let backgroundNode = strongSelf.backgroundNode {
+                backgroundNode.update(wallpaper: item.wallpaper, animated: false)
+                backgroundNode.updateBubbleTheme(bubbleTheme: item.theme, bubbleCorners: item.chatBubbleCorners)
+            }
+
+            strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: contentSize)
+            var topOffset: CGFloat = 4.0 + verticalInset
+            for entry in laidOut {
+                entry.apply()
+                let node = entry.node
+                if node.supernode == nil {
+                    strongSelf.containerNode.addSubnode(node)
+                }
+                node.updateFrame(CGRect(origin: CGPoint(x: 0.0, y: topOffset), size: entry.size), within: layoutSize)
+                topOffset += entry.size.height
+            }
+
+            // The author's avatar stands beside the newest message, as it does in a chat. A
+            // group that shows no avatars has none to place.
+            var usedHeaders = Set<ListViewItemNode.HeaderId>()
+            if let newest = laidOut.first?.node, let header = newest.headers()?.first(where: { $0 is ChatMessageAvatarHeader }) {
+                usedHeaders.insert(header.id)
+                let headerFrame = CGRect(origin: CGPoint(x: 0.0, y: 3.0 + newest.frame.minY), size: CGSize(width: layoutSize.width, height: header.height))
+                let headerNode: ListViewItemHeaderNode
+                if let current = strongSelf.itemHeaderNodes[header.id] {
+                    headerNode = current
+                    headerNode.updateFrame(headerFrame, within: layoutSize)
+                    if headerNode.item !== header {
+                        header.updateNode(headerNode, previous: nil, next: nil)
+                        headerNode.item = header
+                    }
+                } else {
+                    headerNode = header.node(synchronousLoad: true)
+                    if headerNode.item !== header {
+                        header.updateNode(headerNode, previous: nil, next: nil)
+                        headerNode.item = header
+                    }
+                    headerNode.frame = headerFrame
+                    strongSelf.itemHeaderNodes[header.id] = headerNode
+                    strongSelf.containerNode.addSubnode(headerNode)
+                }
+                headerNode.updateLayoutInternal(size: headerFrame.size, leftInset: params.leftInset, rightInset: params.leftInset, transition: .immediate)
+                headerNode.updateStickDistanceFactor(0.0, distance: 0.0, transition: .immediate)
+            }
+            for (id, headerNode) in strongSelf.itemHeaderNodes where !usedHeaders.contains(id) {
+                headerNode.removeFromSupernode()
+                strongSelf.itemHeaderNodes[id] = nil
+            }
+
+            strongSelf.topStripeNode.backgroundColor = item.listTheme.list.itemBlocksSeparatorColor
+            strongSelf.bottomStripeNode.backgroundColor = item.listTheme.list.itemBlocksSeparatorColor
+            if strongSelf.topStripeNode.supernode == nil {
+                strongSelf.insertSubnode(strongSelf.topStripeNode, at: 1)
+            }
+            if strongSelf.bottomStripeNode.supernode == nil {
+                strongSelf.insertSubnode(strongSelf.bottomStripeNode, at: 2)
+            }
+            if strongSelf.maskNode.supernode == nil {
+                strongSelf.insertSubnode(strongSelf.maskNode, at: 3)
+            }
+
+            let hasCorners = itemListHasRoundedBlockLayout(params)
+            var hasTopCorners = false
+            var hasBottomCorners = false
+            switch neighbors.top {
+            case .sameSection(false):
+                strongSelf.topStripeNode.isHidden = true
+            default:
+                hasTopCorners = true
+                strongSelf.topStripeNode.isHidden = hasCorners
+            }
+            let bottomStripeOffset: CGFloat
+            switch neighbors.bottom {
+            case .sameSection(false):
+                bottomStripeOffset = -separatorHeight
+                strongSelf.bottomStripeNode.isHidden = false
+            default:
+                bottomStripeOffset = 0.0
+                hasBottomCorners = true
+                strongSelf.bottomStripeNode.isHidden = hasCorners
+            }
+            strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.listTheme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+            strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
+            strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width, height: separatorHeight))
+
+            let backgroundFrame = CGRect(origin: CGPoint(), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
+            if let backgroundNode = strongSelf.backgroundNode {
+                backgroundNode.frame = backgroundFrame
+                backgroundNode.updateLayout(size: backgroundNode.bounds.size, displayMode: .aspectFill, transition: .immediate)
+            }
+            strongSelf.maskNode.frame = backgroundFrame.insetBy(dx: params.leftInset, dy: 0.0)
+            strongSelf.layoutShuffleButton()
+            if let button = strongSelf.shuffleButton {
+                // Above the messages and the rounded edge of the card.
+                strongSelf.view.bringSubviewToFront(button)
+            }
+        })
     }
 
     override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
@@ -1678,9 +1804,13 @@ private func aorusLookStyleIcon(_ preset: AorusMessageLook.Preset, dark: Bool) -
         return hexes.compactMap(aorusLookColor)
     }
     let radius = CGFloat((values["bubble.radius"] as? NSNumber)?.doubleValue ?? 16.0)
-    let cornerRadius = min(4.5, max(1.0, radius * 4.5 / 24.0))
-    let incomingFill = colors("bubble.incoming.fill", dark ? "2C2C2E" : "FFFFFF")
-    let outgoingFill = colors("bubble.outgoing.fill", dark ? "2B5278" : "E1FFC7")
+    let cornerRadius = min(4.5, max(1.0, radius * 4.5 / 16.0))
+    func opacity(_ key: String) -> CGFloat {
+        return CGFloat((values[key] as? NSNumber)?.doubleValue ?? 1.0)
+    }
+    let incomingFill = colors("bubble.incoming.fill", dark ? "2C2C2E" : "FFFFFF").map { $0.withMultipliedAlpha(opacity("bubble.incoming.opacity")) }
+    let outgoingFill = colors("bubble.outgoing.fill", dark ? "2B5278" : "E1FFC7").map { $0.withMultipliedAlpha(opacity("bubble.outgoing.opacity")) }
+    let hasShadow = ((values["bubble.incoming.shadow"] as? NSNumber)?.doubleValue ?? 0.0) > 0.0
     let incomingStroke = colors("bubble.incoming.stroke", nil).first
     let outgoingStroke = colors("bubble.outgoing.stroke", nil).first
     let tile = (dark ? ["1C2733", "2B2140"] : ["CFE6BD", "B3D4E8"]).compactMap(aorusLookColor)
@@ -1705,14 +1835,27 @@ private func aorusLookStyleIcon(_ preset: AorusMessageLook.Preset, dark: Bool) -
 
         let incomingRect = CGRect(x: 3.0, y: 5.0, width: 17.0, height: 9.0)
         let incoming = UIBezierPath(roundedRect: incomingRect, cornerRadius: cornerRadius)
+        let outgoingRect = CGRect(x: 10.0, y: 16.0, width: 17.0, height: 9.0)
+        let outgoing = UIBezierPath(roundedRect: outgoingRect, cornerRadius: cornerRadius)
+        if hasShadow {
+            // A style with a shadow shows it under both bubbles: each is filled once with the
+            // shadow on, and drawn again over it below.
+            context.saveGState()
+            context.setShadow(offset: CGSize(width: 0.0, height: 1.0), blur: 2.5, color: UIColor(white: 0.0, alpha: 0.35).cgColor)
+            context.setFillColor((incomingFill.first ?? .white).cgColor)
+            context.addPath(incoming.cgPath)
+            context.fillPath()
+            context.setFillColor((outgoingFill.first ?? .white).cgColor)
+            context.addPath(outgoing.cgPath)
+            context.fillPath()
+            context.restoreGState()
+        }
         fillGradient(incoming, incomingFill, incomingRect)
         if let incomingStroke {
             incomingStroke.setStroke()
             incoming.lineWidth = 1.0
             incoming.stroke()
         }
-        let outgoingRect = CGRect(x: 10.0, y: 16.0, width: 17.0, height: 9.0)
-        let outgoing = UIBezierPath(roundedRect: outgoingRect, cornerRadius: cornerRadius)
         fillGradient(outgoing, outgoingFill, outgoingRect)
         if let outgoingStroke {
             outgoingStroke.setStroke()
@@ -1730,6 +1873,8 @@ private func aorusLookStyleName(_ id: String) -> (title: String, subtitle: Strin
         return (aorusL("Минимализм", "Minimal"), aorusL("Без хвостиков, скромные углы", "No tails, modest corners"))
     case "round":
         return (aorusL("Округлый", "Round"), aorusL("Мягкие круглые пузыри", "Soft round bubbles"))
+    case "glass":
+        return (aorusL("Стекло", "Glass"), aorusL("Полупрозрачные пузыри с тенью", "See-through bubbles with a shadow"))
     case "outlined":
         return (aorusL("Контур", "Outlined"), aorusL("Полупрозрачные пузыри с обводкой", "See-through bubbles with an outline"))
     case "neon":
@@ -1803,22 +1948,32 @@ private let aorusLookTextSizes: [PresentationFontSize] = [.extraSmall, .small, .
 private let aorusLookNameWeights = ["regular", "medium", "semibold", "bold"]
 private let aorusLookLetterCases = ["asIs", "upper", "lower"]
 
+private let aorusLookTextWeights = ["light", "regular", "medium", "semibold"]
+
+private func aorusLookPercent(_ value: CGFloat) -> String {
+    return "\(Int((value * 100.0).rounded()))%"
+}
+
 private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
     case preview(AorusLookPreview)
-    case another(String)
     case shapeHeader(String)
     case tails(String, Bool)
     case radius(String, CGFloat)
     case merge(String, Bool)
     case radiusSmall(String, CGFloat)
+    case width(String, CGFloat, Bool)
+    case shapeFooter(String)
     case colorsHeader(String)
     case side(String, String, Bool)
+    case transparency(String, String, CGFloat)
+    case shadow(String, String, CGFloat, Bool)
     case color(Int32, AorusLookColorRow)
     case colorsFooter(String)
     case namesHeader(String)
     case showNames(String, Bool)
     case nameColor(AorusLookColorRow)
     case nameWeight(String, Int)
+    case showAvatars(String, Bool)
     case titlesHeader(String)
     case showTitles(String, Bool)
     case titleColor(AorusLookColorRow)
@@ -1827,6 +1982,7 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
     case titlesFooter(String)
     case textHeader(String)
     case textSize(String, Int)
+    case textWeight(String, Int)
     case stylesHeader(String)
     case style(Int32, AorusLookStyleRow)
     case reset(String)
@@ -1834,17 +1990,17 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
 
     var section: ItemListSectionId {
         switch self {
-        case .preview, .another:
+        case .preview:
             return AorusMessageSettingsSection.preview.rawValue
-        case .shapeHeader, .tails, .radius, .merge, .radiusSmall:
+        case .shapeHeader, .tails, .radius, .merge, .radiusSmall, .width, .shapeFooter:
             return AorusMessageSettingsSection.shape.rawValue
-        case .colorsHeader, .side, .color, .colorsFooter:
+        case .colorsHeader, .side, .transparency, .shadow, .color, .colorsFooter:
             return AorusMessageSettingsSection.colors.rawValue
-        case .namesHeader, .showNames, .nameColor, .nameWeight:
+        case .namesHeader, .showNames, .nameColor, .nameWeight, .showAvatars:
             return AorusMessageSettingsSection.names.rawValue
         case .titlesHeader, .showTitles, .titleColor, .titlePlate, .titleCase, .titlesFooter:
             return AorusMessageSettingsSection.titles.rawValue
-        case .textHeader, .textSize:
+        case .textHeader, .textSize, .textWeight:
             return AorusMessageSettingsSection.text.rawValue
         case .stylesHeader, .style:
             return AorusMessageSettingsSection.styles.rawValue
@@ -1857,8 +2013,6 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
         switch self {
         case .preview:
             return 0
-        case .another:
-            return 1
         case .shapeHeader:
             return 10
         case .tails:
@@ -1869,12 +2023,20 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             return 13
         case .radiusSmall:
             return 14
+        case .width:
+            return 15
+        case .shapeFooter:
+            return 16
         case .colorsHeader:
             return 20
         case .side:
             return 21
+        case .transparency:
+            return 22
+        case .shadow:
+            return 23
         case let .color(index, _):
-            return 22 + index
+            return 24 + index
         case .colorsFooter:
             return 40
         case .namesHeader:
@@ -1885,6 +2047,8 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             return 52
         case .nameWeight:
             return 53
+        case .showAvatars:
+            return 54
         case .titlesHeader:
             return 60
         case .showTitles:
@@ -1901,6 +2065,8 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             return 70
         case .textSize:
             return 71
+        case .textWeight:
+            return 72
         case .stylesHeader:
             return 80
         case let .style(index, _):
@@ -1920,21 +2086,19 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
         let arguments = arguments as! AorusMessageSettingsArguments
         switch self {
         case let .preview(preview):
-            return AorusMessagePreviewItem(context: arguments.context, theme: preview.theme, listTheme: presentationData.theme, strings: presentationData.strings, sectionId: self.section, fontSize: preview.fontSize, chatBubbleCorners: preview.corners, wallpaper: preview.wallpaper, dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, sample: preview.sample, outgoing: preview.outgoing)
-        case let .another(title):
-            return ItemListActionItem(presentationData: presentationData, title: title, kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
+            return AorusMessagePreviewItem(context: arguments.context, theme: preview.theme, listTheme: presentationData.theme, strings: presentationData.strings, sectionId: self.section, fontSize: preview.fontSize, chatBubbleCorners: preview.corners, wallpaper: preview.wallpaper, dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, sample: preview.sample, outgoing: preview.outgoing, shuffleTitle: aorusL("Другое сообщение", "Another Message"), shuffle: {
                 arguments.shuffle()
             })
         case let .shapeHeader(text), let .colorsHeader(text), let .namesHeader(text), let .titlesHeader(text), let .textHeader(text), let .stylesHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
-        case let .colorsFooter(text), let .titlesFooter(text), let .resetFooter(text):
+        case let .shapeFooter(text), let .colorsFooter(text), let .titlesFooter(text), let .resetFooter(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .tails(title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setShape("bubble.tails", value)
             })
         case let .radius(title, value):
-            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 32.0, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 16.0, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setShape("bubble.radius", Int(value))
             })
         case let .merge(title, value):
@@ -1942,13 +2106,33 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.setShape("bubble.mergeCorners", value)
             })
         case let .radiusSmall(title, value):
-            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 32.0, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 16.0, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setShape("bubble.radiusSmall", Int(value))
+            })
+        case let .width(title, value, isSet):
+            let defaultText = aorusL("По умолчанию", "Default")
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.5, maximum: 1.0, step: 0.01, valueText: { current in
+                return !isSet && current == value ? defaultText : aorusLookPercent(current)
+            }, sizeMarks: false, sectionId: self.section, changed: { current in
+                arguments.setShape("bubble.width", Double(current))
             })
         case let .side(incoming, outgoing, isOutgoing):
             let font = Font.medium(15.0)
             return AorusLookSegmentItem(presentationData: presentationData, title: nil, options: [AorusLookSegmentOption(text: incoming, font: font), AorusLookSegmentOption(text: outgoing, font: font)], selected: isOutgoing ? 1 : 0, sectionId: self.section, changed: { index in
                 arguments.setOutgoing(index == 1)
+            })
+        case let .transparency(title, key, value):
+            // Shown as how much the wallpaper shows through; kept as the bubble's opacity,
+            // and nothing at all while it is solid.
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 0.9, step: 0.01, valueText: aorusLookPercent, sizeMarks: false, sectionId: self.section, changed: { current in
+                arguments.setShape(key, current <= 0.0 ? nil : Double(1.0 - current))
+            })
+        case let .shadow(title, key, value, isSet):
+            let defaultText = aorusL("По умолчанию", "Default")
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 1.0, step: 0.01, valueText: { current in
+                return !isSet && current == value ? defaultText : aorusLookPercent(current)
+            }, sizeMarks: false, sectionId: self.section, changed: { current in
+                arguments.setShape(key, Double(current))
             })
         case let .color(_, row), let .nameColor(row), let .titleColor(row):
             return AorusLookSwatchesItem(presentationData: presentationData, title: row.title, palette: row.palette.hexes(dark: row.dark), selected: row.selected, sectionId: self.section, picked: { hex in
@@ -1964,6 +2148,10 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             let options = [Font.regular(15.0), Font.medium(15.0), Font.semibold(15.0), Font.bold(15.0)].map { AorusLookSegmentOption(text: "Aa", font: $0) }
             return AorusLookSegmentItem(presentationData: presentationData, title: title, options: options, selected: index, sectionId: self.section, changed: { index in
                 arguments.setChoice("message.nameWeight", aorusLookNameWeights[index], "semibold")
+            })
+        case let .showAvatars(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.setChoice("message.hideAvatar", !value, false)
             })
         case let .showTitles(title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
@@ -1985,6 +2173,11 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
                 return aorusL("%@ пт", "%@ pt").replacingOccurrences(of: "%@", with: "\(Int(size.baseDisplaySize))")
             }, sizeMarks: true, sectionId: self.section, changed: { value in
                 arguments.setTextSize(max(0, min(AorusPluginAppearance.fontSizes.count - 1, Int(value))))
+            })
+        case let .textWeight(title, index):
+            let options = [Font.with(size: 15.0, weight: .light), Font.regular(15.0), Font.medium(15.0), Font.semibold(15.0)].map { AorusLookSegmentOption(text: "Aa", font: $0) }
+            return AorusLookSegmentItem(presentationData: presentationData, title: title, options: options, selected: index, sectionId: self.section, changed: { index in
+                arguments.setChoice("message.textWeight", aorusLookTextWeights[index], "regular")
             })
         case let .style(_, row):
             let icon = AorusMessageLook.presets.first(where: { $0.id == row.id }).map { aorusLookStyleIcon($0, dark: row.dark) }
@@ -2008,19 +2201,25 @@ private func aorusMessageSettingsEntries(presentationData: PresentationData, sta
     var entries: [AorusMessageSettingsEntry] = []
 
     entries.append(.preview(AorusLookPreview(theme: presentationData.theme, fontSize: presentationData.chatFontSize, corners: corners, wallpaper: presentationData.chatWallpaper, sample: sample, outgoing: state.outgoing, revision: revision)))
-    entries.append(.another(aorusL("Другое сообщение", "Another Message")))
 
     entries.append(.shapeHeader(aorusL("ФОРМА", "SHAPE")))
     entries.append(.tails(aorusL("Хвостик", "Tail"), corners.hasTails))
-    entries.append(.radius(aorusL("Скругление углов", "Corner Radius"), corners.mainRadius))
+    entries.append(.radius(aorusL("Скругление углов", "Corner Radius"), min(16.0, corners.mainRadius)))
     entries.append(.merge(aorusL("Слитные сообщения", "Join Consecutive Messages"), corners.mergeBubbleCorners))
     if corners.mergeBubbleCorners {
-        entries.append(.radiusSmall(aorusL("Скругление на стыке", "Radius Where They Join"), corners.auxiliaryRadius))
+        entries.append(.radiusSmall(aorusL("Скругление на стыке", "Radius Where They Join"), min(16.0, corners.auxiliaryRadius)))
     }
+    let width = AorusPluginAppearanceValues.number("bubble.width", in: values)
+    entries.append(.width(aorusL("Ширина сообщений", "Message Width"), width.map { max(0.5, min(1.0, $0)) } ?? 0.9, width != nil))
+    entries.append(.shapeFooter(aorusL("Скругление на стыке — углы там, где сообщения одного человека идут подряд.", "The join radius rounds the corners where one person's messages follow each other.")))
 
     entries.append(.colorsHeader(aorusL("ЦВЕТА", "COLORS")))
     entries.append(.side(aorusL("Входящие", "Incoming"), aorusL("Исходящие", "Outgoing"), state.outgoing))
     let side = state.outgoing ? "outgoing" : "incoming"
+    let opacity = AorusPluginAppearanceValues.number("bubble.\(side).opacity", in: values).map { max(0.1, min(1.0, $0)) } ?? 1.0
+    entries.append(.transparency(aorusL("Прозрачность", "Transparency"), "bubble.\(side).opacity", 1.0 - opacity))
+    let shadow = AorusPluginAppearanceValues.number("bubble.\(side).shadow", in: values)
+    entries.append(.shadow(aorusL("Тень", "Shadow"), "bubble.\(side).shadow", shadow.map { max(0.0, min(1.0, $0)) } ?? 0.0, shadow != nil))
     var colorRows: [(key: String, stop: Int, title: String, palette: AorusLookPalette)] = [
         ("bubble.\(side).fill", 0, aorusL("Фон", "Background"), .fill),
         ("bubble.\(side).fill", 1, aorusL("Градиент", "Gradient"), .gradient),
@@ -2048,6 +2247,7 @@ private func aorusMessageSettingsEntries(presentationData: PresentationData, sta
         let weight = AorusPluginAppearanceValues.string("message.nameWeight", dark: dark, in: values) ?? "semibold"
         entries.append(.nameWeight(aorusL("Толщина имени", "Name Weight"), aorusLookNameWeights.firstIndex(of: weight) ?? 2))
     }
+    entries.append(.showAvatars(aorusL("Показывать аватарки", "Show Avatars"), !(AorusPluginAppearanceValues.flag("message.hideAvatar", in: values) ?? false)))
 
     entries.append(.titlesHeader(aorusL("ПРИПИСКИ", "TITLES")))
     let hideRank = AorusPluginAppearanceValues.flag("message.hideRank", in: values) ?? false
@@ -2062,6 +2262,8 @@ private func aorusMessageSettingsEntries(presentationData: PresentationData, sta
 
     entries.append(.textHeader(aorusL("ТЕКСТ", "TEXT")))
     entries.append(.textSize(aorusL("Размер текста", "Text Size"), aorusLookTextSizes.firstIndex(of: presentationData.chatFontSize) ?? 3))
+    let textWeight = AorusPluginAppearanceValues.string("message.textWeight", dark: dark, in: values) ?? "regular"
+    entries.append(.textWeight(aorusL("Толщина текста", "Text Weight"), aorusLookTextWeights.firstIndex(of: textWeight) ?? 1))
 
     entries.append(.stylesHeader(aorusL("ГОТОВЫЕ СТИЛИ", "READY-MADE STYLES")))
     for (index, preset) in AorusMessageLook.presets.enumerated() {
@@ -2085,7 +2287,7 @@ private final class AorusMessageSettingsArguments {
     let context: AccountContext
     let shuffle: () -> Void
     let setOutgoing: (Bool) -> Void
-    let setShape: (String, Any) -> Void
+    let setShape: (String, Any?) -> Void
     let setChoice: (String, Any, Any) -> Void
     let setTextSize: (Int) -> Void
     let setColor: (AorusLookColorRow, String?) -> Void
@@ -2093,7 +2295,7 @@ private final class AorusMessageSettingsArguments {
     let applyStyle: (String) -> Void
     let resetAll: () -> Void
 
-    init(context: AccountContext, shuffle: @escaping () -> Void, setOutgoing: @escaping (Bool) -> Void, setShape: @escaping (String, Any) -> Void, setChoice: @escaping (String, Any, Any) -> Void, setTextSize: @escaping (Int) -> Void, setColor: @escaping (AorusLookColorRow, String?) -> Void, pickColor: @escaping (AorusLookColorRow) -> Void, applyStyle: @escaping (String) -> Void, resetAll: @escaping () -> Void) {
+    init(context: AccountContext, shuffle: @escaping () -> Void, setOutgoing: @escaping (Bool) -> Void, setShape: @escaping (String, Any?) -> Void, setChoice: @escaping (String, Any, Any) -> Void, setTextSize: @escaping (Int) -> Void, setColor: @escaping (AorusLookColorRow, String?) -> Void, pickColor: @escaping (AorusLookColorRow) -> Void, applyStyle: @escaping (String) -> Void, resetAll: @escaping () -> Void) {
         self.context = context
         self.shuffle = shuffle
         self.setOutgoing = setOutgoing
@@ -2234,10 +2436,10 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
             updateState { state in
                 var state = state
                 // Another message, never the same words twice in a row.
-                let current = AorusMessageSamples.sample(seed: state.seed, language: language).text
+                let current = AorusMessageSamples.sample(seed: state.seed, language: language).quote
                 for _ in 0 ..< 8 {
                     state.seed = UInt64.random(in: 0 ... UInt64.max)
-                    if AorusMessageSamples.sample(seed: state.seed, language: language).text != current {
+                    if AorusMessageSamples.sample(seed: state.seed, language: language).quote != current {
                         break
                     }
                 }
@@ -2257,11 +2459,14 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
             }
         },
         setChoice: { name, value, telegram in
-            // Names and titles are drawn over messages from others: the preview shows one.
-            updateState { state in
-                var state = state
-                state.outgoing = false
-                return state
+            // Names, titles and avatars are drawn beside messages from others: the preview
+            // shows those. The weight of the text is on both sides alike.
+            if name != "message.textWeight" {
+                updateState { state in
+                    var state = state
+                    state.outgoing = false
+                    return state
+                }
             }
             aorusLookStoreChoice(name, value, telegram: telegram)
         },

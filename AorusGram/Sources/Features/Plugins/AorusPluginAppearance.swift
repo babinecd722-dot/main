@@ -55,6 +55,13 @@ public enum AorusPluginAppearance {
     /// the theme is dark and wins there over `bubble.outgoing.fill`.
     public static let appearanceSuffixes = ["@dark", "@light"]
     public static let fontSizes = ["extraSmall", "small", "medium", "regular", "large", "extraLarge", "extraLargeX2"]
+    /// The roundest a bubble can be drawn. Telegram draws a bubble from a 33-point shape
+    /// stretched at its middle, so a radius past half of that folds the shape in on itself —
+    /// the bubble visibly buckles. Its own settings stop at 16 as well.
+    public static let bubbleRadiusLimit: Double = 16
+    /// What the corner keys accepted before the limit, and are still accepted as: a layer
+    /// written for them is kept, drawn at the limit, rather than refused whole.
+    public static let legacyBubbleRadiusLimit: Double = 32
 
     // MARK: - The catalogue
 
@@ -82,6 +89,8 @@ public enum AorusPluginAppearance {
                 Key("bubble.\(side).buttonStroke", .color, "\(who) inline button outline"),
                 Key("bubble.\(side).pollBar", .color, "\(who) poll result bars"),
                 Key("bubble.\(side).selection", .color, "\(who) selected text"),
+                Key("bubble.\(side).opacity", .number(0.1, 1), "\(who) bubble opacity; lower lets the wallpaper through"),
+                Key("bubble.\(side).shadow", .number(0, 1), "\(who) bubble shadow, from none to strong"),
             ]
         }
         keys += [
@@ -96,8 +105,9 @@ public enum AorusPluginAppearance {
             Key("bubble.failed", .color, "Mark on a message that failed to send"),
             Key("bubble.infoText", .color, "Text of a bot's introduction"),
             Key("bubble.infoLink", .color, "Links in a bot's introduction"),
-            Key("bubble.radius", .number(0, 32), "Bubble corner radius"),
-            Key("bubble.radiusSmall", .number(0, 32), "Corner radius where bubbles join"),
+            Key("bubble.radius", .number(0, bubbleRadiusLimit), "Bubble corner radius"),
+            Key("bubble.radiusSmall", .number(0, bubbleRadiusLimit), "Corner radius where bubbles join"),
+            Key("bubble.width", .number(0.5, 1), "Widest a message may grow, as a share of the chat's width"),
             Key("bubble.mergeCorners", .flag, "Join the corners of consecutive bubbles"),
             Key("bubble.tails", .flag, "Draw the tail on the last bubble of a group"),
             Key("message.name", .color, "Names of the people writing in a group; each in their own colour while unset"),
@@ -107,6 +117,8 @@ public enum AorusPluginAppearance {
             Key("message.rankPlate", .flag, "The rounded plate under a title"),
             Key("message.hideRank", .flag, "No titles or labels beside names"),
             Key("message.rankCase", .choice(["asIs", "upper", "lower"]), "Letter case of titles and labels"),
+            Key("message.hideAvatar", .flag, "No avatars beside messages in groups"),
+            Key("message.textWeight", .choice(["light", "regular", "medium", "semibold"]), "Weight of message text"),
 
             Key("chat.wallpaper", .colors(4), "Chat background; up to four colours make a gradient"),
             Key("chat.service", .color, "Service message and date plates"),
@@ -353,13 +365,21 @@ public enum AorusPluginAppearance {
                 rejections.append(Rejection(key: name, reason: "unknown key"))
                 continue
             }
+            var candidate = value
+            // A corner radius past the limit, up to what the key used to take, is kept at the
+            // limit: a layer written before it was lowered is drawn, not refused.
+            if key.name == "bubble.radius" || key.name == "bubble.radiusSmall",
+               let number = value as? NSNumber, !isBoolean(number),
+               number.doubleValue > bubbleRadiusLimit, number.doubleValue <= legacyBubbleRadiusLimit {
+                candidate = bubbleRadiusLimit
+            }
             // Colours and the glass differ between a dark and a light theme; the shape of a
             // bubble and the size of text are the same in both, so they take no suffix.
             if name != key.name, !allowsAppearanceSuffix(key) {
                 rejections.append(Rejection(key: name, reason: "applies to dark and light alike, without @dark or @light"))
                 continue
             }
-            switch normalized(value, kind: key.kind) {
+            switch normalized(candidate, kind: key.kind) {
             case let .success(normalizedValue):
                 values[name] = normalizedValue
             case let .failure(problem):
@@ -539,6 +559,7 @@ public enum AorusMessageLook {
         "bubble.outgoing.link", "bubble.outgoing.accent", "bubble.checks",
         "message.name", "message.nameWeight", "message.hideName",
         "message.rank", "message.rankPlate", "message.hideRank", "message.rankCase",
+        "bubble.incoming.opacity", "bubble.outgoing.opacity", "bubble.incoming.shadow", "bubble.outgoing.shadow",
     ]
 
     /// Ready-made styles. Each colour is given for both appearances, so a style looks right in
@@ -550,10 +571,18 @@ public enum AorusMessageLook {
             "message.nameWeight": "medium", "message.rankPlate": false,
         ]),
         Preset(id: "round", values: [
-            "bubble.tails": false, "bubble.radius": 24, "bubble.radiusSmall": 20, "bubble.mergeCorners": true,
+            "bubble.tails": false, "bubble.radius": 16, "bubble.radiusSmall": 14, "bubble.mergeCorners": true,
+        ]),
+        Preset(id: "glass", values: [
+            "bubble.radius": 16, "bubble.radiusSmall": 10, "bubble.mergeCorners": true,
+            "bubble.incoming.opacity": 0.62, "bubble.outgoing.opacity": 0.7,
+            "bubble.incoming.shadow": 0.55, "bubble.outgoing.shadow": 0.55,
+            "bubble.incoming.stroke@light": "FFFFFF99", "bubble.incoming.stroke@dark": "FFFFFF33",
+            "bubble.outgoing.stroke@light": "FFFFFF99", "bubble.outgoing.stroke@dark": "FFFFFF33",
+            "message.rankPlate": false,
         ]),
         Preset(id: "outlined", values: [
-            "bubble.radius": 18, "bubble.radiusSmall": 8,
+            "bubble.radius": 16, "bubble.radiusSmall": 8,
             "bubble.incoming.fill@light": "FFFFFFB8", "bubble.incoming.stroke@light": "007AFF",
             "bubble.incoming.fill@dark": "1C1C1EB8", "bubble.incoming.stroke@dark": "0A84FF",
             "bubble.outgoing.fill@light": "E3F0FFB8", "bubble.outgoing.stroke@light": "007AFF",
@@ -561,7 +590,7 @@ public enum AorusMessageLook {
             "message.rankPlate": false,
         ]),
         Preset(id: "neon", values: [
-            "bubble.radius": 20, "bubble.radiusSmall": 10,
+            "bubble.radius": 16, "bubble.radiusSmall": 10, "bubble.incoming.shadow": 0.35, "bubble.outgoing.shadow": 0.35,
             "bubble.incoming.fill@light": "FBF3FF", "bubble.incoming.stroke@light": "BF5AF2",
             "bubble.incoming.text@light": "2A1540", "bubble.incoming.link@light": "8E2DE2",
             "bubble.incoming.fill@dark": "170A24", "bubble.incoming.stroke@dark": "BF5AF2",
@@ -574,7 +603,7 @@ public enum AorusMessageLook {
             "message.rank@light": "0E9F94", "message.rank@dark": "5AF2E0",
         ]),
         Preset(id: "pastel", values: [
-            "bubble.radius": 20, "bubble.radiusSmall": 12,
+            "bubble.radius": 16, "bubble.radiusSmall": 12,
             "bubble.incoming.fill@light": "FFF4E6", "bubble.incoming.text@light": "3B2F2F",
             "bubble.incoming.fill@dark": "2E2A33", "bubble.incoming.text@dark": "EDE6F2",
             "bubble.outgoing.fill@light": ["C9E4DE", "C6DEF1"], "bubble.outgoing.text@light": "22333B",

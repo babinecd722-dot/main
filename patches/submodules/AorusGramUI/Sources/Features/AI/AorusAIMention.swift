@@ -641,7 +641,7 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
             })
         }
         children.append(UIAction(title: aorusAILocalized("Выделить", "Select")) { [weak self] _ in
-            self?.aorusSelectLine(containing: range)
+            self?.aorusSelectFormula(range)
         })
         return UIMenu(children: children)
     }
@@ -695,20 +695,73 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         UINotificationFeedbackGenerator().notificationOccurred(error == nil ? .success : .error)
     }
 
-    /// Selects the whole line the formula sits on.
+    /// Selects the formula that was held — the whole of it — with handles.
     ///
-    /// This is the way to the thing a formula cannot give on its own: a selection with handles,
-    /// which the reader drags to take the formula together with whatever stands beside it. The
-    /// selection is made and left there — a text view shows its own menu for a selection when it
-    /// is touched, and there is no supported way to open that menu from here (`UITextView` has
-    /// no edit-menu interaction to ask; the preflight probe says so in twenty-five seconds).
-    func aorusSelectLine(containing range: NSRange) {
-        let text = textStorage.string as NSString
-        guard range.length > 0, NSMaxRange(range) <= text.length else { return }
-        let line = text.lineRange(for: range)
-        guard line.length > 0 else { return }
+    /// A formula is one character, so the selection is exactly the formula, and its handles
+    /// drag out from there to take the `x +` in front of it or whatever follows. It used to
+    /// select the whole line the formula stood on, which is not what was held. The selection
+    /// is made and left there — a text view shows its own menu for a selection when it is
+    /// touched, and there is no supported way to open that menu from here.
+    func aorusSelectFormula(_ range: NSRange) {
+        guard range.length > 0, NSMaxRange(range) <= textStorage.length else { return }
         becomeFirstResponder()
-        selectedRange = line
+        selectedRange = range
+    }
+
+    /// Where each drawn formula in `range` stands, in this view's coordinates, at its full
+    /// height.
+    ///
+    /// A formula is set as a text attachment and stands taller than the line's own text: a
+    /// fraction reaches above the capitals and below the descenders. The system draws a
+    /// selection as the band of the text on the line, so a selected fraction was highlighted
+    /// only across its middle — the part under the finger — and read as if only that much had
+    /// been taken. These frames are what the highlight is widened to.
+    private func aorusFormulaFrames(in range: NSRange) -> [CGRect] {
+        guard range.length > 0, NSMaxRange(range) <= textStorage.length else { return [] }
+        var frames: [CGRect] = []
+        textStorage.enumerateAttribute(.attachment, in: range, options: []) { value, attributeRange, _ in
+            guard let attachment = value as? NSTextAttachment else { return }
+            for index in attributeRange.location ..< NSMaxRange(attributeRange) {
+                guard textStorage.attribute(.aorusAIMathLaTeX, at: index, effectiveRange: nil) != nil else { continue }
+                let glyph = layoutManager.glyphIndexForCharacter(at: index)
+                guard glyph < layoutManager.numberOfGlyphs else { continue }
+                let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+                let location = layoutManager.location(forGlyphAt: glyph)
+                let bounds = attachment.bounds
+                guard bounds.width > 0.0, bounds.height > 0.0 else { continue }
+                // The attachment's bounds are measured from the baseline, upwards; its
+                // origin sits `bounds.minY` below it (negative: a descent).
+                let baseline = line.minY + location.y
+                let frame = CGRect(
+                    x: line.minX + location.x,
+                    y: baseline - bounds.minY - bounds.height,
+                    width: bounds.width,
+                    height: bounds.height
+                )
+                frames.append(frame.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top))
+            }
+        }
+        return frames
+    }
+
+    /// The selection's highlight, reaching over every formula in it from top to bottom.
+    override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
+        let rects = super.selectionRects(for: range)
+        let start = offset(from: beginningOfDocument, to: range.start)
+        let end = offset(from: beginningOfDocument, to: range.end)
+        guard end > start else { return rects }
+        let formulas = aorusFormulaFrames(in: NSRange(location: start, length: end - start))
+        guard !formulas.isEmpty else { return rects }
+        return rects.map { rect -> UITextSelectionRect in
+            var frame = rect.rect
+            for formula in formulas where formula.minX < frame.maxX && formula.maxX > frame.minX && formula.minY < frame.maxY && formula.maxY > frame.minY {
+                frame = frame.union(formula)
+            }
+            if frame == rect.rect {
+                return rect
+            }
+            return AorusAIFormulaSelectionRect(frame: frame, base: rect)
+        }
     }
 
     func aorusCarriesMaths(in range: NSRange) -> Bool {
@@ -971,5 +1024,38 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
             }
         }
         return NSRange(location: lower, length: upper - lower)
+    }
+}
+
+/// A piece of a selection's highlight made taller so it covers a formula whole; everything
+/// else about it is the system's.
+private final class AorusAIFormulaSelectionRect: UITextSelectionRect {
+    private let frame: CGRect
+    private let base: UITextSelectionRect
+
+    init(frame: CGRect, base: UITextSelectionRect) {
+        self.frame = frame
+        self.base = base
+        super.init()
+    }
+
+    override var rect: CGRect {
+        return self.frame
+    }
+
+    override var writingDirection: NSWritingDirection {
+        return self.base.writingDirection
+    }
+
+    override var containsStart: Bool {
+        return self.base.containsStart
+    }
+
+    override var containsEnd: Bool {
+        return self.base.containsEnd
+    }
+
+    override var isVertical: Bool {
+        return self.base.isVertical
     }
 }
