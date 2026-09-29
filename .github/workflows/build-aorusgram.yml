@@ -1077,6 +1077,12 @@ jobs:
       - name: Tree symbol preflight
         run: python3 aorusgram/scripts/swift_tree_symbol_check.py telegram-ios aorusgram
 
+      # A name that exists, but in a module the file it is used in does not import: `Message`
+      # is Postbox's, and a Telegram file that imports only TelegramCore knows it as
+      # `EngineRawMessage`. Only the lines that differ from the pristine tree are read.
+      - name: Import visibility preflight
+        run: python3 aorusgram/scripts/swift_import_visibility_check.py telegram-ios telegram-ios-pristine
+
       # And again over the patched tree, where a protocol Telegram declares and one of our
       # types adopts are finally both in scope.
       - name: Tree protocol conformance preflight

@@ -19508,7 +19508,8 @@ _AORUS_MESSAGE_AVATAR_HELPER = r"""
 
 // AorusGram: no avatars beside messages in groups, when the person turned them off in
 // Message Settings or a plugin asked for it. The bubble leaves no room for one either.
-private func aorusHidesGroupAvatar(_ message: Message) -> Bool {
+// This module sees Postbox's message only through TelegramCore's name for it.
+private func aorusHidesGroupAvatar(_ message: EngineRawMessage) -> Bool {
     guard AorusPluginAppearanceValues.flag("message.hideAvatar", in: AorusPluginAppearanceValues.current()) == true else {
         return false
     }
