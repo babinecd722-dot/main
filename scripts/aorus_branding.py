@@ -19436,6 +19436,38 @@ def patch_message_look(tg: Path) -> None:
     print("MessageLook: names and titles over group messages follow Message Settings")
 
 
+def patch_message_settings(tg: Path) -> None:
+    """AorusGram → Interface → Message Settings, whose preview is a real group message.
+
+    The screen lives in TelegramUI (AorusMessageSettings.swift, copied by the workflow) and is
+    handed to AorusGramUI at launch. Its preview asks Telegram's own preview item for a message
+    with a title beside the name; that item draws such a message's words as grey placeholder
+    lines, because the title editor it was made for shows the title and not the text. The
+    preview's message carries a stable id of its own, and only for that one the words are
+    drawn.
+    """
+    shared = tg / "submodules/TelegramUI/Sources/SharedAccountContext.swift"
+    s = shared.read_text(encoding="utf-8")
+    if "aorusMessagePreviewShowsText(messages)" not in s:
+        old = "                showTextAsPlaceholder: rank != nil\n"
+        new = "                showTextAsPlaceholder: rank != nil && !aorusMessagePreviewShowsText(messages)\n"
+        if s.count(old) != 1:
+            raise RuntimeError(f"MessageSettings: preview placeholder anchor found {s.count(old)} times")
+        s = s.replace(old, new, 1)
+        shared.write_text(s, encoding="utf-8")
+    print("MessageSettings: the preview's message shows its words")
+
+    delegate = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    d = delegate.read_text(encoding="utf-8")
+    if "aorusInstallMessageSettings()" not in d:
+        anchor = "        precondition(!testIsLaunched)\n        testIsLaunched = true\n"
+        if d.count(anchor) != 1:
+            raise RuntimeError("MessageSettings: AppDelegate launch anchor is missing")
+        d = d.replace(anchor, anchor + "        // AorusGram: the Message Settings screen, for AorusGram → Interface to open.\n        aorusInstallMessageSettings()\n", 1)
+        delegate.write_text(d, encoding="utf-8")
+    print("MessageSettings: installed at launch")
+
+
 def patch_hide_tabs(tg: Path) -> None:
     """Hide the Contacts / Calls tabs in the bottom tab bar (AorusGram → Interface).
 
@@ -29776,6 +29808,7 @@ def main() -> None:
     patch_plugin_icons(tg)
     patch_plugin_profile_look(tg)
     patch_message_look(tg)
+    patch_message_settings(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

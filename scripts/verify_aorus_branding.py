@@ -4102,6 +4102,22 @@ def main() -> None:
             elif f'"{name}"' not in drawn:
                 err.append(f"PluginAppearance: {name} is accepted but not drawn")
 
+    # Message Settings: the screen is built in TelegramUI and registered at launch for the
+    # Interface row to open, and Telegram's preview item draws the words of its message
+    # rather than the placeholder lines it draws under a title.
+    message_settings_checks = [
+        ("submodules/TelegramUI/Sources/AorusMessageSettings.swift", "AorusMessageSettingsRoute.register"),
+        ("submodules/TelegramUI/Sources/AorusMessageSettings.swift", "func aorusMessagePreviewShowsText("),
+        ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallMessageSettings()"),
+        ("submodules/TelegramUI/Sources/SharedAccountContext.swift", "showTextAsPlaceholder: rank != nil && !aorusMessagePreviewShowsText(messages)"),
+        ("submodules/AorusGramUI/Sources/AorusSettingsShortcuts.swift", "public enum AorusMessageSettingsRoute"),
+        ("submodules/AorusGramUI/Sources/AorusGramController.swift", "AorusMessageSettingsRoute.make(context)"),
+    ]
+    for relative, marker in message_settings_checks:
+        target = tg / relative
+        if not target.is_file() or marker not in target.read_text(encoding="utf-8"):
+            err.append(f"MessageSettings: {relative} lacks {marker!r}")
+
     # Plugin icons: every icon comes through AppBundle's initializer, which asks the resolver
     # Display installs at launch; a replaced icon reaches the theme's cache, the settings icons
     # and the four places that animate an icon; and every icon a slot names is one the

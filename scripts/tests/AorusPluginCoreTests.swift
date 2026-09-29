@@ -1798,11 +1798,19 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(lookChanges == 2, "every change redraws the app once")
     _ = AorusMessageLook.set("font.chat", "large", dark: false)
     expect(lookChanges == 2, "setting what is already set redraws nothing")
-    let refused = AorusMessageLook.store(["bubble.incoming.fill": "FFF4E6", "no.such.key": "1"])
-    expect(refused.count == 1 && refused.first?.key == "no.such.key" && AorusMessageLook.stored()["font.chat"] as? String == "large", "a wrong key refuses the whole change and keeps what was there")
+    let refusedLook = AorusMessageLook.store(["bubble.incoming.fill": "FFF4E6", "no.such.key": "1"])
+    expect(refusedLook.count == 1 && refusedLook.first?.key == "no.such.key" && AorusMessageLook.stored()["font.chat"] as? String == "large", "a wrong key refuses the whole change and keeps what was there")
     expect(AorusMessageLook.apply(preset: "neon").isEmpty, "a ready-made style applies")
     expect((AorusMessageLook.stored()["bubble.incoming.fill@light"] as? [String]) == ["FBF3FF"] && AorusMessageLook.stored()["font.chat"] as? String == "large", "a style replaces the colours and keeps the text size")
     expect(AorusMessageLook.value("message.rank", dark: true) as? String == "5AF2E0", "a style's colours reach the dark appearance too")
+    // Message Settings shows a style as chosen when the style's part of what is kept is
+    // exactly the style, read back through the same check it was stored with.
+    if let neon = AorusMessageLook.presets.first(where: { $0.id == "neon" }) {
+        let styledNow = AorusMessageLook.stored().filter { styledBaseKeys.contains(AorusPluginAppearance.baseKey($0.key)) }
+        expect(NSDictionary(dictionary: styledNow).isEqual(to: AorusPluginAppearance.validate(neon.values).values), "a style just applied reads back as that style")
+    } else {
+        expect(false, "the neon style exists")
+    }
     expect(AorusMessageLook.apply(preset: "classic").isEmpty && AorusMessageLook.stored().keys.sorted() == ["font.chat"], "the classic style takes the shape and colours back to Telegram's")
     expect(!AorusMessageLook.apply(preset: "sparkle").isEmpty, "an unknown style is refused")
     AorusMessageLook.reset()

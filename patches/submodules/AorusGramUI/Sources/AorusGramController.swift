@@ -373,6 +373,7 @@ private final class AorusArguments {
     let openConnectionSettings: () -> Void // AORUS-CONN
     let openAppBadgePicker: () -> Void
     let openFont: () -> Void
+    let openMessageSettings: () -> Void
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
          openChannel: @escaping () -> Void,
@@ -392,7 +393,8 @@ private final class AorusArguments {
          openProxyDiagnostics: @escaping () -> Void, // AORUS-DIAG
          openConnectionSettings: @escaping () -> Void, // AORUS-CONN
          openAppBadgePicker: @escaping () -> Void,
-         openFont: @escaping () -> Void) {
+         openFont: @escaping () -> Void,
+         openMessageSettings: @escaping () -> Void) {
         self.set = set
         self.openChannel = openChannel
         self.openSubscription = openSubscription
@@ -412,6 +414,7 @@ private final class AorusArguments {
         self.openConnectionSettings = openConnectionSettings // AORUS-CONN
         self.openAppBadgePicker = openAppBadgePicker
         self.openFont = openFont
+        self.openMessageSettings = openMessageSettings
     }
 }
 
@@ -471,6 +474,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case customFont(PresentationTheme, String)
     case subscriptionBanner(PresentationTheme, String, Bool)
     case showStories(PresentationTheme, String, Bool)
+    case messageSettings(PresentationTheme, String)
 
     case tabsHeader(PresentationTheme, String)
     case hideSearchButton(PresentationTheme, String, Bool)
@@ -530,7 +534,7 @@ private enum AorusEntry: ItemListNodeEntry {
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .interfaceV2, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories:
+        case .uiHeader, .interfaceV2, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .messageSettings:
             return AorusSection.ui.rawValue
         case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar:
             return AorusSection.tabs.rawValue
@@ -608,6 +612,9 @@ private enum AorusEntry: ItemListNodeEntry {
         case .squareAvatars:        return 57
         case .subscriptionBanner:   return 58
         case .showStories:          return 59
+        // Directly under Show Stories. The number only has to be one no other row uses; where
+        // the row stands is set in `<` below.
+        case .messageSettings:      return 1000
         case .customFont:           return 60
         case .tabsHeader:           return 61
         case .hideSearchButton:     return 64
@@ -658,6 +665,7 @@ private enum AorusEntry: ItemListNodeEntry {
     static func < (lhs: AorusEntry, rhs: AorusEntry) -> Bool {
         func order(_ entry: AorusEntry) -> Int32 {
             if case let .pluginShortcut(_, _, _, _, _, _, _, placementOrder) = entry { return placementOrder }
+            if case .messageSettings = entry { return 59 * 1000 + 500 }
             return entry.stableId * 1000
         }
         return order(lhs) < order(rhs)
@@ -763,6 +771,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .subscriptionBanner(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .showStories(lt, ls, lv):
             if case let .showStories(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .messageSettings(lt, ls):
+            if case let .messageSettings(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .tabsHeader(lt, ls):
             if case let .tabsHeader(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .hideSearchButton(lt, ls, lv):
@@ -956,6 +966,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.subscriptionBanner, $0) })
         case let .showStories(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.showStories, $0) })
+        case let .messageSettings(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMessageSettings)
         case let .tabsHeader(_, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .hideSearchButton(_, title, value):
@@ -1069,6 +1081,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .squareAvatars(theme, l10n.squareAvatars, state.squareAvatars),
         .subscriptionBanner(theme, l10n.subscriptionBanner, state.subscriptionBanner),
         .showStories(theme, l10n.showStories, state.showStories),
+        .messageSettings(theme, l10n.messageSettings),
         .customFont(theme, l10n.customFont),
 
         .tabsHeader(theme, l10n.tabsHeader),
@@ -1614,6 +1627,14 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             }
             AorusSettingsShortcutHighlight.request(.font)
             navigationController.pushViewController(aorusFontPickerController(context: context))
+        },
+        openMessageSettings: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController,
+                  let screen = AorusMessageSettingsRoute.make(context) else {
+                return
+            }
+            navigationController.pushViewController(screen)
         }
     )
 

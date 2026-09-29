@@ -115,3 +115,26 @@ public enum AorusSettingsRoute {
         return value?(context)
     }
 }
+
+/// How to build AorusGram → Interface → Message Settings, registered at launch.
+///
+/// Its preview is a real message drawn by Telegram's chat code, which this module cannot
+/// import — the chat's bubbles import this one. The screen is built in TelegramUI, where both
+/// are in reach, and left here for the Interface row to open.
+public enum AorusMessageSettingsRoute {
+    private static let lock = NSLock()
+    private static var builder: ((AccountContext) -> ViewController)?
+
+    public static func register(_ value: @escaping (AccountContext) -> ViewController) {
+        lock.lock()
+        builder = value
+        lock.unlock()
+    }
+
+    public static func make(_ context: AccountContext) -> ViewController? {
+        lock.lock()
+        let value = builder
+        lock.unlock()
+        return value?(context)
+    }
+}
