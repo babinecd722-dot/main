@@ -942,7 +942,7 @@ private class AorusLookRowNode: ListViewItemNode {
         self.maskNode = ASImageNode()
         self.maskNode.isLayerBacked = true
 
-        super.init(layerBacked: false, dynamicBounce: false)
+        super.init(layerBacked: false)
 
         self.addSubnode(self.backgroundNode)
         self.addSubnode(self.topStripeNode)
@@ -2192,7 +2192,8 @@ private func aorusLookStoreColor(_ row: AorusLookColorRow, _ hex: String?, theme
     let kept = aorusLookColors(row.key, dark: dark)
     if row.stop == 0 {
         if let hex {
-            AorusMessageLook.set(row.key, [hex] + kept.dropFirst(), dark: dark)
+            let stops: [String] = [hex] + Array(kept.dropFirst())
+            AorusMessageLook.set(row.key, stops, dark: dark)
         } else {
             AorusMessageLook.set(row.key, nil, dark: dark)
         }
