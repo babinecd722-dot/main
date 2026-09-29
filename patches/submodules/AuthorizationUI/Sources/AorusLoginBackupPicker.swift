@@ -56,13 +56,13 @@ private final class AorusAccountCardView: UIControl {
         self.addSubview(self.avatarView)
 
         self.titleLabel.text = title
-        self.titleLabel.font = UIFont.systemFont(ofSize: 17.0, weight: .semibold)
+        self.titleLabel.font = aorusUIFont(17.0, .semibold)
         self.titleLabel.textColor = theme.list.itemPrimaryTextColor
         self.titleLabel.isUserInteractionEnabled = false
         self.addSubview(self.titleLabel)
 
         self.subtitleLabel.text = subtitle
-        self.subtitleLabel.font = UIFont.systemFont(ofSize: 14.0, weight: .regular)
+        self.subtitleLabel.font = aorusUIFont(14.0, .regular)
         self.subtitleLabel.textColor = theme.list.itemSecondaryTextColor
         self.subtitleLabel.isUserInteractionEnabled = false
         self.addSubview(self.subtitleLabel)
@@ -242,20 +242,20 @@ final class AorusLoginBackupPickerController: UIViewController {
         self.contentView.addSubview(self.headerIconView)
 
         self.titleLabel.text = aorusL("Вход по бэкапу", "Sign in from backup")
-        self.titleLabel.font = UIFont.systemFont(ofSize: 26.0, weight: .bold)
+        self.titleLabel.font = aorusUIFont(26.0, .bold)
         self.titleLabel.textColor = self.theme.list.itemPrimaryTextColor
         self.titleLabel.textAlignment = .center
         self.contentView.addSubview(self.titleLabel)
 
         self.descriptionLabel.text = aorusL("Аккаунты хранятся в Keychain и переживают переустановку. Выберите аккаунт — приложение перезапустится и войдёт в него.", "Accounts are stored in the Keychain and survive a reinstall. Choose an account — the app will restart and sign in.")
-        self.descriptionLabel.font = UIFont.systemFont(ofSize: 15.0, weight: .regular)
+        self.descriptionLabel.font = aorusUIFont(15.0, .regular)
         self.descriptionLabel.textColor = self.theme.list.itemSecondaryTextColor
         self.descriptionLabel.textAlignment = .center
         self.descriptionLabel.numberOfLines = 0
         self.contentView.addSubview(self.descriptionLabel)
 
         self.emptyLabel.text = aorusL("Сохранённых аккаунтов пока нет", "No saved accounts yet")
-        self.emptyLabel.font = UIFont.systemFont(ofSize: 17.0, weight: .medium)
+        self.emptyLabel.font = aorusUIFont(17.0, .medium)
         self.emptyLabel.textColor = self.theme.list.itemSecondaryTextColor
         self.emptyLabel.textAlignment = .center
         self.emptyLabel.numberOfLines = 0
@@ -438,7 +438,7 @@ final class AorusLoginBackupPickerController: UIViewController {
             let paragraph = NSMutableParagraphStyle()
             paragraph.alignment = .center
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 20.0, weight: .semibold),
+                .font: aorusUIFont(20.0, .semibold),
                 .foregroundColor: UIColor.white,
                 .paragraphStyle: paragraph,
             ]

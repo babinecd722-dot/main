@@ -100,6 +100,13 @@ public enum AorusPluginAppearance {
             Key("bubble.radiusSmall", .number(0, 32), "Corner radius where bubbles join"),
             Key("bubble.mergeCorners", .flag, "Join the corners of consecutive bubbles"),
             Key("bubble.tails", .flag, "Draw the tail on the last bubble of a group"),
+            Key("message.name", .color, "Names of the people writing in a group; each in their own colour while unset"),
+            Key("message.nameWeight", .choice(["regular", "medium", "semibold", "bold"]), "Weight of those names"),
+            Key("message.hideName", .flag, "No names or titles over messages in groups"),
+            Key("message.rank", .color, "Member titles and the owner and admin labels"),
+            Key("message.rankPlate", .flag, "The rounded plate under a title"),
+            Key("message.hideRank", .flag, "No titles or labels beside names"),
+            Key("message.rankCase", .choice(["asIs", "upper", "lower"]), "Letter case of titles and labels"),
 
             Key("chat.wallpaper", .colors(4), "Chat background; up to four colours make a gradient"),
             Key("chat.service", .color, "Service message and date plates"),
@@ -501,3 +508,162 @@ public enum AorusPluginAppearance {
         }
     }
 }
+
+/// The look the person chose for messages in AorusGram → Interface → Message Settings.
+///
+/// It is written in the appearance catalogue's own keys and kept under a key of its own, apart
+/// from the plugins' layers: a plugin that stops takes its layer with it, but what the person
+/// chose stays. The drawing code lays it over the plugins' look, so the person's choice wins
+/// wherever both describe the same thing. Colours are kept for one appearance at a time — the
+/// screen writes them with `@dark` or `@light` — and the shape and the names for both.
+public enum AorusMessageLook {
+    public static let defaultsKey = "aorusgram_message_look"
+
+    public struct Preset {
+        public let id: String
+        public let values: [String: Any]
+
+        public init(id: String, values: [String: Any]) {
+            self.id = id
+            self.values = values
+        }
+    }
+
+    /// What a ready-made style replaces: the shape, the bubbles' colours, the names and the
+    /// titles. The text size stays what the person set.
+    public static let styledKeys: [String] = [
+        "bubble.radius", "bubble.radiusSmall", "bubble.mergeCorners", "bubble.tails",
+        "bubble.incoming.fill", "bubble.incoming.stroke", "bubble.incoming.text", "bubble.incoming.secondaryText",
+        "bubble.incoming.link", "bubble.incoming.accent",
+        "bubble.outgoing.fill", "bubble.outgoing.stroke", "bubble.outgoing.text", "bubble.outgoing.secondaryText",
+        "bubble.outgoing.link", "bubble.outgoing.accent", "bubble.checks",
+        "message.name", "message.nameWeight", "message.hideName",
+        "message.rank", "message.rankPlate", "message.hideRank", "message.rankCase",
+    ]
+
+    /// Ready-made styles. Each colour is given for both appearances, so a style looks right in
+    /// a light theme and in a dark one.
+    public static let presets: [Preset] = [
+        Preset(id: "classic", values: [:]),
+        Preset(id: "minimal", values: [
+            "bubble.tails": false, "bubble.radius": 10, "bubble.radiusSmall": 6, "bubble.mergeCorners": true,
+            "message.nameWeight": "medium", "message.rankPlate": false,
+        ]),
+        Preset(id: "round", values: [
+            "bubble.tails": false, "bubble.radius": 24, "bubble.radiusSmall": 20, "bubble.mergeCorners": true,
+        ]),
+        Preset(id: "outlined", values: [
+            "bubble.radius": 18, "bubble.radiusSmall": 8,
+            "bubble.incoming.fill@light": "FFFFFFB8", "bubble.incoming.stroke@light": "007AFF",
+            "bubble.incoming.fill@dark": "1C1C1EB8", "bubble.incoming.stroke@dark": "0A84FF",
+            "bubble.outgoing.fill@light": "E3F0FFB8", "bubble.outgoing.stroke@light": "007AFF",
+            "bubble.outgoing.fill@dark": "0A2A4DB8", "bubble.outgoing.stroke@dark": "0A84FF",
+            "message.rankPlate": false,
+        ]),
+        Preset(id: "neon", values: [
+            "bubble.radius": 20, "bubble.radiusSmall": 10,
+            "bubble.incoming.fill@light": "FBF3FF", "bubble.incoming.stroke@light": "BF5AF2",
+            "bubble.incoming.text@light": "2A1540", "bubble.incoming.link@light": "8E2DE2",
+            "bubble.incoming.fill@dark": "170A24", "bubble.incoming.stroke@dark": "BF5AF2",
+            "bubble.incoming.text@dark": "F5E9FF", "bubble.incoming.link@dark": "FF6AD5",
+            "bubble.outgoing.fill@light": ["A86BFF", "FF5FB8"], "bubble.outgoing.text@light": "FFFFFF",
+            "bubble.outgoing.secondaryText@light": "FFFFFFB3", "bubble.outgoing.link@light": "FFFFFF",
+            "bubble.outgoing.fill@dark": ["7B2FF7", "F107A3"], "bubble.outgoing.text@dark": "FFFFFF",
+            "bubble.outgoing.secondaryText@dark": "FFFFFFB3", "bubble.outgoing.link@dark": "FFFFFF",
+            "message.name@light": "C2188B", "message.name@dark": "FF6AD5",
+            "message.rank@light": "0E9F94", "message.rank@dark": "5AF2E0",
+        ]),
+        Preset(id: "pastel", values: [
+            "bubble.radius": 20, "bubble.radiusSmall": 12,
+            "bubble.incoming.fill@light": "FFF4E6", "bubble.incoming.text@light": "3B2F2F",
+            "bubble.incoming.fill@dark": "2E2A33", "bubble.incoming.text@dark": "EDE6F2",
+            "bubble.outgoing.fill@light": ["C9E4DE", "C6DEF1"], "bubble.outgoing.text@light": "22333B",
+            "bubble.outgoing.fill@dark": ["3D5A80", "5B7DB1"], "bubble.outgoing.text@dark": "FFFFFF",
+            "bubble.outgoing.secondaryText@dark": "FFFFFFB3",
+            "message.name@light": "E07A5F", "message.name@dark": "F2A7B8",
+            "message.rank@light": "4E9A7A", "message.rank@dark": "9ED9C9",
+        ]),
+    ]
+
+    /// What is stored, as the drawing code reads it.
+    public static func stored() -> [String: Any] {
+        return UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]
+    }
+
+    /// Keeps `values`, every key checked against the appearance catalogue and the whole set
+    /// refused when one is wrong, and redraws the app when they changed. Answers what was wrong.
+    @discardableResult
+    public static func store(_ values: [String: Any]) -> [AorusPluginAppearance.Rejection] {
+        let checked = AorusPluginAppearance.validate(values)
+        guard checked.rejections.isEmpty else {
+            return checked.rejections
+        }
+        let defaults = UserDefaults.standard
+        guard !NSDictionary(dictionary: stored()).isEqual(to: checked.values) else {
+            return []
+        }
+        if checked.values.isEmpty {
+            defaults.removeObject(forKey: defaultsKey)
+        } else {
+            defaults.set(checked.values, forKey: defaultsKey)
+        }
+        let deliver = {
+            NotificationCenter.default.post(name: AorusPluginAppearance.didChangeNotification, object: nil)
+        }
+        if Thread.isMainThread {
+            deliver()
+        } else {
+            DispatchQueue.main.async(execute: deliver)
+        }
+        return []
+    }
+
+    /// The key a setting is kept under: a colour for the appearance in use, anything else for
+    /// both.
+    public static func storageKey(_ name: String, dark: Bool) -> String {
+        guard let key = AorusPluginAppearance.catalogByName[name], AorusPluginAppearance.allowsAppearanceSuffix(key) else {
+            return name
+        }
+        return name + (dark ? "@dark" : "@light")
+    }
+
+    /// The value the person set for `name`, for the appearance in use.
+    public static func value(_ name: String, dark: Bool) -> Any? {
+        let values = stored()
+        return values[storageKey(name, dark: dark)] ?? values[name]
+    }
+
+    /// Sets one setting, or with nil takes it back to what Telegram draws; the rest stays.
+    @discardableResult
+    public static func set(_ name: String, _ value: Any?, dark: Bool) -> [AorusPluginAppearance.Rejection] {
+        var values = stored()
+        let key = storageKey(name, dark: dark)
+        values[key] = value
+        if key != name {
+            // A plain value from a ready-made style would otherwise still reach the other
+            // appearance and this one alike; the person's choice for this one replaces it.
+            values[name] = nil
+        }
+        return store(values)
+    }
+
+    /// A ready-made style in place of the shape, colours, names and titles the person set.
+    @discardableResult
+    public static func apply(preset id: String) -> [AorusPluginAppearance.Rejection] {
+        guard let preset = presets.first(where: { $0.id == id }) else {
+            return [AorusPluginAppearance.Rejection(key: id, reason: "unknown style")]
+        }
+        let styled = Set(styledKeys)
+        var values = stored().filter { !styled.contains(AorusPluginAppearance.baseKey($0.key)) }
+        for (key, value) in preset.values {
+            values[key] = value
+        }
+        return store(values)
+    }
+
+    /// Everything back to what Telegram draws.
+    public static func reset() {
+        store([:])
+    }
+}
+

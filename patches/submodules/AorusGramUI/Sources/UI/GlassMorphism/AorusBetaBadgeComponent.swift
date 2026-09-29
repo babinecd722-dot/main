@@ -46,7 +46,7 @@ final class AorusBetaBadgeComponent: Component {
 
         func update(text: String, color: UIColor, availableSize: CGSize) -> CGSize {
             self.backgroundColor = color
-            self.label.font = UIFont.systemFont(ofSize: 11.0, weight: .semibold)
+            self.label.font = aorusUIFont(11.0, .semibold)
             self.label.text = text
 
             let horizontalPadding: CGFloat = 5.0

@@ -400,17 +400,17 @@ final class AorusPluginBannerCropController: UIViewController, UIScrollViewDeleg
 
         hint.text = AorusPluginPublishText.moveAndScale
         hint.textColor = UIColor.white.withAlphaComponent(0.85)
-        hint.font = .systemFont(ofSize: 15, weight: .semibold)
+        hint.font = aorusUIFont(15, .semibold)
         hint.textAlignment = .center
         view.addSubview(hint)
 
         cancelButton.setTitle(AorusPluginPublishText.cancel, for: .normal)
         cancelButton.setTitleColor(.white, for: .normal)
-        cancelButton.titleLabel?.font = .systemFont(ofSize: 17)
+        cancelButton.titleLabel?.font = aorusUIFont(17)
         cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
         doneButton.setTitle(AorusPluginPublishText.done, for: .normal)
         doneButton.setTitleColor(.white, for: .normal)
-        doneButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        doneButton.titleLabel?.font = aorusUIFont(17, .semibold)
         doneButton.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
         view.addSubview(cancelButton)
         view.addSubview(doneButton)
@@ -506,7 +506,7 @@ final class AorusPluginProgressOverlay: UIView {
         card.clipsToBounds = true
         spinner.startAnimating()
         label.text = text
-        label.font = .systemFont(ofSize: 15, weight: .semibold)
+        label.font = aorusUIFont(15, .semibold)
         label.textAlignment = .center
         label.textColor = .label
         card.contentView.addSubview(spinner)

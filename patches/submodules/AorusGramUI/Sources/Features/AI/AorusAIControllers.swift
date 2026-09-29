@@ -879,7 +879,7 @@ private final class AorusAISearchFieldView: UIView {
         self.clipsToBounds = true
         iconView.contentMode = .scaleAspectFit
         iconView.image = UIImage(systemName: "magnifyingglass")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 14.0, weight: .medium))
-        textField.font = .systemFont(ofSize: 15.0)
+        textField.font = aorusUIFont(15.0)
         textField.autocapitalizationType = .none
         textField.autocorrectionType = .no
         textField.returnKeyType = .search
@@ -900,7 +900,7 @@ private final class AorusAISearchFieldView: UIView {
         textField.keyboardAppearance = palette.isDark ? .dark : .light
         textField.attributedPlaceholder = NSAttributedString(
             string: placeholder,
-            attributes: [.foregroundColor: palette.tertiary, .font: UIFont.systemFont(ofSize: 15.0)]
+            attributes: [.foregroundColor: palette.tertiary, .font: aorusUIFont(15.0)]
         )
     }
 
@@ -920,7 +920,7 @@ private final class AorusAISectionHeaderView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        label.font = .systemFont(ofSize: 13.0, weight: .medium)
+        label.font = aorusUIFont(13.0, .medium)
         addSubview(label)
     }
 
@@ -956,7 +956,7 @@ private final class AorusAIConversationListHeaderView: UIView {
         // the text outside the header; it wraps to a second line instead.
         greetingLabel.numberOfLines = 2
         greetingLabel.lineBreakMode = .byTruncatingTail
-        subtitleLabel.font = .systemFont(ofSize: 15.0, weight: .regular)
+        subtitleLabel.font = aorusUIFont(15.0, .regular)
         subtitleLabel.numberOfLines = 2
         subtitleLabel.text = aorusAILocalized("Чем займёмся сегодня?", "What are we doing today?")
         [greetingLabel, subtitleLabel].forEach { addSubview($0) }
@@ -1043,11 +1043,11 @@ private final class AorusAIConversationCell: UITableViewCell {
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         self.selectionStyle = .none
-        titleLabel.font = .systemFont(ofSize: 16.0, weight: .medium)
+        titleLabel.font = aorusUIFont(16.0, .medium)
         titleLabel.lineBreakMode = .byTruncatingTail
-        previewLabel.font = .systemFont(ofSize: 14.0)
+        previewLabel.font = aorusUIFont(14.0)
         previewLabel.lineBreakMode = .byTruncatingTail
-        dateLabel.font = .systemFont(ofSize: 12.0)
+        dateLabel.font = aorusUIFont(12.0)
         dateLabel.textAlignment = .right
         chevronView.contentMode = .scaleAspectFit
         chevronView.image = UIImage(systemName: "chevron.right")?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold))
@@ -1151,7 +1151,7 @@ private final class AorusAIConversationCell: UITableViewCell {
         previewLabel.attributedText = AorusAIMentionRenderer.previewText(
             preview.replacingOccurrences(of: "\n", with: " "),
             color: palette.secondary,
-            font: UIFont.systemFont(ofSize: 14.0),
+            font: aorusUIFont(14.0),
             accent: palette.accent
         )
         dateLabel.text = AorusAIFormat.relativeDate(conversation.updatedAt)
@@ -1184,7 +1184,7 @@ private final class AorusAIConversationCell: UITableViewCell {
         let chevronSize: CGFloat = 15.0
         chevronView.frame = CGRect(x: max(0.0, cardWidth - inset - chevronSize), y: floor((cardView.bounds.height - chevronSize) / 2.0), width: chevronSize, height: chevronSize)
         let contentRight = chevronView.frame.minX - 8.0
-        let dateWidth = min(70.0, ceil((dateLabel.text ?? "").size(withAttributes: [.font: UIFont.systemFont(ofSize: 12.0)]).width) + 1.0)
+        let dateWidth = min(70.0, ceil((dateLabel.text ?? "").size(withAttributes: [.font: aorusUIFont(12.0)]).width) + 1.0)
         dateLabel.frame = CGRect(x: max(inset, contentRight - dateWidth), y: 13.0, width: dateWidth, height: 18.0)
         titleLabel.frame = CGRect(x: inset, y: 12.0, width: max(0.0, dateLabel.frame.minX - 8.0 - inset), height: 20.0)
         // The highlight is the same name in the same place; only its mask moves.
@@ -1221,7 +1221,7 @@ private final class AorusAIStarterRowView: UIControl {
         highlight.isUserInteractionEnabled = false
         addSubview(highlight)
         iconView.contentMode = .center
-        titleLabel.font = .systemFont(ofSize: 16.0)
+        titleLabel.font = aorusUIFont(16.0)
         titleLabel.numberOfLines = 1
         titleLabel.lineBreakMode = .byTruncatingTail
         [iconView, titleLabel, separator].forEach { addSubview($0) }
@@ -1311,7 +1311,7 @@ private final class AorusAIConversationListEmptyView: UIView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        noResultsLabel.font = .systemFont(ofSize: 15.0)
+        noResultsLabel.font = aorusUIFont(15.0)
         noResultsLabel.textAlignment = .center
         noResultsLabel.numberOfLines = 2
         noResultsLabel.text = aorusAILocalized("Ничего не найдено", "No results")
@@ -4253,7 +4253,7 @@ private final class AorusAIComposerView: UIView {
         referenceLabel.attributedText = AorusAIMentionRenderer.previewText(
             text.replacingOccurrences(of: "\n", with: " "),
             color: palette.secondary,
-            font: UIFont.systemFont(ofSize: 12.0),
+            font: aorusUIFont(12.0),
             accent: palette.accent
         )
     }
@@ -4296,8 +4296,8 @@ private final class AorusAIComposerView: UIView {
         referenceView.addSubview(referenceClose)
         textView.addSubview(placeholder)
         placeholder.text = aorusAILocalized("Спросите что-нибудь…", "Ask anything…")
-        placeholder.font = .systemFont(ofSize: 16)
-        textView.font = .systemFont(ofSize: 16)
+        placeholder.font = aorusUIFont(16)
+        textView.font = aorusUIFont(16)
         textView.backgroundColor = .clear
         textView.isScrollEnabled = true
         textView.textContainerInset = UIEdgeInsets(top: 2, left: 0, bottom: 2, right: 0)
@@ -4308,7 +4308,7 @@ private final class AorusAIComposerView: UIView {
         textView.onDeleteBackward = { [weak self] in
             return self?.deleteMentionBeforeCaret() ?? false
         }
-        referenceLabel.font = .systemFont(ofSize: 12)
+        referenceLabel.font = aorusUIFont(12)
         referenceLabel.numberOfLines = 1
         referenceLabel.lineBreakMode = .byTruncatingTail
         referenceClose.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
@@ -4496,7 +4496,7 @@ private final class AorusAIComposerView: UIView {
         dictationButton.accessibilityLabel = aorusAILocalized("Диктовать", "Dictate")
     }
 
-    private static let inputFont = UIFont.systemFont(ofSize: 16.0)
+    private static let inputFont = aorusUIFont(16.0)
 
     private func baseTextAttributes() -> [NSAttributedString.Key: Any] {
         let color = theme.map { AorusAIPalette.resolve($0).label } ?? UIColor.label
@@ -5171,7 +5171,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         bubble.addSubview(bodyStack)
         // The design puts the progress line *above* the answer — "Читаю профиль диалога…"
         // is what the turn is doing before the text it produces, not a footnote under it.
-        statusLabel.font = .systemFont(ofSize: 13.0, weight: .semibold)
+        statusLabel.font = aorusUIFont(13.0, .semibold)
         statusLabel.numberOfLines = 0
         // The current action is the title of the trail. Its branches sit directly below;
         // completed work remains readable while the live branch carries the motion.
@@ -5195,7 +5195,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         copyButton.setImage(UIImage(systemName: "doc.on.doc", withConfiguration: actionSymbol), for: .normal)
         regenerateButton.setImage(UIImage(systemName: "arrow.clockwise", withConfiguration: actionSymbol), for: .normal)
         for button in [copyButton, regenerateButton] {
-            button.titleLabel?.font = .systemFont(ofSize: 13.0)
+            button.titleLabel?.font = aorusUIFont(13.0)
             button.imageEdgeInsets = UIEdgeInsets(top: 0.0, left: -4.0, bottom: 0.0, right: 4.0)
             button.contentEdgeInsets = UIEdgeInsets(top: 5.0, left: 10.0, bottom: 5.0, right: 8.0)
             button.layer.cornerRadius = 8.0
@@ -5220,7 +5220,7 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         assistantActions.isHidden = true
         contentStack.addArrangedSubview(assistantActions)
         retryButton.setTitle(aorusAILocalized("Повторить", "Retry"), for: .normal)
-        retryButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        retryButton.titleLabel?.font = aorusUIFont(14, .semibold)
         retryButton.addTarget(self, action: #selector(retry), for: .touchUpInside)
         contentStack.addArrangedSubview(retryButton)
         contentView.addSubview(contentStack)
@@ -5802,9 +5802,9 @@ private final class AorusAINavigationTitleView: UIView {
         super.init(frame: .zero)
         glassView.isUserInteractionEnabled = false
         titleLabel.text = "AorusAI"
-        titleLabel.font = .systemFont(ofSize: 15.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(15.0, .semibold)
         titleLabel.textAlignment = .center
-        statusLabel.font = .systemFont(ofSize: 11.0, weight: .regular)
+        statusLabel.font = aorusUIFont(11.0, .regular)
         statusLabel.textAlignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
         addSubview(glassView)
@@ -5914,12 +5914,12 @@ private final class AorusAINoticeCard: UIView {
         layer.cornerRadius = 14
         layer.cornerCurve = .continuous
         icon.contentMode = .center
-        titleLabel.font = .systemFont(ofSize: 15, weight: .semibold)
+        titleLabel.font = aorusUIFont(15, .semibold)
         titleLabel.numberOfLines = 2
-        bodyLabel.font = .systemFont(ofSize: 13)
+        bodyLabel.font = aorusUIFont(13)
         bodyLabel.numberOfLines = 0
         retryButton.setTitle(aorusAILocalized("Повторить", "Retry"), for: .normal)
-        retryButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+        retryButton.titleLabel?.font = aorusUIFont(15, .semibold)
         retryButton.contentHorizontalAlignment = .leading
         retryButton.addTarget(self, action: #selector(retry), for: .touchUpInside)
         [icon, titleLabel, bodyLabel, retryButton].forEach { addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
@@ -6029,7 +6029,7 @@ private final class AorusAIQuoteCard: UIView {
 
 private final class AorusAIEntityChipView: UIControl {
     private static let avatarSize: CGFloat = 22
-    private let avatarNode = AvatarNode(font: .systemFont(ofSize: 11, weight: .semibold))
+    private let avatarNode = AvatarNode(font: aorusUIFont(11, .semibold))
     private let titleLabel = UILabel()
     private var disposable: Disposable?
     private var peerId: PeerId?
@@ -6044,7 +6044,7 @@ private final class AorusAIEntityChipView: UIControl {
         addSubview(avatarNode.view)
         addSubview(titleLabel)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.font = aorusUIFont(13, .semibold)
         titleLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         // The avatar is laid out by hand on purpose: `AvatarNode` only redraws its
         // contents from its own `frame` setter, and Auto Layout writes straight to the
@@ -6158,7 +6158,7 @@ private final class AorusAIReferenceCard: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         label.numberOfLines = 3
-        label.font = .systemFont(ofSize: 13.0)
+        label.font = aorusUIFont(13.0)
         addSubview(line)
         addSubview(entityContainer)
         addSubview(label)
@@ -6196,7 +6196,7 @@ private final class AorusAIReferenceCard: UIView {
             return AorusAIMentionRenderer.previewText(
                 text,
                 color: quoteColor,
-                font: UIFont.systemFont(ofSize: 13.0),
+                font: aorusUIFont(13.0),
                 accent: theme.list.itemAccentColor
             )
         }
@@ -6236,7 +6236,7 @@ private final class AorusAICodeCard: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         layer.cornerRadius = 10; layer.cornerCurve = .continuous
-        languageLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        languageLabel.font = aorusUIFont(11, .semibold)
         codeView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
         // The text view never scrolls itself: it is laid out at its intrinsic width
         // inside a horizontal scroll view so long lines can be reached by swiping
@@ -6250,7 +6250,7 @@ private final class AorusAICodeCard: UIView {
         scrollView.showsVerticalScrollIndicator = false
         scrollView.alwaysBounceVertical = false
         copyButton.setTitle(aorusAILocalized("Скопировать", "Copy"), for: .normal)
-        copyButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
+        copyButton.titleLabel?.font = aorusUIFont(12, .semibold)
         copyButton.accessibilityLabel = aorusAILocalized("Скопировать код", "Copy code")
         copyButton.addTarget(self, action: #selector(copyCode), for: .touchUpInside)
         [languageLabel, scrollView, copyButton].forEach { addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
@@ -6386,8 +6386,8 @@ private final class AorusAITableCard: UIView {
             return
         }
 
-        let bodyFont = UIFont.systemFont(ofSize: 13.5)
-        let headerFont = UIFont.systemFont(ofSize: 13.5, weight: .semibold)
+        let bodyFont = aorusUIFont(13.5)
+        let headerFont = aorusUIFont(13.5, .semibold)
         naturalColumnWidths = (0 ..< table.columnCount).map { column in
             var width: CGFloat = 84.0
             for (rowIndex, row) in rows.enumerated() {
@@ -6544,8 +6544,8 @@ private final class AorusAIArtifactCard: UIControl {
         super.init(frame: frame)
         layer.cornerRadius = 10; layer.cornerCurve = .continuous
         icon.contentMode = .scaleAspectFit
-        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
-        detailLabel.font = .systemFont(ofSize: 12)
+        titleLabel.font = aorusUIFont(14, .semibold)
+        detailLabel.font = aorusUIFont(12)
         [icon, activity, titleLabel, detailLabel].forEach { addSubview($0); $0.translatesAutoresizingMaskIntoConstraints = false }
         NSLayoutConstraint.activate([
             heightAnchor.constraint(greaterThanOrEqualToConstant: 58), widthAnchor.constraint(greaterThanOrEqualToConstant: 235),
@@ -6825,13 +6825,13 @@ private enum AorusAIMarkdown {
     }
 
     /// The body face. Answers are set at 16.5/26.
-    static let bodyFont = UIFont.systemFont(ofSize: 16.5)
+    static let bodyFont = aorusUIFont(16.5)
 
     /// Bold and italic together. UIKit has no system constructor for the pair, so the two
     /// traits are asked of the semibold descriptor; a family that cannot supply them falls
     /// back to plain semibold rather than losing the emphasis altogether.
     private static func boldItalicFont(size: CGFloat) -> UIFont {
-        let base = UIFont.systemFont(ofSize: size, weight: .semibold)
+        let base = aorusUIFont(size, .semibold)
         guard let descriptor = base.fontDescriptor.withSymbolicTraits([.traitBold, .traitItalic]) else {
             return base
         }
@@ -6874,9 +6874,9 @@ private enum AorusAIMarkdown {
         // left and overwrote the font — the bold was lost on exactly the words the model
         // had emphasised hardest.
         apply(pattern: #"\*\*\*(.+?)\*\*\*"#, in: output, font: boldItalicFont(size: size))
-        apply(pattern: #"\*\*(.+?)\*\*"#, in: output, font: .systemFont(ofSize: size, weight: .semibold))
-        apply(pattern: #"(?<!\*)\*([^*\n]+)\*(?!\*)"#, in: output, font: .italicSystemFont(ofSize: size))
-        apply(pattern: #"(?<!\w)_([^_\n]+)_(?!\w)"#, in: output, font: .italicSystemFont(ofSize: size))
+        apply(pattern: #"\*\*(.+?)\*\*"#, in: output, font: aorusUIFont(size, .semibold))
+        apply(pattern: #"(?<!\*)\*([^*\n]+)\*(?!\*)"#, in: output, font: aorusItalicFont(size))
+        apply(pattern: #"(?<!\w)_([^_\n]+)_(?!\w)"#, in: output, font: aorusItalicFont(size))
         applyStrikethrough(in: output)
         applyHeadings(in: output, scale: scale)
         applyCalloutLabels(in: output, size: size)
@@ -7080,7 +7080,7 @@ private enum AorusAIMarkdown {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
         for match in regex.matches(in: value.string, range: NSRange(location: 0, length: value.length)) {
             if isCode(match.range, in: value) { continue }
-            value.addAttribute(.font, value: UIFont.systemFont(ofSize: size, weight: .semibold), range: match.range)
+            value.addAttribute(.font, value: aorusUIFont(size, .semibold), range: match.range)
         }
     }
 
@@ -7388,8 +7388,8 @@ private final class AorusAIScopeRowView: UIControl {
         countLabel.font = aorusAIMonoFont(size: 19.0, weight: .semibold)
         countLabel.textAlignment = .right
         iconView.contentMode = .center
-        titleLabel.font = .systemFont(ofSize: 16.0)
-        noteLabel.font = .systemFont(ofSize: 13.0)
+        titleLabel.font = aorusUIFont(16.0)
+        noteLabel.font = aorusUIFont(13.0)
         noteLabel.textAlignment = .right
         [countLabel, iconView, titleLabel, noteLabel, separator].forEach { addSubview($0) }
         isAccessibilityElement = true
@@ -7572,13 +7572,13 @@ private final class AorusAIShareScopeController: UIViewController {
         }
 
         titleLabel.text = aorusAILocalized("Сколько показать AorusAI", "How much to show AorusAI")
-        titleLabel.font = .systemFont(ofSize: 20.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(20.0, .semibold)
         titleLabel.textColor = palette.label
         titleLabel.numberOfLines = 2
         card.addSubview(titleLabel)
 
         peerLabel.text = username.map { "@\($0)" }
-        peerLabel.font = .systemFont(ofSize: 14.0)
+        peerLabel.font = aorusUIFont(14.0)
         peerLabel.textColor = palette.secondary
         card.addSubview(peerLabel)
 
@@ -7590,7 +7590,7 @@ private final class AorusAIShareScopeController: UIViewController {
             body += "\n\n" + String(explanation.prefix(300))
         }
         bodyLabel.text = body
-        bodyLabel.font = .systemFont(ofSize: 15.0)
+        bodyLabel.font = aorusUIFont(15.0)
         bodyLabel.textColor = palette.secondary
         bodyLabel.numberOfLines = 0
         card.addSubview(bodyLabel)
@@ -7603,7 +7603,7 @@ private final class AorusAIShareScopeController: UIViewController {
         buildRows()
 
         cancelButton.setTitle(aorusAILocalized("Не делиться", "Don't share"), for: .normal)
-        cancelButton.titleLabel?.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        cancelButton.titleLabel?.font = aorusUIFont(17.0, .semibold)
         cancelButton.setTitleColor(palette.label, for: .normal)
         // Its own surface rather than the panel fill the rows sit on: those rows carry
         // figures, titles and hairlines that make the panel legible, and a button carrying
@@ -7901,14 +7901,14 @@ private final class AorusAIPeriodPickerController: UIViewController {
         card.layer.borderColor = palette.separator.cgColor
 
         titleLabel.text = aorusAILocalized("Выберите период", "Choose a period")
-        titleLabel.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(17.0, .semibold)
         titleLabel.textColor = palette.label
         titleLabel.textAlignment = .center
         subtitleLabel.text = aorusAILocalized(
             "AorusAI получит сообщения только за эти даты.",
             "AorusAI will only receive messages from these dates."
         )
-        subtitleLabel.font = .systemFont(ofSize: 13.0)
+        subtitleLabel.font = aorusUIFont(13.0)
         subtitleLabel.textColor = palette.secondary
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
@@ -7920,11 +7920,11 @@ private final class AorusAIPeriodPickerController: UIViewController {
         configure(row: toRow, label: toLabel, title: aorusAILocalized("По", "To"), picker: toPicker)
 
         cancelButton.setTitle(strings.Common_Cancel, for: .normal)
-        cancelButton.titleLabel?.font = .systemFont(ofSize: 17.0)
+        cancelButton.titleLabel?.font = aorusUIFont(17.0)
         cancelButton.tintColor = palette.accent
         cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
         doneButton.setTitle(aorusAILocalized("Готово", "Done"), for: .normal)
-        doneButton.titleLabel?.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        doneButton.titleLabel?.font = aorusUIFont(17.0, .semibold)
         doneButton.tintColor = palette.accent
         doneButton.addTarget(self, action: #selector(doneTapped), for: .touchUpInside)
 
@@ -7946,7 +7946,7 @@ private final class AorusAIPeriodPickerController: UIViewController {
 
     private func configure(row: UIStackView, label: UILabel, title: String, picker: UIDatePicker) {
         label.text = title
-        label.font = .systemFont(ofSize: 16.0)
+        label.font = aorusUIFont(16.0)
         label.textColor = AorusAIPalette.resolve(theme).label
         row.axis = .horizontal
         row.alignment = .center
@@ -8180,10 +8180,10 @@ private final class AorusAINoticeCapsule: NSObject {
         container.layer.cornerCurve = .continuous
         container.layer.borderWidth = UIScreenPixel
         container.accessibilityTraits = .button
-        label.font = .systemFont(ofSize: 13.0, weight: .semibold)
+        label.font = aorusUIFont(13.0, .semibold)
         label.isUserInteractionEnabled = false
         label.lineBreakMode = .byTruncatingTail
-        detailLabel.font = .systemFont(ofSize: 11.5)
+        detailLabel.font = aorusUIFont(11.5)
         detailLabel.isUserInteractionEnabled = false
         detailLabel.lineBreakMode = .byTruncatingTail
         glyph.isUserInteractionEnabled = false

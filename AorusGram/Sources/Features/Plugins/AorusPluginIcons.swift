@@ -7,8 +7,9 @@ import Foundation
 /// characters, an SVG path, a small PNG or another of Telegram's icons. The app renders it
 /// into the box the original occupied, in the place the original was drawn, and everything
 /// that tints, sizes or animates an icon keeps doing so. A style changes every icon at once
-/// the same way — pixels, heavier or lighter strokes, outlines or a glow — and applies to the
-/// replacements too.
+/// the same way — pixels, heavier or lighter strokes, outlines, two tones, a glow, a halo or
+/// depth — and applies to the replacements too, and to AorusGram's own icons: the Wall tab,
+/// the tabs, settings rows and menu actions plugins add, the ghost mode button.
 ///
 /// Each plugin has a layer of its own. The layers are merged in plugin id order, so where two
 /// plugins replace the same icon the answer does not depend on which one started first. The
@@ -50,14 +51,30 @@ public enum AorusPluginIcons {
     public static let maximumTextLength = 8
     public static let maximumStyleScope = 32
 
-    public static let looks = ["pixel", "bold", "thin", "outline", "glow"]
-    /// Each look's strength, in points, and what it is when the plugin does not say.
+    public static let looks = ["pixel", "bold", "thin", "outline", "duotone", "glow", "halo", "depth"]
+    /// Each look's strength and what it is when the plugin does not say: the side of a pixel,
+    /// how far a stroke grows or shrinks, the reach of the glow, the distance of the halo and
+    /// the length of the depth in points; the outline's stroke as a share of the icon's own;
+    /// the duotone's fill as an opacity.
     public static let lookAmounts: [String: (minimum: Double, maximum: Double, standard: Double)] = [
         "pixel": (1.0, 4.0, 1.5),
-        "bold": (0.25, 2.0, 0.6),
-        "thin": (0.25, 1.5, 0.5),
-        "outline": (0.5, 2.5, 1.0),
-        "glow": (1.0, 8.0, 3.0),
+        "bold": (0.2, 1.2, 0.5),
+        "thin": (0.2, 1.0, 0.5),
+        "outline": (0.5, 2.0, 1.0),
+        "duotone": (0.1, 0.7, 0.32),
+        "glow": (1.0, 4.0, 2.2),
+        "halo": (0.3, 1.5, 0.6),
+        "depth": (0.5, 3.0, 1.4),
+    ]
+    /// AorusGram's own icons, which AorusGram draws rather than loads from Telegram's catalogue.
+    /// They are named the way Telegram's are, under AorusGram/, and are replaced and styled the
+    /// same way.
+    public static let ownIconNames = [
+        "AorusGram/Tabs/Wall",
+        "AorusGram/Tabs/Plugins",
+        "AorusGram/Header/Ghost",
+        "AorusGram/Settings/Plugins",
+        "AorusGram/Menu/Plugins",
     ]
     public static let weights = ["ultraLight", "thin", "light", "regular", "medium", "semibold", "bold", "heavy", "black"]
     public static let fonts = ["system", "rounded", "serif", "mono"]
@@ -70,6 +87,8 @@ public enum AorusPluginIcons {
         Slot("tab.contacts", ["Chat List/Tabs/IconContacts"], "Contacts tab", animated: true),
         Slot("tab.calls", ["Chat List/Tabs/IconCalls"], "Calls tab", animated: true),
         Slot("tab.settings", ["Chat List/Tabs/IconSettings"], "Settings tab", animated: true),
+        Slot("tab.wall", ["AorusGram/Tabs/Wall"], "Wall tab"),
+        Slot("tab.plugins", ["AorusGram/Tabs/Plugins"], "Tabs plugins add"),
 
         Slot("header.back", ["Navigation/Back"], "Back arrow"),
         Slot("header.close", ["Navigation/Close"], "Close cross"),
@@ -83,6 +102,7 @@ public enum AorusPluginIcons {
         Slot("header.newGroup", ["Navigation/CreateGroup"], "New group"),
         Slot("header.expand", ["Navigation/TitleExpand"], "Arrow beside a title that opens a list"),
         Slot("header.newCall", ["Call List/NewCallListIcon"], "New call"),
+        Slot("header.ghost", ["AorusGram/Header/Ghost"], "Ghost mode button in a chat"),
 
         Slot("input.send", ["Chat/Input/Text/SendIcon"], "Send button arrow"),
         Slot("input.microphone", ["Chat/Input/Text/IconMicrophone"], "Voice message button", animated: true),
@@ -178,6 +198,7 @@ public enum AorusPluginIcons {
         Slot("settings.birthday", ["Item List/Icons/Cake"], "Birthday"),
         Slot("settings.aiTools", ["Item List/Icons/AITools"], "AI tools"),
         Slot("settings.color", ["Item List/Icons/Brush"], "Your colour"),
+        Slot("settings.plugins", ["AorusGram/Settings/Plugins"], "Rows plugins add to Settings"),
 
         Slot("menu.reply", ["Chat/Context Menu/Reply"], "Reply"),
         Slot("menu.copy", ["Chat/Context Menu/Copy"], "Copy"),
@@ -207,6 +228,7 @@ public enum AorusPluginIcons {
         Slot("menu.muted", ["Chat/Context Menu/Muted"], "Mute"),
         Slot("menu.unmute", ["Chat/Context Menu/Unmute"], "Unmute"),
         Slot("menu.gift", ["Chat/Context Menu/Gift"], "Gift"),
+        Slot("menu.plugins", ["AorusGram/Menu/Plugins"], "Actions plugins add to menus"),
 
         Slot("plus.plain", ["Chat List/AddIcon", "Navigation/Add", "Item List/AddItemIcon", "Item List/Icons/Add", "Chat/Context Menu/Add", "Media Editor/Add"], "Every plain plus"),
         Slot("plus.circle", ["Chat List/AddRoundIcon", "Chat/Context Menu/AddCircle"], "Plus in a circle"),
@@ -450,7 +472,9 @@ public enum AorusPluginIcons {
                 return .failure(problem)
             }
         case "asset":
-            guard let name = object["asset"] as? String, isIconName(name), iconExists(name) else {
+            // AorusGram's own icons are drawn, not kept in the catalogue, so they cannot be
+            // loaded in place of another.
+            guard let name = object["asset"] as? String, isIconName(name), iconExists(name), !ownIconNames.contains(name) else {
                 return .failure(Problem("asset must name one of Telegram's icons; aorus.icons.assets() lists them"))
             }
             spec["asset"] = name
@@ -590,7 +614,7 @@ public enum AorusPluginIcons {
         var style: [String: Any] = ["look": look]
         if let amount = object["amount"] {
             guard let number = plainNumber(amount), number >= range.minimum, number <= range.maximum else {
-                return .failure(Problem("amount for \(look) must be from \(format(range.minimum)) to \(format(range.maximum)) points"))
+                return .failure(Problem("amount for \(look) must be from \(format(range.minimum)) to \(format(range.maximum))"))
             }
             style["amount"] = number
         } else {

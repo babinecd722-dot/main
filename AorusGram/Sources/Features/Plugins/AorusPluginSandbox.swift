@@ -734,7 +734,12 @@ public final class AorusPluginSandbox {
 
     private func iconNameSet() -> Set<String> {
         if let known = knownIconNames { return known }
-        let names = Set(hostServices.pluginIconNames)
+        var names = Set(hostServices.pluginIconNames)
+        // AorusGram's own icons are named alongside Telegram's. A host that lists nothing lets
+        // every name through, and stays that way.
+        if !names.isEmpty {
+            names.formUnion(AorusPluginIcons.ownIconNames)
+        }
         knownIconNames = names
         return names
     }
@@ -1624,7 +1629,8 @@ public final class AorusPluginSandbox {
         hostObject.setObject(iconsCatalog, forKeyedSubscript: "iconsCatalog" as NSString)
         let iconsAssets: @convention(block) (String) -> String = { [weak self] prefix in
             guard let host = self?.hostServices else { return "[]" }
-            let names = host.pluginIconNames.filter { prefix.isEmpty || $0.hasPrefix(prefix) }.sorted()
+            let listed = host.pluginIconNames + AorusPluginIcons.ownIconNames
+            let names = listed.filter { prefix.isEmpty || $0.hasPrefix(prefix) }.sorted()
             guard let data = try? JSONSerialization.data(withJSONObject: Array(names.prefix(4000))), let text = String(data: data, encoding: .utf8) else {
                 return "[]"
             }

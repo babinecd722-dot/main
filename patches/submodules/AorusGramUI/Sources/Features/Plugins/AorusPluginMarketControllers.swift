@@ -360,7 +360,7 @@ final class AorusPluginModeSwitch: UIControl {
             icon.contentMode = .center
             let label = UILabel()
             label.text = item.title
-            label.font = .systemFont(ofSize: 15, weight: .semibold)
+            label.font = aorusUIFont(15, .semibold)
             addSubview(icon)
             addSubview(label)
             segments.append((icon, label))
@@ -511,16 +511,16 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
         spinner.hidesWhenStopped = true
         addSubview(spinner)
 
-        messageTitle.font = .systemFont(ofSize: 20, weight: .semibold)
+        messageTitle.font = aorusUIFont(20, .semibold)
         messageTitle.textColor = theme.list.itemPrimaryTextColor
         messageTitle.textAlignment = .center
         messageTitle.numberOfLines = 0
-        messageBody.font = .systemFont(ofSize: 15)
+        messageBody.font = aorusUIFont(15)
         messageBody.textColor = theme.list.itemSecondaryTextColor
         messageBody.textAlignment = .center
         messageBody.numberOfLines = 0
         retryButton.setTitle(AorusPluginMarketText.tryAgain, for: .normal)
-        retryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        retryButton.titleLabel?.font = aorusUIFont(17, .semibold)
         retryButton.tintColor = theme.list.itemAccentColor
         retryButton.addTarget(self, action: #selector(reload), for: .touchUpInside)
         messageView.axis = .vertical
@@ -661,6 +661,7 @@ final class AorusPluginMarketView: UIView, UITableViewDataSource, UITableViewDel
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if showsMine && indexPath.section == 0 {
             let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+            aorusApplyAppFont(to: cell)
             cell.backgroundColor = theme.list.itemBlocksBackgroundColor
             cell.textLabel?.text = AorusPluginMarketText.myPlugins
             cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
@@ -854,10 +855,10 @@ final class AorusPluginMarketCell: UITableViewCell {
         icon.layer.cornerCurve = .continuous
         icon.clipsToBounds = true
         icon.contentMode = .scaleAspectFill
-        nameLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-        summaryLabel.font = .systemFont(ofSize: 14)
+        nameLabel.font = aorusUIFont(17, .semibold)
+        summaryLabel.font = aorusUIFont(14)
         summaryLabel.numberOfLines = 2
-        actionButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .bold)
+        actionButton.titleLabel?.font = aorusUIFont(14, .bold)
         actionButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 14, bottom: 6, right: 14)
         actionButton.layer.cornerRadius = 15
         actionButton.addTarget(self, action: #selector(actionTapped), for: .touchUpInside)
@@ -1073,7 +1074,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
     private func sectionTitle(_ text: String) -> UIView {
         let label = UILabel()
         label.text = text.uppercased()
-        label.font = .systemFont(ofSize: 13, weight: .semibold)
+        label.font = aorusUIFont(13, .semibold)
         label.textColor = theme.list.itemSecondaryTextColor
         return padded(label, top: 26, bottom: 8, sides: 36)
     }
@@ -1123,7 +1124,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
             iconView.bottomAnchor.constraint(equalTo: shadow.bottomAnchor),
         ])
         nameLabel.text = card.name
-        nameLabel.font = .systemFont(ofSize: 28, weight: .bold)
+        nameLabel.font = aorusUIFont(28, .bold)
         nameLabel.textColor = theme.list.itemPrimaryTextColor
         nameLabel.textAlignment = .center
         nameLabel.numberOfLines = 2
@@ -1136,7 +1137,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
             meta += " · " + AorusPluginMarketText.updated(formatter.string(from: card.updatedAt))
         }
         metaLabel.text = meta
-        metaLabel.font = .systemFont(ofSize: 15)
+        metaLabel.font = aorusUIFont(15)
         metaLabel.textColor = theme.list.itemSecondaryTextColor
         metaLabel.textAlignment = .center
         metaLabel.numberOfLines = 0
@@ -1166,11 +1167,11 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         stack.alignment = .leading
         stack.spacing = 4
         descriptionLabel.text = card.description
-        descriptionLabel.font = .systemFont(ofSize: 16)
+        descriptionLabel.font = aorusUIFont(16)
         descriptionLabel.textColor = theme.list.itemPrimaryTextColor
         descriptionLabel.numberOfLines = 5
         moreButton.setTitle(AorusPluginMarketText.more, for: .normal)
-        moreButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        moreButton.titleLabel?.font = aorusUIFont(16, .semibold)
         moreButton.tintColor = theme.list.itemAccentColor
         moreButton.addTarget(self, action: #selector(expandDescription), for: .touchUpInside)
         // Only when five lines really do cut the text off.
@@ -1204,9 +1205,9 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         authorAvatar = avatar
         avatar.isUserInteractionEnabled = false
         authorName.text = AorusPluginMarketText.userId(telegramId)
-        authorName.font = .systemFont(ofSize: 17, weight: .semibold)
+        authorName.font = aorusUIFont(17, .semibold)
         authorName.textColor = theme.list.itemPrimaryTextColor
-        authorUsername.font = .systemFont(ofSize: 14)
+        authorUsername.font = aorusUIFont(14)
         authorUsername.textColor = theme.list.itemSecondaryTextColor
         authorBadge.contentMode = .scaleAspectFit
         authorBadge.image = host.badge(telegramId: telegramId, height: 18, accent: theme.list.itemAccentColor)
@@ -1267,7 +1268,7 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
         if rows.isEmpty {
             let label = UILabel()
             label.text = AorusPluginMarketText.noPermissions
-            label.font = .systemFont(ofSize: 16)
+            label.font = aorusUIFont(16)
             label.textColor = theme.list.itemSecondaryTextColor
             label.numberOfLines = 0
             stack.addArrangedSubview(label)
@@ -1277,12 +1278,12 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
             tile.setContentHuggingPriority(.required, for: .horizontal)
             let title = UILabel()
             title.text = item.title
-            title.font = .systemFont(ofSize: 16, weight: .semibold)
+            title.font = aorusUIFont(16, .semibold)
             title.textColor = theme.list.itemPrimaryTextColor
             title.numberOfLines = 0
             let body = UILabel()
             body.text = item.body
-            body.font = .systemFont(ofSize: 14)
+            body.font = aorusUIFont(14)
             body.textColor = theme.list.itemSecondaryTextColor
             body.numberOfLines = 0
             let texts = UIStackView(arrangedSubviews: [title, body])
@@ -1302,14 +1303,14 @@ final class AorusPluginMarketDetailController: UIViewController, UIScrollViewDel
 
     private func buildBottomBar() {
         view.addSubview(bottomBar)
-        primaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        primaryButton.titleLabel?.font = aorusUIFont(17, .semibold)
         primaryButton.layer.cornerRadius = 26
         primaryButton.addTarget(self, action: #selector(primaryTapped), for: .touchUpInside)
-        secondaryButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        secondaryButton.titleLabel?.font = aorusUIFont(17, .semibold)
         secondaryButton.layer.cornerRadius = 26
         secondaryButton.alpha = 0
         secondaryButton.addTarget(self, action: #selector(deleteTapped), for: .touchUpInside)
-        captionLabel.font = .systemFont(ofSize: 13)
+        captionLabel.font = aorusUIFont(13)
         captionLabel.textColor = theme.list.itemSecondaryTextColor
         captionLabel.textAlignment = .center
         captionLabel.numberOfLines = 2
@@ -1565,7 +1566,7 @@ final class AorusPluginMarketMineController: ViewController, UITableViewDataSour
 
     private func showBanner(_ text: String) {
         banner.text = text
-        banner.font = .systemFont(ofSize: 15, weight: .semibold)
+        banner.font = aorusUIFont(15, .semibold)
         banner.textColor = presentationData.theme.list.itemDestructiveColor
         banner.textAlignment = .center
         banner.numberOfLines = 0
@@ -1599,7 +1600,7 @@ final class AorusPluginMarketMineCell: UITableViewCell {
         icon.layer.cornerRadius = 11
         icon.layer.cornerCurve = .continuous
         icon.clipsToBounds = true
-        nameLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        nameLabel.font = aorusUIFont(17, .semibold)
         statusStack.axis = .vertical
         statusStack.spacing = 2
         [icon, nameLabel, statusStack].forEach {
@@ -1634,7 +1635,7 @@ final class AorusPluginMarketMineCell: UITableViewCell {
         func line(_ text: String, _ color: UIColor) {
             let label = UILabel()
             label.text = text
-            label.font = .systemFont(ofSize: 14, weight: .medium)
+            label.font = aorusUIFont(14, .medium)
             label.textColor = color
             label.numberOfLines = 0
             statusStack.addArrangedSubview(label)

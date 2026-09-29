@@ -78,7 +78,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         let titleLabel = UILabel()
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.text = title
-        titleLabel.font = UIFont.systemFont(ofSize: 15.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(15.0, .semibold)
         titleLabel.textColor = .white
         titleLabel.numberOfLines = 0
         row.addSubview(titleLabel)
@@ -86,7 +86,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         let subtitleLabel = UILabel()
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.text = subtitle
-        subtitleLabel.font = UIFont.systemFont(ofSize: 14.0, weight: .regular)
+        subtitleLabel.font = aorusUIFont(14.0, .regular)
         subtitleLabel.textColor = UIColor(white: 1.0, alpha: 0.55)
         subtitleLabel.numberOfLines = 0
         row.addSubview(subtitleLabel)
@@ -144,7 +144,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         let title = UILabel()
         title.translatesAutoresizingMaskIntoConstraints = false
         title.text = aorusL("Голос в текст", "Voice to Text")
-        title.font = UIFont.systemFont(ofSize: 24.0, weight: .bold)
+        title.font = aorusUIFont(24.0, .bold)
         title.textColor = .white
         title.textAlignment = .center
         self.view.addSubview(title)
@@ -174,7 +174,7 @@ public final class AorusVoiceOnboardingController: UIViewController {
         let button = UIButton(type: .system)
         button.translatesAutoresizingMaskIntoConstraints = false
         button.setTitle(aorusL("Продолжить", "Continue"), for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 17.0, weight: .semibold)
+        button.titleLabel?.font = aorusUIFont(17.0, .semibold)
         button.setTitleColor(.white, for: .normal)
         button.backgroundColor = self.accent
         button.layer.cornerRadius = 14.0
@@ -448,7 +448,7 @@ final class AorusVoiceOverlayView: UIView {
         content.addSubview(self.waveform)
 
         self.transcriptLabel.translatesAutoresizingMaskIntoConstraints = false
-        self.transcriptLabel.font = UIFont.systemFont(ofSize: 15.0, weight: .semibold)
+        self.transcriptLabel.font = aorusUIFont(15.0, .semibold)
         self.transcriptLabel.textColor = UIColor(white: 1.0, alpha: 0.46)
         self.transcriptLabel.numberOfLines = 2
         self.transcriptLabel.lineBreakMode = .byTruncatingHead
@@ -463,7 +463,7 @@ final class AorusVoiceOverlayView: UIView {
         content.addSubview(self.hintIcon)
 
         self.hintLabel.translatesAutoresizingMaskIntoConstraints = false
-        self.hintLabel.font = UIFont.systemFont(ofSize: 12.0, weight: .medium)
+        self.hintLabel.font = aorusUIFont(12.0, .medium)
         self.hintLabel.textColor = UIColor(white: 1.0, alpha: 0.55)
         self.hintLabel.textAlignment = .left
         self.hintLabel.text = aorusL("Отпустите, чтобы вставить", "Release to insert")

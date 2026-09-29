@@ -3529,36 +3529,95 @@ public func aorusPluginSettingsEntries() -> [AorusPluginSettingsEntry] {
 }
 
 /// The 30pt rounded tile Telegram draws next to every settings row, with the plugin's own
-/// glyph and colour. Built here so the settings screen only has to place it.
+/// glyph and colour, and the corner Telegram's own tiles have — the one a plugin gave them,
+/// when one did. The glyph is drawn on its own first, so that icons a plugin replaced or
+/// styled reach it the way they reach Telegram's settings icons, and laid on the tile after.
+/// Kept by what it was drawn from: the settings list asks on every layout.
 private func aorusPluginSettingsRowIcon(_ symbol: String, color: UIColor) -> UIImage? {
+    let radius = aorusPluginSettingsTileRadius()
+    let key = "symbol|\(symbol)|\(color.argb)|\(radius)|\(AorusPluginIconValues.revision)"
+    if let cached = aorusPluginRowIcons.image(for: key) {
+        return cached
+    }
     let side = CGSize(width: 30.0, height: 30.0)
     let configuration = UIImage.SymbolConfiguration(pointSize: 17.0, weight: .medium)
     // A glyph newer than this iOS is drawn as the fallback rather than as an empty tile.
-    let glyph = UIImage(systemName: AorusPluginIcon.normalized(symbol), withConfiguration: configuration)
+    let symbolImage = UIImage(systemName: AorusPluginIcon.normalized(symbol), withConfiguration: configuration)
         ?? UIImage(systemName: AorusPluginIcon.fallback, withConfiguration: configuration)
     let format = UIGraphicsImageRendererFormat.default()
     format.opaque = false
-    return UIGraphicsImageRenderer(size: side, format: format).image { context in
-        UIBezierPath(roundedRect: CGRect(origin: .zero, size: side), cornerRadius: 8.0).addClip()
+    var glyph: UIImage?
+    if let symbolImage {
+        let raster = UIGraphicsImageRenderer(size: symbolImage.size, format: format).image { _ in
+            symbolImage.withTintColor(.white, renderingMode: .alwaysOriginal).draw(in: CGRect(origin: .zero, size: symbolImage.size))
+        }
+        glyph = AorusPluginIconValues.own(raster, named: "AorusGram/Settings/Plugins")
+    }
+    let tile = UIGraphicsImageRenderer(size: side, format: format).image { context in
+        UIBezierPath(roundedRect: CGRect(origin: .zero, size: side), cornerRadius: radius).addClip()
         context.cgContext.setFillColor(color.cgColor)
         context.cgContext.fill(CGRect(origin: .zero, size: side))
         guard let glyph else { return }
         let size = glyph.size
         let origin = CGPoint(x: (side.width - size.width) / 2.0, y: (side.height - size.height) / 2.0)
-        glyph.withTintColor(.white, renderingMode: .alwaysOriginal).draw(in: CGRect(origin: origin, size: size))
+        glyph.draw(in: CGRect(origin: origin, size: size))
     }
+    aorusPluginRowIcons.store(tile, for: key)
+    return tile
 }
 
-/// A site's icon as the same 30pt tile, rounded the same way.
+/// A site's icon as the same 30pt tile, rounded the same way. A site's icon has colours of its
+/// own, so of the styles only the pixel reaches it.
 private func aorusPluginSettingsRowTile(_ image: UIImage) -> UIImage? {
+    let radius = aorusPluginSettingsTileRadius()
+    let key = "site|\(ObjectIdentifier(image).hashValue)|\(radius)|\(AorusPluginIconValues.revision)"
+    if let cached = aorusPluginRowIcons.image(for: key) {
+        return cached
+    }
     let side = CGSize(width: 30.0, height: 30.0)
     let format = UIGraphicsImageRendererFormat.default()
     format.opaque = false
-    return UIGraphicsImageRenderer(size: side, format: format).image { _ in
-        UIBezierPath(roundedRect: CGRect(origin: .zero, size: side), cornerRadius: 8.0).addClip()
+    let tile = UIGraphicsImageRenderer(size: side, format: format).image { _ in
+        UIBezierPath(roundedRect: CGRect(origin: .zero, size: side), cornerRadius: radius).addClip()
         image.draw(in: CGRect(origin: .zero, size: side))
     }
+    let result = AorusPluginIconValues.own(tile, named: "AorusGram/Settings/Plugins") ?? tile
+    aorusPluginRowIcons.store(result, for: key)
+    return result
 }
+
+/// The corner of Telegram's settings tiles: its own, or the one a plugin's look gave them.
+private func aorusPluginSettingsTileRadius() -> CGFloat {
+    let values = AorusPluginAppearanceValues.current()
+    guard !values.isEmpty, let radius = AorusPluginAppearanceValues.number("settings.iconRadius", in: values) else {
+        return 8.0
+    }
+    return min(15.0, max(0.0, radius))
+}
+
+/// The settings rows' tiles, by what they were drawn from. Small, and emptied rather than
+/// trimmed: every key names the icons' revision, so an old one is never asked for again.
+private final class AorusPluginRowIconCache {
+    private let lock = NSLock()
+    private var images: [String: UIImage] = [:]
+
+    func image(for key: String) -> UIImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        return images[key]
+    }
+
+    func store(_ image: UIImage, for key: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        if images.count >= 64 {
+            images.removeAll()
+        }
+        images[key] = image
+    }
+}
+
+private let aorusPluginRowIcons = AorusPluginRowIconCache()
 
 private func aorusPluginEntryColor(_ hex: String) -> UIColor {
     guard let value = UInt32(AorusPluginAccent.normalized(hex), radix: 16) else { return .systemPurple }
@@ -3608,7 +3667,8 @@ private func aorusPluginMenuIcon(_ name: String, color: UIColor) -> UIImage? {
     let raster = UIGraphicsImageRenderer(size: size, format: format).image { _ in
         symbol.withRenderingMode(.alwaysTemplate).draw(in: CGRect(origin: .zero, size: size))
     }
-    return generateTintedImage(image: raster, color: color)
+    // Replaced or styled like Telegram's own menu icons, when a plugin changes the icons.
+    return generateTintedImage(image: AorusPluginIconValues.own(raster, named: "AorusGram/Menu/Plugins") ?? raster, color: color)
 }
 
 private final class AorusPluginArtifactPreviewController: QLPreviewController, QLPreviewControllerDataSource {

@@ -146,12 +146,12 @@ private final class AorusIntervalSliderItemNode: ListViewItemNode {
         super.didLoad()
 
         let tl = UILabel()
-        tl.font = .systemFont(ofSize: 17)
+        tl.font = aorusUIFont(17)
         view.addSubview(tl)
         titleLabel = tl
 
         let vl = UILabel()
-        vl.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        vl.font = aorusDigitsFont(13, .regular)
         vl.textAlignment = .right
         view.addSubview(vl)
         valueLabel = vl

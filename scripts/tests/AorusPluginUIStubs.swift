@@ -26,6 +26,69 @@ open class ASDisplayNode {
 
 // MARK: - Display
 
+/// Display's `Font`, through which Telegram draws its text and the chosen font is swapped in.
+public struct Font {
+    public enum Design {
+        case regular
+        case serif
+        case monospace
+        case round
+        case camera
+    }
+
+    public struct Traits: OptionSet {
+        public var rawValue: Int32
+
+        public init(rawValue: Int32) {
+            self.rawValue = rawValue
+        }
+
+        public init() {
+            self.rawValue = 0
+        }
+
+        public static let italic = Traits(rawValue: 1 << 0)
+        public static let monospacedNumbers = Traits(rawValue: 1 << 1)
+    }
+
+    public enum Width {
+        case standard
+        case condensed
+        case compressed
+        case expanded
+    }
+
+    public enum Weight {
+        case regular
+        case thin
+        case light
+        case medium
+        case semibold
+        case bold
+        case heavy
+    }
+
+    public static func with(size: CGFloat, design: Design = .regular, weight: Weight = .regular, width: Width = .standard, traits: Traits = []) -> UIFont {
+        return UIFont.systemFont(ofSize: size)
+    }
+
+    public static func regular(_ size: CGFloat) -> UIFont {
+        return UIFont.systemFont(ofSize: size)
+    }
+
+    public static func medium(_ size: CGFloat) -> UIFont {
+        return UIFont.systemFont(ofSize: size, weight: .medium)
+    }
+
+    public static func semibold(_ size: CGFloat) -> UIFont {
+        return UIFont.systemFont(ofSize: size, weight: .semibold)
+    }
+
+    public static func bold(_ size: CGFloat) -> UIFont {
+        return UIFont.boldSystemFont(ofSize: size)
+    }
+}
+
 public struct ContainerViewLayout: Equatable {
     public var size: CGSize
     public var intrinsicInsets: UIEdgeInsets

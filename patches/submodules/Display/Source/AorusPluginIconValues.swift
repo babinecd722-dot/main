@@ -72,6 +72,9 @@ public enum AorusPluginIconValues {
     private static var observer: NSObjectProtocol?
     private static var cache: [String: UIImage] = [:]
     private static var unchanged = Set<String>()
+    /// AorusGram's own icons as drawn, by name: each original with what it became. An own icon
+    /// comes in several colours under one name, so the original is part of the key.
+    private static var ownCache: [String: [(original: UIImage, result: UIImage)]] = [:]
     private static var installed = false
 
     // MARK: - The table
@@ -122,6 +125,45 @@ public enum AorusPluginIconValues {
             return nil
         }
         return UIImage(bundleImageName: name)
+    }
+
+    /// One of AorusGram's own icons — drawn by AorusGram rather than loaded from Telegram's
+    /// catalogue, like the Wall tab or a plugin's tab and settings row — as the plugins changed
+    /// it: replaced where a plugin replaced `name`, in the style wherever the style reaches
+    /// `name`, and itself otherwise. Telegram's icons get this from the asset loader; these ask.
+    /// The names are the core's `AorusPluginIcons.ownIconNames`.
+    public static func own(_ image: UIImage?, named name: String) -> UIImage? {
+        guard let image else {
+            return nil
+        }
+        lock.lock()
+        let table = tableLocked()
+        let spec = table.icons[name]
+        let styled = table.styleReaches(name)
+        if table.isEmpty || (spec == nil && !styled) {
+            lock.unlock()
+            return image
+        }
+        if let hit = ownCache[name]?.first(where: { $0.original === image }) {
+            lock.unlock()
+            return hit.result
+        }
+        let revision = revisionValue
+        lock.unlock()
+
+        let result = render(original: image, spec: spec, look: styled ? table.look : nil, amount: table.amount) ?? image
+
+        lock.lock()
+        if revision == revisionValue {
+            var entries = ownCache[name] ?? []
+            entries.append((image, result))
+            if entries.count > 8 {
+                entries.removeFirst(entries.count - 8)
+            }
+            ownCache[name] = entries
+        }
+        lock.unlock()
+        return result
     }
 
     private static func currentTable() -> Table {
@@ -175,6 +217,7 @@ public enum AorusPluginIconValues {
         revisionValue += 1
         cache.removeAll()
         unchanged.removeAll()
+        ownCache.removeAll()
     }
 
     /// Layers in plugin id order: a later plugin wins an icon both replace, and the last
@@ -907,138 +950,593 @@ public enum AorusPluginIconValues {
     }
 
     // MARK: - Styles
+    //
+    // A style changes the weight or the character of an icon's shape, never what it shows. The
+    // shape is read at twice the icon's pixels and turned into a signed distance to its edge —
+    // one per connected part — so a stroke can grow or shrink by a fraction of a pixel and keep
+    // a clean, even edge. Two parts that grow keep the gap between them, and a hole keeps being
+    // a hole: that is what keeps a heavier chat bubble two bubbles, and a gear a gear. Only the
+    // pixel look reaches an icon of several colours; the others need the one colour an icon is
+    // tinted in, and leave a multicoloured one as it is.
 
-    /// A bitmap context the size of `image` in pixels, in Core Graphics' own orientation.
-    private static func bitmapContext(width: Int, height: Int) -> CGContext? {
-        guard width > 0, height > 0 else {
-            return nil
-        }
-        return CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+    /// Each look's strength, as the plugin core checks it; a value kept from an older version is
+    /// brought inside.
+    private static let lookRanges: [String: ClosedRange<CGFloat>] = [
+        "pixel": 1.0 ... 4.0,
+        "bold": 0.2 ... 1.2,
+        "thin": 0.2 ... 1.0,
+        "outline": 0.5 ... 2.0,
+        "duotone": 0.1 ... 0.7,
+        "glow": 1.0 ... 4.0,
+        "halo": 0.3 ... 1.5,
+        "depth": 0.5 ... 3.0,
+    ]
+
+    /// An icon's pixels, premultiplied RGBA, top row first.
+    private struct Pixels {
+        let width: Int
+        let height: Int
+        var data: [UInt8]
     }
 
-    /// Offsets on circles of the given radius, in pixels: what "every direction" means for
-    /// growing or shrinking a shape by that much.
-    private static func offsets(radius: CGFloat) -> [CGPoint] {
-        var result: [CGPoint] = []
-        let rings: [(CGFloat, Int)] = radius > 1.5 ? [(radius, 16), (radius * 0.5, 8)] : [(radius, 12)]
-        for (distance, count) in rings {
-            for step in 0 ..< count {
-                let angle = CGFloat(step) / CGFloat(count) * 2.0 * CGFloat.pi
-                result.append(CGPoint(x: cos(angle) * distance, y: sin(angle) * distance))
+    /// An icon's shape: which samples are inside it and, for each connected part, the signed
+    /// distance of every sample to that part's edge — negative inside, in samples.
+    private struct StyleShape {
+        let width: Int
+        let height: Int
+        let factor: Int
+        /// Samples per point.
+        let unit: Float
+        let inside: [Bool]
+        let parts: [[Float]]
+        /// Each part's half-width at its thickest, in samples.
+        let thickness: [Float]
+    }
+
+    /// More parts than this are read as one: a thousand dots of a pattern are not strokes.
+    private static let maximumStyleParts = 24
+
+    private static func applyLook(_ look: String, amount rawAmount: CGFloat, to image: UIImage) -> UIImage? {
+        guard let cgImage = image.cgImage, let range = lookRanges[look], let source = pixels(of: cgImage) else {
+            return nil
+        }
+        let amount = min(range.upperBound, max(range.lowerBound, rawAmount))
+        let scale = max(1.0, CGFloat(source.width) / max(1.0, image.size.width))
+        if look == "pixel" {
+            let cell = max(1, Int((amount * scale).rounded()))
+            return makeImage(pixelated(source, cell: cell), like: image)
+        }
+        guard let color = flatColor(source) else {
+            return nil
+        }
+        // Looks that reach past the edge first draw the icon a little smaller, so what they
+        // add is never cut off by the icon's box.
+        let margin: CGFloat
+        switch look {
+        case "bold":
+            margin = amount + 0.15
+        case "glow":
+            margin = amount * 0.9 + 0.45
+        case "halo":
+            margin = amount + 0.65
+        case "depth":
+            margin = amount * 0.75
+        default:
+            margin = 0.0
+        }
+        let fit = margin > 0.0 ? fitFactor(source, margin: margin * scale) : 1.0
+        let factor = source.width * source.height > 120 * 120 ? 1 : 2
+        guard let shape = styleShape(cgImage, pixelWidth: source.width, pixelHeight: source.height, factor: factor, scale: scale, fit: fit),
+              let coverage = styledCoverage(look, amount: Float(amount), shape: shape) else {
+            return nil
+        }
+        return makeImage(coverage: coverage, shape: shape, color: color, like: image)
+    }
+
+    private static func pixels(of cgImage: CGImage) -> Pixels? {
+        let width = cgImage.width
+        let height = cgImage.height
+        guard width > 0, height > 0, width <= 1024, height <= 1024 else {
+            return nil
+        }
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn: Bool = data.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                return false
             }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return drawn ? Pixels(width: width, height: height, data: data) : nil
+    }
+
+    /// An image of `pixels`, in a context that owns its memory: the image made from it may
+    /// share that memory, and it has to outlive this call.
+    private static func makeImage(_ pixels: Pixels, like image: UIImage) -> UIImage? {
+        guard let context = CGContext(data: nil, width: pixels.width, height: pixels.height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue), let target = context.data else {
+            return nil
+        }
+        let bytesPerRow = context.bytesPerRow
+        let bytes = target.assumingMemoryBound(to: UInt8.self)
+        pixels.data.withUnsafeBufferPointer { source in
+            for row in 0 ..< pixels.height {
+                for index in 0 ..< pixels.width * 4 {
+                    bytes[row * bytesPerRow + index] = source[row * pixels.width * 4 + index]
+                }
+            }
+        }
+        guard let made = context.makeImage() else {
+            return nil
+        }
+        return UIImage(cgImage: made, scale: image.scale, orientation: .up)
+    }
+
+    /// The coverage the look worked out, back at the icon's own pixels, in its one colour.
+    private static func makeImage(coverage: [Float], shape: StyleShape, color: (red: Float, green: Float, blue: Float), like image: UIImage) -> UIImage? {
+        let factor = shape.factor
+        let width = shape.width / factor
+        let height = shape.height / factor
+        var pixels = Pixels(width: width, height: height, data: [UInt8](repeating: 0, count: width * height * 4))
+        let area = Float(factor * factor)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                var sum: Float = 0.0
+                for dy in 0 ..< factor {
+                    let row = (y * factor + dy) * shape.width
+                    for dx in 0 ..< factor {
+                        sum += coverage[row + x * factor + dx]
+                    }
+                }
+                let alpha = min(1.0, max(0.0, sum / area))
+                let offset = (y * width + x) * 4
+                pixels.data[offset] = UInt8((color.red * alpha * 255.0).rounded())
+                pixels.data[offset + 1] = UInt8((color.green * alpha * 255.0).rounded())
+                pixels.data[offset + 2] = UInt8((color.blue * alpha * 255.0).rounded())
+                pixels.data[offset + 3] = UInt8((alpha * 255.0).rounded())
+            }
+        }
+        return makeImage(pixels, like: image)
+    }
+
+    /// The one colour an icon is drawn in, or nil when it has several. Edge pixels, blended
+    /// with nothing, are left out of the count.
+    private static func flatColor(_ pixels: Pixels) -> (red: Float, green: Float, blue: Float)? {
+        var count: Float = 0.0
+        var sums: (Float, Float, Float) = (0.0, 0.0, 0.0)
+        var samples: [(Float, Float, Float)] = []
+        samples.reserveCapacity(pixels.width * pixels.height / 4)
+        for index in stride(from: 0, to: pixels.data.count, by: 4) {
+            let alpha = Float(pixels.data[index + 3])
+            if alpha < 128.0 {
+                continue
+            }
+            let red = Float(pixels.data[index]) / alpha
+            let green = Float(pixels.data[index + 1]) / alpha
+            let blue = Float(pixels.data[index + 2]) / alpha
+            samples.append((red, green, blue))
+            sums.0 += red
+            sums.1 += green
+            sums.2 += blue
+            count += 1.0
+        }
+        guard count > 0.0 else {
+            return nil
+        }
+        let mean = (min(1.0, sums.0 / count), min(1.0, sums.1 / count), min(1.0, sums.2 / count))
+        var deviation: Float = 0.0
+        for sample in samples {
+            deviation += max(abs(sample.0 - mean.0), abs(sample.1 - mean.1), abs(sample.2 - mean.2))
+        }
+        if deviation / count > 0.06 {
+            return nil
+        }
+        return (mean.0, mean.1, mean.2)
+    }
+
+    /// How much smaller to draw an icon so that its ink, grown by `margin` pixels, stays in
+    /// its box.
+    private static func fitFactor(_ pixels: Pixels, margin: CGFloat) -> CGFloat {
+        var minX = pixels.width
+        var minY = pixels.height
+        var maxX = -1
+        var maxY = -1
+        for y in 0 ..< pixels.height {
+            for x in 0 ..< pixels.width where pixels.data[(y * pixels.width + x) * 4 + 3] > 5 {
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+        guard maxX >= minX, maxY >= minY else {
+            return 1.0
+        }
+        let centerX = CGFloat(pixels.width) * 0.5
+        let centerY = CGFloat(pixels.height) * 0.5
+        var factor: CGFloat = 1.0
+        let reaches: [(CGFloat, CGFloat)] = [
+            (centerX - CGFloat(minX), centerX),
+            (CGFloat(maxX + 1) - centerX, centerX),
+            (centerY - CGFloat(minY), centerY),
+            (CGFloat(maxY + 1) - centerY, centerY),
+        ]
+        for (reach, half) in reaches where reach > 0.0 {
+            factor = min(factor, (half - margin) / reach)
+        }
+        return max(0.5, min(1.0, factor))
+    }
+
+    /// The icon's shape at `factor` samples per pixel, drawn `fit` times its size about its
+    /// centre, cut at half coverage, with the distance field of each part.
+    private static func styleShape(_ cgImage: CGImage, pixelWidth: Int, pixelHeight: Int, factor: Int, scale: CGFloat, fit: CGFloat) -> StyleShape? {
+        let width = pixelWidth * factor
+        let height = pixelHeight * factor
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue), let data = context.data else {
+            return nil
+        }
+        context.interpolationQuality = .high
+        let drawnWidth = CGFloat(width) * fit
+        let drawnHeight = CGFloat(height) * fit
+        context.draw(cgImage, in: CGRect(x: (CGFloat(width) - drawnWidth) * 0.5, y: (CGFloat(height) - drawnHeight) * 0.5, width: drawnWidth, height: drawnHeight))
+        let bytesPerRow = context.bytesPerRow
+        let bytes = data.assumingMemoryBound(to: UInt8.self)
+        var inside = [Bool](repeating: false, count: width * height)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                inside[y * width + x] = bytes[y * bytesPerRow + x * 4 + 3] >= 128
+            }
+        }
+        let (labels, count) = connectedParts(inside, width: width, height: height, diagonal: true)
+        guard count > 0 else {
+            return nil
+        }
+        var parts: [[Float]] = []
+        if count > maximumStyleParts {
+            parts.append(signedDistance(inside, width: width, height: height))
+        } else {
+            for part in 1 ... count {
+                let label = Int32(part)
+                parts.append(signedDistance(labels.map { $0 == label }, width: width, height: height))
+            }
+        }
+        let thickness = parts.map { part -> Float in
+            return -(part.min() ?? 0.0)
+        }
+        return StyleShape(width: width, height: height, factor: factor, unit: Float(scale) * Float(factor), inside: inside, parts: parts, thickness: thickness)
+    }
+
+    /// Connected runs of `true`, labelled from 1; `diagonal` joins samples that only touch at
+    /// a corner.
+    private static func connectedParts(_ mask: [Bool], width: Int, height: Int, diagonal: Bool) -> (labels: [Int32], count: Int) {
+        var labels = [Int32](repeating: 0, count: mask.count)
+        var count: Int32 = 0
+        var stack: [Int] = []
+        for start in 0 ..< mask.count where mask[start] && labels[start] == 0 {
+            count += 1
+            labels[start] = count
+            stack.append(start)
+            while let index = stack.popLast() {
+                let x = index % width
+                let y = index / width
+                for dy in -1 ... 1 {
+                    for dx in -1 ... 1 where (dx != 0 || dy != 0) && (diagonal || dx == 0 || dy == 0) {
+                        let nx = x + dx
+                        let ny = y + dy
+                        if nx < 0 || ny < 0 || nx >= width || ny >= height {
+                            continue
+                        }
+                        let next = ny * width + nx
+                        if mask[next] && labels[next] == 0 {
+                            labels[next] = count
+                            stack.append(next)
+                        }
+                    }
+                }
+            }
+        }
+        return (labels, Int(count))
+    }
+
+    /// The distance of every sample to the edge of `mask`, negative inside, in samples.
+    private static func signedDistance(_ mask: [Bool], width: Int, height: Int) -> [Float] {
+        let toInk = squaredDistances(mask, target: true, width: width, height: height)
+        let toSpace = squaredDistances(mask, target: false, width: width, height: height)
+        var result = [Float](repeating: 0.0, count: mask.count)
+        for index in 0 ..< mask.count {
+            result[index] = mask[index] ? 0.5 - toSpace[index].squareRoot() : toInk[index].squareRoot() - 0.5
         }
         return result
     }
 
-    private static func applyLook(_ look: String, amount: CGFloat, to image: UIImage) -> UIImage? {
-        guard let cgImage = image.cgImage else {
-            return nil
+    /// The squared distance from every sample to the nearest one that is `target`: the exact
+    /// transform of Felzenszwalb and Huttenlocher, down the columns and then along the rows.
+    private static func squaredDistances(_ mask: [Bool], target: Bool, width: Int, height: Int) -> [Float] {
+        let far: Float = 1e20
+        var grid = [Float](repeating: far, count: mask.count)
+        for index in 0 ..< mask.count where mask[index] == target {
+            grid[index] = 0.0
         }
-        let width = cgImage.width
-        let height = cgImage.height
-        let pixelScale = CGFloat(width) / max(1.0, image.size.width)
-        let rect = CGRect(x: 0, y: 0, width: width, height: height)
-        let result: CGImage?
-        switch look {
-        case "pixel":
-            result = pixelated(cgImage, cell: max(1, Int((amount * pixelScale).rounded())))
-        case "bold":
-            guard let context = bitmapContext(width: width, height: height) else {
-                return nil
+        let length = max(width, height)
+        var line = [Float](repeating: 0.0, count: length)
+        var result = [Float](repeating: 0.0, count: length)
+        var hull = [Int](repeating: 0, count: length)
+        var bounds = [Float](repeating: 0.0, count: length + 1)
+
+        func transform(_ count: Int) {
+            var top = 0
+            hull[0] = 0
+            bounds[0] = -Float.infinity
+            bounds[1] = Float.infinity
+            if count > 1 {
+                for q in 1 ..< count {
+                    // The first bound is minus infinity, so the lower envelope never empties.
+                    var p = hull[top]
+                    var crossing = ((line[q] + Float(q * q)) - (line[p] + Float(p * p))) / Float(2 * q - 2 * p)
+                    while crossing <= bounds[top] {
+                        top -= 1
+                        p = hull[top]
+                        crossing = ((line[q] + Float(q * q)) - (line[p] + Float(p * p))) / Float(2 * q - 2 * p)
+                    }
+                    top += 1
+                    hull[top] = q
+                    bounds[top] = crossing
+                    bounds[top + 1] = Float.infinity
+                }
             }
-            context.draw(cgImage, in: rect)
-            for offset in offsets(radius: amount * pixelScale) {
-                context.draw(cgImage, in: rect.offsetBy(dx: offset.x, dy: offset.y))
+            top = 0
+            for q in 0 ..< count {
+                while bounds[top + 1] < Float(q) {
+                    top += 1
+                }
+                let offset = Float(q - hull[top])
+                result[q] = offset * offset + line[hull[top]]
             }
-            result = context.makeImage()
-        case "thin":
-            result = eroded(cgImage, radius: amount * pixelScale)
-        case "outline":
-            guard let inner = eroded(cgImage, radius: amount * pixelScale), let context = bitmapContext(width: width, height: height) else {
-                return nil
-            }
-            context.draw(cgImage, in: rect)
-            context.setBlendMode(.destinationOut)
-            context.draw(inner, in: rect)
-            result = context.makeImage()
-        case "glow":
-            guard let context = bitmapContext(width: width, height: height) else {
-                return nil
-            }
-            let color = ink(of: image)?.color ?? UIColor.white
-            context.setShadow(offset: CGSize(), blur: amount * pixelScale, color: color.withAlphaComponent(0.95).cgColor)
-            context.draw(cgImage, in: rect)
-            context.draw(cgImage, in: rect)
-            context.setShadow(offset: CGSize(), blur: 0.0, color: nil)
-            context.draw(cgImage, in: rect)
-            result = context.makeImage()
-        default:
-            result = nil
         }
-        guard let result else {
-            return nil
+
+        for x in 0 ..< width {
+            for y in 0 ..< height {
+                line[y] = grid[y * width + x]
+            }
+            transform(height)
+            for y in 0 ..< height {
+                grid[y * width + x] = result[y]
+            }
         }
-        return UIImage(cgImage: result, scale: image.scale, orientation: .up)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                line[x] = grid[y * width + x]
+            }
+            transform(width)
+            for x in 0 ..< width {
+                grid[y * width + x] = result[x]
+            }
+        }
+        return grid
     }
 
-    /// The shape shrunk by `radius` pixels: what is left where every shifted copy still covers.
-    private static func eroded(_ cgImage: CGImage, radius: CGFloat) -> CGImage? {
-        let width = cgImage.width
-        let height = cgImage.height
-        guard let context = bitmapContext(width: width, height: height) else {
-            return nil
-        }
-        let rect = CGRect(x: 0, y: 0, width: width, height: height)
-        context.draw(cgImage, in: rect)
-        context.setBlendMode(.destinationIn)
-        for offset in offsets(radius: radius) {
-            context.draw(cgImage, in: rect.offsetBy(dx: offset.x, dy: offset.y))
-        }
-        return context.makeImage()
+    /// How much of a sample an edge `distance` samples away covers: one sample of softening.
+    @inline(__always)
+    private static func coverage(_ distance: Float) -> Float {
+        return min(1.0, max(0.0, 0.5 - distance))
     }
 
-    /// Blocks of `cell` pixels, each one the average of what it covers, either there or not:
-    /// the grid centred on the icon, so both sides of a symmetric icon come out the same.
-    private static func pixelated(_ cgImage: CGImage, cell: Int) -> CGImage? {
-        let width = cgImage.width
-        let height = cgImage.height
-        let columns = (width + cell - 1) / cell
-        let lines = (height + cell - 1) / cell
-        let padX = CGFloat(columns * cell - width) * 0.5
-        let padY = CGFloat(lines * cell - height) * 0.5
-        // The context owns its memory, so the image made from it never points at a buffer
-        // that is gone.
-        guard let blocks = bitmapContext(width: columns, height: lines), let data = blocks.data else {
-            return nil
-        }
-        blocks.interpolationQuality = .high
-        blocks.draw(cgImage, in: CGRect(x: padX / CGFloat(cell), y: padY / CGFloat(cell), width: CGFloat(width) / CGFloat(cell), height: CGFloat(height) / CGFloat(cell)))
-        let bytesPerRow = blocks.bytesPerRow
-        let bytes = data.assumingMemoryBound(to: UInt8.self)
-        for line in 0 ..< lines {
-            for column in 0 ..< columns {
-                let index = line * bytesPerRow + column * 4
-                let alpha = Int(bytes[index + 3])
-                if alpha >= 110 {
-                    // Premultiplied: undo it, then the block is opaque.
-                    bytes[index] = UInt8(min(255, Int(bytes[index]) * 255 / alpha))
-                    bytes[index + 1] = UInt8(min(255, Int(bytes[index + 1]) * 255 / alpha))
-                    bytes[index + 2] = UInt8(min(255, Int(bytes[index + 2]) * 255 / alpha))
-                    bytes[index + 3] = 255
-                } else {
-                    bytes[index] = 0
-                    bytes[index + 1] = 0
-                    bytes[index + 2] = 0
-                    bytes[index + 3] = 0
+    /// The distance to the nearest part, and to the one after it, for every sample.
+    private static func nearestParts(_ shape: StyleShape) -> (near: [Float], second: [Float]) {
+        let count = shape.width * shape.height
+        var near = [Float](repeating: 1e20, count: count)
+        var second = [Float](repeating: 1e20, count: count)
+        for part in shape.parts {
+            for index in 0 ..< count {
+                let value = part[index]
+                if value < near[index] {
+                    second[index] = near[index]
+                    near[index] = value
+                } else if value < second[index] {
+                    second[index] = value
                 }
             }
         }
-        guard let small = blocks.makeImage(), let context = bitmapContext(width: width, height: height) else {
+        return (near, second)
+    }
+
+    /// The width of the icon's own strokes: the parts thin enough to be lines, or Telegram's
+    /// usual line when the icon is all shapes.
+    private static func lineWidth(_ shape: StyleShape) -> Float {
+        let lines = shape.thickness.filter { $0 < 1.1 * shape.unit }.map { $0 * 2.0 }.sorted()
+        if lines.isEmpty {
+            return 1.33 * shape.unit
+        }
+        return lines[lines.count / 2]
+    }
+
+    private static func styledCoverage(_ look: String, amount: Float, shape: StyleShape) -> [Float]? {
+        let unit = shape.unit
+        let width = shape.width
+        let height = shape.height
+        let count = width * height
+        var result = [Float](repeating: 0.0, count: count)
+        switch look {
+        case "bold":
+            // Every part grows by `amount`, but not into the gap it shares with another part,
+            // and not so far into a hole that the hole closes.
+            let grow = amount * unit
+            let gap = 0.8 * unit
+            let (near, second) = nearestParts(shape)
+            let space = shape.inside.map { !$0 }
+            let (holes, holeCount) = connectedParts(space, width: width, height: height, diagonal: false)
+            var limits = [Float](repeating: grow, count: holeCount + 1)
+            if holeCount > 0 {
+                var open = [Bool](repeating: false, count: holeCount + 1)
+                for x in 0 ..< width {
+                    open[Int(holes[x])] = true
+                    open[Int(holes[(height - 1) * width + x])] = true
+                }
+                for y in 0 ..< height {
+                    open[Int(holes[y * width])] = true
+                    open[Int(holes[y * width + width - 1])] = true
+                }
+                var deepest = [Float](repeating: 0.0, count: holeCount + 1)
+                for index in 0 ..< count where !shape.inside[index] {
+                    let hole = Int(holes[index])
+                    deepest[hole] = max(deepest[hole], near[index])
+                }
+                for hole in 1 ... holeCount where !open[hole] {
+                    limits[hole] = min(grow, max(0.0, deepest[hole] - gap * 0.5))
+                }
+            }
+            for index in 0 ..< count {
+                if shape.inside[index] {
+                    result[index] = 1.0
+                    continue
+                }
+                let apart = min(1.0, max(0.0, second[index] - near[index] - gap + 0.5))
+                result[index] = coverage(near[index] - limits[Int(holes[index])]) * apart
+            }
+        case "thin":
+            // Every part loses up to `amount` from each side, and never more than half of its
+            // thickest place: a line gets lighter without breaking.
+            for (index, part) in shape.parts.enumerated() {
+                let shrink = min(amount * unit, 0.45 * shape.thickness[index])
+                for sample in 0 ..< count {
+                    result[sample] = max(result[sample], coverage(part[sample] + shrink))
+                }
+            }
+        case "outline", "duotone":
+            // Shapes become their outline, drawn with the icon's own stroke; lines stay lines.
+            // Duotone keeps the inside, lighter.
+            let stroke = look == "outline" ? lineWidth(shape) * amount : lineWidth(shape)
+            let fill: Float = look == "duotone" ? amount : 0.0
+            for (index, part) in shape.parts.enumerated() {
+                let filled = shape.thickness[index] > stroke * 0.9
+                for sample in 0 ..< count {
+                    let value: Float
+                    if filled {
+                        let inner = coverage(part[sample] + stroke)
+                        value = max(0.0, coverage(part[sample]) - inner) + fill * inner
+                    } else {
+                        value = coverage(part[sample])
+                    }
+                    result[sample] = max(result[sample], value)
+                }
+            }
+        case "glow":
+            // A soft light around the icon, a hair away from it, fading out before the edge
+            // of the box so it is never cut straight.
+            let (near, _) = nearestParts(shape)
+            let gap = 0.45 * unit
+            let radius = amount * unit
+            for index in 0 ..< count {
+                let x = index % width
+                let y = index / width
+                let beyond = near[index] - gap
+                let t = max(0.0, beyond) / radius
+                var light = 0.42 * exp(-3.0 * t * t) * min(1.0, max(0.0, beyond + 0.5))
+                let edge = Float(min(min(x, width - 1 - x), min(y, height - 1 - y))) / (radius * 0.8)
+                light *= pow(min(1.0, max(0.0, edge)), 1.5)
+                result[index] = max(coverage(near[index]), light)
+            }
+        case "halo":
+            // A fine ring around the icon, `amount` away from it.
+            let (near, _) = nearestParts(shape)
+            let gap = amount * unit
+            let ring = 0.55 * unit
+            for index in 0 ..< count {
+                let echo = max(0.0, coverage(near[index] - gap - ring) - coverage(near[index] - gap))
+                result[index] = max(coverage(near[index]), 0.5 * echo)
+            }
+        case "depth":
+            // The icon over a lighter copy of itself stretched down and to the right.
+            let (near, _) = nearestParts(shape)
+            var crisp = [Float](repeating: 0.0, count: count)
+            for index in 0 ..< count {
+                crisp[index] = coverage(near[index])
+            }
+            var shadow = [Float](repeating: 0.0, count: count)
+            let steps = max(1, Int(amount * unit))
+            for step in 1 ... steps {
+                let offset = Int((Float(step) * 0.7071).rounded())
+                if offset == 0 || offset >= width || offset >= height {
+                    continue
+                }
+                for y in offset ..< height {
+                    for x in offset ..< width {
+                        let index = y * width + x
+                        shadow[index] = max(shadow[index], crisp[(y - offset) * width + (x - offset)])
+                    }
+                }
+            }
+            for index in 0 ..< count {
+                result[index] = max(crisp[index], 0.35 * shadow[index])
+            }
+        default:
             return nil
         }
-        context.interpolationQuality = .none
-        context.draw(small, in: CGRect(x: -padX, y: -padY, width: CGFloat(columns * cell), height: CGFloat(lines * cell)))
-        return context.makeImage()
+        return result
+    }
+
+    /// Blocks of `cell` pixels on a grid centred on the icon, each one on or off by how much of
+    /// it the icon covers and in the average colour of what it covers. A low cut keeps a thin
+    /// line whole.
+    private static func pixelated(_ pixels: Pixels, cell: Int) -> Pixels {
+        let width = pixels.width
+        let height = pixels.height
+        var minX = width
+        var minY = height
+        var maxX = -1
+        var maxY = -1
+        for y in 0 ..< height {
+            for x in 0 ..< width where pixels.data[(y * width + x) * 4 + 3] > 5 {
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+        var output = Pixels(width: width, height: height, data: [UInt8](repeating: 0, count: width * height * 4))
+        guard maxX >= minX, maxY >= minY else {
+            return output
+        }
+        let centerX = Double(minX + maxX + 1) * 0.5
+        let centerY = Double(minY + maxY + 1) * 0.5
+        let shiftX = ((Int(centerX.rounded()) % cell) + cell) % cell
+        let shiftY = ((Int(centerY.rounded()) % cell) + cell) % cell
+        let area = Float(cell * cell)
+        var cellY = shiftY - cell
+        while cellY < height {
+            var cellX = shiftX - cell
+            while cellX < width {
+                var alpha: Float = 0.0
+                var red: Float = 0.0
+                var green: Float = 0.0
+                var blue: Float = 0.0
+                for y in max(0, cellY) ..< min(height, cellY + cell) {
+                    for x in max(0, cellX) ..< min(width, cellX + cell) {
+                        let offset = (y * width + x) * 4
+                        red += Float(pixels.data[offset])
+                        green += Float(pixels.data[offset + 1])
+                        blue += Float(pixels.data[offset + 2])
+                        alpha += Float(pixels.data[offset + 3])
+                    }
+                }
+                if alpha / 255.0 / area >= 0.22 {
+                    let r = UInt8(min(255.0, red / alpha * 255.0))
+                    let g = UInt8(min(255.0, green / alpha * 255.0))
+                    let b = UInt8(min(255.0, blue / alpha * 255.0))
+                    for y in max(0, cellY) ..< min(height, cellY + cell) {
+                        for x in max(0, cellX) ..< min(width, cellX + cell) {
+                            let offset = (y * width + x) * 4
+                            output.data[offset] = r
+                            output.data[offset + 1] = g
+                            output.data[offset + 2] = b
+                            output.data[offset + 3] = 255
+                        }
+                    }
+                }
+                cellX += cell
+            }
+            cellY += cell
+        }
+        return output
     }
 }
 

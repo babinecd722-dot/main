@@ -163,13 +163,13 @@ func aorusAIGlassBorder(palette: AorusAIPalette) -> UIColor {
 /// every heading in New York, the system serif, which is a handsome face and belongs to
 /// no other screen in this application.
 func aorusAITitleFont(size: CGFloat, weight: UIFont.Weight = .semibold) -> UIFont {
-    return UIFont.systemFont(ofSize: size, weight: weight)
+    return aorusUIFont(size, weight)
 }
 
 /// A monospaced digit face for the dictation timer, so the elapsed time does not
 /// jitter horizontally while it counts.
 func aorusAIMonoFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
-    return UIFont.monospacedDigitSystemFont(ofSize: size, weight: weight)
+    return aorusDigitsFont(size, weight)
 }
 
 /// Where a row sits inside a grouped card, which corners it rounds.
@@ -350,7 +350,7 @@ public final class AorusAIWorkTrailView: UIView {
             super.init(frame: frame)
             isUserInteractionEnabled = false
             for label in [base, highlight] {
-                label.font = .systemFont(ofSize: 12.5, weight: .medium)
+                label.font = aorusUIFont(12.5, .medium)
                 // One line, always. A phase the agent announces can be a whole sentence,
                 // and wrapping it made a chat row two lines tall and changed height under
                 // the reader as the phases went by. The tail is cut instead; the full text
@@ -554,9 +554,9 @@ public final class AorusAIWorkTrailView: UIView {
         case .edited: verb = aorusAILocalized("Изменён", "Edited")
         case .deleted: verb = aorusAILocalized("Удалён", "Deleted")
         }
-        let font = UIFont.systemFont(ofSize: 12.0)
+        let font = aorusUIFont(12.0)
         // Monospaced digits so a column of files lines its counts up instead of dancing.
-        let countFont = UIFont.monospacedDigitSystemFont(ofSize: 12.0, weight: .medium)
+        let countFont = aorusDigitsFont(12.0, .medium)
         let result = NSMutableAttributedString(
             string: "\(verb) \(file.displayName) ",
             attributes: [.font: font, .foregroundColor: palette.secondary]

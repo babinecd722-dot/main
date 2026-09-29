@@ -1703,9 +1703,10 @@ public final class AorusWallChatContents: NSObject, ChatCustomContentsProtocol {
             controller.navigationItem.leftBarButtonItem?.title = aorusL10n.wallRefresh
 
             // The tab bar draws plain images untinted, so recolour the house on theme changes.
+            // A plugin's icons reach it the way they reach Telegram's tabs: replaced or styled.
             let tabBarTheme = presentationData.theme.rootController.tabBar
-            controller.tabBarItem.image = aorusFilledHouseTabImage(color: tabBarTheme.iconColor)
-            controller.tabBarItem.selectedImage = aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor)
+            controller.tabBarItem.image = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.iconColor), named: "AorusGram/Tabs/Wall")
+            controller.tabBarItem.selectedImage = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor), named: "AorusGram/Tabs/Wall")
         })
     }
 
@@ -1833,7 +1834,7 @@ public func makeAorusWallController(context: AccountContext) -> ViewController {
 
     controller.tabBarItem.title = AorusL10n.current.wallTitle
     let tabBarTheme = context.sharedContext.currentPresentationData.with { $0 }.theme.rootController.tabBar
-    controller.tabBarItem.image = aorusFilledHouseTabImage(color: tabBarTheme.iconColor)
-    controller.tabBarItem.selectedImage = aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor)
+    controller.tabBarItem.image = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.iconColor), named: "AorusGram/Tabs/Wall")
+    controller.tabBarItem.selectedImage = AorusPluginIconValues.own(aorusFilledHouseTabImage(color: tabBarTheme.selectedIconColor), named: "AorusGram/Tabs/Wall")
     return controller
 }

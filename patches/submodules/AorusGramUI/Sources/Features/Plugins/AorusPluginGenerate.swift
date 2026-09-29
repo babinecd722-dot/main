@@ -100,11 +100,11 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         glyph.tintColor = accent
         glyph.contentMode = .center
         titleLabel.text = AorusPluginGenerateText.title
-        titleLabel.font = .systemFont(ofSize: 22, weight: .bold)
+        titleLabel.font = aorusUIFont(22, .bold)
         titleLabel.textColor = theme.list.itemPrimaryTextColor
         titleLabel.textAlignment = .center
         subtitleLabel.text = AorusPluginGenerateText.subtitle
-        subtitleLabel.font = .systemFont(ofSize: 15)
+        subtitleLabel.font = aorusUIFont(15)
         subtitleLabel.textColor = theme.list.itemSecondaryTextColor
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
@@ -115,14 +115,14 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         field.layer.borderWidth = 1
         field.layer.borderColor = accent.withAlphaComponent(0.35).cgColor
         textView.backgroundColor = .clear
-        textView.font = .systemFont(ofSize: 17)
+        textView.font = aorusUIFont(17)
         textView.textColor = theme.list.itemPrimaryTextColor
         textView.tintColor = accent
         textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 52)
         textView.delegate = self
         textView.returnKeyType = .default
         placeholder.text = AorusPluginGenerateText.placeholder
-        placeholder.font = .systemFont(ofSize: 17)
+        placeholder.font = aorusUIFont(17)
         placeholder.textColor = theme.list.itemSecondaryTextColor.withAlphaComponent(0.7)
         placeholder.numberOfLines = 0
         sendButton.setImage(UIImage(systemName: "arrow.up.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 32, weight: .semibold)), for: .normal)
@@ -136,7 +136,7 @@ final class AorusPluginGenerateController: UIViewController, UITextViewDelegate 
         field.addSubview(sendButton)
         field.addSubview(spinner)
 
-        errorLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        errorLabel.font = aorusUIFont(14, .medium)
         errorLabel.textColor = theme.list.itemDestructiveColor
         errorLabel.textAlignment = .center
         errorLabel.numberOfLines = 2

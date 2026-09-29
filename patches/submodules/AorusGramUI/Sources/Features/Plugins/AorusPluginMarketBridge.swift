@@ -138,7 +138,7 @@ private final class AorusPluginMarketAvatarView: UIView, AorusPluginMarketAvatar
         self.context = context
         self.theme = theme
         self.side = side
-        self.avatarNode = AvatarNode(font: .systemFont(ofSize: floor(side * 0.4), weight: .semibold))
+        self.avatarNode = AvatarNode(font: aorusUIFont(floor(side * 0.4), .semibold))
         super.init(frame: CGRect(x: 0, y: 0, width: side, height: side))
         addSubview(avatarNode.view)
     }

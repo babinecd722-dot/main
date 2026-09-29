@@ -1612,7 +1612,7 @@ private final class AorusAnimatedProfileImportHUD: UIView {
 
         self.label.text = text
         self.label.textColor = .white
-        self.label.font = .systemFont(ofSize: 15.0, weight: .semibold)
+        self.label.font = aorusUIFont(15.0, .semibold)
         self.label.textAlignment = .center
         self.label.numberOfLines = 2
         self.label.translatesAutoresizingMaskIntoConstraints = false
@@ -2005,7 +2005,7 @@ private final class AorusAnimatedProfileGalleryCell: UICollectionViewCell {
         self.kindView.layer.cornerRadius = 9.0
         self.contentView.addSubview(self.kindView)
         self.durationLabel.textColor = .white
-        self.durationLabel.font = .monospacedDigitSystemFont(ofSize: 11.0, weight: .semibold)
+        self.durationLabel.font = aorusDigitsFont(11.0, .semibold)
         self.durationLabel.textAlignment = .center
         self.kindView.contentView.addSubview(self.durationLabel)
     }
@@ -2097,7 +2097,7 @@ private final class AorusAnimatedProfileMediaGalleryController: UIViewController
 
         self.emptyLabel.text = self.l10n.animatedProfileGalleryEmpty
         self.emptyLabel.textColor = .secondaryLabel
-        self.emptyLabel.font = .systemFont(ofSize: 16.0, weight: .medium)
+        self.emptyLabel.font = aorusUIFont(16.0, .medium)
         self.emptyLabel.textAlignment = .center
         self.emptyLabel.numberOfLines = 2
         self.emptyLabel.isHidden = !self.items.isEmpty
@@ -2268,19 +2268,19 @@ private final class AorusAnimatedProfileCropController: UIViewController, UIScro
 
         self.titleLabel.text = self.l10n.animatedProfileCropTitle
         self.titleLabel.textColor = .white
-        self.titleLabel.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        self.titleLabel.font = aorusUIFont(17.0, .semibold)
         self.titleLabel.textAlignment = .center
         self.view.addSubview(self.titleLabel)
 
         self.cancelButton.setTitle(self.l10n.cancel, for: .normal)
         self.cancelButton.setTitleColor(.white, for: .normal)
-        self.cancelButton.titleLabel?.font = .systemFont(ofSize: 17.0)
+        self.cancelButton.titleLabel?.font = aorusUIFont(17.0)
         self.cancelButton.addTarget(self, action: #selector(self.cancelPressed), for: .touchUpInside)
         self.view.addSubview(self.cancelButton)
 
         self.applyButton.setTitle(self.l10n.animatedProfileCropApply, for: .normal)
         self.applyButton.setTitleColor(UIColor(red: 0.67, green: 0.31, blue: 1.0, alpha: 1.0), for: .normal)
-        self.applyButton.titleLabel?.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        self.applyButton.titleLabel?.font = aorusUIFont(17.0, .semibold)
         self.applyButton.addTarget(self, action: #selector(self.applyPressed), for: .touchUpInside)
         self.view.addSubview(self.applyButton)
 
@@ -2337,7 +2337,7 @@ private final class AorusAnimatedProfileCropController: UIViewController, UIScro
 
         self.hintLabel.text = self.l10n.animatedProfileCropHint
         self.hintLabel.textColor = UIColor.white.withAlphaComponent(0.65)
-        self.hintLabel.font = .systemFont(ofSize: 14.0, weight: .medium)
+        self.hintLabel.font = aorusUIFont(14.0, .medium)
         self.hintLabel.textAlignment = .center
         self.view.addSubview(self.hintLabel)
     }

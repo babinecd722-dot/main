@@ -75,7 +75,7 @@ enum AorusAIMentionRenderer {
     private static let gap = "\u{2009}"
 
     private static func pill(for mention: AorusAIMention, font: UIFont, accent: UIColor, link: Bool) -> NSAttributedString {
-        let nameFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+        let nameFont = aorusUIFont(font.pointSize, .semibold)
         let size = avatarSize(for: font)
         let image = AorusAIMentionAvatarCache.shared.image(for: mention, diameter: size, ring: accent)
         let value = NSMutableAttributedString()
@@ -203,7 +203,7 @@ enum AorusAIMentionRenderer {
         let value = NSMutableAttributedString(string: source, attributes: [.font: font, .foregroundColor: color])
         let matches = AorusAIMentionScanner.matches(in: source)
         guard !matches.isEmpty else { return value }
-        let nameFont = UIFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+        let nameFont = aorusUIFont(font.pointSize, .semibold)
         for match in matches.reversed() {
             guard let cached = AorusAIMentionStore.shared.lookup(match.username) else { continue }
             guard NSMaxRange(match.range) <= value.length else { continue }
@@ -486,7 +486,7 @@ final class AorusAIMentionAvatarCache {
             stroke.lineWidth = inset
             ring.setStroke()
             stroke.stroke()
-            let font = UIFont.systemFont(ofSize: max(7.0, diameter * 0.42), weight: .semibold)
+            let font = aorusUIFont(max(7.0, diameter * 0.42), .semibold)
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ring]
             let bounds = (text as NSString).size(withAttributes: attributes)
             (text as NSString).draw(
@@ -670,7 +670,7 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         let size = (self.font?.pointSize ?? 16.5) * 4.0
         guard let image = AorusAIMathTypesetter.image(
             for: atoms,
-            font: UIFont.systemFont(ofSize: size),
+            font: aorusUIFont(size),
             // The page's ink and the page's colour. The text view's own background is clear —
             // it is the page showing through — and filling with clear is what saved a
             // transparent picture, which Photos shows as a white square.

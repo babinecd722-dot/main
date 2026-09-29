@@ -96,14 +96,14 @@ public final class AorusCodeComposeViewController: UIViewController {
 
         // Title
         titleLabel.text = "AorusCode"
-        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        titleLabel.font = aorusUIFont(17, .semibold)
         titleLabel.textAlignment = .center
         titleLabel.textColor = theme.list.itemPrimaryTextColor
         view.addSubview(titleLabel)
 
         // Cancel
         cancelButton.setTitle(aorusL("Отмена", "Cancel"), for: .normal)
-        cancelButton.titleLabel?.font = .systemFont(ofSize: 17)
+        cancelButton.titleLabel?.font = aorusUIFont(17)
         cancelButton.setTitleColor(theme.list.itemAccentColor, for: .normal)
         cancelButton.addTarget(self, action: #selector(onCancel), for: .touchUpInside)
         view.addSubview(cancelButton)
@@ -127,7 +127,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         contentView.addSubview(coverCard)
 
         coverHeaderLabel.text = aorusL("Видимый текст", "Visible Text")
-        coverHeaderLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        coverHeaderLabel.font = aorusUIFont(12, .semibold)
         coverHeaderLabel.textColor = theme.list.itemSecondaryTextColor
         coverHeaderLabel.textAlignment = .left
         contentView.addSubview(coverHeaderLabel)
@@ -147,7 +147,7 @@ public final class AorusCodeComposeViewController: UIViewController {
         contentView.addSubview(secretCard)
 
         secretHeaderLabel.text = aorusL("Скрытое сообщение", "Hidden Message")
-        secretHeaderLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        secretHeaderLabel.font = aorusUIFont(12, .semibold)
         secretHeaderLabel.textColor = theme.list.itemAccentColor
         contentView.addSubview(secretHeaderLabel)
 
@@ -160,14 +160,14 @@ public final class AorusCodeComposeViewController: UIViewController {
 
         // Hint
         hintLabel.text = aorusL("Скрытое сообщение видят только пользователи AorusGram — под спойлером.", "Hidden message is only visible to AorusGram users — under a spoiler.")
-        hintLabel.font = .systemFont(ofSize: 12)
+        hintLabel.font = aorusUIFont(12)
         hintLabel.textColor = theme.list.itemSecondaryTextColor
         hintLabel.numberOfLines = 0
         contentView.addSubview(hintLabel)
 
         // Send button
         sendButton.setTitle(aorusL("Отправить", "Send"), for: .normal)
-        sendButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        sendButton.titleLabel?.font = aorusUIFont(16, .semibold)
         sendButton.setTitleColor(.white, for: .normal)
         sendButton.setTitleColor(UIColor(white: 1.0, alpha: 0.5), for: .disabled)
         sendButton.layer.cornerRadius = 14
@@ -182,7 +182,7 @@ public final class AorusCodeComposeViewController: UIViewController {
     }
 
     private func configureTextView(_ tv: UITextView) {
-        tv.font = .systemFont(ofSize: 16)
+        tv.font = aorusUIFont(16)
         tv.backgroundColor = .clear
         tv.textColor = theme.list.itemPrimaryTextColor
         tv.tintColor = theme.list.itemAccentColor
@@ -198,7 +198,7 @@ public final class AorusCodeComposeViewController: UIViewController {
     // `textView.text` is always genuine user content — no placeholder/flag desync.
     private func configurePlaceholder(_ label: UILabel, text: String, in card: UIView) {
         label.text = text
-        label.font = .systemFont(ofSize: 16)
+        label.font = aorusUIFont(16)
         label.textColor = theme.list.itemPlaceholderTextColor
         label.numberOfLines = 0
         label.isUserInteractionEnabled = false

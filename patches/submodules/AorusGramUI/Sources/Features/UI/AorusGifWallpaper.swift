@@ -341,7 +341,7 @@ public final class AorusGifWallpaperPicker: UIViewController, UICollectionViewDa
         let label = UILabel()
         label.text = text
         label.textColor = .secondaryLabel
-        label.font = .systemFont(ofSize: 16.0, weight: .medium)
+        label.font = aorusUIFont(16.0, .medium)
         label.textAlignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
         self.view.addSubview(label)
@@ -459,7 +459,7 @@ private final class AorusGifCell: UICollectionViewCell {
 
         let badge = UILabel()
         badge.text = "GIF"
-        badge.font = .systemFont(ofSize: 9.0, weight: .heavy)
+        badge.font = aorusUIFont(9.0, .heavy)
         badge.textColor = .white
         badge.backgroundColor = UIColor.black.withAlphaComponent(0.55)
         badge.textAlignment = .center

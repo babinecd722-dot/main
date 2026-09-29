@@ -80,7 +80,7 @@ private final class AorusAIWorkTrailController: UIViewController, UITableViewDat
         super.viewDidLoad()
         view.backgroundColor = palette.background
 
-        titleLabel.font = .systemFont(ofSize: 20.0, weight: .bold)
+        titleLabel.font = aorusUIFont(20.0, .bold)
         titleLabel.textColor = palette.label
         titleLabel.textAlignment = .center
         titleLabel.numberOfLines = 1
@@ -265,7 +265,7 @@ private final class PhaseCell: UITableViewCell {
         rail.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rail)
 
-        label.font = .systemFont(ofSize: 15.0)
+        label.font = aorusUIFont(15.0)
         label.numberOfLines = 0
         label.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(label)
@@ -318,7 +318,7 @@ private final class PhaseCell: UITableViewCell {
         // The task being worked on reads brighter than the ones behind it — that is the
         // whole difference, and it is carried by weight and ink rather than by colour.
         label.textColor = isActive ? palette.label : palette.secondary
-        label.font = .systemFont(ofSize: 15.0, weight: isActive ? .medium : .regular)
+        label.font = aorusUIFont(15.0, isActive ? .medium : .regular)
         glyph.tintColor = palette.secondary
         glyph.isHidden = isActive
         spinner.isHidden = !isActive
@@ -377,7 +377,7 @@ private final class FileCell: UITableViewCell {
             holder.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -1.0)
         ])
 
-        label.font = .systemFont(ofSize: 12.0)
+        label.font = aorusUIFont(12.0)
         label.numberOfLines = 0
     }
 

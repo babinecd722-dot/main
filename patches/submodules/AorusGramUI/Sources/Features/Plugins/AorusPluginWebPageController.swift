@@ -521,21 +521,21 @@ private final class AorusPluginWebPageErrorView: UIView {
 
         let title = UILabel()
         title.text = aorusL("Не удалось открыть страницу", "Couldn't open the page")
-        title.font = UIFont.systemFont(ofSize: 20, weight: .semibold)
+        title.font = aorusUIFont(20, .semibold)
         title.textColor = theme.list.itemPrimaryTextColor
         title.textAlignment = .center
         title.numberOfLines = 0
 
         let body = UILabel()
         body.text = aorusL("Проверьте подключение и попробуйте ещё раз.", "Check your connection and try again.")
-        body.font = UIFont.systemFont(ofSize: 15)
+        body.font = aorusUIFont(15)
         body.textColor = theme.list.itemSecondaryTextColor
         body.textAlignment = .center
         body.numberOfLines = 0
 
         let button = UIButton(type: .system)
         button.setTitle(aorusL("Повторить", "Try Again"), for: .normal)
-        button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        button.titleLabel?.font = aorusUIFont(17, .semibold)
         button.tintColor = theme.list.itemAccentColor
         button.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
 

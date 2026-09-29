@@ -44,16 +44,16 @@ public final class DeletedMessageBubbleView: UIView {
         trashIcon.contentMode = .scaleAspectFit
 
         // Текст
-        textLabel.font          = .systemFont(ofSize: 14)
+        textLabel.font          = aorusUIFont(14)
         textLabel.textColor     = UIColor.label.withAlphaComponent(0.5)
         textLabel.numberOfLines = 0
 
         // Имя
-        nameLabel.font      = .systemFont(ofSize: 11, weight: .semibold)
+        nameLabel.font      = aorusUIFont(11, .semibold)
         nameLabel.textColor = UIColor.systemGray
 
         // Время удаления
-        timeLabel.font      = .systemFont(ofSize: 10)
+        timeLabel.font      = aorusUIFont(10)
         timeLabel.textColor = UIColor.systemGray2
 
         [nameLabel, trashIcon, textLabel, timeLabel].forEach {
@@ -103,10 +103,10 @@ public final class DeletedMessageBubbleView: UIView {
 
         if msg.text.isEmpty {
             textLabel.text = aorusL("Медиафайл", "Media")
-            textLabel.font = .italicSystemFont(ofSize: 14)
+            textLabel.font = aorusItalicFont(14)
         } else {
             textLabel.text = msg.text
-            textLabel.font = .systemFont(ofSize: 14)
+            textLabel.font = aorusUIFont(14)
         }
 
         let aorusL10n = AorusL10n.current

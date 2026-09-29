@@ -1798,8 +1798,8 @@ def main() -> None:
         "private func aorusFilledHouseTabImage(color: UIColor)",
         'UIImage(systemName: "house.fill", withConfiguration: configuration)',
         "context.cgContext.setBlendMode(.clear)",
-        "controller.tabBarItem.image = aorusFilledHouseTabImage(",
-        "controller.tabBarItem.selectedImage = aorusFilledHouseTabImage(",
+        "controller.tabBarItem.image = AorusPluginIconValues.own(aorusFilledHouseTabImage(",
+        "controller.tabBarItem.selectedImage = AorusPluginIconValues.own(aorusFilledHouseTabImage(",
         # The tab bar draws plain images with `tintColor: nil` (only Lottie-backed stock tabs
         # get themed), so the house must be rendered in the theme colour and refreshed when
         # the theme changes — otherwise it stays the inherited tint (white) forever.
@@ -4072,6 +4072,8 @@ def main() -> None:
     display_values = tg / "submodules/Display/Source/AorusPluginAppearanceValues.swift"
     settings_resources = tg / "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift"
     profile_header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
+    # Names and titles over group messages are drawn by the bubble's own layout.
+    bubble_node = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
     if not appearance_core.is_file() or not display_values.is_file():
         err.append("PluginAppearance: the appearance catalogue or its reader is missing")
     else:
@@ -4079,12 +4081,19 @@ def main() -> None:
         core_text = appearance_core.read_text(encoding="utf-8")
         drawn = "".join(
             path.read_text(encoding="utf-8")
-            for path in (presentation_data, glass_component, settings_resources, profile_header)
+            for path in (presentation_data, glass_component, settings_resources, profile_header, bubble_node)
         )
         if "aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme))" not in drawn or "aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue))" not in drawn:
             err.append("PluginAppearance: the theme is built without the plugin look")
         if "aorusgram.pluginAppearanceChanged" not in drawn:
             err.append("PluginAppearance: a changed look does not rebuild the theme")
+        # The person's own look from Message Settings is laid over the plugins' in the one
+        # table everything reads.
+        display_text = display_values.read_text(encoding="utf-8")
+        if 'messageLookKey = "aorusgram_message_look"' not in display_text or "values.merge(own" not in display_text:
+            err.append("PluginAppearance: the look set in Message Settings is not read")
+        if 'defaultsKey = "aorusgram_message_look"' not in core_text:
+            err.append("PluginAppearance: Message Settings and the drawing code keep the look under different keys")
         for name in _re_look.findall(r'Key\("([^"]+)"', core_text):
             if "\\(side)" in name:
                 tail = name.split(".", 2)[2]
@@ -4126,8 +4135,29 @@ def main() -> None:
             slot_assets += _re_icons.findall(r'"([^"]+)"', body)
         if len(slot_assets) != len(set(slot_assets)):
             err.append("PluginIcons: an icon belongs to two slots")
+        # AorusGram's own icons are drawn, not in the catalogue: each has to be one the core
+        # lists, and a place in the tree has to ask for it by that name, or its slot does
+        # nothing.
+        core_text = icons_core.read_text(encoding="utf-8")
+        own_block = _re_icons.search(r"ownIconNames = \[(.*?)\]", core_text, _re_icons.S)
+        own_names = set(_re_icons.findall(r'"([^"]+)"', own_block.group(1))) if own_block else set()
+        if not own_names:
+            err.append("PluginIcons: the core lists no own icons")
+        asked: set[str] = set()
+        for swift_file in (tg / "submodules").rglob("*.swift"):
+            try:
+                text = swift_file.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "AorusPluginIconValues.own(" in text:
+                asked.update(_re_icons.findall(r'named: "(AorusGram/[^"]+)"', text))
         for asset in slot_assets:
-            if not (catalogue_root / f"{asset}.imageset").is_dir():
+            if asset.startswith("AorusGram/"):
+                if asset not in own_names:
+                    err.append(f"PluginIcons: slot icon {asset} is not one of the core's own icons")
+                elif asset not in asked:
+                    err.append(f"PluginIcons: nothing draws the own icon {asset} through AorusPluginIconValues.own")
+            elif not (catalogue_root / f"{asset}.imageset").is_dir():
                 err.append(f"PluginIcons: slot icon {asset} is not in Telegram's catalogue")
     else:
         err.append("PluginIcons: the icon catalogue is missing")

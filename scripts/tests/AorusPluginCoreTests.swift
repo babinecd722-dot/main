@@ -1765,6 +1765,51 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(AorusPluginAppearance.validate(["settings.iconRadius": NSNumber(value: 16)]).rejections.count == 1, "a tile corner past round is refused")
     expect(AorusPluginAppearance.validate(["settings.iconRadius@dark": NSNumber(value: 4)]).rejections.count == 1, "a tile corner is the same in dark and light")
 
+    // Names and titles over group messages, and the look the person sets in Message Settings.
+    let messageKeys = AorusPluginAppearance.validate([
+        "message.name@dark": "FF6AD5",
+        "message.nameWeight": "bold",
+        "message.hideName": NSNumber(value: false),
+        "message.rank": "5AF2E0",
+        "message.rankPlate": NSNumber(value: true),
+        "message.hideRank": NSNumber(value: false),
+        "message.rankCase": "upper",
+    ])
+    expect(messageKeys.rejections.isEmpty && messageKeys.values.count == 7, "names and titles take their keys")
+    expect(AorusPluginAppearance.validate(["message.rankCase": "title"]).rejections.count == 1, "a letter case the app does not draw is refused")
+    expect(AorusPluginAppearance.validate(["message.nameWeight@dark": "bold"]).rejections.count == 1, "a name's weight is the same in dark and light")
+    expect(AorusMessageLook.storageKey("bubble.incoming.fill", dark: true) == "bubble.incoming.fill@dark" && AorusMessageLook.storageKey("message.rank", dark: false) == "message.rank@light", "a colour is kept for the appearance in use")
+    expect(AorusMessageLook.storageKey("bubble.radius", dark: true) == "bubble.radius" && AorusMessageLook.storageKey("message.rankCase", dark: true) == "message.rankCase", "the shape and the names are kept for both")
+    let styledBaseKeys = Set(AorusMessageLook.styledKeys)
+    expect(styledBaseKeys.allSatisfy { AorusPluginAppearance.catalogByName[$0] != nil }, "a ready-made style only replaces keys the catalogue has")
+    for preset in AorusMessageLook.presets {
+        expect(AorusPluginAppearance.validate(preset.values).rejections.isEmpty, "the \(preset.id) style passes the check")
+        expect(preset.values.keys.allSatisfy { styledBaseKeys.contains(AorusPluginAppearance.baseKey($0)) }, "the \(preset.id) style stays inside what a style replaces")
+    }
+    expect(AorusMessageLook.presets.first?.id == "classic" && AorusMessageLook.presets.first?.values.isEmpty == true, "the first style is Telegram's own")
+    let savedLook = UserDefaults.standard.dictionary(forKey: AorusMessageLook.defaultsKey)
+    UserDefaults.standard.removeObject(forKey: AorusMessageLook.defaultsKey)
+    var lookChanges = 0
+    let lookObserver = NotificationCenter.default.addObserver(forName: AorusPluginAppearance.didChangeNotification, object: nil, queue: nil) { _ in lookChanges += 1 }
+    expect(AorusMessageLook.set("bubble.incoming.fill", ["FFF4E6", "FFD6A5"], dark: false).isEmpty, "a gradient fill is kept")
+    expect(AorusMessageLook.set("font.chat", "large", dark: false).isEmpty, "the text size is kept")
+    expect((AorusMessageLook.value("bubble.incoming.fill", dark: false) as? [String]) == ["FFF4E6", "FFD6A5"] && AorusMessageLook.value("bubble.incoming.fill", dark: true) == nil, "a colour set in a light theme stays out of a dark one")
+    expect(AorusMessageLook.stored()["bubble.incoming.fill@light"] != nil, "it is stored for the light appearance")
+    expect(lookChanges == 2, "every change redraws the app once")
+    _ = AorusMessageLook.set("font.chat", "large", dark: false)
+    expect(lookChanges == 2, "setting what is already set redraws nothing")
+    let refused = AorusMessageLook.store(["bubble.incoming.fill": "FFF4E6", "no.such.key": "1"])
+    expect(refused.count == 1 && refused.first?.key == "no.such.key" && AorusMessageLook.stored()["font.chat"] as? String == "large", "a wrong key refuses the whole change and keeps what was there")
+    expect(AorusMessageLook.apply(preset: "neon").isEmpty, "a ready-made style applies")
+    expect((AorusMessageLook.stored()["bubble.incoming.fill@light"] as? [String]) == ["FBF3FF"] && AorusMessageLook.stored()["font.chat"] as? String == "large", "a style replaces the colours and keeps the text size")
+    expect(AorusMessageLook.value("message.rank", dark: true) as? String == "5AF2E0", "a style's colours reach the dark appearance too")
+    expect(AorusMessageLook.apply(preset: "classic").isEmpty && AorusMessageLook.stored().keys.sorted() == ["font.chat"], "the classic style takes the shape and colours back to Telegram's")
+    expect(!AorusMessageLook.apply(preset: "sparkle").isEmpty, "an unknown style is refused")
+    AorusMessageLook.reset()
+    expect(AorusMessageLook.stored().isEmpty && UserDefaults.standard.object(forKey: AorusMessageLook.defaultsKey) == nil, "reset leaves nothing stored")
+    NotificationCenter.default.removeObserver(lookObserver)
+    if let savedLook { UserDefaults.standard.set(savedLook, forKey: AorusMessageLook.defaultsKey) }
+
     // Icons in place of Telegram's: the catalogue, the check, the merge, and a plugin using them.
     expect(AorusPluginPermission.requestedBySource("aorus.icons.set({ 'tab.chats': 'star' });").contains(.appCustomization), "replacing an icon asks for app customization")
     expect(AorusPluginPermission.requestedBySource("aorus.icons.style('pixel');").contains(.appCustomization), "styling the icons asks for app customization")
@@ -1805,7 +1850,29 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(iconStyle?["look"] as? String == "pixel" && iconStyle?["amount"] as? Double == 2, "the style keeps its look and amount")
     expect((iconStyle?["names"] as? [String])?.contains("Chat List/Tabs/IconChats") == true && (iconStyle?["prefixes"] as? [String]) == ["Chat/Input/"], "a group becomes its icons and a folder stays a folder")
     let defaultStyle = AorusPluginIcons.validate(["*": "glow"], iconExists: iconExists).layer["*"] as? [String: Any]
-    expect(defaultStyle?["amount"] as? Double == 3 && (defaultStyle?["names"] as? [String])?.isEmpty == true, "a look alone reaches every icon at its standard strength")
+    expect(defaultStyle?["amount"] as? Double == 2.2 && (defaultStyle?["names"] as? [String])?.isEmpty == true, "a look alone reaches every icon at its standard strength")
+    expect(AorusPluginIcons.looks == ["pixel", "bold", "thin", "outline", "duotone", "glow", "halo", "depth"], "eight looks")
+    for look in AorusPluginIcons.looks {
+        let range = AorusPluginIcons.lookAmounts[look]
+        expect(range != nil && range!.minimum < range!.standard && range!.standard < range!.maximum, "\(look) has a range around its standard")
+        let standard = AorusPluginIcons.validate(["*": look], iconExists: iconExists).layer["*"] as? [String: Any]
+        expect(standard?["look"] as? String == look && standard?["amount"] as? Double == range?.standard, "\(look) alone takes its standard strength")
+        if let range {
+            let tooMuch = AorusPluginIcons.validate(["*": ["look": look, "amount": NSNumber(value: range.maximum + 0.5)]], iconExists: iconExists)
+            expect(tooMuch.layer.isEmpty && tooMuch.rejections.first?.reason.contains(look) == true, "\(look) past its range is refused by name")
+        }
+    }
+    // AorusGram's own icons are slots like Telegram's, reached by their groups, and drawn, so
+    // never loaded in place of another icon.
+    expect(AorusPluginIcons.ownIconNames.allSatisfy { name in AorusPluginIcons.catalog.contains { $0.assets == [name] } }, "every own icon has a slot")
+    expect(AorusPluginIcons.ownIconNames.allSatisfy { AorusPluginIcons.isIconName($0) && $0.hasPrefix("AorusGram/") }, "own icons are named under AorusGram/")
+    expect(AorusPluginIcons.catalogByName["tab.wall"]?.group == "tab" && AorusPluginIcons.catalogByName["menu.plugins"]?.group == "menu", "own icons sit in the groups they are part of")
+    let tabStyle = AorusPluginIcons.validate(["*": ["look": "pixel", "only": ["tab"]]], iconExists: { _ in true }).layer["*"] as? [String: Any]
+    expect((tabStyle?["names"] as? [String]).map { $0.contains("AorusGram/Tabs/Wall") && $0.contains("AorusGram/Tabs/Plugins") && $0.contains("Chat List/Tabs/IconChats") } == true, "a style for the tab bar reaches the Wall and plugin tabs too")
+    let wallReplaced = AorusPluginIcons.validate(["tab.wall": "house.fill"], iconExists: { _ in true }).layer["tab.wall"] as? [String: Any]
+    expect((wallReplaced?["targets"] as? [String]) == ["AorusGram/Tabs/Wall"], "an own icon can be replaced")
+    let ownAsAsset = AorusPluginIcons.validate(["header.back": ["asset": "AorusGram/Tabs/Wall"]], iconExists: { _ in true })
+    expect(ownAsAsset.layer.isEmpty && ownAsAsset.rejections.first?.key == "header.back", "an own icon is not an asset to draw from")
     let iconsBad = AorusPluginIcons.validate([
         "tab.chats": ["symbol": "Not A Symbol"],
         "input.send": ["pixels": ["##", "#"]],

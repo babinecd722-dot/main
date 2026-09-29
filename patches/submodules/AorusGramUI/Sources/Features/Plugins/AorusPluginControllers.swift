@@ -504,6 +504,7 @@ private final class AorusPluginDetailController: ViewController, UITableViewData
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
         cell.textLabel?.textColor = presentationData.theme.list.itemPrimaryTextColor
         if indexPath.section == 0 {
@@ -820,6 +821,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         let theme = presentationData.theme
         let row = sections[indexPath.section].rows[indexPath.row]
         let cell = UITableViewCell(style: row.isBanner ? .subtitle : .value1, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.backgroundColor = theme.list.itemBlocksBackgroundColor
         cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
         cell.detailTextLabel?.textColor = theme.list.itemSecondaryTextColor
@@ -827,7 +829,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         switch row {
         case .banner:
             cell.textLabel?.text = AorusPluginPublishText.banner
-            cell.textLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+            cell.textLabel?.font = aorusUIFont(17, .semibold)
             cell.detailTextLabel?.text = AorusPluginPublishText.bannerHint
             cell.imageView?.image = bannerThumbnail()
         case .name:
@@ -862,7 +864,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             cell.textLabel?.text = text
             cell.textLabel?.textColor = color
             cell.textLabel?.numberOfLines = 0
-            cell.textLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+            cell.textLabel?.font = aorusUIFont(15, .medium)
             cell.accessoryType = .none
             cell.selectionStyle = .none
         case .editor:
@@ -881,7 +883,7 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
             cell.textLabel?.text = AorusPluginMarketText.updating
             cell.textLabel?.textColor = theme.list.itemSecondaryTextColor
             cell.textLabel?.numberOfLines = 0
-            cell.textLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+            cell.textLabel?.font = aorusUIFont(15, .medium)
             cell.accessoryType = .none
             cell.selectionStyle = .none
             let spinner = UIActivityIndicatorView(style: .medium)
@@ -891,13 +893,13 @@ private final class AorusPluginMetadataController: ViewController, UITableViewDa
         case .publish:
             cell.textLabel?.text = AorusPluginPublishText.publish
             cell.textLabel?.textColor = isBanned ? theme.list.itemSecondaryTextColor : theme.list.itemAccentColor
-            cell.textLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+            cell.textLabel?.font = aorusUIFont(17, .semibold)
             cell.textLabel?.textAlignment = .center
             cell.accessoryType = .none
         case .delete:
             cell.textLabel?.text = AorusPluginMarketText.deletePlugin
             cell.textLabel?.textColor = isBanned ? theme.list.itemSecondaryTextColor : theme.list.itemDestructiveColor
-            cell.textLabel?.font = .systemFont(ofSize: 17, weight: .regular)
+            cell.textLabel?.font = aorusUIFont(17, .regular)
             cell.textLabel?.textAlignment = .center
             cell.accessoryType = .none
         }
@@ -1118,7 +1120,7 @@ private final class AorusPluginLongTextController: ViewController {
         textView.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
         textView.textColor = presentationData.theme.list.itemPrimaryTextColor
         textView.tintColor = presentationData.theme.list.itemAccentColor
-        textView.font = .systemFont(ofSize: 17)
+        textView.font = aorusUIFont(17)
         textView.layer.cornerRadius = 12
         textView.layer.cornerCurve = .continuous
         textView.textContainerInset = UIEdgeInsets(top: 14, left: 12, bottom: 14, right: 12)
@@ -1430,7 +1432,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         console.layer.borderColor = UIColor.separator.cgColor; console.layer.borderWidth = 1 / UIScreen.main.scale
         console.textContainerInset = UIEdgeInsets(top: 42, left: 16, bottom: 12, right: 16)
         consolePlaceholder.text = AorusPluginUIString.console.text
-        consolePlaceholder.font = .systemFont(ofSize: 13, weight: .semibold)
+        consolePlaceholder.font = aorusUIFont(13, .semibold)
         consolePlaceholder.textColor = .secondaryLabel
         consolePlaceholder.isHidden = true
         editorTools.axis = .horizontal; editorTools.distribution = .fillEqually; editorTools.backgroundColor = dark ? UIColor(white: 0.12, alpha: 0.94) : UIColor(white: 1, alpha: 0.96)
@@ -1483,7 +1485,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         }
     }
 
-    private func addTool(_ title: String, _ image: String, _ action: Selector) { let button = UIButton(type: .system); button.setImage(UIImage(systemName: image), for: .normal); button.setTitle(" " + title, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold); button.addTarget(self, action: action, for: .touchUpInside); editorTools.addArrangedSubview(button) }
+    private func addTool(_ title: String, _ image: String, _ action: Selector) { let button = UIButton(type: .system); button.setImage(UIImage(systemName: image), for: .normal); button.setTitle(" " + title, for: .normal); button.titleLabel?.font = aorusUIFont(12, .semibold); button.addTarget(self, action: action, for: .touchUpInside); editorTools.addArrangedSubview(button) }
 
     func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
         // A new line, a paste or a deletion of a whole selection ends the step it belongs to.
@@ -1986,8 +1988,8 @@ private final class AorusPluginCodeStyle {
 private final class AorusPluginLineGutter: UIView {
     weak var textView: UITextView?
 
-    private let font = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-    private let currentFont = UIFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+    private let font = aorusDigitsFont(12, .regular)
+    private let currentFont = aorusDigitsFont(12, .semibold)
     private var color = UIColor.secondaryLabel
     private var currentColor = UIColor.label
     private var band = UIColor.clear
@@ -2220,7 +2222,7 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
         tableView.backgroundColor = presentationData.theme.list.blocksBackgroundColor; tableView.dataSource = self; tableView.delegate = self
         emptyLabel.text = aorusL("У этого плагина нет настраиваемых параметров.", "This plugin has no configurable settings.")
         emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
-        emptyLabel.font = .systemFont(ofSize: 15)
+        emptyLabel.font = aorusUIFont(15)
         emptyLabel.textAlignment = .center
         emptyLabel.numberOfLines = 0
         tableView.backgroundView = emptyLabel
@@ -2248,10 +2250,11 @@ private final class AorusPluginSettingsController: ViewController, UITableViewDa
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let field = fields[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.textLabel?.text = field.title
         cell.detailTextLabel?.text = displayValue(for: field) ?? field.summary
         if field.kind == .section {
-            cell.textLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+            cell.textLabel?.font = aorusUIFont(14, .semibold)
             cell.textLabel?.textColor = .secondaryLabel
             cell.selectionStyle = .none
         } else if field.kind == .toggle {
@@ -2503,6 +2506,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let permission = AorusPluginPermission.allCases[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.textLabel?.text = permissionTitle(permission)
         cell.detailTextLabel?.text = permissionDescription(permission, requested: requested.contains(permission))
         cell.detailTextLabel?.numberOfLines = 0
@@ -2545,7 +2549,7 @@ private final class AorusPluginDocsController: ViewController {
     private let presentationData: PresentationData; private let textView = UITextView()
     init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text }
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override func loadDisplayNode() { displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor; textView.backgroundColor = .clear; textView.textColor = presentationData.theme.list.itemPrimaryTextColor; textView.font = .systemFont(ofSize: 15); textView.isEditable = false; textView.alwaysBounceVertical = true; textView.textContainerInset = UIEdgeInsets(top: 18, left: 18, bottom: 40, right: 18); textView.text = AorusPluginDocumentation.text; displayNode.view.addSubview(textView); displayNodeDidLoad() }
+    override func loadDisplayNode() { displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor; textView.backgroundColor = .clear; textView.textColor = presentationData.theme.list.itemPrimaryTextColor; textView.font = aorusUIFont(15); textView.isEditable = false; textView.alwaysBounceVertical = true; textView.textContainerInset = UIEdgeInsets(top: 18, left: 18, bottom: 40, right: 18); textView.text = AorusPluginDocumentation.text; displayNode.view.addSubview(textView); displayNodeDidLoad() }
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; transition.updateFrame(view: textView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)) }
 }
 
@@ -2756,7 +2760,7 @@ private enum AorusPluginDocumentation {
             aorus.icons.reset()
             const slots = aorus.icons.slots()
             const names = aorus.icons.assets('Chat List/')
-            Любую иконку Telegram можно заменить: по слоту — таббар, поле ввода, шапки, профиль, значки настроек, меню, все плюсы, звонки — или по имени из каталога, который перечисляет assets(). Замена — SF Symbol, пиксельная сетка с палитрой, символы или эмодзи, SVG path, PNG, другая иконка Telegram или пустое место; scale, rotate, flip и offset подгоняют её. Она рисуется в рамке исходной иконки и её цветом, поэтому тема и оформление красят и её. Стиль меняет все иконки сразу: pixel, bold, thin, outline и glow, only ограничивает его группами, слотами или папками. Таббар, микрофон, кнопки эмодзи и клавиатуры и кнопки профиля, которые Telegram анимирует, с заменой показываются неподвижными. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином; одна неверная иконка отклоняет изменение, и ошибка называет её. Нужно разрешение appCustomization; get, slots и assets его не требуют.
+            Любую иконку Telegram можно заменить: по слоту — таббар, поле ввода, шапки, профиль, значки настроек, меню, все плюсы, звонки — или по имени из каталога, который перечисляет assets(). Замена — SF Symbol, пиксельная сетка с палитрой, символы или эмодзи, SVG path, PNG, другая иконка Telegram или пустое место; scale, rotate, flip и offset подгоняют её. Она рисуется в рамке исходной иконки и её цветом, поэтому тема и оформление красят и её. Стиль меняет все иконки сразу: pixel, bold, thin, outline, duotone, glow, halo и depth, only ограничивает его группами, слотами или папками; линии толстеют и тонеют ровно, не сливаясь. Стиль и замены доходят и до своих иконок AorusGram — вкладки Wall, вкладок, строк настроек и действий плагинов, кнопки призрака. Таббар, микрофон, кнопки эмодзи и клавиатуры и кнопки профиля, которые Telegram анимирует, с заменой показываются неподвижными. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином; одна неверная иконка отклоняет изменение, и ошибка называет её. Нужно разрешение appCustomization; get, slots и assets его не требуют.
 
             Соединение
             const state = await aorus.proxy.status()
@@ -3050,7 +3054,7 @@ private enum AorusPluginDocumentation {
     aorus.icons.reset()
     const slots = aorus.icons.slots()
     const names = aorus.icons.assets('Chat List/')
-    Any of Telegram's icons can be replaced: by slot — the tab bar, the input field, navigation bars, the profile, the settings symbols, menus, every plus, calls — or by name from the catalogue assets() lists. A replacement is an SF Symbol, a pixel grid with a palette, a few characters or an emoji, an SVG path, a PNG, another of Telegram's icons or an empty space; scale, rotate, flip and offset adjust it. It is drawn in the original's box and in its colour, so the theme and the look colour it too. A style changes every icon at once: pixel, bold, thin, outline and glow, with only limiting it to groups, slots or folders. The tab bar, the microphone, the emoji and keyboard buttons and the profile's buttons, which Telegram animates, are shown still while replaced. Changes show at once, are kept until the next launch and leave with the plugin; one invalid icon rejects the change and the error names it. Needs appCustomization; get, slots and assets need nothing.
+    Any of Telegram's icons can be replaced: by slot — the tab bar, the input field, navigation bars, the profile, the settings symbols, menus, every plus, calls — or by name from the catalogue assets() lists. A replacement is an SF Symbol, a pixel grid with a palette, a few characters or an emoji, an SVG path, a PNG, another of Telegram's icons or an empty space; scale, rotate, flip and offset adjust it. It is drawn in the original's box and in its colour, so the theme and the look colour it too. A style changes every icon at once: pixel, bold, thin, outline, duotone, glow, halo and depth, with only limiting it to groups, slots or folders; strokes grow and thin evenly without running together. Styles and replacements reach AorusGram's own icons too — the Wall tab, the tabs, settings rows and menu actions plugins add, the ghost button. The tab bar, the microphone, the emoji and keyboard buttons and the profile's buttons, which Telegram animates, are shown still while replaced. Changes show at once, are kept until the next launch and leave with the plugin; one invalid icon rejects the change and the error names it. Needs appCustomization; get, slots and assets need nothing.
 
     Connection
     const state = await aorus.proxy.status()
@@ -3256,6 +3260,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             return drawn
         }
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
         cell.textLabel?.text = row.title
         cell.textLabel?.textColor = row.destructive ? presentationData.theme.list.itemDestructiveColor : presentationData.theme.list.itemPrimaryTextColor
@@ -3359,6 +3364,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
         case .segmented:
             let options = row.options ?? []
             let control = UISegmentedControl(items: options.map(\.title))
+            aorusApplyAppFont(to: control)
             control.selectedSegmentIndex = options.firstIndex(where: { $0.value == row.value?.stringValue }) ?? 0
             control.selectedSegmentTintColor = (row.colors?.first).map(aorusPageColor)
             control.accessibilityIdentifier = "\(indexPath.section):\(indexPath.row)"
@@ -3391,6 +3397,7 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
             return nil
         }
         let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.backgroundColor = bleeds ? .clear : presentationData.theme.list.itemBlocksBackgroundColor
         cell.selectionStyle = tappable && !bleeds ? .default : .none
         content.translatesAutoresizingMaskIntoConstraints = false
@@ -3418,14 +3425,14 @@ final class AorusPluginPageController: ViewController, UITableViewDataSource, UI
     private func titled(_ view: UIView, row: AorusPluginUIPage.Row, palette: AorusPluginPagePalette) -> UIView {
         let titleLabel = UILabel()
         titleLabel.text = row.title
-        titleLabel.font = .systemFont(ofSize: 16.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(16.0, .semibold)
         titleLabel.textColor = palette.primary
         titleLabel.numberOfLines = 0
         var parts: [UIView] = [titleLabel]
         if let subtitle = row.subtitle, !subtitle.isEmpty {
             let subtitleLabel = UILabel()
             subtitleLabel.text = subtitle
-            subtitleLabel.font = .systemFont(ofSize: 13.0)
+            subtitleLabel.font = aorusUIFont(13.0)
             subtitleLabel.textColor = palette.secondary
             subtitleLabel.numberOfLines = 0
             parts.append(subtitleLabel)
@@ -3802,7 +3809,7 @@ private final class AorusPluginBadgeView: UIView {
     init(text: String, color: UIColor) {
         super.init(frame: .zero)
         label.text = text.uppercased()
-        label.font = .systemFont(ofSize: 11, weight: .bold)
+        label.font = aorusUIFont(11, .bold)
         label.textColor = color
         addSubview(label)
         backgroundColor = color.withAlphaComponent(0.16)
@@ -3911,6 +3918,7 @@ private final class AorusPluginDiagnosticsController: ViewController, UITableVie
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let row = rows[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
         cell.selectionStyle = .none
         cell.textLabel?.text = row.0
@@ -3969,7 +3977,7 @@ private final class AorusPluginConsoleController: ViewController {
         emptyLabel.text = AorusPluginUIString.consoleEmpty.text
         emptyLabel.textAlignment = .center
         emptyLabel.numberOfLines = 0
-        emptyLabel.font = .systemFont(ofSize: 15.0)
+        emptyLabel.font = aorusUIFont(15.0)
         emptyLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
         displayNode.view.addSubview(textView)
         displayNode.view.addSubview(emptyLabel)
@@ -4112,7 +4120,7 @@ private final class AorusPluginCell: UITableViewCell {
 
 private final class AorusPluginsEmptyView: UIView {
     var onCreate: (() -> Void)?; private let icon = UIImageView(image: UIImage(systemName: "puzzlepiece.extension")); private let title = UILabel(); private let body = UILabel(); private let button = UIButton(type: .system)
-    override init(frame: CGRect) { super.init(frame: frame); icon.contentMode = .scaleAspectFit; title.font = .systemFont(ofSize: 22, weight: .semibold); title.textAlignment = .center; body.font = .systemFont(ofSize: 15); body.numberOfLines = 0; body.textAlignment = .center; button.setTitle(AorusPluginUIString.create.text, for: .normal); button.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold); button.addTarget(self, action: #selector(create), for: .touchUpInside); [icon,title,body,button].forEach(addSubview) }
+    override init(frame: CGRect) { super.init(frame: frame); icon.contentMode = .scaleAspectFit; title.font = aorusUIFont(22, .semibold); title.textAlignment = .center; body.font = aorusUIFont(15); body.numberOfLines = 0; body.textAlignment = .center; button.setTitle(AorusPluginUIString.create.text, for: .normal); button.titleLabel?.font = aorusUIFont(16, .semibold); button.addTarget(self, action: #selector(create), for: .touchUpInside); [icon,title,body,button].forEach(addSubview) }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func configure(theme: PresentationTheme) { backgroundColor = theme.list.blocksBackgroundColor; icon.tintColor = theme.list.itemAccentColor; title.textColor = theme.list.itemPrimaryTextColor; body.textColor = theme.list.itemSecondaryTextColor; title.text = AorusPluginUIString.emptyTitle.text; body.text = AorusPluginUIString.emptyBody.text }
     override func layoutSubviews() { super.layoutSubviews(); let width = min(bounds.width - 64, 360); icon.frame = CGRect(x: (bounds.width - 52)/2, y: max(60, bounds.midY - 130), width: 52, height: 52); title.frame = CGRect(x: (bounds.width-width)/2, y: icon.frame.maxY+18, width: width, height: 30); body.frame = CGRect(x: (bounds.width-width)/2, y: title.frame.maxY+8, width: width, height: 44); button.frame = CGRect(x: (bounds.width-220)/2, y: body.frame.maxY+16, width: 220, height: 44) }

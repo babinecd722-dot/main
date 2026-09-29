@@ -111,7 +111,7 @@ final class AorusPluginOverlayHost: UIView {
         button.alpha = CGFloat(overlay.alpha)
         if overlay.displayMode != .icon, !overlay.title.isEmpty {
             button.setTitle(overlay.title, for: .normal)
-            button.titleLabel?.font = UIFont.systemFont(ofSize: CGFloat(overlay.fontSize ?? 15.0), weight: .semibold)
+            button.titleLabel?.font = aorusUIFont(CGFloat(overlay.fontSize ?? 15.0), .semibold)
         }
         if overlay.displayMode != .text, let icon = overlay.icon, let image = UIImage(systemName: icon) {
             button.setImage(image.withRenderingMode(.alwaysTemplate), for: .normal)
@@ -330,10 +330,10 @@ private final class AorusPluginOverlayPanel: UIView {
     func configure(title: String, subtitle: String?, icon: String?, titleColor: UIColor, fontSize: CGFloat) {
         self.titleLabel.text = title
         self.titleLabel.textColor = titleColor
-        self.titleLabel.font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        self.titleLabel.font = aorusUIFont(fontSize, .semibold)
         self.subtitleLabel.text = subtitle
         self.subtitleLabel.textColor = titleColor.withAlphaComponent(0.65)
-        self.subtitleLabel.font = UIFont.systemFont(ofSize: max(11.0, fontSize - 2.0), weight: .regular)
+        self.subtitleLabel.font = aorusUIFont(max(11.0, fontSize - 2.0), .regular)
         self.subtitleLabel.isHidden = (subtitle ?? "").isEmpty
         if let icon = icon, let image = UIImage(systemName: icon) {
             self.iconView.image = image.withRenderingMode(.alwaysTemplate)

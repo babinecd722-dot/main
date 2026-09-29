@@ -79,6 +79,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         let groups = AorusAIMessageMenu.groups(languageCode: presentationData.strings.baseLanguageCode)
         self.groups = groups
         self.segments = UISegmentedControl(items: groups.map { $0.title ?? aorusAILocalized("Действия", "Actions") })
+        aorusApplyAppFont(to: self.segments)
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -92,7 +93,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         view.backgroundColor = palette.background
 
         titleLabel.text = aorusAILocalized("ИИ-компаньон", "AI Companion")
-        titleLabel.font = .systemFont(ofSize: 20.0, weight: .bold)
+        titleLabel.font = aorusUIFont(20.0, .bold)
         titleLabel.textColor = palette.label
         titleLabel.textAlignment = .center
         headerView.addSubview(titleLabel)
@@ -126,7 +127,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         // Interface 2.0 repaints the page's ink, and the default grey belongs to the theme
         // it replaced.
         segments.setTitleTextAttributes([.foregroundColor: palette.secondary], for: .normal)
-        segments.setTitleTextAttributes([.font: UIFont.systemFont(ofSize: 12.0, weight: .semibold)], for: .selected)
+        segments.setTitleTextAttributes([.font: aorusUIFont(12.0, .semibold)], for: .selected)
         segments.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
         view.addSubview(segments)
 
@@ -141,7 +142,7 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         newChatButton.setTitle(aorusAILocalized("Новый диалог с сообщением", "New chat with message"), for: .normal)
         newChatButton.setImage(UIImage(systemName: "bubble.left.and.bubble.right"), for: .normal)
         newChatButton.tintColor = palette.accent
-        newChatButton.titleLabel?.font = .systemFont(ofSize: 15.0, weight: .semibold)
+        newChatButton.titleLabel?.font = aorusUIFont(15.0, .semibold)
         newChatButton.semanticContentAttribute = .forceLeftToRight
         newChatButton.imageEdgeInsets = UIEdgeInsets(top: 0.0, left: -5.0, bottom: 0.0, right: 5.0)
         newChatButton.backgroundColor = palette.accentSoft
@@ -211,10 +212,10 @@ private final class AorusAIMessageActionsController: UIViewController, UITableVi
         let item = selectedItems[indexPath.row]
         cell.textLabel?.text = item.title
         cell.textLabel?.textColor = palette.label
-        cell.textLabel?.font = .systemFont(ofSize: 16.0, weight: .medium)
+        cell.textLabel?.font = aorusUIFont(16.0, .medium)
         cell.detailTextLabel?.text = item.hint
         cell.detailTextLabel?.textColor = palette.tertiary
-        cell.detailTextLabel?.font = .systemFont(ofSize: 12.0)
+        cell.detailTextLabel?.font = aorusUIFont(12.0)
         cell.imageView?.image = UIImage(bundleImageName: item.icon)?.withRenderingMode(.alwaysTemplate)
         cell.imageView?.tintColor = palette.secondary
         cell.backgroundColor = .clear

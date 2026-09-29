@@ -73,7 +73,7 @@ final class AorusPluginHeroView: UIView {
         let top: UIView
         if let text = row.value?.stringValue, !text.isEmpty {
             emoji.text = text
-            emoji.font = .systemFont(ofSize: 44.0)
+            emoji.font = aorusUIFont(44.0)
             top = emoji
         } else {
             glyph.image = UIImage(systemName: row.icon.map { AorusPluginIcon.normalized($0) } ?? "sparkles")
@@ -83,11 +83,11 @@ final class AorusPluginHeroView: UIView {
             top = glyph
         }
         titleLabel.text = row.title
-        titleLabel.font = .systemFont(ofSize: 24.0, weight: .bold)
+        titleLabel.font = aorusUIFont(24.0, .bold)
         titleLabel.textColor = .white
         titleLabel.numberOfLines = 0
         subtitleLabel.text = row.subtitle
-        subtitleLabel.font = .systemFont(ofSize: 15.0, weight: .medium)
+        subtitleLabel.font = aorusUIFont(15.0, .medium)
         subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.86)
         subtitleLabel.numberOfLines = 0
         subtitleLabel.isHidden = (row.subtitle ?? "").isEmpty
@@ -139,13 +139,13 @@ final class AorusPluginProgressView: UIView {
         self.previous = CGFloat(previous ?? 0.0)
         super.init(frame: .zero)
         titleLabel.text = row.title
-        titleLabel.font = .systemFont(ofSize: 16.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(16.0, .semibold)
         titleLabel.textColor = palette.primary
         valueLabel.text = "\(Int((row.fraction * 100.0).rounded()))%"
-        valueLabel.font = .monospacedDigitSystemFont(ofSize: 15.0, weight: .semibold)
+        valueLabel.font = aorusDigitsFont(15.0, .semibold)
         valueLabel.textColor = aorusPageColors(row, palette: palette)[0]
         subtitleLabel.text = row.subtitle
-        subtitleLabel.font = .systemFont(ofSize: 13.0)
+        subtitleLabel.font = aorusUIFont(13.0)
         subtitleLabel.textColor = palette.secondary
         subtitleLabel.numberOfLines = 0
         subtitleLabel.isHidden = (row.subtitle ?? "").isEmpty
@@ -243,7 +243,7 @@ final class AorusPluginRingView: UIView {
         ring.layer.addSublayer(trackLayer)
         ring.layer.addSublayer(gradient)
         centerLabel.text = "\(Int((row.fraction * 100.0).rounded()))%"
-        centerLabel.font = .monospacedDigitSystemFont(ofSize: 15.0, weight: .bold)
+        centerLabel.font = aorusDigitsFont(15.0, .bold)
         centerLabel.textColor = palette.primary
         centerLabel.textAlignment = .center
         centerLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -251,12 +251,12 @@ final class AorusPluginRingView: UIView {
 
         let titleLabel = UILabel()
         titleLabel.text = row.title
-        titleLabel.font = .systemFont(ofSize: 17.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(17.0, .semibold)
         titleLabel.textColor = palette.primary
         titleLabel.numberOfLines = 0
         let subtitleLabel = UILabel()
         subtitleLabel.text = row.subtitle
-        subtitleLabel.font = .systemFont(ofSize: 14.0)
+        subtitleLabel.font = aorusUIFont(14.0)
         subtitleLabel.textColor = palette.secondary
         subtitleLabel.numberOfLines = 0
         subtitleLabel.isHidden = (row.subtitle ?? "").isEmpty
@@ -507,7 +507,7 @@ final class AorusPluginChipsView: UIView {
             let button = UIButton(type: .system)
             button.tag = index
             button.setTitle(option.title, for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: 15.0, weight: selected ? .semibold : .regular)
+            button.titleLabel?.font = aorusUIFont(15.0, selected ? .semibold : .regular)
             button.setTitleColor(selected ? .white : palette.primary, for: .normal)
             button.backgroundColor = selected ? color : palette.track
             button.layer.cornerRadius = 17.0
@@ -600,16 +600,13 @@ final class AorusPluginStatView: UIView {
         } else {
             valueLabel.text = row.value?.stringValue ?? "—"
         }
-        valueLabel.font = UIFont.systemFont(ofSize: 34.0, weight: .bold)
-        if let descriptor = valueLabel.font.fontDescriptor.withDesign(.rounded) {
-            valueLabel.font = UIFont(descriptor: descriptor, size: 34.0)
-        }
+        valueLabel.font = aorusRoundedFont(34.0, .bold)
         valueLabel.textColor = (row.colors?.first).map(aorusPageColor) ?? palette.primary
         valueLabel.adjustsFontSizeToFitWidth = true
         valueLabel.minimumScaleFactor = 0.5
         let titleLabel = UILabel()
         titleLabel.text = row.title
-        titleLabel.font = .systemFont(ofSize: 14.0, weight: .medium)
+        titleLabel.font = aorusUIFont(14.0, .medium)
         titleLabel.textColor = palette.secondary
         titleLabel.numberOfLines = 0
 
@@ -638,7 +635,7 @@ final class AorusPluginStatView: UIView {
         if let subtitle = row.subtitle, !subtitle.isEmpty {
             let label = UILabel()
             label.text = subtitle
-            label.font = .systemFont(ofSize: 14.0, weight: .semibold)
+            label.font = aorusUIFont(14.0, .semibold)
             label.textColor = row.style != nil ? trendColor : palette.secondary
             trend.addArrangedSubview(label)
         }
@@ -670,7 +667,7 @@ final class AorusPluginCodeView: UIView {
         super.init(frame: .zero)
         let titleLabel = UILabel()
         titleLabel.text = row.title
-        titleLabel.font = .systemFont(ofSize: 13.0, weight: .semibold)
+        titleLabel.font = aorusUIFont(13.0, .semibold)
         titleLabel.textColor = palette.secondary
         let box = UIView()
         box.backgroundColor = palette.groupBackground
@@ -729,7 +726,7 @@ final class AorusPluginPictureView: UIView {
         imageView.backgroundColor = palette.track
         let caption = UILabel()
         caption.text = row.subtitle ?? row.title
-        caption.font = .systemFont(ofSize: 13.0)
+        caption.font = aorusUIFont(13.0)
         caption.textColor = palette.secondary
         caption.numberOfLines = 0
         let stack = UIStackView(arrangedSubviews: [imageView, caption])

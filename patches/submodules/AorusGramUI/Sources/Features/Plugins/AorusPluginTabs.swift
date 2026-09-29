@@ -138,8 +138,9 @@ public final class AorusPluginTabHost {
         // The bar draws its images as they are, so the glyph is tinted here, once per state.
         let tabBar = presentationData.theme.rootController.tabBar
         let icon = entry.tab.icon ?? AorusPluginIcon.fallback
-        item.image = Self.image(icon: icon, color: tabBar.iconColor)
-        item.selectedImage = Self.image(icon: icon, color: tabBar.selectedIconColor)
+        // Replaced or styled the way Telegram's own tabs are, when a plugin changes the icons.
+        item.image = AorusPluginIconValues.own(Self.image(icon: icon, color: tabBar.iconColor), named: "AorusGram/Tabs/Plugins")
+        item.selectedImage = AorusPluginIconValues.own(Self.image(icon: icon, color: tabBar.selectedIconColor), named: "AorusGram/Tabs/Plugins")
         updateBadge(entry)
     }
 

@@ -533,6 +533,7 @@ private final class AorusMediaMetadataViewController: UIViewController, UITableV
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let row = self.sections[indexPath.section].rows[indexPath.row]
         let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        aorusApplyAppFont(to: cell)
         cell.selectionStyle = .none
         cell.textLabel?.text = row.title
         cell.textLabel?.font = Font.with(size: 15.0, weight: .semibold)

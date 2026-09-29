@@ -16007,6 +16007,13 @@ def patch_per_chat_ghost_mode(tg: Path) -> None:
             print("PerChatGhost: added Postbox import")
         else:
             print("PerChatGhost: UIKit import anchor not found for Postbox import")
+    # The ghost is one of AorusGram's own icons, which Display's icon values replace or style.
+    if "import Display\n" not in t:
+        if "import UIKit\n" not in t:
+            raise RuntimeError("PerChatGhost: UIKit import anchor not found for Display import")
+        t = t.replace("import UIKit\n", "import UIKit\nimport Display\n", 1)
+        nav_buttons_changed = True
+        print("PerChatGhost: added Display import")
     if "private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage?" in t:
         t = t.replace(
             "private func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage?",
@@ -16026,6 +16033,11 @@ private func aorusGhostPeerKey(_ peerId: PeerId) -> String {
 }
 
 func aorusGhostIconImage(active: Bool, color: UIColor) -> UIImage? {
+    // One of AorusGram's own icons: a plugin's icons replace or style it like Telegram's.
+    return AorusPluginIconValues.own(aorusGhostIconDrawn(active: active, color: color), named: "AorusGram/Header/Ghost")
+}
+
+private func aorusGhostIconDrawn(active: Bool, color: UIColor) -> UIImage? {
     let size = CGSize(width: 34.0, height: 34.0)
     return UIGraphicsImageRenderer(size: size).image { context in
         let ctx = context.cgContext
@@ -18130,6 +18142,8 @@ import UIKit
 /// A key may carry `@dark` or `@light`, and then wins over the plain key in that appearance.
 public enum AorusPluginAppearanceValues {
     public static let defaultsKey = "aorusgram_plugin_appearance"
+    /// `AorusMessageLook.defaultsKey` in the plugin core.
+    public static let messageLookKey = "aorusgram_message_look"
     public static let didChangeNotification = Notification.Name("aorusgram.pluginAppearanceChanged")
 
     private static let lock = NSLock()
@@ -18154,6 +18168,11 @@ public enum AorusPluginAppearanceValues {
             return (cached, cachedRevision)
         }
         var values = UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]
+        // The look the person chose in AorusGram → Interface → Message Settings, kept apart
+        // from the plugins' layers and laid over them: what the person chose wins.
+        if let own = UserDefaults.standard.dictionary(forKey: messageLookKey), !own.isEmpty {
+            values.merge(own, uniquingKeysWith: { _, own in own })
+        }
         if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
             values = [:]
         }
@@ -19276,6 +19295,145 @@ def patch_plugin_profile_look(tg: Path) -> None:
     t = t.rstrip("\n") + "\n" + _AORUS_PROFILE_BUTTON_HELPER
     path.write_text(t, encoding="utf-8")
     print("PluginProfileLook: profile buttons follow plugins")
+
+
+_AORUS_MESSAGE_LOOK_HELPERS = r"""
+
+// MARK: - AorusGram message look
+
+// Names and titles over group messages as the person set them in AorusGram → Interface →
+// Message Settings, or a plugin through `aorus.appearance`. Read from the same table the theme
+// is built from, so a change redraws every message with the new theme.
+
+private func aorusMessageNameFont(_ size: CGFloat) -> UIFont {
+    switch AorusPluginAppearanceValues.string("message.nameWeight", dark: false, in: AorusPluginAppearanceValues.current()) {
+    case "regular":
+        return Font.regular(size)
+    case "medium":
+        return Font.medium(size)
+    case "bold":
+        return Font.bold(size)
+    default:
+        return Font.semibold(size)
+    }
+}
+
+private func aorusMessageRankText(_ text: String) -> String {
+    switch AorusPluginAppearanceValues.string("message.rankCase", dark: false, in: AorusPluginAppearanceValues.current()) {
+    case "upper":
+        return text.uppercased()
+    case "lower":
+        return text.lowercased()
+    default:
+        return text
+    }
+}
+
+private func aorusMessageRankColor(dark: Bool) -> UIColor? {
+    return AorusPluginAppearanceValues.color("message.rank", dark: dark, in: AorusPluginAppearanceValues.current())
+}
+
+private func aorusMessageRankPlate() -> Bool {
+    return AorusPluginAppearanceValues.flag("message.rankPlate", in: AorusPluginAppearanceValues.current()) ?? true
+}
+"""
+
+
+def patch_message_look(tg: Path) -> None:
+    """Names and titles over group messages, drawn the way the person set them.
+
+    AorusGram → Interface → Message Settings, and plugins through `aorus.appearance`, set the
+    colour and weight of the names over messages in groups, can hide them, and set the colour,
+    letter case and plate of the titles beside them — the admin and owner labels too — or hide
+    those. The bubble's own layout reads them where it builds the header, so the preview on the
+    settings screen and every chat draw them the same way. A title's plate is drawn again when
+    its colour changes, since the node that holds it is kept across a theme change.
+    """
+    path = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
+    t = path.read_text(encoding="utf-8")
+    if "aorusMessageNameFont(" in t:
+        print("MessageLook: already patched")
+        return
+    edits = [
+        (
+            "    private var authorNameColor: UIColor?\n",
+            "    private var authorNameColor: UIColor?\n"
+            "    /// AorusGram: the colour a title's plate was last drawn in.\n"
+            "    private var aorusRankPlateColor: UIColor?\n",
+        ),
+        (
+            "        let nameFont = Font.semibold(fontSize)\n",
+            "        let nameFont = aorusMessageNameFont(fontSize)\n",
+        ),
+        (
+            "        let translateToLanguage = item.associatedData.translateToLanguage\n"
+            "        var isSummarized = false\n",
+            "        // AorusGram: the names and titles over group messages as the person set them.\n"
+            "        let aorusLook = AorusPluginAppearanceValues.current()\n"
+            "        if incoming, !aorusLook.isEmpty {\n"
+            "            var aorusInGroup = item.message.peers[item.message.id.peerId] is TelegramGroup\n"
+            "            if let channel = item.message.peers[item.message.id.peerId] as? TelegramChannel, case .group = channel.info {\n"
+            "                aorusInGroup = true\n"
+            "            }\n"
+            "            if aorusInGroup {\n"
+            "                if AorusPluginAppearanceValues.flag(\"message.hideName\", in: aorusLook) == true {\n"
+            "                    authorNameString = nil\n"
+            "                    authorRank = nil\n"
+            "                }\n"
+            "                if authorNameColor != nil, let aorusNameColor = AorusPluginAppearanceValues.color(\"message.name\", dark: item.presentationData.theme.theme.overallDarkAppearance, in: aorusLook) {\n"
+            "                    authorNameColor = aorusNameColor\n"
+            "                }\n"
+            "                if AorusPluginAppearanceValues.flag(\"message.hideRank\", in: aorusLook) == true {\n"
+            "                    authorRank = nil\n"
+            "                }\n"
+            "            }\n"
+            "        }\n"
+            "\n"
+            "        let translateToLanguage = item.associatedData.translateToLanguage\n"
+            "        var isSummarized = false\n",
+        ),
+        (
+            "                        if !string.isEmpty {\n"
+            "                            rankBadgeString = NSAttributedString(string: \"\\(string)\", font: inlineBotPrefixFont, textColor: rankBadgeColor ?? defaultRankColor)\n"
+            "                        }\n",
+            "                        if !string.isEmpty {\n"
+            "                            // AorusGram: the title's colour and letter case from Message Settings.\n"
+            "                            if let aorusRankColor = aorusMessageRankColor(dark: item.presentationData.theme.theme.overallDarkAppearance) {\n"
+            "                                rankBadgeColor = aorusRankColor\n"
+            "                            }\n"
+            "                            rankBadgeString = NSAttributedString(string: aorusMessageRankText(string), font: inlineBotPrefixFont, textColor: rankBadgeColor ?? defaultRankColor)\n"
+            "                        }\n",
+        ),
+        (
+            "                    rankBackgroundColor = messageTheme.secondaryTextColor.withMultipliedAlpha(0.1)\n"
+            "                }\n",
+            "                    rankBackgroundColor = messageTheme.secondaryTextColor.withMultipliedAlpha(0.1)\n"
+            "                }\n"
+            "                // AorusGram: a title without its plate, when the person turned it off.\n"
+            "                if !aorusMessageRankPlate() {\n"
+            "                    rankBackgroundBaseAlpha = 0.0\n"
+            "                }\n",
+        ),
+        (
+            "                    rankBackgroundNode.image = generateStretchableFilledCircleImage(radius: rankBadgeSize.height * 0.5, color: rankBackgroundColor)\n"
+            "                }\n",
+            "                    rankBackgroundNode.image = generateStretchableFilledCircleImage(radius: rankBadgeSize.height * 0.5, color: rankBackgroundColor)\n"
+            "                }\n"
+            "                // AorusGram: the node is kept across a theme change, so a title whose colour\n"
+            "                // changed has its plate drawn again in the new one.\n"
+            "                if strongSelf.aorusRankPlateColor != rankBackgroundColor {\n"
+            "                    strongSelf.aorusRankPlateColor = rankBackgroundColor\n"
+            "                    rankBackgroundNode.image = generateStretchableFilledCircleImage(radius: rankBadgeSize.height * 0.5, color: rankBackgroundColor)\n"
+            "                }\n",
+        ),
+    ]
+    for old, new in edits:
+        if t.count(old) != 1:
+            raise RuntimeError(f"MessageLook: anchor found {t.count(old)} times: {old.strip().splitlines()[0]!r}")
+        t = t.replace(old, new, 1)
+    t = t.rstrip("\n") + "\n" + _AORUS_MESSAGE_LOOK_HELPERS
+    path.write_text(t, encoding="utf-8")
+    print("MessageLook: names and titles over group messages follow Message Settings")
 
 
 def patch_hide_tabs(tg: Path) -> None:
@@ -29617,6 +29775,7 @@ def main() -> None:
     # After every patch of the tab bar and the profile: its anchors are lines those leave.
     patch_plugin_icons(tg)
     patch_plugin_profile_look(tg)
+    patch_message_look(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

@@ -261,7 +261,7 @@ private final class AorusClipboardListController: UITableViewController {
         cell.textLabel?.text = text
         cell.textLabel?.numberOfLines = 3
         cell.textLabel?.lineBreakMode = .byTruncatingTail
-        cell.textLabel?.font = UIFont.systemFont(ofSize: 15.0)
+        cell.textLabel?.font = aorusUIFont(15.0)
         cell.textLabel?.textColor = theme.list.itemPrimaryTextColor
         cell.backgroundColor = theme.list.plainBackgroundColor
         let selected = UIView()

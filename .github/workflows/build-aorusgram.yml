@@ -273,9 +273,13 @@ jobs:
             > /tmp/aorus-plugin-ui/AorusPluginGenerate.swift
           # The drawn rows of a plugin page: UIKit and Core Animation over the page model,
           # every API checked against iOS 13 like the screen that shows them.
-          sed -E '/^import AorusGram$/d' \
+          sed -E '/^import (Display|AorusGram)$/d' \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginPageViews.swift \
             > /tmp/aorus-plugin-ui/AorusPluginPageViews.swift
+          # The chosen font for AorusGram's own screens, over Display's Font as the stubs have it.
+          sed -E '/^import Display$/d' \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusUIFont.swift \
+            > /tmp/aorus-plugin-ui/AorusUIFont.swift
           swiftc -typecheck \
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
@@ -298,7 +302,8 @@ jobs:
             /tmp/aorus-plugin-ui/AorusPluginMarketControllers.swift \
             /tmp/aorus-plugin-ui/AorusPluginPublishing.swift \
             /tmp/aorus-plugin-ui/AorusPluginGenerate.swift \
-            /tmp/aorus-plugin-ui/AorusPluginPageViews.swift
+            /tmp/aorus-plugin-ui/AorusPluginPageViews.swift \
+            /tmp/aorus-plugin-ui/AorusUIFont.swift
           swiftc -frontend -parse \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusBuildKeyProvider.swift \
             aorusgram/AorusGram/Sources/Features/Subscription/AorusUpdateManifest.swift \
