@@ -18466,10 +18466,12 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
             if let shadowStrength {
                 // Soft and close under a light shadow, deeper and further under a strong one;
                 // never wider than the room Telegram leaves around a bubble for its shadow.
+                // The image a shadow is drawn in has 10 points of room around the bubble, which
+                // the strongest one, blur and offset together, stays inside.
                 let shadow: PresentationThemeBubbleShadow? = shadowStrength > 0.0 ? PresentationThemeBubbleShadow(
-                    color: UIColor(white: 0.0, alpha: 0.1 + 0.32 * shadowStrength),
-                    radius: 1.0 + 5.0 * shadowStrength,
-                    verticalOffset: 0.5 + 1.5 * shadowStrength
+                    color: UIColor(white: 0.0, alpha: 0.12 + 0.38 * shadowStrength),
+                    radius: 1.5 + 5.5 * shadowStrength,
+                    verticalOffset: 0.5 + 2.0 * shadowStrength
                 ) : nil
                 updated = aorusBubbleComponents(updated, shadow: shadow)
             }
@@ -18606,6 +18608,11 @@ func aorusPluginBubbleCorners(_ corners: PresentationChatBubbleCorners) -> Prese
     if let tails = AorusPluginAppearanceValues.flag("bubble.tails", in: values) {
         result.hasTails = tails
     }
+    // Where bubbles join is never rounder than their outer corners: a join radius past the
+    // corner radius would round the joined corners more than the free ones, and every place
+    // that draws a join — the bubbles, the buttons under them, a round video leaving one —
+    // reads the same value from here.
+    result.auxiliaryRadius = min(result.auxiliaryRadius, result.mainRadius)
     return result
 }
 
@@ -19502,6 +19509,22 @@ private func aorusMessageHidesAvatar(_ message: Message) -> Bool {
     }
     return false
 }
+
+// An outline the person set in Message Settings, or a plugin did, is drawn over any wallpaper.
+// Telegram draws a bubble's outline only over a picture or a gradient, so on a plain colour
+// the one chosen here was never drawn at all.
+private func aorusBubbleDrawsOutline(_ type: ChatMessageBackgroundType, dark: Bool) -> Bool {
+    let side: String
+    switch type {
+    case .none:
+        return false
+    case .incoming:
+        side = "incoming"
+    case .outgoing:
+        side = "outgoing"
+    }
+    return AorusPluginAppearanceValues.color("bubble.\(side).stroke", dark: dark, in: AorusPluginAppearanceValues.current()) != nil
+}
 """
 
 _AORUS_MESSAGE_AVATAR_HELPER = r"""
@@ -19520,6 +19543,61 @@ private func aorusHidesGroupAvatar(_ message: EngineRawMessage) -> Bool {
         return true
     }
     return false
+}
+"""
+
+_AORUS_MESSAGE_SHADOW_HELPER = r"""
+
+// AorusGram: a shadow the person set in Message Settings, or a plugin did, is drawn over any
+// wallpaper. Telegram draws a bubble's shadow only over a picture or a gradient, so on a plain
+// colour the one chosen here was never drawn.
+private func aorusBubbleDrawsShadow(_ type: ChatMessageBackgroundType) -> Bool {
+    let side: String
+    switch type {
+    case .none:
+        return false
+    case .incoming:
+        side = "incoming"
+    case .outgoing:
+        side = "outgoing"
+    }
+    guard let strength = AorusPluginAppearanceValues.number("bubble.\(side).shadow", in: AorusPluginAppearanceValues.current()) else {
+        return false
+    }
+    return strength > 0.0
+}
+"""
+
+_AORUS_MESSAGE_SEE_THROUGH_HELPER = r"""
+
+// MARK: - AorusGram see-through bubbles
+
+// How much of a bubble the person, or a plugin, left opaque: 1 while nothing is set.
+private func aorusBubbleOpacity(incoming: Bool) -> CGFloat {
+    let key = incoming ? "bubble.incoming.opacity" : "bubble.outgoing.opacity"
+    guard let opacity = AorusPluginAppearanceValues.number(key, in: AorusPluginAppearanceValues.current()) else {
+        return 1.0
+    }
+    return max(0.1, min(1.0, opacity))
+}
+
+// A bubble made see-through in Message Settings, or by a plugin, shows the wallpaper itself
+// through it. Telegram lays its own translucent bubbles on a blurred or dimmed copy of the
+// wallpaper instead, which drew a see-through bubble as a flat, murky one with none of the
+// wallpaper's pattern in it.
+private func aorusBubbleSeeThrough(_ theme: PresentationTheme, incoming: Bool) -> Bool {
+    let values = AorusPluginAppearanceValues.current()
+    if values.isEmpty {
+        return false
+    }
+    if aorusBubbleOpacity(incoming: incoming) < 1.0 {
+        return true
+    }
+    let key = incoming ? "bubble.incoming.fill" : "bubble.outgoing.fill"
+    guard let fill = AorusPluginAppearanceValues.colors(key, dark: theme.overallDarkAppearance, in: values) else {
+        return false
+    }
+    return fill.contains(where: { $0.alpha < 1.0 })
 }
 """
 
@@ -19617,6 +19695,11 @@ def patch_message_shape_and_layout(tg: Path) -> None:
                 "            }\n",
             ),
             (
+                "        strongSelf.backgroundNode.setType(type: backgroundType, highlighted: false, graphics: graphics, maskMode: strongSelf.backgroundMaskMode, hasWallpaper: hasWallpaper, transition: legacyTransition, backgroundNode: presentationContext.backgroundNode)\n",
+                "        // AorusGram: an outline set in Message Settings is drawn on a plain wallpaper too.\n"
+                "        strongSelf.backgroundNode.setType(type: backgroundType, highlighted: false, graphics: graphics, maskMode: strongSelf.backgroundMaskMode, hasWallpaper: hasWallpaper || aorusBubbleDrawsOutline(backgroundType, dark: item.presentationData.theme.theme.overallDarkAppearance), transition: legacyTransition, backgroundNode: presentationContext.backgroundNode)\n",
+            ),
+            (
                 "        if isPreview, let peer = firstMessage.peers[firstMessage.id.peerId] as? TelegramUser, peer.firstName == nil {\n"
                 "            hasAvatar = false\n"
                 "            effectiveAuthor = nil\n"
@@ -19659,6 +19742,74 @@ def patch_message_shape_and_layout(tg: Path) -> None:
         c = c.replace(old, "        self.messageFont = aorusMessageTextFont(baseFontSize)\n", 1).rstrip("\n") + "\n" + _AORUS_MESSAGE_TEXT_FONT_HELPER
         presentation.write_text(c, encoding="utf-8")
     print("MessageLayout: message width, group avatars and text weight follow Message Settings")
+
+    # Shadows on any wallpaper, and the join radius the bubble images are drawn with.
+    background = tg / "submodules/ChatMessageBackground/Sources/ChatMessageBackground.swift"
+    k = background.read_text(encoding="utf-8")
+    if "aorusBubbleDrawsShadow(" not in k:
+        edits = [
+            (
+                "        let shadowImage: UIImage?\n        \n        if hasWallpaper {\n",
+                "        let shadowImage: UIImage?\n        \n"
+                "        // AorusGram: a shadow set in Message Settings is drawn on a plain wallpaper too.\n"
+                "        if hasWallpaper || aorusBubbleDrawsShadow(type) {\n",
+            ),
+            (
+                "        let minRadius = bubbleCorners.auxiliaryRadius\n",
+                "        // AorusGram: the corners where bubbles join, by the rule their images are drawn with.\n"
+                "        let minRadius = bubbleCorners.mergeBubbleCorners ? min(bubbleCorners.auxiliaryRadius, bubbleCorners.mainRadius) : bubbleCorners.mainRadius\n",
+            ),
+        ]
+        for old, new in edits:
+            if k.count(old) != 1:
+                raise RuntimeError(f"MessageShadow: background anchor found {k.count(old)} times: {old.strip()[:80]!r}")
+            k = k.replace(old, new, 1)
+        k = k.rstrip("\n") + "\n" + _AORUS_MESSAGE_SHADOW_HELPER
+        background.write_text(k, encoding="utf-8")
+
+    # See-through bubbles show the wallpaper itself.
+    wallpaper = tg / "submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift"
+    w = wallpaper.read_text(encoding="utf-8")
+    if "aorusBubbleSeeThrough(" not in w:
+        edits = []
+        for side in ("incoming", "outgoing"):
+            edits.append((
+                f"            if bubbleTheme.chat.message.{side}.bubble.withWallpaper.fill.contains(where: {{ $0.alpha <= 0.99 }}) {{\n"
+                "                return !hasPlainWallpaper\n",
+                f"            if bubbleTheme.chat.message.{side}.bubble.withWallpaper.fill.contains(where: {{ $0.alpha <= 0.99 }}) {{\n"
+                f"                // AorusGram: see-through as it is set, the wallpaper itself behind it.\n"
+                f"                return !hasPlainWallpaper && !aorusBubbleSeeThrough(bubbleTheme, incoming: {'true' if side == 'incoming' else 'false'})\n",
+            ))
+            edits.append((
+                f"needsCleanBackground = bubbleTheme.chat.message.{side}.bubble.withWallpaper.fill.contains(where: {{ $0.alpha <= 0.99 }})\n",
+                f"needsCleanBackground = bubbleTheme.chat.message.{side}.bubble.withWallpaper.fill.contains(where: {{ $0.alpha <= 0.99 }}) && !aorusBubbleSeeThrough(bubbleTheme, incoming: {'true' if side == 'incoming' else 'false'})\n",
+            ))
+        edits.append((
+            "                        let gradientWallpaperNode = GradientBackgroundNode.CloneNode(parentNode: gradientBackgroundNode, isDimmed: true)\n"
+            "                        gradientWallpaperNode.frame = self.bounds\n"
+            "                        self.gradientWallpaperNode = gradientWallpaperNode\n"
+            "                        self.insertSubnode(gradientWallpaperNode, at: 0)\n"
+            "                    }\n",
+            "                        let gradientWallpaperNode = GradientBackgroundNode.CloneNode(parentNode: gradientBackgroundNode, isDimmed: true)\n"
+            "                        gradientWallpaperNode.frame = self.bounds\n"
+            "                        self.gradientWallpaperNode = gradientWallpaperNode\n"
+            "                        self.insertSubnode(gradientWallpaperNode, at: 0)\n"
+            "                    }\n"
+            "                    // AorusGram: an outgoing bubble filled with the animated gradient lets the\n"
+            "                    // wallpaper through as much as it is set to; nothing else is dimmed here.\n"
+            "                    var aorusGradientAlpha: CGFloat = 1.0\n"
+            "                    if case .outgoing = self.bubbleType, gradientBackgroundNode === backgroundNode.outgoingBubbleGradientBackgroundNode {\n"
+            "                        aorusGradientAlpha = aorusBubbleOpacity(incoming: false)\n"
+            "                    }\n"
+            "                    self.gradientWallpaperNode?.alpha = aorusGradientAlpha\n",
+        ))
+        for old, new in edits:
+            if w.count(old) != 1:
+                raise RuntimeError(f"MessageSeeThrough: wallpaper anchor found {w.count(old)} times: {old.strip()[:80]!r}")
+            w = w.replace(old, new, 1)
+        w = w.rstrip("\n") + "\n" + _AORUS_MESSAGE_SEE_THROUGH_HELPER
+        wallpaper.write_text(w, encoding="utf-8")
+    print("MessageLayout: shadows and outlines on any wallpaper; see-through bubbles show the wallpaper")
 
 
 def patch_message_settings(tg: Path) -> None:

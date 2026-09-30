@@ -5674,6 +5674,22 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
         return UITextItem.MenuConfiguration(preview: nil, menu: menu)
     }
 
+    /// While a held formula's menu is open, the whole formula is tinted, as a selection would
+    /// be: the reader sees that what the menu acts on is all of the fraction, not the part of
+    /// it under their finger.
+    @available(iOS 17.0, *)
+    func textView(_ textView: UITextView, textItemMenuWillDisplayFor textItem: UITextItem,
+                  animator: UIContextMenuInteractionAnimating) {
+        guard case .textAttachment = textItem.content, let view = textView as? AorusAIMentionTextView else { return }
+        view.aorusHoldFormula(textItem.range)
+    }
+
+    @available(iOS 17.0, *)
+    func textView(_ textView: UITextView, textItemMenuWillEndFor textItem: UITextItem,
+                  animator: UIContextMenuInteractionAnimating) {
+        (textView as? AorusAIMentionTextView)?.aorusReleaseHeldFormula()
+    }
+
     /// A tap on a formula does nothing. It is a piece of the sentence, and tapping a word does
     /// not open anything either.
     @available(iOS 17.0, *)
@@ -5707,6 +5723,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
     /// of them would have nothing to arrive on: an answer that finished while the selection was
     /// held has no later delta to carry it.
     func textViewDidChangeSelection(_ textView: UITextView) {
+        // A fraction is taken whole, and a formula highlighted whole, however the selection
+        // was made.
+        (textView as? AorusAIMentionTextView)?.aorusSelectionDidChange()
         // A RELEASE, not merely an empty selection. This fires on every re-render too — setting
         // a text view's contents changes its selection — and answering those would put a second
         // full pass through the message behind every delta of every answer.

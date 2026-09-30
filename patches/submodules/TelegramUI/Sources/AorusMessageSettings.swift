@@ -615,6 +615,10 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     private let bottomStripeNode: ASDisplayNode
     private let maskNode: ASImageNode
     private let containerNode: ASDisplayNode
+    /// The messages' shadows, under the messages. A chat's list keeps every bubble's shadow in
+    /// a layer of its own beneath all of them, so one bubble's shadow never falls on the next;
+    /// the preview lays its messages out itself, and keeps them here the same way.
+    private let shadowsNode: ASDisplayNode
     /// Newest first, as the rotated container lays them out.
     private var messageNodes: [ListViewItemNode] = []
     private var messagesOutgoing: Bool?
@@ -622,6 +626,10 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     private var item: AorusMessagePreviewItem?
     private var shuffleButton: UIButton?
     private var shuffleGlyph: UIImageView?
+    /// The button's plate: the same material a chat's date stands on, over this wallpaper.
+    private var shuffleBlur: NavigationBackgroundNode?
+    private var shuffleContent: WallpaperBubbleBackgroundNode?
+    private var shuffleSpins = 0
     /// The size the wallpaper was last laid out at. It is the height of the list the screen
     /// shows, not the row's: the wallpaper then looks as it does behind a chat, and it keeps
     /// its scale while the row grows and shrinks instead of zooming with it.
@@ -636,58 +644,102 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
         self.containerNode = ASDisplayNode()
         self.containerNode.isUserInteractionEnabled = false
         self.containerNode.subnodeTransform = CATransform3DMakeRotation(CGFloat.pi, 0.0, 0.0, 1.0)
+        self.shadowsNode = ASDisplayNode()
+        self.shadowsNode.isLayerBacked = true
 
         super.init(layerBacked: false)
 
         self.clipsToBounds = true
         self.addSubnode(self.containerNode)
+        self.containerNode.addSubnode(self.shadowsNode)
     }
 
-    override func didLoad() {
-        super.didLoad()
+    /// A round button in the corner of the wallpaper, on the plate a chat's date stands on — the
+    /// same colour, and the same blur where the chat blurs it, for this wallpaper — so it reads
+    /// as part of the chat rather than a control laid over it.
+    private func updateShuffleButton(item: AorusMessagePreviewItem, params: ListViewItemLayoutParams, backgroundSize: CGSize) {
+        let size: CGFloat = 32.0
+        let button: UIButton
+        let glyph: UIImageView
+        if let currentButton = self.shuffleButton, let currentGlyph = self.shuffleGlyph {
+            button = currentButton
+            glyph = currentGlyph
+        } else {
+            button = UIButton(type: .custom)
+            button.clipsToBounds = true
+            button.layer.cornerRadius = size / 2.0
+            let configuration = UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)
+            glyph = UIImageView(image: (UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: configuration) ?? UIImage(systemName: "shuffle", withConfiguration: configuration))?.withRenderingMode(.alwaysTemplate))
+            glyph.contentMode = .center
+            glyph.isUserInteractionEnabled = false
+            button.addSubview(glyph)
+            button.addTarget(self, action: #selector(self.shuffleTapped), for: .touchUpInside)
+            button.addTarget(self, action: #selector(self.shuffleDown), for: [.touchDown, .touchDragEnter])
+            button.addTarget(self, action: #selector(self.shuffleUp), for: [.touchUpOutside, .touchCancel, .touchUpInside, .touchDragExit])
+            self.view.addSubview(button)
+            self.shuffleButton = button
+            self.shuffleGlyph = glyph
+        }
 
-        // A round button in the corner of the wallpaper, on the same dark glass Telegram puts
-        // its dates and service messages on, so it reads as part of the chat.
-        let button = UIButton(type: .custom)
-        button.layer.cornerRadius = 16.0
-        button.clipsToBounds = true
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
-        blur.isUserInteractionEnabled = false
-        blur.frame = CGRect(x: 0.0, y: 0.0, width: 32.0, height: 32.0)
-        blur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        button.addSubview(blur)
-        let tint = UIView(frame: blur.bounds)
-        tint.isUserInteractionEnabled = false
-        tint.backgroundColor = UIColor(white: 0.0, alpha: 0.12)
-        tint.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        button.addSubview(tint)
-        let configuration = UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)
-        let glyph = UIImageView(image: (UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: configuration) ?? UIImage(systemName: "shuffle", withConfiguration: configuration))?.withRenderingMode(.alwaysTemplate))
-        glyph.tintColor = .white
-        glyph.contentMode = .center
-        glyph.isUserInteractionEnabled = false
-        glyph.frame = blur.bounds
-        glyph.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        button.addSubview(glyph)
-        button.addTarget(self, action: #selector(self.shuffleTapped), for: .touchUpInside)
-        button.addTarget(self, action: #selector(self.shuffleDown), for: .touchDown)
-        button.addTarget(self, action: #selector(self.shuffleUp), for: [.touchUpOutside, .touchCancel, .touchUpInside])
-        self.view.addSubview(button)
-        self.shuffleButton = button
-        self.shuffleGlyph = glyph
-        self.layoutShuffleButton()
+        // Where a chat lays its dates on the wallpaper itself, dimmed, so does this; elsewhere
+        // it is the tinted blur a chat's date uses.
+        if let backgroundNode = self.backgroundNode, backgroundNode.hasExtraBubbleBackground() {
+            if self.shuffleContent == nil, let content = backgroundNode.makeBubbleBackground(for: .free) {
+                content.clipsToBounds = true
+                content.isUserInteractionEnabled = false
+                button.insertSubview(content.view, at: 0)
+                self.shuffleContent = content
+            }
+        } else if let content = self.shuffleContent {
+            content.view.removeFromSuperview()
+            self.shuffleContent = nil
+        }
+        let blur: NavigationBackgroundNode
+        if let current = self.shuffleBlur {
+            blur = current
+        } else {
+            blur = NavigationBackgroundNode(color: .clear)
+            blur.isUserInteractionEnabled = false
+            button.insertSubview(blur.view, at: 0)
+            self.shuffleBlur = blur
+        }
+
+        let frame = CGRect(x: params.width - params.rightInset - 12.0 - size, y: 12.0, width: size, height: size)
+        button.frame = frame
+        let bounds = CGRect(origin: CGPoint(), size: frame.size)
+        glyph.frame = bounds
+        glyph.tintColor = serviceMessageColorComponents(theme: item.theme, wallpaper: item.wallpaper).primaryText
+        if let content = self.shuffleContent {
+            blur.isHidden = true
+            content.frame = bounds
+            content.cornerRadius = size / 2.0
+            content.update(rect: frame, within: backgroundSize, transition: .immediate)
+        } else {
+            blur.isHidden = false
+            blur.frame = bounds
+            blur.updateColor(color: selectDateFillStaticColor(theme: item.theme, wallpaper: item.wallpaper), enableBlur: dateFillNeedsBlur(theme: item.theme, wallpaper: item.wallpaper), transition: .immediate)
+            blur.update(size: bounds.size, cornerRadius: size / 2.0, transition: .immediate)
+        }
+        button.accessibilityLabel = item.shuffleTitle
+        // Above the messages and the rounded edge of the card.
+        self.view.bringSubviewToFront(button)
     }
 
+    // Pressed, the button dims the way Telegram's own do, and comes back as it is let go.
     @objc private func shuffleDown() {
-        UIView.animate(withDuration: 0.12, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
-            self.shuffleButton?.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
-        }, completion: nil)
+        guard let button = self.shuffleButton else {
+            return
+        }
+        button.layer.removeAnimation(forKey: "opacity")
+        button.alpha = 0.55
     }
 
     @objc private func shuffleUp() {
-        UIView.animate(withDuration: 0.3, delay: 0.0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
-            self.shuffleButton?.transform = .identity
-        }, completion: nil)
+        guard let button = self.shuffleButton, button.alpha < 1.0 else {
+            return
+        }
+        button.alpha = 1.0
+        button.layer.animateAlpha(from: 0.55, to: 1.0, duration: 0.2)
     }
 
     @objc private func shuffleTapped() {
@@ -695,29 +747,19 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             return
         }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        // A full turn of the arrows for every new message.
-        let rotation = CABasicAnimation(keyPath: "transform.rotation.z")
-        rotation.fromValue = 0.0
-        rotation.toValue = CGFloat.pi * 2.0
-        rotation.duration = 0.45
-        rotation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.shuffleGlyph?.layer.add(rotation, forKey: "aorusShuffle")
+        // One turn of the arrows for every new message, slowing to a stop. Each turn adds to
+        // the one still running, so quick taps keep the arrows spinning instead of snapping
+        // them back to the start.
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0.0
+        spin.toValue = CGFloat.pi * 2.0
+        spin.duration = 0.55
+        spin.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0.0, 0.2, 1.0)
+        spin.isAdditive = true
+        self.shuffleSpins += 1
+        self.shuffleGlyph?.layer.add(spin, forKey: "aorusShuffle\(self.shuffleSpins)")
         item.shuffle()
     }
-
-    private func layoutShuffleButton() {
-        guard let button = self.shuffleButton, let item = self.item else {
-            return
-        }
-        let size: CGFloat = 32.0
-        let rightInset = self.params?.rightInset ?? 0.0
-        let width = self.params?.width ?? self.bounds.width
-        button.bounds = CGRect(x: 0.0, y: 0.0, width: size, height: size)
-        button.center = CGPoint(x: width - rightInset - 12.0 - size / 2.0, y: 12.0 + size / 2.0)
-        button.accessibilityLabel = item.shuffleTitle
-    }
-
-    private var params: ListViewItemLayoutParams?
 
     /// Lays the messages out now and returns the row's size with what places them.
     func layout(item: AorusMessagePreviewItem, params: ListViewItemLayoutParams, neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
@@ -790,16 +832,17 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             }
             let previousItem = strongSelf.item
             strongSelf.item = item
-            strongSelf.params = params
 
             // Another message, or the other side: what was there fades out over what comes,
             // rather than the words or the bubbles jumping from one to the other.
             let sampleChanged = previousItem.map { $0.sample != item.sample } ?? false
+            var crossfades = false
             if (!reuse && !strongSelf.messageNodes.isEmpty) || sampleChanged, let snapshot = strongSelf.containerNode.view.snapshotView(afterScreenUpdates: false) {
+                crossfades = true
                 snapshot.frame = strongSelf.containerNode.frame
                 snapshot.isUserInteractionEnabled = false
                 strongSelf.view.insertSubview(snapshot, aboveSubview: strongSelf.containerNode.view)
-                UIView.animate(withDuration: 0.25, delay: 0.0, options: [.curveEaseOut], animations: {
+                UIView.animate(withDuration: 0.22, delay: 0.0, options: [.curveEaseInOut], animations: {
                     snapshot.alpha = 0.0
                 }, completion: { _ in
                     snapshot.removeFromSuperview()
@@ -808,6 +851,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
 
             if !reuse {
                 for node in strongSelf.messageNodes {
+                    node.extractedBackgroundNode?.removeFromSupernode()
                     node.removeFromSupernode()
                 }
                 for (_, headerNode) in strongSelf.itemHeaderNodes {
@@ -824,12 +868,16 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             }
 
             strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: contentSize)
+            strongSelf.shadowsNode.frame = CGRect(origin: CGPoint(), size: contentSize)
             var topOffset: CGFloat = 4.0 + verticalInset
             for entry in laidOut {
                 entry.apply()
                 let node = entry.node
                 if node.supernode == nil {
                     strongSelf.containerNode.addSubnode(node)
+                }
+                if let shadowNode = node.extractedBackgroundNode, shadowNode.supernode !== strongSelf.shadowsNode {
+                    strongSelf.shadowsNode.addSubnode(shadowNode)
                 }
                 node.updateFrame(CGRect(origin: CGPoint(x: 0.0, y: topOffset), size: entry.size), within: layoutSize)
                 topOffset += entry.size.height
@@ -915,10 +963,9 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
                 backgroundNode.frame = CGRect(origin: CGPoint(), size: backgroundSize)
                 backgroundNode.updateLayout(size: backgroundSize, displayMode: .aspectFill, transition: .immediate)
             }
-            strongSelf.layoutShuffleButton()
-            if let button = strongSelf.shuffleButton {
-                // Above the messages and the rounded edge of the card.
-                strongSelf.view.bringSubviewToFront(button)
+            strongSelf.updateShuffleButton(item: item, params: params, backgroundSize: backgroundSize)
+            if crossfades {
+                strongSelf.containerNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.22, timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue)
             }
         })
     }
@@ -1970,7 +2017,8 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
     case tails(String, Bool)
     case radius(String, CGFloat)
     case merge(String, Bool)
-    case radiusSmall(String, CGFloat)
+    /// The join radius, and the most it can be: the corner radius itself.
+    case radiusSmall(String, CGFloat, CGFloat)
     case width(String, CGFloat, Bool)
     case shapeFooter(String)
     case colorsHeader(String)
@@ -2115,8 +2163,8 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setShape("bubble.mergeCorners", value)
             })
-        case let .radiusSmall(title, value):
-            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 16.0, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
+        case let .radiusSmall(title, value, maximum):
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: maximum, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setShape("bubble.radiusSmall", Int(value))
             })
         case let .width(title, value, isSet):
@@ -2216,8 +2264,12 @@ private func aorusMessageSettingsEntries(presentationData: PresentationData, sta
     entries.append(.tails(aorusL("Хвостик", "Tail"), corners.hasTails))
     entries.append(.radius(aorusL("Скругление углов", "Corner Radius"), min(16.0, corners.mainRadius)))
     entries.append(.merge(aorusL("Слитные сообщения", "Join Consecutive Messages"), corners.mergeBubbleCorners))
-    if corners.mergeBubbleCorners {
-        entries.append(.radiusSmall(aorusL("Скругление на стыке", "Radius Where They Join"), min(16.0, corners.auxiliaryRadius)))
+    // Where messages join can be as round as their corners and no rounder, so the slider ends
+    // at the corner radius: every step of it changes the join. With square corners there is
+    // no join to round.
+    let joinMaximum = min(16.0, corners.mainRadius.rounded())
+    if corners.mergeBubbleCorners && joinMaximum >= 1.0 {
+        entries.append(.radiusSmall(aorusL("Скругление на стыке", "Radius Where They Join"), min(joinMaximum, corners.auxiliaryRadius), joinMaximum))
     }
     let width = AorusPluginAppearanceValues.number("bubble.width", in: values)
     entries.append(.width(aorusL("Ширина сообщений", "Message Width"), width.map { max(0.5, min(1.0, $0)) } ?? 0.9, width != nil))

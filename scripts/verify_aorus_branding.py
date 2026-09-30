@@ -4121,6 +4121,19 @@ def main() -> None:
         ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "if hasAvatar, aorusMessageHidesAvatar(firstMessage) {"),
         ("submodules/TelegramUI/Components/Chat/ChatMessageItemImpl/Sources/ChatMessageItemImpl.swift", "if hasAvatar, !isBroadcastChannel, aorusHidesGroupAvatar(message) {"),
         ("submodules/TelegramPresentationData/Sources/ChatPresentationData.swift", "self.messageFont = aorusMessageTextFont(baseFontSize)"),
+        # A join is never rounder than the corners, wherever it is read.
+        ("submodules/TelegramPresentationData/Sources/PresentationData.swift", "result.auxiliaryRadius = min(result.auxiliaryRadius, result.mainRadius)"),
+        ("submodules/ChatMessageBackground/Sources/ChatMessageBackground.swift", "let minRadius = bubbleCorners.mergeBubbleCorners ? min(bubbleCorners.auxiliaryRadius, bubbleCorners.mainRadius) : bubbleCorners.mainRadius"),
+        # Shadows and outlines that were set are drawn on any wallpaper.
+        ("submodules/ChatMessageBackground/Sources/ChatMessageBackground.swift", "if hasWallpaper || aorusBubbleDrawsShadow(type) {"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "hasWallpaper: hasWallpaper || aorusBubbleDrawsOutline(backgroundType, dark: item.presentationData.theme.theme.overallDarkAppearance)"),
+        # See-through bubbles show the wallpaper itself, not a dimmed copy of it.
+        ("submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift", "return !hasPlainWallpaper && !aorusBubbleSeeThrough(bubbleTheme, incoming: true)"),
+        ("submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift", "return !hasPlainWallpaper && !aorusBubbleSeeThrough(bubbleTheme, incoming: false)"),
+        ("submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift", "withWallpaper.fill.contains(where: { $0.alpha <= 0.99 }) && !aorusBubbleSeeThrough(bubbleTheme, incoming: true)"),
+        ("submodules/WallpaperBackgroundNode/Sources/WallpaperBackgroundNode.swift", "withWallpaper.fill.contains(where: { $0.alpha <= 0.99 }) && !aorusBubbleSeeThrough(bubbleTheme, incoming: false)"),
+        # The preview keeps its messages' shadows under them, as a chat's list does.
+        ("submodules/TelegramUI/Sources/AorusMessageSettings.swift", "strongSelf.shadowsNode.addSubnode(shadowNode)"),
         ("submodules/TelegramUI/Sources/AorusMessageSettings.swift", "AorusMessageSettingsRoute.register"),
         ("submodules/TelegramUI/Sources/AorusMessageSettings.swift", "func aorusMessagePreviewShowsText("),
         ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallMessageSettings()"),

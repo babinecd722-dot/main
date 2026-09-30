@@ -709,16 +709,16 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
     }
 
     /// Where each drawn formula in `range` stands, in this view's coordinates, at its full
-    /// height.
+    /// height, with the character it is set as.
     ///
     /// A formula is set as a text attachment and stands taller than the line's own text: a
     /// fraction reaches above the capitals and below the descenders. The system draws a
     /// selection as the band of the text on the line, so a selected fraction was highlighted
     /// only across its middle — the part under the finger — and read as if only that much had
-    /// been taken. These frames are what the highlight is widened to.
-    private func aorusFormulaFrames(in range: NSRange) -> [CGRect] {
+    /// been taken.
+    private func aorusFormulaFrames(in range: NSRange) -> [(index: Int, frame: CGRect)] {
         guard range.length > 0, NSMaxRange(range) <= textStorage.length else { return [] }
-        var frames: [CGRect] = []
+        var frames: [(index: Int, frame: CGRect)] = []
         textStorage.enumerateAttribute(.attachment, in: range, options: []) { value, attributeRange, _ in
             guard let attachment = value as? NSTextAttachment else { return }
             for index in attributeRange.location ..< NSMaxRange(attributeRange) {
@@ -738,30 +738,264 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
                     width: bounds.width,
                     height: bounds.height
                 )
-                frames.append(frame.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top))
+                frames.append((index, frame.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)))
             }
         }
         return frames
     }
 
-    /// The selection's highlight, reaching over every formula in it from top to bottom.
-    override func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
-        let rects = super.selectionRects(for: range)
-        let start = offset(from: beginningOfDocument, to: range.start)
-        let end = offset(from: beginningOfDocument, to: range.end)
-        guard end > start else { return rects }
-        let formulas = aorusFormulaFrames(in: NSRange(location: start, length: end - start))
-        guard !formulas.isEmpty else { return rects }
-        return rects.map { rect -> UITextSelectionRect in
-            var frame = rect.rect
-            for formula in formulas where formula.minX < frame.maxX && formula.maxX > frame.minX && formula.minY < frame.maxY && formula.maxY > frame.minY {
-                frame = frame.union(formula)
-            }
-            if frame == rect.rect {
-                return rect
-            }
-            return AorusAIFormulaSelectionRect(frame: frame, base: rect)
+    // MARK: Formulas, selected whole
+
+    /// The rest of each selected formula, filled in the selection's own colour.
+    ///
+    /// The system's highlight is left exactly as the system draws it — its band across the
+    /// line — and this covers what the band leaves out of a formula, above it and below it, so
+    /// the two read as one highlight over the whole fraction. It is drawn under the text, as the
+    /// system's own is. Where the system's band already reaches over a formula there is nothing
+    /// left to fill and nothing is drawn.
+    private lazy var aorusFormulaHighlightLayer: CAShapeLayer = {
+        let layer = CAShapeLayer()
+        layer.actions = ["path": NSNull(), "fillColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
+        self.layer.insertSublayer(layer, at: 0)
+        return layer
+    }()
+    private var aorusHasFormulaHighlight = false
+
+    /// A formula held for its menu, tinted whole while the menu is open.
+    private lazy var aorusHeldFormulaLayer: CAShapeLayer = {
+        let layer = CAShapeLayer()
+        layer.actions = ["path": NSNull(), "fillColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
+        self.layer.insertSublayer(layer, at: 0)
+        return layer
+    }()
+
+    /// The colour the system highlights a selection in, read from the view it draws it with, so
+    /// what is filled in here matches it exactly; until that view is found, the tint at the
+    /// strength the system uses.
+    private var aorusSampledHighlightColor: UIColor?
+
+    private func aorusSelectionHighlightColor() -> UIColor {
+        if let sampled = Self.aorusHighlightColor(in: self, depth: 0) {
+            self.aorusSampledHighlightColor = sampled
+            return sampled
         }
+        return self.aorusSampledHighlightColor ?? self.tintColor.withAlphaComponent(0.2)
+    }
+
+    private static func aorusHighlightColor(in view: UIView, depth: Int) -> UIColor? {
+        guard depth < 6 else { return nil }
+        for subview in view.subviews {
+            let name = NSStringFromClass(type(of: subview))
+            if name.contains("Highlight") || name.contains("SelectionView") || name.contains("RangeView") {
+                if let color = aorusTranslucentFill(in: subview, depth: 0) {
+                    return color
+                }
+            }
+            if let color = aorusHighlightColor(in: subview, depth: depth + 1) {
+                return color
+            }
+        }
+        return nil
+    }
+
+    /// The first see-through fill in a highlight view: the band itself, not the handles or the
+    /// caret, which are opaque.
+    private static func aorusTranslucentFill(in view: UIView, depth: Int) -> UIColor? {
+        func usable(_ color: CGColor?) -> Bool {
+            guard let color else { return false }
+            return color.alpha > 0.0 && color.alpha < 0.9
+        }
+        if usable(view.backgroundColor?.cgColor), let color = view.backgroundColor {
+            return color
+        }
+        for sublayer in view.layer.sublayers ?? [] {
+            if let shape = sublayer as? CAShapeLayer, usable(shape.fillColor), let fill = shape.fillColor {
+                return UIColor(cgColor: fill)
+            }
+            if usable(sublayer.backgroundColor), let fill = sublayer.backgroundColor {
+                return UIColor(cgColor: fill)
+            }
+        }
+        guard depth < 3 else { return nil }
+        for subview in view.subviews {
+            if let color = aorusTranslucentFill(in: subview, depth: depth + 1) {
+                return color
+            }
+        }
+        return nil
+    }
+
+    /// The system's band for the one character at `index`, as the system itself lays it out.
+    private func aorusBand(forCharacterAt index: Int) -> [CGRect] {
+        guard let start = position(from: beginningOfDocument, offset: index),
+              let end = position(from: start, offset: 1),
+              let range = textRange(from: start, to: end) else { return [] }
+        return selectionRects(for: range).map { $0.rect }.filter { !$0.isEmpty && !$0.isInfinite && !$0.isNull }
+    }
+
+    /// Covers `frame` except where `bands` already do, into `path`.
+    private func aorusAddUncovered(_ frame: CGRect, bands: [CGRect], to path: CGMutablePath) {
+        guard !bands.isEmpty else {
+            path.addRect(frame)
+            return
+        }
+        let top = bands.map { $0.minY }.min() ?? frame.minY
+        let bottom = bands.map { $0.maxY }.max() ?? frame.maxY
+        // Edge to edge with the band, so the filled parts line up with it exactly.
+        let minX = min(frame.minX, bands.map { $0.minX }.min() ?? frame.minX)
+        let maxX = max(frame.maxX, bands.map { $0.maxX }.max() ?? frame.maxX)
+        if frame.minY < top {
+            path.addRect(CGRect(x: minX, y: frame.minY, width: maxX - minX, height: top - frame.minY))
+        }
+        if frame.maxY > bottom {
+            path.addRect(CGRect(x: minX, y: bottom, width: maxX - minX, height: frame.maxY - bottom))
+        }
+    }
+
+    /// Brings the filled-in parts of the selected formulas up to date with the selection.
+    func aorusUpdateFormulaHighlight() {
+        let range = self.selectedRange
+        guard self.isFirstResponder, range.length > 0, NSMaxRange(range) <= textStorage.length, aorusCarriesMaths(in: range) else {
+            if self.aorusHasFormulaHighlight {
+                self.aorusHasFormulaHighlight = false
+                self.aorusFormulaHighlightLayer.path = nil
+            }
+            return
+        }
+        let path = CGMutablePath()
+        for formula in aorusFormulaFrames(in: range) {
+            aorusAddUncovered(formula.frame, bands: aorusBand(forCharacterAt: formula.index), to: path)
+        }
+        let layer = self.aorusFormulaHighlightLayer
+        layer.frame = CGRect(origin: CGPoint(), size: CGSize(width: max(self.bounds.width, self.contentSize.width), height: max(self.bounds.height, self.contentSize.height)))
+        layer.fillColor = aorusSelectionHighlightColor().cgColor
+        layer.path = path
+        self.aorusHasFormulaHighlight = !path.isEmpty
+    }
+
+    /// The selection has changed: grown to whole fractions if it cut one, and the formulas in
+    /// it highlighted whole. The system's highlight is laid out a moment after the selection
+    /// changes, so the highlight is brought up to date again once it has been.
+    func aorusSelectionDidChange() {
+        aorusSnapSelectionToFractions()
+        // A caret moving in the composer has nothing to highlight and nothing to catch up on.
+        guard self.selectedRange.length > 0 || self.aorusHasFormulaHighlight else { return }
+        aorusUpdateFormulaHighlight()
+        DispatchQueue.main.async { [weak self] in
+            self?.aorusUpdateFormulaHighlight()
+        }
+    }
+
+    /// Tints a held formula whole while its menu is open.
+    func aorusHoldFormula(_ range: NSRange) {
+        let path = CGMutablePath()
+        for formula in aorusFormulaFrames(in: range) {
+            path.addRoundedRect(in: formula.frame.insetBy(dx: -2.0, dy: -1.0), cornerWidth: 4.0, cornerHeight: 4.0)
+        }
+        let layer = self.aorusHeldFormulaLayer
+        layer.removeAllAnimations()
+        layer.frame = CGRect(origin: CGPoint(), size: CGSize(width: max(self.bounds.width, self.contentSize.width), height: max(self.bounds.height, self.contentSize.height)))
+        layer.fillColor = aorusSelectionHighlightColor().cgColor
+        layer.path = path
+        layer.opacity = 1.0
+        layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15)
+    }
+
+    func aorusReleaseHeldFormula() {
+        let layer = self.aorusHeldFormulaLayer
+        guard layer.path != nil else { return }
+        layer.opacity = 0.0
+        layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, completion: { [weak layer] finished in
+            if finished {
+                layer?.path = nil
+            }
+        })
+    }
+
+    // MARK: Fractions written as text, selected whole
+
+    /// A fraction set as text: `3/4`, `x²/2`, `(a+b)/(c−d)`, `12/05/2024` — terms and bracketed
+    /// groups joined by slashes. Only whole tokens: not a piece of a web address or a path.
+    private static let aorusFractionExpression: NSRegularExpression? = {
+        // A bracketed group, one level of brackets inside it allowed: `(a+(b))`.
+        let group = #"\((?:[^()\n]|\([^()\n]*\))*\)"#
+        // A number, a name, a power or an index written as a character: `1.5`, `x²`, `√2`.
+        let term = #"[\p{L}\p{N}_√π∞°%′″\u00B2\u00B3\u00B9\u2070-\u209F]+(?:[.,]\p{N}+)*"#
+        let unit = "(?:" + group + "|" + term + ")"
+        // What a unit may be followed by without a slash: a power, `e^(iπ)`, or a group,
+        // `f(x)`. Never a second term, which would let one word be split any number of ways.
+        let operand = unit + #"(?:\^"# + unit + "|" + group + ")*"
+        // A slash, touching both sides or with a space on both: `a/b`, `7 / 8`. One space on
+        // one side is a path, `/usr/bin`, not a fraction.
+        let slash = #"(?:[/⁄∕]|[ \u00A0][/⁄∕][ \u00A0])"#
+        let pattern = #"(?<![\p{L}\p{N}_./:\\^])"# + operand + "(?:" + slash + operand + ")+" + #"(?![\p{L}\p{N}_/^])"#
+        return try? NSRegularExpression(pattern: pattern)
+    }()
+
+    /// `range` grown so that no fraction written as text is cut: a selection that takes part
+    /// of one — the word under a finger, a handle dragged into it — takes all of it.
+    func aorusRangeCoveringFractions(_ range: NSRange) -> NSRange {
+        let length = textStorage.length
+        guard range.length > 0, NSMaxRange(range) <= length, let expression = Self.aorusFractionExpression else {
+            return range
+        }
+        let string = textStorage.string as NSString
+        // Only the paragraphs the selection's two ends stand in can hold a fraction it cuts.
+        let first = string.paragraphRange(for: NSRange(location: range.location, length: 0))
+        let last = string.paragraphRange(for: NSRange(location: max(range.location, NSMaxRange(range) - 1), length: 0))
+        var lower = range.location
+        var upper = NSMaxRange(range)
+        for paragraph in (first == last ? [first] : [first, last]) {
+            for match in expression.matches(in: string as String, range: paragraph) {
+                let fraction = match.range
+                let overlaps = fraction.location < NSMaxRange(range) && NSMaxRange(fraction) > range.location
+                let contained = fraction.location >= range.location && NSMaxRange(fraction) <= NSMaxRange(range)
+                if overlaps && !contained {
+                    lower = min(lower, fraction.location)
+                    upper = max(upper, NSMaxRange(fraction))
+                }
+            }
+        }
+        return NSRange(location: lower, length: upper - lower)
+    }
+
+    private var aorusSnapping = false
+
+    /// Grows the selection to whole fractions. Only where text is read: in the composer a
+    /// person selects what they typed exactly as they typed it.
+    func aorusSnapSelectionToFractions() {
+        guard !self.isEditable, !self.aorusSnapping else { return }
+        let range = self.selectedRange
+        let snapped = aorusRangeCoveringFractions(range)
+        guard snapped != range else { return }
+        self.aorusSnapping = true
+        self.selectedRange = snapped
+        self.aorusSnapping = false
+    }
+
+    override var selectedTextRange: UITextRange? {
+        get {
+            return super.selectedTextRange
+        }
+        set {
+            super.selectedTextRange = newValue
+            guard !self.aorusSnapping else { return }
+            aorusSelectionDidChange()
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if self.aorusHasFormulaHighlight || self.selectedRange.length > 0 {
+            aorusUpdateFormulaHighlight()
+        }
+    }
+
+    @discardableResult
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        aorusUpdateFormulaHighlight()
+        return resigned
     }
 
     func aorusCarriesMaths(in range: NSRange) -> Bool {
@@ -1024,38 +1258,5 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
             }
         }
         return NSRange(location: lower, length: upper - lower)
-    }
-}
-
-/// A piece of a selection's highlight made taller so it covers a formula whole; everything
-/// else about it is the system's.
-private final class AorusAIFormulaSelectionRect: UITextSelectionRect {
-    private let frame: CGRect
-    private let base: UITextSelectionRect
-
-    init(frame: CGRect, base: UITextSelectionRect) {
-        self.frame = frame
-        self.base = base
-        super.init()
-    }
-
-    override var rect: CGRect {
-        return self.frame
-    }
-
-    override var writingDirection: NSWritingDirection {
-        return self.base.writingDirection
-    }
-
-    override var containsStart: Bool {
-        return self.base.containsStart
-    }
-
-    override var containsEnd: Bool {
-        return self.base.containsEnd
-    }
-
-    override var isVertical: Bool {
-        return self.base.isVertical
     }
 }
