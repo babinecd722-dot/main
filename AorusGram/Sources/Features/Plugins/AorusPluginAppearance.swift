@@ -296,8 +296,19 @@ public enum AorusPluginAppearance {
             Key("notification.background", .color, "In-app notification banners"),
             Key("notification.text", .color, "In-app notification text"),
 
-            Key("glass.style", .choice(["regular", "clear"]), "Material of the app's glass panes"),
+            Key("glass.style", .choice(["regular", "clear", "solid", "pixel"]), "Material of the app's glass panes: glass, clear glass, a solid plate or a plate with pixel steps"),
             Key("glass.tint", .color, "Tint over the app's glass panes; the alpha sets its strength"),
+            Key("glass.roundness", .number(0, 1), "How round the panes are, as a share of how round Telegram draws them; 0 squares their corners"),
+            Key("glass.pixelSize", .number(2, 8), "Size of one pixel of the pixel style's steps and outline"),
+            Key("glass.fill", .colors(3), "Colour laid over the glass, or the plate itself for solid and pixel; up to three colours make a gradient"),
+            Key("glass.border", .colors(3), "Outline of the panes; up to three colours make a gradient"),
+            Key("glass.borderWidth", .number(0.5, 4), "Thickness of the outline"),
+            Key("glass.borderStyle", .choice(["solid", "dashed", "dotted"]), "Line the outline is drawn with"),
+            Key("glass.borderMotion", .flag, "The outline's colours run around the pane"),
+            Key("glass.shadow", .number(0, 1), "Shadow under the panes, from none to strong"),
+            Key("glass.glow", .color, "Glow around the panes; the alpha sets its strength"),
+            Key("glass.glowSize", .number(2, 24), "How far the glow reaches"),
+            Key("glass.shine", .number(0, 1), "Glossy highlight across the top of the panes"),
 
             Key("font.chat", .choice(fontSizes), "Message text size"),
             Key("font.lists", .choice(fontSizes), "Text size of lists and settings"),
@@ -691,6 +702,149 @@ public enum AorusMessageLook {
     }
 
     /// Everything back to what Telegram draws.
+    public static func reset() {
+        store([:])
+    }
+}
+
+/// The glass the person chose in AorusGram → Interface → Bubble Settings: the capsules and
+/// panes Telegram draws of glass — the back button, the title over a chat, the input panel,
+/// the tab bar — made of another material, shaped, coloured, outlined and lit.
+///
+/// It is written in the appearance catalogue's `glass.` keys and kept, like `AorusMessageLook`,
+/// under a key of its own and laid over whatever plugins ask of the glass. It is announced with
+/// a notification of its own: every pane redraws itself from it directly, so a change here
+/// rebuilds nothing else — not the theme, not the screens drawn with it. Colours are kept for
+/// one appearance at a time, with `@dark` or `@light`; the rest is the same in both.
+public enum AorusGlassLook {
+    public static let defaultsKey = "aorusgram_glass_look"
+    public static let didChangeNotification = Notification.Name("aorusgram.glassLookChanged")
+
+    /// Every key a pane of glass reads, and so every key a ready-made style replaces.
+    public static let keys: [String] = AorusPluginAppearance.catalog.map { $0.name }.filter { $0.hasPrefix("glass.") }
+
+    /// Ready-made styles. Each colour is given for both appearances, so a style looks right in
+    /// a light theme and in a dark one.
+    public static let presets: [AorusMessageLook.Preset] = [
+        AorusMessageLook.Preset(id: "liquid", values: [:]),
+        AorusMessageLook.Preset(id: "clear", values: [
+            "glass.style": "clear",
+        ]),
+        AorusMessageLook.Preset(id: "solid", values: [
+            "glass.style": "solid", "glass.shadow": 0.35,
+            "glass.fill@light": "FFFFFFEB", "glass.fill@dark": "1C1C1EEB",
+            "glass.border@light": "0000000F", "glass.border@dark": "FFFFFF1A", "glass.borderWidth": 1,
+        ]),
+        AorusMessageLook.Preset(id: "pixel", values: [
+            "glass.style": "pixel", "glass.pixelSize": 4, "glass.shadow": 0.6, "glass.shine": 0.5,
+            "glass.fill@light": "FFFFFF", "glass.fill@dark": "2C2C2E",
+            "glass.border@light": "1C1C1E", "glass.border@dark": "F2F2F7",
+        ]),
+        AorusMessageLook.Preset(id: "neon", values: [
+            "glass.style": "clear", "glass.borderWidth": 1.5, "glass.borderMotion": true, "glass.glowSize": 12,
+            "glass.border@light": ["00B8D9", "E020C0"], "glass.border@dark": ["00E5FF", "FF2BD6"],
+            "glass.glow@light": "00B8D980", "glass.glow@dark": "00E5FFB3",
+        ]),
+        AorusMessageLook.Preset(id: "outline", values: [
+            "glass.style": "clear", "glass.borderWidth": 1, "glass.shine": 0.35,
+            "glass.border@light": "FFFFFFCC", "glass.border@dark": "FFFFFF4D",
+        ]),
+        AorusMessageLook.Preset(id: "gloss", values: [
+            "glass.shine": 0.7, "glass.shadow": 0.4, "glass.borderWidth": 1,
+            "glass.border@light": "FFFFFF99", "glass.border@dark": "FFFFFF33",
+        ]),
+        AorusMessageLook.Preset(id: "square", values: [
+            "glass.roundness": 0.3, "glass.borderWidth": 1,
+            "glass.border@light": "0000001A", "glass.border@dark": "FFFFFF26",
+        ]),
+        AorusMessageLook.Preset(id: "stitched", values: [
+            "glass.borderStyle": "dashed", "glass.borderWidth": 1.5,
+            "glass.border@light": "FFFFFFE6", "glass.border@dark": "FFFFFFB3",
+        ]),
+    ]
+
+    /// What is stored, as the drawing code reads it.
+    public static func stored() -> [String: Any] {
+        return UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]
+    }
+
+    /// Keeps `values`, every key checked against the appearance catalogue and the whole set
+    /// refused when one is wrong or is not a key of the glass, and redraws the glass when they
+    /// changed. Answers what was wrong.
+    @discardableResult
+    public static func store(_ values: [String: Any]) -> [AorusPluginAppearance.Rejection] {
+        let foreign = values.keys.filter { !AorusPluginAppearance.baseKey($0).hasPrefix("glass.") }.sorted()
+        guard foreign.isEmpty else {
+            return foreign.map { AorusPluginAppearance.Rejection(key: $0, reason: "not a key of the glass") }
+        }
+        let checked = AorusPluginAppearance.validate(values)
+        guard checked.rejections.isEmpty else {
+            return checked.rejections
+        }
+        let defaults = UserDefaults.standard
+        guard !NSDictionary(dictionary: stored()).isEqual(to: checked.values) else {
+            return []
+        }
+        if checked.values.isEmpty {
+            defaults.removeObject(forKey: defaultsKey)
+        } else {
+            defaults.set(checked.values, forKey: defaultsKey)
+        }
+        let deliver = {
+            NotificationCenter.default.post(name: didChangeNotification, object: nil)
+        }
+        if Thread.isMainThread {
+            deliver()
+        } else {
+            DispatchQueue.main.async(execute: deliver)
+        }
+        return []
+    }
+
+    /// The key a setting is kept under: a colour for the appearance in use, anything else for
+    /// both — a pane is the same shape and material in a light theme and in a dark one.
+    public static func storageKey(_ name: String, dark: Bool) -> String {
+        guard let key = AorusPluginAppearance.catalogByName[name] else {
+            return name
+        }
+        switch key.kind {
+        case .color, .colors:
+            return name + (dark ? "@dark" : "@light")
+        case .number, .flag, .choice:
+            return name
+        }
+    }
+
+    /// The value the person set for `name`, for the appearance in use.
+    public static func value(_ name: String, dark: Bool) -> Any? {
+        let values = stored()
+        return values[storageKey(name, dark: dark)] ?? values[name]
+    }
+
+    /// Sets one setting, or with nil takes it back to what is drawn without it; the rest stays.
+    @discardableResult
+    public static func set(_ name: String, _ value: Any?, dark: Bool) -> [AorusPluginAppearance.Rejection] {
+        var values = stored()
+        let key = storageKey(name, dark: dark)
+        values[key] = value
+        if key != name {
+            // A plain value from a ready-made style would otherwise still reach the other
+            // appearance and this one alike; the person's choice for this one replaces it.
+            values[name] = nil
+        }
+        return store(values)
+    }
+
+    /// A ready-made style in place of everything the person set for the glass.
+    @discardableResult
+    public static func apply(preset id: String) -> [AorusPluginAppearance.Rejection] {
+        guard let preset = presets.first(where: { $0.id == id }) else {
+            return [AorusPluginAppearance.Rejection(key: id, reason: "unknown style")]
+        }
+        return store(preset.values)
+    }
+
+    /// Everything back to the glass Telegram draws, or the plugins ask for.
     public static func reset() {
         store([:])
     }

@@ -68,7 +68,7 @@ public enum AorusAIMath {
     public static func render(_ source: String) -> Rendered {
         var drawables: [Atom] = []
         var lines: [String] = []
-        for line in source.components(separatedBy: .newlines) {
+        for line in logicalLines(source) {
             // A display fence on a line of its own is a delimiter, not content.
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
             if trimmedLine == "$$" || trimmedLine == "\\[" || trimmedLine == "\\]" { continue }
@@ -88,7 +88,7 @@ public enum AorusAIMath {
     /// The text form of a whole fragment: for a table cell, a quote, anywhere a run of text is
     /// all there is and a drawing has nowhere to go.
     public static func typography(_ source: String) -> String {
-        return source.components(separatedBy: .newlines)
+        return logicalLines(source)
             .map { line -> String in
                 var text = ""
                 forEachFragment(of: line) { fragment, isCode in
@@ -102,6 +102,156 @@ public enum AorusAIMath {
     /// One fragment of running text, as text.
     public static func inlineText(_ source: String) -> String {
         return typography(source)
+    }
+
+    /// The message's lines, with every formula written across several of them put back on
+    /// one.
+    ///
+    /// A model lays a large formula out the way a person would in a `.tex` file: the
+    /// numerator on its own lines, `}{`, the denominator on its own. Read a line at a time,
+    /// `\frac{` alone on a line is not a fraction, and the reader got the commands as text
+    /// with the pieces of the formula drawn between them. LaTeX reads a line break inside a
+    /// formula as a space, and so does this: what stands between `$$` and `$$`, or `\[` and
+    /// `\]`, what an environment's `\begin` and `\end` hold, and a command whose braces
+    /// open on one line and close on a later one are each a single line. A brace that never
+    /// closes gives the lines back as they were, so prose with a stray `{` is left alone.
+    public static func logicalLines(_ source: String) -> [String] {
+        let lines = source.components(separatedBy: .newlines)
+        var result: [String] = []
+        var index = 0
+        var inCodeBlock = false
+        // A formula runs this many lines at most; past that an unclosed brace is prose.
+        let longest = 60
+        while index < lines.count {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") {
+                inCodeBlock.toggle()
+                result.append(line)
+                index += 1
+                continue
+            }
+            if inCodeBlock {
+                result.append(line)
+                index += 1
+                continue
+            }
+            // A display block fenced on lines of its own.
+            if trimmed == "$$" || trimmed == "\\[" {
+                let closing: Set<String> = trimmed == "$$" ? ["$$"] : ["\\]"]
+                var body: [String] = []
+                var end = index + 1
+                while end < lines.count, end - index <= longest {
+                    let candidate = lines[end].trimmingCharacters(in: .whitespaces)
+                    if closing.contains(candidate) { break }
+                    body.append(candidate)
+                    end += 1
+                }
+                if end < lines.count, closing.contains(lines[end].trimmingCharacters(in: .whitespaces)) {
+                    result.append(body.filter { !$0.isEmpty }.joined(separator: " "))
+                    index = end + 1
+                    continue
+                }
+                result.append(line)
+                index += 1
+                continue
+            }
+            // A formula opened on this line and closed on a later one.
+            var state = FormulaSpan()
+            state.read(line)
+            if state.isOpen && (line.contains("\\") || state.displayDollars) {
+                var joined = line
+                var end = index + 1
+                var closed = false
+                while end < lines.count, end - index <= longest {
+                    let next = lines[end]
+                    if next.trimmingCharacters(in: .whitespaces).hasPrefix("```") { break }
+                    state.read(next)
+                    joined += " " + next.trimmingCharacters(in: .whitespaces)
+                    end += 1
+                    if !state.isOpen {
+                        closed = true
+                        break
+                    }
+                }
+                if closed {
+                    result.append(joined)
+                    index = end
+                    continue
+                }
+            }
+            result.append(line)
+            index += 1
+        }
+        return result
+    }
+
+    /// What a formula has opened and not yet closed, read a line at a time: braces, `\begin`
+    /// without its `\end`, an odd `$$`, and an unclosed `\[`. Escaped braces, `\{` and
+    /// `\}`, are characters, and code spans are code.
+    private struct FormulaSpan {
+        var braces = 0
+        var environments = 0
+        var displayDollars = false
+        var displayBracket = false
+
+        var isOpen: Bool {
+            return braces > 0 || environments > 0 || displayDollars || displayBracket
+        }
+
+        mutating func read(_ line: String) {
+            let characters = Array(line)
+            var position = 0
+            var inCode = false
+            while position < characters.count {
+                let character = characters[position]
+                if character == "`" {
+                    inCode.toggle()
+                    position += 1
+                    continue
+                }
+                if inCode {
+                    position += 1
+                    continue
+                }
+                if character == "\\", position + 1 < characters.count {
+                    let next = characters[position + 1]
+                    if next == "{" || next == "}" || next == "$" || next == "\\" {
+                        position += 2
+                        continue
+                    }
+                    if next == "[" {
+                        displayBracket = true
+                        position += 2
+                        continue
+                    }
+                    if next == "]" {
+                        displayBracket = false
+                        position += 2
+                        continue
+                    }
+                    let rest = String(characters[(position + 1)...].prefix(6))
+                    if rest.hasPrefix("begin{") {
+                        environments += 1
+                    } else if rest.hasPrefix("end{") {
+                        environments = max(0, environments - 1)
+                    }
+                    position += 1
+                    continue
+                }
+                if character == "$", position + 1 < characters.count, characters[position + 1] == "$" {
+                    displayDollars.toggle()
+                    position += 2
+                    continue
+                }
+                if character == "{" {
+                    braces += 1
+                } else if character == "}" {
+                    braces = max(0, braces - 1)
+                }
+                position += 1
+            }
+        }
     }
 
     /// The structure of one fragment.

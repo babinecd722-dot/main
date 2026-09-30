@@ -18188,6 +18188,66 @@ public enum AorusPluginAppearanceValues {
         lock.lock()
         cached = nil
         cachedRevision += 1
+        // Plugins may describe the glass as well, so the glass is read again with the rest.
+        glassCached = nil
+        glassRevision += 1
+        lock.unlock()
+    }
+
+    // MARK: The glass
+
+    /// `AorusGlassLook.defaultsKey` in the plugin core: the glass the person chose in
+    /// AorusGram → Interface → Bubble Settings.
+    public static let glassLookKey = "aorusgram_glass_look"
+    /// `AorusGlassLook.didChangeNotification` in the plugin core. The glass is drawn from its own
+    /// table, so a change the person makes to it rebuilds no theme: every pane redraws itself.
+    public static let glassDidChangeNotification = Notification.Name("aorusgram.glassLookChanged")
+
+    private static var glassCached: [String: Any]?
+    private static var glassRevision = 0
+    private static var glassObserver: NSObjectProtocol?
+
+    /// The `glass.` keys in force — what plugins ask of the glass with what the person chose laid
+    /// over it — and a number that changes whenever either does.
+    public static func glassSnapshot() -> (values: [String: Any], revision: Int) {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        if glassObserver == nil {
+            glassObserver = NotificationCenter.default.addObserver(forName: glassDidChangeNotification, object: nil, queue: nil, using: { _ in
+                AorusPluginAppearanceValues.invalidateGlass()
+            })
+        }
+        if observer == nil {
+            observer = NotificationCenter.default.addObserver(forName: didChangeNotification, object: nil, queue: nil, using: { _ in
+                AorusPluginAppearanceValues.invalidate()
+            })
+        }
+        if let glassCached {
+            return (glassCached, glassRevision)
+        }
+        var values = (UserDefaults.standard.dictionary(forKey: defaultsKey) ?? [:]).filter { $0.key.hasPrefix("glass.") }
+        if let own = UserDefaults.standard.dictionary(forKey: glassLookKey), !own.isEmpty {
+            // What the person set for both appearances wins over what a plugin set for one: a
+            // key read for one appearance is looked up with its suffix first.
+            for key in own.keys where !key.contains("@") {
+                values[key + "@dark"] = nil
+                values[key + "@light"] = nil
+            }
+            values.merge(own, uniquingKeysWith: { _, own in own })
+        }
+        if UserDefaults.standard.bool(forKey: "__LOCK_KEY__") {
+            values = [:]
+        }
+        glassCached = values
+        return (values, glassRevision)
+    }
+
+    private static func invalidateGlass() {
+        lock.lock()
+        glassCached = nil
+        glassRevision += 1
         lock.unlock()
     }
 
@@ -18697,37 +18757,28 @@ def patch_plugin_appearance(tg: Path) -> None:
 
     glass = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
     g = glass.read_text(encoding="utf-8")
-    if "AorusPluginAppearanceValues" not in g:
-        old_decl = "                            let glassEffectValue: UIGlassEffect\n"
+    if "AorusGlassStyle.current(dark: isDark).tint" not in g:
         old_apply = (
             "                            glassEffectValue.isInteractive = isInteractive\n"
             "                            glassEffect = glassEffectValue\n"
         )
-        if g.count(old_decl) != 1 or g.count(old_apply) != 1:
-            raise RuntimeError("PluginAppearance: glass effect anchors are missing")
-        g = g.replace(old_decl, "                            var glassEffectValue: UIGlassEffect\n", 1)
+        if g.count(old_apply) != 1:
+            raise RuntimeError("PluginAppearance: glass effect anchor is missing")
+        # The material is chosen before Telegram draws the pane (patch_bubble_settings); only
+        # the tint goes into the glass effect itself, which is an object, so the value Telegram
+        # keeps in a `let` takes it as it is.
         g = g.replace(old_apply, (
             "                            glassEffectValue.isInteractive = isInteractive\n"
-            "                            // AorusGram: the glass a plugin styled, for the panes the app draws plainly.\n"
-            "                            // A pane Telegram gives a colour of its own keeps it: that colour means something.\n"
-            "                            if tintColor.kind == .panel || tintColor.kind == .clear {\n"
-            "                                let aorusValues = AorusPluginAppearanceValues.current()\n"
-            "                                if !aorusValues.isEmpty {\n"
-            "                                    if let aorusStyle = AorusPluginAppearanceValues.string(\"glass.style\", dark: isDark, in: aorusValues) {\n"
-            "                                        let aorusTint = glassEffectValue.tintColor\n"
-            "                                        glassEffectValue = UIGlassEffect(style: aorusStyle == \"clear\" ? .clear : .regular)\n"
-            "                                        glassEffectValue.tintColor = aorusTint\n"
-            "                                        glassEffectValue.isInteractive = isInteractive\n"
-            "                                    }\n"
-            "                                    if let aorusTint = AorusPluginAppearanceValues.color(\"glass.tint\", dark: isDark, in: aorusValues) {\n"
-            "                                        glassEffectValue.tintColor = aorusTint\n"
-            "                                    }\n"
-            "                                }\n"
+            "                            // AorusGram: the tint the person or a plugin gave the glass, for the panes the app\n"
+            "                            // draws plainly. A pane Telegram gives a colour of its own keeps it: that colour\n"
+            "                            // means something.\n"
+            "                            if tintColor.kind == .panel || tintColor.kind == .clear, let aorusTint = AorusGlassStyle.current(dark: isDark).tint {\n"
+            "                                glassEffectValue.tintColor = aorusTint\n"
             "                            }\n"
             "                            glassEffect = glassEffectValue\n"
         ), 1)
         glass.write_text(g, encoding="utf-8")
-        print("PluginAppearance: glass panes follow the plugin style and tint")
+        print("PluginAppearance: glass panes take the tint the person or a plugin chose")
 
 
 _AORUS_APP_BUNDLE_RESOLVER_H = '''
@@ -19842,6 +19893,208 @@ def patch_message_settings(tg: Path) -> None:
         d = d.replace(anchor, anchor + "        // AorusGram: the Message Settings screen, for AorusGram → Interface to open.\n        aorusInstallMessageSettings()\n", 1)
         delegate.write_text(d, encoding="utf-8")
     print("MessageSettings: installed at launch")
+
+
+_AORUS_GLASS_UPDATE_SIGNATURE = "    func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {\n"
+
+_AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chose it in Bubble Settings or a plugin asked for it.
+    // Every pane is laid out through here. The corners are made as round as the style says,
+    // Telegram's glass is drawn — or, for a solid or pixel plate, left out — and the style's
+    // plate, colour, outline, highlight, shadow and glow are laid around it
+    // (AorusGlassStyle.swift). A pane keeps what it was last asked for, so a new style redraws
+    // it at once, whether or not whoever owns it lays it out again.
+    private struct AorusGlassRequest {
+        let size: CGSize
+        let shape: Shape
+        let isDark: Bool
+        let tintColor: TintColor
+        let isInteractive: Bool
+        let isVisible: Bool
+    }
+
+    private var aorusRequest: AorusGlassRequest?
+    private var aorusAppliedStyle: AorusGlassStyle?
+    private var aorusObservesStyle: Bool = false
+    private var aorusDecorationView: AorusGlassDecorationView?
+    private var aorusHaloView: AorusGlassHaloView?
+
+    func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {
+        self.aorusUpdate(AorusGlassRequest(size: size, shape: shape, isDark: isDark, tintColor: tintColor, isInteractive: isInteractive, isVisible: isVisible), transition: transition, styleChanged: false)
+    }
+
+    private func aorusUpdate(_ request: AorusGlassRequest, transition: ComponentTransition, styleChanged: Bool) {
+        if !self.aorusObservesStyle {
+            self.aorusObservesStyle = true
+            NotificationCenter.default.addObserver(self, selector: #selector(self.aorusStyleDidChange), name: AorusPluginAppearanceValues.glassDidChangeNotification, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(self.aorusStyleDidChange), name: AorusPluginAppearanceValues.didChangeNotification, object: nil)
+        }
+        self.aorusRequest = request
+        let style = AorusGlassStyle.current(dark: request.isDark)
+        if self.aorusAppliedStyle != style {
+            // Telegram applies its glass again only when what it is asked for changes.
+            self.aorusAppliedStyle = style
+            self.params = nil
+        }
+        let shape = style.shape(request.shape)
+        // Clear glass and the regular kind are Telegram's own two materials: a pane drawn
+        // plainly is simply asked for the other one.
+        var tintColor = request.tintColor
+        switch (style.material, request.tintColor.kind) {
+        case (.clear?, .panel):
+            tintColor = TintColor(kind: .clear, innerColor: request.tintColor.innerColor, innerInset: request.tintColor.innerInset)
+        case (.regular?, .clear):
+            tintColor = TintColor(kind: .panel, innerColor: request.tintColor.innerColor, innerInset: request.tintColor.innerInset)
+        default:
+            break
+        }
+        self.aorusTelegramUpdate(size: request.size, shape: shape, isDark: request.isDark, tintColor: tintColor, isInteractive: request.isInteractive, isVisible: request.isVisible && !style.replacesGlass, transition: transition)
+        self.aorusUpdateDecoration(style: style, request: request, shape: shape, transition: transition, styleChanged: styleChanged)
+    }
+
+    private func aorusUpdateDecoration(style: AorusGlassStyle, request: AorusGlassRequest, shape: Shape, transition: ComponentTransition, styleChanged: Bool) {
+        let size = request.size
+        let drawnPlainly = request.tintColor.kind == .panel || request.tintColor.kind == .clear
+        let fill: [UIColor]
+        if style.replacesGlass {
+            fill = style.plate(for: request.tintColor, isDark: request.isDark)
+        } else if drawnPlainly {
+            fill = style.fill
+        } else {
+            fill = []
+        }
+        // The native glass takes the tint itself; the older glass and a plate are tinted here.
+        let tint: UIColor? = drawnPlainly && (style.replacesGlass || self.nativeView == nil) ? style.tint : nil
+        // With the glass turned off in AorusGram's settings, what surrounds the glass goes with
+        // it; a plate is not glass and stays.
+        let glassShown = (UserDefaults.standard.object(forKey: "aorusgram_feature_glass_ui") as? Bool) ?? true
+        let shown = request.isVisible && (style.replacesGlass || glassShown) && size.width >= 1.0 && size.height >= 1.0
+        let decorated = shown && (!fill.isEmpty || tint != nil || !style.border.isEmpty || style.shine > 0.0)
+        let haloed = shown && (style.shadow > 0.0 || style.glow != nil)
+        let radii = AorusGlassStyle.radii(shape, size: size)
+        let outlines: AorusGlassOutlines? = decorated || haloed ? AorusGlassOutlines(size: size, radii: radii, style: style) : nil
+        let fade = ComponentTransition.easeInOut(duration: 0.25)
+        let animated = styleChanged || !transition.animation.isImmediate
+
+        if decorated, let outlines {
+            let view: AorusGlassDecorationView
+            var appears = false
+            if let current = self.aorusDecorationView {
+                view = current
+            } else {
+                view = AorusGlassDecorationView(frame: CGRect(origin: CGPoint(), size: size))
+                self.aorusDecorationView = view
+                appears = true
+            }
+            // Beneath everything the pane holds, whatever it adds after.
+            if view.superview !== self.contentView {
+                self.contentView.insertSubview(view, at: 0)
+            } else if self.contentView.subviews.first !== view {
+                self.contentView.sendSubviewToBack(view)
+            }
+            let viewTransition: ComponentTransition = appears ? .immediate : transition
+            viewTransition.setFrame(view: view, frame: CGRect(origin: CGPoint(), size: size))
+            view.update(style: style, size: size, outlines: outlines, radii: radii, fill: fill, tint: tint, transition: viewTransition, styleChanged: styleChanged && !appears)
+            if appears && animated {
+                fade.animateAlpha(view: view, from: 0.0, to: 1.0)
+            }
+        } else if let view = self.aorusDecorationView {
+            self.aorusDecorationView = nil
+            if animated {
+                fade.setAlpha(view: view, alpha: 0.0, completion: { [weak view] _ in
+                    view?.removeFromSuperview()
+                })
+            } else {
+                view.removeFromSuperview()
+            }
+        }
+
+        if haloed, let outlines {
+            let view: AorusGlassHaloView
+            var appears = false
+            if let current = self.aorusHaloView {
+                view = current
+            } else {
+                view = AorusGlassHaloView(frame: CGRect(origin: CGPoint(), size: size))
+                self.aorusHaloView = view
+                appears = true
+            }
+            // Behind the glass and everything else the pane draws.
+            if view.superview !== self {
+                self.insertSubview(view, at: 0)
+            } else if self.subviews.first !== view {
+                self.sendSubviewToBack(view)
+            }
+            let viewTransition: ComponentTransition = appears ? .immediate : transition
+            viewTransition.setFrame(view: view, frame: CGRect(origin: CGPoint(), size: size))
+            view.update(style: style, size: size, outlines: outlines, transition: viewTransition, styleChanged: styleChanged && !appears)
+            if appears && animated {
+                fade.animateAlpha(view: view, from: 0.0, to: 1.0)
+            }
+        } else if let view = self.aorusHaloView {
+            self.aorusHaloView = nil
+            if animated {
+                fade.setAlpha(view: view, alpha: 0.0, completion: { [weak view] _ in
+                    view?.removeFromSuperview()
+                })
+            } else {
+                view.removeFromSuperview()
+            }
+        }
+    }
+
+    @objc private func aorusStyleDidChange() {
+        // Posted where the look was kept, before every observer has read it again.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let request = self.aorusRequest else {
+                return
+            }
+            if AorusGlassStyle.current(dark: request.isDark) == self.aorusAppliedStyle {
+                return
+            }
+            self.aorusUpdate(request, transition: .easeInOut(duration: 0.25), styleChanged: true)
+        }
+    }
+
+    private func aorusTelegramUpdate(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool, isVisible: Bool, transition: ComponentTransition) {
+'''
+
+
+def patch_bubble_settings(tg: Path) -> None:
+    """AorusGram → Interface → Bubble Settings: the app's glass as the person chooses it.
+
+    Every pane of glass Telegram draws is laid out through one method of GlassBackgroundView.
+    That method becomes the pane's own drawing — Telegram's, under a name of its own — with the
+    style applied around it: the corners as round as the style says, the glass itself left out
+    where the style draws a plate, and the style's plate, colour, outline, highlight, shadow and
+    glow laid in and around the pane (AorusGlassStyle.swift, copied by the workflow into the
+    same module). Each pane keeps what it was last asked for and listens for the style, so a
+    change is drawn at once everywhere, the chat's own header included.
+
+    The screen lives in TelegramUI (AorusBubbleSettings.swift, copied by the workflow), where
+    the chat's header can be built from its real parts, and is handed to AorusGramUI at launch.
+    Runs after patch_glass_global_toggle and patch_plugin_appearance: it moves the method they
+    patch, lines and all.
+    """
+    glass = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
+    g = glass.read_text(encoding="utf-8")
+    if "private func aorusTelegramUpdate(" not in g:
+        if g.count(_AORUS_GLASS_UPDATE_SIGNATURE) != 1:
+            raise RuntimeError(f"BubbleSettings: GlassBackgroundView.update found {g.count(_AORUS_GLASS_UPDATE_SIGNATURE)} times")
+        if "AorusGram: global glass gate" not in g or "AorusGlassStyle.current(dark: isDark).tint" not in g:
+            raise RuntimeError("BubbleSettings: the glass gate and tint must be patched in first")
+        g = g.replace(_AORUS_GLASS_UPDATE_SIGNATURE, _AORUS_GLASS_UPDATE_WRAPPER, 1)
+        glass.write_text(g, encoding="utf-8")
+    print("BubbleSettings: every pane of glass draws the chosen style")
+
+    delegate = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
+    d = delegate.read_text(encoding="utf-8")
+    if "aorusInstallBubbleSettings()" not in d:
+        anchor = "        aorusInstallMessageSettings()\n"
+        if d.count(anchor) != 1:
+            raise RuntimeError("BubbleSettings: the Message Settings install line is missing")
+        d = d.replace(anchor, anchor + "        // AorusGram: the Bubble Settings screen, beside it.\n        aorusInstallBubbleSettings()\n", 1)
+        delegate.write_text(d, encoding="utf-8")
+    print("BubbleSettings: installed at launch")
 
 
 def patch_hide_tabs(tg: Path) -> None:
@@ -30186,6 +30439,9 @@ def main() -> None:
     patch_message_look(tg)
     patch_message_settings(tg)
     patch_message_shape_and_layout(tg)
+    # After patch_glass_global_toggle and patch_plugin_appearance, whose lines it moves, and
+    # patch_message_settings, beside whose install line it installs its own.
+    patch_bubble_settings(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

@@ -1830,6 +1830,64 @@ if AorusPluginSandbox.watchdogAvailable {
     NotificationCenter.default.removeObserver(lookObserver)
     if let savedLook { UserDefaults.standard.set(savedLook, forKey: AorusMessageLook.defaultsKey) }
 
+    // The glass: every key a pane reads, the person's own glass from Bubble Settings, kept and
+    // announced apart from the rest of the look so a change rebuilds no theme.
+    let glassKeys = AorusPluginAppearance.validate([
+        "glass.style": "pixel",
+        "glass.style@dark": "solid",
+        "glass.roundness": NSNumber(value: 0.4),
+        "glass.pixelSize": NSNumber(value: 6),
+        "glass.fill": ["FFFFFF", "E3F0FF", "F5E8FF"],
+        "glass.border@dark": ["00E5FF", "FF2BD6"],
+        "glass.borderWidth": NSNumber(value: 1.5),
+        "glass.borderStyle": "dotted",
+        "glass.borderMotion": NSNumber(value: true),
+        "glass.shadow": NSNumber(value: 0.6),
+        "glass.glow@light": "00B8D980",
+        "glass.glowSize": NSNumber(value: 12),
+        "glass.shine": NSNumber(value: 0.5),
+    ])
+    expect(glassKeys.rejections.isEmpty && glassKeys.values.count == 13, "every key of the glass is taken")
+    expect((glassKeys.values["glass.fill"] as? [String])?.count == 3, "the glass takes a gradient of three colours")
+    expect(AorusPluginAppearance.validate(["glass.style": "frosted"]).rejections.count == 1, "a material the glass does not draw is refused")
+    expect(AorusPluginAppearance.validate(["glass.fill": ["FFFFFF", "000000", "FF0000", "00FF00"]]).rejections.count == 1, "the glass takes at most three colours")
+    expect(AorusPluginAppearance.validate(["glass.pixelSize": NSNumber(value: 12)]).rejections.count == 1, "a pixel larger than a pane can hold is refused")
+    expect(AorusPluginAppearance.validate(["glass.roundness@dark": NSNumber(value: 0.5)]).rejections.count == 1, "the shape of the glass is the same in dark and light")
+    expect(AorusPluginAppearance.validate(["glass.borderMotion": "yes"]).rejections.count == 1, "the flowing outline is a flag")
+    expect(AorusGlassLook.keys.count == 13 && AorusGlassLook.keys.allSatisfy { $0.hasPrefix("glass.") }, "the glass's own keys are all the glass keys")
+    expect(AorusGlassLook.storageKey("glass.border", dark: true) == "glass.border@dark" && AorusGlassLook.storageKey("glass.tint", dark: false) == "glass.tint@light", "a glass colour is kept for the appearance in use")
+    expect(AorusGlassLook.storageKey("glass.style", dark: true) == "glass.style" && AorusGlassLook.storageKey("glass.shadow", dark: false) == "glass.shadow", "the material and the shape are kept for both")
+    for preset in AorusGlassLook.presets {
+        expect(AorusPluginAppearance.validate(preset.values).rejections.isEmpty, "the \(preset.id) glass passes the check")
+        expect(preset.values.keys.allSatisfy { AorusPluginAppearance.baseKey($0).hasPrefix("glass.") }, "the \(preset.id) glass only sets the glass")
+    }
+    expect(AorusGlassLook.presets.first?.id == "liquid" && AorusGlassLook.presets.first?.values.isEmpty == true, "the first glass is Telegram's own")
+    let savedGlass = UserDefaults.standard.dictionary(forKey: AorusGlassLook.defaultsKey)
+    UserDefaults.standard.removeObject(forKey: AorusGlassLook.defaultsKey)
+    var glassChanges = 0
+    var themeChangesFromGlass = 0
+    let glassObserver = NotificationCenter.default.addObserver(forName: AorusGlassLook.didChangeNotification, object: nil, queue: nil) { _ in glassChanges += 1 }
+    let themeObserver = NotificationCenter.default.addObserver(forName: AorusPluginAppearance.didChangeNotification, object: nil, queue: nil) { _ in themeChangesFromGlass += 1 }
+    expect(AorusGlassLook.set("glass.style", "pixel", dark: true).isEmpty, "a material is kept")
+    expect(AorusGlassLook.stored()["glass.style"] as? String == "pixel" && AorusGlassLook.stored()["glass.style@dark"] == nil, "a material is kept for both appearances")
+    expect(AorusGlassLook.set("glass.border", ["FFFFFF", "00E5FF"], dark: false).isEmpty, "an outline gradient is kept")
+    expect((AorusGlassLook.value("glass.border", dark: false) as? [String]) == ["FFFFFF", "00E5FF"] && AorusGlassLook.value("glass.border", dark: true) == nil, "an outline set in a light theme stays out of a dark one")
+    expect(glassChanges == 2 && themeChangesFromGlass == 0, "the glass redraws itself and rebuilds no theme")
+    let foreignGlass = AorusGlassLook.store(["glass.shine": 0.5, "bubble.radius": 12])
+    expect(foreignGlass.count == 1 && foreignGlass.first?.key == "bubble.radius" && AorusGlassLook.stored()["glass.style"] as? String == "pixel", "the glass keeps only the glass and refuses the rest whole")
+    expect(AorusGlassLook.apply(preset: "neon").isEmpty, "a ready-made glass applies")
+    if let neonGlass = AorusGlassLook.presets.first(where: { $0.id == "neon" }) {
+        expect(NSDictionary(dictionary: AorusGlassLook.stored()).isEqual(to: AorusPluginAppearance.validate(neonGlass.values).values), "a glass just applied reads back as that glass, the person's earlier choices gone")
+    } else {
+        expect(false, "the neon glass exists")
+    }
+    expect(!AorusGlassLook.apply(preset: "sparkle").isEmpty, "an unknown glass is refused")
+    AorusGlassLook.reset()
+    expect(AorusGlassLook.stored().isEmpty && UserDefaults.standard.object(forKey: AorusGlassLook.defaultsKey) == nil, "reset leaves no glass stored")
+    NotificationCenter.default.removeObserver(glassObserver)
+    NotificationCenter.default.removeObserver(themeObserver)
+    if let savedGlass { UserDefaults.standard.set(savedGlass, forKey: AorusGlassLook.defaultsKey) }
+
     // Icons in place of Telegram's: the catalogue, the check, the merge, and a plugin using them.
     expect(AorusPluginPermission.requestedBySource("aorus.icons.set({ 'tab.chats': 'star' });").contains(.appCustomization), "replacing an icon asks for app customization")
     expect(AorusPluginPermission.requestedBySource("aorus.icons.style('pixel');").contains(.appCustomization), "styling the icons asks for app customization")

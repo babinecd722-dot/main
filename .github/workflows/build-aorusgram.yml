@@ -898,6 +898,9 @@ jobs:
           # by the chat's own code, so the screen is built here and handed to AorusGramUI at
           # launch (both call sites are injected by aorus_branding.py).
           cp $PATCHES/submodules/TelegramUI/Sources/AorusMessageSettings.swift $TG/submodules/TelegramUI/Sources/
+          # AorusGram → Interface → Bubble Settings: its preview is a chat's real header — the
+          # navigation bar, the title and the avatar — built here from Telegram's own parts.
+          cp $PATCHES/submodules/TelegramUI/Sources/AorusBubbleSettings.swift $TG/submodules/TelegramUI/Sources/
 
           # 8. The chat controller's half of the plugin chat surface. `aorus.chat.*` means
           #    the chat on screen, and only the controller knows which one that is; the
@@ -953,6 +956,12 @@ jobs:
           #     loaded. aorus_branding.py writes it again with the licence key it reads and
           #     hooks AppBundle's loader up to it.
           cp $PATCHES/submodules/Display/Source/AorusPluginIconValues.swift $TG/submodules/Display/Source/
+
+          # 14. The glass as the person chose it in Bubble Settings, or a plugin asked for it:
+          #     read, shaped and drawn around every pane. GlassBackgroundView.update is routed
+          #     through it by aorus_branding.py.
+          cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassStyle.swift \
+             $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 
           echo "Injection complete"
           echo "--- AorusGramUI sources ---"

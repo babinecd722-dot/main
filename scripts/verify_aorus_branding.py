@@ -4069,6 +4069,8 @@ def main() -> None:
     appearance_core = here.parent / "AorusGram" / "Sources" / "Features" / "Plugins" / "AorusPluginAppearance.swift"
     presentation_data = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
     glass_component = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
+    # The glass keys are read and drawn by the style every pane of glass is laid out with.
+    glass_style = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassStyle.swift"
     display_values = tg / "submodules/Display/Source/AorusPluginAppearanceValues.swift"
     settings_resources = tg / "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift"
     profile_header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
@@ -4076,14 +4078,14 @@ def main() -> None:
     bubble_node = tg / "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift"
     # Message text is set where Telegram builds a chat's fonts.
     chat_presentation = tg / "submodules/TelegramPresentationData/Sources/ChatPresentationData.swift"
-    if not appearance_core.is_file() or not display_values.is_file():
-        err.append("PluginAppearance: the appearance catalogue or its reader is missing")
+    if not appearance_core.is_file() or not display_values.is_file() or not glass_style.is_file():
+        err.append("PluginAppearance: the appearance catalogue, its reader or the glass style is missing")
     else:
         import re as _re_look
         core_text = appearance_core.read_text(encoding="utf-8")
         drawn = "".join(
             path.read_text(encoding="utf-8")
-            for path in (presentation_data, glass_component, settings_resources, profile_header, bubble_node, chat_presentation)
+            for path in (presentation_data, glass_component, glass_style, settings_resources, profile_header, bubble_node, chat_presentation)
         )
         if "aorusApplyPluginAppearance(aorusApplyAmoledTheme(theme))" not in drawn or "aorusApplyPluginAppearance(aorusApplyAmoledTheme(themeValue))" not in drawn:
             err.append("PluginAppearance: the theme is built without the plugin look")
@@ -4096,6 +4098,8 @@ def main() -> None:
             err.append("PluginAppearance: the look set in Message Settings is not read")
         if 'defaultsKey = "aorusgram_message_look"' not in core_text:
             err.append("PluginAppearance: Message Settings and the drawing code keep the look under different keys")
+        if 'defaultsKey = "aorusgram_glass_look"' not in core_text or 'Notification.Name("aorusgram.glassLookChanged")' not in core_text:
+            err.append("PluginAppearance: Bubble Settings and the drawing code keep the glass under different keys")
         for name in _re_look.findall(r'Key\("([^"]+)"', core_text):
             if "\\(side)" in name:
                 tail = name.split(".", 2)[2]
@@ -4140,6 +4144,23 @@ def main() -> None:
         ("submodules/TelegramUI/Sources/SharedAccountContext.swift", "showTextAsPlaceholder: rank != nil && !aorusMessagePreviewShowsText(messages)"),
         ("submodules/AorusGramUI/Sources/AorusSettingsShortcuts.swift", "public enum AorusMessageSettingsRoute"),
         ("submodules/AorusGramUI/Sources/AorusGramController.swift", "AorusMessageSettingsRoute.make(context)"),
+        # Bubble Settings: every pane of glass is laid out through the style, which draws the
+        # plate, outline, highlight, shadow and glow around Telegram's own glass; the person's
+        # glass is read from a table of its own that rebuilds no theme.
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "private func aorusTelegramUpdate("),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "self.aorusUpdateDecoration(style: style, request: request, shape: shape"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "isVisible: request.isVisible && !style.replacesGlass"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "AorusGlassStyle.current(dark: isDark).tint"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "name: AorusPluginAppearanceValues.glassDidChangeNotification"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "AorusGram: global glass gate"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassStyle.swift", "AorusPluginAppearanceValues.glassSnapshot()"),
+        ("submodules/Display/Source/AorusPluginAppearanceValues.swift", 'glassLookKey = "aorusgram_glass_look"'),
+        ("submodules/Display/Source/AorusPluginAppearanceValues.swift", 'Notification.Name("aorusgram.glassLookChanged")'),
+        ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallBubbleSettings()"),
+        ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "AorusBubbleSettingsRoute.register"),
+        ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "bar.previousItem = .item(self.previousBarItem)"),
+        ("submodules/AorusGramUI/Sources/AorusSettingsShortcuts.swift", "public enum AorusBubbleSettingsRoute"),
+        ("submodules/AorusGramUI/Sources/AorusGramController.swift", "AorusBubbleSettingsRoute.make(context)"),
     ]
     for relative, marker in message_settings_checks:
         target = tg / relative

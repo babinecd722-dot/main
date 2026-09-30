@@ -461,6 +461,52 @@ private func writesItselfBackAsLaTeX() {
     }
 }
 
+// MARK: - A formula laid out over several lines
+
+// From a screenshot of an answer: a display fraction written the way a `.tex` file lays one
+// out, over nine lines. Read a line at a time it showed `\frac`, `\sqrt` and three lone
+// closing braces as text, with the pieces of the formula drawn between them.
+private func putsAFormulaWrittenOverSeveralLinesBackTogether() {
+    let fenced = #"""
+    Итог:
+    \[
+    \frac{
+      \left( a + b \cdot \sqrt{c} + \frac{d}{e^2 + f} \right)^3
+    }{
+      \sqrt{
+        \sum_{k=1}^{n} \left( \frac{1}{k^2 + \sin(k\theta)} + \int_0^x e^{-t^2} \, dt \right)
+      }
+      - \log\left( \prod_{i=1}^{m} \frac{i^2 + 1}{i^2 - 1} \right)
+    }
+    \]
+    Готово.
+    """#
+    let rendered = AorusAIMath.render(fenced)
+    expect(rendered.drawables.count, 1, "the fenced formula is one drawing")
+    expect(!rendered.text.contains("\\frac") && !rendered.text.contains("\\sqrt"), "no command is left as text")
+    expect(rendered.text.components(separatedBy: "\n").count, 3, "the prose around it keeps its own lines")
+
+    let bare = #"""
+    \frac{
+      a + b
+    }{
+      c
+    }
+    """#
+    let bareRendered = AorusAIMath.render(bare)
+    expect(bareRendered.drawables.count, 1, "an unfenced formula whose braces span lines is one drawing")
+    expect(!bareRendered.text.contains("}"), "and leaves no brace behind")
+
+    let dollars = "$$\n\\frac{1}{x}\n$$"
+    expect(AorusAIMath.render(dollars).drawables.count, 1, "a formula between two lines of $$ is one drawing")
+
+    let prose = "Используйте {name} в шаблоне\nи следующую строку"
+    expect(AorusAIMath.logicalLines(prose), ["Используйте {name} в шаблоне", "и следующую строку"], "a stray brace in prose joins nothing")
+
+    let unclosed = "\\frac{a\nи дальше просто текст"
+    expect(AorusAIMath.logicalLines(unclosed).count, 2, "a brace that never closes gives the lines back as they were")
+}
+
 @main
 private enum AorusAIMathTests {
     static func main() {
@@ -475,6 +521,7 @@ private enum AorusAIMathTests {
         setsTheRestOfWhatAModelWrites()
         writesItselfBackAsLaTeX()
         survivesWhatAModelActuallySends()
+        putsAFormulaWrittenOverSeveralLinesBackTogether()
         guard failures.isEmpty else {
             for failure in failures {
                 fputs("AorusAIMath test failed: \(failure)\n", stderr)

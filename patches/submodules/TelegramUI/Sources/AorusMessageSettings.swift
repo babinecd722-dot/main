@@ -81,6 +81,11 @@ private enum AorusMessageSamples {
         return AorusMessageSample(quote: quote.0, author: "— " + quote.1, name: name, title: title, nameColor: nameColor, timestamp: Int32(date.timeIntervalSince1970))
     }
 
+    /// The names the samples are written by, in the app's language.
+    static func names(language: String) -> [String] {
+        return (table[language] ?? english).names
+    }
+
     private static var english: AorusMessageSampleLanguage {
         return table["en"] ?? AorusMessageSampleLanguage(quotes: [("“Simplicity is the ultimate sophistication.”", "Leonardo da Vinci")], names: ["Emma"], titles: ["admin"])
     }
@@ -497,6 +502,11 @@ private enum AorusMessageSamples {
     ]
 }
 
+/// The names the previews' people go by, in the app's language.
+func aorusLookSampleNames(language: String) -> [String] {
+    return AorusMessageSamples.names(language: language)
+}
+
 // MARK: - The preview
 
 /// The preview's messages carry stable ids from here up. Telegram's preview item draws the
@@ -624,12 +634,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     private var messagesOutgoing: Bool?
     private var itemHeaderNodes: [ListViewItemNode.HeaderId: ListViewItemHeaderNode] = [:]
     private var item: AorusMessagePreviewItem?
-    private var shuffleButton: UIButton?
-    private var shuffleGlyph: UIImageView?
-    /// The button's plate: the same material a chat's date stands on, over this wallpaper.
-    private var shuffleBlur: NavigationBackgroundNode?
-    private var shuffleContent: WallpaperBubbleBackgroundNode?
-    private var shuffleSpins = 0
+    private var shuffleButton: AorusLookShuffleButton?
     /// The size the wallpaper was last laid out at. It is the height of the list the screen
     /// shows, not the row's: the wallpaper then looks as it does behind a chat, and it keeps
     /// its scale while the row grows and shrinks instead of zooming with it.
@@ -654,111 +659,24 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
         self.containerNode.addSubnode(self.shadowsNode)
     }
 
-    /// A round button in the corner of the wallpaper, on the plate a chat's date stands on — the
-    /// same colour, and the same blur where the chat blurs it, for this wallpaper — so it reads
-    /// as part of the chat rather than a control laid over it.
+    /// The button in the corner of the wallpaper that shows another message.
     private func updateShuffleButton(item: AorusMessagePreviewItem, params: ListViewItemLayoutParams, backgroundSize: CGSize) {
-        let size: CGFloat = 32.0
-        let button: UIButton
-        let glyph: UIImageView
-        if let currentButton = self.shuffleButton, let currentGlyph = self.shuffleGlyph {
-            button = currentButton
-            glyph = currentGlyph
+        let button: AorusLookShuffleButton
+        if let current = self.shuffleButton {
+            button = current
         } else {
-            button = UIButton(type: .custom)
-            button.clipsToBounds = true
-            button.layer.cornerRadius = size / 2.0
-            let configuration = UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)
-            glyph = UIImageView(image: (UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: configuration) ?? UIImage(systemName: "shuffle", withConfiguration: configuration))?.withRenderingMode(.alwaysTemplate))
-            glyph.contentMode = .center
-            glyph.isUserInteractionEnabled = false
-            button.addSubview(glyph)
-            button.addTarget(self, action: #selector(self.shuffleTapped), for: .touchUpInside)
-            button.addTarget(self, action: #selector(self.shuffleDown), for: [.touchDown, .touchDragEnter])
-            button.addTarget(self, action: #selector(self.shuffleUp), for: [.touchUpOutside, .touchCancel, .touchUpInside, .touchDragExit])
+            button = AorusLookShuffleButton(frame: CGRect())
             self.view.addSubview(button)
             self.shuffleButton = button
-            self.shuffleGlyph = glyph
         }
-
-        // Where a chat lays its dates on the wallpaper itself, dimmed, so does this; elsewhere
-        // it is the tinted blur a chat's date uses.
-        if let backgroundNode = self.backgroundNode, backgroundNode.hasExtraBubbleBackground() {
-            if self.shuffleContent == nil, let content = backgroundNode.makeBubbleBackground(for: .free) {
-                content.clipsToBounds = true
-                content.isUserInteractionEnabled = false
-                button.insertSubview(content.view, at: 0)
-                self.shuffleContent = content
-            }
-        } else if let content = self.shuffleContent {
-            content.view.removeFromSuperview()
-            self.shuffleContent = nil
+        button.shuffle = { [weak self] in
+            self?.item?.shuffle()
         }
-        let blur: NavigationBackgroundNode
-        if let current = self.shuffleBlur {
-            blur = current
-        } else {
-            blur = NavigationBackgroundNode(color: .clear)
-            blur.isUserInteractionEnabled = false
-            button.insertSubview(blur.view, at: 0)
-            self.shuffleBlur = blur
-        }
-
+        let size = AorusLookShuffleButton.size
         let frame = CGRect(x: params.width - params.rightInset - 12.0 - size, y: 12.0, width: size, height: size)
-        button.frame = frame
-        let bounds = CGRect(origin: CGPoint(), size: frame.size)
-        glyph.frame = bounds
-        glyph.tintColor = serviceMessageColorComponents(theme: item.theme, wallpaper: item.wallpaper).primaryText
-        if let content = self.shuffleContent {
-            blur.isHidden = true
-            content.frame = bounds
-            content.cornerRadius = size / 2.0
-            content.update(rect: frame, within: backgroundSize, transition: .immediate)
-        } else {
-            blur.isHidden = false
-            blur.frame = bounds
-            blur.updateColor(color: selectDateFillStaticColor(theme: item.theme, wallpaper: item.wallpaper), enableBlur: dateFillNeedsBlur(theme: item.theme, wallpaper: item.wallpaper), transition: .immediate)
-            blur.update(size: bounds.size, cornerRadius: size / 2.0, transition: .immediate)
-        }
-        button.accessibilityLabel = item.shuffleTitle
+        button.update(frame: frame, theme: item.theme, wallpaper: item.wallpaper, backgroundNode: self.backgroundNode, backgroundSize: backgroundSize, title: item.shuffleTitle)
         // Above the messages and the rounded edge of the card.
         self.view.bringSubviewToFront(button)
-    }
-
-    // Pressed, the button dims the way Telegram's own do, and comes back as it is let go.
-    @objc private func shuffleDown() {
-        guard let button = self.shuffleButton else {
-            return
-        }
-        button.layer.removeAnimation(forKey: "opacity")
-        button.alpha = 0.55
-    }
-
-    @objc private func shuffleUp() {
-        guard let button = self.shuffleButton, button.alpha < 1.0 else {
-            return
-        }
-        button.alpha = 1.0
-        button.layer.animateAlpha(from: 0.55, to: 1.0, duration: 0.2)
-    }
-
-    @objc private func shuffleTapped() {
-        guard let item = self.item else {
-            return
-        }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        // One turn of the arrows for every new message, slowing to a stop. Each turn adds to
-        // the one still running, so quick taps keep the arrows spinning instead of snapping
-        // them back to the start.
-        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
-        spin.fromValue = 0.0
-        spin.toValue = CGFloat.pi * 2.0
-        spin.duration = 0.55
-        spin.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0.0, 0.2, 1.0)
-        spin.isAdditive = true
-        self.shuffleSpins += 1
-        self.shuffleGlyph?.layer.add(spin, forKey: "aorusShuffle\(self.shuffleSpins)")
-        item.shuffle()
     }
 
     /// Lays the messages out now and returns the row's size with what places them.
@@ -979,11 +897,115 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     }
 }
 
+/// A round button on a preview's wallpaper that shows another sample, on the plate a chat's
+/// date stands on — the same colour, and the same blur where the chat blurs it, for this
+/// wallpaper — so it reads as part of the chat rather than a control laid over it.
+final class AorusLookShuffleButton: UIButton {
+    static let size: CGFloat = 32.0
+
+    private let glyph: UIImageView
+    /// The button's plate: the same material a chat's date stands on, over this wallpaper.
+    private var blur: NavigationBackgroundNode?
+    private var wallpaperContent: WallpaperBubbleBackgroundNode?
+    private var spins = 0
+    var shuffle: (() -> Void)?
+
+    override init(frame: CGRect) {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)
+        self.glyph = UIImageView(image: (UIImage(systemName: "arrow.triangle.2.circlepath", withConfiguration: configuration) ?? UIImage(systemName: "shuffle", withConfiguration: configuration))?.withRenderingMode(.alwaysTemplate))
+        super.init(frame: frame)
+        self.clipsToBounds = true
+        self.layer.cornerRadius = AorusLookShuffleButton.size / 2.0
+        self.glyph.contentMode = .center
+        self.glyph.isUserInteractionEnabled = false
+        self.addSubview(self.glyph)
+        self.addTarget(self, action: #selector(self.tapped), for: .touchUpInside)
+        self.addTarget(self, action: #selector(self.pressed), for: [.touchDown, .touchDragEnter])
+        self.addTarget(self, action: #selector(self.released), for: [.touchUpOutside, .touchCancel, .touchUpInside, .touchDragExit])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(frame: CGRect, theme: PresentationTheme, wallpaper: TelegramWallpaper, backgroundNode: WallpaperBackgroundNode?, backgroundSize: CGSize, title: String) {
+        // Where a chat lays its dates on the wallpaper itself, dimmed, so does this; elsewhere
+        // it is the tinted blur a chat's date uses.
+        if let backgroundNode, backgroundNode.hasExtraBubbleBackground() {
+            if self.wallpaperContent == nil, let content = backgroundNode.makeBubbleBackground(for: .free) {
+                content.clipsToBounds = true
+                content.isUserInteractionEnabled = false
+                self.insertSubview(content.view, at: 0)
+                self.wallpaperContent = content
+            }
+        } else if let content = self.wallpaperContent {
+            content.view.removeFromSuperview()
+            self.wallpaperContent = nil
+        }
+        let blur: NavigationBackgroundNode
+        if let current = self.blur {
+            blur = current
+        } else {
+            blur = NavigationBackgroundNode(color: .clear)
+            blur.isUserInteractionEnabled = false
+            self.insertSubview(blur.view, at: 0)
+            self.blur = blur
+        }
+
+        self.frame = frame
+        let bounds = CGRect(origin: CGPoint(), size: frame.size)
+        self.glyph.frame = bounds
+        self.glyph.tintColor = serviceMessageColorComponents(theme: theme, wallpaper: wallpaper).primaryText
+        if let content = self.wallpaperContent {
+            blur.isHidden = true
+            content.frame = bounds
+            content.cornerRadius = frame.height / 2.0
+            content.update(rect: frame, within: backgroundSize, transition: .immediate)
+        } else {
+            blur.isHidden = false
+            blur.frame = bounds
+            blur.updateColor(color: selectDateFillStaticColor(theme: theme, wallpaper: wallpaper), enableBlur: dateFillNeedsBlur(theme: theme, wallpaper: wallpaper), transition: .immediate)
+            blur.update(size: bounds.size, cornerRadius: frame.height / 2.0, transition: .immediate)
+        }
+        self.accessibilityLabel = title
+    }
+
+    // Pressed, the button dims the way Telegram's own do, and comes back as it is let go.
+    @objc private func pressed() {
+        self.layer.removeAnimation(forKey: "opacity")
+        self.alpha = 0.55
+    }
+
+    @objc private func released() {
+        guard self.alpha < 1.0 else {
+            return
+        }
+        self.alpha = 1.0
+        self.layer.animateAlpha(from: 0.55, to: 1.0, duration: 0.2)
+    }
+
+    @objc private func tapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        // One turn of the arrows for every new sample, slowing to a stop. Each turn adds to
+        // the one still running, so quick taps keep the arrows spinning instead of snapping
+        // them back to the start.
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0.0
+        spin.toValue = CGFloat.pi * 2.0
+        spin.duration = 0.55
+        spin.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0.0, 0.2, 1.0)
+        spin.isAdditive = true
+        self.spins += 1
+        self.glyph.layer.add(spin, forKey: "aorusShuffle\(self.spins)")
+        self.shuffle?()
+    }
+}
+
 // MARK: - Colours
 
 /// `RRGGBB`, or `RRGGBBAA` for a colour that lets something through: how the appearance
 /// catalogue writes a colour.
-private func aorusLookHex(_ color: UIColor) -> String {
+func aorusLookHex(_ color: UIColor) -> String {
     var red: CGFloat = 0.0
     var green: CGFloat = 0.0
     var blue: CGFloat = 0.0
@@ -1001,7 +1023,7 @@ private func aorusLookHex(_ color: UIColor) -> String {
     return channel(alpha) >= 255 ? opaque : opaque + String(format: "%02X", channel(alpha))
 }
 
-private func aorusLookColor(_ hex: String) -> UIColor? {
+func aorusLookColor(_ hex: String) -> UIColor? {
     let text = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
     guard text.count == 6 || text.count == 8, let raw = UInt64(text, radix: 16) else {
         return nil
@@ -1022,7 +1044,7 @@ private func aorusLookColors(_ name: String, dark: Bool) -> [String] {
     return []
 }
 
-private func aorusLookLuminance(_ color: UIColor) -> CGFloat {
+func aorusLookLuminance(_ color: UIColor) -> CGFloat {
     var red: CGFloat = 0.0
     var green: CGFloat = 0.0
     var blue: CGFloat = 0.0
@@ -1037,7 +1059,7 @@ private func aorusLookLuminance(_ color: UIColor) -> CGFloat {
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue
 }
 
-private func aorusLookSame(_ lhs: Any?, _ rhs: Any?) -> Bool {
+func aorusLookSame(_ lhs: Any?, _ rhs: Any?) -> Bool {
     guard let lhs = lhs as? NSObject, let rhs = rhs as? NSObject else {
         return false
     }
@@ -1072,15 +1094,33 @@ private func aorusLookThemeColor(_ key: String, theme: PresentationTheme) -> UIC
 }
 
 /// The colours offered for one kind of setting, for each appearance.
-private enum AorusLookPalette {
+enum AorusLookPalette {
     case fill
     case gradient
     case ink
     case muted
     case accent
+    /// Tints for glass: see-through, so the glass stays glass.
+    case glassTint
+    /// Plates a pane of glass can be made of instead.
+    case plate
+    /// Lights around a pane.
+    case glow
 
     func hexes(dark: Bool) -> [String] {
         switch (self, dark) {
+        case (.glassTint, false):
+            return ["FFFFFF73", "007AFF2E", "34C7592E", "FF95002E", "FF2D552E", "AF52DE2E"]
+        case (.glassTint, true):
+            return ["0000004D", "0A84FF38", "30D15838", "FF9F0A38", "FF375F38", "BF5AF238"]
+        case (.plate, false):
+            return ["FFFFFF", "F2F2F7", "E3F0FF", "E8F8EC", "FFF1E0", "F5E8FF"]
+        case (.plate, true):
+            return ["1C1C1E", "2C2C2E", "0A2A4D", "1E3A2A", "44291A", "33204A"]
+        case (.glow, false):
+            return ["00B8D9B3", "E020C0B3", "34C759B3", "FF9500B3", "FF2D55B3", "AF52DEB3"]
+        case (.glow, true):
+            return ["00E5FFCC", "FF2BD6CC", "7CFF00CC", "FFD600CC", "FF3D00CC", "FFFFFFB3"]
         case (.fill, false):
             return ["FFFFFF", "E1FFC7", "DCEBFF", "EFE3FF", "FFE8D6", "FFE0EB"]
         case (.fill, true):
@@ -1109,7 +1149,7 @@ private enum AorusLookPalette {
 
 /// The card behind one of this screen's own rows, drawn the way Telegram's rows draw theirs:
 /// the list's background, the separators between rows and the rounded ends of a section.
-private class AorusLookRowNode: ListViewItemNode {
+class AorusLookRowNode: ListViewItemNode {
     let backgroundNode: ASDisplayNode
     let topStripeNode: ASDisplayNode
     let bottomStripeNode: ASDisplayNode
@@ -1184,11 +1224,11 @@ private class AorusLookRowNode: ListViewItemNode {
     }
 }
 
-private func aorusLookTitleFont(_ presentationData: ItemListPresentationData) -> UIFont {
+func aorusLookTitleFont(_ presentationData: ItemListPresentationData) -> UIFont {
     return Font.regular(presentationData.fontSize.itemListBaseFontSize)
 }
 
-private func aorusLookValueFont(_ presentationData: ItemListPresentationData) -> UIFont {
+func aorusLookValueFont(_ presentationData: ItemListPresentationData) -> UIFont {
     return Font.regular(floor(presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))
 }
 
@@ -1196,7 +1236,7 @@ private func aorusLookValueFont(_ presentationData: ItemListPresentationData) ->
 
 /// A value on a track, from `minimum` to `maximum` in steps of `step`. The message is drawn
 /// again at every step while the finger moves.
-private final class AorusLookSliderItem: ListViewItem, ItemListItem {
+final class AorusLookSliderItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
     let title: String
     let value: CGFloat
@@ -1252,7 +1292,7 @@ private final class AorusLookSliderItem: ListViewItem, ItemListItem {
     }
 }
 
-private final class AorusLookSliderItemNode: AorusLookRowNode {
+final class AorusLookSliderItemNode: AorusLookRowNode {
     private var titleLabel: UILabel?
     private var valueLabel: UILabel?
     private var smallMark: UILabel?
@@ -1379,7 +1419,7 @@ private final class AorusLookSliderItemNode: AorusLookRowNode {
 // MARK: Swatches
 
 /// One circle in a row of colours.
-private final class AorusLookSwatchView: UIView {
+final class AorusLookSwatchView: UIView {
     private let fillLayer = CAShapeLayer()
     private let edgeLayer = CAShapeLayer()
     private let ringLayer = CAShapeLayer()
@@ -1454,7 +1494,7 @@ private final class AorusLookSwatchView: UIView {
 
 /// A row of colours to choose from: Telegram's own colour first, then the palette, then any
 /// colour at all from the system picker.
-private final class AorusLookSwatchesItem: ListViewItem, ItemListItem {
+final class AorusLookSwatchesItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
     let title: String
     let palette: [String]
@@ -1515,7 +1555,7 @@ private final class AorusLookSwatchesItem: ListViewItem, ItemListItem {
     }
 }
 
-private final class AorusLookSwatchesItemNode: AorusLookRowNode {
+final class AorusLookSwatchesItemNode: AorusLookRowNode {
     private static let diameter: CGFloat = 30.0
 
     private var titleLabel: UILabel?
@@ -1652,13 +1692,13 @@ private final class AorusLookSwatchesItemNode: AorusLookRowNode {
 
 // MARK: Segments
 
-private struct AorusLookSegmentOption {
+struct AorusLookSegmentOption {
     let text: String
     let font: UIFont
 }
 
 /// A few choices side by side, the chosen one on a raised plate that slides to the next.
-private final class AorusLookSegmentItem: ListViewItem, ItemListItem {
+final class AorusLookSegmentItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
     let title: String?
     let options: [AorusLookSegmentOption]
@@ -1706,7 +1746,7 @@ private final class AorusLookSegmentItem: ListViewItem, ItemListItem {
     }
 }
 
-private final class AorusLookSegmentItemNode: AorusLookRowNode {
+final class AorusLookSegmentItemNode: AorusLookRowNode {
     private static let trackHeight: CGFloat = 34.0
 
     private var titleLabel: UILabel?
@@ -1982,7 +2022,7 @@ private struct AorusLookPreview: Equatable {
 
 /// One colour setting: the catalogue key, which stop of a gradient (0 for the colour itself),
 /// and the colour the person kept for this appearance, if any.
-private struct AorusLookColorRow: Equatable {
+struct AorusLookColorRow: Equatable {
     let key: String
     let stop: Int
     let title: String
@@ -1991,7 +2031,7 @@ private struct AorusLookColorRow: Equatable {
     let dark: Bool
 }
 
-private struct AorusLookStyleRow: Equatable {
+struct AorusLookStyleRow: Equatable {
     let id: String
     let title: String
     let subtitle: String
@@ -2007,7 +2047,7 @@ private let aorusLookLetterCases = ["asIs", "upper", "lower"]
 
 private let aorusLookTextWeights = ["light", "regular", "medium", "semibold"]
 
-private func aorusLookPercent(_ value: CGFloat) -> String {
+func aorusLookPercent(_ value: CGFloat) -> String {
     return "\(Int((value * 100.0).rounded()))%"
 }
 
@@ -2374,7 +2414,7 @@ private final class AorusMessageSettingsArguments {
 /// Writes that come faster than the app can be drawn again — a finger on a slider, the
 /// system picker's wheel — are joined, each setting on its own: the first goes at once, the
 /// last one of each short run after it, and nothing is lost that a later write does not replace.
-private final class AorusLookThrottle {
+final class AorusLookThrottle {
     private final class Lane {
         var last: Double = 0.0
         var pending: (() -> Void)?
@@ -2422,14 +2462,14 @@ private final class AorusLookThrottle {
 
 /// The theme the screen is drawn with, for the few things decided outside a redraw: which
 /// appearance a colour is kept for, and the colour a picker opens on.
-private final class AorusLookScreenContext {
+final class AorusLookScreenContext {
     var theme: PresentationTheme?
     /// The picker's delegate, which the picker itself holds only weakly.
     var pickerDelegate: AnyObject?
 }
 
 @available(iOS 14.0, *)
-private final class AorusLookColorPickerDelegate: NSObject, UIColorPickerViewControllerDelegate {
+final class AorusLookColorPickerDelegate: NSObject, UIColorPickerViewControllerDelegate {
     private let changed: (UIColor) -> Void
 
     init(changed: @escaping (UIColor) -> Void) {

@@ -6972,6 +6972,9 @@ private enum AorusAIMarkdown {
                                 value: AorusAIMath.plainText([drawable]), range: found)
             output.addAttribute(.aorusAIMathLaTeX,
                                 value: AorusAIMath.latex([drawable]), range: found)
+            // Its size as drawn, which the text it stands in fits it to when it is wider.
+            output.addAttribute(.aorusAIMathBounds,
+                                value: NSValue(cgRect: attachment.bounds), range: found)
             let next = found.location + found.length
             searchRange = NSRange(location: next, length: text.length - next)
             index += 1

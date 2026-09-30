@@ -411,6 +411,7 @@ public struct AorusL10n {
     public var customFont: String { t("Кастомный шрифт", "Custom Font") }
     public var subscriptionBanner: String { t("Уведомление о подписке", "Subscription Notice") }
     public var showStories: String { t("Показывать истории", "Show Stories") }
+    public var bubbleSettings: String { t("Настройка баблов", "Bubble Settings") }
     public var messageSettings: String { t("Настройка сообщений", "Message Settings") }
     public var animatedProfileBackground: String { t("Анимированный баннер", "Animated Banner") }
     public var chooseAnimatedProfileMedia: String { t("Выбрать медиа", "Choose Media") }

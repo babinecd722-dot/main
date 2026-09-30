@@ -116,6 +116,29 @@ public enum AorusSettingsRoute {
     }
 }
 
+/// How to build AorusGram → Interface → Bubble Settings, registered at launch.
+///
+/// Its preview is a chat's real header — the navigation bar, the title and the avatar — built
+/// from Telegram's own parts, which this module cannot import. The screen is built in
+/// TelegramUI, where they are in reach, and left here for the Interface row to open.
+public enum AorusBubbleSettingsRoute {
+    private static let lock = NSLock()
+    private static var builder: ((AccountContext) -> ViewController)?
+
+    public static func register(_ value: @escaping (AccountContext) -> ViewController) {
+        lock.lock()
+        builder = value
+        lock.unlock()
+    }
+
+    public static func make(_ context: AccountContext) -> ViewController? {
+        lock.lock()
+        let value = builder
+        lock.unlock()
+        return value?(context)
+    }
+}
+
 /// How to build AorusGram → Interface → Message Settings, registered at launch.
 ///
 /// Its preview is a real message drawn by Telegram's chat code, which this module cannot

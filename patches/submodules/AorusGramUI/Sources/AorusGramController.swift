@@ -373,6 +373,7 @@ private final class AorusArguments {
     let openConnectionSettings: () -> Void // AORUS-CONN
     let openAppBadgePicker: () -> Void
     let openFont: () -> Void
+    let openBubbleSettings: () -> Void
     let openMessageSettings: () -> Void
 
     init(set: @escaping (WritableKeyPath<AorusState, Bool>, Bool) -> Void,
@@ -394,6 +395,7 @@ private final class AorusArguments {
          openConnectionSettings: @escaping () -> Void, // AORUS-CONN
          openAppBadgePicker: @escaping () -> Void,
          openFont: @escaping () -> Void,
+         openBubbleSettings: @escaping () -> Void,
          openMessageSettings: @escaping () -> Void) {
         self.set = set
         self.openChannel = openChannel
@@ -414,6 +416,7 @@ private final class AorusArguments {
         self.openConnectionSettings = openConnectionSettings // AORUS-CONN
         self.openAppBadgePicker = openAppBadgePicker
         self.openFont = openFont
+        self.openBubbleSettings = openBubbleSettings
         self.openMessageSettings = openMessageSettings
     }
 }
@@ -474,6 +477,7 @@ private enum AorusEntry: ItemListNodeEntry {
     case customFont(PresentationTheme, String)
     case subscriptionBanner(PresentationTheme, String, Bool)
     case showStories(PresentationTheme, String, Bool)
+    case bubbleSettings(PresentationTheme, String)
     case messageSettings(PresentationTheme, String)
 
     case tabsHeader(PresentationTheme, String)
@@ -534,7 +538,7 @@ private enum AorusEntry: ItemListNodeEntry {
              .performanceDisk, .performanceThermal, .performanceGraph, .ramAutoClean,
              .ramInterval, .cacheAutoClean, .cacheInterval:
             return AorusSection.performance.rawValue
-        case .uiHeader, .interfaceV2, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .messageSettings:
+        case .uiHeader, .interfaceV2, .glassUI, .amoledMode, .profileReportButton, .siriShortcuts, .appBadge, .squareAvatars, .customFont, .subscriptionBanner, .showStories, .bubbleSettings, .messageSettings:
             return AorusSection.ui.rawValue
         case .tabsHeader, .hideContactsTab, .hideCallsTab, .hideSearchButton, .hideTabTitles, .compactTabBar:
             return AorusSection.tabs.rawValue
@@ -614,6 +618,7 @@ private enum AorusEntry: ItemListNodeEntry {
         case .showStories:          return 59
         // Directly under Show Stories. The number only has to be one no other row uses; where
         // the row stands is set in `<` below.
+        case .bubbleSettings:       return 1001
         case .messageSettings:      return 1000
         case .customFont:           return 60
         case .tabsHeader:           return 61
@@ -665,6 +670,8 @@ private enum AorusEntry: ItemListNodeEntry {
     static func < (lhs: AorusEntry, rhs: AorusEntry) -> Bool {
         func order(_ entry: AorusEntry) -> Int32 {
             if case let .pluginShortcut(_, _, _, _, _, _, _, placementOrder) = entry { return placementOrder }
+            // Bubble Settings just above Message Settings, both under Show Stories.
+            if case .bubbleSettings = entry { return 59 * 1000 + 400 }
             if case .messageSettings = entry { return 59 * 1000 + 500 }
             return entry.stableId * 1000
         }
@@ -771,6 +778,8 @@ private enum AorusEntry: ItemListNodeEntry {
             if case let .subscriptionBanner(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .showStories(lt, ls, lv):
             if case let .showStories(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .bubbleSettings(lt, ls):
+            if case let .bubbleSettings(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .messageSettings(lt, ls):
             if case let .messageSettings(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .tabsHeader(lt, ls):
@@ -966,6 +975,8 @@ private enum AorusEntry: ItemListNodeEntry {
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.subscriptionBanner, $0) })
         case let .showStories(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.set(\.showStories, $0) })
+        case let .bubbleSettings(_, title):
+            return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openBubbleSettings)
         case let .messageSettings(_, title):
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openMessageSettings)
         case let .tabsHeader(_, text):
@@ -1081,6 +1092,7 @@ private func aorusEntries(state: AorusState, theme: PresentationTheme, l10n: Aor
         .squareAvatars(theme, l10n.squareAvatars, state.squareAvatars),
         .subscriptionBanner(theme, l10n.subscriptionBanner, state.subscriptionBanner),
         .showStories(theme, l10n.showStories, state.showStories),
+        .bubbleSettings(theme, l10n.bubbleSettings),
         .messageSettings(theme, l10n.messageSettings),
         .customFont(theme, l10n.customFont),
 
@@ -1627,6 +1639,14 @@ public func aorusGramController(context: AccountContext, shortcutRoutes: AorusSe
             }
             AorusSettingsShortcutHighlight.request(.font)
             navigationController.pushViewController(aorusFontPickerController(context: context))
+        },
+        openBubbleSettings: {
+            guard let controller = weakController,
+                  let navigationController = controller.navigationController as? NavigationController,
+                  let screen = AorusBubbleSettingsRoute.make(context) else {
+                return
+            }
+            navigationController.pushViewController(screen)
         },
         openMessageSettings: {
             guard let controller = weakController,

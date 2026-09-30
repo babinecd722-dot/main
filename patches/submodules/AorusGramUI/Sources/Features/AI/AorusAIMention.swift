@@ -509,6 +509,12 @@ private extension UIColor {
     }
 }
 
+extension NSAttributedString.Key {
+    /// A drawn formula's own size, as it was typeset: what it is fitted to the width of the
+    /// text from, however many times the width changes.
+    static let aorusAIMathBounds = NSAttributedString.Key("AorusAIMathBounds")
+}
+
 /// A text view whose pills pick up their photos when those arrive.
 ///
 /// TextKit 1 is requested explicitly through the designated initializer: on iOS 16 and
@@ -769,24 +775,39 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         return layer
     }()
 
-    /// The colour the system highlights a selection in, read from the view it draws it with, so
-    /// what is filled in here matches it exactly; until that view is found, the tint at the
-    /// strength the system uses.
-    private var aorusSampledHighlightColor: UIColor?
-
+    /// The colour the system highlights a selection in: its tint, see-through.
+    ///
+    /// Read from the view the system draws its highlight with, so what is filled in here
+    /// matches it exactly — but only a see-through version of the tint is taken for it. The
+    /// first reading took whatever see-through fill it met first, which on a dark page was a
+    /// pale white, and the fraction was highlighted white above and below and blue across its
+    /// middle. Anything that is not the tint is ignored, and the tint at the strength the
+    /// system uses stands in for it.
     private func aorusSelectionHighlightColor() -> UIColor {
-        if let sampled = Self.aorusHighlightColor(in: self, depth: 0) {
-            self.aorusSampledHighlightColor = sampled
+        let tint = self.tintColor ?? .systemBlue
+        if let sampled = Self.aorusHighlightColor(in: self, depth: 0), Self.aorusIsSeeThrough(sampled, of: tint) {
             return sampled
         }
-        return self.aorusSampledHighlightColor ?? self.tintColor.withAlphaComponent(0.2)
+        return tint.withAlphaComponent(0.2)
+    }
+
+    /// True when `color` is `tint` let through: the same hue, faint.
+    private static func aorusIsSeeThrough(_ color: UIColor, of tint: UIColor) -> Bool {
+        var red: CGFloat = 0.0, green: CGFloat = 0.0, blue: CGFloat = 0.0, alpha: CGFloat = 0.0
+        var tintRed: CGFloat = 0.0, tintGreen: CGFloat = 0.0, tintBlue: CGFloat = 0.0, tintAlpha: CGFloat = 0.0
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha),
+              tint.getRed(&tintRed, green: &tintGreen, blue: &tintBlue, alpha: &tintAlpha) else {
+            return false
+        }
+        return alpha > 0.05 && alpha < 0.6
+            && abs(red - tintRed) < 0.12 && abs(green - tintGreen) < 0.12 && abs(blue - tintBlue) < 0.12
     }
 
     private static func aorusHighlightColor(in view: UIView, depth: Int) -> UIColor? {
         guard depth < 6 else { return nil }
         for subview in view.subviews {
             let name = NSStringFromClass(type(of: subview))
-            if name.contains("Highlight") || name.contains("SelectionView") || name.contains("RangeView") {
+            if name.contains("Selection") && (name.contains("Highlight") || name.contains("Range")) {
                 if let color = aorusTranslucentFill(in: subview, depth: 0) {
                     return color
                 }
@@ -984,7 +1005,53 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         }
     }
 
+    // MARK: Formulas wider than the text
+
+    /// The width formulas were last fitted to.
+    private var aorusFittedWidth: CGFloat = -1.0
+
+    override var attributedText: NSAttributedString! {
+        didSet {
+            self.aorusFittedWidth = -1.0
+            self.setNeedsLayout()
+        }
+    }
+
+    /// A formula wider than the text is drawn smaller, to fit it.
+    ///
+    /// A display equation — a fraction whose denominator holds a root over a sum and a log
+    /// over a product — is wider than a phone's line at reading size, and a drawing cannot
+    /// wrap: it ran off the edge and was cut there. It is scaled to the width it has instead,
+    /// every part of it together, so it is read whole; "Save as Image" draws it again at full
+    /// size for anyone who wants it larger. A formula that fits is left exactly as drawn.
+    private func aorusFitFormulas() {
+        let width = self.bounds.width - self.textContainerInset.left - self.textContainerInset.right - self.textContainer.lineFragmentPadding * 2.0
+        guard width > 1.0, abs(width - self.aorusFittedWidth) > 0.5 else { return }
+        self.aorusFittedWidth = width
+        let storage = self.textStorage
+        guard storage.length > 0 else { return }
+        var changed: NSRange?
+        storage.enumerateAttribute(.aorusAIMathBounds, in: NSRange(location: 0, length: storage.length), options: []) { value, range, _ in
+            guard let natural = (value as? NSValue)?.cgRectValue, natural.width > 0.0 else { return }
+            for index in range.location ..< NSMaxRange(range) {
+                guard let attachment = storage.attribute(.attachment, at: index, effectiveRange: nil) as? NSTextAttachment else { continue }
+                let scale = min(1.0, width / natural.width)
+                let target = CGRect(x: 0.0, y: natural.minY * scale, width: natural.width * scale, height: natural.height * scale)
+                guard abs(attachment.bounds.width - target.width) > 0.5 || abs(attachment.bounds.height - target.height) > 0.5 else { continue }
+                attachment.bounds = target
+                let characterRange = NSRange(location: index, length: 1)
+                changed = changed.map { NSUnionRange($0, characterRange) } ?? characterRange
+            }
+        }
+        if let changed {
+            self.layoutManager.invalidateLayout(forCharacterRange: changed, actualCharacterRange: nil)
+            self.layoutManager.invalidateDisplay(forCharacterRange: changed)
+            self.invalidateIntrinsicContentSize()
+        }
+    }
+
     override func layoutSubviews() {
+        aorusFitFormulas()
         super.layoutSubviews()
         if self.aorusHasFormulaHighlight || self.selectedRange.length > 0 {
             aorusUpdateFormulaHighlight()
