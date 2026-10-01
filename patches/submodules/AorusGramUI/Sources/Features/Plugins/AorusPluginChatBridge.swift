@@ -65,6 +65,10 @@ public final class AorusPluginChatBridge {
     }
 
     private weak var host: AorusPluginChatHost?
+    /// The chat plugins were last told is open, kept apart from the weak reference: a chat
+    /// that goes away without leaving the screen first — the whole interface replaced on a
+    /// change of account — still has to be reported closed.
+    private var reportedPeerId: Int64?
 
     private init() {}
 
@@ -78,6 +82,7 @@ public final class AorusPluginChatBridge {
     public func attach(_ host: AorusPluginChatHost) {
         assert(Thread.isMainThread)
         self.host = host
+        self.reportedPeerId = host.aorusPluginPeerId
         NotificationCenter.default.post(
             name: AorusPluginChatBridge.openedNotification,
             object: nil,
@@ -92,7 +97,18 @@ public final class AorusPluginChatBridge {
         guard self.host === host else { return }
         let info: [String: Any] = ["peerId": String(host.aorusPluginPeerId)]
         self.host = nil
+        self.reportedPeerId = nil
         NotificationCenter.default.post(name: AorusPluginChatBridge.closedNotification, object: nil, userInfo: info)
+    }
+
+    /// Another account's interface replaces this one. A chat that was open in the old one is
+    /// gone with it, whether or not it said goodbye, and plugins are told it closed.
+    public func withdrawForAccountChange() {
+        assert(Thread.isMainThread)
+        self.host = nil
+        guard let peerId = self.reportedPeerId else { return }
+        self.reportedPeerId = nil
+        NotificationCenter.default.post(name: AorusPluginChatBridge.closedNotification, object: nil, userInfo: ["peerId": String(peerId)])
     }
 
     /// The composer text changed. `source` separates what the person typed from what a

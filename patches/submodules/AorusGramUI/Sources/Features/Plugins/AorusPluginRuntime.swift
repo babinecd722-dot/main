@@ -129,7 +129,14 @@ public final class AorusPluginRuntimeManager {
         lock.unlock()
         if let existingHost {
             existingHost.rebind(context: context)
-            dispatch(event: "accountChanged", payload: ["accountId": String(context.account.id.int64)])
+            // The old account's chat went with its interface; it closes before the new account
+            // is announced, so a plugin never sees a chat open across the change.
+            let accountId = String(context.account.id.int64)
+            let announce = { [weak self] in
+                AorusPluginChatBridge.shared.withdrawForAccountChange()
+                self?.dispatch(event: "accountChanged", payload: ["accountId": accountId])
+            }
+            if Thread.isMainThread { announce() } else { DispatchQueue.main.async(execute: announce) }
             // The new account's screens are built from what the plugins published.
             publishIntegrationsChanged()
             reloadAutostart(startingMissingOnly: true)
@@ -1285,11 +1292,21 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         self.manager = manager
     }
 
+    /// `accounts.switchTo` calls waiting for their account to be the one on screen, by token.
+    private struct PendingSwitch {
+        let accountId: AccountRecordId
+        let completion: (Result<Void, Error>) -> Void
+    }
+    private var pendingSwitches: [String: PendingSwitch] = [:]
+
     /// The account on screen changed; what the plugins do from now on is done on the new one.
     func rebind(context: AccountContext) {
         contextLock.lock()
         currentContext = context
+        let arrived = pendingSwitches.filter { $0.value.accountId == context.account.id }
+        arrived.keys.forEach { pendingSwitches[$0] = nil }
         contextLock.unlock()
+        arrived.values.forEach { $0.completion(.success(())) }
     }
 
     var pluginExecutionAllowed: Bool { AorusPluginEntitlement.isAllowed }
@@ -2873,10 +2890,26 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                 completion(.failure(AorusPluginRequestError("Account is not available")))
                 return
             }
-            if account.account.id != self.context.account.id {
-                self.context.sharedContext.switchToAccount(id: account.account.id, fromSettingsController: nil, withChatListController: nil)
+            let current = self.context
+            let alreadyOn = account.account.id == current.account.id
+            if alreadyOn {
+                completion(.success(()))
+                return
             }
-            completion(.success(()))
+            // Settled once the account is the one on screen, not when the switch is asked for:
+            // a plugin that goes on with `await aorus.account.current()` must find the new one.
+            let token = UUID().uuidString
+            self.contextLock.lock()
+            self.pendingSwitches[token] = PendingSwitch(accountId: account.account.id, completion: completion)
+            self.contextLock.unlock()
+            current.sharedContext.switchToAccount(id: account.account.id, fromSettingsController: nil, withChatListController: nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { [weak self] in
+                guard let self else { return }
+                self.contextLock.lock()
+                let expired = self.pendingSwitches.removeValue(forKey: token)
+                self.contextLock.unlock()
+                expired?.completion(.failure(AorusPluginRequestError("The account did not open")))
+            }
         })
     }
 

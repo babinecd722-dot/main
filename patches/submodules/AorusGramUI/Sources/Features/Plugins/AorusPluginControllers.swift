@@ -2716,7 +2716,7 @@ private enum AorusPluginDocumentation {
             const accounts = await aorus.accounts.list()
             await aorus.accounts.switchTo(accounts[0].id)
             Возвращаются только локальные id, имя, username и признак текущего аккаунта. Ключи авторизации, сессии и токены недоступны. Переключиться можно только на аккаунт, уже добавленный пользователем в приложение.
-            При смене аккаунта плагин не перезапускается: таймеры, сокеты и данные в памяти остаются, а дальнейшие действия выполняются от нового аккаунта. Сам момент смены приходит событием accountChanged с { accountId }. Ответ команды, пришедший после смены, уходит с того аккаунта, на котором команду набрали.
+            При смене аккаунта плагин не перезапускается: таймеры, сокеты и данные в памяти остаются, а дальнейшие действия выполняются от нового аккаунта. Сам момент смены приходит событием accountChanged с { accountId }, а switchTo завершается, когда новый аккаунт уже на экране. Ответ команды, пришедший после смены, уходит с того аккаунта, на котором команду набрали.
 
             Функции и интерфейс
             const all = await aorus.features.list()
@@ -3011,7 +3011,7 @@ private enum AorusPluginDocumentation {
     const accounts = await aorus.accounts.list()
     await aorus.accounts.switchTo(accounts[0].id)
     Only local ids, display name, username and current-account state are returned. Authorization keys, sessions and tokens are unavailable. A plugin can switch only to an account already added by the user.
-    A change of account does not restart a plugin: its timers, sockets and memory stay, and what it does next is done on the new account. The change itself arrives as accountChanged with { accountId }. A command answer that arrives after the change is sent from the account the command was typed on.
+    A change of account does not restart a plugin: its timers, sockets and memory stay, and what it does next is done on the new account. The change itself arrives as accountChanged with { accountId }, and switchTo settles once the new account is on screen. A command answer that arrives after the change is sent from the account the command was typed on.
 
     Features and interface
     const all = await aorus.features.list()
