@@ -577,8 +577,9 @@ private func aorusGlassStyleChosen(_ preset: AorusMessageLook.Preset, stored: [S
 // MARK: - Icons
 
 /// The looks the icons can take, in the order the strip shows them: Telegram's own, then the
-/// styles plugins give the icons (`AorusPluginIcons.looks`).
-private let aorusIconLooks: [String] = ["telegram", "pixel", "bold", "thin", "outline", "duotone", "glow", "halo", "depth"]
+/// styles plugins give the icons (`AorusPluginIcons.looks`). Pixels are not among them: pixel
+/// icons are part of the pixel material, and switched there.
+private let aorusIconLooks: [String] = ["telegram", "bold", "thin", "outline", "duotone", "glow", "halo", "depth"]
 
 private func aorusIconLookName(_ id: String) -> String {
     switch id {
@@ -604,10 +605,9 @@ private func aorusIconLookName(_ id: String) -> String {
     }
 }
 
-/// The size of the icons' pixels that goes with the glass's: the pixel mode is one look.
-private func aorusIconPixelAmount(_ glassPixelSize: Double) -> Double {
-    return min(3.0, max(1.0, glassPixelSize * 0.375))
-}
+/// The size of the icons' pixels the pixel mode starts with: the one the plugins' pixel style
+/// draws with, at which every icon stays readable. The glass's steps have a size of their own.
+private let aorusIconPixelStandard: Double = AorusPluginIcons.lookAmounts["pixel"]?.standard ?? 1.5
 
 /// What the strip shows: the look in force and its strength.
 private struct AorusIconLookRow: Equatable {
@@ -850,6 +850,8 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
     case material(Int)
     case roundness(String, CGFloat)
     case pixelSize(String, CGFloat)
+    case pixelIcons(String, Bool)
+    case pixelIconSize(String, CGFloat)
     case materialFooter(String)
     case colorsHeader(String)
     case color(Int32, AorusLookColorRow)
@@ -881,7 +883,7 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
         switch self {
         case .preview:
             return AorusBubbleSettingsSection.preview.rawValue
-        case .materialHeader, .material, .roundness, .pixelSize, .materialFooter:
+        case .materialHeader, .material, .roundness, .pixelSize, .pixelIcons, .pixelIconSize, .materialFooter:
             return AorusBubbleSettingsSection.material.rawValue
         case .colorsHeader, .color, .tintStrength, .colorsFooter:
             return AorusBubbleSettingsSection.colors.rawValue
@@ -906,12 +908,16 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             return 10
         case .material:
             return 11
-        case .roundness:
-            return 12
         case .pixelSize:
+            return 12
+        case .pixelIcons:
             return 13
-        case .materialFooter:
+        case .pixelIconSize:
             return 14
+        case .roundness:
+            return 15
+        case .materialFooter:
+            return 16
         case .colorsHeader:
             return 20
         case let .color(index, _):
@@ -991,7 +997,16 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
         case let .pixelSize(title, value):
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 2.0, maximum: 8.0, step: 1.0, valueText: { aorusL("%@ пт", "%@ pt").replacingOccurrences(of: "%@", with: "\(Int($0))") }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setNumber("glass.pixelSize", value == 4.0 ? nil : Int(value))
-                arguments.setPixelSize(Double(value))
+            })
+        case let .pixelIcons(title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                arguments.setPixelIcons(value)
+            })
+        case let .pixelIconSize(title, value):
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 1.0, maximum: 4.0, step: 0.5, valueText: { value in
+                return aorusL("%@ пт", "%@ pt").replacingOccurrences(of: "%@", with: String(format: "%.1f", Double(value)))
+            }, sizeMarks: false, sectionId: self.section, changed: { value in
+                arguments.setIconAmount("pixel", Double(value))
             })
         case let .tintStrength(title, value, base):
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.05, maximum: 0.9, step: 0.01, valueText: aorusLookPercent, sizeMarks: false, sectionId: self.section, changed: { value in
@@ -1004,10 +1019,6 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
         case let .iconAmount(title, value, look):
             let range = AorusPluginIcons.lookAmounts[look] ?? (minimum: 1.0, maximum: 4.0, standard: 1.5)
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: CGFloat(range.minimum), maximum: CGFloat(range.maximum), step: 0.1, valueText: { value in
-                // A pixel is so many points; any other look is as strong as a share of its most.
-                if look == "pixel" {
-                    return aorusL("%@ пт", "%@ pt").replacingOccurrences(of: "%@", with: String(format: "%.1f", Double(value)))
-                }
                 return aorusLookPercent(value / CGFloat(max(0.001, range.maximum)))
             }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setIconAmount(look, Double(value))
@@ -1099,14 +1110,21 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     let material = AorusPluginAppearanceValues.string("glass.style", dark: dark, in: values) ?? "regular"
     let plate = material == "solid" || material == "pixel"
     entries.append(.material(aorusGlassMaterials.firstIndex(of: material) ?? 0))
+    // The person's own icon look, and the pixel icons the pixel material switches on.
+    let personIconLook = AorusIconLook.current()
+    let pixelIcons = personIconLook?.look == "pixel"
     if material == "pixel" {
         let pixelSize = AorusPluginAppearanceValues.number("glass.pixelSize", in: values) ?? 4.0
         entries.append(.pixelSize(aorusL("Размер пикселя", "Pixel Size"), max(2.0, min(8.0, pixelSize.rounded()))))
+        entries.append(.pixelIcons(aorusL("Пиксельные иконки", "Pixel Icons"), pixelIcons))
+        if pixelIcons {
+            entries.append(.pixelIconSize(aorusL("Размер пикселя иконок", "Icon Pixel Size"), CGFloat(personIconLook?.amount ?? aorusIconPixelStandard)))
+        }
     }
     let roundness = AorusPluginAppearanceValues.number("glass.roundness", in: values) ?? 1.0
     entries.append(.roundness(aorusL("Скругление", "Roundness"), max(0.0, min(1.0, roundness))))
     if material == "pixel" {
-        entries.append(.materialFooter(aorusL("Пиксели включают пиксельный режим во всём приложении: ступенчатые капсулы, меню и листы действий и пиксельные иконки. Стиль иконок можно сменить ниже.", "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.")))
+        entries.append(.materialFooter(aorusL("Пиксели — пиксельный режим во всём приложении: ступенчатые капсулы, меню и листы действий, а с «Пиксельными иконками» — и все иконки, как их рисует пиксельный стиль плагинов.", "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.")))
     } else {
         entries.append(.materialFooter(aorusL("Меняет всё стекло приложения: кнопки над чатом, строку ввода, панель вкладок, меню и листы действий.", "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.")))
     }
@@ -1164,19 +1182,23 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     entries.append(.lightFooter(aorusL("Прозрачность цвета свечения задаёт его силу. У пиксельных капсул тень жёсткая, как в старых играх.", "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.")))
 
     entries.append(.iconsHeader(aorusL("ИКОНКИ", "ICONS")))
-    // What the icons are drawn in: the person's look, else a plugin's, else Telegram's own.
-    let iconLook: (look: String, amount: Double)?
-    if let person = AorusIconLook.current() {
-        iconLook = person.look == AorusIconLook.none ? nil : person
+    if material == "pixel" && pixelIcons {
+        // The pixel mode draws the icons; another look is chosen once its icons are off.
+        entries.append(.iconsFooter(aorusL("В пиксельном режиме иконки пиксельные. Другой стиль иконок можно выбрать, выключив «Пиксельные иконки» выше.", "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.")))
     } else {
-        iconLook = AorusIconLook.pluginLook()
+        // What the icons are drawn in: the person's look, else a plugin's, else Telegram's own.
+        let iconLook: (look: String, amount: Double)?
+        if let personIconLook {
+            iconLook = personIconLook.look == AorusIconLook.none ? nil : personIconLook
+        } else {
+            iconLook = AorusIconLook.pluginLook()
+        }
+        entries.append(.iconLook(AorusIconLookRow(selected: iconLook?.look ?? "telegram", amount: CGFloat(iconLook?.amount ?? 0.0))))
+        if let iconLook, aorusIconLooks.contains(iconLook.look) {
+            entries.append(.iconAmount(aorusL("Сила стиля", "Style Strength"), CGFloat(iconLook.amount), iconLook.look))
+        }
+        entries.append(.iconsFooter(aorusL("Стиль ложится на все иконки приложения — вкладки, кнопки, меню и настройки, — как стиль иконок у плагинов, и главнее него.", "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.")))
     }
-    entries.append(.iconLook(AorusIconLookRow(selected: iconLook?.look ?? "telegram", amount: CGFloat(iconLook?.amount ?? 0.0))))
-    if let iconLook {
-        let title = iconLook.look == "pixel" ? aorusL("Размер пикселя иконок", "Icon Pixel Size") : aorusL("Сила стиля", "Style Strength")
-        entries.append(.iconAmount(title, CGFloat(iconLook.amount), iconLook.look))
-    }
-    entries.append(.iconsFooter(aorusL("Стиль ложится на все иконки приложения — вкладки, кнопки, меню и настройки, — как стиль иконок у плагинов, и главнее него.", "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.")))
 
     entries.append(.stylesHeader(aorusL("ГОТОВЫЕ СТИЛИ", "READY-MADE STYLES")))
     for (index, preset) in AorusGlassLook.presets.enumerated() {
@@ -1203,7 +1225,7 @@ private final class AorusBubbleSettingsArguments {
     let setNumber: (String, Any?) -> Void
     let setChoice: (String, String, String) -> Void
     let setMaterial: (String) -> Void
-    let setPixelSize: (Double) -> Void
+    let setPixelIcons: (Bool) -> Void
     let setColor: (AorusLookColorRow, String?) -> Void
     let setTintStrength: (String, CGFloat) -> Void
     let pickColor: (AorusLookColorRow) -> Void
@@ -1212,13 +1234,13 @@ private final class AorusBubbleSettingsArguments {
     let applyStyle: (String) -> Void
     let resetAll: () -> Void
 
-    init(context: AccountContext, shuffle: @escaping () -> Void, setNumber: @escaping (String, Any?) -> Void, setChoice: @escaping (String, String, String) -> Void, setMaterial: @escaping (String) -> Void, setPixelSize: @escaping (Double) -> Void, setColor: @escaping (AorusLookColorRow, String?) -> Void, setTintStrength: @escaping (String, CGFloat) -> Void, pickColor: @escaping (AorusLookColorRow) -> Void, setIconLook: @escaping (String) -> Void, setIconAmount: @escaping (String, Double) -> Void, applyStyle: @escaping (String) -> Void, resetAll: @escaping () -> Void) {
+    init(context: AccountContext, shuffle: @escaping () -> Void, setNumber: @escaping (String, Any?) -> Void, setChoice: @escaping (String, String, String) -> Void, setMaterial: @escaping (String) -> Void, setPixelIcons: @escaping (Bool) -> Void, setColor: @escaping (AorusLookColorRow, String?) -> Void, setTintStrength: @escaping (String, CGFloat) -> Void, pickColor: @escaping (AorusLookColorRow) -> Void, setIconLook: @escaping (String) -> Void, setIconAmount: @escaping (String, Double) -> Void, applyStyle: @escaping (String) -> Void, resetAll: @escaping () -> Void) {
         self.context = context
         self.shuffle = shuffle
         self.setNumber = setNumber
         self.setChoice = setChoice
         self.setMaterial = setMaterial
-        self.setPixelSize = setPixelSize
+        self.setPixelIcons = setPixelIcons
         self.setColor = setColor
         self.setTintStrength = setTintStrength
         self.pickColor = pickColor
@@ -1262,13 +1284,12 @@ private func aorusGlassMaterialNow(dark: Bool) -> String {
 }
 
 /// The pixel material is the whole pixel look, the icons with it: choosing it draws every icon
-/// in pixels the glass's size; leaving it takes the pixels the material put on the icons back
-/// off. A look the person chose for the icons themselves stays.
+/// in the plugins' pixel style; leaving it takes the pixel icons back off. Pixel icons belong to
+/// the pixel material alone, so none outlive it.
 private func aorusPixelModeChanged(from previous: String, to material: String) {
     if material == "pixel" && previous != "pixel" {
-        let size = AorusPluginAppearanceValues.number("glass.pixelSize", in: AorusPluginAppearanceValues.glassSnapshot().values) ?? 4.0
-        AorusIconLook.set(look: "pixel", amount: aorusIconPixelAmount(size))
-    } else if material != "pixel" && previous == "pixel" && AorusIconLook.current()?.look == "pixel" {
+        AorusIconLook.set(look: "pixel", amount: aorusIconPixelStandard)
+    } else if material != "pixel" && AorusIconLook.current()?.look == "pixel" {
         AorusIconLook.set(look: nil)
     }
 }
@@ -1352,14 +1373,9 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
             aorusGlassStoreChoice("glass.style", material, telegram: "regular")
             aorusPixelModeChanged(from: previous, to: aorusGlassMaterialNow(dark: dark))
         },
-        setPixelSize: { size in
-            // The icons' pixels grow with the glass's while the pixel mode put them there.
-            guard let current = AorusIconLook.current(), current.look == "pixel" else {
-                return
-            }
-            iconThrottle.run("icons") {
-                AorusIconLook.set(look: "pixel", amount: aorusIconPixelAmount(size))
-            }
+        setPixelIcons: { on in
+            iconThrottle.cancelAll()
+            AorusIconLook.set(look: on ? "pixel" : nil, amount: on ? aorusIconPixelStandard : nil)
         },
         setColor: { row, hex in
             aorusGlassStoreColor(row, hex, dark: screen.theme?.overallDarkAppearance ?? row.dark)
@@ -1422,12 +1438,7 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
                 AorusIconLook.set(look: AorusIconLook.pluginLook() == nil ? nil : AorusIconLook.none)
                 return
             }
-            var amount = AorusPluginIcons.lookAmounts[look]?.standard
-            if look == "pixel" && aorusGlassMaterialNow(dark: screen.theme?.overallDarkAppearance ?? false) == "pixel" {
-                let size = AorusPluginAppearanceValues.number("glass.pixelSize", in: AorusPluginAppearanceValues.glassSnapshot().values) ?? 4.0
-                amount = aorusIconPixelAmount(size)
-            }
-            AorusIconLook.set(look: look, amount: amount)
+            AorusIconLook.set(look: look, amount: AorusPluginIcons.lookAmounts[look]?.standard)
         },
         setIconAmount: { look, amount in
             iconThrottle.run("icons") {

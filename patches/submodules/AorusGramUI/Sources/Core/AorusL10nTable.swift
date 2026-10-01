@@ -53,10 +53,12 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Nella modalità pixel le icone sono pixel. Un altro stile di icone si può scegliere disattivando Icone pixel qui sopra.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel è la modalità pixel per tutta l'app: capsule a gradini, menu e fogli delle azioni e, con Icone pixel attive, tutte le icone, disegnate come le disegna lo stile pixel dei plugin.",
+        "Pixel Icons": "Icone pixel",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Il vetro e le icone torneranno come li disegna Telegram. I plugin continueranno a funzionare.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Anche i plugin possono cambiare il vetro e le icone; ciò che scegli qui ha la precedenza.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Lo stile si applica a tutte le icone dell'app — schede, pulsanti, menu e impostazioni — come lo stile delle icone dei plugin, e ha la precedenza.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixel rende pixelata tutta l'app: capsule a gradini, menu e fogli delle azioni e icone pixel. Lo stile delle icone si può cambiare qui sotto.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Qualsiasi colore è nel cerchio con il più, trasparenza compresa. I colori sono salvati a parte per il tema chiaro e quello scuro; un gradiente va dal primo colore all'ultimo.",
         "Aura": "Aureola",
         "Depth": "Profondità",
@@ -1016,10 +1018,12 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "W trybie pikselowym ikony są pikselowe. Inny styl ikon można wybrać po wyłączeniu pikselowych ikon powyżej.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksele to tryb pikselowy w całej aplikacji: schodkowe kapsuły, menu i arkusze akcji, a z włączonymi pikselowymi ikonami — każda ikona, rysowana tak jak w pikselowym stylu wtyczek.",
+        "Pixel Icons": "Pikselowe ikony",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Szkło i ikony znów będą takie, jak rysuje je Telegram. Wtyczki nadal będą działać.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Wtyczki też mogą zmieniać szkło i ikony; to, co wybierzesz tutaj, ma pierwszeństwo.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Styl obejmuje wszystkie ikony aplikacji — karty, przyciski, menu i ustawienia — tak jak styl ikon z wtyczek, i ma nad nim pierwszeństwo.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Piksele zmieniają całą aplikację w piksele: schodkowe kapsuły, menu i arkusze akcji oraz pikselowe ikony. Styl ikon można zmienić poniżej.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Dowolny kolor jest pod kółkiem z plusem, razem z przezroczystością. Kolory są zapamiętywane osobno dla jasnego i ciemnego motywu; gradient biegnie od pierwszego koloru do ostatniego.",
         "Aura": "Aureola",
         "Depth": "Głębia",
@@ -1979,10 +1983,12 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "In de pixelmodus zijn de iconen pixelig. Een andere iconstijl kies je zodra Pixeliconen hierboven uit staat.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel is de pixelmodus voor de hele app: getrapte capsules, menu's en actiebladen en, met Pixeliconen aan, elk icoon, getekend zoals de pixelstijl van plug-ins dat doet.",
+        "Pixel Icons": "Pixeliconen",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Het glas en de iconen worden weer zoals Telegram ze tekent. Plug-ins blijven werken.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Ook plug-ins kunnen het glas en de iconen veranderen; wat je hier kiest, gaat voor.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "De stijl geldt voor elk icoon in de app — tabbladen, knoppen, menu's en instellingen — zoals de iconstijl van plug-ins, en gaat daarvoor.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixel maakt de hele app pixelig: getrapte capsules, menu's en actiebladen, en pixeliconen. De stijl van de iconen kun je hieronder wijzigen.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Elke kleur zit onder het rondje met een plus, transparantie inbegrepen. Kleuren worden apart bewaard voor het lichte en het donkere thema; een verloop loopt van de eerste kleur naar de laatste.",
         "Aura": "Aura",
         "Depth": "Diepte",
@@ -2942,10 +2948,12 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En el mode de píxels les icones són de píxels. Es pot triar un altre estil d'icones desactivant Icones de píxels a dalt.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Píxels és el mode de píxels per a tota l'aplicació: càpsules esglaonades, menús i fulls d'accions i, amb Icones de píxels activades, totes les icones, dibuixades com ho fa l'estil de píxels dels connectors.",
+        "Pixel Icons": "Icones de píxels",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "El vidre i les icones tornaran a ser com els dibuixa Telegram. Els connectors continuaran funcionant.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Els connectors també poden canviar el vidre i les icones; el que triïs aquí hi té prioritat.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "L'estil s'aplica a totes les icones de l'aplicació — pestanyes, botons, menús i ajustos — com l'estil d'icones dels connectors, i hi té prioritat.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Píxels converteix tota l'aplicació en píxels: càpsules esglaonades, menús i fulls d'accions, i icones de píxels. L'estil de les icones es pot canviar a sota.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Qualsevol color és al cercle amb un més, transparència inclosa. Els colors es desen per separat per al tema clar i el fosc; un degradat va del primer color a l'últim.",
         "Aura": "Aurèola",
         "Depth": "Volum",
@@ -3905,10 +3913,12 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Dalam mode piksel, ikon berpiksel. Gaya ikon lain dapat dipilih setelah Ikon piksel di atas dimatikan.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel adalah mode piksel untuk seluruh aplikasi: kapsul bertangga, menu dan lembar tindakan, dan dengan Ikon piksel aktif, setiap ikon, digambar seperti gaya piksel plugin.",
+        "Pixel Icons": "Ikon piksel",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Kaca dan ikon akan kembali seperti yang digambar Telegram. Plugin tetap berjalan.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Plugin juga dapat mengubah kaca dan ikon; yang dipilih di sini lebih diutamakan.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Gaya ini diterapkan pada setiap ikon aplikasi — tab, tombol, menu, dan pengaturan — seperti gaya ikon dari plugin, dan lebih diutamakan.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Piksel membuat seluruh aplikasi berpiksel: kapsul bertangga, menu dan lembar tindakan, serta ikon piksel. Gaya ikon dapat diubah di bawah.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Warna apa pun ada di lingkaran dengan tanda plus, termasuk transparansi. Warna disimpan terpisah untuk tema terang dan gelap; gradien berjalan dari warna pertama ke terakhir.",
         "Aura": "Aura",
         "Depth": "Kedalaman",
@@ -4868,10 +4878,12 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Dalam mod piksel, ikon adalah piksel. Gaya ikon lain boleh dipilih selepas Ikon piksel di atas dimatikan.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel ialah mod piksel untuk seluruh aplikasi: kapsul bertangga, menu dan helaian tindakan dan, dengan Ikon piksel dihidupkan, setiap ikon, dilukis seperti gaya piksel pemalam.",
+        "Pixel Icons": "Ikon piksel",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Kaca dan ikon akan kembali seperti yang dilukis Telegram. Pemalam terus berfungsi.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Pemalam juga boleh mengubah kaca dan ikon; apa yang dipilih di sini mengatasinya.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Gaya ini dikenakan pada setiap ikon aplikasi — tab, butang, menu dan tetapan — seperti gaya ikon pemalam, dan mengatasinya.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Piksel menjadikan seluruh aplikasi berpiksel: kapsul bertangga, menu dan helaian tindakan, serta ikon piksel. Gaya ikon boleh ditukar di bawah.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Sebarang warna ada di bawah bulatan bertanda tambah, termasuk ketelusan. Warna disimpan berasingan untuk tema cerah dan gelap; gradien bergerak dari warna pertama ke yang terakhir.",
         "Aura": "Aura",
         "Depth": "Kedalaman",
@@ -5831,10 +5843,12 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У піксельным рэжыме іконкі піксельныя. Іншы стыль іконак можна выбраць, выключыўшы «Піксельныя іконкі» вышэй.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пікселі — піксельны рэжым ва ўсёй праграме: ступеньчатыя капсулы, меню і аркушы дзеянняў, а з «Піксельнымі іконкамі» — і ўсе іконкі, як іх малюе піксельны стыль плагінаў.",
+        "Pixel Icons": "Піксельныя іконкі",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Шкло і іконкі зноў будуць такімі, як іх малюе Telegram. Плагіны працягнуць дзейнічаць.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Плагіны таксама могуць змяняць шкло і іконкі; тое, што выбрана тут, галоўнейшае.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Стыль кладзецца на ўсе іконкі праграмы — укладкі, кнопкі, меню і налады — як стыль іконак у плагінаў, і галоўнейшы за яго.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Пікселі ўключаюць піксельны рэжым ва ўсёй праграме: ступеньчатыя капсулы, меню і аркушы дзеянняў і піксельныя іконкі. Стыль іконак можна змяніць ніжэй.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Любы колер — у кружку з плюсам, разам з празрыстасцю. Колеры запамінаюцца асобна для светлай і цёмнай тэмы; градыент ідзе ад першага колеру да апошняга.",
         "Aura": "Арэол",
         "Depth": "Аб'ём",
@@ -6794,10 +6808,12 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Piksel rejimida belgilar pikselli. Boshqa belgilar uslubini tanlash uchun yuqoridagi «Piksel belgilar»ni o‘chiring.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel — butun ilova uchun piksel rejimi: zinapoyali kapsulalar, menyular va amallar varaqlari, «Piksel belgilar» yoqilganda esa barcha belgilar ham, plaginlarning piksel uslubi chizganidek.",
+        "Pixel Icons": "Piksel belgilar",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Shisha va belgilar yana Telegram chizganidek bo‘ladi. Plaginlar ishlashda davom etadi.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Plaginlar ham shisha va belgilarni o‘zgartirishi mumkin; bu yerda tanlangani ustun turadi.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Uslub ilovadagi barcha belgilarga qo‘llanadi — yorliqlar, tugmalar, menyular va sozlamalar — xuddi plaginlarning belgilar uslubi kabi, va undan ustun turadi.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Piksel butun ilovani pikselga aylantiradi: zinapoyali kapsulalar, menyular va amallar varaqlari hamda piksel belgilar. Belgilar uslubini quyida o‘zgartirish mumkin.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Istalgan rang — plyusli doirachada, shaffoflik bilan birga. Ranglar yorug‘ va qorong‘i mavzu uchun alohida saqlanadi; gradiyent birinchi rangdan oxirgisigacha boradi.",
         "Aura": "Gardish",
         "Depth": "Hajm",
@@ -7757,10 +7773,12 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "픽셀 모드에서는 아이콘이 픽셀로 그려집니다. 위의 픽셀 아이콘을 끄면 다른 아이콘 스타일을 고를 수 있습니다.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "픽셀은 앱 전체의 픽셀 모드입니다. 계단식 캡슐, 메뉴와 작업 시트, 그리고 픽셀 아이콘을 켜면 모든 아이콘이 플러그인의 픽셀 스타일처럼 그려집니다.",
+        "Pixel Icons": "픽셀 아이콘",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "글래스와 아이콘이 다시 Telegram이 그리는 모습으로 돌아갑니다. 플러그인은 계속 동작합니다.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "플러그인도 글래스와 아이콘을 바꿀 수 있지만, 여기서 고른 설정이 우선합니다.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "이 스타일은 탭, 버튼, 메뉴, 설정 등 앱의 모든 아이콘에 적용되며, 플러그인의 아이콘 스타일처럼 동작하고 그보다 우선합니다.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "픽셀은 앱 전체를 픽셀로 바꿉니다. 계단식 캡슐, 메뉴와 작업 시트, 픽셀 아이콘까지요. 아이콘 스타일은 아래에서 바꿀 수 있습니다.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "원하는 색상은 더하기가 있는 원에서 투명도까지 고를 수 있습니다. 색상은 밝은 테마와 어두운 테마에 따로 저장되며, 그라데이션은 첫 색상에서 마지막 색상으로 이어집니다.",
         "Aura": "후광",
         "Depth": "입체",
@@ -8720,10 +8738,12 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "في وضع البكسل تكون الأيقونات بكسلية. يمكن اختيار نمط أيقونات آخر بعد إيقاف الأيقونات البكسلية أعلاه.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "البكسل هو وضع البكسل للتطبيق كله: كبسولات متدرجة، والقوائم وأوراق الإجراءات، ومع تفعيل الأيقونات البكسلية كل الأيقونات، مرسومة كما يرسمها نمط البكسل في الإضافات.",
+        "Pixel Icons": "أيقونات بكسلية",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "سيعود الزجاج والأيقونات كما يرسمها Telegram. ستواصل الإضافات عملها.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "يمكن للإضافات أيضًا تغيير الزجاج والأيقونات؛ لكن ما تختاره هنا هو الأَولى.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "يُطبَّق النمط على كل أيقونات التطبيق — التبويبات والأزرار والقوائم والإعدادات — مثل نمط الأيقونات في الإضافات، ويتقدّم عليه.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "البكسل يحوّل التطبيق كله إلى بكسلات: كبسولات متدرجة، والقوائم وأوراق الإجراءات، وأيقونات بكسلية. يمكن تغيير نمط الأيقونات أدناه.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "أي لون موجود في الدائرة ذات علامة الزائد، مع الشفافية. تُحفظ الألوان منفصلة للسمة الفاتحة والداكنة، ويمتد التدرج من اللون الأول إلى الأخير.",
         "Aura": "هالة",
         "Depth": "العمق",
@@ -9683,10 +9703,12 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "در حالت پیکسلی نمادها پیکسلی‌اند. با خاموش کردن نمادهای پیکسلی در بالا می‌توانید سبک دیگری انتخاب کنید.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "پیکسل حالت پیکسلی برای کل برنامه است: کپسول‌های پله‌ای، منوها و برگه‌های عمل و، با روشن بودن نمادهای پیکسلی، همهٔ نمادها، همان‌طور که سبک پیکسلی افزونه‌ها می‌کشد.",
+        "Pixel Icons": "نمادهای پیکسلی",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "شیشه و نمادها دوباره همان‌طور می‌شوند که Telegram می‌کشد. افزونه‌ها همچنان کار می‌کنند.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "افزونه‌ها هم می‌توانند شیشه و نمادها را تغییر دهند؛ آنچه اینجا انتخاب شود برتری دارد.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "این سبک روی همهٔ نمادهای برنامه می‌نشیند — زبانه‌ها، دکمه‌ها، منوها و تنظیمات — مثل سبک نمادهای افزونه‌ها، و بر آن برتری دارد.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "پیکسل کل برنامه را پیکسلی می‌کند: کپسول‌های پله‌ای، منوها و برگه‌های عمل، و نمادهای پیکسلی. سبک نمادها را می‌توانید پایین‌تر تغییر دهید.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "هر رنگی در دایرهٔ به‌علاوه است، همراه با شفافیت. رنگ‌ها جداگانه برای پوستهٔ روشن و تیره نگه داشته می‌شوند؛ گرادیان از رنگ اول تا آخر می‌رود.",
         "Aura": "هاله",
         "Depth": "عمق",
@@ -10646,10 +10668,12 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Пиксель режимінде белгішелер пиксельді. Басқа белгіше стилін жоғарыдағы «Пиксель белгішелерді» өшіріп таңдауға болады.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пиксель — бүкіл қолданбаға арналған пиксель режимі: сатылы капсулалар, мәзірлер мен әрекет парақтары, ал «Пиксель белгішелер» қосулы болса — барлық белгішелер де, плагиндердің пиксель стилі салатындай.",
+        "Pixel Icons": "Пиксель белгішелер",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Шыны мен белгішелер қайтадан Telegram салатындай болады. Плагиндер жұмысын жалғастырады.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Плагиндер де шыны мен белгішелерді өзгерте алады; мұнда таңдалғаны басым.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Стиль қолданбаның барлық белгішелеріне түседі — қойындылар, батырмалар, мәзірлер мен баптаулар — плагиндердің белгіше стилі сияқты, әрі одан басым.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Пиксель бүкіл қолданбаны пиксельге айналдырады: сатылы капсулалар, мәзірлер мен әрекет парақтары және пиксель белгішелер. Белгішелер стилін төменде өзгертуге болады.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Кез келген түс — плюсы бар дөңгелекте, мөлдірлігімен бірге. Түстер ашық және қараңғы тақырып үшін бөлек сақталады; градиент бірінші түстен соңғысына дейін созылады.",
         "Aura": "Шұғыла",
         "Depth": "Көлем",
@@ -11609,10 +11633,12 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "像素模式下图标为像素风格。关闭上方的“像素图标”后即可选择其他图标样式。",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "像素是整个应用的像素模式：阶梯状胶囊、菜单和操作表，开启“像素图标”后还有所有图标，绘制方式与插件的像素样式相同。",
+        "Pixel Icons": "像素图标",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "玻璃和图标将恢复为 Telegram 的绘制方式。插件会继续生效。",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "插件也可以更改玻璃和图标；此处的选择优先。",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "此样式会应用到应用中的所有图标——标签、按钮、菜单和设置——就像插件的图标样式一样，并且优先于它。",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "像素会让整个应用变成像素风格：阶梯状胶囊、菜单和操作表，以及像素图标。图标样式可以在下方更改。",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "任意颜色都在带加号的圆圈里，包括透明度。颜色分别为浅色和深色主题保存；渐变从第一种颜色过渡到最后一种。",
         "Aura": "光环",
         "Depth": "立体",
@@ -12573,10 +12599,12 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "像素模式下圖示為像素風格。關閉上方的「像素圖示」後即可選擇其他圖示樣式。",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "像素是整個應用程式的像素模式：階梯狀膠囊、選單與動作表，開啟「像素圖示」後還有所有圖示，繪製方式與外掛的像素樣式相同。",
+        "Pixel Icons": "像素圖示",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "玻璃和圖示將恢復為 Telegram 的繪製方式。外掛會繼續運作。",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "外掛也可以變更玻璃和圖示；此處的選擇優先。",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "此樣式會套用到應用程式中的所有圖示——分頁、按鈕、選單與設定——就像外掛的圖示樣式一樣，並且優先於它。",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "像素會讓整個應用程式變成像素風格：階梯狀膠囊、選單與動作表，以及像素圖示。圖示樣式可在下方更改。",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "任何顏色都在帶加號的圓圈裡，包括透明度。顏色會分別為淺色與深色主題保存；漸層從第一種顏色延伸到最後一種。",
         "Aura": "光環",
         "Depth": "立體",
@@ -13536,10 +13564,12 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "ピクセルモードではアイコンはピクセルになります。上のピクセルアイコンをオフにすると、別のアイコンスタイルを選べます。",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "ピクセルはアプリ全体のピクセルモードです。階段状のカプセル、メニューとアクションシート、そしてピクセルアイコンをオンにするとすべてのアイコンが、プラグインのピクセルスタイルと同じように描かれます。",
+        "Pixel Icons": "ピクセルアイコン",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "ガラスとアイコンはTelegramの描き方に戻ります。プラグインはそのまま動作します。",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "プラグインもガラスやアイコンを変えられますが、ここで選んだものが優先されます。",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "このスタイルはタブ、ボタン、メニュー、設定などアプリのすべてのアイコンにかかり、プラグインのアイコンスタイルと同じように働き、それより優先されます。",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "ピクセルにするとアプリ全体がピクセル調になります。階段状のカプセル、メニューとアクションシート、ピクセルのアイコンまで。アイコンのスタイルは下で変更できます。",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "どんな色もプラスの丸から選べ、透明度も設定できます。色はライトテーマとダークテーマで別々に保存され、グラデーションは最初の色から最後の色へと続きます。",
         "Aura": "後光",
         "Depth": "立体",
@@ -14499,10 +14529,12 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Pikselitilassa kuvakkeet ovat pikseleitä. Toisen kuvaketyylin voi valita, kun yllä oleva Pikselikuvakkeet on pois päältä.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pikselit on koko sovelluksen pikselitila: porrastetut kapselit, valikot ja toimintoarkit sekä, kun Pikselikuvakkeet on päällä, jokainen kuvake piirrettynä kuten liitännäisten pikselityyli piirtää.",
+        "Pixel Icons": "Pikselikuvakkeet",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Lasi ja kuvakkeet palaavat sellaisiksi kuin Telegram ne piirtää. Liitännäiset toimivat edelleen.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Myös liitännäiset voivat muuttaa lasia ja kuvakkeita; tässä valittu menee edelle.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Tyyli koskee sovelluksen jokaista kuvaketta — välilehtiä, painikkeita, valikoita ja asetuksia — kuten liitännäisten kuvaketyyli, ja menee sen edelle.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pikselit tekevät koko sovelluksesta pikseligrafiikkaa: porrastetut kapselit, valikot ja toimintoarkit sekä pikselikuvakkeet. Kuvakkeiden tyyliä voi muuttaa alempana.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Minkä tahansa värin löydät plussaympyrästä läpinäkyvyyksineen. Värit tallennetaan erikseen vaalealle ja tummalle teemalle; liukuväri kulkee ensimmäisestä väristä viimeiseen.",
         "Aura": "Sädekehä",
         "Depth": "Syvyys",
@@ -15462,10 +15494,12 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "במצב פיקסלים הסמלים פיקסליים. אפשר לבחור סגנון סמלים אחר אחרי כיבוי סמלי הפיקסלים למעלה.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "פיקסלים הוא מצב הפיקסלים לכל האפליקציה: קפסולות מדורגות, תפריטים וגיליונות פעולות, וכשסמלי פיקסלים פעילים — כל סמל, מצויר כפי שסגנון הפיקסלים של התוספים מצייר.",
+        "Pixel Icons": "סמלי פיקסלים",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "הזכוכית והסמלים יחזרו להיות כפי ש-Telegram מצייר אותם. התוספים ימשיכו לפעול.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "גם תוספים יכולים לשנות את הזכוכית והסמלים; מה שנבחר כאן גובר.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "הסגנון חל על כל סמלי האפליקציה — כרטיסיות, כפתורים, תפריטים והגדרות — כמו סגנון הסמלים של תוספים, וגובר עליו.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "פיקסלים הופכים את כל האפליקציה לפיקסלית: קפסולות מדורגות, תפריטים וגיליונות פעולות וסמלי פיקסלים. את סגנון הסמלים אפשר לשנות למטה.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "כל צבע נמצא בעיגול עם הפלוס, כולל שקיפות. הצבעים נשמרים בנפרד לערכת הנושא הבהירה ולכהה; מעבר צבע עובר מהצבע הראשון לאחרון.",
         "Aura": "הילה",
         "Depth": "עומק",
@@ -16425,10 +16459,12 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "U pikselnom načinu ikone su pikselne. Drugi stil ikona možete odabrati kad isključite pikselne ikone iznad.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pikseli su pikselni način za cijelu aplikaciju: stepenaste kapsule, izbornici i listovi radnji te, s uključenim pikselnim ikonama, svaka ikona, nacrtana kao što je crta pikselni stil dodataka.",
+        "Pixel Icons": "Pikselne ikone",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Staklo i ikone ponovno će biti onakvi kakve ih crta Telegram. Dodaci nastavljaju raditi.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "I dodaci mogu mijenjati staklo i ikone; ono što odaberete ovdje ima prednost.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Stil se primjenjuje na sve ikone u aplikaciji — kartice, gumbe, izbornike i postavke — kao stil ikona iz dodataka, i ima prednost pred njim.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pikseli cijelu aplikaciju pretvaraju u piksele: stepenaste kapsule, izbornike i listove radnji te pikselne ikone. Stil ikona možete promijeniti ispod.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Bilo koja boja nalazi se pod kružićem s plusom, uključujući prozirnost. Boje se pamte zasebno za svijetlu i tamnu temu; prijelaz ide od prve boje do posljednje.",
         "Aura": "Aureola",
         "Depth": "Dubina",
@@ -17388,10 +17424,12 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У пикселном режиму иконе су пикселне. Други стил икона можете изабрати када искључите пикселне иконе изнад.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пиксели су пикселни режим за целу апликацију: степенасте капсуле, менији и листови радњи и, са укљученим пикселним иконама, свака икона, нацртана као што је црта пикселни стил додатака.",
+        "Pixel Icons": "Пикселне иконе",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Стакло и иконе поново ће бити онакви какве их црта Telegram. Додаци настављају да раде.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "И додаци могу да мењају стакло и иконе; оно што изаберете овде има предност.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Стил се примењује на све иконе у апликацији — картице, дугмад, меније и подешавања — као стил икона из додатака, и има предност над њим.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Пиксели целу апликацију претварају у пикселе: степенасте капсуле, меније и листове радњи и пикселне иконе. Стил икона можете променити испод.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Било која боја налази се под кружићем са плусом, укључујући провидност. Боје се памте засебно за светлу и тамну тему; прелаз иде од прве боје до последње.",
         "Aura": "Ореол",
         "Depth": "Дубина",
@@ -18351,10 +18389,12 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "V pixelovém režimu jsou ikony pixelové. Jiný styl ikon lze zvolit po vypnutí pixelových ikon výše.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixely jsou pixelový režim pro celou aplikaci: stupňovité kapsle, nabídky a listy akcí a se zapnutými pixelovými ikonami i každá ikona, kreslená jako pixelovým stylem pluginů.",
+        "Pixel Icons": "Pixelové ikony",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Sklo a ikony budou zase takové, jak je kreslí Telegram. Pluginy budou dál fungovat.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Sklo a ikony mohou měnit i pluginy; přednost má to, co zvolíte tady.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Styl se uplatní na všechny ikony aplikace — karty, tlačítka, nabídky i nastavení — stejně jako styl ikon z pluginů, a má před ním přednost.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixely promění celou aplikaci v pixely: stupňovité kapsle, nabídky a listy akcí a pixelové ikony. Styl ikon lze změnit níže.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Jakákoli barva je pod kolečkem s plusem, včetně průhlednosti. Barvy se ukládají zvlášť pro světlý a tmavý motiv; přechod vede od první barvy k poslední.",
         "Aura": "Svatozář",
         "Depth": "Hloubka",
@@ -19314,10 +19354,12 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "V pixelovom režime sú ikony pixelové. Iný štýl ikon môžete zvoliť po vypnutí pixelových ikon vyššie.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixely sú pixelový režim pre celú aplikáciu: stupňovité kapsuly, ponuky a hárky akcií a so zapnutými pixelovými ikonami aj každá ikona, kreslená ako pixelovým štýlom pluginov.",
+        "Pixel Icons": "Pixelové ikony",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Sklo a ikony budú opäť také, ako ich kreslí Telegram. Pluginy budú ďalej fungovať.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Sklo a ikony môžu meniť aj pluginy; prednosť má to, čo zvolíte tu.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Štýl sa uplatní na všetky ikony aplikácie — karty, tlačidlá, ponuky aj nastavenia — rovnako ako štýl ikon z pluginov, a má pred ním prednosť.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixely premenia celú aplikáciu na pixely: stupňovité kapsuly, ponuky a hárky akcií a pixelové ikony. Štýl ikon môžete zmeniť nižšie.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Akákoľvek farba je pod krúžkom s plusom, vrátane priehľadnosti. Farby sa ukladajú zvlášť pre svetlý a tmavý motív; prechod vedie od prvej farby k poslednej.",
         "Aura": "Svätožiara",
         "Depth": "Hĺbka",
@@ -20277,10 +20319,12 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "În modul pixel pictogramele sunt pixelate. Alt stil de pictograme se poate alege după ce dezactivezi Pictograme pixelate mai sus.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel este modul pixel pentru toată aplicația: capsule în trepte, meniuri și foi de acțiuni și, cu Pictograme pixelate activate, fiecare pictogramă, desenată cum o desenează stilul pixel al pluginurilor.",
+        "Pixel Icons": "Pictograme pixelate",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Sticla și pictogramele vor fi din nou cum le desenează Telegram. Pluginurile continuă să funcționeze.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Și pluginurile pot schimba sticla și pictogramele; ce alegi aici are întâietate.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Stilul se aplică tuturor pictogramelor din aplicație — file, butoane, meniuri și setări — ca stilul pictogramelor din pluginuri, și are întâietate.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixel transformă toată aplicația în pixeli: capsule în trepte, meniuri și foi de acțiuni și pictograme pixelate. Stilul pictogramelor se poate schimba mai jos.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Orice culoare se află sub cercul cu plus, inclusiv transparența. Culorile se păstrează separat pentru tema luminoasă și cea întunecată; un gradient merge de la prima culoare la ultima.",
         "Aura": "Aură",
         "Depth": "Volum",
@@ -21240,10 +21284,12 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Pixeles módban az ikonok pixelesek. Más ikonstílus a fenti Pixeles ikonok kikapcsolása után választható.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "A Pixel az egész alkalmazás pixeles módja: lépcsős kapszulák, menük és műveletlapok, bekapcsolt pixeles ikonokkal pedig minden ikon, úgy rajzolva, ahogy a bővítmények pixeles stílusa rajzolja.",
+        "Pixel Icons": "Pixeles ikonok",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Az üveg és az ikonok újra olyanok lesznek, ahogy a Telegram rajzolja őket. A bővítmények tovább működnek.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "A bővítmények is módosíthatják az üveget és az ikonokat; az itt választott élvez elsőbbséget.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "A stílus az alkalmazás minden ikonjára kerül — lapokra, gombokra, menükre és beállításokra —, ahogy a bővítmények ikonstílusa, és elsőbbséget élvez.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "A Pixel az egész alkalmazást pixelessé teszi: lépcsős kapszulák, menük és műveletlapok, valamint pixeles ikonok. Az ikonok stílusa lent módosítható.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Bármilyen szín a pluszos körben érhető el, átlátszósággal együtt. A színeket külön tárolja a világos és a sötét téma; a színátmenet az első színtől az utolsóig tart.",
         "Aura": "Glória",
         "Depth": "Mélység",
@@ -22203,10 +22249,12 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "I pikselmodus er ikonene pikselert. En annen ikonstil kan velges når Pikselikoner over er av.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel er pikselmodus for hele appen: trappede kapsler, menyer og handlingsark og, med Pikselikoner på, hvert ikon, tegnet slik programtilleggenes pikselstil tegner dem.",
+        "Pixel Icons": "Pikselikoner",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Glasset og ikonene blir igjen slik Telegram tegner dem. Programtillegg fortsetter å virke.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Programtillegg kan også endre glasset og ikonene; det du velger her, går foran.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Stilen legges over hvert ikon i appen — faner, knapper, menyer og innstillinger — slik ikonstilen fra programtillegg gjør, og går foran den.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Piksel gjør hele appen pikselert: trappede kapsler, menyer og handlingsark, og pikselikoner. Ikonstilen kan endres nedenfor.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Enhver farge finner du under sirkelen med pluss, gjennomsiktighet inkludert. Farger lagres hver for seg for lyst og mørkt tema; en gradient går fra den første fargen til den siste.",
         "Aura": "Glorie",
         "Depth": "Dybde",
@@ -23166,10 +23214,12 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "I pixelläget är symbolerna pixliga. En annan symbolstil kan väljas när Pixelsymboler ovan är av.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel är pixelläget för hela appen: trappstegade kapslar, menyer och åtgärdsblad och, med Pixelsymboler på, varje symbol, ritad som tilläggens pixelstil ritar den.",
+        "Pixel Icons": "Pixelsymboler",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Glaset och symbolerna blir åter som Telegram ritar dem. Tillägg fortsätter att fungera.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Tillägg kan också ändra glaset och symbolerna; det du väljer här går före.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Stilen läggs på varje symbol i appen — flikar, knappar, menyer och inställningar — som symbolstilen från tillägg, och går före den.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixel gör hela appen pixlig: trappstegade kapslar, menyer och åtgärdsblad samt pixelsymboler. Symbolstilen kan ändras nedan.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Vilken färg som helst finns under cirkeln med plus, genomskinlighet inräknad. Färger sparas separat för ljust och mörkt tema; en toning går från den första färgen till den sista.",
         "Aura": "Gloria",
         "Depth": "Djup",
@@ -24129,10 +24179,12 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Ở chế độ điểm ảnh, biểu tượng là điểm ảnh. Có thể chọn kiểu biểu tượng khác sau khi tắt Biểu tượng điểm ảnh ở trên.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Điểm ảnh là chế độ điểm ảnh cho toàn ứng dụng: viên nang bậc thang, menu và bảng tác vụ, và khi bật Biểu tượng điểm ảnh, mọi biểu tượng được vẽ như kiểu điểm ảnh của plugin.",
+        "Pixel Icons": "Biểu tượng điểm ảnh",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Kính và biểu tượng sẽ trở lại như Telegram vẽ. Plugin vẫn tiếp tục hoạt động.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Plugin cũng có thể thay đổi kính và biểu tượng; lựa chọn ở đây được ưu tiên.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Kiểu này áp lên mọi biểu tượng trong ứng dụng — thẻ, nút, menu và cài đặt — giống kiểu biểu tượng của plugin, và được ưu tiên hơn.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Điểm ảnh biến cả ứng dụng thành phong cách điểm ảnh: viên nang bậc thang, menu và bảng tác vụ, cùng biểu tượng điểm ảnh. Có thể đổi kiểu biểu tượng ở bên dưới.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Mọi màu đều nằm ở vòng tròn có dấu cộng, kể cả độ trong suốt. Màu được lưu riêng cho chủ đề sáng và tối; dải chuyển màu đi từ màu đầu tiên đến màu cuối cùng.",
         "Aura": "Hào quang",
         "Depth": "Chiều sâu",
@@ -25092,10 +25144,12 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У піксельному режимі іконки піксельні. Інший стиль іконок можна вибрати, вимкнувши «Піксельні іконки» вище.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пікселі — піксельний режим у всьому застосунку: ступінчасті капсули, меню й аркуші дій, а з «Піксельними іконками» — і всі іконки, як їх малює піксельний стиль плагінів.",
+        "Pixel Icons": "Піксельні іконки",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Скло й іконки знову будуть такими, як їх малює Telegram. Плагіни й далі діятимуть.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Плагіни теж можуть змінювати скло й іконки; те, що вибрано тут, головніше.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Стиль лягає на всі іконки застосунку — вкладки, кнопки, меню й налаштування — як стиль іконок у плагінів, і головніший за нього.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Пікселі вмикають піксельний режим у всьому застосунку: ступінчасті капсули, меню й аркуші дій і піксельні іконки. Стиль іконок можна змінити нижче.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Будь-який колір — у кружечку з плюсом, разом із прозорістю. Кольори запам'ятовуються окремо для світлої та темної теми; градієнт іде від першого кольору до останнього.",
         "Aura": "Ореол",
         "Depth": "Об'єм",
@@ -26064,10 +26118,12 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En el modo píxel los iconos son de píxeles. Se puede elegir otro estilo de iconos al desactivar Iconos de píxeles arriba.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Píxel es el modo píxel para toda la app: cápsulas escalonadas, menús y hojas de acciones y, con Iconos de píxeles activados, cada icono, dibujado como lo dibuja el estilo píxel de los plugins.",
+        "Pixel Icons": "Iconos de píxeles",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "El cristal y los iconos volverán a ser como los dibuja Telegram. Los plugins seguirán funcionando.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Los plugins también pueden cambiar el cristal y los iconos; lo que elijas aquí tiene prioridad.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "El estilo se aplica a todos los iconos de la app — pestañas, botones, menús y ajustes — como el estilo de iconos de los plugins, y tiene prioridad sobre él.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Píxel vuelve pixelada toda la app: cápsulas escalonadas, menús y hojas de acciones, e iconos de píxeles. El estilo de los iconos se puede cambiar abajo.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Cualquier color está en el círculo con el más, transparencia incluida. Los colores se guardan por separado para el tema claro y el oscuro; un degradado va del primer color al último.",
         "Aura": "Aura",
         "Depth": "Volumen",
@@ -27036,10 +27092,12 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "No modo pixel os ícones são de pixel. Outro estilo de ícones pode ser escolhido desativando Ícones de pixel acima.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel é o modo pixel para o app inteiro: cápsulas em degraus, menus e folhas de ações e, com Ícones de pixel ativados, todos os ícones, desenhados como o estilo pixel dos plugins os desenha.",
+        "Pixel Icons": "Ícones de pixel",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "O vidro e os ícones voltarão a ser como o Telegram os desenha. Os plugins continuam funcionando.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Os plugins também podem mudar o vidro e os ícones; o que for escolhido aqui tem prioridade.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "O estilo vale para todos os ícones do app — abas, botões, menus e ajustes — como o estilo de ícones dos plugins, e tem prioridade sobre ele.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixel deixa o app inteiro pixelado: cápsulas em degraus, menus e folhas de ações, e ícones de pixel. O estilo dos ícones pode ser mudado abaixo.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Qualquer cor está no círculo com o mais, transparência incluída. As cores são guardadas à parte para o tema claro e o escuro; um degradê vai da primeira cor à última.",
         "Aura": "Auréola",
         "Depth": "Volume",
@@ -28008,10 +28066,12 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Im Pixelmodus sind die Symbole pixelig. Einen anderen Symbolstil wählst du, sobald Pixelsymbole oben aus ist.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel ist der Pixelmodus für die ganze App: gestufte Kapseln, Menüs und Aktionsblätter und, mit eingeschalteten Pixelsymbolen, jedes Symbol, so gezeichnet wie der Pixelstil von Plugins.",
+        "Pixel Icons": "Pixelsymbole",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Glas und Symbole sehen wieder so aus, wie Telegram sie zeichnet. Plugins wirken weiter.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Auch Plugins können das Glas und die Symbole ändern; was du hier wählst, hat Vorrang.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Der Stil gilt für jedes Symbol der App — Tabs, Tasten, Menüs und Einstellungen — wie der Symbolstil von Plugins und hat Vorrang davor.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixel macht die ganze App pixelig: gestufte Kapseln, Menüs und Aktionsblätter sowie Pixelsymbole. Den Stil der Symbole kannst du unten ändern.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Jede Farbe findest du im Kreis mit dem Plus, Transparenz inklusive. Farben werden getrennt für das helle und das dunkle Design gespeichert; ein Verlauf führt von der ersten Farbe zur letzten.",
         "Aura": "Aura",
         "Depth": "Tiefe",
@@ -28980,10 +29040,12 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En mode pixel, les icônes sont en pixels. Un autre style d'icônes se choisit une fois Icônes en pixels désactivé plus haut.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel est le mode pixel pour toute l'app : capsules en escalier, menus et feuilles d'actions et, avec Icônes en pixels activé, chaque icône, dessinée comme le style pixel des plugins la dessine.",
+        "Pixel Icons": "Icônes en pixels",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Le verre et les icônes redeviendront tels que Telegram les dessine. Les plugins continuent de fonctionner.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Les plugins peuvent aussi changer le verre et les icônes ; ce qui est choisi ici passe avant.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Le style s'applique à toutes les icônes de l'app — onglets, boutons, menus et réglages — comme le style d'icônes des plugins, et passe avant lui.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Pixel rend toute l'app pixelisée : capsules en escalier, menus et feuilles d'actions, et icônes en pixels. Le style des icônes se change plus bas.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "N'importe quelle couleur se trouve dans le cercle avec le plus, transparence comprise. Les couleurs sont gardées à part pour le thème clair et le thème sombre ; un dégradé va de la première couleur à la dernière.",
         "Aura": "Auréole",
         "Depth": "Relief",
@@ -29952,10 +30014,12 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Piksel modunda simgeler pikseldir. Yukarıdaki Piksel simgeler kapatılınca başka bir simge stili seçilebilir.",
+        "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel, tüm uygulama için piksel modudur: basamaklı kapsüller, menüler ve eylem sayfaları ve Piksel simgeler açıkken her simge, eklentilerin piksel stilinin çizdiği gibi.",
+        "Pixel Icons": "Piksel simgeler",
         "The glass and the icons will be the way Telegram draws them again. Plugins keep working.": "Cam ve simgeler yeniden Telegram'ın çizdiği gibi olacak. Eklentiler çalışmaya devam eder.",
         "Plugins can change the glass and the icons too; what is chosen here wins.": "Eklentiler de camı ve simgeleri değiştirebilir; burada seçilen önceliklidir.",
         "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.": "Stil uygulamadaki tüm simgelere uygulanır — sekmeler, düğmeler, menüler ve ayarlar — eklentilerin simge stili gibi, ve ondan önceliklidir.",
-        "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.": "Piksel tüm uygulamayı piksel yapar: basamaklı kapsüller, menüler ve eylem sayfaları ile piksel simgeler. Simge stili aşağıdan değiştirilebilir.",
         "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.": "Her renk artı işaretli dairede, saydamlığıyla birlikte. Renkler açık ve koyu tema için ayrı saklanır; geçiş ilk renkten sonuncusuna uzanır.",
         "Aura": "Hale",
         "Depth": "Derinlik",
