@@ -1887,8 +1887,10 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             completion(.failure(AorusPluginRequestError("Send messages permission is not granted")))
             return
         }
+        // One account for the check, "me" and the send, even if the account changes meanwhile.
+        let context = self.context
         if let accountId, accountId != context.account.id.int64 {
-            completion(.failure(AorusPluginRequestError("A plugin cannot send from another account")))
+            completion(.failure(AorusPluginRequestError("A plugin sends only from the account on screen, and accountId names another one")))
             return
         }
         let target: PeerId
