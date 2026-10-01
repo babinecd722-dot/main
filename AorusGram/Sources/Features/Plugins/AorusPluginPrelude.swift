@@ -22,7 +22,7 @@ public enum AorusPluginPrelude {
         "foreground", "background", "settingsChanged", "appSettingsChanged",
         "connectionChanged", "uiAction", "contextAction", "settings.changed", "settings.action", "settings.reset",
         "chatOpened", "chatClosed", "inputChanged", "overlayAction", "pluginMessage", "nativeButtonAction",
-        "socketMessage",
+        "socketMessage", "accountChanged",
     ]
 
     /// The places a plugin can get between the app and what it was about to do. Declared
@@ -171,8 +171,11 @@ public enum AorusPluginPrelude {
         var handlers = {};
         for (var e = 0; e < KNOWN_EVENTS.length; e++) { handlers[KNOWN_EVENTS[e]] = []; }
 
+        // The app is told the prefix and every name a command answers to, so it can tell a
+        // command from an ordinary message itself and send the ordinary one without waiting
+        // on the plugin at all.
         function notifyHooks() {
-            host.hooksChanged(handlers.send.length > 0, commandOrder.length > 0);
+            host.hooksChanged(handlers.send.length > 0, commandOrder.length > 0, prefix, Object.keys(commands).concat(Object.keys(commandAliases)));
         }
 
         function on(event, handler) {
@@ -315,6 +318,7 @@ public enum AorusPluginPrelude {
                 throw new Error('Prefix must be 1 to 3 characters and contain no letters, digits or spaces');
             }
             prefix = value;
+            notifyHooks();
         }
 
         function listCommands() {

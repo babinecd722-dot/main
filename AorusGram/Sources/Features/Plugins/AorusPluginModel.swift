@@ -376,6 +376,9 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
         "overlayAction": .customUI,
         "nativeButtonAction": .customUI,
         "pluginMessage": .pluginMessaging,
+        // Which account is now on screen is what `aorus.account.current` answers, so the
+        // event that says it changed asks for the same grant.
+        "accountChanged": .accountProfile,
     ]
 
     private static let subscription = try? NSRegularExpression(

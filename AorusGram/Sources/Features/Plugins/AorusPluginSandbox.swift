@@ -763,6 +763,10 @@ public final class AorusPluginSandbox {
     private var recentEntries: [AorusPluginLogEntry] = []
     private var sendHooks = false
     private var commandHooks = false
+    /// The plugin's command prefix and every name its commands answer to, as it last told the
+    /// app: enough to tell one of its commands from an ordinary message without asking it.
+    private var commandPrefix = "."
+    private var commandNames = Set<String>()
     /// The events the plugin has a handler for, as the prelude reports them.
     private var listenedEvents: Set<String> = []
     /// Events the app sends only to a plugin listening for them: they come with every key
@@ -770,7 +774,7 @@ public final class AorusPluginSandbox {
     /// of them to find it has nothing to do was the cost of a busy chat.
     public static let deliveredOnlyToListeners: Set<String> = [
         "message", "messageDeleted", "messageEdited", "inputChanged", "chatOpened", "chatClosed",
-        "appSettingsChanged", "connectionChanged", "foreground", "background",
+        "appSettingsChanged", "connectionChanged", "foreground", "background", "accountChanged",
     ]
 
     /// Called on the sandbox queue for every log line, after the host has been told. The
@@ -830,6 +834,71 @@ public final class AorusPluginSandbox {
         let hooks = sendHooks || commandHooks
         stateLock.unlock()
         return running && !cooling && permitted && hooks
+    }
+
+    /// Whether an outgoing text is anything this plugin acts on: every text while it has a
+    /// `send` handler, and otherwise only a text that is one of its commands. Answered from
+    /// what the plugin told the app, without asking it, so a message that is no command goes
+    /// out at once instead of waiting on the plugin's queue.
+    public func wantsOutgoing(_ text: String) -> Bool {
+        return outgoingRoute(for: text) != nil
+    }
+
+    /// Whether the text is one of this plugin's commands — its prefix, then a name it
+    /// registered, then nothing or a space — the same reading the prelude makes of it.
+    public func isCommand(_ text: String) -> Bool {
+        return outgoingRoute(for: text)?.command == true
+    }
+
+    private struct OutgoingRoute {
+        /// The text is one of the plugin's commands. Such a text is never sent as typed: the
+        /// person addressed the plugin, and the prelude consumes every command it runs.
+        let command: Bool
+        /// The plugin timed out a moment ago and is not waited on until the cooldown ends.
+        let cooling: Bool
+    }
+
+    private func outgoingRoute(for text: String) -> OutgoingRoute? {
+        stateLock.lock()
+        let running = runningFlag
+        let cooling = (hungUntil ?? .distantPast) > Date()
+        let permitted = permissions.contains(.outgoingMessages)
+        let send = sendHooks
+        let commands = commandHooks
+        let prefix = commandPrefix
+        let names = commandNames
+        stateLock.unlock()
+        guard running, permitted else {
+            return nil
+        }
+        if commands, AorusPluginSandbox.matchesCommand(text, prefix: prefix, names: names) {
+            return OutgoingRoute(command: true, cooling: cooling)
+        }
+        // A `send` handler that was too slow is left out while it cools down, as before; a
+        // command is not, because skipping it would post the command itself in the chat.
+        if send && !cooling {
+            return OutgoingRoute(command: false, cooling: false)
+        }
+        return nil
+    }
+
+    private static func matchesCommand(_ text: String, prefix: String, names: Set<String>) -> Bool {
+        // What JavaScript's `\s` is, which the prelude reads commands with: Unicode white space
+        // and the byte-order mark. Reading less would let a command through as a plain message.
+        let isSpace: (Character) -> Bool = { $0.isWhitespace || $0 == "\u{FEFF}" }
+        let trimmed = text.drop(while: isSpace)
+        guard trimmed.hasPrefix(prefix) else {
+            return false
+        }
+        let body = trimmed.dropFirst(prefix.count)
+        let name = body.prefix(while: { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") })
+        guard !name.isEmpty else {
+            return false
+        }
+        if let next = body.dropFirst(name.count).first, !isSpace(next) {
+            return false
+        }
+        return names.contains(name.lowercased())
     }
 
     /// A line written by the app rather than by the plugin: a dispatch, a refusal, a piece
@@ -1047,6 +1116,7 @@ public final class AorusPluginSandbox {
         runningFlag = false
         sendHooks = false
         commandHooks = false
+        commandNames.removeAll()
         listenedEvents.removeAll()
         stateLock.unlock()
     }
@@ -1134,23 +1204,31 @@ public final class AorusPluginSandbox {
     /// The same, knowing where the text was going, so that a command answering later can
     /// answer there.
     public func processOutgoing(text: String, context outgoing: AorusPluginOutgoingContext, timeout: TimeInterval) -> AorusPluginOutgoingVerdict {
-        guard hasOutgoingHooks else { return .passThrough }
+        guard let route = outgoingRoute(for: text) else { return .passThrough }
         final class Box {
             let lock = NSLock()
             var verdict = AorusPluginOutgoingVerdict.passThrough
             var abandoned = false
+            var finished = false
         }
         let box = Box()
+        // A command is not waited on when there is no time for it — a plugin that has just
+        // timed out, or a budget the plugins before it used up. It still runs, and what it
+        // answers is sent where it was typed when it is ready.
+        let waits = !route.cooling && timeout > 0
+        if !waits { box.abandoned = true }
         let semaphore = DispatchSemaphore(value: 0)
-        queue.async {
+        // The person is waiting on this one: it runs ahead of whatever else the plugin is doing
+        // at the priority of the tap, not of the plugin's background work.
+        queue.async(qos: .userInteractive, flags: .enforceQoS) {
             var verdict = AorusPluginOutgoingVerdict.passThrough
+            var pending = false
+            // Registered before the command runs: an answer that is ready at once comes back
+            // while the promise jobs are drained, which is before this call returns.
+            let token = UUID().uuidString
+            self.rememberCommandReply(token, context: outgoing)
             if let dispatcher = self.dispatcher, self.context != nil {
                 self.pendingException = nil
-                // Registered before the command runs: an answer that is ready at once comes
-                // back while the promise jobs are drained, which is before this call returns.
-                let token = UUID().uuidString
-                self.rememberCommandReply(token, context: outgoing)
-                var pending = false
                 if let result = dispatcher.invokeMethod("runOutgoing", withArguments: [text, String(outgoing.peerId), String(outgoing.accountId), token]),
                    result.isObject {
                     verdict.consumed = result.forProperty("consumed").toBool()
@@ -1160,32 +1238,63 @@ public final class AorusPluginSandbox {
                         verdict.replacement = replacement.toString()
                     }
                 }
-                box.lock.lock()
-                let wentOutUnchanged = box.abandoned
-                box.lock.unlock()
-                // Kept only for a command that answers later, and only when the chat waited for
-                // the verdict: after a timeout the typed text went out as it was, and an answer
-                // following it would be a message nobody asked for.
-                if !pending || wentOutUnchanged {
-                    self.commandReplies[token] = nil
-                }
             }
             box.lock.lock()
             let abandoned = box.abandoned
-            if !abandoned { box.verdict = verdict }
+            if !abandoned {
+                box.verdict = verdict
+                box.finished = true
+            }
             box.lock.unlock()
+            if abandoned && route.command {
+                self.answerLate(verdict, typed: text, context: outgoing, token: token, pending: pending)
+            } else if !pending || abandoned {
+                // Kept only for a command that answers later, and only when the chat waited
+                // for the verdict: after a `send` handler's timeout the typed text went out as
+                // it was, and an answer following it would be a message nobody asked for.
+                self.commandReplies[token] = nil
+            }
             semaphore.signal()
+        }
+        if !waits {
+            return AorusPluginOutgoingVerdict(consumed: true, replacement: nil, timedOut: true)
         }
         if semaphore.wait(timeout: .now() + timeout) == .timedOut {
             box.lock.lock()
-            box.abandoned = true
+            // The answer can land between the wait giving up and this line; it is used then.
+            let finished = box.finished
+            if !finished { box.abandoned = true }
             box.lock.unlock()
-            setState(hung: true)
-            record(.warn, "The outgoing hook did not answer within \(Int(timeout * 1000)) ms; this plugin is skipped for the next \(Int(AorusPluginSandbox.hungCooldown)) seconds and then tried again")
-            return AorusPluginOutgoingVerdict(consumed: false, replacement: nil, timedOut: true)
+            if !finished {
+                setState(hung: true)
+                if route.command {
+                    record(.warn, "The command did not answer within \(Int(timeout * 1000)) ms; it goes on running, and what it answers is sent to the chat when it is ready")
+                    return AorusPluginOutgoingVerdict(consumed: true, replacement: nil, timedOut: true)
+                }
+                record(.warn, "The outgoing hook did not answer within \(Int(timeout * 1000)) ms; this plugin is skipped for the next \(Int(AorusPluginSandbox.hungCooldown)) seconds and then tried again")
+                return AorusPluginOutgoingVerdict(consumed: false, replacement: nil, timedOut: true)
+            }
         }
         box.lock.lock(); defer { box.lock.unlock() }
         return box.verdict
+    }
+
+    /// A command the chat stopped waiting for. Its typed text was held back, so what the
+    /// command makes of it goes out now, where it was typed, on the plugin's queue.
+    private func answerLate(_ verdict: AorusPluginOutgoingVerdict, typed text: String, context outgoing: AorusPluginOutgoingContext, token: String, pending: Bool) {
+        // An answer still to come arrives through `commands.reply`, with the token kept for it.
+        if pending { return }
+        commandReplies[token] = nil
+        if verdict.consumed { return }
+        // The command's answer. Or, when by the time it ran the plugin had no such command any
+        // more, the text as it was typed: nobody else is going to send it now.
+        let answer = verdict.replacement ?? text
+        hostServices.pluginSendCommandResult(manifest.id, context: outgoing, text: answer) { [weak self] result in
+            if case let .failure(error) = result {
+                let reason = (error as? AorusPluginRequestError)?.message ?? error.localizedDescription
+                self?.record(.warn, "A late command answer could not be sent: " + reason)
+            }
+        }
     }
 
     /// Counts a message to `peer` against the limits, or answers why it cannot go.
@@ -1424,11 +1533,15 @@ public final class AorusPluginSandbox {
         }
         hostObject.setObject(log, forKeyedSubscript: "log" as NSString)
 
-        let hooksChanged: @convention(block) (Bool, Bool) -> Void = { [weak self] hasSend, hasCommands in
+        let hooksChanged: @convention(block) (Bool, Bool, JSValue, JSValue) -> Void = { [weak self] hasSend, hasCommands, prefix, names in
             guard let self = self else { return }
+            let prefixText: String = prefix.isString ? (prefix.toString() as String?) ?? "." : "."
+            let nameList = names.isArray ? (names.toArray() as? [String]) ?? [] : []
             self.stateLock.lock()
             self.sendHooks = self.permissions.contains(.outgoingMessages) && hasSend
             self.commandHooks = self.permissions.contains(.outgoingMessages) && hasCommands
+            self.commandPrefix = prefixText.isEmpty ? "." : prefixText
+            self.commandNames = Set(nameList.prefix(512).map { $0.lowercased() })
             self.stateLock.unlock()
         }
         hostObject.setObject(hooksChanged, forKeyedSubscript: "hooksChanged" as NSString)

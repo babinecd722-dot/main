@@ -405,7 +405,26 @@ if AorusPluginSandbox.watchdogAvailable {
     _ = commandStarted.wait(timeout: .now() + 2)
     let verdict = command.processOutgoing(text: ".r hello", peerId: 100, accountId: 200, timeout: 0.5)
     expect(!verdict.consumed && verdict.replacement == "HELLO", "chat command replaces outgoing text")
+    // A message that is none of a plugin's commands is not offered to it: it goes out without
+    // waiting on the plugin's queue.
+    expect(command.wantsOutgoing(".r hello") && command.wantsOutgoing("  .R"), "a command, however it is typed, is the plugin's")
+    expect(!command.wantsOutgoing("hello") && !command.wantsOutgoing(".rx") && !command.wantsOutgoing(".r-x") && !command.wantsOutgoing("."), "an ordinary message is not")
+    let plainVerdict = command.processOutgoing(text: "hello", peerId: 100, accountId: 200, timeout: 0.5)
+    expect(!plainVerdict.consumed && plainVerdict.replacement == nil && !plainVerdict.timedOut, "an ordinary message passes a command plugin untouched")
     command.stop()
+
+    let prefixed = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Prefixed"),
+        source: "aorus.commands.setPrefix('!'); aorus.commands.register('go', function () { return true; }, { aliases: ['g'] });",
+        host: AorusPluginNullHost(),
+        permissions: [.outgoingMessages]
+    )
+    let prefixedStarted = DispatchSemaphore(value: 0)
+    prefixed.start { error in expect(error == nil, "a plugin with its own prefix starts"); prefixedStarted.signal() }
+    _ = prefixedStarted.wait(timeout: .now() + 2)
+    expect(prefixed.wantsOutgoing("!go now") && prefixed.wantsOutgoing("!g"), "a command and its alias under the plugin's own prefix are the plugin's")
+    expect(!prefixed.wantsOutgoing(".go") && !prefixed.wantsOutgoing("!stop"), "the default prefix and an unknown name are not")
+    prefixed.stop()
 
     let asyncHost = AorusPluginNullHost()
     var translatedMessages: [String] = []
@@ -807,6 +826,35 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(slowActions == 1, "events are still delivered while the outgoing hook is cooling down")
     expect(slow.registration().commands.isEmpty, "a send handler is not a command")
     slow.stop()
+
+    // A command the chat cannot wait for is never posted as typed. It is held back, goes on
+    // running, and what it answers is sent where it was typed — also while its plugin cools
+    // down after the timeout.
+    let lateHost = AorusPluginNullHost()
+    var lateAnswers: [String] = []
+    let lateAnswered = DispatchSemaphore(value: 0)
+    lateHost.onCommandResult = { _, context, text in
+        expect(context.peerId == 7 && context.accountId == 8, "a late answer goes where the command was typed")
+        lateAnswers.append(text)
+        lateAnswered.signal()
+    }
+    let late = AorusPluginSandbox(
+        manifest: AorusPluginManifest(name: "Late command"),
+        source: "aorus.commands.register('late', function (args) { var until = Date.now() + 300; while (Date.now() < until) {} return 'done ' + args; });",
+        host: lateHost,
+        permissions: [.outgoingMessages]
+    )
+    let lateStarted = DispatchSemaphore(value: 0)
+    late.start { error in expect(error == nil, "a slow command plugin starts"); lateStarted.signal() }
+    _ = lateStarted.wait(timeout: .now() + 2)
+    let lateVerdict = late.processOutgoing(text: ".late one", peerId: 7, accountId: 8, timeout: 0.05)
+    expect(lateVerdict.consumed && lateVerdict.timedOut, "a slow command is held back, not sent as typed")
+    expect(lateAnswered.wait(timeout: .now() + 2) == .success && lateAnswers == ["done one"], "the slow command's answer is sent when it is ready")
+    expect(late.isHung && late.wantsOutgoing(".late two") && !late.wantsOutgoing("plain"), "a cooling plugin still owns its commands")
+    let coolingVerdict = late.processOutgoing(text: ".late two", peerId: 7, accountId: 8, timeout: 0.05)
+    expect(coolingVerdict.consumed, "a command to a cooling plugin is held back at once")
+    expect(lateAnswered.wait(timeout: .now() + 2) == .success && lateAnswers == ["done one", "done two"], "and answered when it has run")
+    late.stop()
 
     // Two runs of one plugin — a restart, a change of account. What each draws carries its own
     // run, so the old run's goodbye cannot stop the new run's snow, and what a stopping run

@@ -106,25 +106,34 @@ public final class AorusPluginRuntimeManager {
 
     private init() {}
 
+    /// The account on screen, whenever its interface is built: at launch and after every
+    /// change of account.
+    ///
+    /// Plugins run once, not once per account. A change of account used to stop every plugin
+    /// and start it again, which threw away what each was in the middle of — its timers and
+    /// sockets, an AI turn, what it kept in memory, a screen it had open — ran every start
+    /// handler a second time, and settled the promise of a plugin's own `accounts.switchTo`
+    /// in a run that was already gone. Now the plugins keep running, what they do from then
+    /// on is done on the new account, and each hears `accountChanged`.
     public func configure(context: AccountContext) {
         lock.lock()
-        let unchanged = self.context === context
-        let previous = unchanged ? [] : Array(sandboxes.values)
-        let previousHost = unchanged ? nil : self.host
-        if !unchanged {
-            sandboxes.removeAll()
-            schemas.removeAll()
-            pages.removeAll()
-            settingsShortcuts.removeAll()
-            contextActions.removeAll()
-            self.context = context
+        if self.context === context {
+            lock.unlock()
+            return
+        }
+        self.context = context
+        let existingHost = self.host
+        if existingHost == nil {
             self.host = AorusPluginTelegramHost(context: context, manager: self)
         }
         lock.unlock()
-        guard !unchanged else { return }
-        previous.forEach { sandbox in
-            previousHost?.clearPluginState(sandbox.manifest.id)
-            AorusPluginRuntimeManager.retire(sandbox)
+        if let existingHost {
+            existingHost.rebind(context: context)
+            dispatch(event: "accountChanged", payload: ["accountId": String(context.account.id.int64)])
+            // The new account's screens are built from what the plugins published.
+            publishIntegrationsChanged()
+            reloadAutostart(startingMissingOnly: true)
+            return
         }
         publishIntegrationsChanged()
         installObservers()
@@ -328,10 +337,15 @@ public final class AorusPluginRuntimeManager {
         lock.unlock()
         var replacement = text
         let deadline = Date().addingTimeInterval(0.1)
-        for sandbox in active where sandbox.hasOutgoingHooks {
+        // Only a plugin this text means something to is asked: one with a `send` handler, or
+        // one whose command it is. Every other message goes out without waiting on anyone.
+        for sandbox in active where sandbox.wantsOutgoing(replacement) {
             let remaining = deadline.timeIntervalSinceNow
-            guard remaining > 0 else { break }
-            let result = sandbox.processOutgoing(text: replacement, context: outgoing, timeout: remaining)
+            // Once the budget is spent a `send` handler is skipped, as it always was. A command
+            // is still handed to its plugin, which answers when it can: skipping it would post
+            // the command itself in the chat.
+            guard remaining > 0 || sandbox.isCommand(replacement) else { continue }
+            let result = sandbox.processOutgoing(text: replacement, context: outgoing, timeout: max(0, remaining))
             if result.consumed { return result }
             if let value = result.replacement { replacement = value }
         }
@@ -736,6 +750,13 @@ public final class AorusPluginRuntimeManager {
         return host
     }
 
+    /// The account on screen, read under the lock: the message observers run on whatever
+    /// thread posted, while a change of account replaces it on the main thread.
+    private func currentContext() -> AccountContext? {
+        lock.lock(); defer { lock.unlock() }
+        return context
+    }
+
     /// What a plugin may do, as the store said at one generation of it.
     private struct GrantSnapshot {
         let generation: Int
@@ -902,9 +923,9 @@ public final class AorusPluginRuntimeManager {
             })
         }
         observers.append(center.addObserver(forName: NSNotification.Name("aorusgram.didReceiveMessage"), object: nil, queue: nil) { [weak self] note in
-            guard let self, let info = note.userInfo,
+            guard let self, let info = note.userInfo, let context = self.currentContext(),
                   let eventAccountPath = info["accountPath"] as? String,
-                  eventAccountPath == self.context?.account.postbox.mediaBox.basePath else { return }
+                  eventAccountPath == context.account.postbox.mediaBox.basePath else { return }
             var payload: [String: Any] = [:]
             for key in ["peerId", "senderId", "msgId", "msgNs", "text", "date", "peerKind"] {
                 if let value = info[key] as? NSNumber, key == "peerId" || key == "senderId" {
@@ -913,32 +934,32 @@ public final class AorusPluginRuntimeManager {
                     payload[key] = value
                 }
             }
-            payload["accountId"] = String(self.context?.account.id.int64 ?? 0)
+            payload["accountId"] = String(context.account.id.int64)
             self.dispatch(event: "message", payload: payload)
         })
         observers.append(center.addObserver(forName: NSNotification.Name("aorusgram.willDeleteMessage"), object: nil, queue: nil) { [weak self] note in
-            guard let self, let info = note.userInfo,
+            guard let self, let info = note.userInfo, let context = self.currentContext(),
                   let eventAccountPath = info["accountPath"] as? String,
-                  eventAccountPath == self.context?.account.postbox.mediaBox.basePath,
+                  eventAccountPath == context.account.postbox.mediaBox.basePath,
                   let peerId = info["peerId"] as? NSNumber,
                   let msgId = info["msgId"] as? NSNumber,
                   let msgNs = info["msgNs"] as? NSNumber else { return }
             self.dispatch(event: "messageDeleted", payload: [
-                "accountId": String(self.context?.account.id.int64 ?? 0),
+                "accountId": String(context.account.id.int64),
                 "peerId": String(peerId.int64Value),
                 "msgId": msgId,
                 "msgNs": msgNs,
             ])
         })
         observers.append(center.addObserver(forName: NSNotification.Name("aorusgram.willEditMessage"), object: nil, queue: nil) { [weak self] note in
-            guard let self, let info = note.userInfo,
+            guard let self, let info = note.userInfo, let context = self.currentContext(),
                   let eventAccountPath = info["accountPath"] as? String,
-                  eventAccountPath == self.context?.account.postbox.mediaBox.basePath,
+                  eventAccountPath == context.account.postbox.mediaBox.basePath,
                   let peerId = info["peerId"] as? NSNumber,
                   let msgId = info["msgId"] as? NSNumber,
                   let msgNs = info["msgNs"] as? NSNumber else { return }
             var payload: [String: Any] = [
-                "accountId": String(self.context?.account.id.int64 ?? 0),
+                "accountId": String(context.account.id.int64),
                 "peerId": String(peerId.int64Value),
                 "msgId": msgId,
                 "msgNs": msgNs,
@@ -1238,7 +1259,15 @@ final class AorusPluginAITurn {
 }
 
 private final class AorusPluginTelegramHost: AorusPluginHostServices {
-    private let context: AccountContext
+    private let contextLock = NSLock()
+    private var currentContext: AccountContext
+    /// The account the plugins act on: the one on screen. It changes with the account, under
+    /// plugins that keep running across the change.
+    private var context: AccountContext {
+        contextLock.lock()
+        defer { contextLock.unlock() }
+        return currentContext
+    }
     private weak var manager: AorusPluginRuntimeManager?
     private let aiLock = NSLock()
     /// Held while the document picker is on screen: UIKit keeps only a weak delegate.
@@ -1252,8 +1281,15 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     private var aiPending: [String: AorusPluginAITurn] = [:]
 
     init(context: AccountContext, manager: AorusPluginRuntimeManager) {
-        self.context = context
+        self.currentContext = context
         self.manager = manager
+    }
+
+    /// The account on screen changed; what the plugins do from now on is done on the new one.
+    func rebind(context: AccountContext) {
+        contextLock.lock()
+        currentContext = context
+        contextLock.unlock()
     }
 
     var pluginExecutionAllowed: Bool { AorusPluginEntitlement.isAllowed }
@@ -1879,10 +1915,6 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             completion(.failure(AorusPluginRequestError("Outgoing messages permission is not granted")))
             return
         }
-        guard outgoing.accountId == context.account.id.int64 else {
-            completion(.failure(AorusPluginRequestError("The chat the command was typed in belongs to another account")))
-            return
-        }
         let replySubject = outgoing.replyTo.map {
             EngineMessageReplySubject(messageId: MessageId(peerId: PeerId($0.peerId), namespace: $0.namespace, id: $0.messageId), quote: nil, innerSubject: nil)
         }
@@ -1896,14 +1928,30 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             }
             return .message(text: piece.text, attributes: attributes, inlineStickers: [:], mediaReference: nil, threadId: outgoing.threadId, replyToMessageId: index == 0 ? replySubject : nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])
         }
-        let signal = enqueueMessages(account: context.account, peerId: PeerId(outgoing.peerId), messages: messages)
-        let _ = signal.start(completed: { completion(.success(())) })
+        // From the account the command was typed on: an answer that arrives after the person
+        // switched accounts still belongs to that chat, not to the account now on screen.
+        let current = context
+        let send: (Account) -> Void = { account in
+            let signal = enqueueMessages(account: account, peerId: PeerId(outgoing.peerId), messages: messages)
+            let _ = signal.start(completed: { completion(.success(())) })
+        }
+        if outgoing.accountId == current.account.id.int64 {
+            send(current.account)
+            return
+        }
+        let _ = (current.sharedContext.activeAccountContexts |> take(1) |> deliverOnMainQueue).start(next: { value in
+            guard let account = value.accounts.first(where: { $0.1.account.id.int64 == outgoing.accountId })?.1.account else {
+                completion(.failure(AorusPluginRequestError("The account the command was typed on is no longer signed in")))
+                return
+            }
+            send(account)
+        })
     }
 
     func pluginEditMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, text: String, entities: [AorusPluginTextEntity], completion: @escaping (Result<Void, Error>) -> Void) {
         let converted = aorusPluginMessageEntities(entities)
-        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id in
-            let signal = self.context.engine.messages.requestEditMessage(
+        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id, context in
+            let signal = context.engine.messages.requestEditMessage(
                 messageId: id,
                 text: text,
                 media: .keep,
@@ -1926,8 +1974,8 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginDeleteMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, forEveryone: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
-        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id in
-            let signal = self.context.engine.messages.deleteMessagesInteractively(
+        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id, context in
+            let signal = context.engine.messages.deleteMessagesInteractively(
                 messageIds: [id],
                 type: forEveryone ? .forEveryone : .forLocalPeer
             )
@@ -1936,8 +1984,8 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginForwardMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, toPeerId: Int64, completion: @escaping (Result<Void, Error>) -> Void) {
-        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id in
-            let signal = enqueueMessages(account: self.context.account, peerId: PeerId(toPeerId), messages: [
+        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id, context in
+            let signal = enqueueMessages(account: context.account, peerId: PeerId(toPeerId), messages: [
                 .forward(source: id, threadId: nil, grouping: .none, attributes: [], correlationId: nil)
             ])
             let _ = signal.start(completed: { completion(.success(())) })
@@ -1945,26 +1993,29 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginReactToMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, reaction: String?, completion: @escaping (Result<Void, Error>) -> Void) {
-        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id in
-            self.context.engine.messages.setMessageReactions(ids: [id], reactions: reaction.map { [.builtin($0)] } ?? [])
+        withPluginMessage(pluginId, peerId: peerId, namespace: namespace, messageId: messageId, completion: completion) { id, context in
+            context.engine.messages.setMessageReactions(ids: [id], reactions: reaction.map { [.builtin($0)] } ?? [])
             completion(.success(()))
         }
     }
 
-    private func withPluginMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void, action: @escaping (MessageId) -> Void) {
+    private func withPluginMessage(_ pluginId: String, peerId: Int64, namespace: Int32, messageId: Int32, completion: @escaping (Result<Void, Error>) -> Void, action: @escaping (MessageId, AccountContext) -> Void) {
         guard AorusPluginEntitlement.isAllowed,
               manager?.isPermissionGranted(.manageMessages, pluginId: pluginId) == true else {
             completion(.failure(AorusPluginRequestError("Manage messages permission is not granted")))
             return
         }
         let id = MessageId(peerId: PeerId(peerId), namespace: namespace, id: messageId)
+        // Checked and acted on in one account. A change of account between the two would
+        // otherwise apply the identifiers to the same numbers in another account's chat.
+        let context = self.context
         let _ = (context.account.postbox.transaction { transaction in transaction.getMessage(id) != nil } |> take(1)).start(next: { exists in
             guard exists, AorusPluginEntitlement.isAllowed,
                   self.manager?.isPermissionGranted(.manageMessages, pluginId: pluginId) == true else {
                 completion(.failure(AorusPluginRequestError(exists ? "Manage messages permission is not granted" : "Message is not available")))
                 return
             }
-            action(id)
+            action(id, context)
         })
     }
 
@@ -2770,8 +2821,15 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             completion(.failure(AorusPluginRequestError("Account profile permission is not granted")))
             return
         }
+        // The id and the title of one account, even if the account changes while it is read.
+        let context = self.context
         let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: context.account.peerId)) |> take(1)).start(next: { peer in
-            completion(.success(["id": String(self.context.account.peerId.toInt64()), "title": peer?.compactDisplayTitle ?? ""]))
+            completion(.success([
+                "id": String(context.account.peerId.toInt64()),
+                // The account itself, as `accountChanged`, incoming messages and `accounts.list` name it.
+                "accountId": String(context.account.id.int64),
+                "title": peer?.compactDisplayTitle ?? "",
+            ]))
         })
     }
 

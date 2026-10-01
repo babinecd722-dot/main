@@ -2575,7 +2575,7 @@ private enum AorusPluginDocumentation {
             messageDeleted: { accountId, peerId, msgId, msgNs }
             messageEdited: { accountId, peerId, msgId, msgNs, originalText, text, date }
             send: { accountId, peerId, text }
-            Идентификаторы аккаунтов и чатов — десятичные строки. События сообщений требуют отдельного разрешения и относятся только к текущему аккаунту. Подписка по имени сама запрашивает разрешение, без которого событие не приходит: message, messageDeleted и messageEdited — входящие, send — исходящие, chatOpened и chatClosed — сведения о чате, inputChanged — поле ввода, appSettingsChanged — настройку приложения, connectionChanged — управление соединением, overlayAction и nativeButtonAction — свой интерфейс, pluginMessage — сообщения плагинов. Обработчик send может вернуть новую строку, false для отмены или ничего для отправки без изменений. Promise из send не задерживает отправку.
+            Идентификаторы аккаунтов и чатов — десятичные строки. События сообщений требуют отдельного разрешения и относятся только к текущему аккаунту. Подписка по имени сама запрашивает разрешение, без которого событие не приходит: message, messageDeleted и messageEdited — входящие, send — исходящие, chatOpened и chatClosed — сведения о чате, inputChanged — поле ввода, appSettingsChanged — настройку приложения, connectionChanged — управление соединением, overlayAction и nativeButtonAction — свой интерфейс, pluginMessage — сообщения плагинов, accountChanged — сведения об аккаунте. Обработчик send может вернуть новую строку, false для отмены или ничего для отправки без изменений. Promise из send не задерживает отправку.
 
             Команды
             aorus.commands.register('name', (args, context) => result, { description, usage })
@@ -2716,6 +2716,7 @@ private enum AorusPluginDocumentation {
             const accounts = await aorus.accounts.list()
             await aorus.accounts.switchTo(accounts[0].id)
             Возвращаются только локальные id, имя, username и признак текущего аккаунта. Ключи авторизации, сессии и токены недоступны. Переключиться можно только на аккаунт, уже добавленный пользователем в приложение.
+            При смене аккаунта плагин не перезапускается: таймеры, сокеты и данные в памяти остаются, а дальнейшие действия выполняются от нового аккаунта. Сам момент смены приходит событием accountChanged с { accountId }. Ответ команды, пришедший после смены, уходит с того аккаунта, на котором команду набрали.
 
             Функции и интерфейс
             const all = await aorus.features.list()
@@ -2869,7 +2870,7 @@ private enum AorusPluginDocumentation {
     messageDeleted: { accountId, peerId, msgId, msgNs }
     messageEdited: { accountId, peerId, msgId, msgNs, originalText, text, date }
     send: { accountId, peerId, text }
-    Account and peer identifiers are decimal strings. Message events require their own permission and are scoped to the current account. Subscribing by name asks for the permission an event is not delivered without: message, messageDeleted and messageEdited need incoming messages, send needs outgoing messages, chatOpened and chatClosed need chat metadata, inputChanged needs the composer, appSettingsChanged needs app customization, connectionChanged needs connection control, overlayAction and nativeButtonAction need custom UI, pluginMessage needs plugin messaging. A send handler may return replacement text, false to consume it, or nothing to leave it unchanged. A Promise from send never delays sending.
+    Account and peer identifiers are decimal strings. Message events require their own permission and are scoped to the current account. Subscribing by name asks for the permission an event is not delivered without: message, messageDeleted and messageEdited need incoming messages, send needs outgoing messages, chatOpened and chatClosed need chat metadata, inputChanged needs the composer, appSettingsChanged needs app customization, connectionChanged needs connection control, overlayAction and nativeButtonAction need custom UI, pluginMessage needs plugin messaging, accountChanged needs the account profile. A send handler may return replacement text, false to consume it, or nothing to leave it unchanged. A Promise from send never delays sending.
 
     Commands
     aorus.commands.register('name', (args, context) => result, { description, usage })
@@ -3010,6 +3011,7 @@ private enum AorusPluginDocumentation {
     const accounts = await aorus.accounts.list()
     await aorus.accounts.switchTo(accounts[0].id)
     Only local ids, display name, username and current-account state are returned. Authorization keys, sessions and tokens are unavailable. A plugin can switch only to an account already added by the user.
+    A change of account does not restart a plugin: its timers, sockets and memory stay, and what it does next is done on the new account. The change itself arrives as accountChanged with { accountId }. A command answer that arrives after the change is sent from the account the command was typed on.
 
     Features and interface
     const all = await aorus.features.list()
