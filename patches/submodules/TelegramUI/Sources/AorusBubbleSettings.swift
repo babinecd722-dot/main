@@ -825,7 +825,7 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     }
     let roundness = AorusPluginAppearanceValues.number("glass.roundness", in: values) ?? 1.0
     entries.append(.roundness(aorusL("Скругление", "Roundness"), max(0.0, min(1.0, roundness))))
-    entries.append(.materialFooter(aorusL("Меняет все стеклянные капсулы приложения: кнопки над чатом, строку ввода, панель вкладок и остальные.", "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.")))
+    entries.append(.materialFooter(aorusL("Меняет всё стекло приложения: кнопки над чатом, строку ввода, панель вкладок, меню и листы действий.", "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.")))
 
     entries.append(.colorsHeader(aorusL("ЦВЕТА", "COLORS")))
     let fill = aorusGlassColors("glass.fill", dark: dark)

@@ -20,6 +20,7 @@ from aorus_call_proxy_udp import (
 
 from profile_personalization_patch import patch_profile_personalization
 from interface_v2_patch import patch_interface_v2
+from glass_everywhere_patch import patch_glass_everywhere
 
 # ---------------------------------------------------------------------------
 # Security: opaque per-deployment keys — replace the grep-able "aorusgram_*"
@@ -19901,7 +19902,7 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
     // Every pane is laid out through here. The corners are made as round as the style says,
     // Telegram's glass is drawn — or, for a solid or pixel plate, left out — and the style's
     // plate, colour, outline, highlight, shadow and glow are laid around it
-    // (AorusGlassStyle.swift). A pane keeps what it was last asked for, so a new style redraws
+    // (Display/AorusGlassStyle.swift). A pane keeps what it was last asked for, so a new style redraws
     // it at once, whether or not whoever owns it lays it out again.
     private struct AorusGlassRequest {
         let size: CGSize
@@ -19948,10 +19949,10 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
             break
         }
         self.aorusTelegramUpdate(size: request.size, shape: shape, isDark: request.isDark, tintColor: tintColor, isInteractive: request.isInteractive, isVisible: request.isVisible && !style.replacesGlass, transition: transition)
-        self.aorusUpdateDecoration(style: style, request: request, shape: shape, transition: transition, styleChanged: styleChanged)
+        self.aorusUpdateDecoration(style: style, request: request, transition: transition, styleChanged: styleChanged)
     }
 
-    private func aorusUpdateDecoration(style: AorusGlassStyle, request: AorusGlassRequest, shape: Shape, transition: ComponentTransition, styleChanged: Bool) {
+    private func aorusUpdateDecoration(style: AorusGlassStyle, request: AorusGlassRequest, transition: ComponentTransition, styleChanged: Bool) {
         let size = request.size
         let drawnPlainly = request.tintColor.kind == .panel || request.tintColor.kind == .clear
         let fill: [UIColor]
@@ -19970,10 +19971,12 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
         let shown = request.isVisible && (style.replacesGlass || glassShown) && size.width >= 1.0 && size.height >= 1.0
         let decorated = shown && (!fill.isEmpty || tint != nil || !style.border.isEmpty || style.shine > 0.0)
         let haloed = shown && (style.shadow > 0.0 || style.glow != nil)
-        let radii = AorusGlassStyle.radii(shape, size: size)
-        let outlines: AorusGlassOutlines? = decorated || haloed ? AorusGlassOutlines(size: size, radii: radii, style: style) : nil
+        // The corners Telegram asked for: the outlines round them as the style says, as the
+        // glass itself was just rounded.
+        let outlines: AorusGlassOutlines? = decorated || haloed ? AorusGlassOutlines(size: size, corners: AorusGlassStyle.corners(request.shape), style: style) : nil
         let fade = ComponentTransition.easeInOut(duration: 0.25)
         let animated = styleChanged || !transition.animation.isImmediate
+        let drawTransition = transition.containedViewLayoutTransition
 
         if decorated, let outlines {
             let view: AorusGlassDecorationView
@@ -19993,7 +19996,7 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
             }
             let viewTransition: ComponentTransition = appears ? .immediate : transition
             viewTransition.setFrame(view: view, frame: CGRect(origin: CGPoint(), size: size))
-            view.update(style: style, size: size, outlines: outlines, radii: radii, fill: fill, tint: tint, transition: viewTransition, styleChanged: styleChanged && !appears)
+            view.update(style: style, outlines: outlines, fill: fill, tint: tint, transition: appears ? .immediate : drawTransition, styleChanged: styleChanged && !appears)
             if appears && animated {
                 fade.animateAlpha(view: view, from: 0.0, to: 1.0)
             }
@@ -20026,7 +20029,7 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
             }
             let viewTransition: ComponentTransition = appears ? .immediate : transition
             viewTransition.setFrame(view: view, frame: CGRect(origin: CGPoint(), size: size))
-            view.update(style: style, size: size, outlines: outlines, transition: viewTransition, styleChanged: styleChanged && !appears)
+            view.update(style: style, outlines: outlines, transition: appears ? .immediate : drawTransition, styleChanged: styleChanged && !appears)
             if appears && animated {
                 fade.animateAlpha(view: view, from: 0.0, to: 1.0)
             }
@@ -20066,8 +20069,9 @@ def patch_bubble_settings(tg: Path) -> None:
     That method becomes the pane's own drawing — Telegram's, under a name of its own — with the
     style applied around it: the corners as round as the style says, the glass itself left out
     where the style draws a plate, and the style's plate, colour, outline, highlight, shadow and
-    glow laid in and around the pane (AorusGlassStyle.swift, copied by the workflow into the
-    same module). Each pane keeps what it was last asked for and listens for the style, so a
+    glow laid in and around the pane (Display/AorusGlassStyle.swift and the glass module's own
+    AorusGlassShape.swift, both copied by the workflow). Each pane keeps what it was last asked
+    for and listens for the style, so a
     change is drawn at once everywhere, the chat's own header included.
 
     The screen lives in TelegramUI (AorusBubbleSettings.swift, copied by the workflow), where
@@ -30442,6 +30446,8 @@ def main() -> None:
     # After patch_glass_global_toggle and patch_plugin_appearance, whose lines it moves, and
     # patch_message_settings, beside whose install line it installs its own.
     patch_bubble_settings(tg)
+    # After the glass toggle and Interface 2.0, which rewrite parts of the menus it styles.
+    patch_glass_everywhere(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)

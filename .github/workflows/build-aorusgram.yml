@@ -958,9 +958,12 @@ jobs:
           cp $PATCHES/submodules/Display/Source/AorusPluginIconValues.swift $TG/submodules/Display/Source/
 
           # 14. The glass as the person chose it in Bubble Settings, or a plugin asked for it:
-          #     read, shaped and drawn around every pane. GlassBackgroundView.update is routed
-          #     through it by aorus_branding.py.
-          cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassStyle.swift \
+          #     read, shaped and drawn around every pane — in Display, where the menus and the
+          #     action sheets are built as well as the glass. GlassBackgroundView.update, the
+          #     long-press and tap menus and the action sheets are routed through it by
+          #     aorus_branding.py; the glass module adds its own shapes to it.
+          cp $PATCHES/submodules/Display/Source/AorusGlassStyle.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift \
              $TG/submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/
 
           echo "Injection complete"

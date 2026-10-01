@@ -4069,8 +4069,9 @@ def main() -> None:
     appearance_core = here.parent / "AorusGram" / "Sources" / "Features" / "Plugins" / "AorusPluginAppearance.swift"
     presentation_data = tg / "submodules/TelegramPresentationData/Sources/PresentationData.swift"
     glass_component = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift"
-    # The glass keys are read and drawn by the style every pane of glass is laid out with.
-    glass_style = tg / "submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassStyle.swift"
+    # The glass keys are read and drawn by the style every pane of glass is laid out with: one
+    # engine in Display, under the glass module, the menus and the action sheet alike.
+    glass_style = tg / "submodules/Display/Source/AorusGlassStyle.swift"
     display_values = tg / "submodules/Display/Source/AorusPluginAppearanceValues.swift"
     settings_resources = tg / "submodules/TelegramPresentationData/Sources/Resources/PresentationResourcesSettings.swift"
     profile_header = tg / "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift"
@@ -4148,12 +4149,24 @@ def main() -> None:
         # plate, outline, highlight, shadow and glow around Telegram's own glass; the person's
         # glass is read from a table of its own that rebuilds no theme.
         ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "private func aorusTelegramUpdate("),
-        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "self.aorusUpdateDecoration(style: style, request: request, shape: shape"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "self.aorusUpdateDecoration(style: style, request: request, transition: transition"),
         ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "isVisible: request.isVisible && !style.replacesGlass"),
         ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "AorusGlassStyle.current(dark: isDark).tint"),
         ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "name: AorusPluginAppearanceValues.glassDidChangeNotification"),
         ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "AorusGram: global glass gate"),
-        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassStyle.swift", "AorusPluginAppearanceValues.glassSnapshot()"),
+        ("submodules/Display/Source/AorusGlassStyle.swift", "AorusPluginAppearanceValues.glassSnapshot()"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift", "func shape(_ shape: GlassBackgroundView.Shape) -> GlassBackgroundView.Shape"),
+        # The panes that draw their own material take the same style: the long-press menu and
+        # the button it grows out of, what it holds, the tap menu with its arrow, the action sheet.
+        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "private func aorusTelegramUpdate(theme: PresentationTheme)"),
+        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.aorusSurface.beginMorph(duration: duration, toSize: keyframes[keyframes.count - 1], toCornerRadius: nil)"),
+        ("submodules/TelegramUI/Components/ContextControllerImpl/Sources/ContextControllerActionsStackNode.swift", "self.aorusSurface.morph(cornerRadius: nextValue)"),
+        ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "AorusGlassStyle.applyPixelClip(self.contentsView.layer"),
+        ("submodules/TelegramUI/Components/LensTransition/Sources/LensTransitionContainer.swift", "AorusGlassStyle.applyPixelClip(self.backgroundView.contentView.layer"),
+        ("submodules/Display/Source/ContextMenuContainerNode.swift", "self.aorusSurface.attach(host: self.containerNode.view"),
+        ("submodules/Display/Source/ContextMenuContainerNode.swift", "aorusPath = outline.copy(using: &shift) ?? outline"),
+        ("submodules/Display/Source/ActionSheetItemGroupNode.swift", "self.aorusUpdateSurface(clippingNodeFrame: clippingNodeFrame"),
+        ("submodules/Display/Source/ActionSheetItemGroupNode.swift", "style.surroundImage(radius: 16.0, color: self.theme.dimColor)"),
         ("submodules/Display/Source/AorusPluginAppearanceValues.swift", 'glassLookKey = "aorusgram_glass_look"'),
         ("submodules/Display/Source/AorusPluginAppearanceValues.swift", 'Notification.Name("aorusgram.glassLookChanged")'),
         ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallBubbleSettings()"),

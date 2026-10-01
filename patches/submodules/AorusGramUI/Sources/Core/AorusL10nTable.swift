@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Cambia tutto il vetro dell'app: i pulsanti sopra una chat, la barra di inserimento, la barra delle schede, i menu e i fogli delle azioni.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Le capsule torneranno di vetro, come le disegna Telegram. I plugin continueranno a funzionare.",
         "Plugins can change the glass too; what is chosen here wins.": "Anche i plugin possono cambiare il vetro; ciò che scegli qui ha la precedenza.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La trasparenza del colore del bagliore ne determina l’intensità. Le capsule pixel proiettano un’ombra netta, come nei vecchi giochi.",
@@ -71,7 +72,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Colore sopra il vetro",
         "Glass Tint": "Tinta del vetro",
         "Capsule Color": "Colore delle capsule",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Cambia tutte le capsule di vetro dell’app: i pulsanti sopra la chat, la barra di scrittura, la barra delle schede e le altre.",
         "Roundness": "Arrotondamento",
         "Pixel Size": "Dimensione pixel",
         "MATERIAL": "MATERIALE",
@@ -1003,6 +1003,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Zmienia całe szkło aplikacji: przyciski nad czatem, pasek wpisywania, pasek kart, menu i arkusze akcji.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsuły znów będą szklane, tak jak rysuje je Telegram. Wtyczki nadal będą działać.",
         "Plugins can change the glass too; what is chosen here wins.": "Wtyczki też mogą zmieniać szkło; to, co wybierzesz tutaj, ma pierwszeństwo.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Przezroczystość koloru poświaty określa jej siłę. Pikselowe kapsuły rzucają ostry cień, jak w starych grach.",
@@ -1021,7 +1022,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Kolor na szkle",
         "Glass Tint": "Odcień szkła",
         "Capsule Color": "Kolor kapsuł",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Zmienia wszystkie szklane kapsuły w aplikacji: przyciski nad czatem, pasek wpisywania, pasek kart i pozostałe.",
         "Roundness": "Zaokrąglenie",
         "Pixel Size": "Rozmiar piksela",
         "MATERIAL": "MATERIAŁ",
@@ -1953,6 +1953,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Verandert al het glas van de app: de knoppen boven een chat, de invoerbalk, de tabbalk, menu's en actiebladen.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "De capsules worden weer van glas, zoals Telegram ze tekent. Plug-ins blijven werken.",
         "Plugins can change the glass too; what is chosen here wins.": "Plug-ins kunnen het glas ook veranderen; wat je hier kiest, gaat voor.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "De transparantie van de gloedkleur bepaalt de sterkte. Pixelcapsules werpen een harde schaduw, zoals in oude games.",
@@ -1971,7 +1972,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Kleur over het glas",
         "Glass Tint": "Glastint",
         "Capsule Color": "Kleur van de capsules",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Verandert alle glazen capsules in de app: de knoppen boven een chat, de invoerbalk, de tabbalk en de rest.",
         "Roundness": "Afronding",
         "Pixel Size": "Pixelgrootte",
         "MATERIAL": "MATERIAAL",
@@ -2903,6 +2903,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Canvia tot el vidre de l'aplicació: els botons sobre un xat, la barra d'escriptura, la barra de pestanyes, els menús i els fulls d'accions.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Les càpsules tornaran a ser de vidre, com les dibuixa Telegram. Els complements continuaran funcionant.",
         "Plugins can change the glass too; what is chosen here wins.": "Els complements també poden canviar el vidre; el que triïs aquí té prioritat.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La transparència del color del resplendor en fixa la intensitat. Les càpsules de píxels projecten una ombra dura, com als jocs antics.",
@@ -2921,7 +2922,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Color sobre el vidre",
         "Glass Tint": "To del vidre",
         "Capsule Color": "Color de les càpsules",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Canvia totes les càpsules de vidre de l’app: els botons sobre el xat, la barra d’escriptura, la barra de pestanyes i la resta.",
         "Roundness": "Arrodoniment",
         "Pixel Size": "Mida del píxel",
         "MATERIAL": "MATERIAL",
@@ -3853,6 +3853,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mengubah semua kaca di aplikasi: tombol di atas obrolan, bilah input, bilah tab, menu, dan lembar tindakan.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsul akan kembali menjadi kaca seperti yang digambar Telegram. Plugin tetap berjalan.",
         "Plugins can change the glass too; what is chosen here wins.": "Plugin juga dapat mengubah kaca; pilihan di sini yang diutamakan.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Transparansi warna pendar menentukan kekuatannya. Kapsul piksel memberi bayangan tegas, seperti gim lawas.",
@@ -3871,7 +3872,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Warna di atas kaca",
         "Glass Tint": "Rona kaca",
         "Capsule Color": "Warna kapsul",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Mengubah semua kapsul kaca di aplikasi: tombol di atas obrolan, bilah input, bilah tab, dan lainnya.",
         "Roundness": "Kebulatan",
         "Pixel Size": "Ukuran piksel",
         "MATERIAL": "BAHAN",
@@ -4803,6 +4803,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mengubah semua kaca dalam aplikasi: butang di atas sembang, bar input, bar tab, menu dan helaian tindakan.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsul akan kembali menjadi kaca seperti yang dilukis Telegram. Pemalam terus berfungsi.",
         "Plugins can change the glass too; what is chosen here wins.": "Pemalam juga boleh mengubah kaca; pilihan di sini diutamakan.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Kelutsinaran warna cahaya menentukan kekuatannya. Kapsul piksel menghasilkan bayang tajam, seperti permainan lama.",
@@ -4821,7 +4822,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Warna di atas kaca",
         "Glass Tint": "Rona kaca",
         "Capsule Color": "Warna kapsul",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Mengubah semua kapsul kaca dalam aplikasi: butang di atas sembang, bar input, bar tab dan yang lain.",
         "Roundness": "Kebulatan",
         "Pixel Size": "Saiz piksel",
         "MATERIAL": "BAHAN",
@@ -5753,6 +5753,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Змяняе ўсё шкло праграмы: кнопкі над чатам, радок уводу, панэль укладак, меню і аркушы дзеянняў.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Капсулы зноў стануць шклянымі, як іх малюе Telegram. Плагіны працягнуць дзейнічаць.",
         "Plugins can change the glass too; what is chosen here wins.": "Плагіны таксама могуць змяняць шкло; тое, што выбрана тут, галоўнейшае.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Празрыстасць колеру свячэння задае яго сілу. У піксельных капсул цень рэзкая, як у старых гульнях.",
@@ -5771,7 +5772,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Колер па-над шклом",
         "Glass Tint": "Адценне шкла",
         "Capsule Color": "Колер капсул",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Змяняе ўсе шкляныя капсулы праграмы: кнопкі над чатам, радок уводу, панэль укладак і астатнія.",
         "Roundness": "Скругленне",
         "Pixel Size": "Памер пікселя",
         "MATERIAL": "МАТЭРЫЯЛ",
@@ -6703,6 +6703,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Ilovadagi barcha shishani o‘zgartiradi: chat ustidagi tugmalar, kiritish satri, yorliqlar paneli, menyular va amallar varaqlari.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsulalar yana Telegram chizganidek shisha bo‘ladi. Plaginlar ishlashda davom etadi.",
         "Plugins can change the glass too; what is chosen here wins.": "Plaginlar ham shishani o‘zgartira oladi; bu yerda tanlangani ustun turadi.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Nur rangining shaffofligi uning kuchini belgilaydi. Piksel kapsulalar eski o‘yinlardagidek keskin soya tashlaydi.",
@@ -6721,7 +6722,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Shisha ustidagi rang",
         "Glass Tint": "Shisha tusi",
         "Capsule Color": "Kapsulalar rangi",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Ilovadagi barcha shisha kapsulalarni o‘zgartiradi: chat ustidagi tugmalar, kiritish qatori, yorliqlar paneli va boshqalar.",
         "Roundness": "Yumaloqlik",
         "Pixel Size": "Piksel o‘lchami",
         "MATERIAL": "MATERIAL",
@@ -7653,6 +7653,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "앱의 모든 글래스를 바꿉니다: 채팅 위의 버튼, 입력창, 탭 바, 메뉴와 작업 시트.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "캡슐이 Telegram이 그리는 원래의 유리로 돌아갑니다. 플러그인은 계속 작동합니다.",
         "Plugins can change the glass too; what is chosen here wins.": "플러그인도 유리를 바꿀 수 있지만, 여기서 고른 설정이 우선합니다.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "발광 색의 투명도가 세기를 정합니다. 픽셀 캡슐은 옛날 게임처럼 선명한 그림자를 드리웁니다.",
@@ -7671,7 +7672,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "유리 위 색상",
         "Glass Tint": "유리 색조",
         "Capsule Color": "캡슐 색상",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "앱의 모든 유리 캡슐을 바꿉니다: 채팅 위 버튼, 입력창, 탭 바 등.",
         "Roundness": "둥글기",
         "Pixel Size": "픽셀 크기",
         "MATERIAL": "재질",
@@ -8603,6 +8603,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "يغيّر كل زجاج التطبيق: الأزرار فوق الدردشة وشريط الإدخال وشريط التبويبات والقوائم وأوراق الإجراءات.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "ستعود الكبسولات زجاجية كما يرسمها Telegram. وستستمر الإضافات في العمل.",
         "Plugins can change the glass too; what is chosen here wins.": "يمكن للإضافات تغيير الزجاج أيضًا؛ وما تختاره هنا له الأولوية.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "تحدد شفافية لون التوهج قوته. تُلقي الكبسولات البكسلية ظلًا حادًا كما في الألعاب القديمة.",
@@ -8621,7 +8622,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "لون فوق الزجاج",
         "Glass Tint": "صبغة الزجاج",
         "Capsule Color": "لون الكبسولات",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "يغيّر كل الكبسولات الزجاجية في التطبيق: الأزرار فوق الدردشة وشريط الكتابة وشريط الألسنة وغيرها.",
         "Roundness": "الاستدارة",
         "Pixel Size": "حجم البكسل",
         "MATERIAL": "المادة",
@@ -9553,6 +9553,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "همهٔ شیشه‌های برنامه را تغییر می‌دهد: دکمه‌های بالای گفتگو، نوار ورودی، نوار زبانه‌ها، منوها و برگه‌های عمل.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "کپسول‌ها دوباره شیشه‌ای می‌شوند، همان‌طور که Telegram می‌کشد. افزونه‌ها به کار خود ادامه می‌دهند.",
         "Plugins can change the glass too; what is chosen here wins.": "افزونه‌ها هم می‌توانند شیشه را تغییر دهند؛ آنچه اینجا انتخاب شود مقدم است.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "شفافیت رنگ درخشش شدت آن را تعیین می‌کند. کپسول‌های پیکسلی سایه‌ای تیز دارند، مثل بازی‌های قدیمی.",
@@ -9571,7 +9572,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "رنگ روی شیشه",
         "Glass Tint": "ته‌رنگ شیشه",
         "Capsule Color": "رنگ کپسول‌ها",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "همه کپسول‌های شیشه‌ای برنامه را تغییر می‌دهد: دکمه‌های بالای گفتگو، نوار نوشتن، نوار زبانه‌ها و بقیه.",
         "Roundness": "گردی",
         "Pixel Size": "اندازه پیکسل",
         "MATERIAL": "جنس",
@@ -10503,6 +10503,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Қолданбадағы барлық шыныны өзгертеді: чат үстіндегі батырмалар, енгізу жолағы, қойындылар панелі, мәзірлер мен әрекет парақтары.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Капсулалар қайтадан Telegram салатындай шыны болады. Плагиндер жұмысын жалғастырады.",
         "Plugins can change the glass too; what is chosen here wins.": "Плагиндер де шыныны өзгерте алады; мұнда таңдалғаны басым.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Жарқыл түсінің мөлдірлігі оның күшін белгілейді. Пиксель капсулалардың көлеңкесі ескі ойындардағыдай анық.",
@@ -10521,7 +10522,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Шыны үстіндегі түс",
         "Glass Tint": "Шыны реңкі",
         "Capsule Color": "Капсулалар түсі",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Қолданбадағы барлық шыны капсулаларды өзгертеді: чат үстіндегі батырмалар, енгізу жолағы, қойындылар панелі және басқалары.",
         "Roundness": "Дөңгелектеу",
         "Pixel Size": "Пиксель өлшемі",
         "MATERIAL": "МАТЕРИАЛ",
@@ -11453,6 +11453,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "更改应用中的所有玻璃：聊天上方的按钮、输入栏、标签栏、菜单和操作表。",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "胶囊将恢复为 Telegram 绘制的玻璃样式。插件会继续生效。",
         "Plugins can change the glass too; what is chosen here wins.": "插件也可以更改玻璃效果；以这里的选择为准。",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "发光颜色的透明度决定其强度。像素胶囊会投下硬朗的阴影，就像老游戏里那样。",
@@ -11471,7 +11472,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "玻璃上层颜色",
         "Glass Tint": "玻璃色调",
         "Capsule Color": "胶囊颜色",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "会改变应用中所有的玻璃胶囊：聊天上方的按钮、输入栏、标签栏等。",
         "Roundness": "圆润度",
         "Pixel Size": "像素大小",
         "MATERIAL": "材质",
@@ -12404,6 +12404,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "變更應用程式中的所有玻璃：聊天上方的按鈕、輸入列、分頁列、選單和動作表。",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "膠囊將恢復為 Telegram 繪製的玻璃樣式。外掛會繼續生效。",
         "Plugins can change the glass too; what is chosen here wins.": "外掛也可以更改玻璃效果；以這裡的選擇為準。",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "發光顏色的透明度決定其強度。像素膠囊會投下硬朗的陰影，就像老遊戲裡那樣。",
@@ -12422,7 +12423,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "玻璃上層顏色",
         "Glass Tint": "玻璃色調",
         "Capsule Color": "膠囊顏色",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "會改變 App 中所有的玻璃膠囊：聊天上方的按鈕、輸入列、標籤列等。",
         "Roundness": "圓潤度",
         "Pixel Size": "像素大小",
         "MATERIAL": "材質",
@@ -13354,6 +13354,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "アプリのすべてのガラスを変更します：チャット上のボタン、入力バー、タブバー、メニュー、アクションシート。",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "カプセルはTelegramが描く元のガラスに戻ります。プラグインは引き続き動作します。",
         "Plugins can change the glass too; what is chosen here wins.": "プラグインもガラスを変更できますが、ここで選んだ設定が優先されます。",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "光彩の色の透明度で強さが決まります。ピクセルのカプセルは昔のゲームのようなくっきりした影を落とします。",
@@ -13372,7 +13373,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "ガラスに重ねる色",
         "Glass Tint": "ガラスの色合い",
         "Capsule Color": "カプセルの色",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "アプリ内のすべてのガラスのカプセルが変わります：チャット上部のボタン、入力欄、タブバーなど。",
         "Roundness": "丸み",
         "Pixel Size": "ピクセルの大きさ",
         "MATERIAL": "素材",
@@ -14304,6 +14304,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Muuttaa sovelluksen kaiken lasin: keskustelun yläpuolella olevat painikkeet, syöttöpalkin, välilehtipalkin, valikot ja toimintoarkit.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapselit ovat taas lasia, kuten Telegram ne piirtää. Laajennukset toimivat edelleen.",
         "Plugins can change the glass too; what is chosen here wins.": "Myös laajennukset voivat muuttaa lasia; tässä valittu on etusijalla.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Hehkun värin läpinäkyvyys määrää sen voimakkuuden. Pikselikapselit luovat terävän varjon kuin vanhoissa peleissä.",
@@ -14322,7 +14323,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Väri lasin päällä",
         "Glass Tint": "Lasin sävy",
         "Capsule Color": "Kapseleiden väri",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Muuttaa kaikki sovelluksen lasikapselit: keskustelun yläpuolen painikkeet, kirjoituspalkin, välilehtipalkin ja muut.",
         "Roundness": "Pyöreys",
         "Pixel Size": "Pikselin koko",
         "MATERIAL": "MATERIAALI",
@@ -15254,6 +15254,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "משנה את כל הזכוכית באפליקציה: הכפתורים מעל הצ'אט, שורת ההקלדה, סרגל הלשוניות, התפריטים וגיליונות הפעולות.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "הקפסולות יחזרו להיות מזכוכית, כפי ש-Telegram מצייר אותן. התוספים ימשיכו לפעול.",
         "Plugins can change the glass too; what is chosen here wins.": "גם תוספים יכולים לשנות את הזכוכית; מה שנבחר כאן גובר.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "השקיפות של צבע הזוהר קובעת את עוצמתו. קפסולות פיקסלים מטילות צל חד, כמו במשחקים ישנים.",
@@ -15272,7 +15273,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "צבע מעל הזכוכית",
         "Glass Tint": "גוון הזכוכית",
         "Capsule Color": "צבע הקפסולות",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "משנה את כל קפסולות הזכוכית באפליקציה: הכפתורים מעל הצ׳אט, שורת ההקלדה, סרגל הלשוניות ועוד.",
         "Roundness": "עיגול",
         "Pixel Size": "גודל פיקסל",
         "MATERIAL": "חומר",
@@ -16204,6 +16204,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mijenja svo staklo u aplikaciji: gumbe iznad razgovora, traku za unos, traku kartica, izbornike i listove radnji.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsule će opet biti staklene, kako ih crta Telegram. Dodaci nastavljaju raditi.",
         "Plugins can change the glass too; what is chosen here wins.": "I dodaci mogu mijenjati staklo; ono što odabereš ovdje ima prednost.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Prozirnost boje sjaja određuje njegovu jačinu. Pikselne kapsule bacaju oštru sjenu, kao u starim igrama.",
@@ -16222,7 +16223,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Boja preko stakla",
         "Glass Tint": "Nijansa stakla",
         "Capsule Color": "Boja kapsula",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Mijenja sve staklene kapsule u aplikaciji: gumbe iznad chata, traku za unos, traku kartica i ostale.",
         "Roundness": "Zaobljenost",
         "Pixel Size": "Veličina piksela",
         "MATERIAL": "MATERIJAL",
@@ -17154,6 +17154,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Мења све стакло у апликацији: дугмад изнад ћаскања, траку за унос, траку картица, меније и листове радњи.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Капсуле ће поново бити стаклене, како их црта Telegram. Додаци настављају да раде.",
         "Plugins can change the glass too; what is chosen here wins.": "И додаци могу да мењају стакло; оно што изабереш овде има предност.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Провидност боје сјаја одређује његову јачину. Пикселне капсуле бацају оштру сенку, као у старим играма.",
@@ -17172,7 +17173,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Боја преко стакла",
         "Glass Tint": "Нијанса стакла",
         "Capsule Color": "Боја капсула",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Мења све стаклене капсуле у апликацији: дугмад изнад ћаскања, траку за унос, траку картица и остале.",
         "Roundness": "Заобљеност",
         "Pixel Size": "Величина пиксела",
         "MATERIAL": "МАТЕРИЈАЛ",
@@ -18104,6 +18104,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mění veškeré sklo aplikace: tlačítka nad chatem, vstupní řádek, panel karet, nabídky a listy akcí.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsle budou opět skleněné, tak jak je kreslí Telegram. Pluginy budou dál fungovat.",
         "Plugins can change the glass too; what is chosen here wins.": "Sklo můžou měnit i pluginy; přednost má to, co vybereš tady.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Průhlednost barvy záře určuje její sílu. Pixelové kapsle vrhají ostrý stín jako ve starých hrách.",
@@ -18122,7 +18123,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Barva přes sklo",
         "Glass Tint": "Odstín skla",
         "Capsule Color": "Barva kapslí",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Mění všechny skleněné kapsle v aplikaci: tlačítka nad chatem, pole pro psaní, panel karet a další.",
         "Roundness": "Zaoblení",
         "Pixel Size": "Velikost pixelu",
         "MATERIAL": "MATERIÁL",
@@ -19054,6 +19054,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mení všetko sklo aplikácie: tlačidlá nad četom, vstupný riadok, panel kariet, ponuky a hárky akcií.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsuly budú opäť sklenené, tak ako ich kreslí Telegram. Pluginy budú ďalej fungovať.",
         "Plugins can change the glass too; what is chosen here wins.": "Sklo môžu meniť aj pluginy; prednosť má to, čo vyberieš tu.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Priehľadnosť farby žiary určuje jej silu. Pixelové kapsuly vrhajú ostrý tieň ako v starých hrách.",
@@ -19072,7 +19073,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Farba cez sklo",
         "Glass Tint": "Odtieň skla",
         "Capsule Color": "Farba kapsúl",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Mení všetky sklenené kapsuly v aplikácii: tlačidlá nad četom, pole na písanie, panel kariet a ďalšie.",
         "Roundness": "Zaoblenie",
         "Pixel Size": "Veľkosť pixelu",
         "MATERIAL": "MATERIÁL",
@@ -20004,6 +20004,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Schimbă toată sticla aplicației: butoanele de deasupra unui chat, bara de scriere, bara de file, meniurile și foile de acțiuni.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Capsulele vor fi din nou de sticlă, așa cum le desenează Telegram. Pluginurile continuă să funcționeze.",
         "Plugins can change the glass too; what is chosen here wins.": "Și pluginurile pot schimba sticla; ce alegi aici are prioritate.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Transparența culorii strălucirii îi stabilește intensitatea. Capsulele pixel aruncă o umbră netă, ca în jocurile vechi.",
@@ -20022,7 +20023,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Culoare peste sticlă",
         "Glass Tint": "Nuanța sticlei",
         "Capsule Color": "Culoarea capsulelor",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Schimbă toate capsulele de sticlă din aplicație: butoanele de deasupra chatului, bara de scriere, bara de file și celelalte.",
         "Roundness": "Rotunjire",
         "Pixel Size": "Dimensiunea pixelului",
         "MATERIAL": "MATERIAL",
@@ -20954,6 +20954,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Az alkalmazás összes üvegét megváltoztatja: a csevegés feletti gombokat, a beviteli sávot, a lapsávot, a menüket és a műveletlapokat.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "A kapszulák ismét üvegből lesznek, ahogy a Telegram rajzolja őket. A bővítmények tovább működnek.",
         "Plugins can change the glass too; what is chosen here wins.": "A bővítmények is módosíthatják az üveget; az itt választott élvez elsőbbséget.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "A ragyogás színének átlátszósága adja meg az erősségét. A pixeles kapszulák éles árnyékot vetnek, mint a régi játékokban.",
@@ -20972,7 +20973,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Szín az üvegen",
         "Glass Tint": "Üveg árnyalata",
         "Capsule Color": "Kapszulák színe",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Az alkalmazás összes üvegkapszuláját megváltoztatja: a csevegés feletti gombokat, a beviteli sávot, a lapsávot és a többit.",
         "Roundness": "Kerekítés",
         "Pixel Size": "Pixelméret",
         "MATERIAL": "ANYAG",
@@ -21904,6 +21904,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Endrer alt glasset i appen: knappene over en chat, inntastingsfeltet, fanelinjen, menyer og handlingsark.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapslene blir glass igjen, slik Telegram tegner dem. Programtillegg fortsetter å virke.",
         "Plugins can change the glass too; what is chosen here wins.": "Programtillegg kan også endre glasset; det som velges her, går foran.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Gjennomsiktigheten i glødfargen bestemmer styrken. Pikselkapsler kaster en skarp skygge, som i gamle spill.",
@@ -21922,7 +21923,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Farge over glasset",
         "Glass Tint": "Glassfarge",
         "Capsule Color": "Kapselfarge",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Endrer alle glasskapslene i appen: knappene over en chat, skrivefeltet, fanelinjen og resten.",
         "Roundness": "Avrunding",
         "Pixel Size": "Pikselstørrelse",
         "MATERIAL": "MATERIALE",
@@ -22854,6 +22854,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Ändrar allt glas i appen: knapparna ovanför en chatt, inmatningsfältet, flikfältet, menyer och åtgärdsblad.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapslarna blir glas igen, så som Telegram ritar dem. Tillägg fortsätter att fungera.",
         "Plugins can change the glass too; what is chosen here wins.": "Tillägg kan också ändra glaset; det som väljs här går före.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Glödfärgens genomskinlighet avgör styrkan. Pixelkapslar kastar en skarp skugga, som i gamla spel.",
@@ -22872,7 +22873,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Färg över glaset",
         "Glass Tint": "Glastoning",
         "Capsule Color": "Kapselfärg",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Ändrar alla glaskapslar i appen: knapparna ovanför en chatt, inmatningsfältet, flikfältet och resten.",
         "Roundness": "Rundning",
         "Pixel Size": "Pixelstorlek",
         "MATERIAL": "MATERIAL",
@@ -23804,6 +23804,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Thay đổi toàn bộ kính của ứng dụng: các nút phía trên cuộc trò chuyện, thanh nhập, thanh tab, menu và bảng tác vụ.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Các viên nang sẽ trở lại là kính như Telegram vẽ. Plugin vẫn tiếp tục hoạt động.",
         "Plugins can change the glass too; what is chosen here wins.": "Plugin cũng có thể thay đổi kính; lựa chọn ở đây được ưu tiên.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Độ trong suốt của màu phát sáng quyết định độ mạnh. Viên nang điểm ảnh đổ bóng sắc nét như trò chơi cổ điển.",
@@ -23822,7 +23823,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Màu phủ lên kính",
         "Glass Tint": "Sắc kính",
         "Capsule Color": "Màu viên nang",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Thay đổi mọi viên nang kính trong ứng dụng: các nút phía trên cuộc trò chuyện, thanh nhập, thanh tab và những phần khác.",
         "Roundness": "Độ bo tròn",
         "Pixel Size": "Kích thước điểm ảnh",
         "MATERIAL": "CHẤT LIỆU",
@@ -24754,6 +24754,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Змінює все скло застосунку: кнопки над чатом, рядок введення, панель вкладок, меню й аркуші дій.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Капсули знову стануть скляними, як їх малює Telegram. Плагіни й далі працюватимуть.",
         "Plugins can change the glass too; what is chosen here wins.": "Плагіни теж можуть змінювати скло; те, що вибрано тут, має перевагу.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Прозорість кольору сяйва задає його силу. Піксельні капсули мають різку тінь, як у старих іграх.",
@@ -24772,7 +24773,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Колір поверх скла",
         "Glass Tint": "Відтінок скла",
         "Capsule Color": "Колір капсул",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Змінює всі скляні капсули застосунку: кнопки над чатом, рядок введення, панель вкладок та інші.",
         "Roundness": "Заокруглення",
         "Pixel Size": "Розмір пікселя",
         "MATERIAL": "МАТЕРІАЛ",
@@ -25713,6 +25713,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Cambia todo el cristal de la app: los botones sobre un chat, la barra de escritura, la barra de pestañas, los menús y las hojas de acciones.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Las cápsulas volverán a ser de cristal, como las dibuja Telegram. Los complementos seguirán funcionando.",
         "Plugins can change the glass too; what is chosen here wins.": "Los complementos también pueden cambiar el cristal; lo que elijas aquí tiene prioridad.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La transparencia del color del resplandor fija su intensidad. Las cápsulas de píxeles proyectan una sombra dura, como en los juegos antiguos.",
@@ -25731,7 +25732,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Color sobre el cristal",
         "Glass Tint": "Tono del cristal",
         "Capsule Color": "Color de las cápsulas",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Cambia todas las cápsulas de cristal de la app: los botones sobre el chat, la barra de escritura, la barra de pestañas y las demás.",
         "Roundness": "Redondez",
         "Pixel Size": "Tamaño del píxel",
         "MATERIAL": "MATERIAL",
@@ -26672,6 +26672,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Muda todo o vidro do app: os botões sobre um chat, a barra de digitação, a barra de abas, os menus e as folhas de ações.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "As cápsulas voltarão a ser de vidro, do jeito que o Telegram desenha. Os plugins continuam funcionando.",
         "Plugins can change the glass too; what is chosen here wins.": "Os plugins também podem mudar o vidro; o que for escolhido aqui tem prioridade.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "A transparência da cor do brilho define a intensidade. As cápsulas pixel projetam uma sombra marcada, como nos jogos antigos.",
@@ -26690,7 +26691,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Cor sobre o vidro",
         "Glass Tint": "Tom do vidro",
         "Capsule Color": "Cor das cápsulas",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Muda todas as cápsulas de vidro do app: os botões acima do chat, a barra de digitação, a barra de abas e as demais.",
         "Roundness": "Arredondamento",
         "Pixel Size": "Tamanho do pixel",
         "MATERIAL": "MATERIAL",
@@ -27631,6 +27631,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Ändert das gesamte Glas der App: die Tasten über einem Chat, die Eingabeleiste, die Tab-Leiste, Menüs und Aktionsblätter.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Die Kapseln werden wieder aus Glas sein, so wie Telegram sie zeichnet. Plugins bleiben aktiv.",
         "Plugins can change the glass too; what is chosen here wins.": "Auch Plugins können das Glas ändern; was hier gewählt ist, hat Vorrang.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Die Transparenz der Leuchtfarbe bestimmt ihre Stärke. Pixelkapseln werfen einen harten Schatten wie in alten Spielen.",
@@ -27649,7 +27650,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Farbe über dem Glas",
         "Glass Tint": "Glastönung",
         "Capsule Color": "Kapselfarbe",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Ändert alle Glaskapseln der App: die Knöpfe über einem Chat, die Eingabeleiste, die Tab-Leiste und die übrigen.",
         "Roundness": "Rundung",
         "Pixel Size": "Pixelgröße",
         "MATERIAL": "MATERIAL",
@@ -28590,6 +28590,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Modifie tout le verre de l'app : les boutons au-dessus d'une discussion, la barre de saisie, la barre d'onglets, les menus et les feuilles d'actions.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Les capsules redeviendront en verre, telles que Telegram les dessine. Les plugins continuent de fonctionner.",
         "Plugins can change the glass too; what is chosen here wins.": "Les plugins peuvent aussi modifier le verre ; ce qui est choisi ici l’emporte.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La transparence de la couleur du halo en règle l’intensité. Les capsules pixel projettent une ombre nette, comme dans les vieux jeux.",
@@ -28608,7 +28609,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Couleur sur le verre",
         "Glass Tint": "Teinte du verre",
         "Capsule Color": "Couleur des capsules",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Modifie toutes les capsules de verre de l’app : les boutons au-dessus d’une discussion, la barre de saisie, la barre d’onglets et les autres.",
         "Roundness": "Arrondi",
         "Pixel Size": "Taille des pixels",
         "MATERIAL": "MATIÈRE",
@@ -29549,6 +29549,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Uygulamadaki tüm camı değiştirir: sohbetin üstündeki düğmeler, yazma çubuğu, sekme çubuğu, menüler ve eylem sayfaları.",
         "The capsules will be glass again, the way Telegram draws them. Plugins keep working.": "Kapsüller yeniden Telegram'ın çizdiği gibi cam olacak. Eklentiler çalışmaya devam eder.",
         "Plugins can change the glass too; what is chosen here wins.": "Eklentiler de camı değiştirebilir; burada seçilen önceliklidir.",
         "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Parıltı renginin saydamlığı gücünü belirler. Piksel kapsüller eski oyunlardaki gibi keskin gölge düşürür.",
@@ -29567,7 +29568,6 @@ enum AorusL10nTable {
         "Color Over the Glass": "Camın Üstündeki Renk",
         "Glass Tint": "Cam Tonu",
         "Capsule Color": "Kapsül Rengi",
-        "Changes every glass capsule in the app: the buttons over a chat, the input bar, the tab bar and the rest.": "Uygulamadaki tüm cam kapsülleri değiştirir: sohbetin üstündeki düğmeler, yazma çubuğu, sekme çubuğu ve diğerleri.",
         "Roundness": "Yuvarlaklık",
         "Pixel Size": "Piksel Boyutu",
         "MATERIAL": "MALZEME",
