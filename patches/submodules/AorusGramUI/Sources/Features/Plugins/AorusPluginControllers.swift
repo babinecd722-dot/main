@@ -207,14 +207,10 @@ private final class AorusPluginsListController: ViewController, UITableViewDataS
             outgoing?.isHidden = true
             outgoing?.alpha = 1
         })
-        // The "+" belongs to the plugins: it goes with them and comes back with them.
-        if let createButton {
-            createButton.isUserInteractionEnabled = !on
-            UIView.animate(withDuration: on ? 0.18 : 0.42, delay: 0, usingSpringWithDamping: on ? 1 : 0.7, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
-                createButton.alpha = on ? 0 : 1
-                createButton.transform = on ? CGAffineTransform(scaleX: 0.6, y: 0.6) : .identity
-            }, completion: nil)
-        }
+        // The "+" belongs to the plugins: it goes with them and comes back with them. It shrinks
+        // what it holds, never itself, so laying it out while the Market is open — on the way
+        // back from a plugin just installed — leaves it the size it is.
+        createButton?.setCollapsed(on, animated: true)
         if on { marketView?.appear() }
     }
 

@@ -794,26 +794,33 @@ final class AorusPluginPillButton: UIButton {
 /// Market sheet's close button. A press shrinks it a little and lets it spring back, the way
 /// the system's glass buttons answer a touch.
 final class AorusPluginGlassCircleButton: UIControl {
+    private let content = UIView()
     private let glass: UIView & AorusPluginGlassBackground
     private let glyph = UIImageView()
     private let isDark: Bool
+    private var isCollapsed = false
 
     init(glass: UIView & AorusPluginGlassBackground, symbol: String, pointSize: CGFloat, weight: UIImage.SymbolWeight, tint: UIColor, isDark: Bool, shadow: Bool) {
         self.glass = glass
         self.isDark = isDark
         super.init(frame: .zero)
+        // Pressed and put away are drawn by scaling what the button holds, never the button
+        // itself: a view with a transform has no frame of its own, and a screen that lays the
+        // button out by its frame while it is scaled leaves it that much larger once it is not.
+        content.isUserInteractionEnabled = false
+        addSubview(content)
         glass.isUserInteractionEnabled = false
-        addSubview(glass)
+        content.addSubview(glass)
         glyph.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight))?.withRenderingMode(.alwaysTemplate)
         glyph.tintColor = tint
         glyph.contentMode = .center
         glyph.isUserInteractionEnabled = false
-        addSubview(glyph)
+        content.addSubview(glyph)
         if shadow {
-            layer.shadowColor = UIColor.black.cgColor
-            layer.shadowOpacity = isDark ? 0.32 : 0.12
-            layer.shadowRadius = 14
-            layer.shadowOffset = CGSize(width: 0, height: 5)
+            content.layer.shadowColor = UIColor.black.cgColor
+            content.layer.shadowOpacity = isDark ? 0.32 : 0.12
+            content.layer.shadowRadius = 14
+            content.layer.shadowOffset = CGSize(width: 0, height: 5)
         }
         isAccessibilityElement = true
         accessibilityTraits = .button
@@ -823,18 +830,38 @@ final class AorusPluginGlassCircleButton: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        glass.frame = bounds
-        glass.updateGlass(size: bounds.size, cornerRadius: bounds.height / 2, isDark: isDark)
-        glyph.frame = bounds
-        if layer.shadowOpacity > 0 { layer.shadowPath = UIBezierPath(ovalIn: bounds).cgPath }
+        let local = CGRect(origin: .zero, size: bounds.size)
+        // Bounds and centre, not frame: the content may be scaled right now.
+        content.bounds = local
+        content.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        glass.frame = local
+        glass.updateGlass(size: local.size, cornerRadius: local.height / 2, isDark: isDark)
+        glyph.frame = local
+        if content.layer.shadowOpacity > 0 { content.layer.shadowPath = UIBezierPath(ovalIn: local).cgPath }
+    }
+
+    /// Puts the button away, shrinking and fading where it stands, or brings it back.
+    func setCollapsed(_ collapsed: Bool, animated: Bool) {
+        isCollapsed = collapsed
+        isUserInteractionEnabled = !collapsed
+        let changes = {
+            self.alpha = collapsed ? 0 : 1
+            self.content.transform = collapsed ? CGAffineTransform(scaleX: 0.6, y: 0.6) : .identity
+        }
+        if animated {
+            UIView.animate(withDuration: collapsed ? 0.18 : 0.42, delay: 0, usingSpringWithDamping: collapsed ? 1 : 0.7, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: changes, completion: nil)
+        } else {
+            changes()
+        }
     }
 
     override var isHighlighted: Bool {
         didSet {
             guard isHighlighted != oldValue else { return }
             let pressed = isHighlighted
+            let rest: CGAffineTransform = isCollapsed ? CGAffineTransform(scaleX: 0.6, y: 0.6) : .identity
             UIView.animate(withDuration: pressed ? 0.12 : 0.45, delay: 0, usingSpringWithDamping: pressed ? 1 : 0.55, initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
-                self.transform = pressed ? CGAffineTransform(scaleX: 0.9, y: 0.9) : .identity
+                self.content.transform = pressed ? CGAffineTransform(scaleX: 0.9, y: 0.9) : rest
                 self.glyph.alpha = pressed ? 0.7 : 1
             }, completion: nil)
         }
