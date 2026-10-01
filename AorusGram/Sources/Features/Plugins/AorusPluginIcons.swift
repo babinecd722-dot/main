@@ -741,6 +741,87 @@ public enum AorusPluginIcons {
     }
 }
 
+/// The look the person chose for every icon in AorusGram → Interface → Bubble Settings: one of
+/// the styles plugins give the icons with `aorus.icons`, drawn the same way, and laid over
+/// whatever style a plugin asks for, as the person's glass is laid over the plugins'.
+///
+/// It is kept under a key of its own, `{ look, amount }`, read by the drawing code beside the
+/// plugins' layers. `none` keeps Telegram's own icons where a plugin would style them; nothing
+/// kept leaves the plugins' style, or Telegram's icons. A change is announced with the
+/// notification the plugins' icons use, and the app redraws its icons.
+public enum AorusIconLook {
+    public static let defaultsKey = "aorusgram_icon_look"
+    /// Telegram's own icons, whatever the plugins ask for.
+    public static let none = "none"
+
+    /// What the person chose: a look and its strength, or `none`; nil while they chose nothing.
+    public static func current() -> (look: String, amount: Double)? {
+        guard let stored = UserDefaults.standard.dictionary(forKey: defaultsKey), let look = stored["look"] as? String else {
+            return nil
+        }
+        if look == none {
+            return (none, 0.0)
+        }
+        guard let range = AorusPluginIcons.lookAmounts[look] else {
+            return nil
+        }
+        let amount = (stored["amount"] as? NSNumber)?.doubleValue ?? range.standard
+        return (look, min(range.maximum, max(range.minimum, amount)))
+    }
+
+    /// The look the plugins give the icons, under the person's, and its strength; nil while
+    /// none does.
+    public static func pluginLook() -> (look: String, amount: Double)? {
+        guard let style = AorusPluginIcons.merge(AorusPluginIcons.storedLayers()).style, let look = style["look"] as? String, let range = AorusPluginIcons.lookAmounts[look] else {
+            return nil
+        }
+        return (look, (style["amount"] as? NSNumber)?.doubleValue ?? range.standard)
+    }
+
+    /// Keeps `look` — one of `AorusPluginIcons.looks` with an amount inside its range, or `none` —
+    /// or with nil forgets the person's choice, and redraws the icons when it changed. Answers
+    /// whether the look was one the icons can be drawn in.
+    @discardableResult
+    public static func set(look: String?, amount: Double? = nil) -> Bool {
+        var value: [String: Any]?
+        if let look {
+            if look == none {
+                value = ["look": none]
+            } else if let range = AorusPluginIcons.lookAmounts[look] {
+                let wanted = amount ?? range.standard
+                guard wanted.isFinite else {
+                    return false
+                }
+                value = ["look": look, "amount": min(range.maximum, max(range.minimum, wanted))]
+            } else {
+                return false
+            }
+        }
+        let defaults = UserDefaults.standard
+        let previous = defaults.dictionary(forKey: defaultsKey)
+        if let value {
+            if let previous, NSDictionary(dictionary: previous).isEqual(to: value) {
+                return true
+            }
+            defaults.set(value, forKey: defaultsKey)
+        } else {
+            if previous == nil {
+                return true
+            }
+            defaults.removeObject(forKey: defaultsKey)
+        }
+        let deliver = {
+            NotificationCenter.default.post(name: AorusPluginAppearance.didChangeNotification, object: nil)
+        }
+        if Thread.isMainThread {
+            deliver()
+        } else {
+            DispatchQueue.main.async(execute: deliver)
+        }
+        return true
+    }
+}
+
 /// SVG path data, as far as an icon needs it: every command, absolute and relative, and the
 /// numbers each one takes. Used to reject what could not be drawn before it is kept.
 public enum AorusPluginIconPath {

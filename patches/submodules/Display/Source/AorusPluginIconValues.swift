@@ -20,6 +20,11 @@ import AppBundle
 /// was drawn with.
 public enum AorusPluginIconValues {
     public static let layersKey = "aorusgram_plugin_icon_layers"
+    /// `AorusIconLook.defaultsKey` in the plugin core: the look the person chose for every icon
+    /// in Bubble Settings, laid over the plugins' style.
+    public static let personLookKey = "aorusgram_icon_look"
+    /// The person's look goes in as a layer after every plugin's, so it is the style in force.
+    private static let personLayer = "~aorusgram.person"
     public static let didChangeNotification = Notification.Name("aorusgram.pluginAppearanceChanged")
 
     /// Styles reach icons up to this size. Anything larger is an illustration, not an icon.
@@ -166,6 +171,13 @@ public enum AorusPluginIconValues {
         return result
     }
 
+    /// `image` in `look` at `amount`, drawn as the style draws every icon it reaches: a picture
+    /// of a look for a screen that offers it. Nil for a look it does not know or an image it
+    /// cannot draw.
+    public static func preview(_ image: UIImage, look: String, amount: CGFloat) -> UIImage? {
+        return render(original: image, spec: nil, look: look, amount: amount)
+    }
+
     private static func currentTable() -> Table {
         lock.lock()
         defer {
@@ -179,7 +191,11 @@ public enum AorusPluginIconValues {
         if defaults.bool(forKey: "__LOCK_KEY__") {
             return NSDictionary()
         }
-        return (defaults.dictionary(forKey: layersKey) ?? [:]) as NSDictionary
+        var layers = defaults.dictionary(forKey: layersKey) ?? [:]
+        if let look = defaults.dictionary(forKey: personLookKey), look["look"] is String {
+            layers[personLayer] = ["*": look]
+        }
+        return layers as NSDictionary
     }
 
     /// Called with the lock held.
@@ -235,7 +251,8 @@ public enum AorusPluginIconValues {
                     continue
                 }
                 if key == "*" {
-                    style = spec
+                    // `none` is the person keeping Telegram's own icons over a plugin's style.
+                    style = (spec["look"] as? String) == "none" ? nil : spec
                     continue
                 }
                 for target in spec["targets"] as? [String] ?? [] {

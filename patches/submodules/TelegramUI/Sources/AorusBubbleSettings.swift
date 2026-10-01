@@ -14,6 +14,7 @@ import WallpaperBackgroundNode
 import NavigationBarImpl
 import ChatTitleView
 import ChatAvatarNavigationNode
+import AppBundle
 import AorusGram
 import AorusGramUI
 
@@ -573,6 +574,246 @@ private func aorusGlassStyleChosen(_ preset: AorusMessageLook.Preset, stored: [S
     return NSDictionary(dictionary: stored).isEqual(to: expected)
 }
 
+// MARK: - Icons
+
+/// The looks the icons can take, in the order the strip shows them: Telegram's own, then the
+/// styles plugins give the icons (`AorusPluginIcons.looks`).
+private let aorusIconLooks: [String] = ["telegram", "pixel", "bold", "thin", "outline", "duotone", "glow", "halo", "depth"]
+
+private func aorusIconLookName(_ id: String) -> String {
+    switch id {
+    case "pixel":
+        return aorusL("Пиксели", "Pixel")
+    case "bold":
+        return aorusL("Жирные", "Bold")
+    case "thin":
+        return aorusL("Тонкие", "Thin")
+    case "outline":
+        return aorusL("Контур", "Outline")
+    case "duotone":
+        return aorusL("Два тона", "Two-Tone")
+    case "glow":
+        return aorusL("Свечение", "Glow")
+    case "halo":
+        return aorusL("Ореол", "Aura")
+    case "depth":
+        return aorusL("Объём", "Depth")
+    default:
+        // A name, the same in every language.
+        return "Telegram"
+    }
+}
+
+/// The size of the icons' pixels that goes with the glass's: the pixel mode is one look.
+private func aorusIconPixelAmount(_ glassPixelSize: Double) -> Double {
+    return min(3.0, max(1.0, glassPixelSize * 0.375))
+}
+
+/// What the strip shows: the look in force and its strength.
+private struct AorusIconLookRow: Equatable {
+    let selected: String
+    let amount: CGFloat
+}
+
+/// Telegram's settings tab icon in `look`, for the strip: drawn once per look, strength and
+/// colour, by the code that draws every styled icon.
+private final class AorusIconLookPreviews {
+    static let shared = AorusIconLookPreviews()
+
+    private var images: [String: UIImage] = [:]
+    private lazy var sample: UIImage? = UIImage(named: "Chat List/Tabs/IconSettings", in: getAppBundle(), compatibleWith: nil)
+
+    func image(look: String, amount: CGFloat, color: UIColor) -> UIImage? {
+        let key = "\(look)|\(Int((amount * 100.0).rounded()))|\(aorusLookHex(color))"
+        if let image = self.images[key] {
+            return image
+        }
+        guard let sample = self.sample else {
+            return nil
+        }
+        let drawn = look == "telegram" ? sample : (AorusPluginIconValues.preview(sample, look: look, amount: amount) ?? sample)
+        let tinted = generateTintedImage(image: drawn, color: color)
+        if self.images.count > 64 {
+            self.images.removeAll()
+        }
+        self.images[key] = tinted
+        return tinted
+    }
+}
+
+private final class AorusIconLookItem: ListViewItem, ItemListItem {
+    let presentationData: ItemListPresentationData
+    let row: AorusIconLookRow
+    let sectionId: ItemListSectionId
+    let picked: (String) -> Void
+
+    init(presentationData: ItemListPresentationData, row: AorusIconLookRow, sectionId: ItemListSectionId, picked: @escaping (String) -> Void) {
+        self.presentationData = presentationData
+        self.row = row
+        self.sectionId = sectionId
+        self.picked = picked
+    }
+
+    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, previousItem: ListViewItem?, nextItem: ListViewItem?, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
+        async {
+            let node = AorusIconLookItemNode()
+            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+            node.contentSize = layout.contentSize
+            node.insets = layout.insets
+            Queue.mainQueue().async {
+                completion(node, {
+                    return (nil, { _ in apply() })
+                })
+            }
+        }
+    }
+
+    func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, previousItem: ListViewItem?, nextItem: ListViewItem?, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
+        Queue.mainQueue().async {
+            if let nodeValue = node() as? AorusIconLookItemNode {
+                let makeLayout = nodeValue.asyncLayout()
+                async {
+                    let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topItem: previousItem as? ItemListItem, bottomItem: nextItem as? ItemListItem))
+                    Queue.mainQueue().async {
+                        completion(layout, { _ in
+                            apply()
+                        })
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A strip of tiles, one per look, each with Telegram's own icon drawn in it; the chosen one
+/// framed in the accent. It scrolls sideways when the looks do not fit.
+private final class AorusIconLookItemNode: AorusLookRowNode {
+    private static let tileSize = CGSize(width: 64.0, height: 56.0)
+    private static let captionHeight: CGFloat = 16.0
+    private static let height: CGFloat = 12.0 + 56.0 + 6.0 + 16.0 + 12.0
+
+    private var scrollView: UIScrollView?
+    private var tiles: [(plate: UIView, icon: UIImageView, caption: UILabel)] = []
+    private var item: AorusIconLookItem?
+    private var params: ListViewItemLayoutParams?
+    /// The tile just tapped, shown chosen before the new look comes back.
+    private var pendingLook: String?
+    private var scrolledToChoice = false
+    private lazy var feedback = UISelectionFeedbackGenerator()
+
+    override func didLoad() {
+        super.didLoad()
+        let scrollView = UIScrollView()
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.alwaysBounceHorizontal = true
+        scrollView.delaysContentTouches = false
+        scrollView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tapped(_:))))
+        self.view.addSubview(scrollView)
+        self.scrollView = scrollView
+        // The card's rounded corners stay over the tiles that scroll under them.
+        self.maskNode.removeFromSupernode()
+        self.addSubnode(self.maskNode)
+        self.refresh()
+    }
+
+    @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
+        guard let item = self.item, let scrollView = self.scrollView, recognizer.state == .ended else {
+            return
+        }
+        let point = recognizer.location(in: scrollView)
+        guard let index = self.tiles.firstIndex(where: { $0.plate.frame.union($0.caption.frame).insetBy(dx: -4.0, dy: -4.0).contains(point) }), index < aorusIconLooks.count else {
+            return
+        }
+        let look = aorusIconLooks[index]
+        if look == (self.pendingLook ?? item.row.selected) {
+            return
+        }
+        self.feedback.selectionChanged()
+        self.pendingLook = look
+        self.refresh()
+        item.picked(look)
+    }
+
+    private func refresh() {
+        guard let item = self.item, let params = self.params, let scrollView = self.scrollView else {
+            return
+        }
+        let theme = item.presentationData.theme
+        let dark = theme.overallDarkAppearance
+        let selected = self.pendingLook ?? item.row.selected
+
+        while self.tiles.count < aorusIconLooks.count {
+            let plate = UIView()
+            plate.isUserInteractionEnabled = false
+            plate.layer.cornerRadius = 14.0
+            plate.layer.cornerCurve = .continuous
+            let icon = UIImageView()
+            icon.contentMode = .center
+            plate.addSubview(icon)
+            let caption = UILabel()
+            caption.textAlignment = .center
+            caption.isUserInteractionEnabled = false
+            scrollView.addSubview(plate)
+            scrollView.addSubview(caption)
+            self.tiles.append((plate, icon, caption))
+        }
+
+        let side = params.leftInset + 16.0
+        let spacing: CGFloat = 10.0
+        let tileSize = AorusIconLookItemNode.tileSize
+        scrollView.frame = CGRect(x: params.leftInset, y: 0.0, width: max(0.0, params.width - params.leftInset - params.rightInset), height: AorusIconLookItemNode.height)
+        let inset = side - params.leftInset
+        let neutral = dark ? UIColor(white: 1.0, alpha: 0.08) : UIColor(white: 0.0, alpha: 0.045)
+        let accent = theme.list.itemAccentColor
+        for (index, look) in aorusIconLooks.enumerated() {
+            let tile = self.tiles[index]
+            let isSelected = look == selected
+            let x = inset + CGFloat(index) * (tileSize.width + spacing)
+            tile.plate.frame = CGRect(origin: CGPoint(x: x, y: 12.0), size: tileSize)
+            tile.plate.backgroundColor = isSelected ? accent.withAlphaComponent(dark ? 0.22 : 0.12) : neutral
+            tile.plate.layer.borderWidth = isSelected ? 2.0 : 0.0
+            tile.plate.layer.borderColor = accent.cgColor
+            let amount: CGFloat = isSelected && look != "telegram" ? item.row.amount : CGFloat(AorusPluginIcons.lookAmounts[look]?.standard ?? 1.0)
+            tile.icon.image = AorusIconLookPreviews.shared.image(look: look, amount: amount, color: isSelected ? accent : theme.list.itemPrimaryTextColor)
+            tile.icon.frame = CGRect(origin: CGPoint(), size: tileSize)
+            tile.caption.font = isSelected ? Font.semibold(12.0) : Font.regular(12.0)
+            tile.caption.textColor = isSelected ? accent : theme.list.itemSecondaryTextColor
+            tile.caption.text = aorusIconLookName(look)
+            tile.caption.frame = CGRect(x: x - 6.0, y: 12.0 + tileSize.height + 6.0, width: tileSize.width + 12.0, height: AorusIconLookItemNode.captionHeight)
+        }
+        let contentWidth = inset * 2.0 + CGFloat(aorusIconLooks.count) * tileSize.width + CGFloat(aorusIconLooks.count - 1) * spacing
+        scrollView.contentSize = CGSize(width: contentWidth, height: AorusIconLookItemNode.height)
+
+        // The chosen look is in sight when the screen opens.
+        if !self.scrolledToChoice, scrollView.bounds.width > 0.0, let index = aorusIconLooks.firstIndex(of: selected) {
+            self.scrolledToChoice = true
+            let tileMidX = inset + CGFloat(index) * (tileSize.width + spacing) + tileSize.width / 2.0
+            let maxOffset = max(0.0, contentWidth - scrollView.bounds.width)
+            scrollView.contentOffset = CGPoint(x: min(maxOffset, max(0.0, tileMidX - scrollView.bounds.width / 2.0)), y: 0.0)
+        }
+    }
+
+    func asyncLayout() -> (_ item: AorusIconLookItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
+        return { item, params, neighbors in
+            let contentSize = CGSize(width: params.width, height: AorusIconLookItemNode.height)
+            let insets = itemListNeighborsGroupedInsets(neighbors, params)
+            let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
+            return (layout, { [weak self] in
+                guard let strongSelf = self else {
+                    return
+                }
+                strongSelf.item = item
+                strongSelf.params = params
+                // The new look has come back: what it holds is what is shown.
+                strongSelf.pendingLook = nil
+                strongSelf.layoutCard(theme: item.presentationData.theme, params: params, neighbors: neighbors, contentSize: contentSize, insets: insets)
+                strongSelf.refresh()
+            })
+        }
+    }
+}
+
 // MARK: - Entries
 
 private enum AorusBubbleSettingsSection: Int32 {
@@ -581,6 +822,7 @@ private enum AorusBubbleSettingsSection: Int32 {
     case colors
     case outline
     case light
+    case icons
     case styles
     case reset
 }
@@ -611,6 +853,8 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
     case materialFooter(String)
     case colorsHeader(String)
     case color(Int32, AorusLookColorRow)
+    /// How strongly the tint colours the glass, and the tint it is the strength of.
+    case tintStrength(String, CGFloat, String)
     case colorsFooter(String)
     case outlineHeader(String)
     case outlineColor(Int32, AorusLookColorRow)
@@ -624,6 +868,10 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
     case glow(AorusLookColorRow)
     case glowSize(String, CGFloat)
     case lightFooter(String)
+    case iconsHeader(String)
+    case iconLook(AorusIconLookRow)
+    case iconAmount(String, CGFloat, String)
+    case iconsFooter(String)
     case stylesHeader(String)
     case style(Int32, AorusLookStyleRow)
     case reset(String)
@@ -635,12 +883,14 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             return AorusBubbleSettingsSection.preview.rawValue
         case .materialHeader, .material, .roundness, .pixelSize, .materialFooter:
             return AorusBubbleSettingsSection.material.rawValue
-        case .colorsHeader, .color, .colorsFooter:
+        case .colorsHeader, .color, .tintStrength, .colorsFooter:
             return AorusBubbleSettingsSection.colors.rawValue
         case .outlineHeader, .outlineColor, .outlineWidth, .outlineLine, .outlineMotion, .outlineFooter:
             return AorusBubbleSettingsSection.outline.rawValue
         case .lightHeader, .shadow, .shine, .glow, .glowSize, .lightFooter:
             return AorusBubbleSettingsSection.light.rawValue
+        case .iconsHeader, .iconLook, .iconAmount, .iconsFooter:
+            return AorusBubbleSettingsSection.icons.rawValue
         case .stylesHeader, .style:
             return AorusBubbleSettingsSection.styles.rawValue
         case .reset, .resetFooter:
@@ -666,6 +916,8 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             return 20
         case let .color(index, _):
             return 21 + index
+        case .tintStrength:
+            return 22
         case .colorsFooter:
             return 30
         case .outlineHeader:
@@ -692,6 +944,14 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             return 54
         case .lightFooter:
             return 55
+        case .iconsHeader:
+            return 56
+        case .iconLook:
+            return 57
+        case .iconAmount:
+            return 58
+        case .iconsFooter:
+            return 59
         case .stylesHeader:
             return 60
         case let .style(index, _):
@@ -714,15 +974,15 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
             return AorusBubblePreviewItem(context: arguments.context, theme: preview.theme, listTheme: presentationData.theme, strings: presentationData.strings, sectionId: self.section, chatBubbleCorners: preview.corners, wallpaper: preview.wallpaper, dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, sample: preview.sample, shuffleTitle: aorusL("Другой собеседник", "Another Person"), shuffle: {
                 arguments.shuffle()
             })
-        case let .materialHeader(text), let .colorsHeader(text), let .outlineHeader(text), let .lightHeader(text), let .stylesHeader(text):
+        case let .materialHeader(text), let .colorsHeader(text), let .outlineHeader(text), let .lightHeader(text), let .iconsHeader(text), let .stylesHeader(text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
-        case let .materialFooter(text), let .colorsFooter(text), let .outlineFooter(text), let .lightFooter(text), let .resetFooter(text):
+        case let .materialFooter(text), let .colorsFooter(text), let .outlineFooter(text), let .lightFooter(text), let .iconsFooter(text), let .resetFooter(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         case let .material(index):
             let font = Font.medium(14.0)
             let options = [aorusL("Стекло", "Glass"), aorusL("Прозрачное", "Transparent"), aorusL("Плотное", "Solid"), aorusL("Пиксели", "Pixel")].map { AorusLookSegmentOption(text: $0, font: font) }
             return AorusLookSegmentItem(presentationData: presentationData, title: nil, options: options, selected: index, sectionId: self.section, changed: { index in
-                arguments.setChoice("glass.style", aorusGlassMaterials[max(0, min(aorusGlassMaterials.count - 1, index))], "regular")
+                arguments.setMaterial(aorusGlassMaterials[max(0, min(aorusGlassMaterials.count - 1, index))])
             })
         case let .roundness(title, value):
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 1.0, step: 0.01, valueText: aorusLookPercent, sizeMarks: false, sectionId: self.section, changed: { value in
@@ -731,6 +991,26 @@ private enum AorusBubbleSettingsEntry: ItemListNodeEntry, Equatable {
         case let .pixelSize(title, value):
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 2.0, maximum: 8.0, step: 1.0, valueText: { aorusL("%@ пт", "%@ pt").replacingOccurrences(of: "%@", with: "\(Int($0))") }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setNumber("glass.pixelSize", value == 4.0 ? nil : Int(value))
+                arguments.setPixelSize(Double(value))
+            })
+        case let .tintStrength(title, value, base):
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.05, maximum: 0.9, step: 0.01, valueText: aorusLookPercent, sizeMarks: false, sectionId: self.section, changed: { value in
+                arguments.setTintStrength(base, value)
+            })
+        case let .iconLook(row):
+            return AorusIconLookItem(presentationData: presentationData, row: row, sectionId: self.section, picked: { look in
+                arguments.setIconLook(look)
+            })
+        case let .iconAmount(title, value, look):
+            let range = AorusPluginIcons.lookAmounts[look] ?? (minimum: 1.0, maximum: 4.0, standard: 1.5)
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: CGFloat(range.minimum), maximum: CGFloat(range.maximum), step: 0.1, valueText: { value in
+                // A pixel is so many points; any other look is as strong as a share of its most.
+                if look == "pixel" {
+                    return aorusL("%@ пт", "%@ pt").replacingOccurrences(of: "%@", with: String(format: "%.1f", Double(value)))
+                }
+                return aorusLookPercent(value / CGFloat(max(0.001, range.maximum)))
+            }, sizeMarks: false, sectionId: self.section, changed: { value in
+                arguments.setIconAmount(look, Double(value))
             })
         case let .color(_, row), let .outlineColor(_, row), let .glow(row):
             return AorusLookSwatchesItem(presentationData: presentationData, title: row.title, palette: row.palette.hexes(dark: row.dark), selected: row.selected, sectionId: self.section, picked: { hex in
@@ -825,29 +1105,30 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     }
     let roundness = AorusPluginAppearanceValues.number("glass.roundness", in: values) ?? 1.0
     entries.append(.roundness(aorusL("Скругление", "Roundness"), max(0.0, min(1.0, roundness))))
-    entries.append(.materialFooter(aorusL("Меняет всё стекло приложения: кнопки над чатом, строку ввода, панель вкладок, меню и листы действий.", "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.")))
+    if material == "pixel" {
+        entries.append(.materialFooter(aorusL("Пиксели включают пиксельный режим во всём приложении: ступенчатые капсулы, меню и листы действий и пиксельные иконки. Стиль иконок можно сменить ниже.", "Pixel turns the whole app pixel: stepped capsules, menus and action sheets, and pixel icons. The icon style can be changed below.")))
+    } else {
+        entries.append(.materialFooter(aorusL("Меняет всё стекло приложения: кнопки над чатом, строку ввода, панель вкладок, меню и листы действий.", "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.")))
+    }
 
     entries.append(.colorsHeader(aorusL("ЦВЕТА", "COLORS")))
+    let tint = aorusGlassColors("glass.tint", dark: dark)
+    entries.append(.color(0, AorusLookColorRow(key: "glass.tint", stop: 0, title: plate ? aorusL("Оттенок", "Tint") : aorusL("Оттенок стекла", "Glass Tint"), palette: .glassTint, selected: tint.first, dark: dark)))
+    if let drawnTint = AorusPluginAppearanceValues.color("glass.tint", dark: dark, in: values) {
+        let alpha = drawnTint.cgColor.alpha
+        let base = String(aorusLookHex(drawnTint.withAlphaComponent(1.0)).prefix(6))
+        entries.append(.tintStrength(aorusL("Сила оттенка", "Tint Strength"), max(0.05, min(0.9, alpha)), base))
+    }
     let fill = aorusGlassColors("glass.fill", dark: dark)
-    var colorRows: [(key: String, stop: Int, title: String, palette: AorusLookPalette)] = []
-    if plate {
-        colorRows.append(("glass.fill", 0, aorusL("Цвет капсул", "Capsule Color"), .plate))
-        if !fill.isEmpty {
-            colorRows.append(("glass.fill", 1, aorusL("Градиент", "Gradient"), .plate))
-        }
-    } else {
-        colorRows.append(("glass.tint", 0, aorusL("Оттенок стекла", "Glass Tint"), .glassTint))
-        colorRows.append(("glass.fill", 0, aorusL("Цвет поверх стекла", "Color Over the Glass"), .glassTint))
-        if !fill.isEmpty {
-            colorRows.append(("glass.fill", 1, aorusL("Градиент", "Gradient"), .glassTint))
-        }
+    let fillPalette: AorusLookPalette = plate ? .plate : .glassTint
+    entries.append(.color(2, AorusLookColorRow(key: "glass.fill", stop: 0, title: plate ? aorusL("Цвет капсул", "Capsule Color") : aorusL("Цвет поверх стекла", "Color Over the Glass"), palette: fillPalette, selected: fill.first, dark: dark)))
+    if !fill.isEmpty {
+        entries.append(.color(3, AorusLookColorRow(key: "glass.fill", stop: 1, title: aorusL("Градиент", "Gradient"), palette: fillPalette, selected: fill.count > 1 ? fill[1] : nil, dark: dark)))
     }
-    for (index, row) in colorRows.enumerated() {
-        let kept = aorusGlassColors(row.key, dark: dark)
-        let selected = row.stop < kept.count ? kept[row.stop] : nil
-        entries.append(.color(Int32(index), AorusLookColorRow(key: row.key, stop: row.stop, title: row.title, palette: row.palette, selected: selected, dark: dark)))
+    if fill.count > 1 {
+        entries.append(.color(4, AorusLookColorRow(key: "glass.fill", stop: 2, title: aorusL("Третий цвет", "Third Color"), palette: fillPalette, selected: fill.count > 2 ? fill[2] : nil, dark: dark)))
     }
-    entries.append(.colorsFooter(aorusL("Цвета запоминаются отдельно для светлой и тёмной темы. Градиент идёт от первого цвета ко второму.", "Colors are kept separately for the light and the dark theme. A gradient runs from the first color to the second.")))
+    entries.append(.colorsFooter(aorusL("Любой цвет — кружок с плюсом, в нём же прозрачность. Цвета запоминаются отдельно для светлой и тёмной темы; градиент идёт от первого цвета к последнему.", "Any color is under the circle with a plus, transparency included. Colors are kept separately for the light and the dark theme; a gradient runs from the first color to the last.")))
 
     entries.append(.outlineHeader(aorusL("ОБВОДКА", "OUTLINE")))
     let border = aorusGlassColors("glass.border", dark: dark)
@@ -855,6 +1136,9 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     let drawnBorder = AorusPluginAppearanceValues.colors("glass.border", dark: dark, in: values) ?? []
     if !border.isEmpty {
         entries.append(.outlineColor(1, AorusLookColorRow(key: "glass.border", stop: 1, title: aorusL("Второй цвет", "Second Color"), palette: .accent, selected: border.count > 1 ? border[1] : nil, dark: dark)))
+    }
+    if border.count > 1 {
+        entries.append(.outlineColor(2, AorusLookColorRow(key: "glass.border", stop: 2, title: aorusL("Третий цвет", "Third Color"), palette: .accent, selected: border.count > 2 ? border[2] : nil, dark: dark)))
     }
     if !drawnBorder.isEmpty {
         if material != "pixel" {
@@ -879,6 +1163,21 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     }
     entries.append(.lightFooter(aorusL("Прозрачность цвета свечения задаёт его силу. У пиксельных капсул тень жёсткая, как в старых играх.", "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.")))
 
+    entries.append(.iconsHeader(aorusL("ИКОНКИ", "ICONS")))
+    // What the icons are drawn in: the person's look, else a plugin's, else Telegram's own.
+    let iconLook: (look: String, amount: Double)?
+    if let person = AorusIconLook.current() {
+        iconLook = person.look == AorusIconLook.none ? nil : person
+    } else {
+        iconLook = AorusIconLook.pluginLook()
+    }
+    entries.append(.iconLook(AorusIconLookRow(selected: iconLook?.look ?? "telegram", amount: CGFloat(iconLook?.amount ?? 0.0))))
+    if let iconLook {
+        let title = iconLook.look == "pixel" ? aorusL("Размер пикселя иконок", "Icon Pixel Size") : aorusL("Сила стиля", "Style Strength")
+        entries.append(.iconAmount(title, CGFloat(iconLook.amount), iconLook.look))
+    }
+    entries.append(.iconsFooter(aorusL("Стиль ложится на все иконки приложения — вкладки, кнопки, меню и настройки, — как стиль иконок у плагинов, и главнее него.", "The style is laid over every icon in the app — tabs, buttons, menus and settings — like the icon style plugins can set, and wins over it.")))
+
     entries.append(.stylesHeader(aorusL("ГОТОВЫЕ СТИЛИ", "READY-MADE STYLES")))
     for (index, preset) in AorusGlassLook.presets.enumerated() {
         let name = aorusGlassStyleName(preset.id)
@@ -886,7 +1185,7 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     }
 
     entries.append(.reset(aorusL("Сбросить всё", "Reset All")))
-    entries.append(.resetFooter(aorusL("Плагины тоже могут менять стекло; то, что выбрано здесь, главнее.", "Plugins can change the glass too; what is chosen here wins.")))
+    entries.append(.resetFooter(aorusL("Плагины тоже могут менять стекло и иконки; то, что выбрано здесь, главнее.", "Plugins can change the glass and the icons too; what is chosen here wins.")))
     return entries
 }
 
@@ -903,46 +1202,74 @@ private final class AorusBubbleSettingsArguments {
     let shuffle: () -> Void
     let setNumber: (String, Any?) -> Void
     let setChoice: (String, String, String) -> Void
+    let setMaterial: (String) -> Void
+    let setPixelSize: (Double) -> Void
     let setColor: (AorusLookColorRow, String?) -> Void
+    let setTintStrength: (String, CGFloat) -> Void
     let pickColor: (AorusLookColorRow) -> Void
+    let setIconLook: (String) -> Void
+    let setIconAmount: (String, Double) -> Void
     let applyStyle: (String) -> Void
     let resetAll: () -> Void
 
-    init(context: AccountContext, shuffle: @escaping () -> Void, setNumber: @escaping (String, Any?) -> Void, setChoice: @escaping (String, String, String) -> Void, setColor: @escaping (AorusLookColorRow, String?) -> Void, pickColor: @escaping (AorusLookColorRow) -> Void, applyStyle: @escaping (String) -> Void, resetAll: @escaping () -> Void) {
+    init(context: AccountContext, shuffle: @escaping () -> Void, setNumber: @escaping (String, Any?) -> Void, setChoice: @escaping (String, String, String) -> Void, setMaterial: @escaping (String) -> Void, setPixelSize: @escaping (Double) -> Void, setColor: @escaping (AorusLookColorRow, String?) -> Void, setTintStrength: @escaping (String, CGFloat) -> Void, pickColor: @escaping (AorusLookColorRow) -> Void, setIconLook: @escaping (String) -> Void, setIconAmount: @escaping (String, Double) -> Void, applyStyle: @escaping (String) -> Void, resetAll: @escaping () -> Void) {
         self.context = context
         self.shuffle = shuffle
         self.setNumber = setNumber
         self.setChoice = setChoice
+        self.setMaterial = setMaterial
+        self.setPixelSize = setPixelSize
         self.setColor = setColor
+        self.setTintStrength = setTintStrength
         self.pickColor = pickColor
+        self.setIconLook = setIconLook
+        self.setIconAmount = setIconAmount
         self.applyStyle = applyStyle
         self.resetAll = resetAll
     }
 }
 
 /// Keeps a colour the person chose for one row: the colour itself, or one stop of a gradient,
-/// whose other stops stay as they were.
+/// whose other stops stay as they were. Taking a stop away takes the ones after it with it.
 private func aorusGlassStoreColor(_ row: AorusLookColorRow, _ hex: String?, dark: Bool) {
     guard row.key == "glass.fill" || row.key == "glass.border" else {
         AorusGlassLook.set(row.key, hex, dark: dark)
         return
     }
-    let kept = aorusGlassColors(row.key, dark: dark)
-    if row.stop == 0 {
-        if let hex {
-            let stops: [String] = [hex] + Array(kept.dropFirst())
-            AorusGlassLook.set(row.key, stops, dark: dark)
-        } else {
-            AorusGlassLook.set(row.key, nil, dark: dark)
-        }
-        return
-    }
+    var stops = aorusGlassColors(row.key, dark: dark)
     if let hex {
         // A gradient needs the colour it starts from: the one kept, or the glass's own.
-        let base = kept.first ?? aorusGlassDefaultHex(row.key, dark: dark)
-        AorusGlassLook.set(row.key, [base, hex], dark: dark)
-    } else if let first = kept.first {
-        AorusGlassLook.set(row.key, [first], dark: dark)
+        if stops.isEmpty {
+            stops = [aorusGlassDefaultHex(row.key, dark: dark)]
+        }
+        while stops.count < row.stop {
+            stops.append(stops[stops.count - 1])
+        }
+        if row.stop < stops.count {
+            stops[row.stop] = hex
+        } else {
+            stops.append(hex)
+        }
+    } else {
+        stops = Array(stops.prefix(row.stop))
+    }
+    AorusGlassLook.set(row.key, stops.isEmpty ? nil : stops, dark: dark)
+}
+
+/// The glass's material as it is drawn now, for the appearance in use.
+private func aorusGlassMaterialNow(dark: Bool) -> String {
+    return AorusPluginAppearanceValues.string("glass.style", dark: dark, in: AorusPluginAppearanceValues.glassSnapshot().values) ?? "regular"
+}
+
+/// The pixel material is the whole pixel look, the icons with it: choosing it draws every icon
+/// in pixels the glass's size; leaving it takes the pixels the material put on the icons back
+/// off. A look the person chose for the icons themselves stays.
+private func aorusPixelModeChanged(from previous: String, to material: String) {
+    if material == "pixel" && previous != "pixel" {
+        let size = AorusPluginAppearanceValues.number("glass.pixelSize", in: AorusPluginAppearanceValues.glassSnapshot().values) ?? 4.0
+        AorusIconLook.set(look: "pixel", amount: aorusIconPixelAmount(size))
+    } else if material != "pixel" && previous == "pixel" && AorusIconLook.current()?.look == "pixel" {
+        AorusIconLook.set(look: nil)
     }
 }
 
@@ -964,6 +1291,9 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
     }
     let screen = AorusLookScreenContext()
     let throttle = AorusLookThrottle()
+    // The icons are drawn again across the whole app at every change: a finger on their slider
+    // is followed less closely than one on the glass's.
+    let iconThrottle = AorusLookThrottle(interval: 0.35)
     weak var weakController: ItemListController?
 
     // The statuses Telegram offers everyone: the animated emoji a person with Premium wears
@@ -1016,8 +1346,30 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
         setChoice: { name, value, telegram in
             aorusGlassStoreChoice(name, value, telegram: telegram)
         },
+        setMaterial: { material in
+            let dark = screen.theme?.overallDarkAppearance ?? false
+            let previous = aorusGlassMaterialNow(dark: dark)
+            aorusGlassStoreChoice("glass.style", material, telegram: "regular")
+            aorusPixelModeChanged(from: previous, to: aorusGlassMaterialNow(dark: dark))
+        },
+        setPixelSize: { size in
+            // The icons' pixels grow with the glass's while the pixel mode put them there.
+            guard let current = AorusIconLook.current(), current.look == "pixel" else {
+                return
+            }
+            iconThrottle.run("icons") {
+                AorusIconLook.set(look: "pixel", amount: aorusIconPixelAmount(size))
+            }
+        },
         setColor: { row, hex in
             aorusGlassStoreColor(row, hex, dark: screen.theme?.overallDarkAppearance ?? row.dark)
+        },
+        setTintStrength: { base, strength in
+            let alpha = Int((max(0.0, min(1.0, strength)) * 255.0).rounded())
+            let hex = base + String(format: "%02X", alpha)
+            throttle.run("glass.tint#strength") {
+                AorusGlassLook.set("glass.tint", hex, dark: screen.theme?.overallDarkAppearance ?? false)
+            }
         },
         pickColor: { row in
             guard let controller = weakController else {
@@ -1063,9 +1415,32 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
                 controller.present(alert, animated: true)
             }
         },
+        setIconLook: { look in
+            iconThrottle.cancelAll()
+            if look == "telegram" {
+                // Telegram's own icons: nothing kept, or a plugin's style held off.
+                AorusIconLook.set(look: AorusIconLook.pluginLook() == nil ? nil : AorusIconLook.none)
+                return
+            }
+            var amount = AorusPluginIcons.lookAmounts[look]?.standard
+            if look == "pixel" && aorusGlassMaterialNow(dark: screen.theme?.overallDarkAppearance ?? false) == "pixel" {
+                let size = AorusPluginAppearanceValues.number("glass.pixelSize", in: AorusPluginAppearanceValues.glassSnapshot().values) ?? 4.0
+                amount = aorusIconPixelAmount(size)
+            }
+            AorusIconLook.set(look: look, amount: amount)
+        },
+        setIconAmount: { look, amount in
+            iconThrottle.run("icons") {
+                AorusIconLook.set(look: look, amount: amount)
+            }
+        },
         applyStyle: { id in
             throttle.cancelAll()
+            iconThrottle.cancelAll()
+            let dark = screen.theme?.overallDarkAppearance ?? false
+            let previous = aorusGlassMaterialNow(dark: dark)
             AorusGlassLook.apply(preset: id)
+            aorusPixelModeChanged(from: previous, to: aorusGlassMaterialNow(dark: dark))
         },
         resetAll: {
             guard let controller = weakController else {
@@ -1075,11 +1450,13 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
             let sheet = ActionSheetController(presentationData: presentationData)
             sheet.setItemGroups([
                 ActionSheetItemGroup(items: [
-                    ActionSheetTextItem(title: aorusL("Капсулы снова будут стеклянными, как их рисует Telegram. Плагины продолжат действовать.", "The capsules will be glass again, the way Telegram draws them. Plugins keep working.")),
+                    ActionSheetTextItem(title: aorusL("Стекло и иконки снова будут такими, как их рисует Telegram. Плагины продолжат действовать.", "The glass and the icons will be the way Telegram draws them again. Plugins keep working.")),
                     ActionSheetButtonItem(title: aorusL("Сбросить всё", "Reset All"), color: .destructive, action: { [weak sheet] in
                         sheet?.dismissAnimated()
                         throttle.cancelAll()
+                        iconThrottle.cancelAll()
                         AorusGlassLook.reset()
+                        AorusIconLook.set(look: nil)
                     })
                 ]),
                 ActionSheetItemGroup(items: [

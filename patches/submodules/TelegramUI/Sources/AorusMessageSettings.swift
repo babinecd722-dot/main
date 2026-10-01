@@ -1110,17 +1110,17 @@ enum AorusLookPalette {
     func hexes(dark: Bool) -> [String] {
         switch (self, dark) {
         case (.glassTint, false):
-            return ["FFFFFF73", "007AFF2E", "34C7592E", "FF95002E", "FF2D552E", "AF52DE2E"]
+            return ["FFFFFF73", "007AFF40", "34C75940", "FF950040", "FF2D5540", "AF52DE40", "5AC8FA40", "00000026"]
         case (.glassTint, true):
-            return ["0000004D", "0A84FF38", "30D15838", "FF9F0A38", "FF375F38", "BF5AF238"]
+            return ["0000004D", "0A84FF4D", "30D1584D", "FF9F0A4D", "FF375F4D", "BF5AF24D", "64D2FF4D", "FFFFFF26"]
         case (.plate, false):
-            return ["FFFFFF", "F2F2F7", "E3F0FF", "E8F8EC", "FFF1E0", "F5E8FF"]
+            return ["FFFFFF", "F2F2F7", "E3F0FF", "E8F8EC", "FFF1E0", "F5E8FF", "FFE5EC", "1C1C1E"]
         case (.plate, true):
-            return ["1C1C1E", "2C2C2E", "0A2A4D", "1E3A2A", "44291A", "33204A"]
+            return ["1C1C1E", "2C2C2E", "0A2A4D", "1E3A2A", "44291A", "33204A", "4A1F33", "F2F2F7"]
         case (.glow, false):
-            return ["00B8D9B3", "E020C0B3", "34C759B3", "FF9500B3", "FF2D55B3", "AF52DEB3"]
+            return ["00B8D9B3", "E020C0B3", "34C759B3", "FF9500B3", "FF2D55B3", "AF52DEB3", "5AC8FAB3", "FFCC00B3"]
         case (.glow, true):
-            return ["00E5FFCC", "FF2BD6CC", "7CFF00CC", "FFD600CC", "FF3D00CC", "FFFFFFB3"]
+            return ["00E5FFCC", "FF2BD6CC", "7CFF00CC", "FFD600CC", "FF3D00CC", "BF5AF2CC", "64D2FFCC", "FFFFFFB3"]
         case (.fill, false):
             return ["FFFFFF", "E1FFC7", "DCEBFF", "EFE3FF", "FFE8D6", "FFE0EB"]
         case (.fill, true):
@@ -2421,8 +2421,14 @@ final class AorusLookThrottle {
         var scheduled = false
     }
 
-    private let interval: Double = 0.08
+    private let interval: Double
     private var lanes: [String: Lane] = [:]
+
+    /// `interval` apart at most: a setting that redraws a few panes can follow a finger closely,
+    /// one that redraws the whole app less often.
+    init(interval: Double = 0.08) {
+        self.interval = interval
+    }
 
     func run(_ key: String, _ action: @escaping () -> Void) {
         let lane: Lane

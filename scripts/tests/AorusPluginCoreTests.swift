@@ -1888,6 +1888,24 @@ if AorusPluginSandbox.watchdogAvailable {
     NotificationCenter.default.removeObserver(themeObserver)
     if let savedGlass { UserDefaults.standard.set(savedGlass, forKey: AorusGlassLook.defaultsKey) }
 
+    // The person's own icon style from Bubble Settings: one of the plugins' looks, kept apart
+    // from the plugins' layers and announced as the icons are.
+    let savedIconLook = UserDefaults.standard.dictionary(forKey: AorusIconLook.defaultsKey)
+    UserDefaults.standard.removeObject(forKey: AorusIconLook.defaultsKey)
+    var iconLookChanges = 0
+    let iconLookObserver = NotificationCenter.default.addObserver(forName: AorusPluginAppearance.didChangeNotification, object: nil, queue: nil) { _ in iconLookChanges += 1 }
+    expect(AorusIconLook.current() == nil, "no icon style is kept at first")
+    expect(AorusIconLook.set(look: "pixel", amount: 2.0) && AorusIconLook.current()?.look == "pixel" && AorusIconLook.current()?.amount == 2.0, "a look is kept with its strength")
+    expect(AorusIconLook.set(look: "pixel", amount: 2.0) && iconLookChanges == 1, "the same look again redraws nothing")
+    expect(AorusIconLook.set(look: "glow", amount: 99.0) && AorusIconLook.current()?.amount == AorusPluginIcons.lookAmounts["glow"]?.maximum, "a strength is brought inside its range")
+    expect(AorusIconLook.set(look: "bold") && AorusIconLook.current()?.amount == AorusPluginIcons.lookAmounts["bold"]?.standard, "a look without a strength takes its usual one")
+    expect(!AorusIconLook.set(look: "sparkle") && AorusIconLook.current()?.look == "bold", "a look the icons cannot take is refused and the last one stays")
+    expect(AorusIconLook.set(look: AorusIconLook.none) && AorusIconLook.current()?.look == AorusIconLook.none, "Telegram's own icons can be kept over a plugin's style")
+    expect(AorusIconLook.set(look: nil) && AorusIconLook.current() == nil && UserDefaults.standard.object(forKey: AorusIconLook.defaultsKey) == nil, "forgetting the choice leaves nothing stored")
+    expect(iconLookChanges == 5, "every change redraws the icons")
+    NotificationCenter.default.removeObserver(iconLookObserver)
+    if let savedIconLook { UserDefaults.standard.set(savedIconLook, forKey: AorusIconLook.defaultsKey) }
+
     // Icons in place of Telegram's: the catalogue, the check, the merge, and a plugin using them.
     expect(AorusPluginPermission.requestedBySource("aorus.icons.set({ 'tab.chats': 'star' });").contains(.appCustomization), "replacing an icon asks for app customization")
     expect(AorusPluginPermission.requestedBySource("aorus.icons.style('pixel');").contains(.appCustomization), "styling the icons asks for app customization")

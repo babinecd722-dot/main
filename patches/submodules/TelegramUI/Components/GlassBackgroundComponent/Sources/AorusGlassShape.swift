@@ -6,12 +6,14 @@ import Display
 // is laid out with: its shapes, its corners and the colour Telegram gives a pane.
 
 extension AorusGlassStyle {
-    /// The shape Telegram asked for, as round as the style makes it.
+    /// The shape Telegram asked for, as round as the style makes it. A pixel pane is square to
+    /// Telegram: the glass clips what it holds to its own corners, and the plate's steps, drawn
+    /// inside it, would be cut round.
     func shape(_ shape: GlassBackgroundView.Shape) -> GlassBackgroundView.Shape {
-        if self.roundness >= 1.0 {
+        if self.roundness >= 1.0 && !self.isPixel {
             return shape
         }
-        let factor = self.roundness
+        let factor = self.isPixel ? 0.0 : self.roundness
         switch shape {
         case let .roundedRect(cornerRadius):
             return .roundedRect(cornerRadius: cornerRadius * factor)

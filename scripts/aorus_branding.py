@@ -19915,6 +19915,7 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
 
     private var aorusRequest: AorusGlassRequest?
     private var aorusAppliedStyle: AorusGlassStyle?
+    private var aorusAppliedKind: TintColor.Kind?
     private var aorusObservesStyle: Bool = false
     private var aorusDecorationView: AorusGlassDecorationView?
     private var aorusHaloView: AorusGlassHaloView?
@@ -19948,7 +19949,13 @@ _AORUS_GLASS_UPDATE_WRAPPER = r'''    // AorusGram: the glass as the person chos
         default:
             break
         }
-        self.aorusTelegramUpdate(size: request.size, shape: shape, isDark: request.isDark, tintColor: tintColor, isInteractive: request.isInteractive, isVisible: request.isVisible && !style.replacesGlass, transition: transition)
+        // Before it animates to new glass, Telegram compares only the tint. With the style's
+        // tint on both, clear glass and the regular kind compare equal, and a change from one
+        // to the other would never be put in: it is put in at once instead.
+        let kindChanged = self.aorusAppliedKind.map { $0 != tintColor.kind } ?? false
+        self.aorusAppliedKind = tintColor.kind
+        let glassTransition: ComponentTransition = kindChanged && style.tint != nil ? .immediate : transition
+        self.aorusTelegramUpdate(size: request.size, shape: shape, isDark: request.isDark, tintColor: tintColor, isInteractive: request.isInteractive, isVisible: request.isVisible && !style.replacesGlass, transition: glassTransition)
         self.aorusUpdateDecoration(style: style, request: request, transition: transition, styleChanged: styleChanged)
     }
 

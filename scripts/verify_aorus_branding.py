@@ -4172,6 +4172,14 @@ def main() -> None:
         ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallBubbleSettings()"),
         ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "AorusBubbleSettingsRoute.register"),
         ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "bar.previousItem = .item(self.previousBarItem)"),
+        # Pixel is the whole pixel look: the icons follow the material, and the screen offers
+        # every icon style the plugins have.
+        ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "aorusPixelModeChanged(from: previous, to: aorusGlassMaterialNow(dark: dark))"),
+        ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "return AorusIconLookItem(presentationData: presentationData, row: row"),
+        # A pixel pane is square to Telegram, whose glass clips what it holds round, and a new
+        # material is put in at once when the tint would otherwise hide the change.
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/AorusGlassShape.swift", "let factor = self.isPixel ? 0.0 : self.roundness"),
+        ("submodules/TelegramUI/Components/GlassBackgroundComponent/Sources/GlassBackgroundComponent.swift", "kindChanged && style.tint != nil ? .immediate : transition"),
         ("submodules/AorusGramUI/Sources/AorusSettingsShortcuts.swift", "public enum AorusBubbleSettingsRoute"),
         ("submodules/AorusGramUI/Sources/AorusGramController.swift", "AorusBubbleSettingsRoute.make(context)"),
     ]
@@ -4198,7 +4206,15 @@ def main() -> None:
         ("submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AccessoryItemIconButton.swift", "AccessoryItemIconButton.aorusStillImage(item: item)"),
         ("submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderButtonNode.swift", "AorusPluginIconValues.affects(\"Peer Info/ButtonMore\") ? nil : \"anim_profilemore\""),
         ("submodules/AorusGramUI/Sources/Features/Plugins/AorusBundleIconNames.swift", "static let all: [String] = ["),
+        # The person's own icon style from Bubble Settings goes in after every plugin's layer,
+        # and `none` keeps Telegram's icons over a plugin's style.
+        ("submodules/Display/Source/AorusPluginIconValues.swift", 'personLookKey = "aorusgram_icon_look"'),
+        ("submodules/Display/Source/AorusPluginIconValues.swift", 'private static let personLayer = "~aorusgram.person"'),
+        ("submodules/Display/Source/AorusPluginIconValues.swift", 'style = (spec["look"] as? String) == "none" ? nil : spec'),
+        ("submodules/Display/Source/AorusPluginIconValues.swift", "public static func preview(_ image: UIImage, look: String, amount: CGFloat) -> UIImage?"),
     ]
+    if icons_core.is_file() and 'defaultsKey = "aorusgram_icon_look"' not in icons_core.read_text(encoding="utf-8"):
+        err.append("PluginIcons: Bubble Settings and the drawing code keep the person's icon style under different keys")
     for relative, marker in icon_checks:
         target = tg / relative
         if not target.is_file() or marker not in target.read_text(encoding="utf-8"):
