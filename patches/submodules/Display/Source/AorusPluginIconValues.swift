@@ -1491,69 +1491,297 @@ public enum AorusPluginIconValues {
         return result
     }
 
-    /// Blocks of `cell` pixels on a grid centred on the icon, each one on or off by how much of
-    /// it the icon covers and in the average colour of what it covers. A low cut keeps a thin
-    /// line whole.
+    /// Pixel art of an icon: a grid of blocks `cell` device pixels wide, each one empty or solid
+    /// in one of the icon's own colours.
+    ///
+    /// Taking every block that an icon covered a little of, in the average colour under it,
+    /// filled the gap between two shapes, smeared a gear's spokes into one blot and mixed a white
+    /// glyph into its coloured plate. So the grid is first placed where the icon's edges fall on
+    /// block edges, and a block is solid when the icon covers half of it. A thin stroke covers
+    /// less than half of every block it crosses, so a block that holds more of the stroke than
+    /// the blocks either side of it stays too, which keeps the line one block wide and unbroken;
+    /// a narrow gap is kept the same way the other way round. Each solid block takes one of the
+    /// icon's few colours, and a smaller colour's thin detail — a glyph on a plate — is drawn on
+    /// top rather than voted away by the plate around it.
     private static func pixelated(_ pixels: Pixels, cell: Int) -> Pixels {
         let width = pixels.width
         let height = pixels.height
+        var output = Pixels(width: width, height: height, data: [UInt8](repeating: 0, count: width * height * 4))
+        guard cell >= 1, width > 0, height > 0 else {
+            return output
+        }
+        var alpha = [Float](repeating: 0.0, count: width * height)
+        var peak: Float = 0.0
         var minX = width
         var minY = height
         var maxX = -1
         var maxY = -1
         for y in 0 ..< height {
-            for x in 0 ..< width where pixels.data[(y * width + x) * 4 + 3] > 5 {
-                minX = min(minX, x)
-                maxX = max(maxX, x)
-                minY = min(minY, y)
-                maxY = max(maxY, y)
+            for x in 0 ..< width {
+                let value = Float(pixels.data[(y * width + x) * 4 + 3]) / 255.0
+                alpha[y * width + x] = value
+                peak = max(peak, value)
+                if value > 5.0 / 255.0 {
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
+                }
             }
         }
-        var output = Pixels(width: width, height: height, data: [UInt8](repeating: 0, count: width * height * 4))
-        guard maxX >= minX, maxY >= minY else {
+        guard maxX >= minX, maxY >= minY, peak > 0.0 else {
             return output
         }
-        let centerX = Double(minX + maxX + 1) * 0.5
-        let centerY = Double(minY + maxY + 1) * 0.5
-        let shiftX = ((Int(centerX.rounded()) % cell) + cell) % cell
-        let shiftY = ((Int(centerY.rounded()) % cell) + cell) % cell
-        let area = Float(cell * cell)
-        var cellY = shiftY - cell
-        while cellY < height {
-            var cellX = shiftX - cell
-            while cellX < width {
-                var alpha: Float = 0.0
-                var red: Float = 0.0
-                var green: Float = 0.0
-                var blue: Float = 0.0
-                for y in max(0, cellY) ..< min(height, cellY + cell) {
-                    for x in max(0, cellX) ..< min(width, cellX + cell) {
-                        let offset = (y * width + x) * 4
-                        red += Float(pixels.data[offset])
-                        green += Float(pixels.data[offset + 1])
-                        blue += Float(pixels.data[offset + 2])
-                        alpha += Float(pixels.data[offset + 3])
-                    }
-                }
-                if alpha / 255.0 / area >= 0.22 {
-                    let r = UInt8(min(255.0, red / alpha * 255.0))
-                    let g = UInt8(min(255.0, green / alpha * 255.0))
-                    let b = UInt8(min(255.0, blue / alpha * 255.0))
-                    for y in max(0, cellY) ..< min(height, cellY + cell) {
-                        for x in max(0, cellX) ..< min(width, cellX + cell) {
-                            let offset = (y * width + x) * 4
-                            output.data[offset] = r
-                            output.data[offset + 1] = g
-                            output.data[offset + 2] = b
-                            output.data[offset + 3] = 255
-                        }
-                    }
-                }
-                cellX += cell
+        // An icon drawn see-through all over is as solid as it gets, not half missing.
+        for index in 0 ..< alpha.count {
+            alpha[index] = min(1.0, alpha[index] / peak)
+        }
+
+        // Summed coverage, so any block's share is four reads whatever the grid's offset.
+        let rowLength = width + 1
+        var summed = [Float](repeating: 0.0, count: (width + 1) * (height + 1))
+        for y in 0 ..< height {
+            var row: Float = 0.0
+            for x in 0 ..< width {
+                row += alpha[y * width + x]
+                summed[(y + 1) * rowLength + x + 1] = summed[y * rowLength + x + 1] + row
             }
-            cellY += cell
+        }
+        let area = Float(cell * cell)
+        func coverage(_ x0: Int, _ y0: Int) -> Float {
+            let xa = max(0, x0)
+            let xb = min(width, x0 + cell)
+            let ya = max(0, y0)
+            let yb = min(height, y0 + cell)
+            guard xa < xb, ya < yb else {
+                return 0.0
+            }
+            let total = summed[yb * rowLength + xb] - summed[ya * rowLength + xb] - summed[yb * rowLength + xa] + summed[ya * rowLength + xa]
+            return total / area
+        }
+        let columns = (width - 1) / cell + 2
+        let rows = (height - 1) / cell + 2
+
+        // The offset at which blocks are most nearly all full or all empty, the centred grid
+        // when another is no crisper.
+        let centeredX = ((Int((Double(minX + maxX + 1) * 0.5).rounded()) % cell) + cell) % cell
+        let centeredY = ((Int((Double(minY + maxY + 1) * 0.5).rounded()) % cell) + cell) % cell
+        var bestCost = Float.greatestFiniteMagnitude
+        var offsetX = centeredX
+        var offsetY = centeredY
+        for shiftY in 0 ..< cell {
+            for shiftX in 0 ..< cell {
+                var cost: Float = 0.0
+                for row in 0 ..< rows {
+                    for column in 0 ..< columns {
+                        let value = coverage(shiftX - cell + column * cell, shiftY - cell + row * cell)
+                        cost += min(value, 1.0 - value)
+                    }
+                }
+                let distanceX = min(abs(shiftX - centeredX), cell - abs(shiftX - centeredX))
+                let distanceY = min(abs(shiftY - centeredY), cell - abs(shiftY - centeredY))
+                cost += Float(distanceX + distanceY) * 0.02
+                if cost < bestCost {
+                    bestCost = cost
+                    offsetX = shiftX
+                    offsetY = shiftY
+                }
+            }
+        }
+        let originX = offsetX - cell
+        let originY = offsetY - cell
+        var ink = [Float](repeating: 0.0, count: columns * rows)
+        for row in 0 ..< rows {
+            for column in 0 ..< columns {
+                ink[row * columns + column] = coverage(originX + column * cell, originY + row * cell)
+            }
+        }
+        let solid = pixelBlocks(ink, columns: columns, rows: rows, low: 0.2)
+
+        // The icon's own colours: those of its solid pixels, near ones taken as one.
+        let colors = pixelPalette(pixels, alpha: alpha)
+        guard !colors.isEmpty else {
+            return output
+        }
+        var layers = [[Float]](repeating: [Float](repeating: 0.0, count: columns * rows), count: colors.count)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let value = alpha[y * width + x]
+                guard value > 0.0 else {
+                    continue
+                }
+                let offset = (y * width + x) * 4
+                let raw = Float(pixels.data[offset + 3])
+                let red = Float(pixels.data[offset]) / raw
+                let green = Float(pixels.data[offset + 1]) / raw
+                let blue = Float(pixels.data[offset + 2]) / raw
+                var nearest = 0
+                var nearestDistance = Float.greatestFiniteMagnitude
+                for (index, color) in colors.enumerated() {
+                    let distance = (red - color.red) * (red - color.red) + (green - color.green) * (green - color.green) + (blue - color.blue) * (blue - color.blue)
+                    if distance < nearestDistance {
+                        nearestDistance = distance
+                        nearest = index
+                    }
+                }
+                let column = (x - originX) / cell
+                let row = (y - originY) / cell
+                layers[nearest][row * columns + column] += value / area
+            }
+        }
+        var choice = [Int](repeating: 0, count: columns * rows)
+        for index in 0 ..< choice.count {
+            var most: Float = -1.0
+            for layer in 0 ..< layers.count where layers[layer][index] > most {
+                most = layers[layer][index]
+                choice[index] = layer
+            }
+        }
+        let byArea = (0 ..< layers.count).sorted { layers[$0].reduce(0, +) > layers[$1].reduce(0, +) }
+        for layer in byArea.dropFirst() {
+            let detail = pixelBlocks(layers[layer], columns: columns, rows: rows, low: 0.25)
+            for index in 0 ..< choice.count where solid[index] && detail[index] && layers[layer][index] >= 0.2 {
+                choice[index] = layer
+            }
+        }
+
+        let opacity = peak
+        for row in 0 ..< rows {
+            for column in 0 ..< columns where solid[row * columns + column] {
+                let color = colors[choice[row * columns + column]]
+                let red = UInt8(min(255.0, (color.red * opacity * 255.0).rounded()))
+                let green = UInt8(min(255.0, (color.green * opacity * 255.0).rounded()))
+                let blue = UInt8(min(255.0, (color.blue * opacity * 255.0).rounded()))
+                let coverAlpha = UInt8(min(255.0, (opacity * 255.0).rounded()))
+                let x0 = originX + column * cell
+                let y0 = originY + row * cell
+                for y in max(0, y0) ..< min(height, y0 + cell) {
+                    for x in max(0, x0) ..< min(width, x0 + cell) {
+                        let offset = (y * width + x) * 4
+                        output.data[offset] = red
+                        output.data[offset + 1] = green
+                        output.data[offset + 2] = blue
+                        output.data[offset + 3] = coverAlpha
+                    }
+                }
+            }
         }
         return output
+    }
+
+    /// Which blocks of a coverage grid are solid: those at least half covered, a block that
+    /// holds more of a thin stroke than its neighbours across it, and not a block that holds
+    /// less than its neighbours across a narrow gap. A tie goes to the first of the two blocks,
+    /// so a stroke split evenly between two of them is still one block wide.
+    private static func pixelBlocks(_ grid: [Float], columns: Int, rows: Int, low: Float) -> [Bool] {
+        let high: Float = 0.5
+        let gap: Float = 0.8
+        let step: Float = 0.15
+        let directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+        func value(_ row: Int, _ column: Int) -> Float {
+            guard row >= 0, row < rows, column >= 0, column < columns else {
+                return 0.0
+            }
+            return grid[row * columns + column]
+        }
+        var result = [Bool](repeating: false, count: columns * rows)
+        for row in 0 ..< rows {
+            for column in 0 ..< columns {
+                let current = grid[row * columns + column]
+                if current < high {
+                    guard current >= low else {
+                        continue
+                    }
+                    for (dy, dx) in directions {
+                        let before = value(row - dy, column - dx)
+                        let after = value(row + dy, column + dx)
+                        if current > before && current >= after && current - min(before, after) >= step {
+                            result[row * columns + column] = true
+                            break
+                        }
+                    }
+                } else {
+                    var open = false
+                    if current < gap {
+                        for (dy, dx) in directions {
+                            let before = value(row - dy, column - dx)
+                            let after = value(row + dy, column + dx)
+                            if current < before && current <= after && min(before, after) - current >= step && min(before, after) >= high {
+                                open = true
+                                break
+                            }
+                        }
+                    }
+                    result[row * columns + column] = !open
+                }
+            }
+        }
+        return result
+    }
+
+    /// Up to four colours an icon is drawn in, the most used first: its solid pixels' colours,
+    /// rounded and counted, each kept when it is not near one already taken and covers a
+    /// thirtieth of the icon, then made the average of the pixels nearest it.
+    private static func pixelPalette(_ pixels: Pixels, alpha: [Float]) -> [(red: Float, green: Float, blue: Float)] {
+        var counts: [Int: Int] = [:]
+        var total = 0
+        for index in 0 ..< alpha.count where alpha[index] >= 0.5 {
+            let offset = index * 4
+            let raw = Float(pixels.data[offset + 3])
+            guard raw > 0.0 else {
+                continue
+            }
+            let red = Int((Float(pixels.data[offset]) / raw * 15.0).rounded())
+            let green = Int((Float(pixels.data[offset + 1]) / raw * 15.0).rounded())
+            let blue = Int((Float(pixels.data[offset + 2]) / raw * 15.0).rounded())
+            counts[red * 256 + green * 16 + blue, default: 0] += 1
+            total += 1
+        }
+        guard total > 0 else {
+            return []
+        }
+        var colors: [(red: Float, green: Float, blue: Float)] = []
+        for (key, count) in counts.sorted(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }) {
+            if Float(count) < Float(total) * 0.03 {
+                break
+            }
+            let candidate = (red: Float((key >> 8) & 15) / 15.0, green: Float((key >> 4) & 15) / 15.0, blue: Float(key & 15) / 15.0)
+            let distinct = colors.allSatisfy { abs($0.red - candidate.red) + abs($0.green - candidate.green) + abs($0.blue - candidate.blue) > 0.25 }
+            if distinct {
+                colors.append(candidate)
+            }
+            if colors.count == 4 {
+                break
+            }
+        }
+        var sums = [(red: Float, green: Float, blue: Float, count: Float)](repeating: (0.0, 0.0, 0.0, 0.0), count: colors.count)
+        for index in 0 ..< alpha.count where alpha[index] >= 0.5 {
+            let offset = index * 4
+            let raw = Float(pixels.data[offset + 3])
+            guard raw > 0.0 else {
+                continue
+            }
+            let red = Float(pixels.data[offset]) / raw
+            let green = Float(pixels.data[offset + 1]) / raw
+            let blue = Float(pixels.data[offset + 2]) / raw
+            var nearest = 0
+            var nearestDistance = Float.greatestFiniteMagnitude
+            for (position, color) in colors.enumerated() {
+                let distance = (red - color.red) * (red - color.red) + (green - color.green) * (green - color.green) + (blue - color.blue) * (blue - color.blue)
+                if distance < nearestDistance {
+                    nearestDistance = distance
+                    nearest = position
+                }
+            }
+            sums[nearest].red += red
+            sums[nearest].green += green
+            sums[nearest].blue += blue
+            sums[nearest].count += 1.0
+        }
+        for index in 0 ..< colors.count where sums[index].count > 0.0 {
+            colors[index] = (min(1.0, sums[index].red / sums[index].count), min(1.0, sums[index].green / sums[index].count), min(1.0, sums[index].blue / sums[index].count))
+        }
+        return colors
     }
 }
 
