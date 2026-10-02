@@ -2207,11 +2207,8 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: maximum, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setShape("bubble.radiusSmall", Int(value))
             })
-        case let .width(title, value, isSet):
-            let defaultText = aorusL("По умолчанию", "Default")
-            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.5, maximum: 1.0, step: 0.01, valueText: { current in
-                return !isSet && current == value ? defaultText : aorusLookPercent(current)
-            }, sizeMarks: false, sectionId: self.section, changed: { current in
+        case let .width(title, value, _):
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.5, maximum: 1.0, step: 0.01, valueText: aorusLookPercent, sizeMarks: false, sectionId: self.section, changed: { current in
                 arguments.setShape("bubble.width", Double(current))
             })
         case let .side(incoming, outgoing, isOutgoing):
@@ -2226,6 +2223,8 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.setShape(key, current <= 0.0 ? nil : Double(1.0 - current))
             })
         case let .shadow(title, key, value, isSet):
+            // Until it is set, the bubbles keep the theme's own shadow, which no share of this
+            // slider describes.
             let defaultText = aorusL("По умолчанию", "Default")
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 1.0, step: 0.01, valueText: { current in
                 return !isSet && current == value ? defaultText : aorusLookPercent(current)
@@ -2269,7 +2268,7 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: CGFloat(index), minimum: 0.0, maximum: CGFloat(aorusLookTextSizes.count - 1), step: 1.0, valueText: { value in
                 let size = aorusLookTextSizes[max(0, min(aorusLookTextSizes.count - 1, Int(value)))]
                 return aorusL("%@ пт", "%@ pt").replacingOccurrences(of: "%@", with: "\(Int(size.baseDisplaySize))")
-            }, sizeMarks: true, sectionId: self.section, changed: { value in
+            }, sizeMarks: false, sectionId: self.section, changed: { value in
                 arguments.setTextSize(max(0, min(AorusPluginAppearance.fontSizes.count - 1, Int(value))))
             })
         case let .textWeight(title, index):
@@ -2466,6 +2465,72 @@ final class AorusLookThrottle {
     }
 }
 
+/// For a setting that redraws the whole app: the change is put in once the finger rests, and
+/// at most `interval` after the first change still waiting while it keeps moving.
+///
+/// Message Settings redraws every screen with each change — the theme, the bubbles, the
+/// layout — and putting one in every 80 ms, as the glass does, held the main thread for most of
+/// each interval: the slider stuck and jumped under the finger. Now nothing is redrawn while the
+/// finger moves, the preview follows the moment it stops, and a long drag still shows its way.
+final class AorusLookSettleThrottle {
+    private final class Lane {
+        var pending: (() -> Void)?
+        var firstPendingAt: Double = 0.0
+        var generation = 0
+    }
+
+    private let settle: Double
+    private let interval: Double
+    private var lanes: [String: Lane] = [:]
+
+    init(settle: Double = 0.12, interval: Double = 0.6) {
+        self.settle = settle
+        self.interval = interval
+    }
+
+    func run(_ key: String, _ action: @escaping () -> Void) {
+        let lane: Lane
+        if let current = self.lanes[key] {
+            lane = current
+        } else {
+            lane = Lane()
+            self.lanes[key] = lane
+        }
+        let now = CACurrentMediaTime()
+        if lane.pending == nil {
+            lane.firstPendingAt = now
+        }
+        lane.pending = action
+        lane.generation += 1
+        if now - lane.firstPendingAt >= self.interval {
+            self.fire(lane)
+            return
+        }
+        let generation = lane.generation
+        // Held until it fires: a change made just before the screen is closed is still put in.
+        DispatchQueue.main.asyncAfter(deadline: .now() + self.settle, execute: {
+            guard lane.generation == generation else {
+                return
+            }
+            self.fire(lane)
+        })
+    }
+
+    private func fire(_ lane: Lane) {
+        let action = lane.pending
+        lane.pending = nil
+        action?()
+    }
+
+    /// Drops what is still waiting: a style or a reset replaces it.
+    func cancelAll() {
+        for lane in self.lanes.values {
+            lane.pending = nil
+            lane.generation += 1
+        }
+    }
+}
+
 /// The theme the screen is drawn with, for the few things decided outside a redraw: which
 /// appearance a colour is kept for, and the colour a picker opens on.
 final class AorusLookScreenContext {
@@ -2535,7 +2600,7 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
         statePromise.set(stateValue.modify { f($0) })
     }
     let screen = AorusLookScreenContext()
-    let throttle = AorusLookThrottle()
+    let throttle = AorusLookSettleThrottle()
     weak var weakController: ItemListController?
 
     let arguments = AorusMessageSettingsArguments(
