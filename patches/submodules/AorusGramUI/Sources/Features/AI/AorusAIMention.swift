@@ -731,19 +731,24 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
                 guard textStorage.attribute(.aorusAIMathLaTeX, at: index, effectiveRange: nil) != nil else { continue }
                 let glyph = layoutManager.glyphIndexForCharacter(at: index)
                 guard glyph < layoutManager.numberOfGlyphs else { continue }
-                let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-                let location = layoutManager.location(forGlyphAt: glyph)
                 let bounds = attachment.bounds
                 guard bounds.width > 0.0, bounds.height > 0.0 else { continue }
-                // The attachment's bounds are measured from the baseline, upwards; its
-                // origin sits `bounds.minY` below it (negative: a descent).
-                let baseline = line.minY + location.y
-                let frame = CGRect(
-                    x: line.minX + location.x,
-                    y: baseline - bounds.minY - bounds.height,
-                    width: bounds.width,
-                    height: bounds.height
-                )
+                // Where the layout puts the drawing, as the layout itself reports it. Working it
+                // out from the baseline and the attachment's offset gave a frame a descent too
+                // low — the layout places an attachment's glyph at its lowered origin — so a
+                // tall fraction was highlighted from its middle down and not at all above.
+                let placed = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textContainer)
+                let frame: CGRect
+                if placed.height >= bounds.height - 1.0 && placed.height <= bounds.height + 1.0 && !placed.isNull && !placed.isInfinite {
+                    frame = CGRect(x: placed.minX, y: placed.minY, width: max(placed.width, bounds.width), height: placed.height)
+                } else {
+                    // The baseline, and the attachment's own height above and below it.
+                    let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+                    let used = layoutManager.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+                    let location = layoutManager.location(forGlyphAt: glyph)
+                    let top = max(used.minY, line.minY + location.y - bounds.minY - bounds.height)
+                    frame = CGRect(x: line.minX + location.x, y: min(top, used.maxY - bounds.height), width: bounds.width, height: bounds.height)
+                }
                 frames.append((index, frame.offsetBy(dx: textContainerInset.left, dy: textContainerInset.top)))
             }
         }
