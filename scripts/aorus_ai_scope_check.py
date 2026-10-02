@@ -54,6 +54,9 @@ def declared_names(root: Path, pattern: re.Pattern) -> set:
 # Bazel dependency of the module, or the build dies an hour in with "no such module".
 SYSTEM_MODULES = {
     "Foundation",
+    "CoreFoundation",
+    # swift-corelibs exposes URLSession here, inside canImport on Linux only.
+    "FoundationNetworking",
     "UIKit",
     "CoreGraphics",
     "CoreText",

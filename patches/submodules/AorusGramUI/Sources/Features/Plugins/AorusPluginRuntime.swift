@@ -1290,6 +1290,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     init(context: AccountContext, manager: AorusPluginRuntimeManager) {
         self.currentContext = context
         self.manager = manager
+        AorusPluginMTProto.shared.bind(accountId: context.account.id.int64)
     }
 
     /// `accounts.switchTo` calls waiting for their account to be the one on screen, by token.
@@ -1306,12 +1307,14 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         let arrived = pendingSwitches.filter { $0.value.accountId == context.account.id }
         arrived.keys.forEach { pendingSwitches[$0] = nil }
         contextLock.unlock()
+        AorusPluginMTProto.shared.bind(accountId: context.account.id.int64)
         arrived.values.forEach { $0.completion(.success(())) }
     }
 
     var pluginExecutionAllowed: Bool { AorusPluginEntitlement.isAllowed }
 
     func clearPluginState(_ pluginId: String) {
+        AorusPluginMTProto.shared.cancelAll(pluginId: pluginId)
         aiLock.lock()
         let stream = aiStreams.removeValue(forKey: pluginId)
         let turnId = aiTurnIds.removeValue(forKey: pluginId)
@@ -2364,6 +2367,15 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        if action.hasPrefix("mtproto.") {
+            guard AorusPluginEntitlement.isAllowed,
+                  manager?.isPermissionGranted(.mtproto, pluginId: pluginId) == true else {
+                completion(.failure(AorusPluginRequestError("MTProto permission is not granted")))
+                return
+            }
+            AorusPluginMTProto.shared.perform(pluginId: pluginId, context: context, action: action, payload: payload, completion: completion)
+            return
+        }
         let writes = action == "tree.mutate" || action.hasPrefix("objc.")
             || (action == "hook.define" && (payload["mode"] as? String) == "replace")
         let required: AorusPluginPermission = writes ? .appInternalsWrite : .appInternals

@@ -67,6 +67,18 @@ jobs:
       - name: Plugin prelude preflight
         run: python3 aorusgram/scripts/plugin_prelude_check.py aorusgram
 
+      - name: Plugin system JavaScript preflight
+        run: python3 aorusgram/scripts/plugin_system_prelude_check.py aorusgram
+
+      - name: Plugin network profile preflight
+        run: |
+          mkdir -p /tmp/aorus-plugin-scope
+          swiftc -warnings-as-errors \
+            aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginNetworkScope.swift \
+            aorusgram/scripts/tests/AorusPluginNetworkScopeTests.swift \
+            -o /tmp/aorus-plugin-scope/tests
+          /tmp/aorus-plugin-scope/tests
+
       # A requirement added to a protocol with the test double updated and the real host not
       # is invisible to every other check here and costs a full Bazel run to find out. Run
       # 496 died twenty-nine minutes in on three of them.
@@ -770,6 +782,10 @@ jobs:
           TG=telegram-ios
           PEER=$TG/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen
 
+          # The plugin TL bridge is generated from the exact API layer being built.
+          cp $PATCHES/submodules/TelegramApi/Sources/AorusPluginTL.swift $TG/submodules/TelegramApi/Sources/
+          python3 aorusgram/scripts/gen_plugin_tl.py $TG/submodules/TelegramApi/Sources $TG/submodules/TelegramApi/Sources/AorusPluginTL.generated.swift
+
           # 0. AorusGram core (ClientSpoofManager, AorusGramBootstrap, etc.) — must link into TelegramUI
           mkdir -p $TG/submodules/AorusGram
           rm -rf $TG/submodules/AorusGram/Sources
@@ -975,6 +991,12 @@ jobs:
       # file that does not match it fails the build the same as a corrupted download would.
       # Caching it is what makes a build survive GitHub's release CDN being unavailable,
       # which cost a run: five consecutive 504s inside a 27-second retry window.
+      - name: Plugin Telegram API and native transport preflight
+        run: |
+          python3 aorusgram/scripts/plugin_tl_check.py aorusgram \
+            telegram-ios/submodules/TelegramApi/Sources --export-api /tmp/aorus-plugin-api
+          python3 aorusgram/scripts/plugin_system_native_check.py aorusgram /tmp/aorus-plugin-api
+
       - name: Restore pinned libXray archive
         id: libxray-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4

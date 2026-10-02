@@ -24,8 +24,8 @@ private enum AorusPluginCoreTests {
 static func main() {
 expect(AorusPluginStore.normalizedIdentifier("../license") == nil, "path traversal id is rejected")
 expect(AorusPluginStore.normalizedIdentifier(UUID().uuidString) != nil, "UUID id is accepted")
-expect(AorusPluginSandbox.isBlocked(host: "ai.aorusgram.com"), "control-plane host is blocked")
-expect(AorusPluginSandbox.isBlocked(host: "AI.AORUSGRAM.COM."), "control-plane host with a trailing dot is blocked")
+expect(!AorusPluginSandbox.isBlocked(host: "ai.aorusgram.com"), "a public host is not blocked by brand")
+expect(!AorusPluginSandbox.isBlocked(host: "AI.AORUSGRAM.COM."), "public host normalization preserves access")
 expect(AorusPluginSandbox.isBlocked(host: "127.0.0.1"), "IPv4 loopback is blocked")
 expect(AorusPluginSandbox.isBlocked(host: "::ffff:127.0.0.1"), "IPv4-mapped loopback is blocked")
 expect(AorusPluginSandbox.isBlocked(host: "::127.0.0.1"), "IPv4-compatible loopback is blocked")

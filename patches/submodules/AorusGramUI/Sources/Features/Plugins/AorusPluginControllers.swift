@@ -2553,7 +2553,7 @@ private enum AorusPluginDocumentation {
     static var text: String {
         if AorusLang.current == .ru {
             return """
-            AorusGram Plugin API v1
+            AorusGram Plugin API v1.1
 
             Среда выполнения
             Каждый плагин работает в отдельном контексте JavaScriptCore. У него нет доступа к файловой системе, нативным модулям, Keychain, лицензии, внутренним компонентам AorusAI или туннелю. Опасные возможности включаются только после подтверждения, а любое изменение кода отзывает все выданные разрешения.
@@ -2616,9 +2616,37 @@ private enum AorusPluginDocumentation {
             Типы полей: toggle, text, multiline, number и select. Для number доступны min/max, для select — options: [{ value, title }]. Значения обязаны быть JSON-совместимыми.
 
             Сеть
-            await aorus.http.fetch(url, { method: 'GET', headers: {}, timeout: 30000 })
-            Запросы выполняются в отдельной сессии без cookies. Локальная сеть, loopback, служебные домены AorusGram и перенаправления на них заблокированы.
-            Ответ содержит status, ok, url, headers, text() и json(). Методы: GET, HEAD, POST, PUT, PATCH, DELETE. При междоменном перенаправлении Authorization удаляется.
+            await aorus.http.fetch(url, { method: 'GET', headers: {}, timeout: 30 })
+            await aorus.network.configure({ access: 'all', hosts: ['localhost', '*.example.com'], ports: [8080, 443], redirects: 'sameOrigin' })
+            await aorus.network.profile(), aorus.network.reset(), aorus.network.check(url, { webSocket: false })
+            Профиль public по умолчанию требует публичный адрес; all включает localhost и локальную сеть. Пустые hosts и ports не ограничивают адреса. Точное имя включает только этот хост, *.example.com — его поддомены без самого example.com. До 64 имён и 64 портов от 1 до 65535. Домены AorusGram доступны как обычные адреса, без подписей и ключей клиента.
+            redirects: allowed проверяет профиль при каждом переходе, sameOrigin сохраняет схему, хост и порт, manual возвращает ответ 3xx. До пяти переходов. При смене origin пользовательские заголовки удаляются, кроме Accept, Accept-Language, Content-Type и User-Agent. TLS проверяется штатно. Профиль действует на новые запросы текущего запуска; начатый запрос сохраняет свой профиль.
+            Сессия не использует общие cookies, сохранённые пароли и кеш. Авторизацию и cookies плагин передаёт явно. Ответ содержит status, ok, url, headers, text(), json() и base64(). Для двоичного тела используйте bodyBase64 вместо body. Метод HTTP можно указать самостоятельно. Тело до 2 МБ, ответ до 5 МБ; лимит проверяется во время загрузки.
+            await aorus.http.download(url, 'archive.zip'), aorus.http.upload(url, 'report.txt', { method: 'PUT' })
+            Файлы до 32 МБ, в папке плагина, с тем же сетевым профилем. await aorus.ws.open('ws://localhost:8080', handler) открывает сокет; socket.send(value) и socket.close() отправляют и закрывают. Заголовки handshake передаются третьим аргументом open: { headers: { Authorization: 'Bearer own-key' } }. До двух сокетов, кадр до 1 МБ; слишком большой кадр закрывает соединение. WebSocket не следует перенаправлениям. Остановка плагина отменяет HTTP, закрывает сокеты и сбрасывает профиль.
+
+            Telegram MTProto
+            const info = await aorus.mtproto.info()
+            await aorus.mtproto.methods({ prefix: 'messages.', offset: 0, limit: 20 })
+            await aorus.mtproto.constructors({ prefix: 'inputPeer' })
+            await aorus.mtproto.describeMethod('messages.getHistory'), aorus.mtproto.describeConstructor('inputPeerSelf')
+            Вызовы идут через транспорт текущего аккаунта. Доступны все RPC-методы и TL-конструкторы слоя Telegram API, из которого собран клиент. Нужно разрешение mtproto: оно включает чтение и изменение данных от имени аккаунта. Права на стороне Telegram проверяет сервер.
+            info содержит accountId, peerId, methods, constructors, fingerprint и maximumBytes. Каталог возвращает { items, total, offset, nextOffset }; limit от 1 до 100. Общие формы: catalog('methods' или 'constructors', options), describe(kind, name). Описание содержит TL ID, параметры, их типы, flag и bit для необязательных полей; у метода есть result.
+            const self = aorus.mtproto.construct('inputPeerSelf')
+            const history = await aorus.mtproto.call('messages.getHistory', { peer: self, offsetId: 0, offsetDate: 0, addOffset: 0, limit: 20, maxId: 0, minId: 0, hash: '0' }, { accountId: info.accountId, timeout: 30 })
+            Конструктор — объект { _: 'name', ...fields }. Int64 передавайте десятичной строкой; в ответе он всегда строка. Int32 — целое в 32-битном диапазоне, Double — конечное число, Buffer — { base64: '...' }, Int256 — 64 шестнадцатеричных символа в порядке TL. Векторы — массивы. Api.Bool принимает true, false или конструктор boolTrue, boolFalse; в ответе приходит конструктор. Имена полей — из каталога, например accessHash и randomId.
+            Пропущенные flags и flags2 вычисляются по полям. Явные флаги должны совпадать с полями; поля с общим битом передаются вместе. Биты без отдельного поля задаются через flags. Неизвестные поля и неверные типы отклоняются до отправки.
+            const request = aorus.mtproto.request('help.getConfig', {}, { id: 'config', timeout: 10 })
+            const config = await request.result
+            await request.cancel(), aorus.mtproto.cancel('config'), aorus.mtproto.pending()
+            request возвращает { id, result, cancel }, call — Promise результата. Без id идентификатор создаётся автоматически. ID уникален среди незавершённых запросов этого плагина, до 128 байт. pending возвращает { items: [{ id, accountId }] }, cancel — { cancelled }. Запросы другого плагина недоступны. Переключение аккаунта и остановка плагина отменяют его RPC.
+            timeout от 0.1 до 120 секунд, по умолчанию 30. accountId проверяет аккаунт перед отправкой. automaticFloodWait по умолчанию false; при true ожиданием занимается транспорт в пределах timeout. Ответы Api.Updates передаются менеджеру состояния аккаунта; applyUpdates: false оставляет их плагину. Серверная ошибка отвергает Promise с code, message и method. Отмена не откатывает действие, уже принятое сервером.
+            await aorus.mtproto.batch([{ method: 'help.getConfig', params: {} }, { method: 'help.getNearestDc' }])
+            До 16 вызовов последовательно, результаты в исходном порядке. Первая ошибка прекращает пакет; серверной транзакции нет.
+            const encoded = await aorus.mtproto.encode({ _: 'peerUser', userId: '123' })
+            await aorus.mtproto.decode(encoded.base64), aorus.mtproto.prepare('help.getConfig')
+            await aorus.mtproto.decodeResult(method, params, base64)
+            encode возвращает { base64, bytes } boxed-конструктора, decode разбирает один конструктор. prepare возвращает { method, base64, bytes } запроса до шифрования. decodeResult использует парсер указанного метода, включая векторы. Эти функции не разбирают transport header и зашифрованный MTProto-пакет. До 2 МБ на TL-запрос или ответ, 16384 элементов в векторе, 32 уровней вложенности и 16 незавершённых RPC; они входят в общий лимит запросов к приложению.
 
             Интерфейс
             aorus.ui.toast(text)
@@ -2710,7 +2738,7 @@ private enum AorusPluginDocumentation {
 
             Страница сайта
             aorus.app.openURL, aorus.ui.openURL, aorus.browser.open, строка link и ярлык с url открывают сайт не в Safari, а страницей внутри приложения: с панелью навигации приложения, в его теме и с названием сайта в заголовке. Адреса нет нигде — ни строки адреса, ни домена, ни меню ссылки по долгому нажатию, ни «Открыть в Safari».
-            Cookie и данные сайтов хранятся на диске: вход на сайт сохраняется между открытиями и после перезапуска. Свайп от края идёт назад по истории сайта, а когда идти некуда — закрывает страницу. Потянуть вниз — обновить. Ссылки t.me открываются в Telegram, tel:, mailto: и App Store — только по нажатию. Каждый переход проверяется: loopback, локальная сеть и служебные домены AorusGram отклоняются.
+            Cookie и данные сайтов хранятся на диске: вход на сайт сохраняется между открытиями и после перезапуска. Свайп от края идёт назад по истории сайта, а когда идти некуда — закрывает страницу. Потянуть вниз — обновить. Ссылки t.me открываются в Telegram, tel:, mailto: и App Store — только по нажатию. Каждый переход проверяется: loopback и локальная сеть отклоняются.
 
             Аккаунты
             const accounts = await aorus.accounts.list()
@@ -2834,7 +2862,7 @@ private enum AorusPluginDocumentation {
             Доступны console.log/info/warn/error/debug, setTimeout, setInterval и функции отмены таймеров.
 
             Безопасность
-            Импортированный плагин всегда выключен. Разрешения и значения настроек принадлежат конкретной установке, не экспортируются, а разрешения отзываются при любом изменении исходника. Доступ к AorusAI идет только через ограниченный метод ask. Плагин не имеет API для файловой системы, Keychain, лицензии, VLESS/REALITY credentials, HMAC, сырых настроек или внутренних доменов AorusGram. Защищенные операции повторно проверяют активную лицензию и permission в нативном host.
+            Импортированный плагин выключен. Разрешения и настройки принадлежат установке и не экспортируются; изменение исходника отзывает разрешения. Файловый API работает в папке плагина. HTTP использует сетевой профиль, прямые вызовы Telegram требуют mtproto. Ключи лицензии и VLESS не добавляются к запросам плагина. Нативный host проверяет активную лицензию и разрешение перед выполнением операции.
 
             Маркет и публикация
             Маркет — каталог плагинов, опубликованных авторами, во вкладке «Маркет» на экране плагинов. У каждого плагина есть страница с описанием, автором (имя, аватарка и бейдж из Telegram по его id) и разрешениями. Устанавливается только код, одобренный Маркетом: размер и SHA-256 файла сверяются с карточкой. Установленный плагин выключен; включение показывает его разрешения. Обновление заменяет код, выключает плагин и отзывает разрешения.
@@ -2848,7 +2876,7 @@ private enum AorusPluginDocumentation {
             """
         }
         return """
-    AorusGram Plugin API v1
+    AorusGram Plugin API v1.1
 
     Runtime
     Each plugin runs in a separate JavaScriptCore context. There is no file system, native module loader, eval bridge, Keychain, license, AorusAI internals or tunnel access. Sensitive capabilities require approval and approvals are revoked whenever source code changes.
@@ -2911,9 +2939,37 @@ private enum AorusPluginDocumentation {
     Field types are toggle, text, multiline, number and select. number accepts min/max; select accepts options: [{ value, title }]. Values must be JSON-compatible.
 
     Network
-    await aorus.http.fetch(url, { method: 'GET', headers: {}, timeout: 30000 })
-    Requests use an isolated cookie-free session. Local networks, loopback, AorusGram control-plane domains and redirects to them are blocked.
-    The response exposes status, ok, url, headers, text() and json(). Methods: GET, HEAD, POST, PUT, PATCH and DELETE. Authorization is stripped on cross-origin redirects.
+    await aorus.http.fetch(url, { method: 'GET', headers: {}, timeout: 30 })
+    await aorus.network.configure({ access: 'all', hosts: ['localhost', '*.example.com'], ports: [8080, 443], redirects: 'sameOrigin' })
+    await aorus.network.profile(), aorus.network.reset(), aorus.network.check(url, { webSocket: false })
+    The default public profile requires public addresses; all includes localhost and local networks. Empty hosts and ports do not narrow access. Exact names match one host; *.example.com matches subdomains but not example.com. Up to 64 host names and 64 ports from 1 to 65535. AorusGram domains are ordinary destinations; client keys and signatures are not attached.
+    redirects: allowed checks the profile on every redirect, sameOrigin preserves scheme, host and port, manual returns the 3xx response. Up to five redirects. Changing origin removes custom headers except Accept, Accept-Language, Content-Type and User-Agent. TLS uses normal verification. A profile applies to new requests in this run; an active request keeps its profile.
+    The session does not share cookies, saved credentials or cache. A plugin supplies its own authorization and cookies. Responses expose status, ok, url, headers, text(), json() and base64(). Use bodyBase64 instead of body for binary requests. HTTP methods can be supplied directly. Request bodies are limited to 2 MB and responses to 5 MB, checked while receiving.
+    await aorus.http.download(url, 'archive.zip'), aorus.http.upload(url, 'report.txt', { method: 'PUT' })
+    Files up to 32 MB stay in the plugin directory and use its network profile. await aorus.ws.open('ws://localhost:8080', handler) opens a socket; socket.send(value) and socket.close() send and close. Pass handshake headers as the third open argument: { headers: { Authorization: 'Bearer own-key' } }. Two sockets per plugin, messages up to 1 MB; oversized messages close the connection. WebSocket does not follow redirects. Stopping the plugin cancels HTTP, closes sockets and resets the profile.
+
+    Telegram MTProto
+    const info = await aorus.mtproto.info()
+    await aorus.mtproto.methods({ prefix: 'messages.', offset: 0, limit: 20 })
+    await aorus.mtproto.constructors({ prefix: 'inputPeer' })
+    await aorus.mtproto.describeMethod('messages.getHistory'), aorus.mtproto.describeConstructor('inputPeerSelf')
+    Requests use the current account's transport and all RPC methods and constructors of the API layer built into the client. The mtproto grant covers reading and changing Telegram data as that account. Telegram's server checks the account's rights.
+    info contains accountId, peerId, methods, constructors, fingerprint and maximumBytes. Catalogs return { items, total, offset, nextOffset }; limit is from 1 to 100. General forms: catalog('methods' or 'constructors', options), describe(kind, name). Descriptions contain the TL ID, parameters and types, flag and bit for optional fields, and result for a method.
+    const self = aorus.mtproto.construct('inputPeerSelf')
+    const history = await aorus.mtproto.call('messages.getHistory', { peer: self, offsetId: 0, offsetDate: 0, addOffset: 0, limit: 20, maxId: 0, minId: 0, hash: '0' }, { accountId: info.accountId, timeout: 30 })
+    A constructor is { _: 'name', ...fields }. Pass Int64 as a decimal string; results always use strings. Int32 is a 32-bit integer, Double is finite, Buffer is { base64: '...' }, Int256 is 64 hexadecimal characters in TL byte order. Vectors are arrays. Api.Bool accepts true, false or boolTrue/boolFalse constructors; results use constructors. Field names follow the catalog, such as accessHash and randomId.
+    Omitted flags and flags2 are inferred from fields. Explicit flags must match the fields; fields sharing a bit must appear together. Bits without a field are set through flags. Unknown fields and incorrect types fail before sending.
+    const request = aorus.mtproto.request('help.getConfig', {}, { id: 'config', timeout: 10 })
+    const config = await request.result
+    await request.cancel(), aorus.mtproto.cancel('config'), aorus.mtproto.pending()
+    request returns { id, result, cancel }; call returns the result Promise. An omitted id is generated. IDs are unique among the plugin's pending calls and limited to 128 UTF-8 bytes. pending returns { items: [{ id, accountId }] }; cancel returns { cancelled }. Another plugin's calls are inaccessible. Account switches and stopping the plugin cancel its RPCs.
+    timeout is from 0.1 to 120 seconds, default 30. accountId checks the account before sending. automaticFloodWait defaults to false; true delegates waiting to the transport within the timeout. Api.Updates results enter the account state manager; applyUpdates: false leaves them to the plugin. Server errors reject with code, message and method. Cancellation does not undo an action already accepted by the server.
+    await aorus.mtproto.batch([{ method: 'help.getConfig', params: {} }, { method: 'help.getNearestDc' }])
+    Up to 16 sequential calls; results retain order. The first failure stops the batch. A batch is not a server transaction.
+    const encoded = await aorus.mtproto.encode({ _: 'peerUser', userId: '123' })
+    await aorus.mtproto.decode(encoded.base64), aorus.mtproto.prepare('help.getConfig')
+    await aorus.mtproto.decodeResult(method, params, base64)
+    encode returns { base64, bytes } of a boxed constructor; decode parses one constructor. prepare returns { method, base64, bytes } before encryption. decodeResult uses the method's own response parser, including vectors. These functions do not parse transport headers or encrypted MTProto packets. Limits: 2 MB per TL request or response, 16384 vector elements, 32 nesting levels and 16 pending RPCs, counted within the host request limit.
 
     UI
     aorus.ui.toast(text)
@@ -3005,7 +3061,7 @@ private enum AorusPluginDocumentation {
 
     Site page
     aorus.app.openURL, aorus.ui.openURL, aorus.browser.open, a link row and a url shortcut open the site not in Safari but as a page of the app: under the app's own navigation bar, in its theme, titled with the site's own name. There is no address anywhere: no address bar, no domain, no link menu on a long press, no Open in Safari.
-    Cookies and site data are kept on disk, so a sign-in survives between visits and across relaunches. Swiping from the edge goes back through the site's history, and closes the page when there is nothing to go back to. Pull down to reload. t.me links open in Telegram; tel:, mailto: and App Store links open only on a tap. Every navigation is checked: loopback, local networks and AorusGram control-plane domains are refused.
+    Cookies and site data are kept on disk, so a sign-in survives between visits and across relaunches. Swiping from the edge goes back through the site's history, and closes the page when there is nothing to go back to. Pull down to reload. t.me links open in Telegram; tel:, mailto: and App Store links open only on a tap. Every navigation is checked: loopback and local addresses are refused.
 
     Accounts
     const accounts = await aorus.accounts.list()
@@ -3073,7 +3129,7 @@ private enum AorusPluginDocumentation {
 
     Integrations
     aorus.integrations.settings.register({ id: 'youtube', title: 'YouTube', icon: 'play.rectangle.fill', url: 'https://youtube.com', placement: 'interface' })
-    A shortcut has exactly one of pageId or url and is shown in exactly one place, by placement: plugins (default) is Telegram's own settings list next to the AorusGram entry; privacy, interface, tabs, messages, calls, wall, aorusCode or other is that section of the AorusGram settings, and only that. Shortcuts never appear in the plugin library. A url shortcut opens the site as a page of the app and needs the in-app browser permission. Loopback, local networks and AorusGram control-plane domains are blocked. icon is any of the two hundred and more glyphs in the catalogue (the picker in the plugin's Appearance shows them all by group), color is the tile's own RRGGBB for this shortcut. siteIcon: true draws the site's own icon instead of a glyph: the app finds it on the page (apple-touch-icon or favicon), keeps it and draws it across the whole tile, with no margin; a mark with no background of its own is drawn large on a white tile, a white mark on a dark one. Only for a url shortcut in Telegram's own settings; the AorusGram settings and tabs always draw a glyph.
+    A shortcut has exactly one of pageId or url and is shown in exactly one place, by placement: plugins (default) is Telegram's own settings list next to the AorusGram entry; privacy, interface, tabs, messages, calls, wall, aorusCode or other is that section of the AorusGram settings, and only that. Shortcuts never appear in the plugin library. A url shortcut opens the site as a page of the app and needs the in-app browser permission. Loopback and local addresses are blocked for in-app pages. icon is any of the two hundred and more glyphs in the catalogue (the picker in the plugin's Appearance shows them all by group), color is the tile's own RRGGBB for this shortcut. siteIcon: true draws the site's own icon instead of a glyph: the app finds it on the page (apple-touch-icon or favicon), keeps it and draws it across the whole tile, with no margin; a mark with no background of its own is drawn large on a white tile, a white mark on a dark one. Only for a url shortcut in Telegram's own settings; the AorusGram settings and tabs always draw a glyph.
     aorus.integrations.contextMenu.register({ id: 'reply', title: 'Prepare reply', icon: 'message.fill' })
     Selection emits aorus.on('contextAction', event) with actionId and source. For a single selected message it also includes peerId, namespace, messageId and text. New-message events require a separate permission. At most four plugin actions appear at once.
 
@@ -3128,7 +3184,7 @@ private enum AorusPluginDocumentation {
     console.log/info/warn/error/debug, setTimeout, setInterval and timer cancellation are available.
 
     Security
-    Imported plugins always start disabled. Grants and setting values belong to this installation and are never exported; grants are revoked after every source edit. AorusAI is exposed only through the bounded ask method. There is no plugin API for the file system, Keychain, licensing, VLESS/REALITY credentials, raw settings, HMAC or private AorusGram domains. Protected operations re-check both the active license and permission in the native host.
+    Imported plugins start disabled. Grants and settings belong to this installation and are not exported; source edits revoke grants. The file API uses the plugin directory. HTTP uses the network profile; direct Telegram calls require mtproto. License and VLESS keys are not attached to plugin requests. The native host checks the active license and grant before performing an operation.
 
     Market and publishing
     The Market is the catalogue of plugins authors have published, in the Market tab of the plugins screen. Every plugin has a page with its description, author (name, avatar and badge from Telegram, by their id) and permissions. Only code the Market approved is installed: the file's size and SHA-256 are checked against its card. An installed plugin is switched off; turning it on shows its permissions. An update replaces the code, switches the plugin off and revokes its permissions.
@@ -4131,6 +4187,7 @@ private final class AorusPluginsEmptyView: UIView {
 func permissionTitle(_ permission: AorusPluginPermission) -> String {
     switch permission {
     case .network: return aorusL("Доступ к сети", "Network")
+    case .mtproto: return aorusL("Telegram MTProto", "Telegram MTProto")
     case .sendMessages: return aorusL("Отправка сообщений", "Send messages")
     case .chatMetadata: return aorusL("Данные чатов", "Read chat metadata")
     case .openChats: return aorusL("Открытие чатов", "Open chats")
@@ -4172,7 +4229,9 @@ private func permissionDescription(_ permission: AorusPluginPermission, requeste
 func permissionSummary(_ permission: AorusPluginPermission) -> String {
     switch permission {
     case .network:
-        return aorusL("Разрешает HTTPS-запросы к внешним публичным адресам.", "Allows HTTPS requests to public external hosts.")
+        return aorusL("Разрешает HTTP, HTTPS и WebSocket; плагин может подключаться к публичным и локальным адресам согласно своему сетевому профилю.", "Allows HTTP, HTTPS and WebSocket; the plugin can reach public and local hosts according to its network profile.")
+    case .mtproto:
+        return aorusL("Разрешает вызывать методы Telegram API от текущего аккаунта, читать и изменять данные Telegram.", "Allows Telegram API calls as the current account, including reading and changing Telegram data.")
     case .sendMessages:
         return aorusL("Разрешает отправлять сообщения от текущего аккаунта.", "Allows sending messages from the current account.")
     case .chatMetadata:

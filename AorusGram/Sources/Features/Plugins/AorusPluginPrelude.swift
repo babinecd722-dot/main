@@ -14,7 +14,7 @@ import Foundation
 // on its own has no file, network or process access, so the set of host blocks IS the set of
 // things a plugin can do.
 public enum AorusPluginPrelude {
-    public static let apiVersion = "1.0"
+    public static let apiVersion = "1.1"
 
     /// Events a plugin may subscribe to. Anything else is rejected at `aorus.on`.
     public static let events: [String] = [
@@ -2744,6 +2744,95 @@ public enum AorusPluginPrelude {
             }
         });
 
+        var mtprotoSequence = 0;
+        function mtprotoObject(value, name) {
+            var object = optionalObject(value, name);
+            if (Array.isArray(object)) { throw typeError(name + ' must be an object'); }
+            return object;
+        }
+        function mtprotoResult(answer) {
+            if (answer.error) {
+                var error = new Error(answer.error.message);
+                error.code = answer.error.code;
+                error.method = answer.error.method;
+                throw error;
+            }
+            return answer.result;
+        }
+        var mtprotoApi = freeze({
+            info: function () { return request('mtproto.info', {}); },
+            methods: function (options) { return mtprotoApi.catalog('methods', options); },
+            constructors: function (options) { return mtprotoApi.catalog('constructors', options); },
+            catalog: function (kind, options) {
+                if (kind !== 'methods' && kind !== 'constructors') { throw typeError('kind must be methods or constructors'); }
+                var opts = mtprotoObject(options, 'options');
+                var offset = opts.offset === undefined ? 0 : opts.offset;
+                var limit = opts.limit === undefined ? 100 : opts.limit;
+                if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) {
+                    throw typeError('offset must be non-negative and limit must be from 1 to 100');
+                }
+                return request('mtproto.catalog', { kind: kind, prefix: opts.prefix === undefined ? '' : requireString(opts.prefix, 'prefix'), offset: offset, limit: limit });
+            },
+            describeMethod: function (name) { return mtprotoApi.describe('methods', name); },
+            describeConstructor: function (name) { return mtprotoApi.describe('constructors', name); },
+            describe: function (kind, name) {
+                if (kind !== 'methods' && kind !== 'constructors') { throw typeError('kind must be methods or constructors'); }
+                return request('mtproto.describe', { kind: kind, name: requireString(name, 'name') });
+            },
+            construct: function (name, params) {
+                var object = mtprotoObject(params, 'params');
+                if (Object.prototype.hasOwnProperty.call(object, '_')) { throw typeError('params must not contain a constructor tag'); }
+                return Object.assign({}, object, { _: requireString(name, 'name') });
+            },
+            encode: function (value) { return request('mtproto.encode', { value: mtprotoObject(value, 'value') }); },
+            decode: function (base64) { return request('mtproto.decode', { base64: requireString(base64, 'base64') }).then(mtprotoResult); },
+            decodeResult: function (method, params, base64) {
+                return request('mtproto.decodeResult', { method: requireString(method, 'method'), params: mtprotoObject(params, 'params'), base64: requireString(base64, 'base64') }).then(mtprotoResult);
+            },
+            prepare: function (method, params) {
+                return request('mtproto.prepare', { method: requireString(method, 'method'), params: mtprotoObject(params, 'params') });
+            },
+            request: function (method, params, options) {
+                requireString(method, 'method');
+                var opts = mtprotoObject(options, 'options');
+                var timeout = opts.timeout === undefined ? 30 : opts.timeout;
+                if (typeof timeout !== 'number' || !Number.isFinite(timeout) || timeout < 0.1 || timeout > 120) {
+                    throw typeError('timeout must be from 0.1 to 120 seconds');
+                }
+                if (opts.automaticFloodWait !== undefined && typeof opts.automaticFloodWait !== 'boolean') {
+                    throw typeError('automaticFloodWait must be a boolean');
+                }
+                if (opts.applyUpdates !== undefined && typeof opts.applyUpdates !== 'boolean') {
+                    throw typeError('applyUpdates must be a boolean');
+                }
+                var id = opts.id === undefined ? 'rpc-' + (++mtprotoSequence) : requireString(opts.id, 'id');
+                if (!id || id.length > 128) { throw typeError('id must contain from 1 to 128 characters'); }
+                var result = request('mtproto.call', { method: method, params: mtprotoObject(params, 'params'), id: id,
+                    options: { timeout: timeout, automaticFloodWait: opts.automaticFloodWait === true,
+                        applyUpdates: opts.applyUpdates !== false,
+                        accountId: opts.accountId === undefined ? null : requireString(opts.accountId, 'accountId') }
+                }).then(mtprotoResult);
+                return freeze({ id: id, result: result, cancel: function () { return mtprotoApi.cancel(id); } });
+            },
+            call: function (method, params, options) { return mtprotoApi.request(method, params, options).result; },
+            cancel: function (id) { return request('mtproto.cancel', { id: requireString(id, 'id') }); },
+            pending: function () { return request('mtproto.pending', {}); },
+            batch: function (calls, options) {
+                if (!Array.isArray(calls) || calls.length > 16) { throw typeError('calls must be an array of up to 16 requests'); }
+                var opts = mtprotoObject(options, 'options');
+                var validated = calls.map(function (call) {
+                    var item = mtprotoObject(call, 'call');
+                    return { method: requireString(item.method, 'method'), params: mtprotoObject(item.params, 'params') };
+                });
+                var results = [];
+                var chain = Promise.resolve();
+                validated.forEach(function (item) {
+                    chain = chain.then(function () { return mtprotoApi.call(item.method, item.params, opts); })
+                        .then(function (result) { results.push(result); });
+                });
+                return chain.then(function () { return results; });
+            }
+        });
         var aorus = freeze({
             version: '\(apiVersion)',
             plugin: freeze({ id: info.id, name: info.name, version: info.version, author: info.author }),
@@ -3093,6 +3182,16 @@ public enum AorusPluginPrelude {
                 permissions: function () { return freeze(host.grantedPermissions()); },
                 hasPermission: function (name) { return host.hasPermission(requireString(name, 'name')); }
             }),
+            mtproto: mtprotoApi,
+            network: freeze({
+                profile: function () { return request('network.profile', {}); },
+                configure: function (profile) { return request('network.configure', { profile: mtprotoObject(profile, 'profile') }); },
+                reset: function () { return request('network.configure', { profile: {} }); },
+                check: function (url, options) {
+                    var opts = mtprotoObject(options, 'options');
+                    return request('network.check', { url: requireString(url, 'url'), webSocket: opts.webSocket === true });
+                }
+            }),
             theme: freeze({
                 current: function () { return request('theme.current', {}); },
                 setAccentColor: function (color) {
@@ -3122,10 +3221,16 @@ public enum AorusPluginPrelude {
             // event for a plugin that prefers to listen; a socket is closed when the plugin
             // stops, whether or not it remembered to.
             ws: freeze({
-                open: function (url, handler) {
+                open: function (url, handler, options) {
                     requireString(url, 'url');
                     if (handler !== undefined && handler !== null) { requireFunction(handler, 'handler'); }
-                    return request('ws.open', { url: url, headers: {} }).then(function (answer) {
+                    var opts = mtprotoObject(options, 'options');
+                    var headers = {};
+                    if (opts.headers !== undefined) {
+                        var source = mtprotoObject(opts.headers, 'headers');
+                        Object.keys(source).forEach(function (name) { headers[name] = String(source[name]); });
+                    }
+                    return request('ws.open', { url: url, headers: headers }).then(function (answer) {
                         var id = answer && answer.id;
                         if (typeof id !== 'string') { throw new Error('The socket did not open'); }
                         if (handler) { socketHandlers[id] = handler; }
@@ -3198,12 +3303,15 @@ public enum AorusPluginPrelude {
                         for (var i = 0; i < names.length; i++) { headers[names[i]] = String(opts.headers[names[i]]); }
                     }
                     var body = opts.body;
+                    var binary = opts.bodyBase64 === undefined ? null : requireString(opts.bodyBase64, 'bodyBase64');
+                    if (binary !== null && body !== undefined && body !== null) { throw typeError('Use body or bodyBase64'); }
                     if (body !== undefined && body !== null && typeof body !== 'string') { body = JSON.stringify(body); }
                     return request('http.fetch', {
                         url: url,
                         method: typeof opts.method === 'string' ? opts.method.toUpperCase() : 'GET',
                         headers: headers,
                         body: typeof body === 'string' ? body : null,
+                        base64: binary,
                         timeout: typeof opts.timeout === 'number' ? opts.timeout : null
                     }).then(function (response) {
                         var text = typeof response.body === 'string' ? response.body : '';
@@ -3213,6 +3321,7 @@ public enum AorusPluginPrelude {
                             url: response.url,
                             headers: freeze(response.headers || {}),
                             text: function () { return text; },
+                            base64: function () { return response.base64 || ''; },
                             json: function () { return JSON.parse(text); }
                         });
                     });

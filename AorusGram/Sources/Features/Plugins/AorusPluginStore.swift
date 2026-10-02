@@ -550,10 +550,11 @@ public final class AorusPluginStore {
 // escapes the directory unrepresentable instead of something a cleaning function has to
 // catch.
 public struct AorusPluginFiles {
-    public static let maximumFileBytes = 4 * 1024 * 1024
-    public static let maximumTotalBytes = 32 * 1024 * 1024
+    public static let maximumFileBytes = 32 * 1024 * 1024
+    public static let maximumTotalBytes = 64 * 1024 * 1024
     public static let maximumFileCount = 256
     public static let maximumNameLength = 64
+    private static let mutationLock = NSLock()
 
     public enum FileError: Error, Equatable {
         case invalidName
@@ -626,6 +627,8 @@ public struct AorusPluginFiles {
     /// afterwards, and the write-beside-and-move that leaves the previous file rather than
     /// half of the new one.
     public func writeData(_ name: String, data: Data) throws {
+        Self.mutationLock.lock()
+        defer { Self.mutationLock.unlock() }
         let target = try url(for: name)
         guard data.count <= AorusPluginFiles.maximumFileBytes else { throw FileError.tooLarge }
         let existing = entries()
@@ -639,9 +642,7 @@ public struct AorusPluginFiles {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             // Written beside and moved into place, so a crash mid-write leaves the previous
             // file rather than half of the new one, the same as every other write here.
-            let temporary = directory.appendingPathComponent(".write-\(UUID().uuidString)")
-            try data.write(to: temporary, options: [.atomic])
-            _ = try FileManager.default.replaceItemAt(target, withItemAt: temporary)
+            try data.write(to: target, options: [.atomic])
         } catch {
             throw FileError.io(error.localizedDescription)
         }
@@ -683,6 +684,8 @@ public struct AorusPluginFiles {
     /// not an error: a plugin cleaning up after itself should not have to ask first.
     @discardableResult
     public func remove(_ name: String) throws -> Bool {
+        Self.mutationLock.lock()
+        defer { Self.mutationLock.unlock() }
         let target = try url(for: name)
         guard FileManager.default.fileExists(atPath: target.path) else { return false }
         do {
@@ -695,6 +698,8 @@ public struct AorusPluginFiles {
 
     @discardableResult
     public func clear() -> Int {
+        Self.mutationLock.lock()
+        defer { Self.mutationLock.unlock() }
         var removed = 0
         for entry in entries() {
             let target = directory.appendingPathComponent(entry.name, isDirectory: false)

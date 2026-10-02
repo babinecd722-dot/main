@@ -670,7 +670,7 @@ public final class AorusPluginSandbox {
     /// The largest response `aorus.http.fetch` hands back.
     public static let responseLimitBytes = 5 * 1024 * 1024
     public static let requestBodyLimitBytes = 2 * 1024 * 1024
-    public static let requestPayloadLimitBytes = 256 * 1024
+    public static let requestPayloadLimitBytes = 3 * 1024 * 1024
     public static let pendingRequestLimit = 32
     /// What every call on the open chat answers when there is none. One sentence, in one
     /// place, so a plugin can compare against it and the two hosts cannot drift apart.
@@ -689,8 +689,8 @@ public final class AorusPluginSandbox {
     public static let sendBurstLimit = 5
     public static let sendBurstWindow: TimeInterval = 10
     public static let sendMinuteLimit = 60
-    /// Hosts a plugin may not talk to: the app's own control plane.
-    public static let blockedHostSuffixes: [String] = ["aorusgram.com"]
+    /// Optional deployment-specific exclusions. Generic networking has no brand blocklist.
+    public static let blockedHostSuffixes: [String] = []
 
     public let manifest: AorusPluginManifest
     public let source: String
@@ -710,8 +710,6 @@ public final class AorusPluginSandbox {
     /// has nowhere to write, and a plugin running there is told so rather than writing into
     /// somebody else's directory.
     private let files: AorusPluginFiles?
-    private var session: URLSession?
-    private var networkDelegate: AorusPluginNetworkDelegate?
     private var pendingRequestIds = Set<Int32>()
     /// Where each command still owing an answer was typed, by the token the answer comes back
     /// with. On the plugin's queue, like everything the prelude calls.
@@ -802,7 +800,6 @@ public final class AorusPluginSandbox {
 
     deinit {
         for (_, item) in timers { item.cancel() }
-        session?.invalidateAndCancel()
     }
 
     // MARK: - State
@@ -1105,9 +1102,6 @@ public final class AorusPluginSandbox {
         context?.exceptionHandler = nil
         context = nil
         virtualMachine = nil
-        session?.invalidateAndCancel()
-        session = nil
-        networkDelegate = nil
         pendingRequestIds.removeAll()
         commandReplies.removeAll()
         recentSends.removeAll()
@@ -2714,13 +2708,17 @@ public final class AorusPluginSandbox {
             queue.asyncAfter(deadline: .now() + milliseconds / 1000.0) { [weak self] in
                 self?.settle(id, with: .success(nil))
             }
-        case "http.fetch":
-            guard require(.network, id: id) else { return }
-            fetch(payload: payload, id: id)
+        case "mtproto.info", "mtproto.catalog", "mtproto.describe", "mtproto.encode", "mtproto.decode",
+             "mtproto.decodeResult", "mtproto.prepare", "mtproto.call", "mtproto.cancel", "mtproto.pending":
+            guard require(.mtproto, id: id) else { return }
+            host.pluginRuntimeCall(pluginId, action: kind, payload: payload) { [weak self] result in
+                self?.settle(id, with: result.map { $0 as Any })
+            }
         // A live socket and file transfer, on the same grant and the same host rules as
         // `fetch`. A plugin talking to a backend of its own needs all three: a request, a
         // connection that stays open, and a way to move a file that is not a JSON string.
-        case "ws.open", "ws.send", "ws.close", "http.download", "http.upload":
+        case "ws.open", "ws.send", "ws.close", "http.fetch", "http.download", "http.upload",
+             "network.profile", "network.configure", "network.check":
             guard require(.network, id: id) else { return }
             if kind == "http.download" || kind == "http.upload", files == nil {
                 settle(id, with: .failure(AorusPluginRequestError("This plugin has no file storage")))
@@ -2735,85 +2733,6 @@ public final class AorusPluginSandbox {
     }
 
     // MARK: - HTTP
-
-    /// Validates the request the way the contract describes, then loads it through a
-    /// session of its own with no cookies and no cache.
-    private func fetch(payload: [String: Any], id: Int32) {
-        guard let urlText = payload["url"] as? String, let url = URL(string: urlText), let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else {
-            settle(id, with: .failure(AorusPluginRequestError("Invalid URL")))
-            return
-        }
-        guard scheme == "http" || scheme == "https" else {
-            settle(id, with: .failure(AorusPluginRequestError("Only http and https URLs are allowed")))
-            return
-        }
-        if AorusPluginSandbox.isBlocked(host: host) || !AorusPluginSandbox.hostResolvesPublicly(host) {
-            settle(id, with: .failure(AorusPluginRequestError("Host is not available to plugins")))
-            return
-        }
-        var request = URLRequest(url: url)
-        let method = ((payload["method"] as? String) ?? "GET").uppercased()
-        guard ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].contains(method) else {
-            settle(id, with: .failure(AorusPluginRequestError("HTTP method is not allowed")))
-            return
-        }
-        request.httpMethod = method
-        if let headers = payload["headers"] as? [String: Any] {
-            for (name, value) in headers {
-                let lowered = name.lowercased()
-                guard !["host", "cookie", "proxy-authorization", "proxy-connection", "connection", "content-length"].contains(lowered),
-                      name.count <= 128 else { continue }
-                request.setValue(String(String(describing: value).prefix(8_192)), forHTTPHeaderField: name)
-            }
-        }
-        if let body = payload["body"] as? String {
-            let data = Data(body.utf8)
-            guard data.count <= AorusPluginSandbox.requestBodyLimitBytes else {
-                settle(id, with: .failure(AorusPluginRequestError("Request body is too large")))
-                return
-            }
-            request.httpBody = data
-        }
-        let timeout = min(120.0, max(1.0, ((payload["timeout"] as? NSNumber)?.doubleValue ?? 30_000) / 1000.0))
-        request.timeoutInterval = timeout
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-
-        if session == nil {
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.httpCookieAcceptPolicy = .never
-            configuration.httpShouldSetCookies = false
-            configuration.urlCache = nil
-            configuration.waitsForConnectivity = false
-            let delegate = AorusPluginNetworkDelegate()
-            networkDelegate = delegate
-            session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-        }
-        guard let session = session, let delegate = networkDelegate else {
-            settle(id, with: .failure(AorusPluginRequestError("Network session is unavailable")))
-            return
-        }
-        let task = session.dataTask(with: request)
-        delegate.register(task: task) { [weak self] result in
-            guard let self = self else { return }
-            switch result {
-            case let .failure(error):
-                self.settle(id, with: .failure(error))
-            case let .success((body, http)):
-                var headers: [String: String] = [:]
-                for (key, value) in http.allHeaderFields {
-                    headers[String(describing: key).lowercased()] = String(describing: value)
-                }
-                let result: [String: Any] = [
-                    "status": NSNumber(value: http.statusCode),
-                    "url": http.url?.absoluteString ?? urlText,
-                    "headers": headers,
-                    "body": String(decoding: body, as: UTF8.self),
-                ]
-                self.settle(id, with: .success(result))
-            }
-        }
-        task.resume()
-    }
 
     public static func isBlocked(host: String) -> Bool {
         let lowered = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
@@ -2855,12 +2774,13 @@ public final class AorusPluginSandbox {
             let value = UInt32(bigEndian: v4.s_addr)
             let first = UInt8((value >> 24) & 0xff)
             let second = UInt8((value >> 16) & 0xff)
+            let third = UInt8((value >> 8) & 0xff)
             return first == 0 || first == 10 || first == 127 ||
                 (first == 100 && (64...127).contains(second)) ||
                 (first == 169 && second == 254) || (first == 172 && (16...31).contains(second)) ||
-                (first == 192 && (second == 0 || second == 168)) ||
-                (first == 198 && (second == 18 || second == 19 || second == 51)) ||
-                (first == 203 && second == 0) || first >= 224
+                (first == 192 && (second == 168 || (second == 0 && (third == 0 || third == 2)))) ||
+                (first == 198 && (second == 18 || second == 19 || (second == 51 && third == 100))) ||
+                (first == 203 && second == 0 && third == 113) || first >= 224
         }
         var v6 = in6_addr()
         if inet_pton(AF_INET6, text, &v6) == 1 {
@@ -2935,125 +2855,9 @@ public final class AorusPluginSandbox {
     }
 }
 
-private final class AorusPluginNetworkDelegate: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
-    typealias Completion = (Result<(Data, HTTPURLResponse), Error>) -> Void
-
-    private struct State {
-        var data = Data()
-        var response: HTTPURLResponse?
-        var completion: Completion
-        var failure: Error?
-        var redirectCount = 0
-    }
-
-    private let lock = NSLock()
-    private var states: [Int: State] = [:]
-
-    func register(task: URLSessionDataTask, completion: @escaping Completion) {
-        lock.lock()
-        states[task.taskIdentifier] = State(completion: completion)
-        lock.unlock()
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        lock.lock()
-        if var state = states[task.taskIdentifier] {
-            state.redirectCount += 1
-            states[task.taskIdentifier] = state
-            if state.redirectCount > 5 {
-                state.failure = AorusPluginRequestError("Too many redirects")
-                states[task.taskIdentifier] = state
-                lock.unlock()
-                completionHandler(nil)
-                return
-            }
-        }
-        lock.unlock()
-        guard let url = request.url, let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased(),
-              (scheme == "http" || scheme == "https"),
-              !AorusPluginSandbox.isBlocked(host: host),
-              AorusPluginSandbox.hostResolvesPublicly(host) else {
-            setFailure(AorusPluginRequestError("Redirect target is not available to plugins"), for: task.taskIdentifier)
-            completionHandler(nil)
-            return
-        }
-        var sanitized = request
-        sanitized.setValue(nil, forHTTPHeaderField: "Cookie")
-        sanitized.setValue(nil, forHTTPHeaderField: "Proxy-Authorization")
-        if response.url?.host?.caseInsensitiveCompare(host) != .orderedSame {
-            sanitized.setValue(nil, forHTTPHeaderField: "Authorization")
-        }
-        completionHandler(sanitized)
-    }
-
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        guard let response = response as? HTTPURLResponse else {
-            setFailure(AorusPluginRequestError("No HTTP response"), for: dataTask.taskIdentifier)
-            completionHandler(.cancel)
-            return
-        }
-        if response.expectedContentLength > Int64(AorusPluginSandbox.responseLimitBytes) {
-            setFailure(AorusPluginRequestError("Response too large"), for: dataTask.taskIdentifier)
-            completionHandler(.cancel)
-            return
-        }
-        lock.lock()
-        if var state = states[dataTask.taskIdentifier] {
-            state.response = response
-            states[dataTask.taskIdentifier] = state
-        }
-        lock.unlock()
-        completionHandler(.allow)
-    }
-
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        lock.lock()
-        if var state = states[dataTask.taskIdentifier], state.failure == nil {
-            if state.data.count + data.count > AorusPluginSandbox.responseLimitBytes {
-                state.failure = AorusPluginRequestError("Response too large")
-                states[dataTask.taskIdentifier] = state
-                lock.unlock()
-                dataTask.cancel()
-                return
-            }
-            state.data.append(data)
-            states[dataTask.taskIdentifier] = state
-        }
-        lock.unlock()
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        lock.lock()
-        let state = states.removeValue(forKey: task.taskIdentifier)
-        lock.unlock()
-        guard let state = state else { return }
-        if let failure = state.failure {
-            state.completion(.failure(failure))
-        } else if let error = error {
-            state.completion(.failure(AorusPluginRequestError(error.localizedDescription)))
-        } else if let response = state.response {
-            state.completion(.success((state.data, response)))
-        } else {
-            state.completion(.failure(AorusPluginRequestError("No HTTP response")))
-        }
-    }
-
-    private func setFailure(_ error: Error, for taskIdentifier: Int) {
-        lock.lock()
-        if var state = states[taskIdentifier] {
-            state.failure = error
-            states[taskIdentifier] = state
-        }
-        lock.unlock()
-    }
-}
-
-/// An error raised by the host for a plugin request; its message is what the promise
-/// rejects with.
-public struct AorusPluginRequestError: Error {
+/// The message returned when a host operation rejects a plugin's Promise.
+public struct AorusPluginRequestError: LocalizedError {
     public let message: String
-
-    public init(_ message: String) {
-        self.message = message
-    }
+    public init(_ message: String) { self.message = message }
+    public var errorDescription: String? { message }
 }

@@ -1,60 +1,71 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import AorusGram
 
-/// A plugin's own backend: a connection that stays open, and files that move whole.
-///
-/// `http.fetch` already covers a request and an answer. What it cannot do is stay connected,
-/// and it cannot carry anything that is not text — a response is decoded as UTF-8 and a body
-/// is a string. A plugin talking to a backend somebody wrote needs all three.
-///
-/// Every rule `fetch` applies applies here: http and https only, the host blocklist and the
-/// public-resolution check, no cookies, no cache, an ephemeral session. What is added is
-/// bounded the same way: two sockets per plugin, a cap on a frame, a cap on a file, and
-/// everything a plugin opened is closed when it stops.
-final class AorusPluginNetworkBroker: NSObject {
+/// HTTP, sockets and file transfers share the plugin's network profile.
+final class AorusPluginNetworkBroker: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     static let shared = AorusPluginNetworkBroker()
 
     static let maximumSocketsPerPlugin = 2
     static let maximumFrameBytes = 1 * 1024 * 1024
-    static let maximumTransferBytes = 32 * 1024 * 1024
+    static let maximumTransferBytes = AorusPluginFiles.maximumFileBytes
 
     private final class Socket {
         let task: URLSessionWebSocketTask
         let pluginId: String
         let id: String
-        var closed = false
+        let scope: AorusPluginNetworkScope
+        private let lock = NSLock()
+        private var closedFlag = false
+        var closed: Bool {
+            get { lock.lock(); defer { lock.unlock() }; return closedFlag }
+            set { lock.lock(); closedFlag = newValue; lock.unlock() }
+        }
 
-        init(task: URLSessionWebSocketTask, pluginId: String, id: String) {
+        init(task: URLSessionWebSocketTask, pluginId: String, id: String, scope: AorusPluginNetworkScope) {
             self.task = task
             self.pluginId = pluginId
             self.id = id
+            self.scope = scope
         }
     }
 
     private let lock = NSLock()
     private var sockets: [String: Socket] = [:]
-    private lazy var session: URLSession = {
+    private var scopes: [String: AorusPluginNetworkScope] = [:]
+    private let transport = AorusPluginHTTPTransport()
+    private var session: URLSession!
+
+    private func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
         configuration.urlCache = nil
+        #if !os(Linux)
         configuration.waitsForConnectivity = false
-        return URLSession(configuration: configuration)
-    }()
+        #endif
+        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+    }
 
     private override init() {
         super.init()
+        session = makeSession()
     }
 
     /// The same check `fetch` makes, so there is one answer to "may a plugin reach this"
     /// rather than two that can drift apart.
-    private static func validate(_ text: String, allowingWebSocket: Bool) -> URL? {
-        guard let url = URL(string: text), let scheme = url.scheme?.lowercased(),
-              let host = url.host?.lowercased() else { return nil }
-        let allowed = allowingWebSocket ? ["ws", "wss", "http", "https"] : ["http", "https"]
-        guard allowed.contains(scheme) else { return nil }
-        guard !AorusPluginSandbox.isBlocked(host: host),
-              AorusPluginSandbox.hostResolvesPublicly(host) else { return nil }
+    private func scope(_ pluginId: String) -> AorusPluginNetworkScope {
+        lock.lock()
+        defer { lock.unlock() }
+        return scopes[pluginId] ?? .standard
+    }
+    private func validate(_ text: String, profile: AorusPluginNetworkScope, allowingWebSocket: Bool) -> URL? {
+        guard let url = URL(string: text),
+              profile.allows(url, webSocket: allowingWebSocket, publicHost: AorusPluginHTTPTransport.publicHost) else { return nil }
         return url
     }
 
@@ -64,7 +75,9 @@ final class AorusPluginNetworkBroker: NSObject {
         lock.lock()
         let mine = sockets.values.filter { $0.pluginId == pluginId }
         for socket in mine { sockets[socket.id] = nil }
+        scopes[pluginId] = nil
         lock.unlock()
+        transport.cancelAll(pluginId: pluginId)
         for socket in mine {
             socket.closed = true
             socket.task.cancel(with: .goingAway, reason: nil)
@@ -79,6 +92,22 @@ final class AorusPluginNetworkBroker: NSObject {
         completion: @escaping (Result<[String: Any], Error>) -> Void
     ) {
         switch action {
+        case "network.profile":
+            completion(.success(scope(pluginId).json))
+        case "network.configure":
+            do {
+                let profile = try AorusPluginNetworkScope(payload["profile"] as? [String: Any] ?? [:])
+                lock.lock()
+                scopes[pluginId] = profile
+                lock.unlock()
+                completion(.success(profile.json))
+            } catch { completion(.failure(error)) }
+        case "network.check":
+            let allowed = validate(payload["url"] as? String ?? "", profile: scope(pluginId),
+                                   allowingWebSocket: (payload["webSocket"] as? NSNumber)?.boolValue ?? false) != nil
+            completion(.success(["allowed": allowed]))
+        case "http.fetch":
+            fetch(pluginId: pluginId, payload: payload, completion: completion)
         case "ws.open":
             open(pluginId: pluginId, payload: payload, completion: completion)
         case "ws.send":
@@ -100,9 +129,9 @@ final class AorusPluginNetworkBroker: NSObject {
             socket.task.cancel(with: .normalClosure, reason: nil)
             completion(.success(["ok": NSNumber(value: true)]))
         case "http.download":
-            download(payload: payload, directory: directory, completion: completion)
+            download(pluginId: pluginId, payload: payload, directory: directory, completion: completion)
         case "http.upload":
-            upload(payload: payload, directory: directory, completion: completion)
+            upload(pluginId: pluginId, payload: payload, directory: directory, completion: completion)
         default:
             completion(.failure(AorusPluginRequestError("Unknown network call: " + action)))
         }
@@ -111,37 +140,33 @@ final class AorusPluginNetworkBroker: NSObject {
     // MARK: - The socket
 
     private func open(pluginId: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
-        guard let url = Self.validate(payload["url"] as? String ?? "", allowingWebSocket: true) else {
+        let profile = scope(pluginId)
+        guard let url = validate(payload["url"] as? String ?? "", profile: profile, allowingWebSocket: true) else {
             completion(.failure(AorusPluginRequestError("URL is not available to plugins")))
-            return
-        }
-        lock.lock()
-        let open = sockets.values.filter { $0.pluginId == pluginId }.count
-        lock.unlock()
-        guard open < Self.maximumSocketsPerPlugin else {
-            completion(.failure(AorusPluginRequestError("Too many open sockets (limit \(Self.maximumSocketsPerPlugin))")))
             return
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 60.0
-        if let headers = payload["headers"] as? [String: Any] {
-            for (name, value) in headers {
-                let lowered = name.lowercased()
-                // The same hop-by-hop names `fetch` refuses, plus the ones that would let a
-                // plugin write its own handshake.
-                guard !["host", "cookie", "connection", "upgrade", "sec-websocket-key",
-                        "sec-websocket-version", "sec-websocket-extensions"].contains(lowered),
-                      name.count <= 128 else { continue }
-                request.setValue(String(String(describing: value).prefix(8_192)), forHTTPHeaderField: name)
-            }
+        Self.headers(payload, request: &request)
+        for name in ["Upgrade", "Sec-WebSocket-Key", "Sec-WebSocket-Version", "Sec-WebSocket-Extensions"] {
+            request.setValue(nil, forHTTPHeaderField: name)
         }
         let id = "ws-" + UUID().uuidString
         let task = session.webSocketTask(with: request)
-        let socket = Socket(task: task, pluginId: pluginId, id: id)
-        lock.lock(); sockets[id] = socket; lock.unlock()
+        task.maximumMessageSize = Self.maximumFrameBytes
+        let socket = Socket(task: task, pluginId: pluginId, id: id, scope: profile)
+        lock.lock()
+        guard sockets.values.filter({ $0.pluginId == pluginId }).count < Self.maximumSocketsPerPlugin else {
+            lock.unlock()
+            task.cancel(with: .goingAway, reason: nil)
+            completion(.failure(AorusPluginRequestError("Too many open sockets")))
+            return
+        }
+        sockets[id] = socket
+        lock.unlock()
+        completion(.success(["id": id, "ok": NSNumber(value: true)]))
         task.resume()
         receive(socket)
-        completion(.success(["id": id, "ok": NSNumber(value: true)]))
     }
 
     /// One read, then another. `URLSessionWebSocketTask` delivers a single message per call,
@@ -157,12 +182,11 @@ final class AorusPluginNetworkBroker: NSObject {
             case let .success(message):
                 switch message {
                 case let .string(text):
-                    self.deliver(socket, event: "message", payload: ["text": String(text.prefix(Self.maximumFrameBytes))])
+                    self.deliver(socket, event: "message", payload: ["text": text])
                 case let .data(data):
-                    let bounded = data.prefix(Self.maximumFrameBytes)
                     self.deliver(socket, event: "message", payload: [
                         "binary": NSNumber(value: true),
-                        "base64": bounded.base64EncodedString(),
+                        "base64": data.base64EncodedString(),
                     ])
                 @unknown default:
                     break
@@ -215,8 +239,66 @@ final class AorusPluginNetworkBroker: NSObject {
 
     // MARK: - Files
 
-    private func download(payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
-        guard let url = Self.validate(payload["url"] as? String ?? "", allowingWebSocket: false) else {
+    private static func tokenByte(_ byte: UInt8) -> Bool {
+        (65...90).contains(byte) || (97...122).contains(byte) || (48...57).contains(byte)
+            || [33, 35, 36, 37, 38, 39, 42, 43, 45, 46, 94, 95, 96, 124, 126].contains(byte)
+    }
+    private static func httpMethod(_ value: String) -> String? {
+        let method = value.uppercased()
+        return !method.isEmpty && method.utf8.count <= 32 && method.utf8.allSatisfy(tokenByte) ? method : nil
+    }
+    private static func headers(_ payload: [String: Any], request: inout URLRequest) {
+        for (name, value) in payload["headers"] as? [String: Any] ?? [:] {
+            guard name.utf8.count <= 128, !name.isEmpty,
+                  name.utf8.allSatisfy(tokenByte),
+                  !["host", "connection", "content-length", "transfer-encoding", "proxy-connection"].contains(name.lowercased()) else { continue }
+            let text = String(describing: value)
+            guard text.utf8.count <= 8_192, !text.contains("\r"), !text.contains("\n") else { continue }
+            request.setValue(text, forHTTPHeaderField: name)
+        }
+    }
+    private static func response(_ data: Data, _ response: HTTPURLResponse) -> [String: Any] {
+        var headers: [String: String] = [:]
+        for (name, value) in response.allHeaderFields { headers[String(describing: name)] = String(describing: value) }
+        return ["status": response.statusCode, "url": response.url?.absoluteString ?? "",
+                "headers": headers, "body": String(decoding: data, as: UTF8.self), "base64": data.base64EncodedString()]
+    }
+    private func fetch(pluginId: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        let profile = scope(pluginId)
+        guard let url = validate(payload["url"] as? String ?? "", profile: profile, allowingWebSocket: false) else {
+            completion(.failure(AorusPluginRequestError("URL is outside the network profile")))
+            return
+        }
+        var request = URLRequest(url: url)
+        guard let method = Self.httpMethod(payload["method"] as? String ?? "GET") else {
+            completion(.failure(AorusPluginRequestError("Invalid HTTP method")))
+            return
+        }
+        request.httpMethod = method
+        request.timeoutInterval = max(0.1, min(120, (payload["timeout"] as? NSNumber)?.doubleValue ?? 30))
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        Self.headers(payload, request: &request)
+        if let base64 = payload["base64"] as? String {
+            guard let data = Data(base64Encoded: base64), data.count <= 2 * 1024 * 1024 else {
+                completion(.failure(AorusPluginRequestError("Invalid binary body")))
+                return
+            }
+            request.httpBody = data
+        } else if let body = payload["body"] as? String {
+            guard body.utf8.count <= 2 * 1024 * 1024 else {
+                completion(.failure(AorusPluginRequestError("HTTP body is too large")))
+                return
+            }
+            request.httpBody = Data(body.utf8)
+        }
+        transport.load(pluginId: pluginId, request: request, scope: profile, limit: AorusPluginSandbox.responseLimitBytes) { result in
+            completion(result.map { Self.response($0.0, $0.1) })
+        }
+    }
+
+    private func download(pluginId: String, payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        let profile = scope(pluginId)
+        guard let url = validate(payload["url"] as? String ?? "", profile: profile, allowingWebSocket: false) else {
             completion(.failure(AorusPluginRequestError("URL is not available to plugins")))
             return
         }
@@ -227,34 +309,33 @@ final class AorusPluginNetworkBroker: NSObject {
         var request = URLRequest(url: url)
         request.timeoutInterval = 120.0
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        let task = session.dataTask(with: request) { data, response, error in
-            if let error {
-                completion(.failure(AorusPluginRequestError(error.localizedDescription)))
-                return
-            }
-            guard let data, data.count <= Self.maximumTransferBytes else {
-                completion(.failure(AorusPluginRequestError("Response is empty or too large")))
-                return
-            }
+        transport.load(pluginId: pluginId, request: request, scope: profile, limit: Self.maximumTransferBytes) { result in
+            let data: Data
+            let response: HTTPURLResponse
+            do { (data, response) = try result.get() }
+            catch { completion(.failure(error)); return }
             let files = AorusPluginFiles(directory: directory)
             do {
                 try files.writeData(name, data: data)
+            } catch let error as AorusPluginFiles.FileError {
+                completion(.failure(AorusPluginRequestError(error.message)))
+                return
             } catch {
-                completion(.failure(AorusPluginRequestError("Could not write " + name)))
+                completion(.failure(error))
                 return
             }
             completion(.success([
                 "ok": NSNumber(value: true),
                 "name": name,
                 "bytes": NSNumber(value: data.count),
-                "status": NSNumber(value: (response as? HTTPURLResponse)?.statusCode ?? 0),
+                "status": NSNumber(value: response.statusCode),
             ]))
         }
-        task.resume()
     }
 
-    private func upload(payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
-        guard let url = Self.validate(payload["url"] as? String ?? "", allowingWebSocket: false) else {
+    private func upload(pluginId: String, payload: [String: Any], directory: URL?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        let profile = scope(pluginId)
+        guard let url = validate(payload["url"] as? String ?? "", profile: profile, allowingWebSocket: false) else {
             completion(.failure(AorusPluginRequestError("URL is not available to plugins")))
             return
         }
@@ -268,36 +349,34 @@ final class AorusPluginNetworkBroker: NSObject {
             return
         }
         var request = URLRequest(url: url)
-        request.httpMethod = ((payload["method"] as? String) ?? "POST").uppercased()
+        guard let method = Self.httpMethod(payload["method"] as? String ?? "POST") else {
+            completion(.failure(AorusPluginRequestError("Invalid HTTP method")))
+            return
+        }
+        request.httpMethod = method
         request.timeoutInterval = 120.0
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        if let headers = payload["headers"] as? [String: Any] {
-            for (header, value) in headers {
-                let lowered = header.lowercased()
-                guard !["host", "cookie", "connection", "content-length"].contains(lowered),
-                      header.count <= 128 else { continue }
-                request.setValue(String(String(describing: value).prefix(8_192)), forHTTPHeaderField: header)
-            }
-        }
+        Self.headers(payload, request: &request)
         // The body is the file. A multipart envelope is something a plugin can build itself
         // if its backend wants one; guessing a field name for it here would be wrong as
         // often as right.
         if request.value(forHTTPHeaderField: "Content-Type") == nil {
             request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
         }
-        let task = session.uploadTask(with: request, from: data) { body, response, error in
-            if let error {
-                completion(.failure(AorusPluginRequestError(error.localizedDescription)))
-                return
-            }
-            let http = response as? HTTPURLResponse
-            completion(.success([
-                "ok": NSNumber(value: true),
-                "status": NSNumber(value: http?.statusCode ?? 0),
-                "bytes": NSNumber(value: data.count),
-                "body": String(decoding: (body ?? Data()).prefix(AorusPluginSandbox.responseLimitBytes), as: UTF8.self),
-            ]))
+        request.httpBody = data
+        transport.load(pluginId: pluginId, request: request, scope: profile, limit: AorusPluginSandbox.responseLimitBytes) { result in
+            completion(result.map {
+                var response = Self.response($0.0, $0.1)
+                response["ok"] = true
+                response["bytes"] = data.count
+                return response
+            })
         }
-        task.resume()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        // A WebSocket handshake may not silently move to a different endpoint.
+        completionHandler(nil)
     }
 }

@@ -208,6 +208,8 @@ public struct AorusPluginRecord: Equatable {
 /// A grant is stored by the installation, never inside an exported plugin bundle.
 public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
     case network
+    /// Telegram RPC methods available in the API layer linked into this client.
+    case mtproto
     case sendMessages
     case chatMetadata
     case openChats
@@ -250,7 +252,8 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
     public static let sourceProbes: [(AorusPluginPermission, [String])] = [
             // A socket and a file transfer are the same capability as a request: a plugin
             // reaching a backend somebody wrote.
-            (.network, ["aorus.http", "aorus.ws."]),
+            (.network, ["aorus.http", "aorus.ws.", "aorus.network."]),
+            (.mtproto, ["aorus.mtproto."]),
             // `schedule` and `reply` are `send` with an option filled in, and ask for the same.
             (.sendMessages, ["aorus.messages.send", "aorus.messages.schedule", "aorus.messages.reply", "aorus.chat.sendText", "aorus.chat.replyText"]),
             // `chats.*` names a chat by id; `chat.*` is the one on screen. Reading either is
