@@ -4172,6 +4172,7 @@ def main() -> None:
         ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallBubbleSettings()"),
         # A deleted message's side buttons, stickers and round videos are dimmed with it.
         ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "aorusSideButton.alpha = aorusSideButtonAlpha"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "alpha: (isCurrentlyPlayingMedia || isSidePanelOpen) ? 0.0 : aorusSideButtonAlpha"),
         ("submodules/TelegramUI/Components/Chat/ChatMessageStickerItemNode/Sources/ChatMessageStickerItemNode.swift", "strongSelf.contextSourceNode.contentNode.alpha = aorusDeletedFree ? 0.5 : 1.0"),
         ("submodules/TelegramUI/Components/Chat/ChatMessageAnimatedStickerItemNode/Sources/ChatMessageAnimatedStickerItemNode.swift", "strongSelf.contextSourceNode.contentNode.alpha = aorusDeletedFree ? 0.5 : 1.0"),
         ("submodules/TelegramUI/Components/Chat/ChatMessageInstantVideoItemNode/Sources/ChatMessageInstantVideoItemNode.swift", "strongSelf.contextSourceNode.contentNode.alpha = aorusDeletedFree ? 0.5 : 1.0"),

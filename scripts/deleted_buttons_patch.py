@@ -9,6 +9,9 @@ now dimmed with it, and fade in to the dimmed strength when they appear on a del
 Stickers and round video messages are not bubbles and were not dimmed at all when deleted;
 they now are, the same way, and their share button with them.
 
+Telegram also sets each side button's alpha again later in the same layout, to hide it while
+media plays: at full strength otherwise, which undid the dim. That line now puts the dim back.
+
 A message deleted with no text of its own carries only the invisible deleted marker, which
 counted as text: the quick translate button appeared on a deleted photo with no caption,
 with nothing to translate. The marker no longer counts.
@@ -47,6 +50,12 @@ _BUBBLE_AFTER = (
     "        }\n"
 )
 
+# Telegram puts each side button's alpha back on every layout, after the buttons are made: to
+# hide them while media plays or the side panel is open, and otherwise at full strength. Those
+# lines now restore the deleted dim instead of undoing it.
+_SIDE_ALPHA_OLD = "alpha: (isCurrentlyPlayingMedia || isSidePanelOpen) ? 0.0 : 1.0"
+_SIDE_ALPHA_NEW = "alpha: (isCurrentlyPlayingMedia || isSidePanelOpen) ? 0.0 : aorusSideButtonAlpha"
+
 _TRANSLATE_TEXT_OLD = "&& !aorusHasVoiceMedia && !item.message.text.isEmpty)"
 _TRANSLATE_TEXT_NEW = "&& !aorusHasVoiceMedia && !item.message.text.replacingOccurrences(of: " + _MARKER + ", with: \"\").isEmpty)"
 
@@ -79,6 +88,13 @@ def patch_deleted_side_buttons(tg: Path) -> None:
         t = t.replace(_BUBBLE_BEFORE_ANCHOR, _BUBBLE_BEFORE + _BUBBLE_BEFORE_ANCHOR, 1)
         t = t.replace(_BUBBLE_AFTER_ANCHOR, _BUBBLE_AFTER + _BUBBLE_AFTER_ANCHOR, 1)
         t = t.replace(_TRANSLATE_TEXT_OLD, _TRANSLATE_TEXT_NEW, 1)
+        # Only the lines after the strength is worked out, where it is in scope; there are ten,
+        # two for each of the five side buttons (laid out at once and with an animation).
+        declared = t.index("let aorusSideButtonAlpha: CGFloat")
+        before, after = t[:declared], t[declared:]
+        if before.count(_SIDE_ALPHA_OLD) != 0 or after.count(_SIDE_ALPHA_OLD) < 2:
+            raise SystemExit(f"DeletedButtons: side button alpha lines found {before.count(_SIDE_ALPHA_OLD)} before and {after.count(_SIDE_ALPHA_OLD)} after the dim")
+        t = before + after.replace(_SIDE_ALPHA_OLD, _SIDE_ALPHA_NEW)
         bubble.write_text(t, encoding="utf-8")
     for relative in _FREE_NODES:
         path = tg / relative
