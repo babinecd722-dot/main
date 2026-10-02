@@ -53,6 +53,7 @@ enum AorusL10nTable {
     ]
 
     private static let it: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La trasparenza del colore del bagliore ne determina l’intensità. Le capsule pixel proiettano un’ombra netta, come nei vecchi giochi. Non hanno riflesso.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Nella modalità pixel le icone sono pixel. Un altro stile di icone si può scegliere disattivando Icone pixel qui sopra.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel è la modalità pixel per tutta l'app: capsule a gradini, menu e fogli delle azioni e, con Icone pixel attive, tutte le icone, disegnate come le disegna lo stile pixel dei plugin.",
         "Pixel Icons": "Icone pixel",
@@ -72,7 +73,6 @@ enum AorusL10nTable {
         "Tint Strength": "Intensità della tinta",
         "Tint": "Tinta",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Cambia tutto il vetro dell'app: i pulsanti sopra una chat, la barra di inserimento, la barra delle schede, i menu e i fogli delle azioni.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La trasparenza del colore del bagliore ne determina l’intensità. Le capsule pixel proiettano un’ombra netta, come nei vecchi giochi.",
         "Glow Size": "Ampiezza del bagliore",
         "Glow": "Bagliore",
         "Highlight": "Riflesso",
@@ -1018,6 +1018,7 @@ enum AorusL10nTable {
     ]
 
     private static let pl: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Przezroczystość koloru poświaty określa jej siłę. Pikselowe kapsuły rzucają ostry cień, jak w starych grach. Nie mają odblasku.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "W trybie pikselowym ikony są pikselowe. Inny styl ikon można wybrać po wyłączeniu pikselowych ikon powyżej.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksele to tryb pikselowy w całej aplikacji: schodkowe kapsuły, menu i arkusze akcji, a z włączonymi pikselowymi ikonami — każda ikona, rysowana tak jak w pikselowym stylu wtyczek.",
         "Pixel Icons": "Pikselowe ikony",
@@ -1037,7 +1038,6 @@ enum AorusL10nTable {
         "Tint Strength": "Siła odcienia",
         "Tint": "Odcień",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Zmienia całe szkło aplikacji: przyciski nad czatem, pasek wpisywania, pasek kart, menu i arkusze akcji.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Przezroczystość koloru poświaty określa jej siłę. Pikselowe kapsuły rzucają ostry cień, jak w starych grach.",
         "Glow Size": "Zasięg poświaty",
         "Glow": "Poświata",
         "Highlight": "Odblask",
@@ -1983,6 +1983,7 @@ enum AorusL10nTable {
     ]
 
     private static let nl: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "De transparantie van de gloedkleur bepaalt de sterkte. Pixelcapsules werpen een harde schaduw, zoals in oude games. Glans hebben ze niet.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "In de pixelmodus zijn de iconen pixelig. Een andere iconstijl kies je zodra Pixeliconen hierboven uit staat.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel is de pixelmodus voor de hele app: getrapte capsules, menu's en actiebladen en, met Pixeliconen aan, elk icoon, getekend zoals de pixelstijl van plug-ins dat doet.",
         "Pixel Icons": "Pixeliconen",
@@ -2002,7 +2003,6 @@ enum AorusL10nTable {
         "Tint Strength": "Sterkte van de tint",
         "Tint": "Tint",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Verandert al het glas van de app: de knoppen boven een chat, de invoerbalk, de tabbalk, menu's en actiebladen.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "De transparantie van de gloedkleur bepaalt de sterkte. Pixelcapsules werpen een harde schaduw, zoals in oude games.",
         "Glow Size": "Grootte van de gloed",
         "Glow": "Gloed",
         "Highlight": "Glans",
@@ -2948,6 +2948,7 @@ enum AorusL10nTable {
     ]
 
     private static let ca: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparència del color del resplendor en fixa la intensitat. Les càpsules de píxels projecten una ombra dura, com als jocs antics. No tenen lluïssor.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En el mode de píxels les icones són de píxels. Es pot triar un altre estil d'icones desactivant Icones de píxels a dalt.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Píxels és el mode de píxels per a tota l'aplicació: càpsules esglaonades, menús i fulls d'accions i, amb Icones de píxels activades, totes les icones, dibuixades com ho fa l'estil de píxels dels connectors.",
         "Pixel Icons": "Icones de píxels",
@@ -2967,7 +2968,6 @@ enum AorusL10nTable {
         "Tint Strength": "Intensitat del tint",
         "Tint": "Tint",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Canvia tot el vidre de l'aplicació: els botons sobre un xat, la barra d'escriptura, la barra de pestanyes, els menús i els fulls d'accions.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La transparència del color del resplendor en fixa la intensitat. Les càpsules de píxels projecten una ombra dura, com als jocs antics.",
         "Glow Size": "Mida del resplendor",
         "Glow": "Resplendor",
         "Highlight": "Lluïssor",
@@ -3913,6 +3913,7 @@ enum AorusL10nTable {
     ]
 
     private static let id: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Transparansi warna pendar menentukan kekuatannya. Kapsul piksel memberi bayangan tegas, seperti gim lawas. Kilau tidak ada.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Dalam mode piksel, ikon berpiksel. Gaya ikon lain dapat dipilih setelah Ikon piksel di atas dimatikan.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel adalah mode piksel untuk seluruh aplikasi: kapsul bertangga, menu dan lembar tindakan, dan dengan Ikon piksel aktif, setiap ikon, digambar seperti gaya piksel plugin.",
         "Pixel Icons": "Ikon piksel",
@@ -3932,7 +3933,6 @@ enum AorusL10nTable {
         "Tint Strength": "Kekuatan rona",
         "Tint": "Rona",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mengubah semua kaca di aplikasi: tombol di atas obrolan, bilah input, bilah tab, menu, dan lembar tindakan.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Transparansi warna pendar menentukan kekuatannya. Kapsul piksel memberi bayangan tegas, seperti gim lawas.",
         "Glow Size": "Ukuran pendar",
         "Glow": "Pendar",
         "Highlight": "Kilau",
@@ -4878,6 +4878,7 @@ enum AorusL10nTable {
     ]
 
     private static let ms: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Kelutsinaran warna cahaya menentukan kekuatannya. Kapsul piksel menghasilkan bayang tajam, seperti permainan lama. Kilauan tiada.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Dalam mod piksel, ikon adalah piksel. Gaya ikon lain boleh dipilih selepas Ikon piksel di atas dimatikan.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel ialah mod piksel untuk seluruh aplikasi: kapsul bertangga, menu dan helaian tindakan dan, dengan Ikon piksel dihidupkan, setiap ikon, dilukis seperti gaya piksel pemalam.",
         "Pixel Icons": "Ikon piksel",
@@ -4897,7 +4898,6 @@ enum AorusL10nTable {
         "Tint Strength": "Kekuatan rona",
         "Tint": "Rona",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mengubah semua kaca dalam aplikasi: butang di atas sembang, bar input, bar tab, menu dan helaian tindakan.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Kelutsinaran warna cahaya menentukan kekuatannya. Kapsul piksel menghasilkan bayang tajam, seperti permainan lama.",
         "Glow Size": "Saiz cahaya",
         "Glow": "Cahaya",
         "Highlight": "Kilauan",
@@ -5843,6 +5843,7 @@ enum AorusL10nTable {
     ]
 
     private static let be: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Празрыстасць колеру свячэння задае яго сілу. У піксельных капсул цень рэзкая, як у старых гульнях. Бліку ў іх няма.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У піксельным рэжыме іконкі піксельныя. Іншы стыль іконак можна выбраць, выключыўшы «Піксельныя іконкі» вышэй.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пікселі — піксельны рэжым ва ўсёй праграме: ступеньчатыя капсулы, меню і аркушы дзеянняў, а з «Піксельнымі іконкамі» — і ўсе іконкі, як іх малюе піксельны стыль плагінаў.",
         "Pixel Icons": "Піксельныя іконкі",
@@ -5862,7 +5863,6 @@ enum AorusL10nTable {
         "Tint Strength": "Сіла адцення",
         "Tint": "Адценне",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Змяняе ўсё шкло праграмы: кнопкі над чатам, радок уводу, панэль укладак, меню і аркушы дзеянняў.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Празрыстасць колеру свячэння задае яго сілу. У піксельных капсул цень рэзкая, як у старых гульнях.",
         "Glow Size": "Памер свячэння",
         "Glow": "Свячэнне",
         "Highlight": "Блік",
@@ -6808,6 +6808,7 @@ enum AorusL10nTable {
     ]
 
     private static let uz: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Nur rangining shaffofligi uning kuchini belgilaydi. Piksel kapsulalar eski o‘yinlardagidek keskin soya tashlaydi. Ularda yaltiroq yo‘q.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Piksel rejimida belgilar pikselli. Boshqa belgilar uslubini tanlash uchun yuqoridagi «Piksel belgilar»ni o‘chiring.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel — butun ilova uchun piksel rejimi: zinapoyali kapsulalar, menyular va amallar varaqlari, «Piksel belgilar» yoqilganda esa barcha belgilar ham, plaginlarning piksel uslubi chizganidek.",
         "Pixel Icons": "Piksel belgilar",
@@ -6827,7 +6828,6 @@ enum AorusL10nTable {
         "Tint Strength": "Tus kuchi",
         "Tint": "Tus",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Ilovadagi barcha shishani o‘zgartiradi: chat ustidagi tugmalar, kiritish satri, yorliqlar paneli, menyular va amallar varaqlari.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Nur rangining shaffofligi uning kuchini belgilaydi. Piksel kapsulalar eski o‘yinlardagidek keskin soya tashlaydi.",
         "Glow Size": "Nur o‘lchami",
         "Glow": "Nur",
         "Highlight": "Yaltiroq",
@@ -7773,6 +7773,7 @@ enum AorusL10nTable {
     ]
 
     private static let ko: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "발광 색의 투명도가 세기를 정합니다. 픽셀 캡슐은 옛날 게임처럼 선명한 그림자를 드리웁니다. 하이라이트는 없습니다.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "픽셀 모드에서는 아이콘이 픽셀로 그려집니다. 위의 픽셀 아이콘을 끄면 다른 아이콘 스타일을 고를 수 있습니다.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "픽셀은 앱 전체의 픽셀 모드입니다. 계단식 캡슐, 메뉴와 작업 시트, 그리고 픽셀 아이콘을 켜면 모든 아이콘이 플러그인의 픽셀 스타일처럼 그려집니다.",
         "Pixel Icons": "픽셀 아이콘",
@@ -7792,7 +7793,6 @@ enum AorusL10nTable {
         "Tint Strength": "색조 강도",
         "Tint": "색조",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "앱의 모든 글래스를 바꿉니다: 채팅 위의 버튼, 입력창, 탭 바, 메뉴와 작업 시트.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "발광 색의 투명도가 세기를 정합니다. 픽셀 캡슐은 옛날 게임처럼 선명한 그림자를 드리웁니다.",
         "Glow Size": "발광 크기",
         "Glow": "발광",
         "Highlight": "하이라이트",
@@ -8738,6 +8738,7 @@ enum AorusL10nTable {
     ]
 
     private static let ar: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "تحدد شفافية لون التوهج قوته. تُلقي الكبسولات البكسلية ظلًا حادًا كما في الألعاب القديمة. ولا لمعة لها.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "في وضع البكسل تكون الأيقونات بكسلية. يمكن اختيار نمط أيقونات آخر بعد إيقاف الأيقونات البكسلية أعلاه.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "البكسل هو وضع البكسل للتطبيق كله: كبسولات متدرجة، والقوائم وأوراق الإجراءات، ومع تفعيل الأيقونات البكسلية كل الأيقونات، مرسومة كما يرسمها نمط البكسل في الإضافات.",
         "Pixel Icons": "أيقونات بكسلية",
@@ -8757,7 +8758,6 @@ enum AorusL10nTable {
         "Tint Strength": "قوة الصبغة",
         "Tint": "الصبغة",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "يغيّر كل زجاج التطبيق: الأزرار فوق الدردشة وشريط الإدخال وشريط التبويبات والقوائم وأوراق الإجراءات.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "تحدد شفافية لون التوهج قوته. تُلقي الكبسولات البكسلية ظلًا حادًا كما في الألعاب القديمة.",
         "Glow Size": "حجم التوهج",
         "Glow": "التوهج",
         "Highlight": "اللمعة",
@@ -9703,6 +9703,7 @@ enum AorusL10nTable {
     ]
 
     private static let fa: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "شفافیت رنگ درخشش شدت آن را تعیین می‌کند. کپسول‌های پیکسلی سایه‌ای تیز دارند، مثل بازی‌های قدیمی. برق ندارند.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "در حالت پیکسلی نمادها پیکسلی‌اند. با خاموش کردن نمادهای پیکسلی در بالا می‌توانید سبک دیگری انتخاب کنید.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "پیکسل حالت پیکسلی برای کل برنامه است: کپسول‌های پله‌ای، منوها و برگه‌های عمل و، با روشن بودن نمادهای پیکسلی، همهٔ نمادها، همان‌طور که سبک پیکسلی افزونه‌ها می‌کشد.",
         "Pixel Icons": "نمادهای پیکسلی",
@@ -9722,7 +9723,6 @@ enum AorusL10nTable {
         "Tint Strength": "شدت ته‌رنگ",
         "Tint": "ته‌رنگ",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "همهٔ شیشه‌های برنامه را تغییر می‌دهد: دکمه‌های بالای گفتگو، نوار ورودی، نوار زبانه‌ها، منوها و برگه‌های عمل.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "شفافیت رنگ درخشش شدت آن را تعیین می‌کند. کپسول‌های پیکسلی سایه‌ای تیز دارند، مثل بازی‌های قدیمی.",
         "Glow Size": "اندازه درخشش",
         "Glow": "درخشش",
         "Highlight": "برق",
@@ -10668,6 +10668,7 @@ enum AorusL10nTable {
     ]
 
     private static let kk: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Жарқыл түсінің мөлдірлігі оның күшін белгілейді. Пиксель капсулалардың көлеңкесі ескі ойындардағыдай анық. Оларда жылтыр жоқ.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Пиксель режимінде белгішелер пиксельді. Басқа белгіше стилін жоғарыдағы «Пиксель белгішелерді» өшіріп таңдауға болады.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пиксель — бүкіл қолданбаға арналған пиксель режимі: сатылы капсулалар, мәзірлер мен әрекет парақтары, ал «Пиксель белгішелер» қосулы болса — барлық белгішелер де, плагиндердің пиксель стилі салатындай.",
         "Pixel Icons": "Пиксель белгішелер",
@@ -10687,7 +10688,6 @@ enum AorusL10nTable {
         "Tint Strength": "Реңк күші",
         "Tint": "Реңк",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Қолданбадағы барлық шыныны өзгертеді: чат үстіндегі батырмалар, енгізу жолағы, қойындылар панелі, мәзірлер мен әрекет парақтары.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Жарқыл түсінің мөлдірлігі оның күшін белгілейді. Пиксель капсулалардың көлеңкесі ескі ойындардағыдай анық.",
         "Glow Size": "Жарқыл өлшемі",
         "Glow": "Жарқыл",
         "Highlight": "Жылтыр",
@@ -11633,6 +11633,7 @@ enum AorusL10nTable {
     ]
 
     private static let zhHans: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "发光颜色的透明度决定其强度。像素胶囊会投下硬朗的阴影，就像老游戏里那样。也没有高光。",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "像素模式下图标为像素风格。关闭上方的“像素图标”后即可选择其他图标样式。",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "像素是整个应用的像素模式：阶梯状胶囊、菜单和操作表，开启“像素图标”后还有所有图标，绘制方式与插件的像素样式相同。",
         "Pixel Icons": "像素图标",
@@ -11652,7 +11653,6 @@ enum AorusL10nTable {
         "Tint Strength": "色调强度",
         "Tint": "色调",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "更改应用中的所有玻璃：聊天上方的按钮、输入栏、标签栏、菜单和操作表。",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "发光颜色的透明度决定其强度。像素胶囊会投下硬朗的阴影，就像老游戏里那样。",
         "Glow Size": "发光大小",
         "Glow": "发光",
         "Highlight": "高光",
@@ -12599,6 +12599,7 @@ enum AorusL10nTable {
 
 
     private static let zhHant: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "發光顏色的透明度決定其強度。像素膠囊會投下硬朗的陰影，就像老遊戲裡那樣。也沒有高光。",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "像素模式下圖示為像素風格。關閉上方的「像素圖示」後即可選擇其他圖示樣式。",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "像素是整個應用程式的像素模式：階梯狀膠囊、選單與動作表，開啟「像素圖示」後還有所有圖示，繪製方式與外掛的像素樣式相同。",
         "Pixel Icons": "像素圖示",
@@ -12618,7 +12619,6 @@ enum AorusL10nTable {
         "Tint Strength": "色調強度",
         "Tint": "色調",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "變更應用程式中的所有玻璃：聊天上方的按鈕、輸入列、分頁列、選單和動作表。",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "發光顏色的透明度決定其強度。像素膠囊會投下硬朗的陰影，就像老遊戲裡那樣。",
         "Glow Size": "發光大小",
         "Glow": "發光",
         "Highlight": "高光",
@@ -13564,6 +13564,7 @@ enum AorusL10nTable {
     ]
 
     private static let ja: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "光彩の色の透明度で強さが決まります。ピクセルのカプセルは昔のゲームのようなくっきりした影を落とします。ハイライトはありません。",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "ピクセルモードではアイコンはピクセルになります。上のピクセルアイコンをオフにすると、別のアイコンスタイルを選べます。",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "ピクセルはアプリ全体のピクセルモードです。階段状のカプセル、メニューとアクションシート、そしてピクセルアイコンをオンにするとすべてのアイコンが、プラグインのピクセルスタイルと同じように描かれます。",
         "Pixel Icons": "ピクセルアイコン",
@@ -13583,7 +13584,6 @@ enum AorusL10nTable {
         "Tint Strength": "色味の強さ",
         "Tint": "色味",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "アプリのすべてのガラスを変更します：チャット上のボタン、入力バー、タブバー、メニュー、アクションシート。",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "光彩の色の透明度で強さが決まります。ピクセルのカプセルは昔のゲームのようなくっきりした影を落とします。",
         "Glow Size": "光彩の大きさ",
         "Glow": "光彩",
         "Highlight": "ハイライト",
@@ -14529,6 +14529,7 @@ enum AorusL10nTable {
     ]
 
     private static let fi: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Hehkun värin läpinäkyvyys määrää sen voimakkuuden. Pikselikapselit luovat terävän varjon kuin vanhoissa peleissä. Kiiltoa niissä ei ole.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Pikselitilassa kuvakkeet ovat pikseleitä. Toisen kuvaketyylin voi valita, kun yllä oleva Pikselikuvakkeet on pois päältä.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pikselit on koko sovelluksen pikselitila: porrastetut kapselit, valikot ja toimintoarkit sekä, kun Pikselikuvakkeet on päällä, jokainen kuvake piirrettynä kuten liitännäisten pikselityyli piirtää.",
         "Pixel Icons": "Pikselikuvakkeet",
@@ -14548,7 +14549,6 @@ enum AorusL10nTable {
         "Tint Strength": "Sävyn voimakkuus",
         "Tint": "Sävy",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Muuttaa sovelluksen kaiken lasin: keskustelun yläpuolella olevat painikkeet, syöttöpalkin, välilehtipalkin, valikot ja toimintoarkit.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Hehkun värin läpinäkyvyys määrää sen voimakkuuden. Pikselikapselit luovat terävän varjon kuin vanhoissa peleissä.",
         "Glow Size": "Hehkun koko",
         "Glow": "Hehku",
         "Highlight": "Kiilto",
@@ -15494,6 +15494,7 @@ enum AorusL10nTable {
     ]
 
     private static let he: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "השקיפות של צבע הזוהר קובעת את עוצמתו. קפסולות פיקסלים מטילות צל חד, כמו במשחקים ישנים. אין להן ברק.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "במצב פיקסלים הסמלים פיקסליים. אפשר לבחור סגנון סמלים אחר אחרי כיבוי סמלי הפיקסלים למעלה.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "פיקסלים הוא מצב הפיקסלים לכל האפליקציה: קפסולות מדורגות, תפריטים וגיליונות פעולות, וכשסמלי פיקסלים פעילים — כל סמל, מצויר כפי שסגנון הפיקסלים של התוספים מצייר.",
         "Pixel Icons": "סמלי פיקסלים",
@@ -15513,7 +15514,6 @@ enum AorusL10nTable {
         "Tint Strength": "עוצמת הגוון",
         "Tint": "גוון",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "משנה את כל הזכוכית באפליקציה: הכפתורים מעל הצ'אט, שורת ההקלדה, סרגל הלשוניות, התפריטים וגיליונות הפעולות.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "השקיפות של צבע הזוהר קובעת את עוצמתו. קפסולות פיקסלים מטילות צל חד, כמו במשחקים ישנים.",
         "Glow Size": "גודל הזוהר",
         "Glow": "זוהר",
         "Highlight": "ברק",
@@ -16459,6 +16459,7 @@ enum AorusL10nTable {
     ]
 
     private static let hr: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Prozirnost boje sjaja određuje njegovu jačinu. Pikselne kapsule bacaju oštru sjenu, kao u starim igrama. Odsjaja nemaju.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "U pikselnom načinu ikone su pikselne. Drugi stil ikona možete odabrati kad isključite pikselne ikone iznad.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pikseli su pikselni način za cijelu aplikaciju: stepenaste kapsule, izbornici i listovi radnji te, s uključenim pikselnim ikonama, svaka ikona, nacrtana kao što je crta pikselni stil dodataka.",
         "Pixel Icons": "Pikselne ikone",
@@ -16478,7 +16479,6 @@ enum AorusL10nTable {
         "Tint Strength": "Jačina nijanse",
         "Tint": "Nijansa",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mijenja svo staklo u aplikaciji: gumbe iznad razgovora, traku za unos, traku kartica, izbornike i listove radnji.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Prozirnost boje sjaja određuje njegovu jačinu. Pikselne kapsule bacaju oštru sjenu, kao u starim igrama.",
         "Glow Size": "Veličina sjaja",
         "Glow": "Sjaj",
         "Highlight": "Odsjaj",
@@ -17424,6 +17424,7 @@ enum AorusL10nTable {
     ]
 
     private static let sr: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Провидност боје сјаја одређује његову јачину. Пикселне капсуле бацају оштру сенку, као у старим играма. Одсјаја немају.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У пикселном режиму иконе су пикселне. Други стил икона можете изабрати када искључите пикселне иконе изнад.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пиксели су пикселни режим за целу апликацију: степенасте капсуле, менији и листови радњи и, са укљученим пикселним иконама, свака икона, нацртана као што је црта пикселни стил додатака.",
         "Pixel Icons": "Пикселне иконе",
@@ -17443,7 +17444,6 @@ enum AorusL10nTable {
         "Tint Strength": "Јачина нијансе",
         "Tint": "Нијанса",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Мења све стакло у апликацији: дугмад изнад ћаскања, траку за унос, траку картица, меније и листове радњи.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Провидност боје сјаја одређује његову јачину. Пикселне капсуле бацају оштру сенку, као у старим играма.",
         "Glow Size": "Величина сјаја",
         "Glow": "Сјај",
         "Highlight": "Одсјај",
@@ -18389,6 +18389,7 @@ enum AorusL10nTable {
     ]
 
     private static let cs: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Průhlednost barvy záře určuje její sílu. Pixelové kapsle vrhají ostrý stín jako ve starých hrách. Odlesk nemají.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "V pixelovém režimu jsou ikony pixelové. Jiný styl ikon lze zvolit po vypnutí pixelových ikon výše.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixely jsou pixelový režim pro celou aplikaci: stupňovité kapsle, nabídky a listy akcí a se zapnutými pixelovými ikonami i každá ikona, kreslená jako pixelovým stylem pluginů.",
         "Pixel Icons": "Pixelové ikony",
@@ -18408,7 +18409,6 @@ enum AorusL10nTable {
         "Tint Strength": "Síla odstínu",
         "Tint": "Odstín",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mění veškeré sklo aplikace: tlačítka nad chatem, vstupní řádek, panel karet, nabídky a listy akcí.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Průhlednost barvy záře určuje její sílu. Pixelové kapsle vrhají ostrý stín jako ve starých hrách.",
         "Glow Size": "Velikost záře",
         "Glow": "Záře",
         "Highlight": "Odlesk",
@@ -19354,6 +19354,7 @@ enum AorusL10nTable {
     ]
 
     private static let sk: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Priehľadnosť farby žiary určuje jej silu. Pixelové kapsuly vrhajú ostrý tieň ako v starých hrách. Odlesk nemajú.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "V pixelovom režime sú ikony pixelové. Iný štýl ikon môžete zvoliť po vypnutí pixelových ikon vyššie.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixely sú pixelový režim pre celú aplikáciu: stupňovité kapsuly, ponuky a hárky akcií a so zapnutými pixelovými ikonami aj každá ikona, kreslená ako pixelovým štýlom pluginov.",
         "Pixel Icons": "Pixelové ikony",
@@ -19373,7 +19374,6 @@ enum AorusL10nTable {
         "Tint Strength": "Sila odtieňa",
         "Tint": "Odtieň",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Mení všetko sklo aplikácie: tlačidlá nad četom, vstupný riadok, panel kariet, ponuky a hárky akcií.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Priehľadnosť farby žiary určuje jej silu. Pixelové kapsuly vrhajú ostrý tieň ako v starých hrách.",
         "Glow Size": "Veľkosť žiary",
         "Glow": "Žiara",
         "Highlight": "Odlesk",
@@ -20319,6 +20319,7 @@ enum AorusL10nTable {
     ]
 
     private static let ro: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Transparența culorii strălucirii îi stabilește intensitatea. Capsulele pixel aruncă o umbră netă, ca în jocurile vechi. Nu au strălucire.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "În modul pixel pictogramele sunt pixelate. Alt stil de pictograme se poate alege după ce dezactivezi Pictograme pixelate mai sus.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel este modul pixel pentru toată aplicația: capsule în trepte, meniuri și foi de acțiuni și, cu Pictograme pixelate activate, fiecare pictogramă, desenată cum o desenează stilul pixel al pluginurilor.",
         "Pixel Icons": "Pictograme pixelate",
@@ -20338,7 +20339,6 @@ enum AorusL10nTable {
         "Tint Strength": "Intensitatea nuanței",
         "Tint": "Nuanță",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Schimbă toată sticla aplicației: butoanele de deasupra unui chat, bara de scriere, bara de file, meniurile și foile de acțiuni.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Transparența culorii strălucirii îi stabilește intensitatea. Capsulele pixel aruncă o umbră netă, ca în jocurile vechi.",
         "Glow Size": "Dimensiunea strălucirii",
         "Glow": "Strălucire exterioară",
         "Highlight": "Strălucire",
@@ -21284,6 +21284,7 @@ enum AorusL10nTable {
     ]
 
     private static let hu: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "A ragyogás színének átlátszósága adja meg az erősségét. A pixeles kapszulák éles árnyékot vetnek, mint a régi játékokban. Csillanásuk nincs.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Pixeles módban az ikonok pixelesek. Más ikonstílus a fenti Pixeles ikonok kikapcsolása után választható.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "A Pixel az egész alkalmazás pixeles módja: lépcsős kapszulák, menük és műveletlapok, bekapcsolt pixeles ikonokkal pedig minden ikon, úgy rajzolva, ahogy a bővítmények pixeles stílusa rajzolja.",
         "Pixel Icons": "Pixeles ikonok",
@@ -21303,7 +21304,6 @@ enum AorusL10nTable {
         "Tint Strength": "Árnyalat erőssége",
         "Tint": "Árnyalat",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Az alkalmazás összes üvegét megváltoztatja: a csevegés feletti gombokat, a beviteli sávot, a lapsávot, a menüket és a műveletlapokat.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "A ragyogás színének átlátszósága adja meg az erősségét. A pixeles kapszulák éles árnyékot vetnek, mint a régi játékokban.",
         "Glow Size": "Ragyogás mérete",
         "Glow": "Ragyogás",
         "Highlight": "Csillanás",
@@ -22249,6 +22249,7 @@ enum AorusL10nTable {
     ]
 
     private static let nb: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Gjennomsiktigheten i glødfargen bestemmer styrken. Pikselkapsler kaster en skarp skygge, som i gamle spill. Lysglimt har de ikke.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "I pikselmodus er ikonene pikselert. En annen ikonstil kan velges når Pikselikoner over er av.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel er pikselmodus for hele appen: trappede kapsler, menyer og handlingsark og, med Pikselikoner på, hvert ikon, tegnet slik programtilleggenes pikselstil tegner dem.",
         "Pixel Icons": "Pikselikoner",
@@ -22268,7 +22269,6 @@ enum AorusL10nTable {
         "Tint Strength": "Fargetonens styrke",
         "Tint": "Fargetone",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Endrer alt glasset i appen: knappene over en chat, inntastingsfeltet, fanelinjen, menyer og handlingsark.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Gjennomsiktigheten i glødfargen bestemmer styrken. Pikselkapsler kaster en skarp skygge, som i gamle spill.",
         "Glow Size": "Glødstørrelse",
         "Glow": "Glød",
         "Highlight": "Lysglimt",
@@ -23214,6 +23214,7 @@ enum AorusL10nTable {
     ]
 
     private static let sv: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Glödfärgens genomskinlighet avgör styrkan. Pixelkapslar kastar en skarp skugga, som i gamla spel. Glansdager har de inte.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "I pixelläget är symbolerna pixliga. En annan symbolstil kan väljas när Pixelsymboler ovan är av.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel är pixelläget för hela appen: trappstegade kapslar, menyer och åtgärdsblad och, med Pixelsymboler på, varje symbol, ritad som tilläggens pixelstil ritar den.",
         "Pixel Icons": "Pixelsymboler",
@@ -23233,7 +23234,6 @@ enum AorusL10nTable {
         "Tint Strength": "Färgtonens styrka",
         "Tint": "Färgton",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Ändrar allt glas i appen: knapparna ovanför en chatt, inmatningsfältet, flikfältet, menyer och åtgärdsblad.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Glödfärgens genomskinlighet avgör styrkan. Pixelkapslar kastar en skarp skugga, som i gamla spel.",
         "Glow Size": "Glödens storlek",
         "Glow": "Glöd",
         "Highlight": "Glansdager",
@@ -24179,6 +24179,7 @@ enum AorusL10nTable {
     ]
 
     private static let vi: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Độ trong suốt của màu phát sáng quyết định độ mạnh. Viên nang điểm ảnh đổ bóng sắc nét như trò chơi cổ điển. Chúng không có ánh sáng.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Ở chế độ điểm ảnh, biểu tượng là điểm ảnh. Có thể chọn kiểu biểu tượng khác sau khi tắt Biểu tượng điểm ảnh ở trên.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Điểm ảnh là chế độ điểm ảnh cho toàn ứng dụng: viên nang bậc thang, menu và bảng tác vụ, và khi bật Biểu tượng điểm ảnh, mọi biểu tượng được vẽ như kiểu điểm ảnh của plugin.",
         "Pixel Icons": "Biểu tượng điểm ảnh",
@@ -24198,7 +24199,6 @@ enum AorusL10nTable {
         "Tint Strength": "Độ đậm sắc màu",
         "Tint": "Sắc màu",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Thay đổi toàn bộ kính của ứng dụng: các nút phía trên cuộc trò chuyện, thanh nhập, thanh tab, menu và bảng tác vụ.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Độ trong suốt của màu phát sáng quyết định độ mạnh. Viên nang điểm ảnh đổ bóng sắc nét như trò chơi cổ điển.",
         "Glow Size": "Kích thước phát sáng",
         "Glow": "Phát sáng",
         "Highlight": "Ánh sáng",
@@ -25144,6 +25144,7 @@ enum AorusL10nTable {
     ]
 
     private static let uk: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Прозорість кольору сяйва задає його силу. Піксельні капсули мають різку тінь, як у старих іграх. Відблиску в них немає.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "У піксельному режимі іконки піксельні. Інший стиль іконок можна вибрати, вимкнувши «Піксельні іконки» вище.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Пікселі — піксельний режим у всьому застосунку: ступінчасті капсули, меню й аркуші дій, а з «Піксельними іконками» — і всі іконки, як їх малює піксельний стиль плагінів.",
         "Pixel Icons": "Піксельні іконки",
@@ -25163,7 +25164,6 @@ enum AorusL10nTable {
         "Tint Strength": "Сила відтінку",
         "Tint": "Відтінок",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Змінює все скло застосунку: кнопки над чатом, рядок введення, панель вкладок, меню й аркуші дій.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Прозорість кольору сяйва задає його силу. Піксельні капсули мають різку тінь, як у старих іграх.",
         "Glow Size": "Розмір сяйва",
         "Glow": "Сяйво",
         "Highlight": "Відблиск",
@@ -26118,6 +26118,7 @@ enum AorusL10nTable {
     ]
 
     private static let es: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparencia del color del resplandor fija su intensidad. Las cápsulas de píxeles proyectan una sombra dura, como en los juegos antiguos. No tienen brillo.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En el modo píxel los iconos son de píxeles. Se puede elegir otro estilo de iconos al desactivar Iconos de píxeles arriba.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Píxel es el modo píxel para toda la app: cápsulas escalonadas, menús y hojas de acciones y, con Iconos de píxeles activados, cada icono, dibujado como lo dibuja el estilo píxel de los plugins.",
         "Pixel Icons": "Iconos de píxeles",
@@ -26137,7 +26138,6 @@ enum AorusL10nTable {
         "Tint Strength": "Intensidad del tono",
         "Tint": "Tono",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Cambia todo el cristal de la app: los botones sobre un chat, la barra de escritura, la barra de pestañas, los menús y las hojas de acciones.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La transparencia del color del resplandor fija su intensidad. Las cápsulas de píxeles proyectan una sombra dura, como en los juegos antiguos.",
         "Glow Size": "Tamaño del resplandor",
         "Glow": "Resplandor",
         "Highlight": "Brillo",
@@ -27092,6 +27092,7 @@ enum AorusL10nTable {
     ]
 
     private static let pt: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "A transparência da cor do brilho define a intensidade. As cápsulas pixel projetam uma sombra marcada, como nos jogos antigos. Não têm reflexo.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "No modo pixel os ícones são de pixel. Outro estilo de ícones pode ser escolhido desativando Ícones de pixel acima.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel é o modo pixel para o app inteiro: cápsulas em degraus, menus e folhas de ações e, com Ícones de pixel ativados, todos os ícones, desenhados como o estilo pixel dos plugins os desenha.",
         "Pixel Icons": "Ícones de pixel",
@@ -27111,7 +27112,6 @@ enum AorusL10nTable {
         "Tint Strength": "Intensidade do tom",
         "Tint": "Tom",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Muda todo o vidro do app: os botões sobre um chat, a barra de digitação, a barra de abas, os menus e as folhas de ações.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "A transparência da cor do brilho define a intensidade. As cápsulas pixel projetam uma sombra marcada, como nos jogos antigos.",
         "Glow Size": "Tamanho do brilho",
         "Glow": "Brilho",
         "Highlight": "Reflexo",
@@ -28066,6 +28066,7 @@ enum AorusL10nTable {
     ]
 
     private static let de: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Die Transparenz der Leuchtfarbe bestimmt ihre Stärke. Pixelkapseln werfen einen harten Schatten wie in alten Spielen. Glanzlicht haben sie keins.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Im Pixelmodus sind die Symbole pixelig. Einen anderen Symbolstil wählst du, sobald Pixelsymbole oben aus ist.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel ist der Pixelmodus für die ganze App: gestufte Kapseln, Menüs und Aktionsblätter und, mit eingeschalteten Pixelsymbolen, jedes Symbol, so gezeichnet wie der Pixelstil von Plugins.",
         "Pixel Icons": "Pixelsymbole",
@@ -28085,7 +28086,6 @@ enum AorusL10nTable {
         "Tint Strength": "Stärke der Tönung",
         "Tint": "Tönung",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Ändert das gesamte Glas der App: die Tasten über einem Chat, die Eingabeleiste, die Tab-Leiste, Menüs und Aktionsblätter.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Die Transparenz der Leuchtfarbe bestimmt ihre Stärke. Pixelkapseln werfen einen harten Schatten wie in alten Spielen.",
         "Glow Size": "Leuchtweite",
         "Glow": "Leuchten",
         "Highlight": "Glanzlicht",
@@ -29040,6 +29040,7 @@ enum AorusL10nTable {
     ]
 
     private static let fr: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "La transparence de la couleur du halo en règle l’intensité. Les capsules pixel projettent une ombre nette, comme dans les vieux jeux. Elles n'ont pas de reflet.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "En mode pixel, les icônes sont en pixels. Un autre style d'icônes se choisit une fois Icônes en pixels désactivé plus haut.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Pixel est le mode pixel pour toute l'app : capsules en escalier, menus et feuilles d'actions et, avec Icônes en pixels activé, chaque icône, dessinée comme le style pixel des plugins la dessine.",
         "Pixel Icons": "Icônes en pixels",
@@ -29059,7 +29060,6 @@ enum AorusL10nTable {
         "Tint Strength": "Intensité de la teinte",
         "Tint": "Teinte",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Modifie tout le verre de l'app : les boutons au-dessus d'une discussion, la barre de saisie, la barre d'onglets, les menus et les feuilles d'actions.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "La transparence de la couleur du halo en règle l’intensité. Les capsules pixel projettent une ombre nette, comme dans les vieux jeux.",
         "Glow Size": "Taille du halo",
         "Glow": "Halo",
         "Highlight": "Reflet",
@@ -30014,6 +30014,7 @@ enum AorusL10nTable {
     ]
 
     private static let tr: [String: String] = [
+        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.": "Parıltı renginin saydamlığı gücünü belirler. Piksel kapsüller eski oyunlardaki gibi keskin gölge düşürür. Parlamaları yoktur.",
         "In the pixel mode the icons are pixel. Another icon style can be chosen once Pixel Icons above is off.": "Piksel modunda simgeler pikseldir. Yukarıdaki Piksel simgeler kapatılınca başka bir simge stili seçilebilir.",
         "Pixel is the pixel mode for the whole app: stepped capsules, menus and action sheets and, with Pixel Icons on, every icon, drawn as the plugins' pixel style draws them.": "Piksel, tüm uygulama için piksel modudur: basamaklı kapsüller, menüler ve eylem sayfaları ve Piksel simgeler açıkken her simge, eklentilerin piksel stilinin çizdiği gibi.",
         "Pixel Icons": "Piksel simgeler",
@@ -30033,7 +30034,6 @@ enum AorusL10nTable {
         "Tint Strength": "Ton yoğunluğu",
         "Tint": "Ton",
         "Changes all of the app's glass: the buttons over a chat, the input bar, the tab bar, menus and action sheets.": "Uygulamadaki tüm camı değiştirir: sohbetin üstündeki düğmeler, yazma çubuğu, sekme çubuğu, menüler ve eylem sayfaları.",
-        "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.": "Parıltı renginin saydamlığı gücünü belirler. Piksel kapsüller eski oyunlardaki gibi keskin gölge düşürür.",
         "Glow Size": "Parıltı Boyutu",
         "Glow": "Parıltı",
         "Highlight": "Parlama",

@@ -310,7 +310,7 @@ public enum AorusPluginAppearance {
             Key("glass.shadow", .number(0, 1), "Shadow under the panes, from none to strong"),
             Key("glass.glow", .color, "Glow around the panes; the alpha sets its strength"),
             Key("glass.glowSize", .number(2, 24), "How far the glow reaches"),
-            Key("glass.shine", .number(0, 1), "Glossy highlight across the top of the panes"),
+            Key("glass.shine", .number(0, 1), "Glossy highlight across the top of the panes; the pixel plate has none"),
 
             Key("font.chat", .choice(fontSizes), "Message text size"),
             Key("font.lists", .choice(fontSizes), "Text size of lists and settings"),
@@ -760,7 +760,7 @@ public enum AorusGlassLook {
             "glass.border@light": "0000000F", "glass.border@dark": "FFFFFF1A", "glass.borderWidth": 1,
         ]),
         AorusMessageLook.Preset(id: "pixel", values: [
-            "glass.style": "pixel", "glass.pixelSize": 4, "glass.shadow": 0.6, "glass.shine": 0.5,
+            "glass.style": "pixel", "glass.pixelSize": 4, "glass.shadow": 0.6,
             "glass.fill@light": "FFFFFF", "glass.fill@dark": "2C2C2E",
             "glass.border@light": "1C1C1E", "glass.border@dark": "F2F2F7",
         ]),

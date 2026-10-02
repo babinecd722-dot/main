@@ -510,13 +510,9 @@ private func aorusGlassStyleIcon(_ preset: AorusMessageLook.Preset, dark: Bool) 
             context.setFillColor((fill.first ?? .white).cgColor)
             context.fill(capsule)
         }
-        if shine > 0.0 {
-            if pixel {
-                // The gleam the panes draw: a dash and a dot, a pixel inside the outline.
-                context.setFillColor(UIColor(white: 1.0, alpha: min(1.0, 0.35 + 0.65 * shine)).cgColor)
-                context.fill(CGRect(x: capsule.minX + 4.0, y: capsule.minY + 4.0, width: 4.0, height: 2.0))
-                context.fill(CGRect(x: capsule.minX + 10.0, y: capsule.minY + 4.0, width: 2.0, height: 2.0))
-            } else if let sheen = CGGradient(colorsSpace: nil, colors: [UIColor(white: 1.0, alpha: 0.3 * shine).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor] as CFArray, locations: [0.0, 1.0]) {
+        // A pixel pane has no highlight, as the panes draw none.
+        if shine > 0.0 && !pixel {
+            if let sheen = CGGradient(colorsSpace: nil, colors: [UIColor(white: 1.0, alpha: 0.3 * shine).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor] as CFArray, locations: [0.0, 1.0]) {
                 // As the panes draw it: a soft sheen from the top and a light rim along the top edge.
                 context.drawLinearGradient(sheen, start: CGPoint(x: capsule.midX, y: capsule.minY), end: CGPoint(x: capsule.midX, y: capsule.minY + capsule.height * 0.55), options: [])
                 context.saveGState()
@@ -1183,14 +1179,17 @@ private func aorusBubbleSettingsEntries(presentationData: PresentationData, samp
     entries.append(.lightHeader(aorusL("ТЕНЬ И СВЕЧЕНИЕ", "SHADOW AND GLOW")))
     let shadow = AorusPluginAppearanceValues.number("glass.shadow", in: values) ?? 0.0
     entries.append(.shadow(aorusL("Тень", "Shadow"), max(0.0, min(1.0, shadow))))
-    let shine = AorusPluginAppearanceValues.number("glass.shine", in: values) ?? 0.0
-    entries.append(.shine(aorusL("Блик", "Highlight"), max(0.0, min(1.0, shine))))
+    // A pixel capsule has no highlight, so it has no slider for one.
+    if material != "pixel" {
+        let shine = AorusPluginAppearanceValues.number("glass.shine", in: values) ?? 0.0
+        entries.append(.shine(aorusL("Блик", "Highlight"), max(0.0, min(1.0, shine))))
+    }
     entries.append(.glow(AorusLookColorRow(key: "glass.glow", stop: 0, title: aorusL("Свечение", "Glow"), palette: .glow, selected: aorusGlassColors("glass.glow", dark: dark).first, dark: dark)))
     if AorusPluginAppearanceValues.color("glass.glow", dark: dark, in: values) != nil {
         let glowSize = AorusPluginAppearanceValues.number("glass.glowSize", in: values) ?? 10.0
         entries.append(.glowSize(aorusL("Размер свечения", "Glow Size"), max(2.0, min(24.0, glowSize.rounded()))))
     }
-    entries.append(.lightFooter(aorusL("Прозрачность цвета свечения задаёт его силу. У пиксельных капсул тень жёсткая, как в старых играх.", "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games.")))
+    entries.append(.lightFooter(aorusL("Прозрачность цвета свечения задаёт его силу. У пиксельных капсул тень жёсткая, как в старых играх, а блика нет.", "The glow color's transparency sets its strength. Pixel capsules cast a hard shadow, as in old games, and have no highlight.")))
 
     entries.append(.iconsHeader(aorusL("ИКОНКИ", "ICONS")))
     if material == "pixel" && pixelIcons {
