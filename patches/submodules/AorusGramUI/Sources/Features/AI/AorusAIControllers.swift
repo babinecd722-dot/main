@@ -5552,6 +5552,9 @@ private final class AorusAIMessageCell: UITableViewCell, UITextViewDelegate {
                 view.textContainer.lineFragmentPadding = 0
                 view.delegate = self
                 view.linkTextAttributes = [.foregroundColor: accent, .underlineStyle: 0]
+                // The selection, its handles and a held formula in the answer's own accent,
+                // rather than in whatever tint the view happened to inherit.
+                view.tintColor = accent
                 view.configureMentions(context: context, theme: theme)
                 // The pill is no longer a link, so its tap arrives here instead of through
                 // the text-interaction delegate. Same destination, same URL shape.
@@ -6058,6 +6061,7 @@ private final class AorusAIQuoteCard: UIView {
         backgroundColor = palette.fill
         line.backgroundColor = accent
         textView.linkTextAttributes = [.foregroundColor: accent, .underlineStyle: 0]
+        textView.tintColor = accent
         textView.attributedText = AorusAIMarkdown.attributed(text, color: textColor, accent: accent, mentions: mentions)
         textView.refreshMentionImages()
     }

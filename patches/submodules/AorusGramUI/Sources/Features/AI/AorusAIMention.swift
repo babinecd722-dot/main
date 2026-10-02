@@ -752,13 +752,15 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
 
     // MARK: Formulas, selected whole
 
-    /// The rest of each selected formula, filled in the selection's own colour.
+    /// A selection with a formula in it, drawn in one piece and in one colour.
     ///
-    /// The system's highlight is left exactly as the system draws it — its band across the
-    /// line — and this covers what the band leaves out of a formula, above it and below it, so
-    /// the two read as one highlight over the whole fraction. It is drawn under the text, as the
-    /// system's own is. Where the system's band already reaches over a formula there is nothing
-    /// left to fill and nothing is drawn.
+    /// The system lays out the band of a formula's character a good way below the formula
+    /// itself: a fraction is set lower than the line's text, and the band follows the text. So
+    /// the system's highlight is put away while a formula is selected or held, and this draws
+    /// the whole selection instead — the system's own bands for the text in it, each formula at
+    /// its full height — as a single shape filled once, in the colour the system highlights in.
+    /// Painting over the system's band, as before, left three colours: the band, the fill
+    /// around it, and the two of them laid over each other.
     private lazy var aorusFormulaHighlightLayer: CAShapeLayer = {
         let layer = CAShapeLayer()
         layer.actions = ["path": NSNull(), "fillColor": NSNull(), "position": NSNull(), "bounds": NSNull()]
@@ -774,15 +776,14 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         self.layer.insertSublayer(layer, at: 0)
         return layer
     }()
+    private var aorusHoldsFormula = false
 
     /// The colour the system highlights a selection in: its tint, see-through.
     ///
-    /// Read from the view the system draws its highlight with, so what is filled in here
-    /// matches it exactly — but only a see-through version of the tint is taken for it. The
-    /// first reading took whatever see-through fill it met first, which on a dark page was a
-    /// pale white, and the fraction was highlighted white above and below and blue across its
-    /// middle. Anything that is not the tint is ignored, and the tint at the strength the
-    /// system uses stands in for it.
+    /// Read from the view the system draws its highlight with, so this one looks the same as
+    /// a selection anywhere else — but only a see-through version of the tint is taken for it.
+    /// Anything that is not the tint is ignored, and the tint at the strength the system uses
+    /// stands in for it.
     private func aorusSelectionHighlightColor() -> UIColor {
         let tint = self.tintColor ?? .systemBlue
         if let sampled = Self.aorusHighlightColor(in: self, depth: 0), Self.aorusIsSeeThrough(sampled, of: tint) {
@@ -846,34 +847,70 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         return nil
     }
 
-    /// The system's band for the one character at `index`, as the system itself lays it out.
-    private func aorusBand(forCharacterAt index: Int) -> [CGRect] {
-        guard let start = position(from: beginningOfDocument, offset: index),
-              let end = position(from: start, offset: 1),
-              let range = textRange(from: start, to: end) else { return [] }
-        return selectionRects(for: range).map { $0.rect }.filter { !$0.isEmpty && !$0.isInfinite && !$0.isNull }
-    }
+    // MARK: The system's highlight, put away while a formula is drawn
 
-    /// Covers `frame` except where `bands` already do, into `path`.
-    private func aorusAddUncovered(_ frame: CGRect, bands: [CGRect], to path: CGMutablePath) {
-        guard !bands.isEmpty else {
-            path.addRect(frame)
-            return
-        }
-        let top = bands.map { $0.minY }.min() ?? frame.minY
-        let bottom = bands.map { $0.maxY }.max() ?? frame.maxY
-        // Edge to edge with the band, so the filled parts line up with it exactly.
-        let minX = min(frame.minX, bands.map { $0.minX }.min() ?? frame.minX)
-        let maxX = max(frame.maxX, bands.map { $0.maxX }.max() ?? frame.maxX)
-        if frame.minY < top {
-            path.addRect(CGRect(x: minX, y: frame.minY, width: maxX - minX, height: top - frame.minY))
-        }
-        if frame.maxY > bottom {
-            path.addRect(CGRect(x: minX, y: bottom, width: maxX - minX, height: frame.maxY - bottom))
+    /// The views the system highlights a selection or a held item with: not the caret, not the
+    /// handles, which stay where they are.
+    private static func aorusSystemHighlightViews(in view: UIView, depth: Int, into result: inout [UIView]) {
+        guard depth < 6 else { return }
+        for subview in view.subviews {
+            let name = NSStringFromClass(type(of: subview))
+            if name.contains("Highlight") && !name.contains("Cursor") && !name.contains("Handle") && !name.contains("Grabber") {
+                result.append(subview)
+                continue
+            }
+            aorusSystemHighlightViews(in: subview, depth: depth + 1, into: &result)
         }
     }
 
-    /// Brings the filled-in parts of the selected formulas up to date with the selection.
+    /// The highlight views put away, with the mask each one had, to be given back.
+    private var aorusConcealedHighlights: [(view: UIView, mask: CALayer?)] = []
+    private static let aorusConcealMaskName = "aorus.formulaHighlight.conceal"
+
+    /// Puts the system's highlight away by masking it with nothing: the system may fade its
+    /// highlight in and out, which would undo a change of alpha, but it leaves a mask alone.
+    private func aorusConcealSystemHighlight() {
+        var views: [UIView] = []
+        Self.aorusSystemHighlightViews(in: self, depth: 0, into: &views)
+        for view in views where view.layer.mask?.name != Self.aorusConcealMaskName {
+            let mask = CALayer()
+            mask.name = Self.aorusConcealMaskName
+            self.aorusConcealedHighlights.append((view, view.layer.mask))
+            view.layer.mask = mask
+        }
+    }
+
+    private func aorusRevealSystemHighlight() {
+        guard !self.aorusConcealedHighlights.isEmpty else { return }
+        for item in self.aorusConcealedHighlights where item.view.layer.mask?.name == Self.aorusConcealMaskName {
+            item.view.layer.mask = item.mask
+        }
+        self.aorusConcealedHighlights.removeAll()
+    }
+
+    /// The system's highlight is ours to hide only while a formula's own is shown.
+    private func aorusUpdateSystemHighlight() {
+        if self.aorusHasFormulaHighlight || self.aorusHoldsFormula {
+            aorusConcealSystemHighlight()
+        } else {
+            aorusRevealSystemHighlight()
+        }
+    }
+
+    /// The system's bands for `range`, as the system itself lays them out.
+    private func aorusBands(for range: NSRange) -> [CGRect] {
+        guard range.length > 0,
+              let start = position(from: beginningOfDocument, offset: range.location),
+              let end = position(from: start, offset: range.length),
+              let span = textRange(from: start, to: end) else { return [] }
+        return selectionRects(for: span).map { $0.rect }.filter { !$0.isEmpty && !$0.isInfinite && !$0.isNull }
+    }
+
+    private var aorusHighlightLayerFrame: CGRect {
+        return CGRect(origin: CGPoint(), size: CGSize(width: max(self.bounds.width, self.contentSize.width), height: max(self.bounds.height, self.contentSize.height)))
+    }
+
+    /// Brings the highlight of a selection with formulas in it up to date with the selection.
     func aorusUpdateFormulaHighlight() {
         let range = self.selectedRange
         guard self.isFirstResponder, range.length > 0, NSMaxRange(range) <= textStorage.length, aorusCarriesMaths(in: range) else {
@@ -881,22 +918,40 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
                 self.aorusHasFormulaHighlight = false
                 self.aorusFormulaHighlightLayer.path = nil
             }
+            aorusUpdateSystemHighlight()
             return
         }
+        // Read while the system's highlight is still there to read it from.
+        let color = aorusSelectionHighlightColor()
+        let formulas = aorusFormulaFrames(in: range)
+        let formulaIndices = Set(formulas.map { $0.index })
         let path = CGMutablePath()
-        for formula in aorusFormulaFrames(in: range) {
-            aorusAddUncovered(formula.frame, bands: aorusBand(forCharacterAt: formula.index), to: path)
+        // The text between the formulas, banded as the system bands it.
+        var runStart = range.location
+        for index in range.location ..< NSMaxRange(range) where formulaIndices.contains(index) {
+            for band in aorusBands(for: NSRange(location: runStart, length: index - runStart)) {
+                path.addRect(band)
+            }
+            runStart = index + 1
+        }
+        for band in aorusBands(for: NSRange(location: runStart, length: NSMaxRange(range) - runStart)) {
+            path.addRect(band)
+        }
+        // Each formula at its full height, where it is drawn.
+        for formula in formulas {
+            path.addRect(formula.frame)
         }
         let layer = self.aorusFormulaHighlightLayer
-        layer.frame = CGRect(origin: CGPoint(), size: CGSize(width: max(self.bounds.width, self.contentSize.width), height: max(self.bounds.height, self.contentSize.height)))
-        layer.fillColor = aorusSelectionHighlightColor().cgColor
+        layer.frame = self.aorusHighlightLayerFrame
+        layer.fillColor = color.cgColor
         layer.path = path
         self.aorusHasFormulaHighlight = !path.isEmpty
+        aorusUpdateSystemHighlight()
     }
 
     /// The selection has changed: grown to whole fractions if it cut one, and the formulas in
-    /// it highlighted whole. The system's highlight is laid out a moment after the selection
-    /// changes, so the highlight is brought up to date again once it has been.
+    /// it highlighted whole. The system lays out its own highlight a moment after the selection
+    /// changes, so the highlight is brought up to date again once it has.
     func aorusSelectionDidChange() {
         aorusSnapSelectionToFractions()
         // A caret moving in the composer has nothing to highlight and nothing to catch up on.
@@ -907,29 +962,49 @@ class AorusAIMentionTextView: UITextView, UIGestureRecognizerDelegate {
         }
     }
 
-    /// Tints a held formula whole while its menu is open.
+    /// Tints a held formula whole while its menu is open, in the selection's colour, and puts
+    /// the system's highlight of the held item away: it stood below the formula, in another
+    /// colour, under this one.
     func aorusHoldFormula(_ range: NSRange) {
+        let color = aorusSelectionHighlightColor()
         let path = CGMutablePath()
         for formula in aorusFormulaFrames(in: range) {
             path.addRoundedRect(in: formula.frame.insetBy(dx: -2.0, dy: -1.0), cornerWidth: 4.0, cornerHeight: 4.0)
         }
+        // A selection already showing the formula whole is not drawn a second time over it.
+        let selection = self.selectedRange
+        if self.aorusHasFormulaHighlight, selection.location <= range.location, NSMaxRange(selection) >= NSMaxRange(range) {
+            return
+        }
         let layer = self.aorusHeldFormulaLayer
         layer.removeAllAnimations()
-        layer.frame = CGRect(origin: CGPoint(), size: CGSize(width: max(self.bounds.width, self.contentSize.width), height: max(self.bounds.height, self.contentSize.height)))
-        layer.fillColor = aorusSelectionHighlightColor().cgColor
+        layer.frame = self.aorusHighlightLayerFrame
+        layer.fillColor = color.cgColor
         layer.path = path
         layer.opacity = 1.0
         layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15)
+        self.aorusHoldsFormula = true
+        aorusUpdateSystemHighlight()
+        // The system brings its highlight of the item in as the menu opens.
+        DispatchQueue.main.async { [weak self] in
+            self?.aorusUpdateSystemHighlight()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.aorusUpdateSystemHighlight()
+        }
     }
 
     func aorusReleaseHeldFormula() {
         let layer = self.aorusHeldFormulaLayer
-        guard layer.path != nil else { return }
+        guard self.aorusHoldsFormula, layer.path != nil else { return }
         layer.opacity = 0.0
-        layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, completion: { [weak layer] finished in
+        layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.2, completion: { [weak self, weak layer] finished in
             if finished {
                 layer?.path = nil
             }
+            guard let self else { return }
+            self.aorusHoldsFormula = false
+            self.aorusUpdateSystemHighlight()
         })
     }
 
