@@ -4170,6 +4170,11 @@ def main() -> None:
         ("submodules/Display/Source/AorusPluginAppearanceValues.swift", 'glassLookKey = "aorusgram_glass_look"'),
         ("submodules/Display/Source/AorusPluginAppearanceValues.swift", 'Notification.Name("aorusgram.glassLookChanged")'),
         ("submodules/TelegramUI/Sources/AppDelegate.swift", "aorusInstallBubbleSettings()"),
+        # A deleted message's side buttons, stickers and round videos are dimmed with it.
+        ("submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift", "aorusSideButton.alpha = aorusSideButtonAlpha"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageStickerItemNode/Sources/ChatMessageStickerItemNode.swift", "strongSelf.contextSourceNode.contentNode.alpha = aorusDeletedFree ? 0.5 : 1.0"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageAnimatedStickerItemNode/Sources/ChatMessageAnimatedStickerItemNode.swift", "strongSelf.contextSourceNode.contentNode.alpha = aorusDeletedFree ? 0.5 : 1.0"),
+        ("submodules/TelegramUI/Components/Chat/ChatMessageInstantVideoItemNode/Sources/ChatMessageInstantVideoItemNode.swift", "strongSelf.contextSourceNode.contentNode.alpha = aorusDeletedFree ? 0.5 : 1.0"),
         ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "AorusBubbleSettingsRoute.register"),
         ("submodules/TelegramUI/Sources/AorusBubbleSettings.swift", "bar.previousItem = .item(self.previousBarItem)"),
         # Pixel is the whole pixel look: the icons follow the material, and the screen offers

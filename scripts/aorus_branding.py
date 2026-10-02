@@ -21,6 +21,7 @@ from aorus_call_proxy_udp import (
 from profile_personalization_patch import patch_profile_personalization
 from interface_v2_patch import patch_interface_v2
 from glass_everywhere_patch import patch_glass_everywhere
+from deleted_buttons_patch import patch_deleted_side_buttons
 
 # ---------------------------------------------------------------------------
 # Security: opaque per-deployment keys — replace the grep-able "aorusgram_*"
@@ -30456,6 +30457,9 @@ def main() -> None:
     patch_bubble_settings(tg)
     # After the glass toggle and Interface 2.0, which rewrite parts of the menus it styles.
     patch_glass_everywhere(tg)
+    # After every patch of the message nodes: it anchors on the side buttons and the deleted
+    # dim the earlier ones add.
+    patch_deleted_side_buttons(tg)
     patch_settings_live_refresh(tg)
     patch_save_view_once(tg)
     patch_view_once_capture(tg)
