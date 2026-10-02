@@ -585,6 +585,35 @@ public final class AorusGlassDecorationView: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// The gleam on a pixel pane: on the second row inside the outline, past the corner's
+    /// steps, a dash of two to five pixels, a gap and a dot. Nil when the pane has no room
+    /// for it with a pixel of plate all round.
+    static func pixelGleam(outlines: AorusGlassOutlines) -> CGPath? {
+        let pixel = outlines.pixel
+        guard pixel > 0.0 else {
+            return nil
+        }
+        let size = outlines.size
+        let top = outlines.bodyTop + pixel * 2.0
+        // The outline, the gap above the gleam, the gleam, and at least the outline below it.
+        guard top + pixel * 2.0 <= size.height else {
+            return nil
+        }
+        let left = max(ceil(outlines.corners.topLeft / pixel) * pixel, pixel * 2.0)
+        let right = max(ceil(outlines.corners.topRight / pixel) * pixel, pixel * 2.0)
+        let room = floor((size.width - left - right) / pixel)
+        guard room >= 2.0 else {
+            return nil
+        }
+        let dash = min(5.0, max(2.0, (room * 0.25).rounded()))
+        let path = CGMutablePath()
+        path.addRect(CGRect(x: left, y: top, width: min(dash, room) * pixel, height: pixel))
+        if room >= dash + 3.0 {
+            path.addRect(CGRect(x: left + (dash + 1.0) * pixel, y: top, width: pixel, height: pixel))
+        }
+        return path
+    }
+
     /// Draws the pane. `fill` is the plate or the colour over glass, `tint` a tint drawn here
     /// rather than by the glass itself; either may be empty.
     public func update(style: AorusGlassStyle, outlines: AorusGlassOutlines, fill: [UIColor], tint: UIColor?, transition: ContainedViewLayoutTransition, styleChanged: Bool) {
@@ -649,16 +678,14 @@ public final class AorusGlassDecorationView: UIView {
             self.shineLayer.isHidden = true
         }
 
-        if style.shine > 0.0 && style.isPixel && outlines.pixel > 0.0 {
-            // A pixel pane's highlight is a row of light pixels just under its top edge, clear
-            // of the corners' steps.
-            let pixel = outlines.pixel
-            let left = max(ceil(outlines.corners.topLeft / pixel) * pixel, pixel * 2.0)
-            let right = max(ceil(outlines.corners.topRight / pixel) * pixel, pixel * 2.0)
-            let band = CGRect(x: left, y: outlines.bodyTop + pixel, width: max(0.0, size.width - left - right), height: pixel)
-            self.pixelShineLayer.isHidden = band.width < pixel
-            self.pixelShineLayer.fillColor = UIColor(white: 1.0, alpha: 0.75 * style.shine).cgColor
-            aorusGlassSetPath(self.pixelShineLayer, CGPath(rect: band, transform: nil), transition: .immediate)
+        if style.shine > 0.0 && style.isPixel && outlines.pixel > 0.0, let gleam = AorusGlassDecorationView.pixelGleam(outlines: outlines) {
+            // A pixel pane's highlight is the gleam pixel art gives a button: a short dash and
+            // a dot in its top left corner, a pixel clear of the outline. It used to be a
+            // see-through row the whole width of the pane right under the top edge, which
+            // under a light outline read as a grey line doubling it.
+            self.pixelShineLayer.isHidden = false
+            self.pixelShineLayer.fillColor = UIColor(white: 1.0, alpha: min(1.0, 0.35 + 0.65 * style.shine)).cgColor
+            aorusGlassSetPath(self.pixelShineLayer, gleam, transition: .immediate)
         } else {
             self.pixelShineLayer.isHidden = true
         }

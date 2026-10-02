@@ -512,8 +512,10 @@ private func aorusGlassStyleIcon(_ preset: AorusMessageLook.Preset, dark: Bool) 
         }
         if shine > 0.0 {
             if pixel {
-                context.setFillColor(UIColor(white: 1.0, alpha: 0.75 * shine).cgColor)
-                context.fill(CGRect(x: capsule.minX + 4.0, y: capsule.minY + 2.0, width: capsule.width - 8.0, height: 1.5))
+                // The gleam the panes draw: a dash and a dot, a pixel inside the outline.
+                context.setFillColor(UIColor(white: 1.0, alpha: min(1.0, 0.35 + 0.65 * shine)).cgColor)
+                context.fill(CGRect(x: capsule.minX + 4.0, y: capsule.minY + 4.0, width: 4.0, height: 2.0))
+                context.fill(CGRect(x: capsule.minX + 10.0, y: capsule.minY + 4.0, width: 2.0, height: 2.0))
             } else if let sheen = CGGradient(colorsSpace: nil, colors: [UIColor(white: 1.0, alpha: 0.3 * shine).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor] as CFArray, locations: [0.0, 1.0]) {
                 // As the panes draw it: a soft sheen from the top and a light rim along the top edge.
                 context.drawLinearGradient(sheen, start: CGPoint(x: capsule.midX, y: capsule.minY), end: CGPoint(x: capsule.midX, y: capsule.minY + capsule.height * 0.55), options: [])
