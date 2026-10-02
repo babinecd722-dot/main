@@ -50,6 +50,8 @@ public enum AorusPluginAppearance {
     public static let defaultsKey = "aorusgram_plugin_appearance"
     public static let layersDefaultsKey = "aorusgram_plugin_appearance_layers"
     public static let didChangeNotification = Notification.Name("aorusgram.pluginAppearanceChanged")
+    /// The look stored for one screen to show before the whole app is redrawn with it.
+    public static let previewNotification = Notification.Name("aorusgram.pluginAppearancePreview")
     public static let maximumKeysPerPlugin = 256
     /// A key may be given for one appearance only: `bubble.outgoing.fill@dark` is used while
     /// the theme is dark and wins there over `bubble.outgoing.fill`.
@@ -637,8 +639,10 @@ public enum AorusMessageLook {
 
     /// Keeps `values`, every key checked against the appearance catalogue and the whole set
     /// refused when one is wrong, and redraws the app when they changed. Answers what was wrong.
+    /// With `preview`, only a screen showing the look ahead of the app is told: the rest of the
+    /// app is redrawn once `announce()` is called.
     @discardableResult
-    public static func store(_ values: [String: Any]) -> [AorusPluginAppearance.Rejection] {
+    public static func store(_ values: [String: Any], preview: Bool = false) -> [AorusPluginAppearance.Rejection] {
         let checked = AorusPluginAppearance.validate(values)
         guard checked.rejections.isEmpty else {
             return checked.rejections
@@ -652,8 +656,9 @@ public enum AorusMessageLook {
         } else {
             defaults.set(checked.values, forKey: defaultsKey)
         }
+        let name = preview ? AorusPluginAppearance.previewNotification : AorusPluginAppearance.didChangeNotification
         let deliver = {
-            NotificationCenter.default.post(name: AorusPluginAppearance.didChangeNotification, object: nil)
+            NotificationCenter.default.post(name: name, object: nil)
         }
         if Thread.isMainThread {
             deliver()
@@ -679,8 +684,10 @@ public enum AorusMessageLook {
     }
 
     /// Sets one setting, or with nil takes it back to what Telegram draws; the rest stays.
+    /// With `preview`, it is kept and shown on the screen that changes it, and the rest of the
+    /// app is redrawn with it at the next `announce()`.
     @discardableResult
-    public static func set(_ name: String, _ value: Any?, dark: Bool) -> [AorusPluginAppearance.Rejection] {
+    public static func set(_ name: String, _ value: Any?, dark: Bool, preview: Bool = false) -> [AorusPluginAppearance.Rejection] {
         var values = stored()
         let key = storageKey(name, dark: dark)
         values[key] = value
@@ -689,7 +696,19 @@ public enum AorusMessageLook {
             // appearance and this one alike; the person's choice for this one replaces it.
             values[name] = nil
         }
-        return store(values)
+        return store(values, preview: preview)
+    }
+
+    /// Redraws the whole app with what is kept: after changes stored with `preview`.
+    public static func announce() {
+        let deliver = {
+            NotificationCenter.default.post(name: AorusPluginAppearance.didChangeNotification, object: nil)
+        }
+        if Thread.isMainThread {
+            deliver()
+        } else {
+            DispatchQueue.main.async(execute: deliver)
+        }
     }
 
     /// A ready-made style in place of the shape, colours, names and titles the person set.

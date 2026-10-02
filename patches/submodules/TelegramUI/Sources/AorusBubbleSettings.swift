@@ -1322,7 +1322,8 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
         statePromise.set(stateValue.modify { f($0) })
     }
     let screen = AorusLookScreenContext()
-    let throttle = AorusLookThrottle()
+    // The glass redraws only its panes: it can follow a finger at the rate of the screen.
+    let throttle = AorusLookThrottle(interval: 0.03)
     // The icons are drawn again across the whole app at every change: a finger on their slider
     // is followed less closely than one on the glass's.
     let iconThrottle = AorusLookThrottle(interval: 0.35)

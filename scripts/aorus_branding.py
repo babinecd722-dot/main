@@ -18147,11 +18147,15 @@ public enum AorusPluginAppearanceValues {
     /// `AorusMessageLook.defaultsKey` in the plugin core.
     public static let messageLookKey = "aorusgram_message_look"
     public static let didChangeNotification = Notification.Name("aorusgram.pluginAppearanceChanged")
+    /// The look stored for a screen to show before the app is redrawn with it: Message Settings
+    /// while a slider moves. The table is read again; nothing but that screen draws again.
+    public static let previewNotification = Notification.Name("aorusgram.pluginAppearancePreview")
 
     private static let lock = NSLock()
     private static var cached: [String: Any]?
     private static var cachedRevision = 0
     private static var observer: NSObjectProtocol?
+    private static var previewObserver: NSObjectProtocol?
 
     /// The table in force, and a number that changes whenever the table does.
     public static func snapshot() -> (values: [String: Any], revision: Int) {
@@ -18163,6 +18167,9 @@ public enum AorusPluginAppearanceValues {
             // Delivered on the posting thread, so the table is stale for no longer than it takes
             // the notification to be posted -- before anything it wakes rebuilds a theme.
             observer = NotificationCenter.default.addObserver(forName: didChangeNotification, object: nil, queue: nil, using: { _ in
+                AorusPluginAppearanceValues.invalidate()
+            })
+            previewObserver = NotificationCenter.default.addObserver(forName: previewNotification, object: nil, queue: nil, using: { _ in
                 AorusPluginAppearanceValues.invalidate()
             })
         }
@@ -18344,6 +18351,20 @@ private final class AorusPluginThemeCache {
 }
 
 private let aorusPluginThemeCache = AorusPluginThemeCache()
+
+// Each theme made here, with the theme it was made from: a preview is made from that one again,
+// not laid over the look already in it -- a bubble's opacity would be multiplied in twice.
+private let aorusPluginThemeSources = NSMapTable<PresentationTheme, PresentationTheme>.weakToStrongObjects()
+private let aorusPluginThemeSourcesLock = NSLock()
+
+/// The theme the app would draw with the look as it is stored now, for a screen that shows the
+/// look before the app is redrawn with it: made from the same theme as the one on screen.
+public func aorusPluginPreviewTheme(_ shown: PresentationTheme) -> PresentationTheme {
+    aorusPluginThemeSourcesLock.lock()
+    let source = aorusPluginThemeSources.object(forKey: shown) ?? shown
+    aorusPluginThemeSourcesLock.unlock()
+    return aorusApplyPluginAppearance(source)
+}
 
 // A bubble's colours with another shadow. The theme's own `withUpdated` keeps the shadow it
 // has, so the components are built again around the one asked for.
@@ -18634,6 +18655,9 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
     cache.iconRevision = iconRevision
     cache.result = result
     cache.lock.unlock()
+    aorusPluginThemeSourcesLock.lock()
+    aorusPluginThemeSources.setObject(theme, forKey: result)
+    aorusPluginThemeSourcesLock.unlock()
     return aorusRecordCurrentTheme(result)
 }
 
@@ -18651,7 +18675,7 @@ func aorusPluginWallpaper(_ wallpaper: TelegramWallpaper, dark: Bool) -> Telegra
 }
 
 // The bubble's shape: its corners, how consecutive bubbles join, and the tail.
-func aorusPluginBubbleCorners(_ corners: PresentationChatBubbleCorners) -> PresentationChatBubbleCorners {
+public func aorusPluginBubbleCorners(_ corners: PresentationChatBubbleCorners) -> PresentationChatBubbleCorners {
     let values = AorusPluginAppearanceValues.current()
     if values.isEmpty {
         return corners
@@ -18680,7 +18704,7 @@ func aorusPluginBubbleCorners(_ corners: PresentationChatBubbleCorners) -> Prese
 }
 
 // Text sizes, by the names of Telegram's own steps.
-func aorusPluginFontSizes(_ sizes: (chat: PresentationFontSize, lists: PresentationFontSize)) -> (chat: PresentationFontSize, lists: PresentationFontSize) {
+public func aorusPluginFontSizes(_ sizes: (chat: PresentationFontSize, lists: PresentationFontSize)) -> (chat: PresentationFontSize, lists: PresentationFontSize) {
     let values = AorusPluginAppearanceValues.current()
     if values.isEmpty {
         return sizes

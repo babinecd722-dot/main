@@ -2047,6 +2047,15 @@ private let aorusLookLetterCases = ["asIs", "upper", "lower"]
 
 private let aorusLookTextWeights = ["light", "regular", "medium", "semibold"]
 
+/// A length in points, with the half when there is one: "12", "12.5".
+func aorusLookPoints(_ value: CGFloat) -> String {
+    let halves = (value * 2.0).rounded()
+    if halves.truncatingRemainder(dividingBy: 2.0) == 0.0 {
+        return "\(Int(halves / 2.0))"
+    }
+    return String(format: "%.1f", Double(halves / 2.0))
+}
+
 func aorusLookPercent(_ value: CGFloat) -> String {
     return "\(Int((value * 100.0).rounded()))%"
 }
@@ -2196,16 +2205,17 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
                 arguments.setShape("bubble.tails", value)
             })
         case let .radius(title, value):
-            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 16.0, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
-                arguments.setShape("bubble.radius", Int(value))
+            // Half a point at a time, so the corners round off smoothly under the finger.
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: 16.0, step: 0.5, valueText: aorusLookPoints, sizeMarks: false, sectionId: self.section, changed: { value in
+                arguments.setShape("bubble.radius", Double(value))
             })
         case let .merge(title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.setShape("bubble.mergeCorners", value)
             })
         case let .radiusSmall(title, value, maximum):
-            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: maximum, step: 1.0, valueText: { "\(Int($0))" }, sizeMarks: false, sectionId: self.section, changed: { value in
-                arguments.setShape("bubble.radiusSmall", Int(value))
+            return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.0, maximum: maximum, step: 0.5, valueText: aorusLookPoints, sizeMarks: false, sectionId: self.section, changed: { value in
+                arguments.setShape("bubble.radiusSmall", Double(value))
             })
         case let .width(title, value, _):
             return AorusLookSliderItem(presentationData: presentationData, title: title, value: value, minimum: 0.5, maximum: 1.0, step: 0.01, valueText: aorusLookPercent, sizeMarks: false, sectionId: self.section, changed: { current in
@@ -2289,15 +2299,18 @@ private enum AorusMessageSettingsEntry: ItemListNodeEntry, Equatable {
     }
 }
 
-private func aorusMessageSettingsEntries(presentationData: PresentationData, state: AorusMessageSettingsState, revision: Int) -> [AorusMessageSettingsEntry] {
+private func aorusMessageSettingsEntries(presentationData: PresentationData, previewTheme: PresentationTheme, state: AorusMessageSettingsState, revision: Int) -> [AorusMessageSettingsEntry] {
     let dark = presentationData.theme.overallDarkAppearance
     let values = AorusPluginAppearanceValues.current()
     let stored = AorusMessageLook.stored()
-    let corners = presentationData.chatBubbleCorners
+    // The look as it is kept now, ahead of the rest of the app while a slider moves: the
+    // corners and the text size read from it as the app reads them.
+    let corners = aorusPluginBubbleCorners(presentationData.chatBubbleCorners)
+    let fontSize = aorusPluginFontSizes((chat: presentationData.chatFontSize, lists: presentationData.listsFontSize)).chat
     let sample = AorusMessageSamples.sample(seed: state.seed, language: AorusLang.current.rawValue)
     var entries: [AorusMessageSettingsEntry] = []
 
-    entries.append(.preview(AorusLookPreview(theme: presentationData.theme, fontSize: presentationData.chatFontSize, corners: corners, wallpaper: presentationData.chatWallpaper, sample: sample, outgoing: state.outgoing, revision: revision)))
+    entries.append(.preview(AorusLookPreview(theme: previewTheme, fontSize: fontSize, corners: corners, wallpaper: presentationData.chatWallpaper, sample: sample, outgoing: state.outgoing, revision: revision)))
 
     entries.append(.shapeHeader(aorusL("ФОРМА", "SHAPE")))
     entries.append(.tails(aorusL("Хвостик", "Tail"), corners.hasTails))
@@ -2306,7 +2319,7 @@ private func aorusMessageSettingsEntries(presentationData: PresentationData, sta
     // Where messages join can be as round as their corners and no rounder, so the slider ends
     // at the corner radius: every step of it changes the join. With square corners there is
     // no join to round.
-    let joinMaximum = min(16.0, corners.mainRadius.rounded())
+    let joinMaximum = min(16.0, (corners.mainRadius * 2.0).rounded() / 2.0)
     if corners.mergeBubbleCorners && joinMaximum >= 1.0 {
         entries.append(.radiusSmall(aorusL("Скругление на стыке", "Radius Where They Join"), min(joinMaximum, corners.auxiliaryRadius), joinMaximum))
     }
@@ -2537,7 +2550,29 @@ final class AorusLookScreenContext {
     var theme: PresentationTheme?
     /// The picker's delegate, which the picker itself holds only weakly.
     var pickerDelegate: AnyObject?
+    /// Moves on with every change shown ahead of the app that touches the theme's colours: a
+    /// change of shape or size leaves the preview's theme as it is.
+    var themeRevision = 0
+    private var previewSource: PresentationTheme?
+    private var previewRevision = -1
+    private var previewThemeValue: PresentationTheme?
+
+    /// The theme the preview draws its messages with: the one on screen, with the look as it
+    /// is kept now, made again only when the colours changed.
+    func previewTheme(for shown: PresentationTheme) -> PresentationTheme {
+        if let previewThemeValue = self.previewThemeValue, self.previewSource === shown, self.previewRevision == self.themeRevision {
+            return previewThemeValue
+        }
+        let theme = aorusPluginPreviewTheme(shown)
+        self.previewSource = shown
+        self.previewRevision = self.themeRevision
+        self.previewThemeValue = theme
+        return theme
+    }
 }
+
+/// The keys of the bubbles' shape and size: shown ahead of the app without a theme of their own.
+private let aorusLookShapeKeys: Set<String> = ["bubble.radius", "bubble.radiusSmall", "bubble.mergeCorners", "bubble.tails", "bubble.width", "font.chat"]
 
 @available(iOS 14.0, *)
 final class AorusLookColorPickerDelegate: NSObject, UIColorPickerViewControllerDelegate {
@@ -2558,28 +2593,28 @@ final class AorusLookColorPickerDelegate: NSObject, UIColorPickerViewControllerD
 
 /// Keeps a colour the person chose for one row: the colour itself, or one stop of a bubble's
 /// gradient, whose other stops stay as they were.
-private func aorusLookStoreColor(_ row: AorusLookColorRow, _ hex: String?, theme: PresentationTheme?) {
+private func aorusLookStoreColor(_ row: AorusLookColorRow, _ hex: String?, theme: PresentationTheme?, preview: Bool = false) {
     let dark = theme?.overallDarkAppearance ?? row.dark
     guard row.key.hasSuffix(".fill") else {
-        AorusMessageLook.set(row.key, hex, dark: dark)
+        AorusMessageLook.set(row.key, hex, dark: dark, preview: preview)
         return
     }
     let kept = aorusLookColors(row.key, dark: dark)
     if row.stop == 0 {
         if let hex {
             let stops: [String] = [hex] + Array(kept.dropFirst())
-            AorusMessageLook.set(row.key, stops, dark: dark)
+            AorusMessageLook.set(row.key, stops, dark: dark, preview: preview)
         } else {
-            AorusMessageLook.set(row.key, nil, dark: dark)
+            AorusMessageLook.set(row.key, nil, dark: dark, preview: preview)
         }
         return
     }
     if let hex {
         // A gradient needs the colour it starts from: the one kept, or the one drawn now.
         let base = kept.first ?? theme.map { aorusLookHex(aorusLookThemeColor(row.key, theme: $0)) } ?? "FFFFFF"
-        AorusMessageLook.set(row.key, [base, hex], dark: dark)
+        AorusMessageLook.set(row.key, [base, hex], dark: dark, preview: preview)
     } else if let first = kept.first {
-        AorusMessageLook.set(row.key, [first], dark: dark)
+        AorusMessageLook.set(row.key, [first], dark: dark, preview: preview)
     }
 }
 
@@ -2600,7 +2635,16 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
         statePromise.set(stateValue.modify { f($0) })
     }
     let screen = AorusLookScreenContext()
-    let throttle = AorusLookSettleThrottle()
+    // The preview follows the finger at once: a change is kept and shown on this screen alone,
+    // which redraws two messages. The rest of the app, which redraws everything, is redrawn
+    // with it once the finger rests.
+    let previewThrottle = AorusLookThrottle(interval: 0.04)
+    let throttle = AorusLookSettleThrottle(settle: 0.4, interval: Double.greatestFiniteMagnitude)
+    let announce = {
+        throttle.run("announce") {
+            AorusMessageLook.announce()
+        }
+    }
     weak var weakController: ItemListController?
 
     let arguments = AorusMessageSettingsArguments(
@@ -2627,9 +2671,13 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
             }
         },
         setShape: { name, value in
-            throttle.run(name) {
-                AorusMessageLook.set(name, value, dark: false)
+            previewThrottle.run(name) {
+                if !aorusLookShapeKeys.contains(name) {
+                    screen.themeRevision += 1
+                }
+                AorusMessageLook.set(name, value, dark: false, preview: true)
             }
+            announce()
         },
         setChoice: { name, value, telegram in
             // Names, titles and avatars are drawn beside messages from others: the preview
@@ -2644,9 +2692,10 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
             aorusLookStoreChoice(name, value, telegram: telegram)
         },
         setTextSize: { index in
-            throttle.run("font.chat") {
-                AorusMessageLook.set("font.chat", AorusPluginAppearance.fontSizes[index], dark: false)
+            previewThrottle.run("font.chat") {
+                AorusMessageLook.set("font.chat", AorusPluginAppearance.fontSizes[index], dark: false, preview: true)
             }
+            announce()
         },
         setColor: { row, hex in
             if row.key.hasPrefix("message.") {
@@ -2671,9 +2720,11 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
                 picker.selectedColor = current
                 let delegate = AorusLookColorPickerDelegate(changed: { color in
                     let hex = aorusLookHex(color)
-                    throttle.run(row.key + "#\(row.stop)") {
-                        aorusLookStoreColor(row, hex, theme: screen.theme)
+                    previewThrottle.run(row.key + "#\(row.stop)") {
+                        screen.themeRevision += 1
+                        aorusLookStoreColor(row, hex, theme: screen.theme, preview: true)
                     }
+                    announce()
                 })
                 screen.pickerDelegate = delegate
                 picker.delegate = delegate
@@ -2702,6 +2753,7 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
             }
         },
         applyStyle: { id in
+            previewThrottle.cancelAll()
             throttle.cancelAll()
             AorusMessageLook.apply(preset: id)
         },
@@ -2716,6 +2768,7 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
                     ActionSheetTextItem(title: aorusL("Сообщения снова будут выглядеть так, как их рисует Telegram. Плагины продолжат действовать.", "Messages will look the way Telegram draws them again. Plugins keep working.")),
                     ActionSheetButtonItem(title: aorusL("Сбросить всё", "Reset All"), color: .destructive, action: { [weak sheet] in
                         sheet?.dismissAnimated()
+                        previewThrottle.cancelAll()
                         throttle.cancelAll()
                         AorusMessageLook.reset()
                     })
@@ -2734,12 +2787,16 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
     let lookRevision = Signal<Int, NoError> { subscriber in
         var revision = 0
         subscriber.putNext(revision)
-        let token = NotificationCenter.default.addObserver(forName: AorusPluginAppearance.didChangeNotification, object: nil, queue: .main, using: { _ in
-            revision += 1
-            subscriber.putNext(revision)
-        })
+        let tokens = [AorusPluginAppearance.didChangeNotification, AorusPluginAppearance.previewNotification].map { name in
+            return NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main, using: { _ in
+                revision += 1
+                subscriber.putNext(revision)
+            })
+        }
         return ActionDisposable {
-            NotificationCenter.default.removeObserver(token)
+            for token in tokens {
+                NotificationCenter.default.removeObserver(token)
+            }
         }
     }
 
@@ -2756,7 +2813,7 @@ func aorusMessageSettingsController(context: AccountContext) -> ViewController {
             )
             let listState = ItemListNodeState(
                 presentationData: ItemListPresentationData(presentationData),
-                entries: aorusMessageSettingsEntries(presentationData: presentationData, state: state, revision: revision),
+                entries: aorusMessageSettingsEntries(presentationData: presentationData, previewTheme: screen.previewTheme(for: presentationData.theme), state: state, revision: revision),
                 style: .blocks
             )
             return (controllerState, (listState, arguments))
