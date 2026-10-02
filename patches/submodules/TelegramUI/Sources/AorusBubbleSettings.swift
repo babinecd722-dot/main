@@ -492,9 +492,9 @@ private func aorusGlassStyleIcon(_ preset: AorusMessageLook.Preset, dark: Bool) 
         if shadow > 0.0 {
             context.saveGState()
             if pixel {
-                context.setShadow(offset: CGSize(width: 2.0, height: 2.0), blur: 0.0, color: UIColor(white: 0.0, alpha: 0.2 + 0.5 * shadow).cgColor)
+                context.setShadow(offset: CGSize(width: 2.0, height: 2.0), blur: 0.0, color: UIColor(white: 0.0, alpha: dark ? 0.5 + 0.45 * shadow : 0.25 + 0.5 * shadow).cgColor)
             } else {
-                context.setShadow(offset: CGSize(width: 0.0, height: 1.0), blur: 1.5 + 3.0 * shadow, color: UIColor(white: 0.0, alpha: 0.15 + 0.3 * shadow).cgColor)
+                context.setShadow(offset: CGSize(width: 0.0, height: 1.0 + 1.5 * shadow), blur: 2.0 + 3.5 * shadow, color: UIColor(white: 0.0, alpha: dark ? 0.45 + 0.5 * shadow : 0.14 + 0.36 * shadow).cgColor)
             }
             context.setFillColor((fill.first ?? .white).cgColor)
             context.addPath(path.cgPath)
@@ -514,9 +514,18 @@ private func aorusGlassStyleIcon(_ preset: AorusMessageLook.Preset, dark: Bool) 
             if pixel {
                 context.setFillColor(UIColor(white: 1.0, alpha: 0.75 * shine).cgColor)
                 context.fill(CGRect(x: capsule.minX + 4.0, y: capsule.minY + 2.0, width: capsule.width - 8.0, height: 1.5))
-            } else {
-                context.setFillColor(UIColor(white: 1.0, alpha: 0.45 * shine).cgColor)
-                context.fill(CGRect(x: capsule.minX, y: capsule.minY, width: capsule.width, height: capsule.height * 0.5))
+            } else if let sheen = CGGradient(colorsSpace: nil, colors: [UIColor(white: 1.0, alpha: 0.3 * shine).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor] as CFArray, locations: [0.0, 1.0]) {
+                // As the panes draw it: a soft sheen from the top and a light rim along the top edge.
+                context.drawLinearGradient(sheen, start: CGPoint(x: capsule.midX, y: capsule.minY), end: CGPoint(x: capsule.midX, y: capsule.minY + capsule.height * 0.55), options: [])
+                context.saveGState()
+                context.setLineWidth(2.0)
+                context.addPath(path.cgPath)
+                context.replacePathWithStrokedPath()
+                context.clip()
+                if let rim = CGGradient(colorsSpace: nil, colors: [UIColor(white: 1.0, alpha: 0.85 * shine).cgColor, UIColor(white: 1.0, alpha: 0.0).cgColor] as CFArray, locations: [0.0, 1.0]) {
+                    context.drawLinearGradient(rim, start: CGPoint(x: capsule.midX, y: capsule.minY), end: CGPoint(x: capsule.midX, y: capsule.minY + capsule.height * 0.6), options: [])
+                }
+                context.restoreGState()
             }
         }
         context.restoreGState()

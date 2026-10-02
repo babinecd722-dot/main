@@ -112,6 +112,8 @@ public struct AorusGlassStyle: Equatable {
     public internal(set) var glow: UIColor?
     public internal(set) var glowSize: CGFloat = 10.0
     public internal(set) var shine: CGFloat = 0.0
+    /// Drawn for a dark appearance, where a shadow has to be denser to be seen at all.
+    public internal(set) var isDark: Bool = false
 
     public init() {
     }
@@ -180,6 +182,7 @@ public struct AorusGlassStyle: Equatable {
 
     private static func parse(_ values: [String: Any], dark: Bool) -> AorusGlassStyle {
         var style = AorusGlassStyle()
+        style.isDark = dark
         if values.isEmpty {
             return style
         }
@@ -541,6 +544,9 @@ public final class AorusGlassDecorationView: UIView {
     private let tintLayer = CAShapeLayer()
     private let shineLayer = CAGradientLayer()
     private let shineMask = CAShapeLayer()
+    /// The light caught by the pane's rim: brightest along the top edge, fading down the sides.
+    private let shineRim = CAGradientLayer()
+    private let shineRimMask = CAShapeLayer()
     private let pixelShineLayer = CAShapeLayer()
     private let borderContainer = CALayer()
     private let borderMask = CAShapeLayer()
@@ -560,7 +566,14 @@ public final class AorusGlassDecorationView: UIView {
         self.shineLayer.mask = self.shineMask
         self.shineLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
         self.shineLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
-        self.shineLayer.locations = [0.0, 0.48, 0.5, 1.0]
+        // Inside the pane's own mask, so only the inner half of the stroked rim shows.
+        self.shineRimMask.fillColor = nil
+        self.shineRimMask.strokeColor = UIColor.black.cgColor
+        self.shineRimMask.lineWidth = 2.0
+        self.shineRim.mask = self.shineRimMask
+        self.shineRim.startPoint = CGPoint(x: 0.5, y: 0.0)
+        self.shineRim.endPoint = CGPoint(x: 0.5, y: 1.0)
+        self.shineLayer.addSublayer(self.shineRim)
         self.layer.addSublayer(self.shineLayer)
         self.layer.addSublayer(self.pixelShineLayer)
         self.borderContainer.mask = self.borderMask
@@ -588,7 +601,7 @@ public final class AorusGlassDecorationView: UIView {
         CATransaction.setDisableActions(!styleChanged)
         CATransaction.setAnimationDuration(0.25)
 
-        for layer in [self.fillLayer, self.shineLayer, self.borderContainer, self.fillMask, self.tintLayer, self.shineMask, self.pixelShineLayer, self.borderMask] as [CALayer] {
+        for layer in [self.fillLayer, self.shineLayer, self.borderContainer, self.fillMask, self.tintLayer, self.shineMask, self.shineRim, self.shineRimMask, self.pixelShineLayer, self.borderMask] as [CALayer] {
             transition.updateFrame(layer: layer, frame: bounds)
         }
 
@@ -607,15 +620,31 @@ public final class AorusGlassDecorationView: UIView {
         }
 
         if style.shine > 0.0 && !style.isPixel {
+            // Light on glass: a soft sheen falling from the top edge, never more than the top
+            // of the pane however tall it is, and a bright line along the rim that fades down
+            // the sides. It used to be a band cut off sharp at half height, which read as a
+            // stripe drawn across the pane rather than as light on it.
             self.shineLayer.isHidden = false
             let strength = style.shine
+            let height = max(1.0, size.height)
+            let sheen = min(height * 0.55, 30.0) / height
             self.shineLayer.colors = [
-                UIColor(white: 1.0, alpha: 0.5 * strength).cgColor,
-                UIColor(white: 1.0, alpha: 0.14 * strength).cgColor,
-                UIColor(white: 1.0, alpha: 0.0).cgColor,
+                UIColor(white: 1.0, alpha: 0.3 * strength).cgColor,
+                UIColor(white: 1.0, alpha: 0.1 * strength).cgColor,
                 UIColor(white: 1.0, alpha: 0.0).cgColor,
             ]
+            self.shineLayer.locations = [0.0, NSNumber(value: Double(sheen * 0.45)), NSNumber(value: Double(sheen))]
             aorusGlassSetPath(self.shineMask, outlines.outline, transition: pathTransition)
+            let rim = min(height * 0.6, 26.0) / height
+            self.shineRim.colors = [
+                UIColor(white: 1.0, alpha: 0.85 * strength).cgColor,
+                UIColor(white: 1.0, alpha: 0.3 * strength).cgColor,
+                UIColor(white: 1.0, alpha: 0.0).cgColor,
+                UIColor(white: 1.0, alpha: 0.0).cgColor,
+                UIColor(white: 1.0, alpha: 0.2 * strength).cgColor,
+            ]
+            self.shineRim.locations = [0.0, NSNumber(value: Double(rim * 0.35)), NSNumber(value: Double(rim)), NSNumber(value: Double(max(rim, 1.0 - rim * 0.5))), 1.0]
+            aorusGlassSetPath(self.shineRimMask, outlines.outline, transition: pathTransition)
         } else {
             self.shineLayer.isHidden = true
         }
@@ -751,8 +780,16 @@ public final class AorusGlassHaloView: UIView {
 
         let pixel = style.isPixel
         let strength = style.shadow
-        let shadowRadius: CGFloat = pixel ? 0.0 : 3.0 + 13.0 * strength
-        let shadowOffset: CGSize = pixel ? CGSize(width: outlines.pixel, height: outlines.pixel) : CGSize(width: 0.0, height: 1.0 + 5.0 * strength)
+        let shadowRadius: CGFloat = pixel ? 0.0 : 4.0 + 14.0 * strength
+        let shadowOffset: CGSize = pixel ? CGSize(width: outlines.pixel, height: outlines.pixel) : CGSize(width: 0.0, height: 1.5 + 6.5 * strength)
+        // A shadow as light as one that shows on a bright wallpaper is not seen on a dark one at
+        // all, which is what made the slider look as if it did nothing there.
+        let shadowOpacity: CGFloat
+        if pixel {
+            shadowOpacity = style.isDark ? 0.5 + 0.45 * strength : 0.25 + 0.5 * strength
+        } else {
+            shadowOpacity = style.isDark ? 0.45 + 0.5 * strength : 0.14 + 0.36 * strength
+        }
         let glowRadius: CGFloat = style.glow != nil ? style.glowSize : 0.0
         let reach = max(shadowRadius * 2.0 + max(abs(shadowOffset.width), abs(shadowOffset.height)), glowRadius * 2.5) + 4.0
 
@@ -767,7 +804,7 @@ public final class AorusGlassHaloView: UIView {
             self.shadowLayer.isHidden = false
             transition.updateFrame(layer: self.shadowLayer, frame: bounds)
             self.shadowLayer.shadowColor = UIColor.black.cgColor
-            self.shadowLayer.shadowOpacity = Float(pixel ? 0.2 + 0.55 * strength : 0.08 + 0.32 * strength)
+            self.shadowLayer.shadowOpacity = Float(shadowOpacity)
             self.shadowLayer.shadowRadius = shadowRadius
             self.shadowLayer.shadowOffset = shadowOffset
             aorusGlassSetShadowPath(self.shadowLayer, outlines.outline, transition: pathTransition)

@@ -18528,11 +18528,12 @@ func aorusApplyPluginAppearance(_ theme: PresentationTheme) -> PresentationTheme
                 // Soft and close under a light shadow, deeper and further under a strong one;
                 // never wider than the room Telegram leaves around a bubble for its shadow.
                 // The image a shadow is drawn in has 10 points of room around the bubble, which
-                // the strongest one, blur and offset together, stays inside.
+                // the strongest one, blur and offset together, stays inside. A dark theme lays it
+                // on far denser: as light as on a bright wallpaper, it was not seen there at all.
                 let shadow: PresentationThemeBubbleShadow? = shadowStrength > 0.0 ? PresentationThemeBubbleShadow(
-                    color: UIColor(white: 0.0, alpha: 0.12 + 0.38 * shadowStrength),
-                    radius: 1.5 + 5.5 * shadowStrength,
-                    verticalOffset: 0.5 + 2.0 * shadowStrength
+                    color: UIColor(white: 0.0, alpha: dark ? 0.45 + 0.5 * shadowStrength : 0.14 + 0.44 * shadowStrength),
+                    radius: 1.8 + 5.0 * shadowStrength,
+                    verticalOffset: 0.5 + 2.5 * shadowStrength
                 ) : nil
                 updated = aorusBubbleComponents(updated, shadow: shadow)
             }
