@@ -1492,17 +1492,18 @@ public enum AorusPluginIconValues {
     }
 
     /// Pixel art of an icon: a grid of blocks `cell` device pixels wide, each one empty or solid
-    /// in one of the icon's own colours.
+    /// in one of the icon's own colours, drawn the way a person draws pixel art.
     ///
-    /// Taking every block that an icon covered a little of, in the average colour under it,
-    /// filled the gap between two shapes, smeared a gear's spokes into one blot and mixed a white
-    /// glyph into its coloured plate. So the grid is first placed where the icon's edges fall on
-    /// block edges, and a block is solid when the icon covers half of it. A thin stroke covers
-    /// less than half of every block it crosses, so a block that holds more of the stroke than
-    /// the blocks either side of it stays too, which keeps the line one block wide and unbroken;
-    /// a narrow gap is kept the same way the other way round. Each solid block takes one of the
-    /// icon's few colours, and a smaller colour's thin detail — a glyph on a plate — is drawn on
-    /// top rather than voted away by the plate around it.
+    /// Taking a block wherever the icon covered half of it turned a thin line into stairs two
+    /// blocks wide, ran dots and the gaps between them together, and lost a small dot of another
+    /// colour — a ghost's eyes — altogether. So the icon is read as what it is made of. A stroke
+    /// is followed along its middle and drawn one block wide, or two for a stroke that wide, the
+    /// same all along; a small dot or ring is stamped whole, a block square its own size, and
+    /// dots alike come out alike; only a wide part is filled by how much of each block it
+    /// covers, with the narrow gaps and the small holes in it kept open. An icon the same both
+    /// sides of its middle is drawn on a grid with a block's middle on that line, so a stroke
+    /// down the middle is one block wide and centred, and its two halves come out mirrored.
+    /// Each of the icon's colours is read the same way and drawn over the one under it.
     private static func pixelated(_ pixels: Pixels, cell: Int) -> Pixels {
         let width = pixels.width
         let height = pixels.height
@@ -1510,32 +1511,80 @@ public enum AorusPluginIconValues {
         guard cell >= 1, width > 0, height > 0 else {
             return output
         }
-        var alpha = [Float](repeating: 0.0, count: width * height)
+        let count = width * height
+        // Premultiplied, as drawn.
+        var red = [Float](repeating: 0.0, count: count)
+        var green = [Float](repeating: 0.0, count: count)
+        var blue = [Float](repeating: 0.0, count: count)
+        var opacity = [Float](repeating: 0.0, count: count)
         var peak: Float = 0.0
-        var minX = width
-        var minY = height
-        var maxX = -1
-        var maxY = -1
-        for y in 0 ..< height {
-            for x in 0 ..< width {
-                let value = Float(pixels.data[(y * width + x) * 4 + 3]) / 255.0
-                alpha[y * width + x] = value
-                peak = max(peak, value)
-                if value > 5.0 / 255.0 {
-                    minX = min(minX, x)
-                    maxX = max(maxX, x)
-                    minY = min(minY, y)
-                    maxY = max(maxY, y)
+        for index in 0 ..< count {
+            red[index] = Float(pixels.data[index * 4]) / 255.0
+            green[index] = Float(pixels.data[index * 4 + 1]) / 255.0
+            blue[index] = Float(pixels.data[index * 4 + 2]) / 255.0
+            opacity[index] = Float(pixels.data[index * 4 + 3]) / 255.0
+            peak = max(peak, opacity[index])
+        }
+        guard peak > 0.0, let drawnBounds = pixelBounds(opacity, width: width, height: height) else {
+            return output
+        }
+
+        // Whether the icon is the same both sides of the line through the middle of its box,
+        // a little either way at its edges.
+        func mirrored(vertical: Bool, twice: Int) -> Bool {
+            var difference: Float = 0.0
+            var total: Float = 0.0
+            for y in 0 ..< height {
+                for x in 0 ..< width {
+                    let value = opacity[y * width + x]
+                    total += value
+                    let mirrorX = vertical ? x : twice - 1 - x
+                    let mirrorY = vertical ? twice - 1 - y : y
+                    if mirrorX >= 0, mirrorX < width, mirrorY >= 0, mirrorY < height {
+                        difference += abs(value - opacity[mirrorY * width + mirrorX])
+                    }
+                }
+            }
+            return difference <= 0.08 * total
+        }
+        // Moves the icon half a pixel back, each pixel the average of itself and the next.
+        func halfStep(_ values: inout [Float], vertical: Bool) {
+            for y in 0 ..< height {
+                for x in 0 ..< width {
+                    let next: Float
+                    if vertical {
+                        next = y + 1 < height ? values[(y + 1) * width + x] : 0.0
+                    } else {
+                        next = x + 1 < width ? values[y * width + x + 1] : 0.0
+                    }
+                    values[y * width + x] = (values[y * width + x] + next) * 0.5
                 }
             }
         }
-        guard maxX >= minX, maxY >= minY, peak > 0.0 else {
-            return output
+        // The middle lines, in half pixels.
+        var twiceX = drawnBounds.minX + drawnBounds.maxX + 1
+        var twiceY = drawnBounds.minY + drawnBounds.maxY + 1
+        let symmetricX = mirrored(vertical: false, twice: twiceX)
+        let symmetricY = mirrored(vertical: true, twice: twiceY)
+        // A block's middle can lie on a pixel's middle only when the block is an odd number of
+        // pixels, and on a pixel edge only when it is even; where the middle line falls the
+        // other way the icon is moved half a pixel first.
+        if symmetricX && (twiceX - cell) % 2 != 0 {
+            halfStep(&red, vertical: false)
+            halfStep(&green, vertical: false)
+            halfStep(&blue, vertical: false)
+            halfStep(&opacity, vertical: false)
+            twiceX -= 1
+        }
+        if symmetricY && (twiceY - cell) % 2 != 0 {
+            halfStep(&red, vertical: true)
+            halfStep(&green, vertical: true)
+            halfStep(&blue, vertical: true)
+            halfStep(&opacity, vertical: true)
+            twiceY -= 1
         }
         // An icon drawn see-through all over is as solid as it gets, not half missing.
-        for index in 0 ..< alpha.count {
-            alpha[index] = min(1.0, alpha[index] / peak)
-        }
+        let alpha = opacity.map { min(1.0, $0 / peak) }
 
         // Summed coverage, so any block's share is four reads whatever the grid's offset.
         let rowLength = width + 1
@@ -1562,15 +1611,27 @@ public enum AorusPluginIconValues {
         let columns = (width - 1) / cell + 2
         let rows = (height - 1) / cell + 2
 
-        // The offset at which blocks are most nearly all full or all empty, the centred grid
-        // when another is no crisper.
-        let centeredX = ((Int((Double(minX + maxX + 1) * 0.5).rounded()) % cell) + cell) % cell
-        let centeredY = ((Int((Double(minY + maxY + 1) * 0.5).rounded()) % cell) + cell) % cell
+        // The grid offsets that put the middle line on a block's middle or a block's edge — on
+        // a block's middle alone for a symmetric icon — and of those, the one whose blocks are
+        // most nearly full or empty.
+        func offsets(_ twice: Int, symmetric: Bool) -> [Int] {
+            var result: [Int] = []
+            if (twice - cell) % 2 == 0 {
+                result.append(pixelModulo(pixelFloorDivide(twice - cell, 2), cell))
+            }
+            if !symmetric && twice % 2 == 0 {
+                result.append(pixelModulo(pixelFloorDivide(twice, 2), cell))
+            }
+            if result.isEmpty {
+                result = [pixelModulo(pixelFloorDivide(twice, 2), cell), pixelModulo(pixelFloorDivide(twice - cell, 2), cell)]
+            }
+            return result
+        }
         var bestCost = Float.greatestFiniteMagnitude
-        var offsetX = centeredX
-        var offsetY = centeredY
-        for shiftY in 0 ..< cell {
-            for shiftX in 0 ..< cell {
+        var offsetX = 0
+        var offsetY = 0
+        for shiftY in offsets(twiceY, symmetric: symmetricY) {
+            for shiftX in offsets(twiceX, symmetric: symmetricX) {
                 var cost: Float = 0.0
                 for row in 0 ..< rows {
                     for column in 0 ..< columns {
@@ -1578,89 +1639,132 @@ public enum AorusPluginIconValues {
                         cost += min(value, 1.0 - value)
                     }
                 }
-                let distanceX = min(abs(shiftX - centeredX), cell - abs(shiftX - centeredX))
-                let distanceY = min(abs(shiftY - centeredY), cell - abs(shiftY - centeredY))
-                cost += Float(distanceX + distanceY) * 0.02
-                if cost < bestCost {
+                if cost < bestCost - 1e-6 {
                     bestCost = cost
                     offsetX = shiftX
                     offsetY = shiftY
                 }
             }
         }
-        let originX = offsetX - cell
-        let originY = offsetY - cell
-        var ink = [Float](repeating: 0.0, count: columns * rows)
-        for row in 0 ..< rows {
-            for column in 0 ..< columns {
-                ink[row * columns + column] = coverage(originX + column * cell, originY + row * cell)
+        let padding = Int((1.375 * Float(cell)).rounded(.up)) + 2
+        let grid = PixelGrid(cell: cell, originX: offsetX - cell, originY: offsetY - cell, columns: columns, rows: rows, width: width, height: height, padding: padding)
+        let axes = PixelAxes(x: symmetricX ? Float(twiceX) * 0.5 : nil, y: symmetricY ? Float(twiceY) * 0.5 : nil)
+
+        // The icon on a canvas with room round it, so what is near its edge is measured as
+        // if the space went on.
+        var weight = [Float](repeating: 0.0, count: grid.paddedWidth * grid.paddedHeight)
+        var ink = [Bool](repeating: false, count: grid.paddedWidth * grid.paddedHeight)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let index = (y + padding) * grid.paddedWidth + x + padding
+                weight[index] = alpha[y * width + x]
+                ink[index] = alpha[y * width + x] >= 0.4
             }
         }
-        let solid = pixelBlocks(ink, columns: columns, rows: rows, low: 0.2)
+        var solid = pixelShape(ink, weight: weight, grid: grid, axes: axes)
 
         // The icon's own colours: those of its solid pixels, near ones taken as one.
-        let colors = pixelPalette(pixels, alpha: alpha)
+        let colors = pixelPalette(red: red, green: green, blue: blue, opacity: opacity, alpha: alpha, width: width, height: height, cell: cell)
         guard !colors.isEmpty else {
             return output
         }
-        var layers = [[Float]](repeating: [Float](repeating: 0.0, count: columns * rows), count: colors.count)
+        let blockCount = columns * rows
+        var nearestColor = [Int](repeating: -1, count: count)
+        var layers = [[Float]](repeating: [Float](repeating: 0.0, count: blockCount), count: colors.count)
         for y in 0 ..< height {
             for x in 0 ..< width {
-                let value = alpha[y * width + x]
+                let index = y * width + x
+                let value = alpha[index]
                 guard value > 0.0 else {
                     continue
                 }
-                let offset = (y * width + x) * 4
-                let raw = Float(pixels.data[offset + 3])
-                let red = Float(pixels.data[offset]) / raw
-                let green = Float(pixels.data[offset + 1]) / raw
-                let blue = Float(pixels.data[offset + 2]) / raw
+                let raw = opacity[index]
+                let pixelRed = red[index] / raw
+                let pixelGreen = green[index] / raw
+                let pixelBlue = blue[index] / raw
                 var nearest = 0
                 var nearestDistance = Float.greatestFiniteMagnitude
-                for (index, color) in colors.enumerated() {
-                    let distance = (red - color.red) * (red - color.red) + (green - color.green) * (green - color.green) + (blue - color.blue) * (blue - color.blue)
+                for (position, color) in colors.enumerated() {
+                    let distance = (pixelRed - color.red) * (pixelRed - color.red) + (pixelGreen - color.green) * (pixelGreen - color.green) + (pixelBlue - color.blue) * (pixelBlue - color.blue)
                     if distance < nearestDistance {
                         nearestDistance = distance
-                        nearest = index
+                        nearest = position
                     }
                 }
-                let column = (x - originX) / cell
-                let row = (y - originY) / cell
-                layers[nearest][row * columns + column] += value / area
+                nearestColor[index] = nearest
+                layers[nearest][grid.block(x, y)] += value / area
             }
         }
-        var choice = [Int](repeating: 0, count: columns * rows)
-        for index in 0 ..< choice.count {
+        let totals = layers.map { $0.reduce(0, +) }
+        let byArea = (0 ..< layers.count).sorted { totals[$0] != totals[$1] ? totals[$0] > totals[$1] : $0 < $1 }
+        let base = byArea[0]
+        var choice = [Int](repeating: base, count: blockCount)
+        for index in 0 ..< blockCount where layers[base][index] <= 0.0 {
             var most: Float = -1.0
             for layer in 0 ..< layers.count where layers[layer][index] > most {
                 most = layers[layer][index]
                 choice[index] = layer
             }
         }
-        let byArea = (0 ..< layers.count).sorted { layers[$0].reduce(0, +) > layers[$1].reduce(0, +) }
+        // A smaller colour — a glyph on a plate, a ghost's eyes — read as a shape of its own
+        // and drawn over the larger.
         for layer in byArea.dropFirst() {
-            let detail = pixelBlocks(layers[layer], columns: columns, rows: rows, low: 0.25)
-            for index in 0 ..< choice.count where solid[index] && detail[index] && layers[layer][index] >= 0.2 {
+            var mask = [Bool](repeating: false, count: grid.paddedWidth * grid.paddedHeight)
+            for y in 0 ..< height {
+                for x in 0 ..< width where nearestColor[y * width + x] == layer && alpha[y * width + x] >= 0.4 {
+                    mask[(y + padding) * grid.paddedWidth + x + padding] = true
+                }
+            }
+            let detail = pixelShape(mask, weight: weight, grid: grid, axes: axes)
+            for index in 0 ..< blockCount where detail[index] {
                 choice[index] = layer
             }
         }
 
-        let opacity = peak
+        // The mirrored half: whatever thinning or a tie made of the right half, it is the left
+        // half turned over, and the bottom is the top.
+        for vertical in [false, true] where vertical ? symmetricY : symmetricX {
+            let twice = vertical ? twiceY : twiceX
+            let origin = vertical ? grid.originY : grid.originX
+            let lines = vertical ? rows : columns
+            let across = vertical ? columns : rows
+            // A block and its mirror add up to this.
+            let last = pixelFloorDivide(twice - 2 * origin, cell) - 1
+            for line in 0 ..< lines {
+                let mirror = last - line
+                guard mirror > line, mirror < lines else {
+                    continue
+                }
+                for position in 0 ..< across {
+                    let from = vertical ? line * columns + position : position * columns + line
+                    let to = vertical ? mirror * columns + position : position * columns + mirror
+                    solid[to] = solid[from]
+                    choice[to] = choice[from]
+                }
+            }
+        }
+
         for row in 0 ..< rows {
             for column in 0 ..< columns where solid[row * columns + column] {
                 let color = colors[choice[row * columns + column]]
-                let red = UInt8(min(255.0, (color.red * opacity * 255.0).rounded()))
-                let green = UInt8(min(255.0, (color.green * opacity * 255.0).rounded()))
-                let blue = UInt8(min(255.0, (color.blue * opacity * 255.0).rounded()))
-                let coverAlpha = UInt8(min(255.0, (opacity * 255.0).rounded()))
-                let x0 = originX + column * cell
-                let y0 = originY + row * cell
-                for y in max(0, y0) ..< min(height, y0 + cell) {
-                    for x in max(0, x0) ..< min(width, x0 + cell) {
+                let pixelRed = UInt8(min(255.0, (color.red * peak * 255.0).rounded()))
+                let pixelGreen = UInt8(min(255.0, (color.green * peak * 255.0).rounded()))
+                let pixelBlue = UInt8(min(255.0, (color.blue * peak * 255.0).rounded()))
+                let coverAlpha = UInt8(min(255.0, (peak * 255.0).rounded()))
+                // A block of the last row or column may start past the icon's edge.
+                let x0 = max(0, grid.originX + column * cell)
+                let y0 = max(0, grid.originY + row * cell)
+                let x1 = min(width, grid.originX + (column + 1) * cell)
+                let y1 = min(height, grid.originY + (row + 1) * cell)
+                guard x0 < x1, y0 < y1 else {
+                    continue
+                }
+                for y in y0 ..< y1 {
+                    for x in x0 ..< x1 {
                         let offset = (y * width + x) * 4
-                        output.data[offset] = red
-                        output.data[offset + 1] = green
-                        output.data[offset + 2] = blue
+                        output.data[offset] = pixelRed
+                        output.data[offset + 1] = pixelGreen
+                        output.data[offset + 2] = pixelBlue
                         output.data[offset + 3] = coverAlpha
                     }
                 }
@@ -1669,81 +1773,639 @@ public enum AorusPluginIconValues {
         return output
     }
 
-    /// Which blocks of a coverage grid are solid: those at least half covered, a block that
-    /// holds more of a thin stroke than its neighbours across it, and not a block that holds
-    /// less than its neighbours across a narrow gap. A tie goes to the first of the two blocks,
-    /// so a stroke split evenly between two of them is still one block wide.
-    private static func pixelBlocks(_ grid: [Float], columns: Int, rows: Int, low: Float) -> [Bool] {
-        let high: Float = 0.5
-        let gap: Float = 0.8
-        let step: Float = 0.15
-        let directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
-        func value(_ row: Int, _ column: Int) -> Float {
-            guard row >= 0, row < rows, column >= 0, column < columns else {
-                return 0.0
-            }
-            return grid[row * columns + column]
+    /// The blocks of a pixel icon over the icon's pixels, and the icon on a canvas `padding`
+    /// pixels larger all round.
+    private struct PixelGrid {
+        let cell: Int
+        let originX: Int
+        let originY: Int
+        let columns: Int
+        let rows: Int
+        let width: Int
+        let height: Int
+        let padding: Int
+
+        var paddedWidth: Int {
+            return self.width + 2 * self.padding
         }
-        var result = [Bool](repeating: false, count: columns * rows)
-        for row in 0 ..< rows {
-            for column in 0 ..< columns {
-                let current = grid[row * columns + column]
-                if current < high {
-                    guard current >= low else {
-                        continue
-                    }
-                    for (dy, dx) in directions {
-                        let before = value(row - dy, column - dx)
-                        let after = value(row + dy, column + dx)
-                        if current > before && current >= after && current - min(before, after) >= step {
-                            result[row * columns + column] = true
-                            break
+
+        var paddedHeight: Int {
+            return self.height + 2 * self.padding
+        }
+
+        /// The block holding the icon's pixel at `x`, `y`.
+        func block(_ x: Int, _ y: Int) -> Int {
+            return ((y - self.originY) / self.cell) * self.columns + (x - self.originX) / self.cell
+        }
+
+        func set(_ blocks: inout [Bool], _ column: Int, _ row: Int, _ value: Bool) {
+            if column >= 0, column < self.columns, row >= 0, row < self.rows {
+                blocks[row * self.columns + column] = value
+            }
+        }
+    }
+
+    /// The lines a symmetric icon is the same either side of, in the icon's pixels.
+    private struct PixelAxes {
+        let x: Float?
+        let y: Float?
+    }
+
+    /// A small dot or ring of a pixel icon and the blocks it is stamped as.
+    private struct PixelStamp {
+        let pixels: [Int]
+        var middleX: Float
+        var middleY: Float
+        let sizeX: Float
+        let sizeY: Float
+        let hole: Int
+        var onAxisX: Bool = false
+        var onAxisY: Bool = false
+        var blocksWide: Int = 1
+        var blocksHigh: Int = 1
+        var blocks: [(column: Int, row: Int)] = []
+    }
+
+    private static func pixelFloorDivide(_ value: Int, _ divisor: Int) -> Int {
+        let quotient = value / divisor
+        return value % divisor != 0 && (value < 0) != (divisor < 0) ? quotient - 1 : quotient
+    }
+
+    private static func pixelModulo(_ value: Int, _ divisor: Int) -> Int {
+        return ((value % divisor) + divisor) % divisor
+    }
+
+    /// The box of what `alpha` draws at all.
+    private static func pixelBounds(_ alpha: [Float], width: Int, height: Int) -> (minX: Int, maxX: Int, minY: Int, maxY: Int)? {
+        var minX = width
+        var minY = height
+        var maxX = -1
+        var maxY = -1
+        for y in 0 ..< height {
+            for x in 0 ..< width where alpha[y * width + x] > 5.0 / 255.0 {
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+        return maxX >= minX && maxY >= minY ? (minX, maxX, minY, maxY) : nil
+    }
+
+    /// Guo and Hall's thinning: a shape worn down from its edges to a line one pixel wide
+    /// along its middle. It keeps a line two pixels wide on a slant, which Zhang and Suen's
+    /// wears away from its end.
+    private static func pixelThin(_ mask: [Bool], width: Int, height: Int) -> [Bool] {
+        var current = mask
+        var changed = true
+        while changed {
+            changed = false
+            for pass in 0 ..< 2 {
+                var remove: [Int] = []
+                for y in 1 ..< max(1, height - 1) {
+                    for x in 1 ..< max(1, width - 1) where current[y * width + x] {
+                        let index = y * width + x
+                        let p2 = current[index - width]
+                        let p3 = current[index - width + 1]
+                        let p4 = current[index + 1]
+                        let p5 = current[index + width + 1]
+                        let p6 = current[index + width]
+                        let p7 = current[index + width - 1]
+                        let p8 = current[index - 1]
+                        let p9 = current[index - width - 1]
+                        var crossings = 0
+                        if !p2 && (p3 || p4) { crossings += 1 }
+                        if !p4 && (p5 || p6) { crossings += 1 }
+                        if !p6 && (p7 || p8) { crossings += 1 }
+                        if !p8 && (p9 || p2) { crossings += 1 }
+                        guard crossings == 1 else {
+                            continue
+                        }
+                        let first = (p9 || p2 ? 1 : 0) + (p3 || p4 ? 1 : 0) + (p5 || p6 ? 1 : 0) + (p7 || p8 ? 1 : 0)
+                        let second = (p2 || p3 ? 1 : 0) + (p4 || p5 ? 1 : 0) + (p6 || p7 ? 1 : 0) + (p8 || p9 ? 1 : 0)
+                        let neighbours = min(first, second)
+                        guard neighbours >= 2, neighbours <= 3 else {
+                            continue
+                        }
+                        let side = pass == 0 ? ((p2 || p3 || !p5) && p4) : ((p6 || p7 || !p9) && p8)
+                        if !side {
+                            remove.append(index)
                         }
                     }
-                } else {
-                    var open = false
-                    if current < gap {
-                        for (dy, dx) in directions {
-                            let before = value(row - dy, column - dx)
-                            let after = value(row + dy, column + dx)
-                            if current < before && current <= after && min(before, after) - current >= step && min(before, after) >= high {
-                                open = true
-                                break
-                            }
-                        }
+                }
+                if !remove.isEmpty {
+                    changed = true
+                    for index in remove {
+                        current[index] = false
                     }
-                    result[row * columns + column] = !open
                 }
             }
         }
-        return result
+        return current
+    }
+
+    /// For each part of `mask`, labelled by `labels`, whether it lies side by side with a pixel
+    /// of `other`, and how many pixels it has.
+    private static func pixelPartsTouching(_ labels: [Int32], count: Int, mask: [Bool], other: [Bool], width: Int, height: Int) -> (touches: [Bool], sizes: [Int]) {
+        var touches = [Bool](repeating: false, count: count + 1)
+        var sizes = [Int](repeating: 0, count: count + 1)
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let index = y * width + x
+                guard mask[index] else {
+                    continue
+                }
+                let label = Int(labels[index])
+                sizes[label] += 1
+                if (x > 0 && other[index - 1]) || (x + 1 < width && other[index + 1]) || (y > 0 && other[index - width]) || (y + 1 < height && other[index + width]) {
+                    touches[label] = true
+                }
+            }
+        }
+        return (touches, sizes)
+    }
+
+    /// The blocks a shape of a pixel icon fills: its small dots and rings stamped whole, its
+    /// strokes along their middle, its wide parts by area with the narrow gaps and small holes
+    /// in them kept open. `shape` and `weight` are on the padded canvas.
+    private static func pixelShape(_ shape: [Bool], weight: [Float], grid: PixelGrid, axes: PixelAxes) -> [Bool] {
+        let cell = Float(grid.cell)
+        let area = cell * cell
+        let paddedWidth = grid.paddedWidth
+        let paddedHeight = grid.paddedHeight
+        let padding = grid.padding
+        var blocks = [Bool](repeating: false, count: grid.columns * grid.rows)
+
+        // Small dots and rings first, and the rest is read without them.
+        var mask = shape
+        for stamp in pixelStamps(mask, weight: weight, grid: grid, enclosedOnly: false, axes: axes) {
+            for block in stamp.blocks {
+                grid.set(&blocks, block.column, block.row, true)
+            }
+            for index in stamp.pixels {
+                mask[index] = false
+            }
+        }
+
+        let stroke = 0.875 * cell
+        let bold = 1.375 * cell
+        let narrowGap = 0.75 * cell
+        let toSpace = squaredDistances(mask, target: false, width: paddedWidth, height: paddedHeight)
+        // Wide: what a disc of `stroke` reaches rolling inside the shape. Filled: the wide parts
+        // with somewhere more than two and a half blocks across. A part only a little wider than
+        // a stroke — where strokes meet, or a bold stroke all along — is drawn as a stroke.
+        let core = toSpace.map { $0 >= stroke * stroke }
+        let toCore = squaredDistances(core, target: true, width: paddedWidth, height: paddedHeight)
+        var wide = [Bool](repeating: false, count: mask.count)
+        for index in 0 ..< mask.count {
+            wide[index] = mask[index] && toCore[index] <= stroke * stroke
+        }
+        let wideParts = connectedParts(wide, width: paddedWidth, height: paddedHeight, diagonal: true)
+        var filledPart = [Bool](repeating: false, count: wideParts.count + 1)
+        for index in 0 ..< mask.count where wide[index] && toSpace[index] >= bold * bold {
+            filledPart[Int(wideParts.labels[index])] = true
+        }
+        var filled = [Bool](repeating: false, count: mask.count)
+        var narrow = [Bool](repeating: false, count: mask.count)
+        for index in 0 ..< mask.count where mask[index] {
+            filled[index] = wide[index] && filledPart[Int(wideParts.labels[index])]
+            narrow[index] = !filled[index]
+        }
+        // The narrow parts are strokes, unless too small to be one beside a filled part, when
+        // they are that part's edge and count with it.
+        let narrowParts = connectedParts(narrow, width: paddedWidth, height: paddedHeight, diagonal: true)
+        let narrowContacts = pixelPartsTouching(narrowParts.labels, count: narrowParts.count, mask: narrow, other: filled, width: paddedWidth, height: paddedHeight)
+        var keep = [Bool](repeating: false, count: narrowParts.count + 1)
+        for label in 1 ..< narrowParts.count + 1 {
+            keep[label] = Float(narrowContacts.sizes[label]) >= (narrowContacts.touches[label] ? 0.5 : 0.08) * area
+        }
+        var filledShare = [Float](repeating: 0.0, count: blocks.count)
+        for y in 0 ..< grid.height {
+            for x in 0 ..< grid.width {
+                let index = (y + padding) * paddedWidth + x + padding
+                let label = Int(narrowParts.labels[index])
+                let edge = narrow[index] && !keep[label] && narrowContacts.touches[label]
+                if filled[index] || edge {
+                    filledShare[grid.block(x, y)] += weight[index]
+                }
+            }
+        }
+        // Half covered is filled, however the sum rounds: an icon moved half a pixel covers
+        // many blocks exactly half.
+        var fill = filledShare.map { $0 >= 0.5 * area - 0.001 }
+
+        // Gaps: narrow space between parts of the shape, kept open one block wide. A gap too
+        // small to be one beside open space is the rim of that space — a hole's or the
+        // outside's — not a gap between two parts.
+        let toInk = squaredDistances(mask, target: true, width: paddedWidth, height: paddedHeight)
+        let spaceCore = toInk.map { $0 >= narrowGap * narrowGap }
+        let toSpaceCore = squaredDistances(spaceCore, target: true, width: paddedWidth, height: paddedHeight)
+        var space = [Bool](repeating: false, count: mask.count)
+        var openSpace = [Bool](repeating: false, count: mask.count)
+        var gaps = [Bool](repeating: false, count: mask.count)
+        for index in 0 ..< mask.count where !mask[index] {
+            space[index] = true
+            openSpace[index] = toSpaceCore[index] <= narrowGap * narrowGap
+            gaps[index] = !openSpace[index]
+        }
+        let gapParts = connectedParts(gaps, width: paddedWidth, height: paddedHeight, diagonal: true)
+        let gapContacts = pixelPartsTouching(gapParts.labels, count: gapParts.count, mask: gaps, other: openSpace, width: paddedWidth, height: paddedHeight)
+        let gapMiddles = pixelThin(gaps, width: paddedWidth, height: paddedHeight)
+        let narrowest = 0.3 * cell
+        for index in 0 ..< mask.count where gapMiddles[index] {
+            let label = Int(gapParts.labels[index])
+            guard Float(gapContacts.sizes[label]) >= (gapContacts.touches[label] ? 0.5 : 0.08) * area, 4.0 * toInk[index] >= narrowest * narrowest else {
+                continue
+            }
+            let x = index % paddedWidth - padding
+            let y = index / paddedWidth - padding
+            guard x >= 0, x < grid.width, y >= 0, y < grid.height else {
+                continue
+            }
+            let u = (Float(x) + 0.6 - Float(grid.originX)) / cell
+            let v = (Float(y) + 0.7 - Float(grid.originY)) / cell
+            let column = Int(u.rounded(.down))
+            let row = Int(v.rounded(.down))
+            if abs(u - Float(column) - 0.5) + abs(v - Float(row) - 0.5) < 0.5 {
+                grid.set(&fill, column, row, false)
+            }
+        }
+        // Small holes, like small dots, a block square their own size.
+        let spaceWeight = weight.map { 1.0 - $0 }
+        for hole in pixelStamps(space, weight: spaceWeight, grid: grid, enclosedOnly: true, axes: axes) {
+            for block in hole.blocks {
+                grid.set(&fill, block.column, block.row, false)
+            }
+        }
+        for index in 0 ..< blocks.count where fill[index] {
+            blocks[index] = true
+        }
+
+        // Strokes: each one block wide along its middle, or two for a stroke mostly wider than
+        // one and three quarter blocks — the same all along it, whatever its width does at a
+        // joint or a cap.
+        guard narrowParts.count > 0 else {
+            return blocks
+        }
+        let middles = pixelThin(narrow, width: paddedWidth, height: paddedHeight)
+        var widths = [[Float]](repeating: [], count: narrowParts.count + 1)
+        for index in 0 ..< mask.count where middles[index] {
+            // Across a stroke an odd number of pixels wide one pixel is furthest in, and across
+            // an even one two are: its width, from how far in its middle is.
+            let here = toSpace[index]
+            let even = toSpace[index + 1] == here || toSpace[index - 1] == here || toSpace[index + paddedWidth] == here || toSpace[index - paddedWidth] == here
+            widths[Int(narrowParts.labels[index])].append(2.0 * here.squareRoot() - (even ? 0.0 : 1.0))
+        }
+        var brushes = [Int](repeating: 1, count: narrowParts.count + 1)
+        for label in 1 ..< narrowParts.count + 1 where !widths[label].isEmpty {
+            let sorted = widths[label].sorted()
+            brushes[label] = sorted[sorted.count / 2] >= 1.75 * cell ? 2 : 1
+        }
+
+        // Each stroke's middle, followed from pixel to pixel, marks the block whose diamond it
+        // passes through — or, for a two block brush, the four round the corner whose diamond
+        // it passes through. A middle running exactly along the edge between two blocks, or
+        // along a diamond's side, would touch the diamonds only at their edges, so every point
+        // is moved a tenth of a pixel right and a fifth down first — amounts no edge of the grid
+        // falls on — and such a stroke takes the blocks below and to the right all along, rather
+        // than now one side and now the other. Either side of the middle line of a symmetric
+        // icon the push is away from that line, so the two sides take mirrored blocks.
+        var points = [Int: (x: Float, y: Float)]()
+        for index in 0 ..< mask.count where middles[index] && keep[Int(narrowParts.labels[index])] {
+            let here = toSpace[index]
+            // The middle of a stroke an even number of pixels wide lies between two of them;
+            // thinning keeps the one on its own side, so the point is moved half way back.
+            let x = Float(index % paddedWidth - padding) + 0.5 + 0.5 * ((toSpace[index + 1] == here ? 1.0 : 0.0) - (toSpace[index - 1] == here ? 1.0 : 0.0))
+            let y = Float(index / paddedWidth - padding) + 0.5 + 0.5 * ((toSpace[index + paddedWidth] == here ? 1.0 : 0.0) - (toSpace[index - paddedWidth] == here ? 1.0 : 0.0))
+            let pushX: Float = axes.x.map { x >= $0 ? 0.1 : -0.1 } ?? 0.1
+            let pushY: Float = axes.y.map { y >= $0 ? 0.2 : -0.2 } ?? 0.2
+            points[index] = (x + pushX, y + pushY)
+        }
+        var hit = [Bool](repeating: false, count: narrowParts.count + 1)
+        func mark(_ label: Int, _ start: (x: Float, y: Float), _ end: (x: Float, y: Float)) {
+            let ax = (start.x - Float(grid.originX)) / cell
+            let ay = (start.y - Float(grid.originY)) / cell
+            let bx = (end.x - Float(grid.originX)) / cell
+            let by = (end.y - Float(grid.originY)) / cell
+            // The least L1 distance from a block's middle or corner to the segment: at an end, or
+            // where the segment crosses that point's row or column.
+            func nearest(_ cx: Float, _ cy: Float) -> Float {
+                var times: [Float] = [0.0, 1.0]
+                if bx != ax {
+                    times.append((cx - ax) / (bx - ax))
+                }
+                if by != ay {
+                    times.append((cy - ay) / (by - ay))
+                }
+                var least = Float.greatestFiniteMagnitude
+                for time in times where time >= 0.0 && time <= 1.0 {
+                    least = min(least, abs(ax + (bx - ax) * time - cx) + abs(ay + (by - ay) * time - cy))
+                }
+                return least
+            }
+            if brushes[label] == 1 {
+                for column in Int(min(ax, bx).rounded(.down)) ... Int(max(ax, bx).rounded(.down)) {
+                    for row in Int(min(ay, by).rounded(.down)) ... Int(max(ay, by).rounded(.down)) where nearest(Float(column) + 0.5, Float(row) + 0.5) < 0.5 {
+                        grid.set(&blocks, column, row, true)
+                        hit[label] = true
+                    }
+                }
+            } else {
+                for cornerX in Int((min(ax, bx) + 0.5).rounded(.down)) ... Int((max(ax, bx) + 0.5).rounded(.down)) {
+                    for cornerY in Int((min(ay, by) + 0.5).rounded(.down)) ... Int((max(ay, by) + 0.5).rounded(.down)) where nearest(Float(cornerX), Float(cornerY)) < 0.5 {
+                        for row in cornerY - 1 ... cornerY {
+                            for column in cornerX - 1 ... cornerX {
+                                grid.set(&blocks, column, row, true)
+                            }
+                        }
+                        hit[label] = true
+                    }
+                }
+            }
+        }
+        for (index, point) in points {
+            let label = Int(narrowParts.labels[index])
+            mark(label, point, point)
+            for step in [1, paddedWidth - 1, paddedWidth, paddedWidth + 1] {
+                if let next = points[index + step] {
+                    mark(label, point, next)
+                }
+            }
+        }
+        // A stroke too small to have a middle in any block's diamond: where most of it is.
+        var sumX = [Float](repeating: 0.0, count: narrowParts.count + 1)
+        var sumY = [Float](repeating: 0.0, count: narrowParts.count + 1)
+        for index in 0 ..< mask.count where narrow[index] {
+            let label = Int(narrowParts.labels[index])
+            sumX[label] += Float(index % paddedWidth - padding) + 0.5
+            sumY[label] += Float(index / paddedWidth - padding) + 0.5
+        }
+        for label in 1 ..< narrowParts.count + 1 where keep[label] && !hit[label] {
+            let size = Float(narrowContacts.sizes[label])
+            let u = (sumX[label] / size - Float(grid.originX)) / cell
+            let v = (sumY[label] / size - Float(grid.originY)) / cell
+            if brushes[label] == 1 {
+                grid.set(&blocks, Int(u.rounded(.down)), Int(v.rounded(.down)), true)
+            } else {
+                let cornerX = Int((u + 0.5).rounded(.down))
+                let cornerY = Int((v + 0.5).rounded(.down))
+                for row in cornerY - 1 ... cornerY {
+                    for column in cornerX - 1 ... cornerX {
+                        grid.set(&blocks, column, row, true)
+                    }
+                }
+            }
+        }
+        return blocks
+    }
+
+    /// Small dots and rings: parts at most three and a half blocks across that fill most of
+    /// their box and are not a short slanted stroke. Each is a block square its own size, or a
+    /// ring of eight round a block-sized hole, placed on the grid by its middle; dots alike are
+    /// drawn alike, and dots whose squares would touch are drawn a block smaller, so they stay
+    /// apart. With `enclosedOnly`, parts that reach the canvas edge are left out: the holes of
+    /// a shape, not the space round it.
+    private static func pixelStamps(_ mask: [Bool], weight: [Float], grid: PixelGrid, enclosedOnly: Bool, axes: PixelAxes) -> [PixelStamp] {
+        let cell = Float(grid.cell)
+        let paddedWidth = grid.paddedWidth
+        let paddedHeight = grid.paddedHeight
+        let padding = Float(grid.padding)
+        let parts = connectedParts(mask, width: paddedWidth, height: paddedHeight, diagonal: true)
+        guard parts.count > 0 else {
+            return []
+        }
+        var members = [[Int]](repeating: [], count: parts.count + 1)
+        for index in 0 ..< mask.count where mask[index] {
+            members[Int(parts.labels[index])].append(index)
+        }
+        var found: [PixelStamp] = []
+        for label in 1 ..< parts.count + 1 {
+            let pixels = members[label]
+            var minX = paddedWidth
+            var minY = paddedHeight
+            var maxX = -1
+            var maxY = -1
+            for index in pixels {
+                minX = min(minX, index % paddedWidth)
+                maxX = max(maxX, index % paddedWidth)
+                minY = min(minY, index / paddedWidth)
+                maxY = max(maxY, index / paddedWidth)
+            }
+            if enclosedOnly && (minX == 0 || minY == 0 || maxX == paddedWidth - 1 || maxY == paddedHeight - 1) {
+                continue
+            }
+            let boxWidth = maxX - minX + 1
+            let boxHeight = maxY - minY + 1
+            let boxArea = Float(boxWidth * boxHeight)
+            guard Float(boxWidth) <= 3.5 * cell, Float(boxHeight) <= 3.5 * cell, Float(pixels.count) >= 0.5 * boxArea else {
+                continue
+            }
+            // How far it spreads, weighed by how much of each pixel it covers.
+            var total: Float = 0.0
+            var meanX: Float = 0.0
+            var meanY: Float = 0.0
+            for index in pixels {
+                let value = weight[index]
+                total += value
+                meanX += Float(index % paddedWidth) * value
+                meanY += Float(index / paddedWidth) * value
+            }
+            guard total > 0.0 else {
+                continue
+            }
+            meanX /= total
+            meanY /= total
+            var spreadX: Float = 0.0
+            var spreadY: Float = 0.0
+            var together: Float = 0.0
+            for index in pixels {
+                let value = weight[index]
+                let dx = Float(index % paddedWidth) - meanX
+                let dy = Float(index / paddedWidth) - meanY
+                spreadX += dx * dx * value
+                spreadY += dy * dy * value
+                together += dx * dy * value
+            }
+            spreadX /= total
+            spreadY /= total
+            together /= total
+            // A short slanted stroke fills its box as well as a dot does; it is a stroke.
+            if spreadX > 0.0 && spreadY > 0.0 && abs(together) > 0.4 * (spreadX * spreadY).squareRoot() {
+                continue
+            }
+            // The part's hole: what of its box, with a pixel round it, the outside cannot reach.
+            let frameWidth = boxWidth + 2
+            let frameHeight = boxHeight + 2
+            var body = [Bool](repeating: false, count: frameWidth * frameHeight)
+            for index in pixels {
+                body[(index / paddedWidth - minY + 1) * frameWidth + index % paddedWidth - minX + 1] = true
+            }
+            var outside = [Bool](repeating: false, count: body.count)
+            var stack = [0]
+            outside[0] = true
+            while let index = stack.popLast() {
+                let x = index % frameWidth
+                let y = index / frameWidth
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    let nx = x + dx
+                    let ny = y + dy
+                    guard nx >= 0, nx < frameWidth, ny >= 0, ny < frameHeight else {
+                        continue
+                    }
+                    let next = ny * frameWidth + nx
+                    if !body[next] && !outside[next] {
+                        outside[next] = true
+                        stack.append(next)
+                    }
+                }
+            }
+            var hole = 0
+            for index in 0 ..< body.count where !body[index] && !outside[index] {
+                hole += 1
+            }
+            let ring = Float(hole) >= 0.25 * cell * cell
+            // A dot fills most of its box — a disc three quarters and more; a ring with a hole
+            // a block in size less. An arrow head or a hook as small fills less.
+            guard Float(pixels.count) >= (ring ? 0.5 : 0.7) * boxArea else {
+                continue
+            }
+            // Its size as a disc's, from how far it spreads, which a pixel more or less at its
+            // edge hardly moves, so two dots alike come out alike. A ring spreads further than
+            // a dot as wide; its size is its box.
+            let sizeX = ring ? Float(boxWidth) / cell : 4.0 * spreadX.squareRoot() / cell
+            let sizeY = ring ? Float(boxHeight) / cell : 4.0 * spreadY.squareRoot() / cell
+            let middleX = (Float(minX + maxX + 1)) * 0.5 - padding
+            let middleY = (Float(minY + maxY + 1)) * 0.5 - padding
+            found.append(PixelStamp(pixels: pixels, middleX: middleX, middleY: middleY, sizeX: sizeX, sizeY: sizeY, hole: hole))
+        }
+        // A dot on the middle line of a symmetric icon is centred on it, which takes an odd
+        // number of blocks across. Off it, a dot whose middle is exactly on a block edge goes
+        // the way the strokes do: away from the middle line, else right and down.
+        for index in found.indices {
+            let middleX = found[index].middleX
+            let middleY = found[index].middleY
+            if let axis = axes.x, abs(middleX - axis) < 0.5 * cell {
+                found[index].onAxisX = true
+                found[index].middleX = axis
+            } else {
+                let push: Float = axes.x.map { middleX < $0 ? -0.1 : 0.1 } ?? 0.1
+                found[index].middleX = middleX + push
+            }
+            if let axis = axes.y, abs(middleY - axis) < 0.5 * cell {
+                found[index].onAxisY = true
+                found[index].middleY = axis
+            } else {
+                let push: Float = axes.y.map { middleY < $0 ? -0.2 : 0.2 } ?? 0.2
+                found[index].middleY = middleY + push
+            }
+        }
+        // Dots alike are drawn alike: each takes the average size of those within a fifth of
+        // its own, odd across where one of them must be.
+        let sizes = found.map { (x: $0.sizeX, y: $0.sizeY, onX: $0.onAxisX, onY: $0.onAxisY) }
+        for index in found.indices {
+            let own = sizes[index]
+            let alike = sizes.filter { abs($0.x - own.x) <= 0.2 * own.x && abs($0.y - own.y) <= 0.2 * own.y }
+            let averageX = alike.reduce(0.0) { $0 + $1.x } / Float(alike.count)
+            let averageY = alike.reduce(0.0) { $0 + $1.y } / Float(alike.count)
+            var wide = max(1, Int((averageX + 0.35).rounded(.down)))
+            var high = max(1, Int((averageY + 0.35).rounded(.down)))
+            if wide % 2 == 0 && alike.contains(where: { $0.onX }) {
+                wide = 2 * Int((averageX / 2.0).rounded(.down)) + 1
+            }
+            if high % 2 == 0 && alike.contains(where: { $0.onY }) {
+                high = 2 * Int((averageY / 2.0).rounded(.down)) + 1
+            }
+            found[index].blocksWide = wide
+            found[index].blocksHigh = high
+        }
+        // The first block a stamp `size` blocks across covers, centred on `middle`.
+        func first(_ middle: Float, _ size: Int, _ origin: Int) -> Int {
+            let position = (middle - Float(origin)) / cell
+            if size % 2 == 1 {
+                return Int(position.rounded(.down)) - (size - 1) / 2
+            }
+            return Int((position + 0.5).rounded(.down)) - size / 2
+        }
+        func box(_ stamp: PixelStamp) -> (minColumn: Int, minRow: Int, maxColumn: Int, maxRow: Int) {
+            let column = first(stamp.middleX, stamp.blocksWide, grid.originX)
+            let row = first(stamp.middleY, stamp.blocksHigh, grid.originY)
+            return (column, row, column + stamp.blocksWide - 1, row + stamp.blocksHigh - 1)
+        }
+        for _ in 0 ..< 3 {
+            let boxes = found.map { box($0) }
+            var shrink = Set<Int>()
+            for one in found.indices {
+                for other in found.indices where other > one {
+                    let a = boxes[one]
+                    let b = boxes[other]
+                    if a.minColumn <= b.maxColumn + 1 && b.minColumn <= a.maxColumn + 1 && a.minRow <= b.maxRow + 1 && b.minRow <= a.maxRow + 1 {
+                        shrink.insert(one)
+                        shrink.insert(other)
+                    }
+                }
+            }
+            let smaller = shrink.filter { found[$0].blocksWide > 1 || found[$0].blocksHigh > 1 }
+            if smaller.isEmpty {
+                break
+            }
+            for index in smaller {
+                found[index].blocksWide = max(1, found[index].blocksWide - (found[index].onAxisX ? 2 : 1))
+                found[index].blocksHigh = max(1, found[index].blocksHigh - (found[index].onAxisY ? 2 : 1))
+            }
+        }
+        for index in found.indices {
+            let place = box(found[index])
+            let ring = found[index].blocksWide == 3 && found[index].blocksHigh == 3 && Float(found[index].hole) >= 0.25 * cell * cell
+            var blocks: [(column: Int, row: Int)] = []
+            for row in place.minRow ... place.maxRow {
+                for column in place.minColumn ... place.maxColumn where !(ring && row == place.minRow + 1 && column == place.minColumn + 1) {
+                    blocks.append((column, row))
+                }
+            }
+            found[index].blocks = blocks
+        }
+        return found
     }
 
     /// Up to four colours an icon is drawn in, the most used first: its solid pixels' colours,
     /// rounded and counted, each kept when it is not near one already taken and covers a
-    /// thirtieth of the icon, then made the average of the pixels nearest it.
-    private static func pixelPalette(_ pixels: Pixels, alpha: [Float]) -> [(red: Float, green: Float, blue: Float)] {
+    /// thirtieth of the icon or a few pixels all of its own colour — a small dot of a colour,
+    /// a ghost's eye, is a colour too, where a blended edge never is — then made the average of
+    /// the pixels nearest it.
+    private static func pixelPalette(red: [Float], green: [Float], blue: [Float], opacity: [Float], alpha: [Float], width: Int, height: Int, cell: Int) -> [(red: Float, green: Float, blue: Float)] {
+        var keys = [Int](repeating: -1, count: alpha.count)
+        for index in 0 ..< alpha.count where alpha[index] >= 0.5 && opacity[index] > 0.0 {
+            let raw = opacity[index]
+            let r = Int((red[index] / raw * 15.0).rounded())
+            let g = Int((green[index] / raw * 15.0).rounded())
+            let b = Int((blue[index] / raw * 15.0).rounded())
+            keys[index] = r * 256 + g * 16 + b
+        }
         var counts: [Int: Int] = [:]
+        var inner: [Int: Int] = [:]
         var total = 0
-        for index in 0 ..< alpha.count where alpha[index] >= 0.5 {
-            let offset = index * 4
-            let raw = Float(pixels.data[offset + 3])
-            guard raw > 0.0 else {
-                continue
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let index = y * width + x
+                let key = keys[index]
+                guard key >= 0 else {
+                    continue
+                }
+                counts[key, default: 0] += 1
+                total += 1
+                if x > 0, x < width - 1, y > 0, y < height - 1, keys[index - 1] == key, keys[index + 1] == key, keys[index - width] == key, keys[index + width] == key {
+                    inner[key, default: 0] += 1
+                }
             }
-            let red = Int((Float(pixels.data[offset]) / raw * 15.0).rounded())
-            let green = Int((Float(pixels.data[offset + 1]) / raw * 15.0).rounded())
-            let blue = Int((Float(pixels.data[offset + 2]) / raw * 15.0).rounded())
-            counts[red * 256 + green * 16 + blue, default: 0] += 1
-            total += 1
         }
         guard total > 0 else {
             return []
         }
+        let own = min(0.3 * Float(cell * cell), 16.0)
         var colors: [(red: Float, green: Float, blue: Float)] = []
         for (key, count) in counts.sorted(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }) {
-            if Float(count) < Float(total) * 0.03 {
-                break
+            if Float(count) < Float(total) * 0.03 && Float(inner[key] ?? 0) < own {
+                continue
             }
             let candidate = (red: Float((key >> 8) & 15) / 15.0, green: Float((key >> 4) & 15) / 15.0, blue: Float(key & 15) / 15.0)
             let distinct = colors.allSatisfy { abs($0.red - candidate.red) + abs($0.green - candidate.green) + abs($0.blue - candidate.blue) > 0.25 }
@@ -1755,27 +2417,23 @@ public enum AorusPluginIconValues {
             }
         }
         var sums = [(red: Float, green: Float, blue: Float, count: Float)](repeating: (0.0, 0.0, 0.0, 0.0), count: colors.count)
-        for index in 0 ..< alpha.count where alpha[index] >= 0.5 {
-            let offset = index * 4
-            let raw = Float(pixels.data[offset + 3])
-            guard raw > 0.0 else {
-                continue
-            }
-            let red = Float(pixels.data[offset]) / raw
-            let green = Float(pixels.data[offset + 1]) / raw
-            let blue = Float(pixels.data[offset + 2]) / raw
+        for index in 0 ..< alpha.count where keys[index] >= 0 {
+            let raw = opacity[index]
+            let pixelRed = red[index] / raw
+            let pixelGreen = green[index] / raw
+            let pixelBlue = blue[index] / raw
             var nearest = 0
             var nearestDistance = Float.greatestFiniteMagnitude
             for (position, color) in colors.enumerated() {
-                let distance = (red - color.red) * (red - color.red) + (green - color.green) * (green - color.green) + (blue - color.blue) * (blue - color.blue)
+                let distance = (pixelRed - color.red) * (pixelRed - color.red) + (pixelGreen - color.green) * (pixelGreen - color.green) + (pixelBlue - color.blue) * (pixelBlue - color.blue)
                 if distance < nearestDistance {
                     nearestDistance = distance
                     nearest = position
                 }
             }
-            sums[nearest].red += red
-            sums[nearest].green += green
-            sums[nearest].blue += blue
+            sums[nearest].red += pixelRed
+            sums[nearest].green += pixelGreen
+            sums[nearest].blue += pixelBlue
             sums[nearest].count += 1.0
         }
         for index in 0 ..< colors.count where sums[index].count > 0.0 {

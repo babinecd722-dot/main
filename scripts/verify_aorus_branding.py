@@ -4218,7 +4218,17 @@ def main() -> None:
         ("submodules/Display/Source/AorusPluginIconValues.swift", 'private static let personLayer = "~aorusgram.person"'),
         ("submodules/Display/Source/AorusPluginIconValues.swift", 'style = (spec["look"] as? String) == "none" ? nil : spec'),
         ("submodules/Display/Source/AorusPluginIconValues.swift", "public static func preview(_ image: UIImage, look: String, amount: CGFloat) -> UIImage?"),
+        # Pixel icons are drawn as pixel art: strokes along their middle, small dots stamped
+        # whole, symmetric icons mirrored, and each smaller colour — a ghost's eyes — read as a
+        # shape of its own.
+        ("submodules/Display/Source/AorusPluginIconValues.swift", "private static func pixelThin(_ mask: [Bool], width: Int, height: Int) -> [Bool]"),
+        ("submodules/Display/Source/AorusPluginIconValues.swift", "for stamp in pixelStamps(mask, weight: weight, grid: grid, enclosedOnly: false, axes: axes)"),
+        ("submodules/Display/Source/AorusPluginIconValues.swift", "let detail = pixelShape(mask, weight: weight, grid: grid, axes: axes)"),
+        ("submodules/Display/Source/AorusPluginIconValues.swift", "for vertical in [false, true] where vertical ? symmetricY : symmetricX"),
     ]
+    # A pixel pane has no highlight: anything drawn on its flat plate read as a grey mark.
+    if glass_style.is_file() and "pixelGleam" in glass_style.read_text(encoding="utf-8"):
+        err.append("PluginIcons: the pixel pane still draws a gleam")
     if icons_core.is_file() and 'defaultsKey = "aorusgram_icon_look"' not in icons_core.read_text(encoding="utf-8"):
         err.append("PluginIcons: Bubble Settings and the drawing code keep the person's icon style under different keys")
     for relative, marker in icon_checks:
