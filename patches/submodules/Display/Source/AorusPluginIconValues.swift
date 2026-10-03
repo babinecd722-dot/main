@@ -1709,7 +1709,8 @@ public enum AorusPluginIconValues {
         var solid = pixelShape(ink, weight: weight, grid: grid, axes: axes)
 
         // The icon's own colours: those of its solid pixels, near ones taken as one.
-        let colors = pixelPalette(red: red, green: green, blue: blue, opacity: opacity, alpha: alpha, width: width, height: height, cell: cell)
+        let palette = pixelPalette(red: red, green: green, blue: blue, opacity: opacity, alpha: alpha, width: width, height: height, cell: cell)
+        let colors = palette.colors
         guard !colors.isEmpty else {
             return output
         }
@@ -1744,7 +1745,7 @@ public enum AorusPluginIconValues {
         let byArea = (0 ..< layers.count).sorted { totals[$0] != totals[$1] ? totals[$0] > totals[$1] : $0 < $1 }
         let base = byArea[0]
         var choice = [Int](repeating: base, count: blockCount)
-        for index in 0 ..< blockCount where layers[base][index] <= 0.0 {
+        for index in 0 ..< blockCount where !palette.details || layers[base][index] <= 0.0 {
             var most: Float = -1.0
             for layer in 0 ..< layers.count where layers[layer][index] > most {
                 most = layers[layer][index]
@@ -1753,7 +1754,7 @@ public enum AorusPluginIconValues {
         }
         // A smaller colour — a glyph on a plate, a ghost's eyes — read as a shape of its own
         // and drawn over the larger.
-        for layer in byArea.dropFirst() {
+        for layer in byArea.dropFirst() where palette.details {
             var mask = [Bool](repeating: false, count: grid.paddedWidth * grid.paddedHeight)
             for y in 0 ..< height {
                 for x in 0 ..< width where nearestColor[y * width + x] == layer && alpha[y * width + x] >= 0.4 {
@@ -2427,7 +2428,7 @@ public enum AorusPluginIconValues {
     /// thirtieth of the icon or a few pixels all of its own colour — a small dot of a colour,
     /// a ghost's eye, is a colour too, where a blended edge never is — then made the average of
     /// the pixels nearest it.
-    private static func pixelPalette(red: [Float], green: [Float], blue: [Float], opacity: [Float], alpha: [Float], width: Int, height: Int, cell: Int) -> [(red: Float, green: Float, blue: Float)] {
+    private static func pixelPalette(red: [Float], green: [Float], blue: [Float], opacity: [Float], alpha: [Float], width: Int, height: Int, cell: Int) -> (colors: [(red: Float, green: Float, blue: Float)], details: Bool) {
         var keys = [Int](repeating: -1, count: alpha.count)
         for index in 0 ..< alpha.count where alpha[index] >= 0.5 && opacity[index] > 0.0 {
             let raw = opacity[index]
@@ -2454,11 +2455,12 @@ public enum AorusPluginIconValues {
             }
         }
         guard total > 0 else {
-            return []
+            return ([], false)
         }
         let own = min(0.3 * Float(cell * cell), 16.0)
         var colors: [(red: Float, green: Float, blue: Float)] = []
-        for (key, count) in counts.sorted(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }) {
+        let ranked = counts.sorted(by: { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key })
+        for (key, count) in ranked {
             if Float(count) < Float(total) * 0.03 && Float(inner[key] ?? 0) < own {
                 continue
             }
@@ -2469,6 +2471,34 @@ public enum AorusPluginIconValues {
             }
             if colors.count == 4 {
                 break
+            }
+        }
+        let details = !colors.isEmpty
+        if colors.isEmpty {
+            // Small gradients can have neither a frequent colour nor a flat interior.
+            // Keep a spread of their colours instead of excluding the entire image.
+            func color(_ key: Int) -> (red: Float, green: Float, blue: Float) {
+                return (Float((key >> 8) & 15) / 15.0, Float((key >> 4) & 15) / 15.0, Float(key & 15) / 15.0)
+            }
+            colors.append(color(ranked[0].key))
+            while colors.count < 4 {
+                var selected: Int?
+                var bestScore: Float = 0.0
+                for (key, count) in ranked {
+                    let candidate = color(key)
+                    guard colors.allSatisfy({ abs($0.red - candidate.red) + abs($0.green - candidate.green) + abs($0.blue - candidate.blue) > 0.25 }) else { continue }
+                    var distance = Float.greatestFiniteMagnitude
+                    for existing in colors {
+                        let red = existing.red - candidate.red
+                        let green = existing.green - candidate.green
+                        let blue = existing.blue - candidate.blue
+                        distance = min(distance, red * red + green * green + blue * blue)
+                    }
+                    let score = distance * Float(count)
+                    if score > bestScore { selected = key; bestScore = score }
+                }
+                guard let selected else { break }
+                colors.append(color(selected))
             }
         }
         var sums = [(red: Float, green: Float, blue: Float, count: Float)](repeating: (0.0, 0.0, 0.0, 0.0), count: colors.count)
@@ -2494,7 +2524,7 @@ public enum AorusPluginIconValues {
         for index in 0 ..< colors.count where sums[index].count > 0.0 {
             colors[index] = (min(1.0, sums[index].red / sums[index].count), min(1.0, sums[index].green / sums[index].count), min(1.0, sums[index].blue / sums[index].count))
         }
-        return colors
+        return (colors, details)
     }
 }
 

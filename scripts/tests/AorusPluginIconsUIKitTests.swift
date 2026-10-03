@@ -69,6 +69,17 @@ private enum AorusPluginIconsUIKitTests {
         let preview = AorusPluginIconValues.preview(global, look:"pixel", amount:2.0)!
         sameCanvas(preview, original, "preview retains symbol dimensions")
         expect(preview.pngData() != global.pngData(), "preview applies the selected amount to the original glyph")
+        stage("checking gradient icon")
+        let gradient = generateImage(CGSize(width:32,height:32), scale:1, rotatedContext: { _, context in
+            for y in 0..<32 { for x in 0..<32 {
+                context.setFillColor(UIColor(red:CGFloat(x)/31,green:CGFloat(y)/31,blue:0.5,alpha:1).cgColor)
+                context.fill(CGRect(x:CGFloat(x),y:CGFloat(y),width:1,height:1))
+            } }
+        })!.withRenderingMode(.alwaysOriginal)
+        let styledGradient = AorusPluginIconValues.own(gradient,named:"AorusGram/Test/Gradient")!
+        expect(styledGradient.size == gradient.size,"gradient icon keeps its canvas")
+        expect(styledGradient.pngData() != gradient.pngData(),"gradient icon is pixelated")
+        expect(styledGradient.renderingMode == .alwaysOriginal,"gradient icon keeps its colours")
         stage("checking dictation replacement")
         defaults.set(["test":["AorusGram/Input/Dictation":["kind":"symbol", "symbol":"pencil", "targets":["AorusGram/Input/Dictation"]]]], forKey: AorusPluginIconValues.layersKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)

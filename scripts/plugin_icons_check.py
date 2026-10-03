@@ -87,6 +87,18 @@ TESTS = r"""
             expect(colored.data[(48*width+66)*4+2] > colored.data[(48*width+66)*4],"right half remains blue")
             expect(pixelated(transparent,cell:cell).data.allSatisfy { $0 == 0 },"empty image stays empty")
         }
+        var gradientBytes: [UInt8] = []
+        for y in 0..<32 { for x in 0..<32 {
+            gradientBytes += [UInt8(x*255/31), UInt8(y*255/31), 127, 255]
+        } }
+        let gradient = Pixels(width:32, height:32, data:gradientBytes)
+        for cell in 2...8 {
+            let output = pixelated(gradient,cell:cell)
+            expect(output.width == 32 && output.height == 32,"gradient canvas")
+            expect(output.data[(16*32+16)*4+3] > 0,"gradient remains visible")
+            expect(output.data[(16*32+24)*4] > output.data[(16*32+8)*4],"gradient keeps horizontal colours")
+            expect(output.data[(24*32+16)*4+1] > output.data[(8*32+16)*4+1],"gradient keeps vertical colours")
+        }
         print("Pixel renderer passed: \(checks) assertions")
     }
 """
