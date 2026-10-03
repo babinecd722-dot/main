@@ -5,6 +5,7 @@ from pathlib import Path
 import platform
 import re
 import json
+import os
 import subprocess
 import tempfile
 
@@ -132,8 +133,17 @@ def main():
                 subprocess.run(["xcrun", "simctl", "bootstatus", device["udid"], "-b"], check=True, timeout=240)
                 simulator_sdk = subprocess.check_output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"], text=True).strip()
                 executable = work / "uikit-icon-tests"
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True)
-                subprocess.run(["xcrun", "simctl", "spawn", device["udid"], str(executable)], check=True, timeout=60)
+                simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                try:
+                    subprocess.run(["xcrun", "simctl", "spawn", device["udid"], str(executable)], check=True, timeout=120)
+                except subprocess.TimeoutExpired:
+                    # Simulator processes share the host kernel; a sample identifies the
+                    # exact UIKit call that failed to return instead of hiding the timeout.
+                    processes = subprocess.run(["pgrep", "-f", str(executable)], capture_output=True, text=True)
+                    for pid in processes.stdout.split():
+                        subprocess.run(["sample", pid, "1", "1"], timeout=15, check=False)
+                    raise
             finally:
                 if created_boot:
                     subprocess.run(["xcrun", "simctl", "shutdown", device["udid"]], check=True)

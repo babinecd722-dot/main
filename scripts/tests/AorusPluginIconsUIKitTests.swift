@@ -1,10 +1,13 @@
 import Foundation
 import UIKit
 import ObjectiveC
+import Darwin
 
 @main
 private enum AorusPluginIconsUIKitTests {
     static func main() {
+        func stage(_ message: String) { print("UIKit icons: " + message); fflush(stdout) }
+        stage("starting")
         var checks = 0
         func expect(_ value: Bool, _ message: String) {
             checks += 1
@@ -14,16 +17,19 @@ private enum AorusPluginIconsUIKitTests {
         defer { defaults.removeObject(forKey: AorusPluginIconValues.personLookKey); defaults.removeObject(forKey: AorusPluginIconValues.layersKey) }
         defaults.removeObject(forKey: AorusPluginIconValues.personLookKey)
         defaults.removeObject(forKey: AorusPluginIconValues.layersKey)
+        stage("loading original symbol")
         let original = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
         let traits = UITraitCollection(userInterfaceStyle: .dark)
         for selector in ["systemImageNamed:", "systemImageNamed:withConfiguration:", "systemImageNamed:compatibleWithTraitCollection:"] {
             expect(class_getClassMethod(UIImage.self, NSSelectorFromString(selector)) != nil, "UIKit symbol loader selector")
         }
+        stage("installing resolver")
         AorusPluginIconValues.install()
         AorusPluginIconValues.install()
         defaults.set(["look":"pixel", "amount":1.5], forKey: AorusPluginIconValues.personLookKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
         for name in ["waveform", "trash", "square.and.arrow.up", "mic", "ellipsis", "arrow.left"] {
+            stage("loading " + name)
             let plain = UIImage(systemName: name)!
             let configured = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
             let themed = UIImage(systemName: name, compatibleWith: traits)!
@@ -32,6 +38,7 @@ private enum AorusPluginIconsUIKitTests {
                 expect(image.size.width > 0 && image.size.height > 0, "symbol retains dimensions")
             }
         }
+        stage("checking own icon and preview")
         let global = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
         expect(global.size == original.size, "waveform keeps layout size")
         let own = AorusPluginIconValues.own(global, named: "AorusGram/Input/Dictation")!
@@ -40,6 +47,7 @@ private enum AorusPluginIconsUIKitTests {
         let preview = AorusPluginIconValues.preview(global, look:"pixel", amount:2.0)!
         expect(preview.size == original.size, "preview retains symbol dimensions")
         expect(preview.pngData() != global.pngData(), "preview applies the selected amount to the original glyph")
+        stage("checking dictation replacement")
         defaults.set(["test":["AorusGram/Input/Dictation":["kind":"symbol", "symbol":"pencil", "targets":["AorusGram/Input/Dictation"]]]], forKey: AorusPluginIconValues.layersKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
         let replaced = AorusPluginIconValues.own(global, named:"AorusGram/Input/Dictation")!
@@ -49,6 +57,7 @@ private enum AorusPluginIconsUIKitTests {
         defaults.removeObject(forKey:AorusPluginIconValues.personLookKey)
         defaults.removeObject(forKey:AorusPluginIconValues.layersKey)
         NotificationCenter.default.post(name:AorusPluginIconValues.didChangeNotification,object:nil)
+        stage("checking reset")
         let unstyled = UIImage(systemName:"waveform",withConfiguration:UIImage.SymbolConfiguration(pointSize:20,weight:.regular))!
         expect(unstyled.pngData() == original.pngData(), "reset restores the original symbol")
         print("UIKit icon resolver passed: \(checks) assertions")
