@@ -334,8 +334,15 @@ public enum AorusPluginIconValues {
         Thread.current.threadDictionary[renderingKey] = true
         defer { Thread.current.threadDictionary[renderingKey] = wasRendering }
         var image = original
-        // Symbol images and CI-backed images need a bitmap before their alpha can be read.
-        if image.cgImage == nil {
+        // A symbol's CGImage may hold just its glyph rather than its full layout box.
+        // Draw such images into that box before reading alpha, so styles keep the
+        // symbol's metrics. CI-backed and rotated images need the same rasterization.
+        let bitmapMatchesCanvas: Bool
+        if let bitmap = image.cgImage {
+            bitmapMatchesCanvas = abs(CGFloat(bitmap.width) - size.width * scale) <= 0.5
+                && abs(CGFloat(bitmap.height) - size.height * scale) <= 0.5
+        } else { bitmapMatchesCanvas = false }
+        if !bitmapMatchesCanvas || image.imageOrientation != .up {
             UIGraphicsBeginImageContextWithOptions(size, false, scale)
             original.draw(in: CGRect(origin: .zero, size: size))
             let raster = UIGraphicsGetImageFromCurrentImageContext()

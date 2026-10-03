@@ -28,6 +28,12 @@ private enum AorusPluginIconsUIKitTests {
         stage("loading original symbol")
         let original = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
         let traits = UITraitCollection(userInterfaceStyle: .dark)
+        let names = ["waveform", "trash", "square.and.arrow.up", "mic", "ellipsis", "arrow.left"]
+        let references = Dictionary(uniqueKeysWithValues: names.map { name in
+            (name, [UIImage(systemName: name)!,
+                UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!,
+                UIImage(systemName: name, compatibleWith: traits)!])
+        })
         for selector in ["systemImageNamed:", "systemImageNamed:withConfiguration:", "systemImageNamed:compatibleWithTraitCollection:"] {
             expect(class_getClassMethod(UIImage.self, NSSelectorFromString(selector)) != nil, "UIKit symbol loader selector")
         }
@@ -36,14 +42,18 @@ private enum AorusPluginIconsUIKitTests {
         AorusPluginIconValues.install()
         defaults.set(["look":"pixel", "amount":1.5], forKey: AorusPluginIconValues.personLookKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
-        for name in ["waveform", "trash", "square.and.arrow.up", "mic", "ellipsis", "arrow.left"] {
+        for name in names {
             stage("loading " + name)
             let plain = UIImage(systemName: name)!
             let configured = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
             let themed = UIImage(systemName: name, compatibleWith: traits)!
-            for image in [plain, configured, themed] {
+            for (index, image) in [plain, configured, themed].enumerated() {
                 expect(image.cgImage != nil, "symbol becomes a bitmap")
-                expect(image.size.width > 0 && image.size.height > 0, "symbol retains dimensions")
+                let reference = references[name]![index]
+                sameCanvas(image, reference, name + " retains canvas")
+                expect(image.scale == reference.scale, name + " retains scale")
+                expect(image.alignmentRectInsets == reference.alignmentRectInsets, name + " retains alignment")
+                expect(image.renderingMode == reference.renderingMode, name + " retains rendering mode")
             }
         }
         stage("checking own icon and preview")
