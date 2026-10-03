@@ -10,6 +10,42 @@ from pathlib import Path
 from aorus_l10n_check import verify_language_tables
 
 
+def drawn_own_icon_names(tg: Path) -> set[str]:
+    """Resolve direct icon calls and the SwiftUI toolbar's named-symbol route."""
+    root = tg / "submodules"
+    renderer = root / "Display/Source/AorusPluginIconValues.swift"
+    renderer_text = renderer.read_text(encoding="utf-8") if renderer.is_file() else ""
+    symbol_owns_image = "guard let image = own(original, named: name)" in renderer_text
+    loaders = "(?:own|symbol)" if symbol_owns_image else "own"
+    direct = re.compile(r"AorusPluginIconValues\." + loaders + r'\([\s\S]*?named:\s*"(AorusGram/[^"\n]+)"')
+    asked: set[str] = set()
+    for swift_file in root.rglob("*.swift"):
+        try:
+            text = swift_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        asked.update(direct.findall(text))
+
+    panel = root / "TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources"
+    helper = panel / "AorusToolbarIcon.swift"
+    toolbar = panel / "AorusInputToolbar.swift"
+    if not symbol_owns_image or not helper.is_file() or not toolbar.is_file():
+        return asked
+    helper_text = helper.read_text(encoding="utf-8")
+    toolbar_text = toolbar.read_text(encoding="utf-8")
+    route = (
+        'if let image = aorusToolbarSymbolImage(name, size: size, weight: weight)',
+        'Image(uiImage: image)',
+        'return AorusPluginIconValues.symbol(name, pointSize: size, weight: weight, named: "AorusGram/Input/Formatting/" + name)',
+    )
+    if all(marker in helper_text for marker in route):
+        names = set(re.findall(r'AorusToolbarSymbol\(name:\s*"([^"]+)"', toolbar_text))
+        if "AorusToolbarSymbol(name: systemName)" in toolbar_text:
+            names.update(re.findall(r'formatButton\(systemName:\s*"([^"]+)"', toolbar_text))
+        asked.update("AorusGram/Input/Formatting/" + name for name in names)
+    return asked
+
+
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     err: list[str] = []
@@ -4113,20 +4149,13 @@ def main() -> None:
         own_names = set(_re_icons.findall(r'"([^"]+)"', own_block.group(1))) if own_block else set()
         if not own_names:
             err.append("PluginIcons: the core lists no own icons")
-        asked: set[str] = set()
-        for swift_file in (tg / "submodules").rglob("*.swift"):
-            try:
-                text = swift_file.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            if "AorusPluginIconValues.own(" in text:
-                asked.update(_re_icons.findall(r'named: "(AorusGram/[^"]+)"', text))
+        asked = drawn_own_icon_names(tg)
         for asset in slot_assets:
             if asset.startswith("AorusGram/"):
                 if asset not in own_names:
                     err.append(f"PluginIcons: slot icon {asset} is not one of the core's own icons")
                 elif asset not in asked:
-                    err.append(f"PluginIcons: nothing draws the own icon {asset} through AorusPluginIconValues.own")
+                    err.append(f"PluginIcons: nothing draws the own icon {asset} through the icon renderer")
             elif not (catalogue_root / f"{asset}.imageset").is_dir():
                 err.append(f"PluginIcons: slot icon {asset} is not in Telegram's catalogue")
     else:

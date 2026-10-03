@@ -267,6 +267,40 @@ def main():
     assert 'private var aorusCodeToolbarIcon:' in toolbar and 'private var aorusTranslateToolbarIcon:' in toolbar
     assert "samplingQueue.async" in declaration(hud, "private func updateSnapshot()")
     assert "samplingToken += 1" in declaration(hud, "private func discardHUDWindow()")
+    from verify_aorus_branding import drawn_own_icon_names
+    with tempfile.TemporaryDirectory(prefix="aorus-icon-routes-") as directory:
+        tree = Path(directory)
+        panel = tree / "submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources"
+        panel.mkdir(parents=True)
+        helper = panel / "AorusToolbarIcon.swift"
+        helper_source = (repo / "patches/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusToolbarIcon.swift").read_text()
+        helper.write_text(helper_source)
+        toolbar_file = panel / "AorusInputToolbar.swift"
+        toolbar_file.write_text(toolbar)
+        renderer_file = tree / "submodules/Display/Source/AorusPluginIconValues.swift"
+        renderer_file.parent.mkdir(parents=True)
+        renderer_source = (repo / "patches/submodules/Display/Source/AorusPluginIconValues.swift").read_text()
+        renderer_file.write_text(renderer_source)
+        (panel / "Dictation.swift").write_text('AorusPluginIconValues.symbol("waveform", pointSize: 20, named: "AorusGram/Input/Dictation")')
+        core_icons = (repo / "AorusGram/Sources/Features/Plugins/AorusPluginIcons.swift").read_text()
+        import re
+        expected = set(re.findall(r'"(AorusGram/Input/[^"\n]+)"', core_icons))
+        assert expected <= drawn_own_icon_names(tree), "every input icon reaches the renderer"
+        helper.write_text(helper_source.replace('return AorusPluginIconValues.symbol(name,', 'return UIImage(systemName: name,'))
+        assert "AorusGram/Input/Formatting/bold" not in drawn_own_icon_names(tree), "bypassing the renderer is detected"
+        helper.write_text(helper_source.replace('aorusToolbarSymbolImage(name, size: size, weight: weight)', 'otherImage(name)'))
+        assert "AorusGram/Input/Formatting/bold" not in drawn_own_icon_names(tree), "disconnected SwiftUI image helper is detected"
+        helper.unlink()
+        assert "AorusGram/Input/Formatting/bold" not in drawn_own_icon_names(tree), "missing injected helper is detected"
+        helper.write_text(helper_source)
+        toolbar_file.write_text(toolbar.replace("AorusToolbarSymbol(name: systemName)", "Image(systemName: systemName)"))
+        assert "AorusGram/Input/Formatting/bold" not in drawn_own_icon_names(tree), "format buttons bypassing the helper are detected"
+        toolbar_file.write_text(toolbar)
+        renderer_file.write_text(renderer_source.replace("guard let image = own(original, named: name)", "guard let image = original"))
+        assert "AorusGram/Input/Dictation" not in drawn_own_icon_names(tree), "named symbols bypassing own are detected"
+        renderer_file.write_text(renderer_source)
+        assert expected <= drawn_own_icon_names(tree), "restored routes pass"
+    print("Input icon routes passed: 7 integration assertions", flush=True)
     with tempfile.TemporaryDirectory(prefix="aorus-client-lifecycle-") as directory:
         work = Path(directory)
         launch = work / "Telegram/Telegram-iOS/Base.lproj/LaunchScreen.xib"
