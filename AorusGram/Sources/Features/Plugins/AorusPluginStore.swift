@@ -592,7 +592,20 @@ public struct AorusPluginFiles {
     }
 
     public let directory: URL
-    public init(directory: URL) { self.directory = directory.standardizedFileURL.resolvingSymlinksInPath() }
+    public init(directory: URL) {
+        // Darwin may leave a path unchanged when its final directories do not exist.
+        // Resolve the existing ancestor first, then append the missing directories,
+        // so creating the storage does not change its canonical address (/var, /tmp).
+        var ancestor = directory.standardizedFileURL
+        var missing: [String] = []
+        while !FileManager.default.fileExists(atPath: ancestor.path), ancestor.path != "/" {
+            missing.append(ancestor.lastPathComponent)
+            ancestor.deleteLastPathComponent()
+        }
+        ancestor = ancestor.resolvingSymlinksInPath()
+        for component in missing.reversed() { ancestor.appendPathComponent(component, isDirectory: true) }
+        self.directory = ancestor
+    }
 
     /// Legacy flat names remain available to callers that need an ASCII file name.
     public static func normalizedName(_ name: String) -> String? {

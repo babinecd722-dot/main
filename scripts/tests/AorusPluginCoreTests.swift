@@ -1268,7 +1268,8 @@ if AorusPluginSandbox.watchdogAvailable {
                 function () { aorus.storage.set('escape', 'rejected'); }
             )
             .then(function () { return aorus.files.usage(); })
-            .then(function (usage) { aorus.storage.set('count', usage.count); });
+            .then(function (usage) { aorus.storage.set('count', usage.count); })
+            .catch(function (error) { aorus.storage.set('error', String(error)); });
     });
     """
     let fileSandbox = AorusPluginSandbox(
@@ -1282,7 +1283,7 @@ if AorusPluginSandbox.watchdogAvailable {
     fileSandbox.start { error in expect(error == nil, "file plugin starts"); fileStarted.signal() }
     _ = fileStarted.wait(timeout: .now() + 2)
     Thread.sleep(forTimeInterval: 0.5)
-    expect(fileResults["text"] == .string("first and second"), "append adds to what was written")
+    expect(fileResults["text"] == .string("first and second"), "append adds to what was written; error: \(String(describing: fileResults["error"]))")
     expect(fileResults["json"] == .number(3), "writeJSON and readJSON round-trip a value")
     expect(fileResults["fallback"] == .string("fallback"), "readJSON of a missing file answers with the fallback")
     expect(fileResults["missing"] == .string("null"), "readText of a missing file answers null")
@@ -1336,7 +1337,7 @@ if AorusPluginSandbox.watchdogAvailable {
     advancedSandbox.start { error in expect(error == nil, "advanced files start"); advancedStarted.signal() }
     _ = advancedStarted.wait(timeout: .now() + 2)
     _ = advancedDone.wait(timeout: .now() + 3)
-    expect(advancedValues["error"] == nil && advancedValues["done"] == .bool(true), "advanced files complete through JavaScriptCore")
+    expect(advancedValues["error"] == nil && advancedValues["done"] == .bool(true), "advanced files complete through JavaScriptCore; error: \(String(describing: advancedValues["error"]))")
     expect(advancedValues["chunk"] == .string("AAH/Ag==") && advancedValues["unpacked"] == .string("AAH/Ag=="), "binary chunks and ZIP preserve bytes through JavaScriptCore")
     expect(advancedValues["format"] == .string("aorusgram-plugin") && advancedValues["metadata"] == .string("Example/Author"), "generated plugin bundle preserves metadata")
     expect(advancedValues["syntax"] == .string("rejected"), "generated plugin source syntax is checked")

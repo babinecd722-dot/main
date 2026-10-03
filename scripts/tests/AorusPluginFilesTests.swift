@@ -11,6 +11,16 @@ private enum AorusPluginFilesTests {
         }
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
+        let alias = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let target = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: target)
+        defer { try? FileManager.default.removeItem(at: alias); try? FileManager.default.removeItem(at: target) }
+        let throughAlias = AorusPluginFiles(directory: alias.appendingPathComponent("new/nested"))
+        expect(throughAlias.directory.path == target.resolvingSymlinksInPath().appendingPathComponent("new/nested").path, "nonexistent storage resolves its existing ancestor")
+        try throughAlias.write("first", text: "original")
+        try throughAlias.appendData("first", data: Data(" and appended".utf8))
+        expect(try throughAlias.read("first") == "original and appended", "creation preserves storage address through a system alias")
         let files = AorusPluginFiles(directory: directory)
         expect(files.readData("missing") == nil, "missing file")
         try files.write("text.txt", text: "Тест")
