@@ -55,14 +55,16 @@ def patch_launch_screen(tg: Path) -> None:
         print("LaunchScreen.xib not found, skip")
         return
     t = xib.read_text(encoding="utf-8")
-    t = t.replace('appearance="dark"', 'appearance="light"')
-    t = t.replace(
-        '<color key="backgroundColor" systemColor="systemBackgroundColor"/>',
-        '<color key="backgroundColor" red="0.95" green="0.95" blue="0.96" alpha="1" '
-        'colorSpace="custom" customColorSpace="sRGB"/>',
+    t = re.sub(r'appearance="(?:light|dark)"', 'appearance="dark"', t)
+    t, count = re.subn(
+        r'<color key="backgroundColor"[^>]*/>',
+        '<color key="backgroundColor" red="0" green="0" blue="0" alpha="1" '
+        'colorSpace="custom" customColorSpace="sRGB"/>', t,
     )
+    if count != 1:
+        raise RuntimeError("LaunchScreen: expected one root background colour")
     xib.write_text(t, encoding="utf-8")
-    print("Patched LaunchScreen.xib (light neutral background, light appearance)")
+    print("Patched LaunchScreen.xib (black background)")
 
 
 def patch_xcconfig(tg: Path) -> None:
@@ -300,7 +302,7 @@ def patch_app_delegate_launch_fixes(tg: Path) -> None:
        container nil → \"Error 2\", disk full alert) call presentNative on a window
        that was never made key/visible — alerts do not paint → endless black screen.
 
-    2) Dark mode used UIColor.black under Metal before first frame; use near-black tint.
+    2) Match the black launch screen until the account's presentation theme is ready.
     """
     path = tg / "submodules/TelegramUI/Sources/AppDelegate.swift"
     if not path.is_file():
@@ -327,11 +329,13 @@ def patch_app_delegate_launch_fixes(tg: Path) -> None:
         t = t.replace(win_metal, win_metal_new, 1)
         print("AppDelegate: makeKeyAndVisible immediately after window wiring")
 
-    old_black = "hostView.containerView.backgroundColor = UIColor.black"
-    new_bg = "hostView.containerView.backgroundColor = UIColor(red: 0.11, green: 0.13, blue: 0.17, alpha: 1.0)"
-    if old_black in t:
-        t = t.replace(old_black, new_bg, 1)
-        print("AppDelegate: dark-mode pre-Metal background not pure black")
+    start = "        if let traitCollection = window.rootViewController?.traitCollection {\n"
+    end = "        self.window = window\n"
+    if start in t:
+        first = t.index(start)
+        last = t.index(end, first)
+        t = t[:first] + "        // AorusGram: the launch surface stays black until presentation data arrives.\n        window.backgroundColor = .black\n        hostView.containerView.backgroundColor = .black\n" + t[last:]
+        print("AppDelegate: black launch surface before presentation data")
 
     # AltStore / ad-hoc resign often drops App Group entitlement → containerURL is nil → "Error 2".
     # Use Application Support fallback (extensions disabled in CI build; data stays in sandbox).
@@ -29298,8 +29302,10 @@ def patch_voice_to_text(tg: Path) -> None:
             repairs.append("outer action spacing")
 
         voice_icon = '                aorusVoiceButton.icon.image = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular))?.withRenderingMode(.alwaysTemplate)\n'
-        styled_icon = '            aorusVoiceButton.icon.image = AorusPluginIconValues.own(UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)), named: "AorusGram/Input/Dictation")?.withRenderingMode(.alwaysTemplate)\n'
+        styled_icon = '            aorusVoiceButton.icon.image = AorusPluginIconValues.symbol("waveform", pointSize: 20.0, named: "AorusGram/Input/Dictation")?.withRenderingMode(.alwaysTemplate)\n'
         tint = '            aorusVoiceButton.icon.tintColor = interfaceState.theme.chat.inputPanel.inputControlColor\n'
+        previous_icon = '            aorusVoiceButton.icon.image = AorusPluginIconValues.own(UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)), named: "AorusGram/Input/Dictation")?.withRenderingMode(.alwaysTemplate)\n'
+        source = source.replace(previous_icon, styled_icon)
         if styled_icon not in source and tint in source:
             source = source.replace(voice_icon, "").replace(tint, styled_icon + tint, 1)
             repairs.append("dictation icon style")
@@ -29373,7 +29379,7 @@ def patch_voice_to_text(tg: Path) -> None:
         "                self.textInputContainerBackgroundView.contentView.addSubview(aorusVoiceButton.icon)\n"
         "                self.textInputContainerBackgroundView.contentView.addSubview(aorusVoiceButton.button)\n"
         "            }\n"
-        "            aorusVoiceButton.icon.image = AorusPluginIconValues.own(UIImage(systemName: \"waveform\", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)), named: \"AorusGram/Input/Dictation\")?.withRenderingMode(.alwaysTemplate)\n"
+        "            aorusVoiceButton.icon.image = AorusPluginIconValues.symbol(\"waveform\", pointSize: 20.0, named: \"AorusGram/Input/Dictation\")?.withRenderingMode(.alwaysTemplate)\n"
         "            aorusVoiceButton.icon.tintColor = interfaceState.theme.chat.inputPanel.inputControlColor\n"
         "            let aorusVoiceButtonSize = CGSize(width: 32.0, height: minimalInputHeight)\n"
         "            let aorusVoiceButtonFrame = CGRect(origin: CGPoint(x: nextButtonTopRight.x - aorusVoiceButtonSize.width, y: nextButtonTopRight.y + floor((minimalInputHeight - aorusVoiceButtonSize.height) / 2.0)), size: aorusVoiceButtonSize)\n"

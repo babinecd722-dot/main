@@ -110,6 +110,7 @@ def main():
     parser.add_argument("--swiftc", default="swiftc")
     args = parser.parse_args()
     source = (args.repo / "patches/submodules/Display/Source/AorusPluginIconValues.swift").read_text()
+    toolbar_source = (args.repo / "patches/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusToolbarIcon.swift").read_text().replace("import Display\n", "").replace("import AppBundle\n", "")
     parts = []
     for name in FUNCTIONS:
         match = re.search(r"    private (?:static func|struct) " + name + r"\b", source)
@@ -157,7 +158,9 @@ def main():
                     "UIDeviceFamily": [1, 2], "UILaunchScreen": {},
                 }))
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                toolbar = work / "ToolbarIcons.swift"
+                toolbar.write_text(toolbar_source)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(toolbar), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 try:

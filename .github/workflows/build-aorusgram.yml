@@ -82,6 +82,9 @@ jobs:
       - name: Plugin documentation export preflight
         run: python3 aorusgram/scripts/plugin_exports_check.py aorusgram
 
+      - name: Client lifecycle and Mach sampling preflight
+        run: python3 aorusgram/scripts/client_lifecycle_check.py aorusgram
+
       - name: Plugin network profile preflight
         run: |
           mkdir -p /tmp/aorus-plugin-scope
@@ -985,6 +988,7 @@ jobs:
           #     (compiled via its Sources/**/*.swift glob). The toolbar is wired into the
           #     input panel node by aorus_branding.py.
           cp $PATCHES/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusInputToolbar.swift $TG/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/
+          cp $PATCHES/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusToolbarIcon.swift $TG/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/
 
           # 11. The icons plugins draw in place of Telegram's, resolved where every icon is
           #     loaded. aorus_branding.py writes it again with the licence key it reads and

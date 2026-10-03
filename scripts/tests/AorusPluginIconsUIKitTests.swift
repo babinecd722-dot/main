@@ -38,6 +38,9 @@ private enum AorusPluginIconsUIKitTests {
                 UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!,
                 UIImage(systemName: name, compatibleWith: traits)!])
         })
+        let smallConfiguration = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
+        let configuredReference = original.withConfiguration(smallConfiguration)
+        let appliedReference = original.applyingSymbolConfiguration(smallConfiguration)!
         for selector in ["systemImageNamed:", "systemImageNamed:withConfiguration:", "systemImageNamed:compatibleWithTraitCollection:"] {
             expect(class_getClassMethod(UIImage.self, NSSelectorFromString(selector)) != nil, "UIKit symbol loader selector")
         }
@@ -46,6 +49,9 @@ private enum AorusPluginIconsUIKitTests {
         AorusPluginIconValues.install()
         defaults.set(["look":"pixel", "amount":1.5], forKey: AorusPluginIconValues.personLookKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
+        for selector in ["imageWithConfiguration:", "imageByApplyingSymbolConfiguration:"] {
+            expect(class_getInstanceMethod(UIImage.self, NSSelectorFromString(selector)) != nil, "UIKit instance configuration selector")
+        }
         for name in names {
             stage("loading " + name)
             let plain = UIImage(systemName: name)!
@@ -55,13 +61,19 @@ private enum AorusPluginIconsUIKitTests {
                 expect(image.cgImage != nil, "symbol becomes a bitmap")
                 let reference = references[name]![index]
                 sameCanvas(image, reference, name + " retains canvas")
-                expect(image.scale == reference.scale, name + " retains scale")
+                expect(image.scale == max(reference.scale, UIScreen.main.scale), name + " rasterizes at Retina scale")
                 expect(image.alignmentRectInsets == reference.alignmentRectInsets, name + " retains alignment")
-                expect(image.renderingMode == reference.renderingMode, name + " retains rendering mode")
+                expect(image.renderingMode == .alwaysTemplate, name + " remains tintable after becoming a bitmap")
             }
         }
         stage("checking own icon and preview")
         let global = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
+        let resized = global.withConfiguration(smallConfiguration)
+        sameCanvas(resized, configuredReference, "configuration applied after loading keeps glyph metrics")
+        let applied = global.applyingSymbolConfiguration(smallConfiguration)!
+        sameCanvas(applied, appliedReference, "applying configuration after loading keeps glyph metrics")
+        expect(resized.pngData() != global.pngData(), "post-load configuration changes the rendered glyph")
+        expect(resized.renderingMode == .alwaysTemplate && applied.renderingMode == .alwaysTemplate, "configured bitmap remains tintable")
         sameCanvas(global, original, "waveform keeps layout size")
         let own = AorusPluginIconValues.own(global, named: "AorusGram/Input/Dictation")!
         expect(own.pngData() == global.pngData(), "own icon is not styled a second time")
@@ -69,6 +81,73 @@ private enum AorusPluginIconsUIKitTests {
         let preview = AorusPluginIconValues.preview(global, look:"pixel", amount:2.0)!
         sameCanvas(preview, original, "preview retains symbol dimensions")
         expect(preview.pngData() != global.pngData(), "preview applies the selected amount to the original glyph")
+        stage("checking control colours")
+        func drawnColour(_ image: UIImage, tint: UIColor, style: UIUserInterfaceStyle) -> (red: Int, green: Int, blue: Int) {
+            let view = UIImageView(image: image)
+            view.bounds = CGRect(origin: .zero, size: image.size)
+            view.tintColor = tint
+            view.overrideUserInterfaceStyle = style
+            view.layoutIfNeeded()
+            let drawn = UIGraphicsImageRenderer(size: image.size).image { context in view.layer.render(in: context.cgContext) }
+            let bitmap = drawn.cgImage!
+            var bytes = [UInt8](repeating: 0, count: bitmap.width * bitmap.height * 4)
+            bytes.withUnsafeMutableBytes { data in
+                let context = CGContext(data: data.baseAddress, width: bitmap.width, height: bitmap.height, bitsPerComponent: 8, bytesPerRow: bitmap.width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                context.draw(bitmap, in: CGRect(x: 0, y: 0, width: bitmap.width, height: bitmap.height))
+            }
+            var totals = (red: 0, green: 0, blue: 0)
+            for offset in stride(from: 0, to: bytes.count, by: 4) {
+                totals.red += Int(bytes[offset]); totals.green += Int(bytes[offset + 1]); totals.blue += Int(bytes[offset + 2])
+            }
+            return totals
+        }
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            for name in names {
+                let image = UIImage(systemName: name)!
+                let red = drawnColour(image, tint: .red, style: style)
+                let green = drawnColour(image, tint: .green, style: style)
+                expect(red.red > 0 && red.red > red.green * 10, name + " follows red control tint")
+                expect(green.green > 0 && green.green > green.red * 10, name + " follows green control tint")
+            }
+        }
+        if #available(iOS 15.0, *) {
+            let palette = UIImage.SymbolConfiguration(paletteColors: [.red, .blue])
+            let colouredSymbol = UIImage(systemName: "folder.badge.plus", withConfiguration: palette)!
+            let colour = drawnColour(colouredSymbol, tint: .green, style: .dark)
+            expect(colouredSymbol.renderingMode == .alwaysOriginal, "palette symbol retains its explicit colours")
+            expect(colour.red > 0 && colour.blue > 0, "palette symbol does not become a single control tint")
+        }
+        stage("checking formatting glyphs and named dictation")
+        for name in ["return", "pencil.slash", "text.quote", "eye.slash", "bold", "italic", "link", "underline", "strikethrough", "doc.on.clipboard", "chevron.left.forwardslash.chevron.right"] {
+            let image = aorusToolbarSymbolImage(name)!
+            expect(image.cgImage != nil && image.renderingMode == .alwaysTemplate, "SwiftUI glyph uses tintable Pixel bitmap")
+            expect(aorusToolbarSymbolImage(name) === image, "toolbar symbol cache")
+            let colour = drawnColour(image, tint: .green, style: .dark)
+            expect(colour.green > colour.red * 10 && colour.green > 0, "formatting glyph tint")
+        }
+        let mono = aorusToolbarMonospaceImage()!
+        expect(mono.cgImage != nil && mono.renderingMode == .alwaysTemplate, "monospace glyph uses Pixel renderer")
+        expect(aorusToolbarMonospaceImage() === mono, "monospace glyph cache")
+        let dictation = AorusPluginIconValues.symbol("waveform", pointSize: 20, named: "AorusGram/Input/Dictation")!
+        expect(dictation.cgImage != nil && dictation.pngData() != original.pngData(), "native dictation uses Pixel renderer")
+        expect(AorusPluginIconValues.symbol("waveform", pointSize: 20, named: "AorusGram/Input/Dictation") === dictation, "dictation symbol cache")
+        let revisionBeforeMemoryWarning = AorusPluginIconValues.revision
+        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        let redrawnDictation = AorusPluginIconValues.symbol("waveform", pointSize: 20, named: "AorusGram/Input/Dictation")!
+        expect(redrawnDictation !== dictation && redrawnDictation.pngData() == dictation.pngData(), "memory warning releases images without changing the glyph")
+        expect(AorusPluginIconValues.revision == revisionBeforeMemoryWarning, "memory cleanup does not change the theme revision")
+        expect(AorusPluginIconValues.symbol("mic", pointSize: .nan) == nil, "invalid symbol size is rejected")
+        expect(AorusPluginIconValues.symbol("mic", pointSize: 0) == nil, "empty symbol size is rejected")
+        defaults.set(["look":"pixel", "amount":1.5, "names":["AorusGram/Input/Dictation"]], forKey: AorusPluginIconValues.personLookKey)
+        NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
+        expect(!AorusPluginIconValues.symbol("waveform", pointSize:20, named:"AorusGram/Input/Dictation")!.isSymbolImage, "dictation scope applies before rasterization")
+        expect(aorusToolbarSymbolImage("bold")!.isSymbolImage, "dictation scope leaves formatting unchanged")
+        defaults.set(["look":"pixel", "amount":1.5, "names":["AorusGram/Input/Formatting/bold"]], forKey: AorusPluginIconValues.personLookKey)
+        NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
+        expect(!aorusToolbarSymbolImage("bold")!.isSymbolImage, "formatting scope uses the named symbol path")
+        expect(AorusPluginIconValues.symbol("waveform", pointSize:20, named:"AorusGram/Input/Dictation")!.isSymbolImage, "formatting scope leaves dictation unchanged")
+        defaults.set(["look":"pixel", "amount":1.5], forKey: AorusPluginIconValues.personLookKey)
+        NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
         stage("checking gradient icon")
         let gradient = generateImage(CGSize(width:32,height:32), scale:1, rotatedContext: { _, context in
             for y in 0..<32 { for x in 0..<32 {
@@ -83,10 +162,11 @@ private enum AorusPluginIconsUIKitTests {
         stage("checking dictation replacement")
         defaults.set(["test":["AorusGram/Input/Dictation":["kind":"symbol", "symbol":"pencil", "targets":["AorusGram/Input/Dictation"]]]], forKey: AorusPluginIconValues.layersKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
-        let replaced = AorusPluginIconValues.own(global, named:"AorusGram/Input/Dictation")!
+        let replaced = AorusPluginIconValues.symbol("waveform", pointSize: 20, named:"AorusGram/Input/Dictation")!
         expect(replaced.cgImage != nil, "a symbol can replace a symbol")
         sameCanvas(replaced, original, "replacement keeps layout size")
         expect(replaced.pngData() != global.pngData(), "dictation replacement is applied")
+        expect(replaced !== dictation, "symbol cache is invalidated when a plugin replaces it")
         defaults.removeObject(forKey:AorusPluginIconValues.personLookKey)
         defaults.removeObject(forKey:AorusPluginIconValues.layersKey)
         NotificationCenter.default.post(name:AorusPluginIconValues.didChangeNotification,object:nil)

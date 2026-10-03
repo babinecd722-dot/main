@@ -2921,10 +2921,12 @@ private enum AorusPluginDocumentation {
             aorus.icons.set({ 'plus.plain': { text: '✚' }, 'header.back': { path: 'M15 4 L7 12 L15 20', stroke: 2.5 }, 'tab.calls': { hidden: true } })
             aorus.icons.style('pixel')
             aorus.icons.style({ look: 'glow', amount: 4, only: ['tab', 'input'] })
+            aorus.icons.set({ 'format.bold': 'bold.circle', 'input.dictation': 'mic' })
+            aorus.icons.style({ look: 'pixel', only: ['format', 'input.dictation'] })
             aorus.icons.reset()
             const slots = aorus.icons.slots()
             const names = aorus.icons.assets('Chat List/')
-            Любую иконку Telegram можно заменить: по слоту — таббар, поле ввода, шапки, профиль, значки настроек, меню, все плюсы, звонки — или по имени из каталога, который перечисляет assets(). Замена — SF Symbol, пиксельная сетка с палитрой, символы или эмодзи, SVG path, PNG, другая иконка Telegram или пустое место; scale, rotate, flip и offset подгоняют её. Она рисуется в рамке исходной иконки и её цветом, поэтому тема и оформление красят и её. Стиль меняет все иконки сразу: pixel, bold, thin, outline, duotone, glow, halo и depth, only ограничивает его группами, слотами или папками; линии толстеют и тонеют ровно, не сливаясь. Стиль и замены доходят и до своих иконок AorusGram — вкладки Wall, вкладок, строк настроек и действий плагинов, кнопки призрака. Таббар, микрофон, кнопки эмодзи и клавиатуры и кнопки профиля, которые Telegram анимирует, с заменой показываются неподвижными. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином; одна неверная иконка отклоняет изменение, и ошибка называет её. Нужно разрешение appCustomization; get, slots и assets его не требуют.
+            Любую иконку Telegram можно заменить: по слоту — таббар, поле ввода, шапки, профиль, значки настроек, меню, все плюсы, звонки — или по имени из каталога, который перечисляет assets(). Замена — SF Symbol, пиксельная сетка с палитрой, символы или эмодзи, SVG path, PNG, другая иконка Telegram или пустое место; scale, rotate, flip и offset подгоняют её. Она рисуется в рамке исходной иконки и её цветом, поэтому тема и оформление красят и её. Стиль меняет все иконки сразу: pixel, bold, thin, outline, duotone, glow, halo и depth, only ограничивает его группами, слотами или папками; линии толстеют и тонеют ровно, не сливаясь. Стиль и замены доходят и до своих иконок AorusGram — вкладки Wall, вкладок, строк настроек и действий плагинов, кнопки призрака, голосового ввода input.dictation и панели форматирования (группа format). Монохромные символы сохраняют цвет элемента интерфейса, цветные изображения — свою палитру; символы рисуются с масштабом Retina. Таббар, микрофон, кнопки эмодзи и клавиатуры и кнопки профиля, которые Telegram анимирует, с заменой показываются неподвижными. Изменения видны сразу, сохраняются до следующего запуска и уходят вместе с плагином; одна неверная иконка отклоняет изменение, и ошибка называет её. Нужно разрешение appCustomization; get, slots и assets его не требуют.
 
             Соединение
             const state = await aorus.proxy.status()
@@ -3308,10 +3310,12 @@ private enum AorusPluginDocumentation {
     aorus.icons.set({ 'plus.plain': { text: '✚' }, 'header.back': { path: 'M15 4 L7 12 L15 20', stroke: 2.5 }, 'tab.calls': { hidden: true } })
     aorus.icons.style('pixel')
     aorus.icons.style({ look: 'glow', amount: 4, only: ['tab', 'input'] })
+    aorus.icons.set({ 'format.bold': 'bold.circle', 'input.dictation': 'mic' })
+    aorus.icons.style({ look: 'pixel', only: ['format', 'input.dictation'] })
     aorus.icons.reset()
     const slots = aorus.icons.slots()
     const names = aorus.icons.assets('Chat List/')
-    Any of Telegram's icons can be replaced: by slot — the tab bar, the input field, navigation bars, the profile, the settings symbols, menus, every plus, calls — or by name from the catalogue assets() lists. A replacement is an SF Symbol, a pixel grid with a palette, a few characters or an emoji, an SVG path, a PNG, another of Telegram's icons or an empty space; scale, rotate, flip and offset adjust it. It is drawn in the original's box and in its colour, so the theme and the look colour it too. A style changes every icon at once: pixel, bold, thin, outline, duotone, glow, halo and depth, with only limiting it to groups, slots or folders; strokes grow and thin evenly without running together. Styles and replacements reach AorusGram's own icons too — the Wall tab, the tabs, settings rows and menu actions plugins add, the ghost button. The tab bar, the microphone, the emoji and keyboard buttons and the profile's buttons, which Telegram animates, are shown still while replaced. Changes show at once, are kept until the next launch and leave with the plugin; one invalid icon rejects the change and the error names it. Needs appCustomization; get, slots and assets need nothing.
+    Any of Telegram's icons can be replaced: by slot — the tab bar, the input field, navigation bars, the profile, the settings symbols, menus, every plus, calls — or by name from the catalogue assets() lists. A replacement is an SF Symbol, a pixel grid with a palette, a few characters or an emoji, an SVG path, a PNG, another of Telegram's icons or an empty space; scale, rotate, flip and offset adjust it. It is drawn in the original's box and in its colour, so the theme and the look colour it too. A style changes every icon at once: pixel, bold, thin, outline, duotone, glow, halo and depth, with only limiting it to groups, slots or folders; strokes grow and thin evenly without running together. Styles and replacements reach AorusGram's own icons too — the Wall tab, the tabs, settings rows and menu actions plugins add, the ghost button, voice input (input.dictation) and the formatting toolbar (the format group). Monochrome symbols follow the control’s tint, coloured images keep their palette, and symbols are rendered at Retina scale. The tab bar, the microphone, the emoji and keyboard buttons and the profile's buttons, which Telegram animates, are shown still while replaced. Changes show at once, are kept until the next launch and leave with the plugin; one invalid icon rejects the change and the error names it. Needs appCustomization; get, slots and assets need nothing.
 
     Connection
     const state = await aorus.proxy.status()
@@ -4212,7 +4216,8 @@ private final class AorusPluginConsoleController: ViewController {
         let clear = UIBarButtonItem(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), style: .plain, target: self, action: #selector(clearLog))
         let export = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share"), style: .plain, target: self, action: #selector(exportLog))
         export.accessibilityLabel = AorusPluginUIString.export.text
-        navigationItem.rightBarButtonItems = [clear, export]
+        // Display lays these out from left to right, including its glass navigation bar.
+        navigationItem.rightBarButtonItems = [export, clear]
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -4297,7 +4302,7 @@ private final class AorusPluginConsoleController: ViewController {
 
     @objc private func exportLog() {
         let entries = AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id)?.recentLog ?? []
-        aorusPluginExportText(AorusPluginTextExport.console(name: record.manifest.name, id: record.manifest.id, entries: entries), name: "Plugins_Console.log", from: self, anchor: navigationItem.rightBarButtonItems?.last)
+        aorusPluginExportText(AorusPluginTextExport.console(name: record.manifest.name, id: record.manifest.id, entries: entries), name: "Plugins_Console.log", from: self, anchor: navigationItem.rightBarButtonItems?.first)
     }
 
     @objc private func clearLog() {
@@ -4548,7 +4553,9 @@ private func aorusPluginExportText(_ text: String, name: String, from presenter:
             } else {
                 // Telegram renders its navigation items in Display rather than UINavigationBar.
                 popover.sourceView = presenter.view
-                let offset: CGFloat = anchor === presenter.navigationItem.rightBarButtonItems?.first ? 24.0 : 68.0
+                let items = presenter.navigationItem.rightBarButtonItems ?? presenter.navigationItem.rightBarButtonItem.map { [$0] } ?? []
+                let index = items.firstIndex(where: { $0 === anchor }) ?? max(0, items.count - 1)
+                let offset = CGFloat(24 + max(0, items.count - 1 - index) * 44)
                 popover.sourceRect = CGRect(x: max(0, presenter.view.bounds.width - offset), y: min(presenter.view.bounds.height - 1, presenter.view.safeAreaInsets.top + 22), width: 1, height: 1)
             }
         }

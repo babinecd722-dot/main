@@ -76,14 +76,22 @@ public enum AorusPluginIconValues {
     private static var rawLayers: NSDictionary?
     private static var revisionValue = 0
     private static var observer: NSObjectProtocol?
+    private static var memoryObserver: NSObjectProtocol?
     private static var cache: [String: UIImage] = [:]
     private static var unchanged = Set<String>()
     /// AorusGram's own icons as drawn, by name: each original with what it became. An own icon
     /// comes in several colours under one name, so the original is part of the key.
     private static var ownCache: [String: [(original: UIImage, result: UIImage)]] = [:]
+    private static var symbolCache: [String: UIImage] = [:]
     private static var installed = false
     private static var styledImageKey: UInt8 = 0
     private static var originalImageKey: UInt8 = 0
+    private static var symbolSourceKey: UInt8 = 0
+    private final class SymbolSource {
+        let image: UIImage
+        let name: String
+        init(image: UIImage, name: String) { self.image = image; self.name = name }
+    }
     private static let renderingKey = "aorusgram.renderingPluginIcon"
 
     // MARK: - The table
@@ -98,6 +106,14 @@ public enum AorusPluginIconValues {
         if first {
             setAppBundleImageResolver(AorusBundleIconResolver())
             UIImage.aorusInstallSymbolResolver()
+            memoryObserver = NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: nil) { _ in
+                lock.lock()
+                cache.removeAll()
+                unchanged.removeAll()
+                ownCache.removeAll()
+                symbolCache.removeAll()
+                lock.unlock()
+            }
         }
     }
 
@@ -162,6 +178,9 @@ public enum AorusPluginIconValues {
         lock.unlock()
 
         let result = render(original: image, spec: spec, look: styled ? table.look : nil, amount: table.amount) ?? image
+        if image.isSymbolImage, result !== image {
+            objc_setAssociatedObject(result, &symbolSourceKey, SymbolSource(image: image, name: name), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
 
         lock.lock()
         if revision == revisionValue {
@@ -183,6 +202,42 @@ public enum AorusPluginIconValues {
         Thread.current.threadDictionary[renderingKey] = previous
         guard previous == nil else { return image }
         return own(image, named: "SFSymbols/" + name)
+    }
+
+    /// Configuration often arrives after UIImage(systemName:). Apply it to the original
+    /// vector first; configuring an already rasterized bitmap cannot resize its glyph.
+    fileprivate static func configuredSymbol(_ image: UIImage, load: (UIImage) -> UIImage?) -> UIImage? {
+        guard let source = objc_getAssociatedObject(image, &symbolSourceKey) as? SymbolSource else { return nil }
+        let previous = Thread.current.threadDictionary[renderingKey]
+        Thread.current.threadDictionary[renderingKey] = true
+        defer { Thread.current.threadDictionary[renderingKey] = previous }
+        return own(load(source.image), named: source.name)
+    }
+
+    /// A symbol drawn for a native or SwiftUI control. Load the vector before applying the
+    /// named slot, so a global symbol style cannot hide that slot's replacement or scope.
+    public static func symbol(_ symbol: String, pointSize: CGFloat, weight: UIImage.SymbolWeight = .regular, named name: String? = nil) -> UIImage? {
+        guard pointSize.isFinite, pointSize > 0, pointSize <= 64 else { return nil }
+        let name = name ?? "SFSymbols/" + symbol
+        let key = "\(name)|\(symbol)|\(pointSize)|\(weight.rawValue)"
+        lock.lock()
+        _ = tableLocked()
+        let cached = symbolCache[key]
+        let stamp = revisionValue
+        lock.unlock()
+        if let cached { return cached }
+        let previous = Thread.current.threadDictionary[renderingKey]
+        Thread.current.threadDictionary[renderingKey] = true
+        let original = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight))
+        Thread.current.threadDictionary[renderingKey] = previous
+        guard let image = own(original, named: name) else { return nil }
+        lock.lock()
+        if stamp == revisionValue {
+            if symbolCache.count >= 128 { symbolCache.removeAll() }
+            symbolCache[key] = image
+        }
+        lock.unlock()
+        return image
     }
 
     /// `image` in `look` at `amount`, drawn as the style draws every icon it reaches: a picture
@@ -248,6 +303,7 @@ public enum AorusPluginIconValues {
         cache.removeAll()
         unchanged.removeAll()
         ownCache.removeAll()
+        symbolCache.removeAll()
     }
 
     /// Layers in plugin id order: a later plugin wins an icon both replace, and the last
@@ -325,7 +381,9 @@ public enum AorusPluginIconValues {
             return nil
         }
         let size = original.size
-        let scale = max(1.0, original.scale)
+        // Symbols are vectors at scale 1. Rasterize at the screen's scale so UIKit does not
+        // soften the pixel grid when the bitmap is displayed on a Retina screen.
+        let scale = original.isSymbolImage ? max(original.scale, UIScreen.main.scale) : max(1.0, original.scale)
         guard size.width >= 1.0, size.height >= 1.0, size.width <= 2048.0, size.height <= 2048.0 else {
             return nil
         }
@@ -342,7 +400,7 @@ public enum AorusPluginIconValues {
             bitmapMatchesCanvas = abs(CGFloat(bitmap.width) - size.width * scale) <= 0.5
                 && abs(CGFloat(bitmap.height) - size.height * scale) <= 0.5
         } else { bitmapMatchesCanvas = false }
-        if !bitmapMatchesCanvas || image.imageOrientation != .up {
+        if !bitmapMatchesCanvas || image.imageOrientation != .up || image.scale != scale {
             UIGraphicsBeginImageContextWithOptions(size, false, scale)
             original.draw(in: CGRect(origin: .zero, size: size))
             let raster = UIGraphicsGetImageFromCurrentImageContext()
@@ -374,7 +432,21 @@ public enum AorusPluginIconValues {
             return nil
         }
         var result = image
-        if original.renderingMode != .automatic {
+        if original.renderingMode == .automatic, original.isSymbolImage {
+            // Automatic symbols are templates in UIKit. A bitmap is no longer a symbol,
+            // so automatic would display its black source pixels instead of the control's tint.
+            // Palette and hierarchical symbols can carry explicit colours. Retain those,
+            // while monochrome symbols continue to follow the containing control's tint.
+            let source = image.cgImage.flatMap { pixels(of: $0) }
+            let coloured = source.map { source in
+                stride(from: 0, to: source.data.count, by: 4).contains { offset in
+                    guard source.data[offset + 3] > 16 else { return false }
+                    let red = Int(source.data[offset]), green = Int(source.data[offset + 1]), blue = Int(source.data[offset + 2])
+                    return max(red, max(green, blue)) - min(red, min(green, blue)) > 3
+                }
+            } ?? false
+            result = result.withRenderingMode(coloured ? .alwaysOriginal : .alwaysTemplate)
+        } else if original.renderingMode != .automatic {
             result = result.withRenderingMode(original.renderingMode)
         }
         if original.alignmentRectInsets != .zero {
@@ -388,7 +460,7 @@ public enum AorusPluginIconValues {
         }
         if appliedLook, let look {
             objc_setAssociatedObject(result, &styledImageKey, ["revision": renderRevision, "look": look, "amount": Double(amount)] as NSDictionary, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            objc_setAssociatedObject(result, &originalImageKey, unstyled, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            objc_setAssociatedObject(result, &originalImageKey, unstyled.withRenderingMode(result.renderingMode), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         return result
     }
@@ -2548,6 +2620,15 @@ private extension UIImage {
                 method_exchangeImplementations(native, hook)
             }
         }
+        for (original, replacement) in [
+            ("imageWithConfiguration:", "aorusOriginalImageWithConfiguration:"),
+            ("imageByApplyingSymbolConfiguration:", "aorusOriginalImageByApplyingSymbolConfiguration:")
+        ] {
+            if let native = class_getInstanceMethod(UIImage.self, NSSelectorFromString(original)),
+               let hook = class_getInstanceMethod(UIImage.self, NSSelectorFromString(replacement)) {
+                method_exchangeImplementations(native, hook)
+            }
+        }
     }
     @objc dynamic class func aorusOriginalSystemImageNamed(_ name: String) -> UIImage? {
         return AorusPluginIconValues.systemSymbol(name: name) { aorusOriginalSystemImageNamed(name) }
@@ -2560,5 +2641,13 @@ private extension UIImage {
     @objc(aorusOriginalSystemImageNamed:compatibleWithTraitCollection:)
     dynamic class func aorusOriginalSystemImageNamed(_ name: String, compatibleWithTraitCollection traits: UITraitCollection?) -> UIImage? {
         return AorusPluginIconValues.systemSymbol(name: name) { aorusOriginalSystemImageNamed(name, compatibleWithTraitCollection: traits) }
+    }
+    @objc(aorusOriginalImageWithConfiguration:)
+    dynamic func aorusOriginalImageWithConfiguration(_ configuration: UIImage.Configuration) -> UIImage {
+        return AorusPluginIconValues.configuredSymbol(self) { $0.withConfiguration(configuration) } ?? aorusOriginalImageWithConfiguration(configuration)
+    }
+    @objc(aorusOriginalImageByApplyingSymbolConfiguration:)
+    dynamic func aorusOriginalImageByApplyingSymbolConfiguration(_ configuration: UIImage.SymbolConfiguration) -> UIImage? {
+        return AorusPluginIconValues.configuredSymbol(self) { $0.applyingSymbolConfiguration(configuration) } ?? aorusOriginalImageByApplyingSymbolConfiguration(configuration)
     }
 }

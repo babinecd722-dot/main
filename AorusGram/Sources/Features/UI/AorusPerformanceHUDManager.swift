@@ -451,6 +451,9 @@ public final class AorusPerformanceHUDManager {
     private var scheduledHUDRetryCount = 0
     private var launchRestorationToken = 0
     private var previousNetworkBytes: (rx: UInt64, tx: UInt64, time: TimeInterval)?
+    private let samplingQueue = DispatchQueue(label: "aorusgram.corePerformanceSampling", qos: .utility)
+    private var samplingInFlight = false
+    private var samplingToken = 0
 
     private func onMain(_ f: @escaping () -> Void) {
         if Thread.isMainThread {
@@ -517,6 +520,7 @@ public final class AorusPerformanceHUDManager {
 
     @objc private func onDidEnterBackground() {
         onMain { [weak self] in
+            self?.samplingQueue.async { [weak self] in self?.previousNetworkBytes = nil }
             self?.stopDisplayLink()
             self?.statsTimer?.invalidate()
             self?.statsTimer = nil
@@ -725,6 +729,7 @@ public final class AorusPerformanceHUDManager {
             }
             return
         }
+        samplingToken += 1
         hudView?.removeFromSuperview()
         window?.isHidden = true
         window?.rootViewController = nil
@@ -778,12 +783,27 @@ public final class AorusPerformanceHUDManager {
             discardHUDWindow()
             return
         }
-        let snapshot = collectSnapshot(settings: settings)
-        hud.update(snapshot: snapshot, settings: settings, l10n: AorusPerformanceHUDL10n.current)
-        layoutHUD()
+        guard !samplingInFlight else { return }
+        samplingInFlight = true
+        let token = samplingToken
+        let fps = currentFPS
+        let battery = settings.performanceShowBattery ? batteryPercent() : nil
+        let charging = settings.performanceShowBattery && (UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full)
+        samplingQueue.async { [weak self, weak hud] in
+            guard let self else { return }
+            let snapshot = self.collectSnapshot(settings: settings, fps: fps, battery: battery, charging: charging)
+            DispatchQueue.main.async { [weak self, weak hud] in
+                guard let self else { return }
+                self.samplingInFlight = false
+                guard token == self.samplingToken, let hud, self.hudView === hud,
+                      UIApplication.shared.applicationState == .active else { return }
+                hud.update(snapshot: snapshot, settings: settings, l10n: AorusPerformanceHUDL10n.current)
+                self.layoutHUD()
+            }
+        }
     }
 
-    private func collectSnapshot(settings: AorusPerformanceHUDSettings) -> AorusPerformanceSnapshot {
+    private func collectSnapshot(settings: AorusPerformanceHUDSettings, fps: Int, battery: Int?, charging: Bool) -> AorusPerformanceSnapshot {
         let needsRAM = settings.performanceShowRAM
         let needsCPU = settings.performanceShowCPU
         let network: (rx: UInt64, tx: UInt64) = settings.performanceShowNetwork ? networkRate() : (0, 0)
@@ -791,9 +811,9 @@ public final class AorusPerformanceHUDManager {
             uptimeSeconds: settings.performanceShowUptime ? ProcessInfo.processInfo.systemUptime : 0,
             ramMB: needsRAM ? memoryFootprintMB() : 0.0,
             cpuPercent: needsCPU ? processCPUPercent() : 0.0,
-            fps: settings.needsFPSSampling ? currentFPS : 0,
-            batteryPercent: settings.performanceShowBattery ? batteryPercent() : nil,
-            batteryCharging: settings.performanceShowBattery && (UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full),
+            fps: settings.needsFPSSampling ? fps : 0,
+            batteryPercent: battery,
+            batteryCharging: charging,
             rxBytesPerSecond: network.rx,
             txBytesPerSecond: network.tx,
             freeDiskBytes: settings.performanceShowDisk ? freeDiskBytes() : 0,
@@ -821,6 +841,10 @@ public final class AorusPerformanceHUDManager {
             return 0.0
         }
         defer {
+            // The array and the send rights returned by task_threads have separate owners.
+            for index in 0 ..< Int(threadCount) {
+                mach_port_deallocate(mach_task_self_, threads[index])
+            }
             let size = vm_size_t(Int(threadCount) * MemoryLayout<thread_t>.stride)
             vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: threads)), size)
         }

@@ -103,6 +103,17 @@ public final class AorusPluginRuntimeManager {
     /// version, or a start someone asked for, tries again.
     private var failedStarts: [String: String] = [:]
     private var observers: [NSObjectProtocol] = []
+    private let reloadQueue = DispatchQueue(label: "aorusgram.pluginReload", qos: .utility)
+    // Requests and application of their snapshots belong to main; disk reads do not.
+    private var reloadSequence = 0
+
+    private struct PreparedAutostart {
+        let record: AorusPluginRecord
+        let permissions: Set<AorusPluginPermission>
+        let digest: String
+        let approved: Bool
+        let readable: Bool
+    }
 
     private init() {}
 
@@ -164,13 +175,48 @@ public final class AorusPluginRuntimeManager {
     /// already running are left exactly as they are, and a plugin whose code failed to start
     /// is not started again until its code changes.
     public func reloadAutostart(startingMissingOnly: Bool = false) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.reloadAutostart(startingMissingOnly: startingMissingOnly) }
+            return
+        }
         guard let host = currentHost() else { return }
         guard AorusPluginEntitlement.isAllowed else {
+            reloadSequence += 1
             stopAll()
             return
         }
+        guard UIApplication.shared.isProtectedDataAvailable else { return }
+        reloadSequence += 1
+        let sequence = reloadSequence
+        lock.lock()
+        let trackedIds = Set(sandboxes.keys).union(appearanceLayers.keys).union(iconLayers.keys)
+        lock.unlock()
+        reloadQueue.async { [weak self] in
+            let store = AorusPluginStore.shared
+            let generation = store.generation
+            let prepared = store.list().compactMap { store.load(id: $0.id) }.map { record -> PreparedAutostart in
+                let state = store.permissionState(for: record.manifest.id)
+                let digest = AorusPluginStore.sourceDigest(record.source)
+                let approved = state.sourceDigest == digest && AorusPluginPermission.requestedBySource(record.source).isSubset(of: state.granted)
+                return PreparedAutostart(record: record, permissions: state.granted, digest: digest, approved: approved, readable: approved || store.isReadable(id: record.manifest.id))
+            }
+            let presentIds = Set(trackedIds.filter { store.contains(id: $0) })
+            DispatchQueue.main.async { [weak self] in
+                guard let self, sequence == self.reloadSequence else { return }
+                guard generation == store.generation else {
+                    self.reloadAutostart(startingMissingOnly: startingMissingOnly)
+                    return
+                }
+                guard self.currentHost() === host, UIApplication.shared.isProtectedDataAvailable else { return }
+                guard AorusPluginEntitlement.isAllowed else { self.stopAll(); return }
+                self.applyAutostart(prepared, presentIds: presentIds, host: host, startingMissingOnly: startingMissingOnly)
+            }
+        }
+    }
+
+    private func applyAutostart(_ prepared: [PreparedAutostart], presentIds: Set<String>, host: AorusPluginTelegramHost, startingMissingOnly: Bool) {
         let store = AorusPluginStore.shared
-        let records = store.list().compactMap { store.load(id: $0.id) }
+        let records = prepared.map { $0.record }
         // Enabled is running. Every enabled plugin is started when the account runtime appears
         // — at launch, after the system closed the app in the background, after a change of
         // account — and again whenever the app comes to the front, because the switch in the
@@ -182,15 +228,15 @@ public final class AorusPluginRuntimeManager {
 
         // A look kept from the last launch stays only for a plugin that is still on and may still
         // change the look. One whose files could not be read just now keeps it, like its run.
-        let lookIds = Set(desired.filter { store.permissionState(for: $0.manifest.id).granted.contains(.appCustomization) }.map { $0.manifest.id })
+        let lookIds = Set(prepared.filter { $0.record.manifest.isEnabled && $0.permissions.contains(.appCustomization) }.map { $0.record.manifest.id })
         lock.lock()
         let keptLooks = appearanceLayers.filter { id, _ in
-            lookIds.contains(id) || (!listedIds.contains(id) && store.contains(id: id))
+            lookIds.contains(id) || (!listedIds.contains(id) && presentIds.contains(id))
         }
         let prunedLooks = keptLooks.count != appearanceLayers.count
         appearanceLayers = keptLooks
         let keptIcons = iconLayers.filter { id, _ in
-            lookIds.contains(id) || (!listedIds.contains(id) && store.contains(id: id))
+            lookIds.contains(id) || (!listedIds.contains(id) && presentIds.contains(id))
         }
         let prunedIcons = keptIcons.count != iconLayers.count
         iconLayers = keptIcons
@@ -205,7 +251,7 @@ public final class AorusPluginRuntimeManager {
         let runningIds = Array(sandboxes.keys)
         lock.unlock()
         let staleIds = runningIds.filter { id in
-            !enabledIds.contains(id) && (listedIds.contains(id) || !store.contains(id: id))
+            !enabledIds.contains(id) && (listedIds.contains(id) || !presentIds.contains(id))
         }
         lock.lock()
         let stale = staleIds.compactMap { sandboxes.removeValue(forKey: $0) }
@@ -213,22 +259,21 @@ public final class AorusPluginRuntimeManager {
         releaseResources(of: stale.map { $0.manifest.id })
         stale.forEach { $0.stop() }
 
-        for record in desired {
+        for item in prepared where item.record.manifest.isEnabled {
+            let record = item.record
             let id = record.manifest.id
             lock.lock()
             let exists = sandboxes[id] != nil
             let failedDigest = failedStarts[id]
             lock.unlock()
             if startingMissingOnly && exists { continue }
-            let state = store.permissionState(for: id)
-            let digest = AorusPluginStore.sourceDigest(record.source)
-            let requested = AorusPluginPermission.requestedBySource(record.source)
-            guard state.sourceDigest == digest, requested.isSubset(of: state.granted) else {
+            let digest = item.digest
+            guard item.approved else {
                 // Switched off only when the code and its grants were both read and do not
                 // agree. Files that could not be read — the phone just restarted and not yet
                 // unlocked, an I/O error — are tried again the next time, never taken as a
                 // reason to turn the plugin off.
-                guard store.isReadable(id: id) else { continue }
+                guard item.readable else { continue }
                 var manifest = record.manifest
                 manifest.isEnabled = false
                 try? store.updateManifest(manifest)
@@ -236,7 +281,7 @@ public final class AorusPluginRuntimeManager {
             }
             if exists { continue }
             if startingMissingOnly && failedDigest == digest { continue }
-            start(record: record, host: host, permissions: state.granted)
+            start(record: record, host: host, permissions: item.permissions)
         }
     }
 

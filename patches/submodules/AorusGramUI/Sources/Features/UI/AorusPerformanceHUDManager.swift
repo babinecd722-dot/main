@@ -358,6 +358,9 @@ public final class AorusPerformanceHUDManager {
     private var scheduledHUDRetryCount = 0
     private var launchRestorationToken = 0
     private var previousNetworkBytes: (rx: UInt64, tx: UInt64, time: TimeInterval)?
+    private let samplingQueue = DispatchQueue(label: "aorusgram.performanceSampling", qos: .utility)
+    private var samplingInFlight = false
+    private var samplingToken = 0
 
     private func onMain(_ f: @escaping () -> Void) {
         if Thread.isMainThread {
@@ -425,6 +428,7 @@ public final class AorusPerformanceHUDManager {
 
     @objc private func onDidEnterBackground() {
         onMain { [weak self] in
+            self?.samplingQueue.async { [weak self] in self?.previousNetworkBytes = nil }
             self?.stopDisplayLink()
             self?.statsTimer?.invalidate()
             self?.statsTimer = nil
@@ -630,6 +634,7 @@ public final class AorusPerformanceHUDManager {
             }
             return
         }
+        samplingToken += 1
         hudView?.removeFromSuperview()
         window?.isHidden = true
         window?.rootViewController = nil
@@ -678,19 +683,34 @@ public final class AorusPerformanceHUDManager {
             discardHUDWindow()
             return
         }
-        let snapshot = collectSnapshot()
-        hud.update(snapshot: snapshot, settings: AorusGramManager.shared, l10n: AorusL10n.current)
-        layoutHUD()
+        guard !samplingInFlight else { return }
+        samplingInFlight = true
+        let token = samplingToken
+        let fps = currentFPS
+        let battery = batteryPercent()
+        let charging = UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full
+        samplingQueue.async { [weak self, weak hud] in
+            guard let self else { return }
+            let snapshot = self.collectSnapshot(fps: fps, battery: battery, charging: charging)
+            DispatchQueue.main.async { [weak self, weak hud] in
+                guard let self else { return }
+                self.samplingInFlight = false
+                guard token == self.samplingToken, let hud, self.hudView === hud,
+                      UIApplication.shared.applicationState == .active else { return }
+                hud.update(snapshot: snapshot, settings: AorusGramManager.shared, l10n: AorusL10n.current)
+                self.layoutHUD()
+            }
+        }
     }
 
-    private func collectSnapshot() -> AorusPerformanceSnapshot {
+    private func collectSnapshot(fps: Int, battery: Int?, charging: Bool) -> AorusPerformanceSnapshot {
         let network = networkRate()
         return AorusPerformanceSnapshot(
             ramMB: memoryFootprintMB(),
             cpuPercent: processCPUPercent(),
-            fps: currentFPS,
-            batteryPercent: batteryPercent(),
-            batteryCharging: UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full,
+            fps: fps,
+            batteryPercent: battery,
+            batteryCharging: charging,
             rxBytesPerSecond: network.rx,
             txBytesPerSecond: network.tx,
             freeDiskBytes: freeDiskBytes(),
@@ -718,6 +738,11 @@ public final class AorusPerformanceHUDManager {
             return 0.0
         }
         defer {
+            // task_threads gives us a send right for every thread as well as the array.
+            // Freeing only the array leaked rights on every one-second HUD sample.
+            for index in 0 ..< Int(threadCount) {
+                mach_port_deallocate(mach_task_self_, threads[index])
+            }
             let size = vm_size_t(Int(threadCount) * MemoryLayout<thread_t>.stride)
             vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: threads)), size)
         }

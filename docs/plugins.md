@@ -2260,8 +2260,10 @@ const names = aorus.icons.assets('Chat List/');                  // имена �
 группами слотов (`tab`, `input`, `settings` и остальные из таблиц), отдельными слотами,
 иконками по имени или папками каталога (`'Chat List/'`); без `only` стиль действует на все
 иконки до 64 точек — крупные иллюстрации он не трогает. Стиль распространяется также
-на SF Symbols, созданные через системный загрузчик UIKit. Голосовой ввод текста имеет
-отдельный слот `input.dictation`.
+на SF Symbols, созданные через системный загрузчик UIKit, и на панель форматирования.
+Голосовой ввод текста имеет отдельный слот `input.dictation`; кнопки форматирования
+входят в группу `format`. Монохромные символы сохраняют цвет элемента интерфейса,
+а цветные изображения — собственную палитру. Символы рисуются с масштабом Retina.
 
 | `look` | `amount` | Что делает |
 |---|---|---|
@@ -2352,6 +2354,18 @@ Wall, и вкладки плагинов. Взять такую иконку и�
 |---|---|---|
 | `input.send` | Стрелка кнопки отправки | `Chat/Input/Text/SendIcon` |
 | `input.dictation` | Голосовой ввод текста | `AorusGram/Input/Dictation` |
+| `format.newLine` | Новая строка | `AorusGram/Input/Formatting/return` |
+| `format.clear` | Очистка форматирования | `AorusGram/Input/Formatting/pencil.slash` |
+| `format.quote` | Цитата | `AorusGram/Input/Formatting/text.quote` |
+| `format.spoiler` | Спойлер | `AorusGram/Input/Formatting/eye.slash` |
+| `format.bold` | Полужирный | `AorusGram/Input/Formatting/bold` |
+| `format.italic` | Курсив | `AorusGram/Input/Formatting/italic` |
+| `format.monospace` | Моноширинный | `AorusGram/Input/Formatting/Monospace` |
+| `format.link` | Ссылка | `AorusGram/Input/Formatting/link` |
+| `format.underline` | Подчёркивание | `AorusGram/Input/Formatting/underline` |
+| `format.strikethrough` | Зачёркивание | `AorusGram/Input/Formatting/strikethrough` |
+| `format.clipboard` | Буфер обмена | `AorusGram/Input/Formatting/clipboard`, `AorusGram/Input/Formatting/doc.on.clipboard` |
+| `format.code` | Код | `AorusGram/Input/Formatting/chevron.left.forwardslash.chevron.right` |
 | `input.microphone` | Кнопка голосового сообщения (анимирована) | `Chat/Input/Text/IconMicrophone` |
 | `input.videoMessage` | Кнопка видеосообщения (анимирована) | `Chat/Input/Text/IconVideo` |
 | `input.attach` | Кнопка вложения | `Chat/Input/Text/IconAttachment` |

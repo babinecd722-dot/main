@@ -2,6 +2,7 @@ import SwiftUI
 import Foundation
 import UIKit
 import AppBundle
+import Display
 import AorusGramUI
 
 // AorusGram "Formatting Panel" — a formatting toolbar shown above the keyboard in
@@ -64,6 +65,7 @@ final class AorusFormattingToolbarModel: ObservableObject {
 
 struct AorusFormattingToolbarView: View {
     @ObservedObject private var model: AorusFormattingToolbarModel
+    @ObservedObject private var icons = AorusToolbarIconPreference.shared
 
     private let onNewLine: () -> Void
     private let onClearFormatting: () -> Void
@@ -120,6 +122,7 @@ struct AorusFormattingToolbarView: View {
     }
 
     var body: some View {
+        let _ = icons.revision
         VStack(spacing: 6) {
             formattingToolbar
                 .frame(height: 44)
@@ -160,7 +163,7 @@ struct AorusFormattingToolbarView: View {
             HStack(spacing: 12) {
                 // New line — always available.
                 Button(action: onNewLine) {
-                    Image(systemName: "return")
+                    AorusToolbarSymbol(name: "return")
                         .foregroundColor(Color.primary)
                 }
                 .buttonStyle(AorusToolbarButtonStyle())
@@ -208,7 +211,7 @@ struct AorusFormattingToolbarView: View {
                 languageButton(kind: .source, code: self.model.sourceLanguageCode)
 
                 Button(action: self.swapLanguages) {
-                    Image(systemName: "arrow.left.arrow.right")
+                    AorusToolbarSymbol(name: "arrow.left.arrow.right", size: 17, weight: .semibold)
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(Color.secondary)
                         .frame(width: 34, height: 34)
@@ -247,7 +250,7 @@ struct AorusFormattingToolbarView: View {
                     AorusActivityIndicator()
                         .frame(width: 18, height: 18)
                 } else if self.model.translationFailed {
-                    Image(systemName: "exclamationmark.circle.fill")
+                    AorusToolbarSymbol(name: "exclamationmark.circle.fill")
                         .foregroundColor(Color.orange)
                         .accessibility(label: Text(aorusL("Не удалось перевести", "Translation failed")))
                 }
@@ -257,7 +260,7 @@ struct AorusFormattingToolbarView: View {
                         self.model.sourceText = ""
                         self.translateCurrentText()
                     }) {
-                        Image(systemName: "xmark.circle.fill")
+                        AorusToolbarSymbol(name: "xmark.circle.fill")
                             .foregroundColor(Color.secondary.opacity(0.75))
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -280,7 +283,7 @@ struct AorusFormattingToolbarView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                Image(systemName: "chevron.down")
+                AorusToolbarSymbol(name: "chevron.down", size: 10, weight: .bold)
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(Color.secondary)
             }
@@ -309,7 +312,7 @@ struct AorusFormattingToolbarView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: size, height: size)
         } else {
-            Image(systemName: "globe")
+            AorusToolbarSymbol(name: "globe", size: size - 2, weight: .medium)
                 .font(.system(size: size - 2.0, weight: .medium))
         }
     }
@@ -338,7 +341,7 @@ struct AorusFormattingToolbarView: View {
 
     private func formatButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: { if self.model.canFormat { action() } }) {
-            Image(systemName: systemName)
+            AorusToolbarSymbol(name: systemName)
                 .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
         }
         .buttonStyle(AorusToolbarButtonStyle())
@@ -347,7 +350,7 @@ struct AorusFormattingToolbarView: View {
 
     private func clearFormattingButton() -> some View {
         Button(action: { if self.model.canClearFormatting { self.onClearFormatting() } }) {
-            Image(systemName: "pencil.slash")
+            AorusToolbarSymbol(name: "pencil.slash")
                 .foregroundColor(self.model.canClearFormatting ? Color.primary : Color.secondary.opacity(0.45))
         }
         .buttonStyle(AorusToolbarButtonStyle())
@@ -357,13 +360,7 @@ struct AorusFormattingToolbarView: View {
 
     private func monospaceButton() -> some View {
         Button(action: { if self.model.canFormat { self.onMonospace() } }) {
-            Group {
-                if #available(iOS 16.4, *) {
-                    Text("M").monospaced()
-                } else {
-                    Text("M")
-                }
-            }
+            AorusToolbarMonospace()
             .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
         }
         .buttonStyle(AorusToolbarButtonStyle())
@@ -374,9 +371,9 @@ struct AorusFormattingToolbarView: View {
         Button(action: self.onClipboard) {
             Group {
                 if #available(iOS 16.0, *) {
-                    Image(systemName: "clipboard")
+                    AorusToolbarSymbol(name: "clipboard")
                 } else {
-                    Image(systemName: "doc.on.clipboard")
+                    AorusToolbarSymbol(name: "doc.on.clipboard")
                 }
             }
             .foregroundColor(Color.primary)
@@ -395,7 +392,7 @@ struct AorusFormattingToolbarView: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 21, height: 21)
                 } else {
-                    Image(systemName: "person.crop.circle.badge.questionmark")
+                    AorusToolbarSymbol(name: "person.crop.circle.badge.questionmark")
                 }
             }
             .foregroundColor(self.model.canFormat ? Color.primary : Color.secondary.opacity(0.45))
@@ -482,14 +479,14 @@ private struct AorusTranslationLanguagePicker: View {
         NavigationView {
             VStack(spacing: 0) {
                 HStack(spacing: 9) {
-                    Image(systemName: "magnifyingglass")
+                    AorusToolbarSymbol(name: "magnifyingglass")
                         .foregroundColor(Color.secondary)
                     TextField(aorusL("Поиск языка", "Search Languages"), text: self.$query)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                     if !self.query.isEmpty {
                         Button(action: { self.query = "" }) {
-                            Image(systemName: "xmark.circle.fill")
+                            AorusToolbarSymbol(name: "xmark.circle.fill")
                                 .foregroundColor(Color.secondary)
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -544,7 +541,7 @@ private struct AorusTranslationLanguagePicker: View {
                     .foregroundColor(Color.primary)
                 Spacer()
                 if code == self.selectedCode {
-                    Image(systemName: "checkmark")
+                    AorusToolbarSymbol(name: "checkmark")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(Color(self.accentColor))
                 }
@@ -573,8 +570,8 @@ private struct AorusActivityIndicator: UIViewRepresentable {
 // AorusCode glyph — Telegram's own "anonymous sender" incognito icon, reused as a
 // template so it follows the toolbar's grey/white foreground colour. On-theme for a
 // hidden message and distinct from the other panel icons (no reused code/eye glyph).
-private let aorusCodeToolbarIcon: UIImage? = UIImage(bundleImageName: "Avatar/AnonymousSenderIcon")?.withRenderingMode(.alwaysTemplate)
-private let aorusTranslateToolbarIcon: UIImage? = UIImage(bundleImageName: "Chat/Context Menu/Translate")?.withRenderingMode(.alwaysTemplate)
+private var aorusCodeToolbarIcon: UIImage? { UIImage(bundleImageName: "Avatar/AnonymousSenderIcon")?.withRenderingMode(.alwaysTemplate) }
+private var aorusTranslateToolbarIcon: UIImage? { UIImage(bundleImageName: "Chat/Context Menu/Translate")?.withRenderingMode(.alwaysTemplate) }
 
 // iOS 13–14 blur fallback.
 private struct AorusBlurView: UIViewRepresentable {
