@@ -1330,7 +1330,7 @@ if AorusPluginSandbox.watchdogAvailable {
         } catch (error) { aorus.storage.set('error', String(error)); }
     });
     """
-    let advancedSandbox = AorusPluginSandbox(pluginId: UUID().uuidString, source: advancedSource,
+    let advancedSandbox = AorusPluginSandbox(manifest: AorusPluginManifest(name: "Advanced Files"), source: advancedSource,
         host: advancedHost, permissions: [.dialogs, .sendMessages, .appCustomization], filesDirectory: advancedDirectory)
     let advancedStarted = DispatchSemaphore(value: 0)
     advancedSandbox.start { error in expect(error == nil, "advanced files start"); advancedStarted.signal() }
