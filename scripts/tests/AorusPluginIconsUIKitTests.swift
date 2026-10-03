@@ -41,6 +41,13 @@ private enum AorusPluginIconsUIKitTests {
         let smallConfiguration = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
         let configuredReference = original.withConfiguration(smallConfiguration)
         let appliedReference = original.applyingSymbolConfiguration(smallConfiguration)!
+        var paletteReferences: [String: UIImage] = [:]
+        if #available(iOS 15.0, *) {
+            let palette = UIImage.SymbolConfiguration(paletteColors: [.red, .blue, .yellow])
+            for name in ["folder.badge.plus", "person.3.sequence.fill"] {
+                paletteReferences[name] = UIImage(systemName: name, withConfiguration: palette)!
+            }
+        }
         for selector in ["systemImageNamed:", "systemImageNamed:withConfiguration:", "systemImageNamed:compatibleWithTraitCollection:"] {
             expect(class_getClassMethod(UIImage.self, NSSelectorFromString(selector)) != nil, "UIKit symbol loader selector")
         }
@@ -111,11 +118,20 @@ private enum AorusPluginIconsUIKitTests {
             }
         }
         if #available(iOS 15.0, *) {
-            let palette = UIImage.SymbolConfiguration(paletteColors: [.red, .blue])
-            let colouredSymbol = UIImage(systemName: "folder.badge.plus", withConfiguration: palette)!
-            let colour = drawnColour(colouredSymbol, tint: .green, style: .dark)
-            expect(colouredSymbol.renderingMode == .alwaysOriginal, "palette symbol retains its explicit colours")
-            expect(colour.red > 0 && colour.blue > 0, "palette symbol does not become a single control tint")
+            let palette = UIImage.SymbolConfiguration(paletteColors: [.red, .blue, .yellow])
+            for name in ["folder.badge.plus", "person.3.sequence.fill"] {
+                let native = drawnColour(paletteReferences[name]!, tint: .green, style: .dark)
+                let colouredSymbol = UIImage(systemName: name, withConfiguration: palette)!
+                let colour = drawnColour(colouredSymbol, tint: .green, style: .dark)
+                stage("palette \(name): native \(native), rendered \(colour)")
+                if name == "person.3.sequence.fill" {
+                    expect(native.red > 0 && native.blue > 0, "palette fixture has multiple native colours")
+                }
+                expect(colouredSymbol.renderingMode == .alwaysOriginal, "palette symbol retains its explicit colours")
+                expect(native.red == 0 || colour.red > 0, "palette symbol keeps native red")
+                expect(native.blue == 0 || colour.blue > 0, "palette symbol keeps native blue")
+                expect(colour.red > 0 || colour.blue > 0, "palette symbol does not become a single control tint")
+            }
         }
         stage("checking formatting glyphs and named dictation")
         for name in ["return", "pencil.slash", "text.quote", "eye.slash", "bold", "italic", "link", "underline", "strikethrough", "doc.on.clipboard", "chevron.left.forwardslash.chevron.right"] {
