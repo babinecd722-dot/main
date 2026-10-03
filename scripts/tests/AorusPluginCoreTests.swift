@@ -2071,7 +2071,9 @@ if AorusPluginSandbox.watchdogAvailable {
     }
     // AorusGram's own icons are slots like Telegram's, reached by their groups, and drawn, so
     // never loaded in place of another icon.
-    expect(AorusPluginIcons.ownIconNames.allSatisfy { name in AorusPluginIcons.catalog.contains { $0.assets == [name] } }, "every own icon has a slot")
+    expect(AorusPluginIcons.ownIconNames.allSatisfy { name in AorusPluginIcons.catalog.contains { $0.assets.contains(name) } }, "every own icon has a slot")
+    expect(AorusPluginIcons.catalogByName["format.clipboard"]?.assets == ["AorusGram/Input/Formatting/clipboard", "AorusGram/Input/Formatting/doc.on.clipboard"], "clipboard variants share a slot across iOS versions")
+    expect(AorusPluginIcons.ownIconNames.filter { $0.hasPrefix("AorusGram/Input/Formatting/") }.allSatisfy { name in AorusPluginIcons.catalog.contains { $0.group == "format" && $0.assets.contains(name) } }, "the format group reaches every toolbar symbol")
     expect(AorusPluginIcons.ownIconNames.allSatisfy { AorusPluginIcons.isIconName($0) && $0.hasPrefix("AorusGram/") }, "own icons are named under AorusGram/")
     expect(AorusPluginIcons.catalogByName["tab.wall"]?.group == "tab" && AorusPluginIcons.catalogByName["menu.plugins"]?.group == "menu", "own icons sit in the groups they are part of")
     let tabStyle = AorusPluginIcons.validate(["*": ["look": "pixel", "only": ["tab"]]], iconExists: { _ in true }).layer["*"] as? [String: Any]

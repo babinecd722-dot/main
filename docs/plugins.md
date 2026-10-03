@@ -2366,6 +2366,14 @@ Wall, и вкладки плагинов. Взять такую иконку и�
 | `format.strikethrough` | Зачёркивание | `AorusGram/Input/Formatting/strikethrough` |
 | `format.clipboard` | Буфер обмена | `AorusGram/Input/Formatting/clipboard`, `AorusGram/Input/Formatting/doc.on.clipboard` |
 | `format.code` | Код | `AorusGram/Input/Formatting/chevron.left.forwardslash.chevron.right` |
+| `format.language` | Язык перевода | `AorusGram/Input/Formatting/globe` |
+| `format.aorusCode` | Запасная иконка AorusCode | `AorusGram/Input/Formatting/person.crop.circle.badge.questionmark` |
+| `format.swapLanguages` | Поменять языки | `AorusGram/Input/Formatting/arrow.left.arrow.right` |
+| `format.expand` | Выбор языка | `AorusGram/Input/Formatting/chevron.down` |
+| `format.search` | Поиск языка | `AorusGram/Input/Formatting/magnifyingglass` |
+| `format.dismiss` | Закрытие и очистка поиска | `AorusGram/Input/Formatting/xmark.circle.fill` |
+| `format.selected` | Выбранный язык | `AorusGram/Input/Formatting/checkmark` |
+| `format.error` | Ошибка перевода | `AorusGram/Input/Formatting/exclamationmark.circle.fill` |
 | `input.microphone` | Кнопка голосового сообщения (анимирована) | `Chat/Input/Text/IconMicrophone` |
 | `input.videoMessage` | Кнопка видеосообщения (анимирована) | `Chat/Input/Text/IconVideo` |
 | `input.attach` | Кнопка вложения | `Chat/Input/Text/IconAttachment` |
