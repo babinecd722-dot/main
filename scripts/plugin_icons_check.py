@@ -17,6 +17,7 @@ public protocol AppBundleImageResolver: AnyObject {
     func resolveBundleImage(named: String, original: UIImage) -> UIImage?
 }
 public func setAppBundleImageResolver(_ resolver: AppBundleImageResolver?) {}
+public func getAppBundle() -> Bundle { Bundle.main }
 public extension UIImage {
     convenience init?(bundleImageName: String) { self.init() }
 }

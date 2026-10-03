@@ -1389,8 +1389,9 @@ jobs:
 
       - name: Collect build artifacts info
         if: always()
-        working-directory: telegram-ios
+        working-directory: ${{ github.workspace }}
         run: |
+          if [ -d telegram-ios ]; then cd telegram-ios; fi
           echo "=== All .app and .ipa files (with symlinks) ===" > $RUNNER_TEMP/found_files.txt
           find -L . -name "*.app" -type d 2>/dev/null | grep -v ".dSYM" >> $RUNNER_TEMP/found_files.txt || true
           find -L . -name "*.ipa" 2>/dev/null >> $RUNNER_TEMP/found_files.txt || true

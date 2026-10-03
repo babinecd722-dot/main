@@ -138,6 +138,12 @@ private enum AorusPluginFilesTests {
         try files.writeData("large.bin", data: Data(repeating: 7, count: AorusPluginFiles.maximumChunkBytes+1))
         do { _ = try files.perform("files.readBase64", payload: ["name":"large.bin"]); fatalError("Whole-file bridge limit bypassed") } catch {}
         expect(try files.readRange("large.bin", offset: AorusPluginFiles.maximumChunkBytes, length: 1) == Data([7]), "large file final chunk")
+        _ = files.clear()
+        let picked = try files.importData(Data([0,255,1]), suggestedName:"Документ.bin")
+        let pickedAgain = try files.importData(Data([2,3]), suggestedName:"Документ.bin")
+        expect(picked["name"] as? String == "Документ.bin" && picked["encoding"] as? String == "binary", "picker imports original bytes and name")
+        expect(files.readData("Документ.bin") == Data([0,255,1]), "picker preserves existing bytes")
+        expect(pickedAgain["name"] as? String != "Документ.bin" && files.readData(pickedAgain["name"] as! String) == Data([2,3]), "picker collision keeps both files")
         let options = try AorusPluginFileSendOptions(["caption":"Документ", "silent":true, "replyTo":42, "threadId":"9223372036854775807", "scheduleAt":2000000000], now:Date(timeIntervalSince1970:1000))
         expect(options.caption == "Документ" && options.silent && options.replyTo == 42 && options.threadId == Int64.max && options.scheduleAt == 2000000000, "document send options")
         let emptyOptions = try AorusPluginFileSendOptions([:])

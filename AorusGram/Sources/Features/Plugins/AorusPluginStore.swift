@@ -666,6 +666,20 @@ public struct AorusPluginFiles {
         }
     }
 
+    public func importData(_ data: Data, suggestedName: String) throws -> [String: Any] {
+        try locked {
+            let candidate = (suggestedName as NSString).lastPathComponent
+            var name = Self.normalizedPath(candidate) ?? "picked.bin"
+            if try info(name) != nil {
+                let suffix = (name as NSString).pathExtension
+                name = UUID().uuidString + (suffix.isEmpty ? "" : "." + suffix)
+                if Self.normalizedPath(name) == nil { name = UUID().uuidString + ".bin" }
+            }
+            try writeData(name, data: data)
+            return ["name": name, "sizeBytes": NSNumber(value: data.count), "encoding": "binary"]
+        }
+    }
+
     public func appendData(_ name: String, data: Data) throws {
         try locked {
             let existing = try info(name)
@@ -695,8 +709,13 @@ public struct AorusPluginFiles {
             guard info["type"] as? String == "file" else { throw FileError.io("The path is a directory") }
             let handle = try FileHandle(forReadingFrom: fileURL(name))
             defer { handle.closeFile() }
-            handle.seek(toFileOffset: UInt64(offset))
-            return handle.readData(ofLength: length)
+            if #available(iOS 13.4, macOS 10.15.4, *) {
+                try handle.seek(toOffset: UInt64(offset))
+                return try handle.read(upToCount: length) ?? Data()
+            } else {
+                handle.seek(toFileOffset: UInt64(offset))
+                return handle.readData(ofLength: length)
+            }
         }
     }
     public func info(_ name: String) throws -> [String: Any]? {

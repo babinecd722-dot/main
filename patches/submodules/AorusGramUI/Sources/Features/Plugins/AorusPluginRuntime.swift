@@ -2396,26 +2396,33 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                     guard let bytes = files.readData(name) else { throw AorusPluginRequestError("No such file: \(name)") }
                     return ((name as NSString).lastPathComponent, bytes)
                 }
+                var shareDirectory: URL?
+                var shareURLs: [URL] = []
+                if action == "files.share" {
+                    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-plugin-share").appendingPathComponent(UUID().uuidString)
+                    do {
+                        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                        for (index, entry) in data.enumerated() {
+                            let folder = directory.appendingPathComponent(String(index))
+                            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                            let url = folder.appendingPathComponent(entry.0)
+                            try entry.1.write(to: url, options: .atomic)
+                            shareURLs.append(url)
+                        }
+                        shareDirectory = directory
+                    } catch { try? FileManager.default.removeItem(at: directory); throw error }
+                }
+                let stagedDirectory = shareDirectory
+                let stagedURLs = shareURLs
                 DispatchQueue.main.async {
                     guard self.context.account.id == context.account.id, AorusPluginEntitlement.isAllowed,
                           self.manager?.isPermissionGranted(permission, pluginId: pluginId) == true else {
+                        if let directory = stagedDirectory { try? FileManager.default.removeItem(at: directory) }
                         completion(.failure(AorusPluginRequestError("Account or plugin permission changed"))); return
                     }
                     do {
-                        if action == "files.share" {
-                            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-plugin-share").appendingPathComponent(UUID().uuidString)
-                            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                            var urls: [URL] = []
-                            do {
-                                for (index, entry) in data.enumerated() {
-                                    // Distinct source folders may contain files with the same basename.
-                                    let folder = directory.appendingPathComponent(String(index))
-                                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                                    let url = folder.appendingPathComponent(entry.0)
-                                    try entry.1.write(to: url, options: .atomic); urls.append(url)
-                                }
-                            } catch { try? FileManager.default.removeItem(at: directory); throw error }
-                            self.presentShare(items: urls, cleanup: { try? FileManager.default.removeItem(at: directory) }) { result in
+                        if let directory = stagedDirectory {
+                            self.presentShare(items: stagedURLs, cleanup: { try? FileManager.default.removeItem(at: directory) }) { result in
                                 completion(result.map { ["presented": NSNumber(value: true)] })
                             }
                             return
@@ -3667,21 +3674,22 @@ final class AorusPluginFilePickerDelegate: NSObject, UIDocumentPickerDelegate {
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let source = urls.first else { finish(.success(nil)); return }
-        let files = AorusPluginFiles(directory: directory)
-        var name = AorusPluginFiles.normalizedPath(source.lastPathComponent) ?? "picked.bin"
-        if (try? files.info(name)) != nil {
-            name = UUID().uuidString + "-" + name
-        }
         let accessed = source.startAccessingSecurityScopedResource()
-        defer { if accessed { source.stopAccessingSecurityScopedResource() } }
-        do {
-            let handle = try FileHandle(forReadingFrom: source)
-            defer { handle.closeFile() }
-            let data = handle.readData(ofLength: AorusPluginFiles.maximumFileBytes + 1)
-            guard data.count <= AorusPluginFiles.maximumFileBytes else { throw AorusPluginFiles.FileError.tooLarge }
-            try files.writeData(name, data: data)
-            finish(.success(["name": name, "sizeBytes": NSNumber(value: data.count), "encoding": "binary"]))
-        } catch { finish(.failure(error)) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Keep the picker alive while its local copy is being read.
+            defer { if accessed { source.stopAccessingSecurityScopedResource() }; withExtendedLifetime(controller) {} }
+            let result: Result<[String: Any]?, Error>
+            do {
+                let handle = try FileHandle(forReadingFrom: source)
+                defer { handle.closeFile() }
+                let data: Data
+                if #available(iOS 13.4, *) { data = try handle.read(upToCount: AorusPluginFiles.maximumFileBytes + 1) ?? Data() }
+                else { data = handle.readData(ofLength: AorusPluginFiles.maximumFileBytes + 1) }
+                guard data.count <= AorusPluginFiles.maximumFileBytes else { throw AorusPluginFiles.FileError.tooLarge }
+                result = .success(try AorusPluginFiles(directory: self.directory).importData(data, suggestedName: source.lastPathComponent))
+            } catch { result = .failure(error) }
+            DispatchQueue.main.async { self.finish(result) }
+        }
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
