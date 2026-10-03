@@ -642,18 +642,25 @@ public struct AorusPluginFiles {
         return try body()
     }
 
+    private func entry(_ name: String, attributes: [FileAttributeKey: Any]) -> [String: Any]? {
+        guard let type = attributes[.type] as? FileAttributeType,
+              type == .typeRegular || type == .typeDirectory else { return nil }
+        return ["name": name,
+            "size": type == .typeDirectory ? NSNumber(value: 0) : attributes[.size] as? NSNumber ?? NSNumber(value: 0),
+            "modified": NSNumber(value: Int64(((attributes[.modificationDate] as? Date) ?? .distantPast).timeIntervalSince1970)),
+            "type": type == .typeDirectory ? "directory" : "file"]
+    }
+
     private func entries() -> [[String: Any]] {
-        guard let iterator = FileManager.default.enumerator(at: directory,
-            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey], options: []) else { return [] }
+        // Relative names are stable even when Foundation exposes an absolute URL
+        // through a different system alias (for example /var and /private/var).
+        guard let iterator = FileManager.default.enumerator(atPath: directory.path) else { return [] }
         var result: [[String: Any]] = []
-        for case let url as URL in iterator {
-            let path = String(url.path.dropFirst(directory.path.count + 1))
+        for case let path as String in iterator {
             guard Self.normalizedPath(path) != nil,
-                  let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey]) else { continue }
-            if values.isSymbolicLink == true { iterator.skipDescendants(); continue }
-            result.append(["name": path, "size": NSNumber(value: values.isDirectory == true ? 0 : values.fileSize ?? 0),
-                "modified": NSNumber(value: Int64((values.contentModificationDate ?? .distantPast).timeIntervalSince1970)),
-                "type": values.isDirectory == true ? "directory" : "file"])
+                  let attributes = try? FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(path).path) else { continue }
+            if attributes[.type] as? FileAttributeType == .typeSymbolicLink { iterator.skipDescendants(); continue }
+            if let value = entry(path, attributes: attributes) { result.append(value) }
         }
         return result.sorted { ($0["name"] as! String) < ($1["name"] as! String) }
     }
@@ -733,8 +740,9 @@ public struct AorusPluginFiles {
     }
     public func info(_ name: String) throws -> [String: Any]? {
         try locked {
-            _ = try fileURL(name)
-            return entries().first { $0["name"] as? String == name }
+            let url = try fileURL(name)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+            return entry(name, attributes: attributes)
         }
     }
     public func list(_ path: String = "", recursive: Bool = true) throws -> [[String: Any]] {
