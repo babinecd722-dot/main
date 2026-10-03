@@ -2644,6 +2644,11 @@ private extension UIImage {
     }
     @objc(aorusOriginalImageWithConfiguration:)
     dynamic func aorusOriginalImageWithConfiguration(_ configuration: UIImage.Configuration) -> UIImage {
+        // UIImageView also configures bitmaps with ordinary UIImage.Configuration objects.
+        // Recreating the source symbol for those display settings would discard its palette.
+        guard configuration is UIImage.SymbolConfiguration else {
+            return aorusOriginalImageWithConfiguration(configuration)
+        }
         return AorusPluginIconValues.configuredSymbol(self) { $0.withConfiguration(configuration) } ?? aorusOriginalImageWithConfiguration(configuration)
     }
     @objc(aorusOriginalImageByApplyingSymbolConfiguration:)

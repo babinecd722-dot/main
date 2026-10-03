@@ -122,8 +122,10 @@ private enum AorusPluginIconsUIKitTests {
             for name in ["folder.badge.plus", "person.3.sequence.fill"] {
                 let native = drawnColour(paletteReferences[name]!, tint: .green, style: .dark)
                 let colouredSymbol = UIImage(systemName: name, withConfiguration: palette)!
+                let bitmap = drawnColour(UIImage(cgImage: colouredSymbol.cgImage!, scale: colouredSymbol.scale, orientation: .up).withRenderingMode(.alwaysOriginal), tint: .green, style: .dark)
                 let colour = drawnColour(colouredSymbol, tint: .green, style: .dark)
-                stage("palette \(name): native \(native), rendered \(colour)")
+                stage("palette \(name): native \(native), bitmap \(bitmap), rendered \(colour)")
+                expect(bitmap.red > 0 || bitmap.blue > 0, "palette colours survive rasterization")
                 if name == "person.3.sequence.fill" {
                     expect(native.red > 0 && native.blue > 0, "palette fixture has multiple native colours")
                 }
