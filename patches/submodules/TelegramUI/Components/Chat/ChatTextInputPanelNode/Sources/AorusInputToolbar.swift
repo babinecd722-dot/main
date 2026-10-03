@@ -541,7 +541,7 @@ private struct AorusTranslationLanguagePicker: View {
                     .foregroundColor(Color.primary)
                 Spacer()
                 if code == self.selectedCode {
-                    AorusToolbarSymbol(name: "checkmark")
+                    AorusToolbarSymbol(name: "checkmark", size: 15, weight: .semibold)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(Color(self.accentColor))
                 }

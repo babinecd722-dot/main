@@ -41,6 +41,7 @@ private enum AorusPluginIconsUIKitTests {
         let smallConfiguration = UIImage.SymbolConfiguration(pointSize: 13, weight: .bold)
         let configuredReference = original.withConfiguration(smallConfiguration)
         let appliedReference = original.applyingSymbolConfiguration(smallConfiguration)!
+        let selectedLanguageReference = UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))!
         var paletteReferences: [String: UIImage] = [:]
         if #available(iOS 15.0, *) {
             let palette = UIImage.SymbolConfiguration(paletteColors: [.red, .blue, .yellow])
@@ -143,6 +144,9 @@ private enum AorusPluginIconsUIKitTests {
             let colour = drawnColour(image, tint: .green, style: .dark)
             expect(colour.green > colour.red * 10 && colour.green > 0, "formatting glyph tint")
         }
+        let selectedLanguage = aorusToolbarSymbolImage("checkmark", size: 15, weight: .semibold)!
+        sameCanvas(selectedLanguage, selectedLanguageReference, "selected language keeps its 15 point semibold glyph")
+        expect(selectedLanguage.pngData() != aorusToolbarSymbolImage("checkmark")!.pngData(), "toolbar size and weight configure the vector before rasterization")
         let mono = aorusToolbarMonospaceImage()!
         expect(mono.cgImage != nil && mono.renderingMode == .alwaysTemplate, "monospace glyph uses Pixel renderer")
         expect(aorusToolbarMonospaceImage() === mono, "monospace glyph cache")
