@@ -16,6 +16,12 @@ import UIKit
 // `AorusPluginRuntimeManager`, which is ours and changes with the feature — are checked
 // against the real file by `release_security_check.py`, signature by signature.
 
+// MARK: - AppBundle
+
+public extension UIImage {
+    convenience init?(bundleImageName: String) { self.init() }
+}
+
 // MARK: - AsyncDisplayKit
 
 open class ASDisplayNode {

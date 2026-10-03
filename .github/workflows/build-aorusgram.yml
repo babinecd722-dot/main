@@ -272,7 +272,7 @@ jobs:
           # Bazel run. The file's Telegram imports are replaced by stubs copied from the
           # pinned tree, and the body is type-checked for real against the iOS SDK.
           mkdir -p /tmp/aorus-plugin-ui
-          sed -E '/^import (Display|AccountContext|TelegramPresentationData|TelegramCore|Postbox|SwiftSignalKit|ContextUI|QuickLook|AorusGram)$/d' \
+          sed -E '/^import (Display|AppBundle|AccountContext|TelegramPresentationData|TelegramCore|Postbox|SwiftSignalKit|ContextUI|QuickLook|AorusGram)$/d' \
             aorusgram/patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginControllers.swift \
             > /tmp/aorus-plugin-ui/AorusPluginControllers.swift
           # The plugin's web page is WebKit over the same Telegram surface, and every WebKit

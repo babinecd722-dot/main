@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AppBundle
 import Display
 import AccountContext
 import TelegramPresentationData
