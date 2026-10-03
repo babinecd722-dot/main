@@ -6,6 +6,7 @@ import platform
 import re
 import json
 import os
+import plistlib
 import subprocess
 import tempfile
 
@@ -132,18 +133,42 @@ def main():
             try:
                 subprocess.run(["xcrun", "simctl", "bootstatus", device["udid"], "-b"], check=True, timeout=240)
                 simulator_sdk = subprocess.check_output(["xcrun", "--sdk", "iphonesimulator", "--show-sdk-path"], text=True).strip()
-                executable = work / "uikit-icon-tests"
+                app = work / "PluginIconTests.app"
+                app.mkdir()
+                executable = app / "uikit-icon-tests"
+                bundle_id = "org.aorusgram.PluginIconTests"
+                (app / "Info.plist").write_bytes(plistlib.dumps({
+                    "CFBundleIdentifier": bundle_id, "CFBundleExecutable": executable.name,
+                    "CFBundleName": "PluginIconTests", "CFBundlePackageType": "APPL",
+                    "CFBundleShortVersionString": "1.0", "CFBundleVersion": "1",
+                    "MinimumOSVersion": "13.0", "LSRequiresIPhoneOS": True,
+                    "UIDeviceFamily": [1, 2], "UILaunchScreen": {},
+                }))
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
+                subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 try:
-                    subprocess.run(["xcrun", "simctl", "spawn", device["udid"], str(executable)], check=True, timeout=120)
-                except subprocess.TimeoutExpired:
+                    # UIKit's screen configuration requires a real application launch;
+                    # simctl spawn of a command-line tool can wait indefinitely on it.
+                    result = subprocess.run(["xcrun", "simctl", "launch", "--console", "--terminate-running-process", device["udid"], bundle_id], capture_output=True, text=True, timeout=120)
+                    print(result.stdout, end="", flush=True)
+                    print(result.stderr, end="", flush=True)
+                    result.check_returncode()
+                    if "UIKit icon resolver passed:" not in result.stdout:
+                        raise RuntimeError("The UIKit application exited without completing its assertions")
+                except subprocess.TimeoutExpired as failure:
+                    for output in [failure.stdout, failure.stderr]:
+                        if output:
+                            print(output.decode(errors="replace") if isinstance(output, bytes) else output, flush=True)
                     # Simulator processes share the host kernel; a sample identifies the
                     # exact UIKit call that failed to return instead of hiding the timeout.
-                    processes = subprocess.run(["pgrep", "-f", str(executable)], capture_output=True, text=True)
+                    processes = subprocess.run(["pgrep", "-f", executable.name], capture_output=True, text=True)
                     for pid in processes.stdout.split():
                         subprocess.run(["sample", pid, "1", "1"], timeout=15, check=False)
                     raise
+                finally:
+                    subprocess.run(["xcrun", "simctl", "uninstall", device["udid"], bundle_id], check=False)
             finally:
                 if created_boot:
                     subprocess.run(["xcrun", "simctl", "shutdown", device["udid"]], check=True)

@@ -5,7 +5,11 @@ import Darwin
 
 @main
 private enum AorusPluginIconsUIKitTests {
-    static func main() {
+    @MainActor static func main() {
+        UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil, NSStringFromClass(AorusPluginIconsTestApplication.self))
+    }
+
+    @MainActor static func run() {
         func stage(_ message: String) { print("UIKit icons: " + message); fflush(stdout) }
         stage("starting")
         var checks = 0
@@ -79,5 +83,18 @@ private enum AorusPluginIconsUIKitTests {
         let unstyled = UIImage(systemName:"waveform",withConfiguration:UIImage.SymbolConfiguration(pointSize:20,weight:.regular))!
         expect(unstyled.pngData() == original.pngData(), "reset restores the original symbol")
         print("UIKit icon resolver passed: \(checks) assertions")
+    }
+}
+
+@objc(AorusPluginIconsTestApplication)
+@MainActor
+private final class AorusPluginIconsTestApplication: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        DispatchQueue.main.async {
+            AorusPluginIconsUIKitTests.run()
+            fflush(stdout)
+            exit(0)
+        }
+        return true
     }
 }
