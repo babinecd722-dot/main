@@ -302,7 +302,7 @@ final class AorusPluginNetworkBroker: NSObject, URLSessionTaskDelegate, @uncheck
             completion(.failure(AorusPluginRequestError("URL is not available to plugins")))
             return
         }
-        guard let directory, let name = AorusPluginFiles.normalizedName(payload["name"] as? String ?? "") else {
+        guard let directory, let name = AorusPluginFiles.normalizedPath(payload["name"] as? String ?? "") else {
             completion(.failure(AorusPluginRequestError("A valid file name is required")))
             return
         }
@@ -339,7 +339,7 @@ final class AorusPluginNetworkBroker: NSObject, URLSessionTaskDelegate, @uncheck
             completion(.failure(AorusPluginRequestError("URL is not available to plugins")))
             return
         }
-        guard let directory, let name = AorusPluginFiles.normalizedName(payload["name"] as? String ?? "") else {
+        guard let directory, let name = AorusPluginFiles.normalizedPath(payload["name"] as? String ?? "") else {
             completion(.failure(AorusPluginRequestError("A valid file name is required")))
             return
         }

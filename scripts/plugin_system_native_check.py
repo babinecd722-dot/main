@@ -18,6 +18,8 @@ import base64
 import hashlib
 import struct
 import re
+import zipfile
+import warnings
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -138,6 +140,10 @@ def main():
         work = Path(directory)
         for source in api.glob("*TelegramApi*"):
             shutil.copyfile(source, work / source.name)
+        if os.uname().sysname != "Darwin":
+            zlib = work / "zlib"
+            zlib.mkdir()
+            (zlib / "module.modulemap").write_text('module zlib [system] { header "/usr/include/zlib.h" link "z" export * }\n')
         common = [args.swiftc, "-swift-version", "5", "-module-cache-path", str(work / "cache"),
                   "-I", str(work), "-L", str(work), "-Xlinker", "-rpath", "-Xlinker", str(work)]
         def run(command, **kwargs):
@@ -153,8 +159,9 @@ def main():
                 text = (repo / "AorusGram/Sources/Features/Plugins/AorusPluginStore.swift").read_text()
                 # Compile the actual Foundation file API, independently of the UIKit store.
                 files = work / "AorusPluginFiles.swift"
-                files.write_text("import Foundation\n" + text[text.index("public struct AorusPluginFiles {"):])
+                files.write_text("import Foundation\nimport CoreFoundation\n" + text[text.index("public struct AorusPluginFiles {"):])
                 source_files.append(str(files))
+                source_files.append(str(repo / "AorusGram/Sources/Features/Plugins/AorusPluginArchive.swift"))
             run(common + ["-emit-library", "-emit-module", "-module-name", module] + source_files + [
                           "-emit-module-path", str(work / (module + ".swiftmodule")),
                           "-o", str(work / ("lib" + module + suffix))] + ["-l" + item for item in dependencies] + install_name)
@@ -181,6 +188,38 @@ def main():
                 finally:
                     server.shutdown()
                     server.server_close()
+            elif name == "files":
+                fixture = work / "zip-fixtures"
+                fixture.mkdir()
+                with zipfile.ZipFile(fixture / "deflated.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("binary.dat", bytes([0,1,255]))
+                    archive.writestr("папка/текст.txt", "Привет")
+                    archive.writestr("empty/", b"")
+                for kind in ["traversal", "symlink", "duplicate", "oversized", "corrupt"]:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", UserWarning)
+                        with zipfile.ZipFile(fixture / (kind+".zip"), "w") as archive:
+                            entry = zipfile.ZipInfo("../escape" if kind == "traversal" else "item")
+                            if kind == "symlink": entry.create_system, entry.external_attr = 3, 0o120777 << 16
+                            archive.writestr(entry, b"content")
+                            if kind == "duplicate": archive.writestr(entry, b"duplicate")
+                    if kind in ("oversized", "corrupt"):
+                        data = bytearray((fixture / (kind+".zip")).read_bytes())
+                        if kind == "oversized":
+                            offset = data.index(b"PK\x01\x02")
+                            struct.pack_into("<I", data, offset+24, 33554433)
+                        else: data[34] ^= 1
+                        (fixture / (kind+".zip")).write_bytes(data)
+                run([str(executable), str(fixture)], env=env)
+                with zipfile.ZipFile(fixture / "swift.zip") as archive:
+                    assert archive.testzip() is None
+                    assert archive.read("Проекты/первый/hello world.txt").decode() == "Привет"
+                    assert archive.read("binary.dat") == bytes([0,1,255,0,2,3])
+                    assert archive.getinfo("binary.dat").compress_type == zipfile.ZIP_DEFLATED
+                with zipfile.ZipFile(fixture / "swift-stored.zip") as archive:
+                    assert archive.getinfo("stored.txt").compress_type == zipfile.ZIP_STORED
+                    assert archive.read("stored.txt") == b"stored"
+                print("ZIP interoperability passed (Swift ↔ Python, stored and deflated)", flush=True)
             else:
                 run([str(executable)], env=env)
 

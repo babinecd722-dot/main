@@ -54,7 +54,7 @@ KNOWN_FOREIGN = {
     "dropLast", "trimmingCharacters", "replacingOccurrences", "components", "description",
 }
 
-TYPE_DECL = re.compile(r"\b(?:class|struct|enum|extension|actor|protocol)\s+([A-Za-z_]\w*)")
+TYPE_DECL = re.compile(r"\b(?:class|struct|enum|extension|actor|protocol)\s+(?!func\b|var\b)([A-Za-z_]\w*)")
 # `class Cell: UITableViewCell, UITextViewDelegate {` — the first name after the colon is the
 # superclass when it is one of ours, and an inherited method is not a mistake.
 TYPE_PARENTS = re.compile(r"\b(?:class|extension)\s+([A-Za-z_]\w*)\s*:\s*([^{]+)\{")
@@ -313,6 +313,9 @@ def locals_in(code):
 
 def check(sources, layout, by_type, free, nested, parents, written):
     failures = []
+    nominal_types = set()
+    for code in sources.values():
+        nominal_types.update(re.findall(r"\b(?:class|struct|enum|actor|protocol)\s+(?!func\b|var\b)([A-Za-z_]\w*)", code))
     for (_, owner, name, _), places in sorted(written.items()):
         if len(places) < 2:
             continue
@@ -392,7 +395,7 @@ def check(sources, layout, by_type, free, nested, parents, written):
                 #
                 # Only for a type we own, and only when the member is declared nowhere at all
                 # — inherited and framework members are somebody else's to check.
-                if name in KNOWN_FOREIGN or name in nested.get(owner, set()):
+                if owner not in nominal_types or name in KNOWN_FOREIGN or name in nested.get(owner, set()):
                     continue
                 if any(name in table for table in by_type.values()):
                     continue

@@ -75,6 +75,7 @@ public enum AorusPluginIcons {
         "AorusGram/Header/Ghost",
         "AorusGram/Settings/Plugins",
         "AorusGram/Menu/Plugins",
+        "AorusGram/Input/Dictation",
     ]
     public static let weights = ["ultraLight", "thin", "light", "regular", "medium", "semibold", "bold", "heavy", "black"]
     public static let fonts = ["system", "rounded", "serif", "mono"]
@@ -105,6 +106,7 @@ public enum AorusPluginIcons {
         Slot("header.ghost", ["AorusGram/Header/Ghost"], "Ghost mode button in a chat"),
 
         Slot("input.send", ["Chat/Input/Text/SendIcon"], "Send button arrow"),
+        Slot("input.dictation", ["AorusGram/Input/Dictation"], "Voice input transcription"),
         Slot("input.microphone", ["Chat/Input/Text/IconMicrophone"], "Voice message button", animated: true),
         Slot("input.videoMessage", ["Chat/Input/Text/IconVideo"], "Video message button", animated: true),
         Slot("input.attach", ["Chat/Input/Text/IconAttachment"], "Attach button"),

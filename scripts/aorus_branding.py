@@ -29297,6 +29297,13 @@ def patch_voice_to_text(tg: Path) -> None:
             )
             repairs.append("outer action spacing")
 
+        voice_icon = '                aorusVoiceButton.icon.image = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular))?.withRenderingMode(.alwaysTemplate)\n'
+        styled_icon = '            aorusVoiceButton.icon.image = AorusPluginIconValues.own(UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)), named: "AorusGram/Input/Dictation")?.withRenderingMode(.alwaysTemplate)\n'
+        tint = '            aorusVoiceButton.icon.tintColor = interfaceState.theme.chat.inputPanel.inputControlColor\n'
+        if styled_icon not in source and tint in source:
+            source = source.replace(voice_icon, "").replace(tint, styled_icon + tint, 1)
+            repairs.append("dictation icon style")
+
         return source, repairs
 
     if "aorusVoiceLongPress" in t:
@@ -29358,7 +29365,6 @@ def patch_voice_to_text(tg: Path) -> None:
         "                        iconTransition.updateAlpha(layer: aorusVoiceButton.icon.layer, alpha: 1.0)\n"
         "                    }\n"
         "                }\n"
-        "                aorusVoiceButton.icon.image = UIImage(systemName: \"waveform\", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular))?.withRenderingMode(.alwaysTemplate)\n"
         "                aorusVoiceButton.button.addTarget(self, action: #selector(self.aorusVoiceButtonTapped), for: .touchUpInside)\n"
         "                let aorusVoiceLongPress = UILongPressGestureRecognizer(target: self, action: #selector(self.aorusVoiceLongPress(_:)))\n"
         "                aorusVoiceLongPress.minimumPressDuration = 0.25\n"
@@ -29367,6 +29373,7 @@ def patch_voice_to_text(tg: Path) -> None:
         "                self.textInputContainerBackgroundView.contentView.addSubview(aorusVoiceButton.icon)\n"
         "                self.textInputContainerBackgroundView.contentView.addSubview(aorusVoiceButton.button)\n"
         "            }\n"
+        "            aorusVoiceButton.icon.image = AorusPluginIconValues.own(UIImage(systemName: \"waveform\", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .regular)), named: \"AorusGram/Input/Dictation\")?.withRenderingMode(.alwaysTemplate)\n"
         "            aorusVoiceButton.icon.tintColor = interfaceState.theme.chat.inputPanel.inputControlColor\n"
         "            let aorusVoiceButtonSize = CGSize(width: 32.0, height: minimalInputHeight)\n"
         "            let aorusVoiceButtonFrame = CGRect(origin: CGPoint(x: nextButtonTopRight.x - aorusVoiceButtonSize.width, y: nextButtonTopRight.y + floor((minimalInputHeight - aorusVoiceButtonSize.height) / 2.0)), size: aorusVoiceButtonSize)\n"

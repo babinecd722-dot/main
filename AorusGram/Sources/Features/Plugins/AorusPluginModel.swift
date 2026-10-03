@@ -255,7 +255,7 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
             (.network, ["aorus.http", "aorus.ws.", "aorus.network."]),
             (.mtproto, ["aorus.mtproto."]),
             // `schedule` and `reply` are `send` with an option filled in, and ask for the same.
-            (.sendMessages, ["aorus.messages.send", "aorus.messages.schedule", "aorus.messages.reply", "aorus.chat.sendText", "aorus.chat.replyText"]),
+            (.sendMessages, ["aorus.files.send", "aorus.messages.send", "aorus.messages.schedule", "aorus.messages.reply", "aorus.chat.sendText", "aorus.chat.replyText"]),
             // `chats.*` names a chat by id; `chat.*` is the one on screen. Reading either is
             // the same capability: a title, an identifier and what is in view.
             (.chatMetadata, [
@@ -317,7 +317,7 @@ public enum AorusPluginPermission: String, Codable, CaseIterable, Hashable {
                 "type: 'link'", "type: \"link\"", "\"type\":\"link\"", ".link({",
             ]),
             (.artificialIntelligence, ["aorus.ai."]),
-            (.appCustomization, [
+            (.appCustomization, ["aorus.files.installPlugin", "aorus.files.exportPlugin",
                 "aorus.features.", "aorus.interface.", "aorus.tabs.", "aorus.avatars.", "aorus.wall.",
                 "aorus.strings.override", "aorus.strings.restore",
                 // The look of the app. Reading the catalogue or the plugin's own layer asks for
@@ -1855,5 +1855,44 @@ public struct AorusPluginEffectRequest: Equatable {
             break
         }
         return .success(request)
+    }
+}
+
+/// The reference shown in the client and its exported copy come from the same text.
+public enum AorusPluginTextExport {
+    public static func documentation(_ text: String) -> String {
+        let paragraphs = text.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n\n")
+        var result: [String] = []
+        for (index, paragraph) in paragraphs.enumerated() {
+            var lines = paragraph.components(separatedBy: "\n")
+            if index == 0 { result.append("# " + paragraph); continue }
+            if let first = lines.first, lines.count > 1, first.count < 80,
+               !first.contains(where: { ".:;(){}=,".contains($0) }), !first.hasPrefix("await ") {
+                result.append("## " + first)
+                lines.removeFirst()
+            }
+            var code: [String] = [], prose: [String] = []
+            func flushCode() {
+                if !code.isEmpty { result.append("```js\n" + code.joined(separator: "\n") + "\n```"); code.removeAll() }
+            }
+            func flushProse() {
+                if !prose.isEmpty { result.append(prose.joined(separator: "\n")); prose.removeAll() }
+            }
+            for line in lines {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                let isCode = ["aorus.", "await ", "const ", "let ", "var ", "console.", "//", "}", "]);", "return "].contains(where: { trimmed.hasPrefix($0) }) || line.hasPrefix("  ")
+                if isCode { flushProse(); code.append(line) }
+                else { flushCode(); prose.append(line) }
+            }
+            flushCode(); flushProse()
+        }
+        return result.joined(separator: "\n\n") + "\n"
+    }
+    public static func console(name: String, id: String, entries: [AorusPluginLogEntry]) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var lines = [name + " (" + id + ")", ""]
+        lines += entries.map { formatter.string(from: $0.date) + " [" + $0.level.rawValue.uppercased() + "] " + $0.text }
+        return lines.joined(separator: "\n") + "\n"
     }
 }

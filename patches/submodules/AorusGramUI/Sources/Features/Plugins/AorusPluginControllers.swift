@@ -2543,7 +2543,10 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
 
 private final class AorusPluginDocsController: ViewController {
     private let presentationData: PresentationData; private let textView = UITextView()
-    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text }
+    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text; navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share"), style: .plain, target: self, action: #selector(exportDocumentation)); navigationItem.rightBarButtonItem?.accessibilityLabel = AorusPluginUIString.export.text }
+    @objc private func exportDocumentation() {
+        aorusPluginExportText(AorusPluginTextExport.documentation(AorusPluginDocumentation.text), name: "Plugins_Documentation.md", from: self, anchor: navigationItem.rightBarButtonItem)
+    }
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     override func loadDisplayNode() { displayNode = ViewControllerTracingNode(); displayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor; textView.backgroundColor = .clear; textView.textColor = presentationData.theme.list.itemPrimaryTextColor; textView.font = aorusUIFont(15); textView.isEditable = false; textView.alwaysBounceVertical = true; textView.textContainerInset = UIEdgeInsets(top: 18, left: 18, bottom: 40, right: 18); textView.text = AorusPluginDocumentation.text; displayNode.view.addSubview(textView); displayNodeDidLoad() }
     override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) { super.containerLayoutUpdated(layout, transition: transition); let top = navigationLayout(layout: layout).navigationFrame.maxY; transition.updateFrame(view: textView, frame: CGRect(x: 0, y: top, width: layout.size.width, height: layout.size.height - top)) }
@@ -2553,10 +2556,10 @@ private enum AorusPluginDocumentation {
     static var text: String {
         if AorusLang.current == .ru {
             return """
-            AorusGram Plugin API v1.1
+            AorusGram Plugin API v1.2
 
             Среда выполнения
-            Каждый плагин работает в отдельном контексте JavaScriptCore. У него нет доступа к файловой системе, нативным модулям, Keychain, лицензии, внутренним компонентам AorusAI или туннелю. Опасные возможности включаются только после подтверждения, а любое изменение кода отзывает все выданные разрешения.
+            Каждый плагин работает в отдельном контексте JavaScriptCore. Файлы, сеть, интерфейс и Telegram доступны через API клиента. Опасные возможности включаются только после подтверждения, а любое изменение кода отзывает все выданные разрешения.
 
             Жизненный цикл
             aorus.on('start', handler)
@@ -2688,6 +2691,141 @@ private enum AorusPluginDocumentation {
             Параметры: intensity от 0.1 до 3 (сколько частиц), speed и size от 0.25 до 3, wind от -1 до 1 (плюс сносит вправо), color или colors в формате RRGGBB, emoji и rising для emoji и leaves, x и y от 0 до 1 для burst и ripple, duration в миллисекундах (0 значит «пока не остановят», иначе до десяти минут). Числа ограничиваются, а не отклоняются.
             Ответ { ok, shown, reason, id }. shown: false — не ошибка, а причина в reason: reduceMotion (залпы, волны и тряска при «Уменьшении движения»), thermal (разовый эффект при критическом перегреве), background и noScreen (эффект начнётся сам, когда приложение откроют), rateLimited (вспышка чаще раза в треть секунды), tooMany (три эффекта на плагин, шесть на все), notRunning (stop для эффекта, которого нет). Если эффект не показан, в консоли плагина появляется предупреждение с причиной, например aorus.effects: burst confetti not shown: thermal (для notRunning его нет).
             При «Уменьшении движения» непрерывный эффект идёт спокойнее: один слой, медленнее, без покачивания и вращения. При экономии заряда частиц вдвое меньше, при перегреве они редеют. Всё нарисованное исчезает, когда плагин останавливается. Нужно разрешение «Эффекты на экране».
+
+            Файлы
+
+            aorus.files хранит файлы внутри папки плагина. Файлы остаются после остановки и
+            перезапуска; удаление плагина удаляет его папку. Операции чтения, записи и упаковки
+            работают без отдельного разрешения. Имена передаются как относительные пути: Unicode,
+            пробелы и скрытые файлы допустимы. Путь содержит до 512 символов и 16 компонентов,
+            компонент — до 255 байт UTF-8. Абсолютные пути, . и .., пустые компоненты,
+            управляющие символы и обратная косая черта отклоняются. Символические ссылки не обходятся.
+
+            Текст и JSON
+
+            await aorus.files.writeText('notes.txt', 'первая строка');
+            await aorus.files.append('notes.txt', ' вторая строка');
+            const text = await aorus.files.readText('notes.txt');
+            await aorus.files.writeJSON('state.json', { count: 3 });
+            const state = await aorus.files.readJSON('state.json', {});
+
+            readText возвращает null, если файла нет, и отклоняет чтение бинарного файла как
+            UTF-8. readJSON возвращает второй аргумент при отсутствии файла или ошибке JSON.
+            append дописывает текст одной нативной операцией: параллельные вызовы не теряют данные.
+            Запись заменяет файл атомарно. Родительские папки создаются через mkdir.
+
+            Бинарные данные и порции
+
+            await aorus.files.writeBase64('bytes.bin', 'AAH/');
+            const bytes = await aorus.files.readBase64('bytes.bin');
+            await aorus.files.appendBase64('bytes.bin', 'Ag==');
+            await aorus.files.writeText('download.bin', '');
+            await aorus.files.writeChunk('download.bin', 'AAH/', 0);
+            await aorus.files.writeChunk('download.bin', 'Ag==', 3);
+            const chunk = await aorus.files.readChunk('download.bin', 0, 1048576);
+            // { base64, offset, size, eof }
+
+            Base64 описывает байты файла, а не текст, который сохраняется в него. Один бинарный
+            запрос содержит до 1 МБ декодированных данных. readText, readJSON и readBase64
+            читают до 1 МБ; для больших файлов используется readChunk(name, offset, length).
+            Смещение и длина задаются в байтах, длина по умолчанию — 1 МБ. На конце файла порция
+            короче; после конца возвращается пустая порция с eof: true. Отсутствующий файл — null.
+            writeChunk(name, base64, offset) дописывает порцию, только если смещение совпадает
+            с текущим размером файла. Неправильное смещение отклоняется без изменения файла.
+
+            Папки и файловые операции
+
+            await aorus.files.mkdir('Проекты/пример');
+            await aorus.files.writeText('Проекты/пример/readme.txt', 'Пример');
+            await aorus.files.copy('Проекты/пример', 'копия');
+            await aorus.files.move('копия', 'готово');
+            await aorus.files.exists('готово/readme.txt');
+            await aorus.files.info('готово/readme.txt');
+            // { name, size, modified, type: 'file' | 'directory' }
+            await aorus.files.list();
+            await aorus.files.list('Проекты', { recursive: false });
+            await aorus.files.remove('готово');
+            await aorus.files.usage();
+            await aorus.files.clear();
+
+            mkdir создаёт недостающие родительские папки. copy и move работают с файлами и
+            деревьями папок; назначение должно отсутствовать, его родительская папка — существовать.
+            list возвращает упорядоченный каталог с путями относительно корня плагина. По умолчанию
+            он включает вложенные папки; recursive: false показывает только непосредственных детей.
+            remove удаляет папку вместе с содержимым, возвращает false для отсутствующего пути.
+            clear возвращает количество удалённых файлов и папок.
+
+            Лимиты: 32 МБ на файл, 64 МБ на все данные, 256 файлов и папок вместе. usage возвращает
+            count, bytes, maximumBytes, maximumFileBytes, maximumCount, maximumChunkBytes.
+            Размер папки в info и list равен нулю; общий размер считает содержимое файлов.
+            Замена файла меньшим освобождает квоту. Копирование и параллельная запись учитывают квоту
+            до изменения данных.
+
+            ZIP
+
+            await aorus.files.archive(['Проекты', 'bytes.bin'], 'project.zip');
+            const entries = await aorus.files.archiveList('project.zip');
+            const extracted = await aorus.files.extract('project.zip', 'распаковано');
+
+            archive принимает путь или массив путей, сохраняет их относительно корня плагина,
+            включая пустые папки. ZIP создаётся с Deflate-сжатием и открывается стандартными архиваторами. Третий аргумент { compression: 'store' } сохраняет записи без сжатия; { compression: 'deflate' } задаёт сжатие явно. archiveList показывает { name, size, type } без распаковки.
+            extract принимает ZIP с сохранёнными или Deflate-записями и возвращает каталог
+            распакованной папки. Назначение должно отсутствовать, его родитель — существовать.
+            Распаковка сначала проверяет размеры, имена и контрольные суммы, затем переносит готовую
+            папку на место. Ошибка не оставляет частично распакованный каталог. Квоты действуют и
+            на архив, и на распакованные данные. Шифрование, ZIP64, многотомные архивы и имена вне
+            UTF-8 не поддерживаются. Дублирующиеся пути и символические ссылки отклоняются.
+
+            Импорт, отправка и меню «Поделиться»
+
+            const picked = await aorus.files.pick();
+            // { name, sizeBytes, encoding: 'binary' } или null при отмене
+            await aorus.files.share('project.zip');
+            await aorus.files.share(['project.zip', 'notes.txt']);
+            await aorus.files.send('me', 'project.zip', { caption: 'Проект' });
+            await aorus.files.send(peerId, ['bytes.bin', 'notes.txt'], {
+                caption: 'Файлы', silent: true, replyTo: 42, threadId: '123'
+            });
+
+            pick открывает системный выбор файла и копирует исходные байты. При совпадении имени
+            создаётся новое имя; существующий файл не перезаписывается. Ошибки чтения и квоты
+            отклоняют запрос, отмена возвращает null. pick и share требуют dialogs.
+            share принимает до десяти файлов и возвращает { presented: true }, когда открыто
+            системное меню. Меню получает отдельные копии: изменение или удаление исходника плагином
+            не меняет содержимое отправляемого файла.
+
+            send требует sendMessages, отправляет до десяти файлов как документы с текущего
+            аккаунта. 'me' означает «Избранное», идентификатор чата — десятичная строка. Опции:
+            caption до 1024 символов для первого документа, silent, replyTo — id сообщения,
+            threadId — десятичная строка, scheduleAt — будущая Unix-метка времени. Ответ
+            { queued, messageIds: [{ id, namespace, peerId }] } означает постановку в очередь
+            Telegram, а не завершение загрузки на сервер.
+
+            Файлы плагинов
+
+            await aorus.files.createPlugin('Example.aorusplugin',
+                "aorus.on('start', function () { console.log('Hello'); });",
+                { name: 'Example', summary: 'Пример', version: '1.0.0', author: 'Автор' });
+            await aorus.files.share('Example.aorusplugin');
+            await aorus.files.send('me', 'Example.aorusplugin');
+            const installed = await aorus.files.installPlugin('Example.aorusplugin');
+            await aorus.files.exportPlugin('Current.aorusplugin');
+            await aorus.files.exportPlugin('Copy.aorusplugin', installed.pluginId);
+
+            createPlugin создаёт совместимый .aorusplugin с исходником и метаданными, без установки.
+            Исходник — до 512 КБ. Поля метаданных: name, summary, version, author, icon,
+            accent; значения проверяются так же, как в редакторе. Файл можно отправить, добавить
+            в архив или передать через системное меню.
+
+            installPlugin и exportPlugin требуют appCustomization. Импорт принимает
+            .aorusplugin или JavaScript до 2 МБ и создаёт новую выключенную установку. Ответ:
+            { pluginId, name, enabled: false }. Включение выполняется через обычный экран плагина.
+            exportPlugin сохраняет текущий плагин либо плагин по pluginId. Экспорт содержит код
+            и метаданные; разрешения, локальные настройки и хранилище установки в него не входят.
+
+            В справочнике клиента кнопка в правом верхнем углу отправляет Plugins_Documentation.md
+            через системное меню. В консоли кнопка слева от очистки отправляет Plugins_Console.log:
+            название и id плагина, время UTC, уровень и полный текст каждой записи текущего журнала.
 
             Цвета
             aorus.color.parse('#5B4DFF'), aorus.color.hex(r, g, b), aorus.color.hsl(h, s, l), aorus.color.toHsl(color)
@@ -2876,7 +3014,7 @@ private enum AorusPluginDocumentation {
             """
         }
         return """
-    AorusGram Plugin API v1.1
+    AorusGram Plugin API v1.2
 
     Runtime
     Each plugin runs in a separate JavaScriptCore context. There is no file system, native module loader, eval bridge, Keychain, license, AorusAI internals or tunnel access. Sensitive capabilities require approval and approvals are revoked whenever source code changes.
@@ -2978,6 +3116,70 @@ private enum AorusPluginDocumentation {
     await aorus.ui.prompt(title, text)
     aorus.ui.haptic('light')
     Haptics: light, medium, heavy, soft, rigid, selection, success, warning, error.
+
+    Files
+    The files namespace stores data in the plugin directory. Files survive stopping and restarting the plugin; deleting the plugin removes the directory. Reading, writing and making archives need no separate permission. Paths are relative, with Unicode, spaces and hidden files supported. A path holds up to 512 characters and 16 components; each component holds up to 255 UTF-8 bytes. Absolute paths, dot and dot-dot components, empty components, control characters and backslashes are rejected. Symbolic links are not followed.
+
+    Text and JSON
+    await aorus.files.writeText('notes.txt', 'First line')
+    await aorus.files.append('notes.txt', ' Second line')
+    const text = await aorus.files.readText('notes.txt')
+    await aorus.files.writeJSON('state.json', { count: 3 })
+    const state = await aorus.files.readJSON('state.json', {})
+    readText returns null for a missing file and rejects invalid UTF-8. readJSON uses its fallback for missing files and invalid JSON. append is one native operation, so simultaneous calls keep each other's data. Writes replace a file atomically. Create parent directories with mkdir.
+
+    Binary data and chunks
+    await aorus.files.writeBase64('bytes.bin', 'AAH/')
+    const bytes = await aorus.files.readBase64('bytes.bin')
+    await aorus.files.appendBase64('bytes.bin', 'Ag==')
+    await aorus.files.writeText('download.bin', '')
+    await aorus.files.writeChunk('download.bin', 'AAH/', 0)
+    await aorus.files.writeChunk('download.bin', 'Ag==', 3)
+    const chunk = await aorus.files.readChunk('download.bin', 0, 1048576)
+    The result is { base64, offset, size, eof }. Base64 describes the file's bytes; the base64 text itself is not saved. A binary request contains up to 1 MB of decoded bytes. readText, readJSON and readBase64 read files up to 1 MB. Use readChunk(name, offset, length) for larger files. Offset and length are byte counts; length defaults to 1 MB. The last chunk can be shorter; reading beyond the end returns an empty chunk with eof: true. A missing file returns null. writeChunk(name, base64, offset) appends only when offset matches the current file size. A stale offset rejects without changing the file.
+
+    Directories and file operations
+    await aorus.files.mkdir('Projects/example')
+    await aorus.files.writeText('Projects/example/readme.txt', 'Example')
+    await aorus.files.copy('Projects/example', 'copy')
+    await aorus.files.move('copy', 'ready')
+    await aorus.files.exists('ready/readme.txt')
+    await aorus.files.info('ready/readme.txt')
+    await aorus.files.list()
+    await aorus.files.list('Projects', { recursive: false })
+    await aorus.files.remove('ready')
+    await aorus.files.usage()
+    await aorus.files.clear()
+    mkdir creates missing parent directories. copy and move support files and directory trees; the destination must be absent and its parent must exist. info returns { name, size, modified, type: 'file' | 'directory' }, or null. modified is a Unix timestamp in seconds. list returns a sorted catalogue with paths relative to the plugin root; recursive defaults to true. remove deletes a directory with its contents and returns false if the path is absent. clear returns the number of removed files and directories.
+    The limits are 32 MB per file, 64 MB in total and 256 files and directories together. usage returns count, bytes, maximumBytes, maximumFileBytes, maximumCount and maximumChunkBytes. Directory sizes are zero; total usage counts file contents. Replacing a file with a smaller one frees quota. Copying and simultaneous writes check the resulting usage before changing data.
+
+    ZIP archives
+    await aorus.files.archive(['Projects', 'bytes.bin'], 'project.zip')
+    const entries = await aorus.files.archiveList('project.zip')
+    const extracted = await aorus.files.extract('project.zip', 'unpacked')
+    archive accepts a path or an array of paths and preserves paths relative to the plugin root, including empty directories. It creates a standard ZIP with Deflate compression. Pass { compression: 'store' } as the third argument to keep entries uncompressed, or { compression: 'deflate' } to select compression explicitly. archiveList returns { name, size, type } entries without extracting them. extract accepts stored and Deflate entries and returns the extracted catalogue. The destination must be absent and its parent must exist. Extraction checks names, sizes and checksums, then moves a completed directory into place. A failure leaves no partially extracted directory. Both the archive and the extracted files count towards quota. Encryption, ZIP64, split archives and non-UTF-8 names are unsupported. Duplicate paths and symbolic links are rejected.
+
+    Picking, sharing and sending
+    const picked = await aorus.files.pick()
+    await aorus.files.share('project.zip')
+    await aorus.files.share(['project.zip', 'notes.txt'])
+    await aorus.files.send('me', 'project.zip', { caption: 'Project' })
+    await aorus.files.send(peerId, ['bytes.bin', 'notes.txt'], { caption: 'Files', silent: true, replyTo: 42, threadId: '123' })
+    pick opens the system picker and copies the original bytes. It returns { name, sizeBytes, encoding: 'binary' }, or null on cancellation. A name collision gets a new name; existing files are preserved. Read failures and quota errors reject the request. pick and share need dialogs. share accepts up to ten files and returns { presented: true } when the system sheet opens. The sheet receives separate copies, so changing or deleting a plugin file does not alter the shared content.
+    send needs sendMessages and queues up to ten files as documents from the current account. 'me' is Saved Messages; a chat identifier is a decimal string. Options: caption up to 1024 characters on the first document, silent, replyTo as a message id, threadId as a decimal string, scheduleAt as a future Unix timestamp. The response { queued, messageIds: [{ id, namespace, peerId }] } reports Telegram's outgoing queue, not completion of the server upload.
+
+    Plugin files
+    await aorus.files.createPlugin('Example.aorusplugin', "aorus.on('start', function () { console.log('Hello'); });", { name: 'Example', summary: 'Example plugin', version: '1.0.0', author: 'Author' })
+    await aorus.files.share('Example.aorusplugin')
+    await aorus.files.send('me', 'Example.aorusplugin')
+    const installed = await aorus.files.installPlugin('Example.aorusplugin')
+    await aorus.files.exportPlugin('Current.aorusplugin')
+    await aorus.files.exportPlugin('Copy.aorusplugin', installed.pluginId)
+    createPlugin writes a compatible .aorusplugin file containing source and metadata without installing it. Source is limited to 512 KB. Metadata fields are name, summary, version, author, icon and accent, checked as they are in the editor. The file can be sent, shared or archived.
+    installPlugin and exportPlugin need appCustomization. Import accepts a .aorusplugin bundle or JavaScript up to 2 MB and creates a new disabled installation. The response is { pluginId, name, enabled: false }. Enable it in the plugin screen. exportPlugin saves the current plugin or the plugin identified by pluginId. Export includes code and presentation metadata; permissions, local settings and installation storage are excluded.
+
+    Reference and console export
+    The reference's upper-right button shares Plugins_Documentation.md using the system sheet. In the console, the button to the left of Clear shares Plugins_Console.log: the plugin name and id, UTC timestamps, levels and full text of every entry in the current log.
 
     Screen effects
     An animation over the whole app and its alerts, at the same level as the performance statistics (CPU, RAM). Touches pass straight through it. An effect appears as soon as start is called and runs until it is turned off: leaving the app does not end it, and an enabled plugin starts every time the app opens, so an effect started in the start handler comes back by itself. Calling start again with the same id and the same options changes nothing on the screen and counts the duration from then; with other options the new effect takes the old one's place within a second, filling the screen at once, so the screen never empties. stop ends the birth of new particles and the rest leave on their own. When a plugin restarts, the old run's stop only affects what that run drew. An effect only goes away when it is stopped, its plugin is switched off or its duration runs out; a hot phone thins it but never takes it away.
@@ -3998,7 +4200,7 @@ private final class AorusPluginConsoleController: ViewController {
     private let textView = UITextView()
     private let emptyLabel = UILabel()
     private var timer: Timer?
-    private var shownCount = -1
+    private var shownEntries: [AorusPluginLogEntry]?
     private var atBottom = true
 
     init(context: AccountContext, record: AorusPluginRecord) {
@@ -4006,12 +4208,10 @@ private final class AorusPluginConsoleController: ViewController {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = AorusPluginUIString.console.text
-        navigationItem.rightBarButtonItem = UIBarButtonItem(
-            image: UIImage(systemName: "trash"),
-            style: .plain,
-            target: self,
-            action: #selector(clearLog)
-        )
+        let clear = UIBarButtonItem(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), style: .plain, target: self, action: #selector(clearLog))
+        let export = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share"), style: .plain, target: self, action: #selector(exportLog))
+        export.accessibilityLabel = AorusPluginUIString.export.text
+        navigationItem.rightBarButtonItems = [clear, export]
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -4055,8 +4255,8 @@ private final class AorusPluginConsoleController: ViewController {
 
     private func refresh() {
         let entries = AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id)?.recentLog ?? []
-        guard entries.count != shownCount else { return }
-        shownCount = entries.count
+        guard entries != shownEntries else { return }
+        shownEntries = entries
         emptyLabel.isHidden = !entries.isEmpty
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
@@ -4094,9 +4294,14 @@ private final class AorusPluginConsoleController: ViewController {
         }
     }
 
+    @objc private func exportLog() {
+        let entries = AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id)?.recentLog ?? []
+        aorusPluginExportText(AorusPluginTextExport.console(name: record.manifest.name, id: record.manifest.id, entries: entries), name: "Plugins_Console.log", from: self, anchor: navigationItem.rightBarButtonItems?.last)
+    }
+
     @objc private func clearLog() {
         AorusPluginRuntimeManager.shared.sandbox(id: record.manifest.id)?.clearLog()
-        shownCount = -1
+        shownEntries = nil
         refresh()
     }
 }
@@ -4263,7 +4468,7 @@ func permissionSummary(_ permission: AorusPluginPermission) -> String {
     case .artificialIntelligence:
         return aorusL("Разрешает отправлять запросы AorusAI через защищенный клиентский шлюз.", "Allows AorusAI requests through the protected client gateway.")
     case .appCustomization:
-        return aorusL("Разрешает изменять функции и оформление AorusGram из проверенного списка и добавлять вкладки в нижнюю панель.", "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar.")
+        return aorusL("Разрешает изменять функции и оформление AorusGram из проверенного списка и добавлять вкладки в нижнюю панель. Также позволяет устанавливать и экспортировать плагины.", "Allows changing AorusGram features and appearance from a verified catalog, and adding tabs to the bottom bar. Also allows installing and exporting plugins.")
     case .connectionControl:
         return aorusL("Разрешает читать состояние маршрута, менять пользовательские переключатели и запускать перепроверку без доступа к ключам серверов.", "Allows reading route status, changing user switches and refreshing the route without access to server credentials.")
     case .accountSwitching:
@@ -4324,4 +4529,33 @@ private func pluginColor(_ value: String) -> UIColor {
         blue: CGFloat(rgb & 0xff) / 255.0,
         alpha: 1.0
     )
+}
+
+private func aorusPluginExportText(_ text: String, name: String, from presenter: UIViewController, anchor: UIBarButtonItem?) {
+    guard presenter.presentedViewController == nil else { return }
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-plugin-export").appendingPathComponent(UUID().uuidString)
+    do {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent(name)
+        try Data(text.utf8).write(to: file, options: .atomic)
+        let controller = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in try? FileManager.default.removeItem(at: directory) }
+        if let popover = controller.popoverPresentationController {
+            if let button = anchor?.customView, button.window != nil {
+                popover.sourceView = button
+                popover.sourceRect = button.bounds
+            } else {
+                // Telegram renders its navigation items in Display rather than UINavigationBar.
+                popover.sourceView = presenter.view
+                let offset: CGFloat = anchor === presenter.navigationItem.rightBarButtonItems?.first ? 24.0 : 68.0
+                popover.sourceRect = CGRect(x: max(0, presenter.view.bounds.width - offset), y: min(presenter.view.bounds.height - 1, presenter.view.safeAreaInsets.top + 22), width: 1, height: 1)
+            }
+        }
+        presenter.present(controller, animated: true)
+    } catch {
+        try? FileManager.default.removeItem(at: directory)
+        let alert = UIAlertController(title: AorusPluginUIString.export.text, message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        presenter.present(alert, animated: true)
+    }
 }

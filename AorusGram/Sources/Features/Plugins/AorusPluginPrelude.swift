@@ -14,7 +14,7 @@ import Foundation
 // on its own has no file, network or process access, so the set of host blocks IS the set of
 // things a plugin can do.
 public enum AorusPluginPrelude {
-    public static let apiVersion = "1.1"
+    public static let apiVersion = "1.2"
 
     /// Events a plugin may subscribe to. Anything else is rejected at `aorus.on`.
     public static let events: [String] = [
@@ -2186,6 +2186,21 @@ public enum AorusPluginPrelude {
         // The plugin's own files. `storage` is one bucket read and written whole, so a plugin
         // keeping anything sizeable there rewrites all of it on every change; this is the
         // other shape. The directory belongs to the plugin and goes when the plugin does.
+        function fileInteger(value, fallback, name, maximum) {
+            if (value === undefined) { return fallback; }
+            if (!Number.isSafeInteger(value) || value < 0 || value > (maximum || 2147483647)) { throw typeError(name + ' must be a non-negative integer within the limit'); }
+            return value;
+        }
+        function fileObject(value) {
+            if (value === undefined) { return {}; }
+            if (!value || typeof value !== 'object' || Array.isArray(value)) { throw typeError('Expected an options object'); }
+            return value;
+        }
+        function fileNames(value, maximum) {
+            var names = typeof value === 'string' ? [value] : value;
+            if (!Array.isArray(names) || names.length < 1 || names.length > (maximum || 256)) { throw typeError('Expected 1 to 256 paths'); }
+            return names.map(function (name) { return requireString(name, 'name'); });
+        }
         var filesApi = freeze({
             writeText: function (name, text) {
                 return request('files.write', { name: requireString(name, 'name'), text: requireString(text, 'text') });
@@ -2207,17 +2222,48 @@ public enum AorusPluginPrelude {
                 });
             },
             append: function (name, text) {
-                requireString(name, 'name');
-                requireString(text, 'text');
-                return request('files.read', { name: name }).then(function (current) {
-                    return request('files.write', { name: name, text: (typeof current === 'string' ? current : '') + text });
-                });
+                return request('files.append', { name: requireString(name, 'name'), text: requireString(text, 'text') });
+            },
+            writeBase64: function (name, base64) { return request('files.writeBase64', { name: requireString(name, 'name'), base64: requireString(base64, 'base64') }); },
+            readBase64: function (name) { return request('files.readBase64', { name: requireString(name, 'name') }); },
+            appendBase64: function (name, base64) { return request('files.appendBase64', { name: requireString(name, 'name'), base64: requireString(base64, 'base64') }); },
+            readChunk: function (name, offset, length) {
+                return request('files.readChunk', { name: requireString(name, 'name'), offset: fileInteger(offset, 0, 'offset'), length: fileInteger(length, 1048576, 'length', 1048576) });
+            },
+            writeChunk: function (name, base64, offset) {
+                return request('files.writeChunk', { name: requireString(name, 'name'), base64: requireString(base64, 'base64'), offset: fileInteger(offset, 0, 'offset') });
+            },
+            mkdir: function (name) { return request('files.mkdir', { name: requireString(name, 'name') }); },
+            copy: function (name, destination) { return request('files.copy', { name: requireString(name, 'name'), destination: requireString(destination, 'destination') }); },
+            move: function (name, destination) { return request('files.move', { name: requireString(name, 'name'), destination: requireString(destination, 'destination') }); },
+            archive: function (names, name, options) {
+                var opts = fileObject(options);
+                var compression = opts.compression === undefined ? 'deflate' : opts.compression;
+                if (compression !== 'store' && compression !== 'deflate') { throw typeError('compression must be store or deflate'); }
+                return request('files.archive', { names: fileNames(names), name: requireString(name, 'name'), compression: compression });
+            },
+            archiveList: function (name) { return request('files.archiveList', { name: requireString(name, 'name') }); },
+            extract: function (name, destination) { return request('files.extract', { name: requireString(name, 'name'), destination: requireString(destination, 'destination') }); },
+            createPlugin: function (name, source, metadata) {
+                var info = fileObject(metadata);
+                ['name', 'summary', 'version', 'author', 'icon', 'accent'].forEach(function (key) { if (info[key] !== undefined) { requireString(info[key], key); } });
+                return request('files.createPlugin', { name: requireString(name, 'name'), source: requireString(source, 'source'), metadata: info });
+            },
+            installPlugin: function (name) { return request('files.installPlugin', { name: requireString(name, 'name') }); },
+            exportPlugin: function (name, pluginId) { return request('files.exportPlugin', { name: requireString(name, 'name'), pluginId: pluginId === undefined ? null : requireString(pluginId, 'pluginId') }); },
+            send: function (peerId, names, options) {
+                var peer = toPeerId(peerId);
+                return request('files.send', { peerId: peer === 'me' ? null : peer, toSelf: peer === 'me', names: fileNames(names, 10), options: fileObject(options) });
             },
             exists: function (name) {
                 return request('files.info', { name: requireString(name, 'name') }).then(function (info) { return info !== null; });
             },
             info: function (name) { return request('files.info', { name: requireString(name, 'name') }); },
-            list: function () { return request('files.list', {}); },
+            list: function (path, options) {
+                var opts = fileObject(options);
+                if (opts.recursive !== undefined && typeof opts.recursive !== 'boolean') { throw typeError('recursive must be boolean'); }
+                return request('files.list', { path: path === undefined ? '' : requireString(path, 'path'), recursive: opts.recursive === undefined ? true : opts.recursive });
+            },
             remove: function (name) { return request('files.remove', { name: requireString(name, 'name') }); },
             clear: function () { return request('files.clear', {}); },
             usage: function () { return request('files.usage', {}); },
@@ -2225,7 +2271,7 @@ public enum AorusPluginPrelude {
             // directory. A plugin never reaches into anybody's documents; it is handed one
             // file, by name, the same as one it wrote itself.
             pick: function () { return request('files.pick', {}); },
-            share: function (name) { return request('files.share', { name: requireString(name, 'name') }); }
+            share: function (names) { return request('files.share', { names: fileNames(names, 10) }); }
         });
 
         // Words the app draws, replaced. The whole set is republished on every change, so

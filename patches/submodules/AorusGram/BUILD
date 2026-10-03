@@ -17,6 +17,7 @@ objc_library(
     name = "LibXraySystemLibraries",
     sdk_dylibs = [
         "libresolv",
+        "libz",
     ],
 )
 

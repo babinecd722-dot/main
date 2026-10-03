@@ -5,7 +5,7 @@
 замороженный объект `aorus`; ничего другого из приложения в контекст не попадает.
 
 Документ описывает то, что есть в сборке, метод за методом. Если чего-то нет здесь —
-значит этого нет и в API. Версия API — `aorus.version`, сейчас `1.0`.
+значит этого нет и в API. Версия API — `aorus.version`, сейчас `1.2`.
 
 ## Содержание
 
@@ -139,7 +139,7 @@ aorus.on('stop', () => console.log('плагин остановлен'));
 |---|---|---|
 | `network` | HTTP, сокеты, файлы и сетевой профиль | `aorus.http`, `aorus.ws.`, `aorus.network.` |
 | `mtproto` | Методы Telegram API от текущего аккаунта, описание и кодирование TL | `aorus.mtproto.` |
-| `sendMessages` | Отправка сообщений, в том числе отложенных | `aorus.messages.send`, `aorus.messages.schedule`, `aorus.messages.reply`, `aorus.chat.sendText`, `aorus.chat.replyText` |
+| `sendMessages` | Отправка сообщений и документов, в том числе отложенных | `aorus.files.send`, `aorus.messages.send`, `aorus.messages.schedule`, `aorus.messages.reply`, `aorus.chat.sendText`, `aorus.chat.replyText` |
 | `manageMessages` | Правка, удаление, пересылка, реакции, модерация | `aorus.messages.edit/delete/deleteLocal/forward/react`, `aorus.moderation.` |
 | `messageHistory` | Чтение истории чата и вложений | `aorus.chats.history`, `aorus.media.` |
 | `chatMetadata` | Название и идентификатор чата, что видно на экране, сведения о людях | `aorus.chats.resolve/get`, `aorus.chat.current/currentPeerId/messages`, `aorus.messages.visible`, `aorus.users.get/resolve/search`, события `chatOpened` и `chatClosed` |
@@ -156,7 +156,7 @@ aorus.on('stop', () => console.log('плагин остановлен'));
 | `contextMenu` | Действие в меню сообщения | `aorus.integrations.contextMenu.register`, `aorus.ui.addMessageContextAction` |
 | `inAppBrowser` | Открытие сайтов страницей внутри приложения | `aorus.browser.open`, `aorus.ui.openURL`, `aorus.app.openURL`, `aorus.navigation.openUrl`, `aorus.tabs.register` с `url`, строки с ссылками |
 | `artificialIntelligence` | Запросы к AorusAI | `aorus.ai.` |
-| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки, акцент, оформление и иконки всего приложения | `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.appearance.set/reset`, `aorus.icons.set/style/reset`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings`, событие `appSettingsChanged` |
+| `appCustomization` | Флаги интерфейса, вкладки и свои вкладки в нижней панели, аватары, стена, строки, акцент, оформление и иконки всего приложения, установка и экспорт плагинов | `aorus.files.installPlugin/exportPlugin`, `aorus.features.`, `aorus.interface.`, `aorus.tabs.`, `aorus.avatars.`, `aorus.wall.`, `aorus.strings.override/restore`, `aorus.appearance.set/reset`, `aorus.icons.set/style/reset`, `aorus.theme.setAccentColor/resetAccentColor`, `aorus.navigation.openSettings`, `aorus.app.openSettings`, событие `appSettingsChanged` |
 | `connectionControl` | Состояние соединения AorusGram | `aorus.proxy.`, событие `connectionChanged` |
 | `telegramProxy` | Список и переключение прокси Telegram | `aorus.telegramProxy.` |
 | `pluginMessaging` | Сообщения другим плагинам и от них | `aorus.plugins.emit/on`, `aorus.on('pluginMessage'…)` |
@@ -1166,41 +1166,152 @@ aorus.cache.clear();                 // сколько было записей
 
 ## 21. Файлы
 
-`storage` — одна корзина, которую читают и пишут целиком: плагин, который держит там
-что-то объёмное, переписывает её всю на каждое изменение. Файлы — другая форма.
+`aorus.files` хранит файлы внутри папки плагина. Файлы остаются после остановки и
+перезапуска; удаление плагина удаляет его папку. Операции чтения, записи и упаковки
+работают без отдельного разрешения. Имена передаются как относительные пути: Unicode,
+пробелы и скрытые файлы допустимы. Путь содержит до 512 символов и 16 компонентов,
+компонент — до 255 байт UTF-8. Абсолютные пути, `.` и `..`, пустые компоненты,
+управляющие символы и обратная косая черта отклоняются. Символические ссылки не обходятся.
+
+### Текст и JSON
 
 ```js
 await aorus.files.writeText('notes.txt', 'первая строка');
-await aorus.files.append('notes.txt', '\nвторая');
-const text = await aorus.files.readText('notes.txt');   // null, если файла нет
-
+await aorus.files.append('notes.txt', ' вторая строка');
+const text = await aorus.files.readText('notes.txt');
 await aorus.files.writeJSON('state.json', { count: 3 });
-const state = await aorus.files.readJSON('state.json', {});  // второй аргумент — на случай битого файла
-
-await aorus.files.exists('state.json');
-await aorus.files.info('state.json');   // { name, size, modified }
-await aorus.files.list();               // [{ name, size, modified }, …]
-await aorus.files.remove('state.json'); // true, если файл был
-await aorus.files.clear();              // сколько удалено
-await aorus.files.usage();              // { count, bytes, maximumBytes, maximumFileBytes, maximumCount }
-
-const picked = await aorus.files.pick();   // человек выбирает файл, приложение копирует его сюда
-await aorus.files.share('report.txt');     // системный лист «Поделиться»
+const state = await aorus.files.readJSON('state.json', {});
 ```
 
-Директория своя у каждого плагина, внутри его собственной папки: удаление плагина удаляет
-и файлы, осиротеть им негде. Для чтения и записи разрешения нет — это его собственное
-место, как и `storage`. `pick` и `share` показывают системный интерфейс и требуют `dialogs`:
-плагин никогда не заходит в чужие документы, ему передают один файл, по имени, так же как
-тот, что он записал сам.
+`readText` возвращает `null`, если файла нет, и отклоняет чтение бинарного файла как
+UTF-8. `readJSON` возвращает второй аргумент при отсутствии файла или ошибке JSON.
+`append` дописывает текст одной нативной операцией: параллельные вызовы не теряют данные.
+Запись заменяет файл атомарно. Родительские папки создаются через `mkdir`.
 
-Лимиты: 32 МБ на файл, 64 МБ на всё, 256 файлов. Перезапись файла чем-то меньшим проходит
-всегда, даже когда квота занята: считается то, что будет лежать после записи.
+### Бинарные данные и порции
 
-Имя проверяется, а не чинится: до 64 символов, только буквы, цифры, точка, дефис и
-подчёркивание, не начинается с точки и не содержит `..`. Имя, которое пришлось бы
-исправлять, — это ошибка, и она возвращается вызывающему. Так путь наружу директории
-оказывается непредставим, а не отлавливается чистящей функцией.
+```js
+await aorus.files.writeBase64('bytes.bin', 'AAH/');
+const bytes = await aorus.files.readBase64('bytes.bin');
+await aorus.files.appendBase64('bytes.bin', 'Ag==');
+await aorus.files.writeText('download.bin', '');
+await aorus.files.writeChunk('download.bin', 'AAH/', 0);
+await aorus.files.writeChunk('download.bin', 'Ag==', 3);
+const chunk = await aorus.files.readChunk('download.bin', 0, 1048576);
+// { base64, offset, size, eof }
+```
+
+Base64 описывает байты файла, а не текст, который сохраняется в него. Один бинарный
+запрос содержит до 1 МБ декодированных данных. `readText`, `readJSON` и `readBase64`
+читают до 1 МБ; для больших файлов используется `readChunk(name, offset, length)`.
+Смещение и длина задаются в байтах, длина по умолчанию — 1 МБ. На конце файла порция
+короче; после конца возвращается пустая порция с `eof: true`. Отсутствующий файл — `null`.
+`writeChunk(name, base64, offset)` дописывает порцию, только если смещение совпадает
+с текущим размером файла. Неправильное смещение отклоняется без изменения файла.
+
+### Папки и файловые операции
+
+```js
+await aorus.files.mkdir('Проекты/пример');
+await aorus.files.writeText('Проекты/пример/readme.txt', 'Пример');
+await aorus.files.copy('Проекты/пример', 'копия');
+await aorus.files.move('копия', 'готово');
+await aorus.files.exists('готово/readme.txt');
+await aorus.files.info('готово/readme.txt');
+// { name, size, modified, type: 'file' | 'directory' }
+await aorus.files.list();
+await aorus.files.list('Проекты', { recursive: false });
+await aorus.files.remove('готово');
+await aorus.files.usage();
+await aorus.files.clear();
+```
+
+`mkdir` создаёт недостающие родительские папки. `copy` и `move` работают с файлами и
+деревьями папок; назначение должно отсутствовать, его родительская папка — существовать.
+`list` возвращает упорядоченный каталог с путями относительно корня плагина. По умолчанию
+он включает вложенные папки; `recursive: false` показывает только непосредственных детей.
+`remove` удаляет папку вместе с содержимым, возвращает `false` для отсутствующего пути.
+`clear` возвращает количество удалённых файлов и папок.
+
+Лимиты: 32 МБ на файл, 64 МБ на все данные, 256 файлов и папок вместе. `usage` возвращает
+`count`, `bytes`, `maximumBytes`, `maximumFileBytes`, `maximumCount`, `maximumChunkBytes`.
+Размер папки в `info` и `list` равен нулю; общий размер считает содержимое файлов.
+Замена файла меньшим освобождает квоту. Копирование и параллельная запись учитывают квоту
+до изменения данных.
+
+### ZIP
+
+```js
+await aorus.files.archive(['Проекты', 'bytes.bin'], 'project.zip');
+const entries = await aorus.files.archiveList('project.zip');
+const extracted = await aorus.files.extract('project.zip', 'распаковано');
+```
+
+`archive` принимает путь или массив путей, сохраняет их относительно корня плагина,
+включая пустые папки. ZIP создаётся с Deflate-сжатием и открывается стандартными архиваторами.
+Третий аргумент `{ compression: 'store' }` сохраняет записи без сжатия;
+`{ compression: 'deflate' }` задаёт сжатие явно. `archiveList` показывает `{ name, size, type }` без распаковки.
+`extract` принимает ZIP с сохранёнными или Deflate-записями и возвращает каталог
+распакованной папки. Назначение должно отсутствовать, его родитель — существовать.
+Распаковка сначала проверяет размеры, имена и контрольные суммы, затем переносит готовую
+папку на место. Ошибка не оставляет частично распакованный каталог. Квоты действуют и
+на архив, и на распакованные данные. Шифрование, ZIP64, многотомные архивы и имена вне
+UTF-8 не поддерживаются. Дублирующиеся пути и символические ссылки отклоняются.
+
+### Импорт, отправка и меню «Поделиться»
+
+```js
+const picked = await aorus.files.pick();
+// { name, sizeBytes, encoding: 'binary' } или null при отмене
+await aorus.files.share('project.zip');
+await aorus.files.share(['project.zip', 'notes.txt']);
+await aorus.files.send('me', 'project.zip', { caption: 'Проект' });
+await aorus.files.send(peerId, ['bytes.bin', 'notes.txt'], {
+    caption: 'Файлы', silent: true, replyTo: 42, threadId: '123'
+});
+```
+
+`pick` открывает системный выбор файла и копирует исходные байты. При совпадении имени
+создаётся новое имя; существующий файл не перезаписывается. Ошибки чтения и квоты
+отклоняют запрос, отмена возвращает `null`. `pick` и `share` требуют `dialogs`.
+`share` принимает до десяти файлов и возвращает `{ presented: true }`, когда открыто
+системное меню. Меню получает отдельные копии: изменение или удаление исходника плагином
+не меняет содержимое отправляемого файла.
+
+`send` требует `sendMessages`, отправляет до десяти файлов как документы с текущего
+аккаунта. `'me'` означает «Избранное», идентификатор чата — десятичная строка. Опции:
+`caption` до 1024 символов для первого документа, `silent`, `replyTo` — id сообщения,
+`threadId` — десятичная строка, `scheduleAt` — будущая Unix-метка времени. Ответ
+`{ queued, messageIds: [{ id, namespace, peerId }] }` означает постановку в очередь
+Telegram, а не завершение загрузки на сервер.
+
+### Файлы плагинов
+
+```js
+await aorus.files.createPlugin('Example.aorusplugin',
+    "aorus.on('start', function () { console.log('Hello'); });",
+    { name: 'Example', summary: 'Пример', version: '1.0.0', author: 'Автор' });
+await aorus.files.share('Example.aorusplugin');
+await aorus.files.send('me', 'Example.aorusplugin');
+const installed = await aorus.files.installPlugin('Example.aorusplugin');
+await aorus.files.exportPlugin('Current.aorusplugin');
+await aorus.files.exportPlugin('Copy.aorusplugin', installed.pluginId);
+```
+
+`createPlugin` создаёт совместимый `.aorusplugin` с исходником и метаданными, без установки.
+Исходник — до 512 КБ. Поля метаданных: `name`, `summary`, `version`, `author`, `icon`,
+`accent`; значения проверяются так же, как в редакторе. Файл можно отправить, добавить
+в архив или передать через системное меню.
+
+`installPlugin` и `exportPlugin` требуют `appCustomization`. Импорт принимает
+`.aorusplugin` или JavaScript до 2 МБ и создаёт новую выключенную установку. Ответ:
+`{ pluginId, name, enabled: false }`. Включение выполняется через обычный экран плагина.
+`exportPlugin` сохраняет текущий плагин либо плагин по `pluginId`. Экспорт содержит код
+и метаданные; разрешения, локальные настройки и хранилище установки в него не входят.
+
+В справочнике клиента кнопка в правом верхнем углу отправляет `Plugins_Documentation.md`
+через системное меню. В консоли кнопка слева от очистки отправляет `Plugins_Console.log`:
+название и id плагина, время UTC, уровень и полный текст каждой записи текущего журнала.
 
 ## 22. Расписания
 
@@ -2148,7 +2259,9 @@ const names = aorus.icons.assets('Chat List/');                  // имена �
 Стиль меняет сразу все иконки одним способом, и заменённые тоже. `only` ограничивает его
 группами слотов (`tab`, `input`, `settings` и остальные из таблиц), отдельными слотами,
 иконками по имени или папками каталога (`'Chat List/'`); без `only` стиль действует на все
-иконки до 64 точек — крупные иллюстрации он не трогает.
+иконки до 64 точек — крупные иллюстрации он не трогает. Стиль распространяется также
+на SF Symbols, созданные через системный загрузчик UIKit. Голосовой ввод текста имеет
+отдельный слот `input.dictation`.
 
 | `look` | `amount` | Что делает |
 |---|---|---|
@@ -2238,6 +2351,7 @@ Wall, и вкладки плагинов. Взять такую иконку и�
 | Слот | Что это | Иконки Telegram |
 |---|---|---|
 | `input.send` | Стрелка кнопки отправки | `Chat/Input/Text/SendIcon` |
+| `input.dictation` | Голосовой ввод текста | `AorusGram/Input/Dictation` |
 | `input.microphone` | Кнопка голосового сообщения (анимирована) | `Chat/Input/Text/IconMicrophone` |
 | `input.videoMessage` | Кнопка видеосообщения (анимирована) | `Chat/Input/Text/IconVideo` |
 | `input.attach` | Кнопка вложения | `Chat/Input/Text/IconAttachment` |

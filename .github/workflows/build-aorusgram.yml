@@ -55,7 +55,9 @@ jobs:
       # The other half of the same problem: a signature changes and one caller is missed.
       # Parsing cannot see it either, so the labels are compared directly.
       - name: Call argument label preflight
-        run: python3 aorusgram/scripts/swift_call_label_check.py aorusgram
+        run: |
+          python3 aorusgram/scripts/tests/test_swift_call_label_check.py
+          python3 aorusgram/scripts/swift_call_label_check.py aorusgram
 
       # `invalid redeclaration of 'x'` in a test file costs a CI round for a name chosen
       # hundreds of lines away from the one that already had it. Two seconds here.
@@ -76,6 +78,12 @@ jobs:
 
       - name: Plugin system JavaScript preflight
         run: python3 aorusgram/scripts/plugin_system_prelude_check.py aorusgram
+
+      - name: Plugin documentation export preflight
+        run: python3 aorusgram/scripts/plugin_exports_check.py aorusgram
+
+      - name: Plugin icons and UIKit preflight
+        run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram
 
       - name: Plugin network profile preflight
         run: |
@@ -245,6 +253,7 @@ jobs:
             -module-cache-path /tmp/aorus-ai-preflight/module-cache \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginModel.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginStore.swift \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginArchive.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginMarket.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginPrelude.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \
@@ -305,6 +314,7 @@ jobs:
             -target arm64-apple-ios13.0 \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginModel.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginStore.swift \
+            aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginArchive.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginMarket.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginPrelude.swift \
             aorusgram/AorusGram/Sources/Features/Plugins/AorusPluginSyntax.swift \

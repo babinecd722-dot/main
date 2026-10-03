@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import AppBundle
+import ObjectiveC
 
 /// AorusGram: the icons plugins draw in place of Telegram's own, drawn where Telegram draws
 /// them.
@@ -81,6 +82,9 @@ public enum AorusPluginIconValues {
     /// comes in several colours under one name, so the original is part of the key.
     private static var ownCache: [String: [(original: UIImage, result: UIImage)]] = [:]
     private static var installed = false
+    private static var styledImageKey: UInt8 = 0
+    private static var originalImageKey: UInt8 = 0
+    private static let renderingKey = "aorusgram.renderingPluginIcon"
 
     // MARK: - The table
 
@@ -93,6 +97,7 @@ public enum AorusPluginIconValues {
         lock.unlock()
         if first {
             setAppBundleImageResolver(AorusBundleIconResolver())
+            UIImage.aorusInstallSymbolResolver()
         }
     }
 
@@ -171,11 +176,20 @@ public enum AorusPluginIconValues {
         return result
     }
 
+    fileprivate static func systemSymbol(name: String, load: () -> UIImage?) -> UIImage? {
+        let previous = Thread.current.threadDictionary[renderingKey]
+        Thread.current.threadDictionary[renderingKey] = true
+        let image = load()
+        Thread.current.threadDictionary[renderingKey] = previous
+        guard previous == nil else { return image }
+        return own(image, named: "SFSymbols/" + name)
+    }
+
     /// `image` in `look` at `amount`, drawn as the style draws every icon it reaches: a picture
     /// of a look for a screen that offers it. Nil for a look it does not know or an image it
     /// cannot draw.
     public static func preview(_ image: UIImage, look: String, amount: CGFloat) -> UIImage? {
-        return render(original: image, spec: nil, look: look, amount: amount)
+        return render(original: (objc_getAssociatedObject(image, &originalImageKey) as? UIImage) ?? image, spec: nil, look: look, amount: amount)
     }
 
     private static func currentTable() -> Table {
@@ -307,7 +321,7 @@ public enum AorusPluginIconValues {
     }
 
     private static func render(original: UIImage, spec: [String: Any]?, look: String?, amount: CGFloat) -> UIImage? {
-        guard original.images == nil, original.cgImage != nil else {
+        guard original.images == nil else {
             return nil
         }
         let size = original.size
@@ -315,19 +329,38 @@ public enum AorusPluginIconValues {
         guard size.width >= 1.0, size.height >= 1.0, size.width <= 2048.0, size.height <= 2048.0 else {
             return nil
         }
+        let renderRevision = revision
+        let wasRendering = Thread.current.threadDictionary[renderingKey]
+        Thread.current.threadDictionary[renderingKey] = true
+        defer { Thread.current.threadDictionary[renderingKey] = wasRendering }
         var image = original
+        // Symbol images and CI-backed images need a bitmap before their alpha can be read.
+        if image.cgImage == nil {
+            UIGraphicsBeginImageContextWithOptions(size, false, scale)
+            original.draw(in: CGRect(origin: .zero, size: size))
+            let raster = UIGraphicsGetImageFromCurrentImageContext()
+            UIGraphicsEndImageContext()
+            guard let raster else { return nil }
+            image = raster
+        }
         var changed = false
+        var appliedLook = false
         if let spec {
-            guard let drawn = drawSpec(spec, original: original, size: size, scale: scale) else {
+            guard let drawn = drawSpec(spec, original: image, size: size, scale: scale) else {
                 return nil
             }
             image = drawn
             changed = true
         }
-        if let look, original.capInsets == .zero, size.width <= styleLimit, size.height <= styleLimit {
+        let unstyled = image
+        let previousStyle = objc_getAssociatedObject(original, &styledImageKey) as? NSDictionary
+        let alreadyStyled = (previousStyle?["revision"] as? NSNumber)?.intValue == renderRevision
+            && previousStyle?["look"] as? String == look && (previousStyle?["amount"] as? NSNumber)?.doubleValue == Double(amount)
+        if let look, (spec != nil || !alreadyStyled), original.capInsets == .zero, size.width <= styleLimit, size.height <= styleLimit {
             if let styled = applyLook(look, amount: amount, to: image) {
                 image = styled
                 changed = true
+                appliedLook = true
             }
         }
         guard changed else {
@@ -345,6 +378,10 @@ public enum AorusPluginIconValues {
         }
         if original.flipsForRightToLeftLayoutDirection {
             result = result.imageFlippedForRightToLeftLayoutDirection()
+        }
+        if appliedLook, let look {
+            objc_setAssociatedObject(result, &styledImageKey, ["revision": renderRevision, "look": look, "amount": Double(amount)] as NSDictionary, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            objc_setAssociatedObject(result, &originalImageKey, unstyled, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
         return result
     }
@@ -1507,6 +1544,7 @@ public enum AorusPluginIconValues {
     private static func pixelated(_ pixels: Pixels, cell: Int) -> Pixels {
         let width = pixels.width
         let height = pixels.height
+        if cell == 1 { return pixels }
         var output = Pixels(width: width, height: height, data: [UInt8](repeating: 0, count: width * height * 4))
         guard cell >= 1, width > 0, height > 0 else {
             return output
@@ -1739,7 +1777,8 @@ public enum AorusPluginIconValues {
                     let from = vertical ? line * columns + position : position * columns + line
                     let to = vertical ? mirror * columns + position : position * columns + mirror
                     solid[to] = solid[from]
-                    choice[to] = choice[from]
+                    // Colour is sampled on each side independently; a symmetric outline
+                    // can contain different colours on its two halves.
                 }
             }
         }
@@ -2104,11 +2143,20 @@ public enum AorusPluginIconValues {
                 return least
             }
             if brushes[label] == 1 {
-                for column in Int(min(ax, bx).rounded(.down)) ... Int(max(ax, bx).rounded(.down)) {
-                    for row in Int(min(ay, by).rounded(.down)) ... Int(max(ay, by).rounded(.down)) where nearest(Float(column) + 0.5, Float(row) + 0.5) < 0.5 {
-                        grid.set(&blocks, column, row, true)
-                        hit[label] = true
-                    }
+                // Follow the middle as one connected path of blocks. Diamond intersection
+                // misses short corner segments and leaves gaps in rings and stray pixels.
+                var x = Int(ax.rounded(.down)), y = Int(ay.rounded(.down))
+                let endX = Int(bx.rounded(.down)), endY = Int(by.rounded(.down))
+                let dx = abs(endX - x), dy = -abs(endY - y)
+                let stepX = x < endX ? 1 : -1, stepY = y < endY ? 1 : -1
+                var error = dx + dy
+                while true {
+                    grid.set(&blocks, x, y, true)
+                    hit[label] = true
+                    if x == endX && y == endY { break }
+                    let twice = 2 * error
+                    if twice >= dy { error += dy; x += stepX }
+                    if twice <= dx { error += dx; y += stepY }
                 }
             } else {
                 for cornerX in Int((min(ax, bx) + 0.5).rounded(.down)) ... Int((max(ax, bx) + 0.5).rounded(.down)) {
@@ -2447,5 +2495,33 @@ public enum AorusPluginIconValues {
 private final class AorusBundleIconResolver: NSObject, AppBundleImageResolver {
     func resolveBundleImage(named name: String, original: UIImage) -> UIImage? {
         return AorusPluginIconValues.resolve(name: name, original: original)
+    }
+}
+
+private extension UIImage {
+    static func aorusInstallSymbolResolver() {
+        guard #available(iOS 13.0, *) else { return }
+        for (original, replacement) in [
+            ("systemImageNamed:", "aorusOriginalSystemImageNamed:"),
+            ("systemImageNamed:withConfiguration:", "aorusOriginalSystemImageNamed:withConfiguration:"),
+            ("systemImageNamed:compatibleWithTraitCollection:", "aorusOriginalSystemImageNamed:compatibleWithTraitCollection:")
+        ] {
+            if let native = class_getClassMethod(UIImage.self, NSSelectorFromString(original)),
+               let hook = class_getClassMethod(UIImage.self, NSSelectorFromString(replacement)) {
+                method_exchangeImplementations(native, hook)
+            }
+        }
+    }
+    @objc dynamic class func aorusOriginalSystemImageNamed(_ name: String) -> UIImage? {
+        return AorusPluginIconValues.systemSymbol(name: name) { aorusOriginalSystemImageNamed(name) }
+    }
+    @available(iOS 13.0, *)
+    @objc(aorusOriginalSystemImageNamed:withConfiguration:)
+    dynamic class func aorusOriginalSystemImageNamed(_ name: String, withConfiguration configuration: UIImage.Configuration?) -> UIImage? {
+        return AorusPluginIconValues.systemSymbol(name: name) { aorusOriginalSystemImageNamed(name, withConfiguration: configuration) }
+    }
+    @objc(aorusOriginalSystemImageNamed:compatibleWithTraitCollection:)
+    dynamic class func aorusOriginalSystemImageNamed(_ name: String, compatibleWithTraitCollection traits: UITraitCollection?) -> UIImage? {
+        return AorusPluginIconValues.systemSymbol(name: name) { aorusOriginalSystemImageNamed(name, compatibleWithTraitCollection: traits) }
     }
 }

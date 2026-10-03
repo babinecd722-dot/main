@@ -128,6 +128,43 @@ function payload(kind) {
     assert.throws(() => aorus.ws.open('ws://localhost', null, { headers: [] }), TypeError);
     __requestFailures['mtproto.info'] = 'Permission not granted: mtproto';
     await assert.rejects(aorus.mtproto.info(), /Permission not granted/);
+    assert.ok(Object.isFrozen(aorus.files));
+    for (const [method, args, route] of [
+        ['writeText', ['x','text'], 'write'], ['readText',['x'],'read'],
+        ['writeJSON',['x',{a:1}],'write'], ['readJSON',['x',{}],'read'], ['append',['x','t'],'append'],
+        ['writeBase64',['x','AA=='],'writeBase64'], ['readBase64',['x'],'readBase64'], ['appendBase64',['x','AA=='],'appendBase64'],
+        ['readChunk',['x',3,4],'readChunk'], ['writeChunk',['x','AA==',3],'writeChunk'],
+        ['mkdir',['dir'],'mkdir'], ['copy',['a','b'],'copy'], ['move',['a','b'],'move'],
+        ['exists',['x'],'info'], ['info',['x'],'info'], ['list',['dir',{recursive:false}],'list'],
+        ['remove',['x'],'remove'], ['clear',[],'clear'], ['usage',[],'usage'], ['pick',[],'pick'],
+        ['share',[['a','b']],'share'], ['send',['me',['a','b'],{silent:true}],'send'],
+        ['archive',[['a','b'],'x.zip'],'archive'], ['archiveList',['x.zip'],'archiveList'], ['extract',['x.zip','out'],'extract'],
+        ['createPlugin',['x.aorusplugin','console.log(1)',{name:'X'}],'createPlugin'],
+        ['installPlugin',['x.aorusplugin'],'installPlugin'], ['exportPlugin',['x.aorusplugin'],'exportPlugin']
+    ]) {
+        await aorus.files[method](...args);
+        assert.ok(payload('files.'+route), method);
+    }
+    assert.equal(payload('files.writeChunk').offset, 3);
+    assert.equal(payload('files.readChunk').length, 4);
+    assert.equal(payload('files.send').toSelf, true);
+    assert.deepEqual(payload('files.share').names, ['a','b']);
+    await aorus.files.list(); assert.deepEqual(payload('files.list'), {path:'',recursive:true});
+    await aorus.files.share('one'); assert.deepEqual(payload('files.share').names, ['one']);
+    await aorus.files.archive('one','one.zip'); assert.deepEqual(payload('files.archive').names,['one']);
+    assert.equal(payload('files.archive').compression,'deflate');
+    await aorus.files.archive('one','one.zip',{compression:'store'}); assert.equal(payload('files.archive').compression,'store');
+    await aorus.files.exportPlugin('one','id'); assert.equal(payload('files.exportPlugin').pluginId,'id');
+    await aorus.files.send('9223372036854775807','one'); assert.equal(payload('files.send').peerId,'9223372036854775807');
+    for (const [method,args] of [
+        ['readChunk',['x',-1]], ['readChunk',['x',0,1048577]], ['readChunk',['x',true]],
+        ['writeChunk',['x','AA==',0.5]], ['writeBase64',['x',[]]], ['appendBase64',['x',1]],
+        ['share',[[]]], ['share',[Array(11).fill('a')]], ['share',[[1]]], ['archive',[{},'x']],
+        ['send',['me','x',[]]], ['archive',['a','b',{compression:'wrong'}]], ['createPlugin',['x','source',null]], ['createPlugin',['x','source',{name:1}]], ['list',['dir',{recursive:1}]],
+        ['installPlugin',[null]], ['exportPlugin',['x',5]], ['mkdir',[3]], ['copy',['a',3]], ['move',[false,'b']]
+    ]) { assert.throws(() => aorus.files[method](...args), TypeError); }
+    __requestFailures['files.writeBase64'] = 'Quota exceeded';
+    await assert.rejects(aorus.files.writeBase64('x','AA=='), /Quota exceeded/);
     __nodeLog('Plugin system prelude passed');
 })().catch(error => { __nodeLog(error.stack); process.exitCode = 1; });
 """

@@ -2323,24 +2323,30 @@ public final class AorusPluginSandbox {
             host.pluginPickFile(pluginId, directory: files?.directory) { [weak self] result in
                 self?.settle(id, with: result.map { value -> Any? in value.map { $0 as Any } })
             }
-        case "files.share":
-            guard require(.dialogs, id: id) else { return }
-            guard let files = self.files, let name = string("name") else {
-                settle(id, with: .failure(AorusPluginRequestError("name is required")))
+        case "files.share", "files.send", "files.installPlugin", "files.exportPlugin":
+            let permission: AorusPluginPermission = kind == "files.share" ? .dialogs : kind == "files.send" ? .sendMessages : .appCustomization
+            guard require(permission, id: id) else { return }
+            host.pluginRuntimeCall(pluginId, action: kind, payload: payload) { [weak self] result in
+                self?.settle(id, with: result.map { $0 as Any? })
+            }
+        case "files.createPlugin":
+            guard let files, let name = string("name"), let source = string("source") else {
+                settle(id, with: .failure(AorusPluginRequestError("name, source and file storage are required")))
                 return
             }
-            guard let normalized = AorusPluginFiles.normalizedName(name) else {
-                settle(id, with: .failure(AorusPluginRequestError(AorusPluginFiles.FileError.invalidName.message)))
-                return
-            }
-            let target = files.directory.appendingPathComponent(normalized, isDirectory: false)
-            guard FileManager.default.fileExists(atPath: target.path) else {
-                settle(id, with: .failure(AorusPluginRequestError("No such file")))
-                return
-            }
-            host.pluginShareFile(pluginId, path: target) { [weak self] result in
-                self?.settle(id, with: result.map { _ -> Any? in nil })
-            }
+            do {
+                guard source.utf8.count <= AorusPluginStore.sourceLimitBytes else { throw AorusPluginStoreError.sourceLimit }
+                if let error = AorusPluginSandbox.checkSyntax(source).first(where: { $0.severity == .error }) {
+                    throw AorusPluginRequestError("Line \(error.line): \(error.message)")
+                }
+                let metadata = payload["metadata"] as? [String: Any] ?? [:]
+                let manifest = AorusPluginManifest(name: metadata["name"] as? String ?? "Plugin",
+                    summary: metadata["summary"] as? String ?? "", version: metadata["version"] as? String ?? "1.0.0",
+                    author: metadata["author"] as? String ?? "", icon: metadata["icon"] as? String ?? AorusPluginIcon.fallback,
+                    accent: metadata["accent"] as? String ?? AorusPluginAccent.fallback, isEnabled: false, autostart: false)
+                try files.writeData(name, data: AorusPluginStore.shared.package(record: AorusPluginRecord(manifest: manifest, source: source)))
+                settle(id, with: .success(try files.info(name)))
+            } catch { settle(id, with: .failure(AorusPluginRequestError(error.localizedDescription))) }
         case "theme.current":
             host.pluginTheme(pluginId) { [weak self] result in
                 self?.settle(id, with: result.map { value -> Any? in value as Any })
@@ -2348,50 +2354,15 @@ public final class AorusPluginSandbox {
         // Files are the plugin's own directory and nobody else's, so there is no permission
         // to check and no host to go through: the quota and the name rule are the whole of
         // it, and both are answered here on the plugin's own queue.
-        case "files.write", "files.read", "files.info", "files.list", "files.remove", "files.clear", "files.usage":
+        case "files.write", "files.read", "files.info", "files.list", "files.remove", "files.clear", "files.usage",
+             "files.append", "files.writeBase64", "files.readBase64", "files.appendBase64", "files.readChunk", "files.writeChunk",
+             "files.mkdir", "files.copy", "files.move", "files.archive", "files.archiveList", "files.extract":
             guard let files = self.files else {
                 settle(id, with: .failure(AorusPluginRequestError("This plugin has no file storage")))
                 return
             }
-            do {
-                switch kind {
-                case "files.write":
-                    guard let name = string("name"), let text = string("text") else {
-                        settle(id, with: .failure(AorusPluginRequestError("name and text are required")))
-                        return
-                    }
-                    try files.write(name, text: text)
-                    settle(id, with: .success(nil))
-                case "files.read":
-                    guard let name = string("name") else {
-                        settle(id, with: .failure(AorusPluginRequestError("name is required")))
-                        return
-                    }
-                    settle(id, with: .success(try files.read(name).map { $0 as Any }))
-                case "files.info":
-                    guard let name = string("name") else {
-                        settle(id, with: .failure(AorusPluginRequestError("name is required")))
-                        return
-                    }
-                    settle(id, with: .success(try files.info(name).map { $0 as Any }))
-                case "files.list":
-                    settle(id, with: .success(files.list() as Any))
-                case "files.remove":
-                    guard let name = string("name") else {
-                        settle(id, with: .failure(AorusPluginRequestError("name is required")))
-                        return
-                    }
-                    settle(id, with: .success(NSNumber(value: try files.remove(name))))
-                case "files.clear":
-                    settle(id, with: .success(NSNumber(value: files.clear())))
-                default:
-                    settle(id, with: .success(files.usage() as Any))
-                }
-            } catch let error as AorusPluginFiles.FileError {
-                settle(id, with: .failure(AorusPluginRequestError(error.message)))
-            } catch {
-                settle(id, with: .failure(AorusPluginRequestError((error as NSError).localizedDescription)))
-            }
+            do { settle(id, with: .success(try files.perform(kind, payload: payload))) }
+            catch { settle(id, with: .failure(AorusPluginRequestError(error.localizedDescription))) }
         case "chat.current":
             guard require(.chatMetadata, id: id) else { return }
             host.pluginCurrentChat(pluginId) { [weak self] result in

@@ -2084,7 +2084,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
                     return
                 }
                 let files = AorusPluginFiles(directory: directory)
-                let name = AorusPluginFiles.normalizedName(described.suggestedName) ?? "attachment.bin"
+                let name = AorusPluginFiles.normalizedPath((described.suggestedName as NSString).lastPathComponent) ?? "attachment.bin"
                 do {
                     let data = try Data(contentsOf: URL(fileURLWithPath: source))
                     guard data.count <= AorusPluginFiles.maximumFileBytes else {
@@ -2211,14 +2211,16 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
             // The person picks, and the app copies the file into the plugin's own directory.
             // A plugin never reaches into anybody's documents: it is handed one file, by
             // name, the same as one it wrote itself.
-            let delegate = AorusPluginFilePickerDelegate(directory: directory) { result in
-                completion(.success(result))
+            guard self.filePicker == nil else { completion(.failure(AorusPluginRequestError("A file picker is already open"))); return }
+            let delegate = AorusPluginFilePickerDelegate(directory: directory) { [weak self] result in
+                self?.filePicker = nil
+                completion(result)
             }
             self.filePicker = delegate
             let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
             picker.delegate = delegate
             picker.allowsMultipleSelection = false
-            presenter.view.window?.rootViewController?.present(picker, animated: true)
+            presenter.present(picker, animated: true)
         }
     }
 
@@ -2366,7 +2368,94 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         )
     }
 
+    private func performFiles(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        let permission: AorusPluginPermission = action == "files.share" ? .dialogs : action == "files.send" ? .sendMessages : .appCustomization
+        guard AorusPluginEntitlement.isAllowed, manager?.isPermissionGranted(permission, pluginId: pluginId) == true else {
+            completion(.failure(AorusPluginRequestError("Permission is not granted"))); return
+        }
+        let context = self.context
+        guard let directory = AorusPluginStore.shared.filesDirectory(for: pluginId) else {
+            completion(.failure(AorusPluginRequestError("This plugin has no file storage"))); return
+        }
+        let files = AorusPluginFiles(directory: directory)
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                if action == "files.exportPlugin" {
+                    let targetId = payload["pluginId"] as? String ?? pluginId
+                    guard let name = payload["name"] as? String, let data = AorusPluginStore.shared.export(id: targetId) else { throw AorusPluginRequestError("No such plugin or destination") }
+                    try files.writeData(name, data: data)
+                    completion(.success(try files.info(name) ?? [:])); return
+                }
+                if action == "files.installPlugin" {
+                    guard let name = payload["name"] as? String, let data = files.readData(name), data.count <= AorusPluginStore.importLimitBytes else { throw AorusPluginRequestError("No such plugin file or file exceeds the import limit") }
+                    let manifest = try AorusPluginStore.shared.importPlugin(data: data, fallbackName: (name as NSString).lastPathComponent)
+                    completion(.success(["pluginId": manifest.id, "name": manifest.name, "enabled": NSNumber(value: false)])); return
+                }
+                guard let names = payload["names"] as? [String], !names.isEmpty, names.count <= 10, Set(names).count == names.count else { throw AorusPluginRequestError("Choose 1 to 10 files") }
+                let data: [(String, Data)] = try names.map { name in
+                    guard let bytes = files.readData(name) else { throw AorusPluginRequestError("No such file: \(name)") }
+                    return ((name as NSString).lastPathComponent, bytes)
+                }
+                DispatchQueue.main.async {
+                    guard self.context.account.id == context.account.id, AorusPluginEntitlement.isAllowed,
+                          self.manager?.isPermissionGranted(permission, pluginId: pluginId) == true else {
+                        completion(.failure(AorusPluginRequestError("Account or plugin permission changed"))); return
+                    }
+                    do {
+                        if action == "files.share" {
+                            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("aorus-plugin-share").appendingPathComponent(UUID().uuidString)
+                            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                            var urls: [URL] = []
+                            do {
+                                for (index, entry) in data.enumerated() {
+                                    // Distinct source folders may contain files with the same basename.
+                                    let folder = directory.appendingPathComponent(String(index))
+                                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                                    let url = folder.appendingPathComponent(entry.0)
+                                    try entry.1.write(to: url, options: .atomic); urls.append(url)
+                                }
+                            } catch { try? FileManager.default.removeItem(at: directory); throw error }
+                            self.presentShare(items: urls, cleanup: { try? FileManager.default.removeItem(at: directory) }) { result in
+                                completion(result.map { ["presented": NSNumber(value: true)] })
+                            }
+                            return
+                        }
+                        let target: PeerId
+                        if payload["toSelf"] as? Bool == true { target = context.account.peerId }
+                        else if let value = payload["peerId"] as? String, let id = Int64(value) { target = PeerId(id) }
+                        else { throw AorusPluginRequestError("peerId is required") }
+                        let options = try AorusPluginFileSendOptions(payload["options"] as? [String: Any] ?? [:])
+                        var attributes: [MessageAttribute] = []
+                        if options.silent { attributes.append(NotificationInfoMessageAttribute(flags: .muted)) }
+                        if let timestamp = options.scheduleAt { attributes.append(OutgoingScheduleInfoMessageAttribute(scheduleTime: timestamp, repeatPeriod: nil)) }
+                        let reply = options.replyTo.map { EngineMessageReplySubject(messageId: MessageId(peerId: target, namespace: Namespaces.Message.Cloud, id: $0), quote: nil, innerSubject: nil) }
+                        let messages: [EnqueueMessage] = data.enumerated().map { index, entry in
+                            let id = Int64.random(in: Int64.min...Int64.max)
+                            let resource = LocalFileMediaResource(fileId: id, size: Int64(entry.1.count))
+                            context.account.postbox.mediaBox.storeResourceData(resource.id, data: entry.1)
+                            var mime = "application/octet-stream"
+                            if #available(iOS 14.0, *) { mime = UTType(filenameExtension: (entry.0 as NSString).pathExtension)?.preferredMIMEType ?? mime }
+                            let file = TelegramMediaFile(fileId: MediaId(namespace: Namespaces.Media.LocalFile, id: id), partialReference: nil,
+                                resource: resource, previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil,
+                                mimeType: mime, size: Int64(entry.1.count), attributes: [.FileName(fileName: entry.0)], alternativeRepresentations: [])
+                            return .message(text: index == 0 ? options.caption : "", attributes: attributes, inlineStickers: [:], mediaReference: .standalone(media: file),
+                                threadId: options.threadId, replyToMessageId: index == 0 ? reply : nil, replyToStoryId: nil, localGroupingKey: nil,
+                                correlationId: nil, bubbleUpEmojiOrStickersets: [])
+                        }
+                        let _ = enqueueMessages(account: context.account, peerId: target, messages: messages).start(next: { ids in
+                            completion(.success(["queued": NSNumber(value: true), "messageIds": ids.compactMap { $0 }.map { ["id": NSNumber(value: $0.id), "namespace": NSNumber(value: $0.namespace), "peerId": String($0.peerId.toInt64())] }]))
+                        })
+                    } catch { completion(.failure(error)) }
+                }
+            } catch { completion(.failure(error)) }
+        }
+    }
+
     func pluginRuntimeCall(_ pluginId: String, action: String, payload: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        if action.hasPrefix("files.") {
+            performFiles(pluginId, action: action, payload: payload, completion: completion)
+            return
+        }
         if action.hasPrefix("mtproto.") {
             guard AorusPluginEntitlement.isAllowed,
                   manager?.isPermissionGranted(.mtproto, pluginId: pluginId) == true else {
@@ -3021,17 +3110,25 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
         presentShare(items: items, completion: completion)
     }
 
-    private func presentShare(items: [Any], completion: @escaping (Result<Void, Error>) -> Void) {
+    private func presentShare(items: [Any], cleanup: (() -> Void)? = nil, completion: @escaping (Result<Void, Error>) -> Void) {
         DispatchQueue.main.async {
             guard self.pluginExecutionAllowed else {
+                cleanup?()
                 completion(.failure(AorusPluginRequestError("Plugin execution is unavailable")))
                 return
             }
             guard let presenter = self.topController() else {
+                cleanup?()
                 completion(.failure(AorusPluginRequestError("Share sheet is unavailable")))
                 return
             }
+            guard !(presenter is UIActivityViewController), presenter.presentedViewController == nil else {
+                cleanup?()
+                completion(.failure(AorusPluginRequestError("A share menu is already open")))
+                return
+            }
             let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+            controller.completionWithItemsHandler = { _, _, _, _ in cleanup?() }
             if let popover = controller.popoverPresentationController {
                 popover.sourceView = presenter.view
                 popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.maxY - 1, width: 1, height: 1)
@@ -3554,42 +3651,41 @@ struct AorusPluginMediaDescription {
 /// delegate, so the runtime holds this for as long as the picker is on screen.
 final class AorusPluginFilePickerDelegate: NSObject, UIDocumentPickerDelegate {
     private let directory: URL
-    private var answer: (([String: Any]?) -> Void)?
+    private var answer: ((Result<[String: Any]?, Error>) -> Void)?
 
-    init(directory: URL, answer: @escaping ([String: Any]?) -> Void) {
+    init(directory: URL, answer: @escaping (Result<[String: Any]?, Error>) -> Void) {
         self.directory = directory
         self.answer = answer
         super.init()
     }
 
-    private func finish(_ value: [String: Any]?) {
+    private func finish(_ value: Result<[String: Any]?, Error>) {
         let answer = self.answer
         self.answer = nil
         answer?(value)
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        guard let source = urls.first else { finish(nil); return }
+        guard let source = urls.first else { finish(.success(nil)); return }
         let files = AorusPluginFiles(directory: directory)
-        // The person's own file name, brought onto the rule the plugin's directory uses.
-        // Anything that would have to be repaired becomes a plain name rather than a refusal:
-        // they picked the file, and the name is not what they were choosing.
-        let name = AorusPluginFiles.normalizedName(source.lastPathComponent)
-            ?? AorusPluginFiles.normalizedName(source.pathExtension.isEmpty ? "picked.bin" : "picked.\(source.pathExtension)")
-            ?? "picked.bin"
+        var name = AorusPluginFiles.normalizedPath(source.lastPathComponent) ?? "picked.bin"
+        if (try? files.info(name)) != nil {
+            name = UUID().uuidString + "-" + name
+        }
         let accessed = source.startAccessingSecurityScopedResource()
         defer { if accessed { source.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: source) else { finish(nil); return }
         do {
-            try files.write(name, text: data.base64EncodedString())
-            finish(["name": name, "sizeBytes": NSNumber(value: data.count), "encoding": "base64"])
-        } catch {
-            finish(nil)
-        }
+            let handle = try FileHandle(forReadingFrom: source)
+            defer { handle.closeFile() }
+            let data = handle.readData(ofLength: AorusPluginFiles.maximumFileBytes + 1)
+            guard data.count <= AorusPluginFiles.maximumFileBytes else { throw AorusPluginFiles.FileError.tooLarge }
+            try files.writeData(name, data: data)
+            finish(.success(["name": name, "sizeBytes": NSNumber(value: data.count), "encoding": "binary"]))
+        } catch { finish(.failure(error)) }
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        finish(nil)
+        finish(.success(nil))
     }
 }
 

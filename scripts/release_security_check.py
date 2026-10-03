@@ -1188,7 +1188,7 @@ def check_plugin_boundary(root: Path, errors: list[str]) -> None:
             fail(errors, f"plugin system file is missing: {path.relative_to(root)}")
     if not core.is_dir():
         return
-    allowed_imports = {"Foundation", "JavaScriptCore", "CryptoKit", "Darwin"}
+    allowed_imports = {"Foundation", "JavaScriptCore", "CryptoKit", "Darwin", "zlib", "CoreFoundation"}
     for path in core.glob("*.swift"):
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             match = re.match(r"\s*import\s+([A-Za-z0-9_]+)", line)
@@ -1293,7 +1293,7 @@ def check_plugin_boundary(root: Path, errors: list[str]) -> None:
     controllers = (ui / "AorusPluginControllers.swift").read_text(encoding="utf-8") if (ui / "AorusPluginControllers.swift").is_file() else ""
     if "AorusPluginRuntimeManager.shared.restart(id: record.manifest.id)" not in controllers:
         fail(errors, "plugin editor must run its plugin through the production account host")
-    if "AorusPluginExport(record: record, settings: [:])" not in store:
+    if not re.search(r"AorusPluginExport\(record:\s*\w+,\s*settings:\s*\[:\]\)", store):
         fail(errors, "plugin exports may include installation-owned settings")
     if "AorusPluginBadgeView(text: state.badge" in controllers:
         fail(errors, "plugin list/detail brought back the debug RUNNING badge")

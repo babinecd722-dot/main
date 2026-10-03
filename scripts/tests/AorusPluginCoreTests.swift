@@ -1293,6 +1293,68 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(fileResults["count"] == .number(1), "usage counts what is left")
     fileSandbox.stop()
 
+    let advancedHost = AorusPluginNullHost()
+    var advancedValues: [String: AorusPluginJSONValue] = [:]
+    var fileRoutes: [String] = []
+    let advancedDone = DispatchSemaphore(value: 0)
+    advancedHost.onStorageChanged = { _, values in
+        advancedValues = values
+        if values["done"] == .bool(true) || values["error"] != nil { advancedDone.signal() }
+    }
+    advancedHost.onRuntimeCall = { _, action, _ in fileRoutes.append(action); return ["ok": NSNumber(value: true)] }
+    let advancedDirectory = temporaryDirectory().appendingPathComponent("advanced-files")
+    let advancedSource = """
+    aorus.on('start', async function () {
+        try {
+            await aorus.files.mkdir('Проекты/пример');
+            await aorus.files.writeBase64('Проекты/пример/bytes.bin', 'AAH/');
+            await aorus.files.writeChunk('Проекты/пример/bytes.bin', 'Ag==', 3);
+            const chunk = await aorus.files.readChunk('Проекты/пример/bytes.bin', 0, 4);
+            aorus.storage.set('chunk', chunk.base64);
+            await aorus.files.copy('Проекты/пример', 'copy');
+            await aorus.files.move('copy', 'ready');
+            await aorus.files.archive('ready', 'bundle.zip');
+            await aorus.files.extract('bundle.zip', 'unpacked');
+            aorus.storage.set('unpacked', await aorus.files.readBase64('unpacked/ready/bytes.bin'));
+            await aorus.files.createPlugin('Example.aorusplugin', "aorus.on('start', function () { console.log('Hello'); });", { name: 'Example', author: 'Author' });
+            const bundle = await aorus.files.readJSON('Example.aorusplugin');
+            aorus.storage.set('format', bundle.format);
+            aorus.storage.set('metadata', bundle.name + '/' + bundle.author);
+            await aorus.files.share(['bundle.zip', 'Example.aorusplugin']);
+            await aorus.files.send('me', 'Example.aorusplugin');
+            await aorus.files.installPlugin('Example.aorusplugin');
+            await aorus.files.exportPlugin('Export.aorusplugin');
+            try { await aorus.files.createPlugin('bad.aorusplugin', 'function () {'); }
+            catch (error) { aorus.storage.set('syntax', 'rejected'); }
+            aorus.storage.set('done', true);
+        } catch (error) { aorus.storage.set('error', String(error)); }
+    });
+    """
+    let advancedSandbox = AorusPluginSandbox(pluginId: UUID().uuidString, source: advancedSource,
+        host: advancedHost, permissions: [.dialogs, .sendMessages, .appCustomization], filesDirectory: advancedDirectory)
+    let advancedStarted = DispatchSemaphore(value: 0)
+    advancedSandbox.start { error in expect(error == nil, "advanced files start"); advancedStarted.signal() }
+    _ = advancedStarted.wait(timeout: .now() + 2)
+    _ = advancedDone.wait(timeout: .now() + 3)
+    expect(advancedValues["error"] == nil && advancedValues["done"] == .bool(true), "advanced files complete through JavaScriptCore")
+    expect(advancedValues["chunk"] == .string("AAH/Ag==") && advancedValues["unpacked"] == .string("AAH/Ag=="), "binary chunks and ZIP preserve bytes through JavaScriptCore")
+    expect(advancedValues["format"] == .string("aorusgram-plugin") && advancedValues["metadata"] == .string("Example/Author"), "generated plugin bundle preserves metadata")
+    expect(advancedValues["syntax"] == .string("rejected"), "generated plugin source syntax is checked")
+    expect(fileRoutes == ["files.share", "files.send", "files.installPlugin", "files.exportPlugin"], "native file actions reach the host")
+    advancedSandbox.stop()
+    do {
+        let data = try Data(contentsOf: advancedDirectory.appendingPathComponent("Example.aorusplugin"))
+        let bundle = try JSONDecoder().decode(AorusPluginExport.self, from: data)
+        expect(bundle.settings.isEmpty && bundle.version == AorusPluginExport.formatVersion, "generated plugin excludes installation state")
+        let imported = try AorusPluginStore(rootURL: temporaryDirectory()).importPlugin(data:data)
+        expect(imported.name == "Example" && !imported.isEnabled && !imported.autostart, "generated plugin imports as a new disabled installation")
+    } catch { expect(false, "generated plugin import failed: \(error)") }
+    expect(AorusPluginPermission.requestedBySource("aorus.files.send('me', 'a'); aorus.files.installPlugin('a'); aorus.files.exportPlugin('a'); aorus.files.share('a');") == [.sendMessages,.appCustomization,.dialogs], "file actions request their existing capabilities")
+    let referenceMarkdown = AorusPluginTextExport.documentation("Reference\n\nFiles\nawait aorus.files.list()\nA file catalogue.\n")
+    expect(referenceMarkdown.contains("# Reference\n") && referenceMarkdown.contains("## Files") && referenceMarkdown.contains("```js\nawait aorus.files.list()\n```"), "reference export formats headings and examples")
+    let exportedLog = AorusPluginTextExport.console(name:"Example",id:"plugin",entries:[AorusPluginLogEntry(date:Date(timeIntervalSince1970:0),level:.error,text:"first\nsecond")])
+    expect(exportedLog.contains("1970-01-01T00:00:00.000Z [ERROR] first\nsecond"), "console export preserves timestamps, levels and multiline text")
+
     // What a plugin draws over the chat. Every number is clamped rather than rejected — a
     // plugin asking for a 900-point button has made a mistake, not an attack, and the useful
     // answer is the largest button that still fits.

@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 import CryptoKit
 
 // Where plugins live on disk. One directory per plugin under Application Support:
@@ -14,7 +15,7 @@ import CryptoKit
 // the previous file rather than half of the new one. Nothing here reads or writes anything
 // outside that directory.
 
-public enum AorusPluginStoreError: Error, Equatable {
+public enum AorusPluginStoreError: Error, Equatable, LocalizedError {
     case notFound
     case invalidBundle
     case storageLimit
@@ -22,6 +23,18 @@ public enum AorusPluginStoreError: Error, Equatable {
     case invalidIdentifier
     case invalidManifest
     case io(String)
+    public var errorDescription: String? {
+        switch self {
+        case .notFound: return "No such plugin"
+        case .invalidBundle: return "Expected a supported .aorusplugin bundle or non-empty JavaScript source"
+        case .storageLimit: return "Plugin storage exceeds its size limit"
+        case .sourceLimit: return "Plugin source must fit within 512 KB and an imported bundle within 2 MB"
+        case .invalidIdentifier: return "A plugin identifier must be a UUID"
+        case .invalidManifest: return "The plugin needs a name and a supported API version"
+        case let .io(message): return message
+        }
+    }
+
 }
 
 public final class AorusPluginStore {
@@ -162,7 +175,7 @@ public final class AorusPluginStore {
     /// decoded is skipped: one damaged plugin must not hide the rest of the list.
     public func list() -> [AorusPluginManifest] {
         return queue.sync {
-            guard let entries = try? FileManager.default.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+            guard let entries = try? FileManager.default.contentsOfDirectory(at: rootURL, includingPropertiesForKeys: nil, options: []) else {
                 return []
             }
             var manifests: [AorusPluginManifest] = []
@@ -373,13 +386,19 @@ public final class AorusPluginStore {
 
     // MARK: - Export and import
 
+    public func package(record: AorusPluginRecord) throws -> Data {
+        let validated = try validate(record)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(AorusPluginExport(record: validated, settings: [:]))
+    }
+
     public func export(id: String) -> Data? {
         guard let record = load(id: id) else { return nil }
         // A setting can be an API token or another private value chosen by the user.
         // Share code and presentation metadata only; local duplication still preserves
         // settings, but an exported file must never carry installation-owned state.
-        let bundle = AorusPluginExport(record: record, settings: [:])
-        return try? encoder.encode(bundle)
+        return try? package(record: record)
     }
 
     /// Accepts a `.aorusplugin` bundle or a bare JavaScript file. A bare file gets the name
@@ -388,8 +407,8 @@ public final class AorusPluginStore {
         guard data.count <= AorusPluginStore.importLimitBytes else {
             throw AorusPluginStoreError.sourceLimit
         }
-        if let bundle = try? decoder.decode(AorusPluginExport.self, from: data) {
-            guard bundle.format == AorusPluginExport.format, !bundle.source.isEmpty else {
+        if let bundle = try? JSONDecoder().decode(AorusPluginExport.self, from: data) {
+            guard bundle.format == AorusPluginExport.format, bundle.version == AorusPluginExport.formatVersion, !bundle.source.isEmpty else {
                 throw AorusPluginStoreError.invalidBundle
             }
             var manifest = bundle.makeManifest()
@@ -554,168 +573,366 @@ public struct AorusPluginFiles {
     public static let maximumTotalBytes = 64 * 1024 * 1024
     public static let maximumFileCount = 256
     public static let maximumNameLength = 64
-    private static let mutationLock = NSLock()
+    public static let maximumChunkBytes = 1024 * 1024
+    private static let mutationLock = NSRecursiveLock()
 
-    public enum FileError: Error, Equatable {
-        case invalidName
-        case tooLarge
-        case quota
-        case tooMany
+    public enum FileError: Error, Equatable, LocalizedError {
+        case invalidName, tooLarge, quota, tooMany
         case io(String)
-
         public var message: String {
             switch self {
-            case .invalidName:
-                return "A file name may hold up to \(AorusPluginFiles.maximumNameLength) letters, digits, dot, dash and underscore, and may not begin with a dot"
-            case .tooLarge:
-                return "A single file may not exceed \(AorusPluginFiles.maximumFileBytes / (1024 * 1024)) MB"
-            case .quota:
-                return "The plugin's files may not exceed \(AorusPluginFiles.maximumTotalBytes / (1024 * 1024)) MB in total"
-            case .tooMany:
-                return "A plugin may keep up to \(AorusPluginFiles.maximumFileCount) files"
-            case let .io(text):
-                return text
+            case .invalidName: return "Use a relative path up to 512 characters; path components cannot be empty, dot, dot-dot, or contain control characters or backslashes"
+            case .tooLarge: return "A single file may not exceed \(AorusPluginFiles.maximumFileBytes / (1024 * 1024)) MB"
+            case .quota: return "The plugin's files may not exceed \(AorusPluginFiles.maximumTotalBytes / (1024 * 1024)) MB in total"
+            case .tooMany: return "A plugin may keep up to \(AorusPluginFiles.maximumFileCount) files and directories"
+            case let .io(text): return text
             }
         }
+        public var errorDescription: String? { message }
     }
 
     public let directory: URL
+    public init(directory: URL) { self.directory = directory.standardizedFileURL.resolvingSymlinksInPath() }
 
-    public init(directory: URL) {
-        self.directory = directory
-    }
-
-    /// A name that is plainly a file name, or nil. Nothing is stripped or replaced: a name
-    /// that would have to be repaired is a mistake worth reporting, and repairing it silently
-    /// is how "notes/../../main.js" becomes a write nobody intended.
+    /// Legacy flat names remain available to callers that need an ASCII file name.
     public static func normalizedName(_ name: String) -> String? {
-        guard !name.isEmpty, name.count <= maximumNameLength, !name.hasPrefix(".") else { return nil }
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-")
-        guard name.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
-        guard !name.contains("..") else { return nil }
+        guard !name.isEmpty, name.count <= maximumNameLength, !name.hasPrefix("."),
+              !name.contains(".."), name.unicodeScalars.allSatisfy({ allowed.contains($0) }) else { return nil }
         return name
     }
 
-    private func url(for name: String) throws -> URL {
-        guard let name = AorusPluginFiles.normalizedName(name) else { throw FileError.invalidName }
-        return directory.appendingPathComponent(name, isDirectory: false)
+    public static func normalizedPath(_ path: String) -> String? {
+        guard !path.isEmpty, path.count <= 512, !path.contains("\\"),
+              !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        let parts = path.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count <= 16, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && $0.utf8.count <= 255 }) else { return nil }
+        return path
     }
 
-    private func entries() -> [(name: String, size: Int, modified: Date)] {
-        guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey],
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else { return [] }
-        return contents.compactMap { url in
-            guard AorusPluginFiles.normalizedName(url.lastPathComponent) != nil else { return nil }
-            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-            return (url.lastPathComponent, values?.fileSize ?? 0, values?.contentModificationDate ?? Date(timeIntervalSince1970: 0))
+    /// Symlinks cannot turn an ordinary relative path into an address outside this directory.
+    public func fileURL(_ path: String) throws -> URL {
+        guard let path = Self.normalizedPath(path) else { throw FileError.invalidName }
+        var target = directory
+        for part in path.split(separator: "/") {
+            target.appendPathComponent(String(part))
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: target.path),
+               attributes[.type] as? FileAttributeType == .typeSymbolicLink { throw FileError.invalidName }
+        }
+        guard directory.resolvingSymlinksInPath().path == directory.path else { throw FileError.invalidName }
+        return target
+    }
+
+    private func locked<T>(_ body: () throws -> T) rethrows -> T {
+        Self.mutationLock.lock()
+        defer { Self.mutationLock.unlock() }
+        return try body()
+    }
+
+    private func entries() -> [[String: Any]] {
+        guard let iterator = FileManager.default.enumerator(at: directory,
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey], options: []) else { return [] }
+        var result: [[String: Any]] = []
+        for case let url as URL in iterator {
+            let path = String(url.path.dropFirst(directory.path.count + 1))
+            guard Self.normalizedPath(path) != nil,
+                  let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey, .isSymbolicLinkKey]) else { continue }
+            if values.isSymbolicLink == true { iterator.skipDescendants(); continue }
+            result.append(["name": path, "size": NSNumber(value: values.isDirectory == true ? 0 : values.fileSize ?? 0),
+                "modified": NSNumber(value: Int64((values.contentModificationDate ?? .distantPast).timeIntervalSince1970)),
+                "type": values.isDirectory == true ? "directory" : "file"])
+        }
+        return result.sorted { ($0["name"] as! String) < ($1["name"] as! String) }
+    }
+
+    private func checkQuota(additionalBytes: Int, additionalCount: Int) throws {
+        let all = entries()
+        guard all.count + additionalCount <= Self.maximumFileCount else { throw FileError.tooMany }
+        guard all.reduce(0, { $0 + ($1["size"] as! NSNumber).intValue }) + additionalBytes <= Self.maximumTotalBytes else { throw FileError.quota }
+    }
+
+    public func write(_ name: String, text: String) throws { try writeData(name, data: Data(text.utf8)) }
+    public func writeData(_ name: String, data: Data) throws {
+        try locked {
+            let target = try fileURL(name)
+            guard data.count <= Self.maximumFileBytes else { throw FileError.tooLarge }
+            let previous = try info(name)
+            guard previous?["type"] as? String != "directory" else { throw FileError.io("The path is a directory") }
+            // Parent directories are explicit: a misspelled path must not create a second tree.
+            guard target.deletingLastPathComponent().path == directory.path || FileManager.default.fileExists(atPath: target.deletingLastPathComponent().path) else { throw FileError.io("Parent directory does not exist") }
+            try checkQuota(additionalBytes: data.count - ((previous?["size"] as? NSNumber)?.intValue ?? 0), additionalCount: previous == nil ? 1 : 0)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try data.write(to: target, options: .atomic)
         }
     }
 
-    public func write(_ name: String, text: String) throws {
-        try writeData(name, data: Data(text.utf8))
-    }
-
-    /// The same write, for bytes that are not text.
-    ///
-    /// A file a plugin downloaded from its own backend is an image, an archive or a signed
-    /// blob as often as it is JSON, and routing those through a String meant they arrived
-    /// corrupted or not at all. Every rule is the one the text write already applied: the
-    /// per-file cap, the file count, the quota measured against what the directory will hold
-    /// afterwards, and the write-beside-and-move that leaves the previous file rather than
-    /// half of the new one.
-    public func writeData(_ name: String, data: Data) throws {
-        Self.mutationLock.lock()
-        defer { Self.mutationLock.unlock() }
-        let target = try url(for: name)
-        guard data.count <= AorusPluginFiles.maximumFileBytes else { throw FileError.tooLarge }
-        let existing = entries()
-        let previous = existing.first(where: { $0.name == target.lastPathComponent })
-        if previous == nil, existing.count >= AorusPluginFiles.maximumFileCount { throw FileError.tooMany }
-        // The quota is checked against what the directory will hold afterwards, so
-        // overwriting a large file with a small one always succeeds.
-        let after = existing.reduce(0) { $0 + $1.size } - (previous?.size ?? 0) + data.count
-        guard after <= AorusPluginFiles.maximumTotalBytes else { throw FileError.quota }
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            // Written beside and moved into place, so a crash mid-write leaves the previous
-            // file rather than half of the new one, the same as every other write here.
-            try data.write(to: target, options: [.atomic])
-        } catch {
-            throw FileError.io(error.localizedDescription)
+    public func appendData(_ name: String, data: Data) throws {
+        try locked {
+            let existing = try info(name)
+            let loaded = readData(name)
+            if existing != nil && loaded == nil { throw FileError.io("Could not read the file to append") }
+            let previous = loaded ?? Data()
+            guard data.count <= Self.maximumFileBytes - previous.count else { throw FileError.tooLarge }
+            try writeData(name, data: previous + data)
         }
     }
 
     public func read(_ name: String) throws -> String? {
-        guard let data = readData(name) else { return nil }
-        return String(data: data, encoding: .utf8)
+        _ = try fileURL(name)
+        return readData(name).flatMap { String(data: $0, encoding: .utf8) }
     }
-
-    /// The bytes, or nothing. A name this refuses is a name that cannot address a file in
-    /// this directory, which is the same answer as the file not being there.
     public func readData(_ name: String) -> Data? {
-        guard let target = try? url(for: name) else { return nil }
-        return try? Data(contentsOf: target)
+        return locked {
+            guard let target = try? fileURL(name), let info = try? self.info(name),
+                  info["type"] as? String == "file", ((info["size"] as? NSNumber)?.intValue ?? Int.max) <= Self.maximumFileBytes else { return nil }
+            return try? Data(contentsOf: target)
+        }
     }
-
+    public func readRange(_ name: String, offset: Int, length: Int) throws -> Data? {
+        try locked {
+            guard offset >= 0, length >= 0, length <= Self.maximumChunkBytes else { throw FileError.io("Invalid offset or chunk length (maximum 1 MB)") }
+            guard let info = try info(name) else { return nil }
+            guard info["type"] as? String == "file" else { throw FileError.io("The path is a directory") }
+            let handle = try FileHandle(forReadingFrom: fileURL(name))
+            defer { handle.closeFile() }
+            handle.seek(toFileOffset: UInt64(offset))
+            return handle.readData(ofLength: length)
+        }
+    }
     public func info(_ name: String) throws -> [String: Any]? {
-        let target = try url(for: name)
-        guard let entry = entries().first(where: { $0.name == target.lastPathComponent }) else { return nil }
-        return [
-            "name": entry.name,
-            "size": NSNumber(value: entry.size),
-            "modified": NSNumber(value: Int64(entry.modified.timeIntervalSince1970)),
-        ]
-    }
-
-    public func list() -> [[String: Any]] {
-        return entries().sorted { $0.name < $1.name }.map { entry in
-            [
-                "name": entry.name,
-                "size": NSNumber(value: entry.size),
-                "modified": NSNumber(value: Int64(entry.modified.timeIntervalSince1970)),
-            ]
+        try locked {
+            _ = try fileURL(name)
+            return entries().first { $0["name"] as? String == name }
         }
     }
+    public func list(_ path: String = "", recursive: Bool = true) throws -> [[String: Any]] {
+        try locked {
+            if !path.isEmpty { _ = try fileURL(path) }
+            return entries().filter {
+                let name = $0["name"] as! String
+                let relative: String
+                if path.isEmpty { relative = name }
+                else { guard name.hasPrefix(path + "/") else { return false }; relative = String(name.dropFirst(path.count + 1)) }
+                return recursive || !relative.contains("/")
+            }
+        }
+    }
+    // Existing callers read the whole catalogue without throwing.
+    public func list() -> [[String: Any]] { locked { entries() } }
 
-    /// True when the file was there to remove. Removing something that is already gone is
-    /// not an error: a plugin cleaning up after itself should not have to ask first.
-    @discardableResult
-    public func remove(_ name: String) throws -> Bool {
-        Self.mutationLock.lock()
-        defer { Self.mutationLock.unlock() }
-        let target = try url(for: name)
-        guard FileManager.default.fileExists(atPath: target.path) else { return false }
-        do {
+    public func mkdir(_ path: String) throws {
+        try locked {
+            let target = try fileURL(path)
+            let components = path.split(separator: "/")
+            var prefix = ""
+            var missing = 0
+            for part in components {
+                prefix += prefix.isEmpty ? String(part) : "/" + part
+                if let info = try info(prefix) {
+                    guard info["type"] as? String == "directory" else { throw FileError.io("A parent path is a file") }
+                } else { missing += 1 }
+            }
+            try checkQuota(additionalBytes: 0, additionalCount: missing)
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        }
+    }
+    public func copy(_ source: String, to destination: String, move: Bool = false) throws {
+        try locked {
+            let from = try fileURL(source), target = try fileURL(destination)
+            guard try info(source) != nil else { throw FileError.io("No such file or directory") }
+            if let iterator = FileManager.default.enumerator(at: from, includingPropertiesForKeys: [.isSymbolicLinkKey]) {
+                for case let child as URL in iterator {
+                    if (try child.resourceValues(forKeys: [.isSymbolicLinkKey])).isSymbolicLink == true { throw FileError.invalidName }
+                }
+            }
+            guard try info(destination) == nil else { throw FileError.io("Destination already exists") }
+            guard !destination.hasPrefix(source + "/") else { throw FileError.io("A directory cannot contain its own copy") }
+            if !move {
+                let copied = entries().filter { ($0["name"] as! String) == source || ($0["name"] as! String).hasPrefix(source + "/") }
+                try checkQuota(additionalBytes: copied.reduce(0) { $0 + ($1["size"] as! NSNumber).intValue }, additionalCount: copied.count)
+            }
+            if move { try FileManager.default.moveItem(at: from, to: target) }
+            else {
+                let stage = directory.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+                defer { try? FileManager.default.removeItem(at: stage) }
+                try FileManager.default.copyItem(at: from, to: stage)
+                try FileManager.default.moveItem(at: stage, to: target)
+            }
+        }
+    }
+    @discardableResult public func remove(_ name: String) throws -> Bool {
+        try locked {
+            let target = try fileURL(name)
+            guard FileManager.default.fileExists(atPath: target.path) else { return false }
             try FileManager.default.removeItem(at: target)
-        } catch {
-            throw FileError.io(error.localizedDescription)
+            return true
         }
-        return true
     }
-
-    @discardableResult
-    public func clear() -> Int {
-        Self.mutationLock.lock()
-        defer { Self.mutationLock.unlock() }
-        var removed = 0
-        for entry in entries() {
-            let target = directory.appendingPathComponent(entry.name, isDirectory: false)
-            if (try? FileManager.default.removeItem(at: target)) != nil { removed += 1 }
+    @discardableResult public func clear() -> Int {
+        locked {
+            let all = entries()
+            var removed = 0
+            for entry in all where !(entry["name"] as! String).contains("/") {
+                if (try? remove(entry["name"] as! String)) == true {
+                    let name = entry["name"] as! String
+                    removed += all.filter { ($0["name"] as! String) == name || ($0["name"] as! String).hasPrefix(name + "/") }.count
+                }
+            }
+            return removed
         }
-        return removed
     }
-
     public func usage() -> [String: Any] {
-        let all = entries()
-        return [
-            "count": NSNumber(value: all.count),
-            "bytes": NSNumber(value: all.reduce(0) { $0 + $1.size }),
-            "maximumBytes": NSNumber(value: AorusPluginFiles.maximumTotalBytes),
-            "maximumFileBytes": NSNumber(value: AorusPluginFiles.maximumFileBytes),
-            "maximumCount": NSNumber(value: AorusPluginFiles.maximumFileCount),
-        ]
+        locked {
+            let all = entries()
+            return ["count": NSNumber(value: all.count), "bytes": NSNumber(value: all.reduce(0) { $0 + ($1["size"] as! NSNumber).intValue }),
+                "maximumBytes": NSNumber(value: Self.maximumTotalBytes), "maximumFileBytes": NSNumber(value: Self.maximumFileBytes),
+                "maximumCount": NSNumber(value: Self.maximumFileCount), "maximumChunkBytes": NSNumber(value: Self.maximumChunkBytes)]
+        }
+    }
+
+    public func archive(_ names: [String], to destination: String, compression: String = "deflate") throws {
+        try locked {
+            guard !names.isEmpty else { throw FileError.io("Choose at least one file or directory") }
+            var contents: [String: Data] = [:]
+            for name in names {
+                guard try info(name) != nil else { throw FileError.io("No such file or directory: \(name)") }
+                for entry in entries() where (entry["name"] as! String) == name || (entry["name"] as! String).hasPrefix(name + "/") {
+                    let path = entry["name"] as! String
+                    guard path != destination else { throw FileError.io("The archive cannot include itself") }
+                    if entry["type"] as? String == "directory" { contents[path + "/"] = Data() }
+                    else {
+                        guard let bytes = readData(path) else { throw FileError.io("Could not read \(path)") }
+                        contents[path] = bytes
+                    }
+                }
+            }
+            try writeData(destination, data: AorusPluginArchive.encode(contents, compression: compression))
+        }
+    }
+    public func archiveList(_ name: String) throws -> [[String: Any]] {
+        try locked {
+            guard let data = readData(name) else { throw FileError.io("No such archive") }
+            return try AorusPluginArchive.entries(data).map { ["name": $0.name, "size": NSNumber(value: $0.size), "type": $0.directory ? "directory" : "file"] }
+        }
+    }
+    /// Extraction commits a new directory in one move. Any failure leaves existing files intact.
+    public func extract(_ name: String, to destination: String) throws -> [[String: Any]] {
+        try locked {
+            let target = try fileURL(destination)
+            guard try info(destination) == nil else { throw FileError.io("Destination already exists") }
+            guard let data = readData(name) else { throw FileError.io("No such archive") }
+            let unpacked = try AorusPluginArchive.decode(data)
+            let stage = directory.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: stage) }
+            let staged = AorusPluginFiles(directory: stage)
+            try staged.mkdir("contents")
+            for (path, bytes) in unpacked.sorted(by: { $0.key < $1.key }) {
+                if path.hasSuffix("/") { try staged.mkdir("contents/" + path.dropLast()) }
+                else {
+                    let parent = ("contents/" + path as NSString).deletingLastPathComponent
+                    try staged.mkdir(parent)
+                    guard !FileManager.default.fileExists(atPath: try staged.fileURL("contents/" + path).path) else { throw FileError.io("Archive entries address the same file") }
+                    try staged.writeData("contents/" + path, data: bytes)
+                }
+            }
+            let stagedEntries = staged.list()
+            try checkQuota(additionalBytes: (staged.usage()["bytes"] as! NSNumber).intValue, additionalCount: stagedEntries.count)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: stage.appendingPathComponent("contents"), to: target)
+            return try list(destination, recursive: true)
+        }
+    }
+    public func perform(_ action: String, payload: [String: Any]) throws -> Any? {
+        func string(_ key: String) throws -> String {
+            guard let value = payload[key] as? String else { throw FileError.io("\(key) is required") }
+            return value
+        }
+        func integer(_ key: String, default fallback: Int) throws -> Int {
+            guard let raw = payload[key] else { return fallback }
+            guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  number.doubleValue.isFinite, number.doubleValue.rounded(.towardZero) == number.doubleValue,
+                  number.doubleValue >= 0, number.doubleValue <= Double(Int32.max) else { throw FileError.io("\(key) must be a non-negative integer") }
+            return number.intValue
+        }
+        func bytes() throws -> Data {
+            guard let data = Data(base64Encoded: try string("base64")), data.count <= Self.maximumChunkBytes else { throw FileError.io("Expected base64 containing at most 1 MB") }
+            return data
+        }
+        switch action {
+        case "files.write": try write(string("name"), text: string("text")); return nil
+        case "files.read":
+            guard let data = try readRange(string("name"), offset: 0, length: Self.maximumChunkBytes) else { return nil }
+            guard ((try info(string("name"))?["size"] as? NSNumber)?.intValue ?? 0) <= Self.maximumChunkBytes else { throw FileError.io("Use readChunk for files larger than 1 MB") }
+            guard let text = String(data: data, encoding: .utf8) else { throw FileError.io("The file is not UTF-8; use readBase64 or readChunk") }
+            return text
+        case "files.writeBase64": try writeData(string("name"), data: bytes()); return nil
+        case "files.append", "files.appendBase64", "files.writeChunk":
+            return try locked {
+                let name = try string("name")
+                if action == "files.writeChunk" {
+                    let offset = try integer("offset", default: 0)
+                    guard offset == ((try info(name)?["size"] as? NSNumber)?.intValue ?? 0) else { throw FileError.io("Chunk offset does not match the file size") }
+                }
+                try appendData(name, data: action == "files.append" ? Data(try string("text").utf8) : bytes())
+                return try info(name)
+            }
+        case "files.readBase64":
+            let name = try string("name")
+            guard ((try info(name)?["size"] as? NSNumber)?.intValue ?? 0) <= Self.maximumChunkBytes else { throw FileError.io("Use readChunk for files larger than 1 MB") }
+            return try readRange(name, offset: 0, length: Self.maximumChunkBytes)?.base64EncodedString()
+        case "files.readChunk":
+            return try locked {
+                let name = try string("name"), offset = try integer("offset", default: 0), length = try integer("length", default: Self.maximumChunkBytes)
+                guard let data = try readRange(name, offset: offset, length: length) else { return nil }
+                let size = (try info(name)?["size"] as? NSNumber)?.intValue ?? 0
+                return ["base64": data.base64EncodedString(), "offset": NSNumber(value: offset), "size": NSNumber(value: size), "eof": NSNumber(value: offset + data.count >= size)] as [String: Any]
+            }
+        case "files.info": return try info(string("name"))
+        case "files.list": return try list(payload["path"] as? String ?? "", recursive: payload["recursive"] as? Bool ?? true)
+        case "files.mkdir": try mkdir(string("name")); return try info(string("name"))
+        case "files.copy", "files.move": try copy(string("name"), to: string("destination"), move: action == "files.move"); return try info(string("destination"))
+        case "files.remove": return NSNumber(value: try remove(string("name")))
+        case "files.clear": return NSNumber(value: clear())
+        case "files.usage": return usage()
+        case "files.archive":
+            guard let names = payload["names"] as? [String] else { throw FileError.io("names must be an array of paths") }
+            try archive(names, to: string("name"), compression: payload["compression"] as? String ?? "deflate"); return try info(string("name"))
+        case "files.archiveList": return try archiveList(string("name"))
+        case "files.extract": return try extract(string("name"), to: string("destination"))
+        default: throw FileError.io("Unknown file operation")
+        }
+    }
+}
+
+/// A document send uses Telegram's usual outgoing-message attributes.
+public struct AorusPluginFileSendOptions {
+    public let caption: String
+    public let silent: Bool
+    public let replyTo: Int32?
+    public let threadId: Int64?
+    public let scheduleAt: Int32?
+
+    public init(_ payload: [String: Any], now: Date = Date()) throws {
+        if let raw = payload["caption"], !(raw is String) { throw AorusPluginFiles.FileError.io("caption must be a string") }
+        caption = payload["caption"] as? String ?? ""
+        guard caption.count <= 1024 else { throw AorusPluginFiles.FileError.io("A file caption may contain at most 1024 characters") }
+        if let raw = payload["silent"] {
+            guard let value = raw as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID() else { throw AorusPluginFiles.FileError.io("silent must be boolean") }
+            silent = value.boolValue
+        } else { silent = false }
+        if let raw = payload["threadId"] {
+            guard let text = raw as? String, let id = Int64(text), id > 0 else { throw AorusPluginFiles.FileError.io("threadId must be a positive decimal identifier") }
+            threadId = id
+        } else { threadId = nil }
+        func positive(_ key: String) throws -> Int32? {
+            guard let raw = payload[key] else { return nil }
+            guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  number.doubleValue.isFinite, number.doubleValue.rounded() == number.doubleValue,
+                  number.doubleValue > 0, number.doubleValue <= Double(Int32.max) else { throw AorusPluginFiles.FileError.io("\(key) must be a positive 32-bit integer") }
+            return number.int32Value
+        }
+        replyTo = try positive("replyTo")
+        scheduleAt = try positive("scheduleAt")
+        if let scheduleAt, Double(scheduleAt) <= now.timeIntervalSince1970 { throw AorusPluginFiles.FileError.io("scheduleAt must be a future Unix timestamp") }
     }
 }
