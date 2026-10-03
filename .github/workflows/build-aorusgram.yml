@@ -792,6 +792,7 @@ jobs:
           # The plugin TL bridge is generated from the exact API layer being built.
           cp $PATCHES/submodules/TelegramApi/Sources/AorusPluginTL.swift $TG/submodules/TelegramApi/Sources/
           python3 aorusgram/scripts/gen_plugin_tl.py $TG/submodules/TelegramApi/Sources $TG/submodules/TelegramApi/Sources/AorusPluginTL.generated.swift
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusPluginAccountUpdates.swift $TG/submodules/TelegramCore/Sources/
 
           # 0. AorusGram core (ClientSpoofManager, AorusGramBootstrap, etc.) — must link into TelegramUI
           mkdir -p $TG/submodules/AorusGram
@@ -1002,7 +1003,8 @@ jobs:
         run: |
           python3 aorusgram/scripts/plugin_tl_check.py aorusgram \
             telegram-ios/submodules/TelegramApi/Sources --export-api /tmp/aorus-plugin-api
-          python3 aorusgram/scripts/plugin_system_native_check.py aorusgram /tmp/aorus-plugin-api
+          python3 aorusgram/scripts/plugin_system_native_check.py aorusgram /tmp/aorus-plugin-api \
+            --telegram-core-sources telegram-ios/submodules/TelegramCore/Sources
 
       - name: Restore pinned libXray archive
         id: libxray-cache

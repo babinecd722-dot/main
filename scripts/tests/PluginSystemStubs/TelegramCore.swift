@@ -2,10 +2,17 @@ import Foundation
 import TelegramApi
 import SwiftSignalKit
 
+public final class AccountStateManager {
+    public private(set) var count = 0
+    public init() {}
+    // The pinned TelegramCore entry point is internal, including in this stub.
+    func addUpdates(_ updates: Api.Updates) { count += 1 }
+}
+
 public struct MTRpcError: Error {
     public let errorCode: Int32
-    public let errorDescription: String
-    public init(errorCode: Int32, errorDescription: String) {
+    public let errorDescription: String?
+    public init(errorCode: Int32, errorDescription: String?) {
         self.errorCode = errorCode
         self.errorDescription = errorDescription
     }

@@ -57,7 +57,8 @@ python3 scripts/plugin_system_prelude_check.py .
 python3 scripts/plugin_tl_check.py . \
     /path/to/Telegram-iOS/submodules/TelegramApi/Sources \
     --export-api /tmp/aorus-plugin-api
-python3 scripts/plugin_system_native_check.py . /tmp/aorus-plugin-api
+python3 scripts/plugin_system_native_check.py . /tmp/aorus-plugin-api \
+    --telegram-core-sources /path/to/Telegram-iOS/submodules/TelegramCore/Sources
 ```
 
 Нужны Python 3, Node и Swift. Путь к Swift задаётся через `--swiftc`.
@@ -69,6 +70,8 @@ TL-проверка компилирует настоящий TelegramApi с м�
 Нативная проверка использует собранный TelegramApi и управляемый транспорт вместо
 соединения с Telegram. Проверяются аккаунт, передача Updates менеджеру состояния,
 ошибки, deadline, отмена, повторное использование ID и лимит запросов.
+Мост передачи Updates компилируется внутри TelegramCore; сигнатура и доступ
+метода в тестовом заменителе сверяются с исходником закреплённой версии Telegram.
 HTTP проверяется на локальном сервере: байты, потоковый лимит, перенаправления,
 заголовки, отмена и файлы. Файловый API компилируется из исходника клиента;
 проверяются создание, перезапись, квота и одновременные записи.

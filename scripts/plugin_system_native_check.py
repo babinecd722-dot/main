@@ -17,6 +17,7 @@ import time
 import base64
 import hashlib
 import struct
+import re
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -117,10 +118,21 @@ def main():
     parser.add_argument("repo", type=Path)
     parser.add_argument("api_build", type=Path)
     parser.add_argument("--swiftc", default="swiftc")
+    parser.add_argument("--telegram-core-sources", type=Path,
+                        help="Check the state manager stub against the pinned TelegramCore source")
     args = parser.parse_args()
     repo = args.repo.resolve()
     api = args.api_build.resolve()
     stubs = repo / "scripts/tests/PluginSystemStubs"
+    if args.telegram_core_sources:
+        actual = (args.telegram_core_sources / "State/AccountStateManager.swift").read_text()
+        stub = (stubs / "TelegramCore.swift").read_text()
+        signature = r"(?m)^    (?:(public|internal|private|fileprivate) )?func addUpdates\(_ updates: Api\.Updates\) \{"
+        actual_method, stub_method = re.search(signature, actual), re.search(signature, stub)
+        if not actual_method or not stub_method:
+            raise ValueError("AccountStateManager.addUpdates signature differs from the pinned source")
+        if (actual_method[1] or "internal") != (stub_method[1] or "internal"):
+            raise ValueError("AccountStateManager.addUpdates access differs from the pinned source")
     plugin = repo / "patches/submodules/AorusGramUI/Sources/Features/Plugins"
     with tempfile.TemporaryDirectory(prefix="aorus-system-native-") as directory:
         work = Path(directory)
@@ -135,6 +147,8 @@ def main():
                                      ("AccountContext", ["TelegramCore"]), ("AorusGram", [])]:
             install_name = ["-Xlinker", "-install_name", "-Xlinker", "@rpath/lib" + module + ".dylib"] if suffix == ".dylib" else []
             source_files = [str(stubs / (module + ".swift"))]
+            if module == "TelegramCore":
+                source_files.append(str(repo / "patches/submodules/TelegramCore/Sources/AorusPluginAccountUpdates.swift"))
             if module == "AorusGram":
                 text = (repo / "AorusGram/Sources/Features/Plugins/AorusPluginStore.swift").read_text()
                 # Compile the actual Foundation file API, independently of the UIKit store.

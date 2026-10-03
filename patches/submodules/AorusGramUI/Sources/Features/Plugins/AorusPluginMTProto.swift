@@ -125,7 +125,7 @@ final class AorusPluginMTProto {
                             guard self.requests[key]?.disposable === disposable else { return }
                             if (options["applyUpdates"] as? NSNumber)?.boolValue != false,
                                let updates = result as? Api.Updates {
-                                context.account.stateManager.addUpdates(updates)
+                                context.account.stateManager.aorusApplyPluginUpdates(updates)
                             }
                             do {
                                 let value = try AorusPluginTL.json(result)
@@ -140,7 +140,7 @@ final class AorusPluginMTProto {
                         self.queue.async {
                             guard self.requests[key]?.disposable === disposable else { return }
                             self.finish(key, .success(["error": ["code": error.errorCode,
-                                "message": error.errorDescription, "method": method]]))
+                                "message": error.errorDescription ?? "RPC_ERROR", "method": method]]))
                         }
                     }, completed: {
                         self.queue.async {

@@ -90,6 +90,13 @@ private enum AorusPluginMTProtoTests {
         }
         let error = try get("mtproto.call", call)["error"] as! [String: Any]
         expect(error["code"] as? Int32 == 420 && error["message"] as? String == "FLOOD_WAIT_10", "structured RPC error")
+        network.handler = { _, _, _, error, _ in
+            error(MTRpcError(errorCode: 500, errorDescription: nil))
+            return ActionDisposable {}
+        }
+        let unnamedError = try get("mtproto.call", call)["error"] as! [String: Any]
+        expect(unnamedError["message"] as? String == "RPC_ERROR", "nullable Objective-C error description")
+        expect(JSONSerialization.isValidJSONObject(unnamedError), "RPC error remains serializable without a description")
         network.handler = { _, _, _, _, completed in completed(); return ActionDisposable {} }
         rejected("mtproto.call", call)
         for action in ["mtproto.unknown", "mtproto.describe", "mtproto.catalog", "mtproto.encode", "mtproto.decode", "mtproto.prepare"] {
