@@ -40,6 +40,13 @@ jobs:
       - name: AorusAI module scope preflight
         run: python3 aorusgram/scripts/aorus_ai_scope_check.py aorusgram
 
+      # Check the same translation keys as the post-branding verifier before
+      # downloading Telegram and compiling the plugin transport tests.
+      - name: UI translation preflight
+        run: |
+          python3 aorusgram/scripts/tests/test_aorus_l10n_check.py
+          python3 aorusgram/scripts/aorus_l10n_check.py aorusgram
+
       # Parsing does not resolve initializers, so a UIKit subclass missing `init(coder:)`
       # is syntactically perfect and fails an hour into the build — twice now.
       - name: UIKit initializer preflight
