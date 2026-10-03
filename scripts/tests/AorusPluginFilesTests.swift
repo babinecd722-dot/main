@@ -38,6 +38,16 @@ private enum AorusPluginFilesTests {
         expect(try files.remove("bytes"), "remove existing")
         expect(try !files.remove("bytes"), "remove missing")
         expect(files.clear() == 1, "clear")
+        let composed = "первый.txt"
+        let decomposed = composed.decomposedStringWithCanonicalMapping
+        expect(Data(AorusPluginFiles.normalizedPath(decomposed)!.utf8) == Data(composed.utf8), "Unicode names normalize to NFC bytes")
+        try files.write(decomposed, text: "Unicode")
+        expect(try files.read(composed) == "Unicode", "canonically equivalent paths address the same file")
+        expect(Data((try files.info(decomposed)!["name"] as! String).utf8) == Data(composed.utf8)
+            && Data((files.list()[0]["name"] as! String).utf8) == Data(composed.utf8), "metadata and catalogue use NFC bytes")
+        let unicodeZip = try AorusPluginArchive.encode([decomposed: Data([1])])
+        expect(Data(try AorusPluginArchive.entries(unicodeZip)[0].name.utf8) == Data(composed.utf8), "ZIP names use NFC bytes")
+        _ = files.clear()
         expect(AorusPluginFiles.normalizedName("../outside") == nil, "invalid name")
         do { try files.writeData("../outside", data: Data()); fatalError("Invalid name accepted") }
         catch AorusPluginFiles.FileError.invalidName {}

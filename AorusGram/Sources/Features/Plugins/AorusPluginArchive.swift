@@ -48,9 +48,10 @@ public enum AorusPluginArchive {
         guard compression == "store" || compression == "deflate" else { throw error("compression must be store or deflate") }
         guard files.count <= AorusPluginFiles.maximumFileCount else { throw error("Too many entries") }
         var data = Data(), central = Data()
-        for (name, bytes) in files.sorted(by: { $0.key < $1.key }) {
-            let path = name.hasSuffix("/") ? String(name.dropLast()) : name
-            guard AorusPluginFiles.normalizedPath(path) != nil else { throw error("Invalid entry name") }
+        for (rawName, bytes) in files.sorted(by: { $0.key < $1.key }) {
+            let path = rawName.hasSuffix("/") ? String(rawName.dropLast()) : rawName
+            guard let normalized = AorusPluginFiles.normalizedPath(path) else { throw error("Invalid entry name") }
+            let name = normalized + (rawName.hasSuffix("/") ? "/" : "")
             guard bytes.count <= AorusPluginFiles.maximumFileBytes else { throw error("Entry exceeds the file limit") }
             guard !name.hasSuffix("/") || bytes.isEmpty else { throw error("A directory cannot contain bytes") }
             let method: UInt32 = compression == "deflate" && !name.hasSuffix("/") ? 8 : 0
@@ -105,7 +106,7 @@ public enum AorusPluginArchive {
             guard let name = String(data: data.subdata(in: cursor + 46..<cursor + 46 + nameSize), encoding: .utf8) else { throw error("Entry names must be UTF-8") }
             let directory = name.hasSuffix("/"), path = directory ? String(name.dropLast()) : name
             let mode = try number(data, cursor + 38, 4) >> 16
-            guard AorusPluginFiles.normalizedPath(path) != nil, names.insert(path).inserted,
+            guard let normalized = AorusPluginFiles.normalizedPath(path), names.insert(normalized).inserted,
                   mode & 0xf000 != 0xa000 else { throw error("Invalid, duplicate or symbolic-link entry") }
             guard size <= AorusPluginFiles.maximumFileBytes, !directory || size == 0 else { throw error("Invalid entry size") }
             total += size
@@ -117,7 +118,7 @@ public enum AorusPluginArchive {
             let start = offset + 30 + localNameSize + Int(try number(data, offset + 28, 2))
             guard start <= centralStart, compressed <= centralStart - start, localNameSize == nameSize,
                   data.subdata(in: offset + 30..<offset + 30 + localNameSize) == Data(name.utf8) else { throw error("Invalid entry data") }
-            result.append(Entry(name: name, size: size, directory: directory, compressedSize: compressed, offset: start, method: method, crc: try number(data, cursor + 16, 4)))
+            result.append(Entry(name: normalized + (directory ? "/" : ""), size: size, directory: directory, compressedSize: compressed, offset: start, method: method, crc: try number(data, cursor + 16, 4)))
             cursor += length
         }
         guard cursor == end else { throw error("Directory size mismatch") }

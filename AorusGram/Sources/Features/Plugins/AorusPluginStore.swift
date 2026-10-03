@@ -616,6 +616,7 @@ public struct AorusPluginFiles {
     }
 
     public static func normalizedPath(_ path: String) -> String? {
+        let path = path.precomposedStringWithCanonicalMapping
         guard !path.isEmpty, path.count <= 512, !path.contains("\\"),
               !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return nil }
         let parts = path.split(separator: "/", omittingEmptySubsequences: false)
@@ -657,10 +658,10 @@ public struct AorusPluginFiles {
         guard let iterator = FileManager.default.enumerator(atPath: directory.path) else { return [] }
         var result: [[String: Any]] = []
         for case let path as String in iterator {
-            guard Self.normalizedPath(path) != nil,
+            guard let name = Self.normalizedPath(path),
                   let attributes = try? FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(path).path) else { continue }
             if attributes[.type] as? FileAttributeType == .typeSymbolicLink { iterator.skipDescendants(); continue }
-            if let value = entry(path, attributes: attributes) { result.append(value) }
+            if let value = entry(name, attributes: attributes) { result.append(value) }
         }
         return result.sorted { ($0["name"] as! String) < ($1["name"] as! String) }
     }
@@ -740,6 +741,7 @@ public struct AorusPluginFiles {
     }
     public func info(_ name: String) throws -> [String: Any]? {
         try locked {
+            guard let name = Self.normalizedPath(name) else { throw FileError.invalidName }
             let url = try fileURL(name)
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
             return entry(name, attributes: attributes)

@@ -2698,8 +2698,8 @@ private enum AorusPluginDocumentation {
             aorus.files хранит файлы внутри папки плагина. Файлы остаются после остановки и
             перезапуска; удаление плагина удаляет его папку. Операции чтения, записи и упаковки
             работают без отдельного разрешения. Имена передаются как относительные пути: Unicode,
-            пробелы и скрытые файлы допустимы. Путь содержит до 512 символов и 16 компонентов,
-            компонент — до 255 байт UTF-8. Абсолютные пути, . и .., пустые компоненты,
+            пробелы и скрытые файлы допустимы. Имена нормализуются в Unicode NFC.
+            Путь содержит до 512 символов и 16 компонентов, компонент — до 255 байт UTF-8. Абсолютные пути, . и .., пустые компоненты,
             управляющие символы и обратная косая черта отклоняются. Символические ссылки не обходятся.
 
             Текст и JSON
@@ -3119,7 +3119,7 @@ private enum AorusPluginDocumentation {
     Haptics: light, medium, heavy, soft, rigid, selection, success, warning, error.
 
     Files
-    The files namespace stores data in the plugin directory. Files survive stopping and restarting the plugin; deleting the plugin removes the directory. Reading, writing and making archives need no separate permission. Paths are relative, with Unicode, spaces and hidden files supported. A path holds up to 512 characters and 16 components; each component holds up to 255 UTF-8 bytes. Absolute paths, dot and dot-dot components, empty components, control characters and backslashes are rejected. Symbolic links are not followed.
+    The files namespace stores data in the plugin directory. Files survive stopping and restarting the plugin; deleting the plugin removes the directory. Reading, writing and making archives need no separate permission. Paths are relative, with Unicode, spaces and hidden files supported. Names are normalized to Unicode NFC. A path holds up to 512 characters and 16 components; each component holds up to 255 UTF-8 bytes. Absolute paths, dot and dot-dot components, empty components, control characters and backslashes are rejected. Symbolic links are not followed.
 
     Text and JSON
     await aorus.files.writeText('notes.txt', 'First line')
