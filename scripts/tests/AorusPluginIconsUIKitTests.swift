@@ -13,6 +13,14 @@ private enum AorusPluginIconsUIKitTests {
             checks += 1
             if !value { fatalError(message) }
         }
+        func sameCanvas(_ image: UIImage, _ original: UIImage, _ message: String) {
+            // Vector symbols may have fractional point dimensions. A bitmap's canvas
+            // rounds each edge to a physical pixel, as UIKit drawing contexts do.
+            let pixel = 1.0 / max(1.0, original.scale)
+            expect(abs(image.size.width - original.size.width) < pixel + 0.000001
+                && abs(image.size.height - original.size.height) < pixel + 0.000001,
+                message + ": " + String(describing: image.size) + " versus " + String(describing: original.size))
+        }
         let defaults = UserDefaults.standard
         defer { defaults.removeObject(forKey: AorusPluginIconValues.personLookKey); defaults.removeObject(forKey: AorusPluginIconValues.layersKey) }
         defaults.removeObject(forKey: AorusPluginIconValues.personLookKey)
@@ -40,19 +48,19 @@ private enum AorusPluginIconsUIKitTests {
         }
         stage("checking own icon and preview")
         let global = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
-        expect(global.size == original.size, "waveform keeps layout size")
+        sameCanvas(global, original, "waveform keeps layout size")
         let own = AorusPluginIconValues.own(global, named: "AorusGram/Input/Dictation")!
         expect(own.pngData() == global.pngData(), "own icon is not styled a second time")
         expect(own.renderingMode == global.renderingMode, "template rendering mode")
         let preview = AorusPluginIconValues.preview(global, look:"pixel", amount:2.0)!
-        expect(preview.size == original.size, "preview retains symbol dimensions")
+        sameCanvas(preview, original, "preview retains symbol dimensions")
         expect(preview.pngData() != global.pngData(), "preview applies the selected amount to the original glyph")
         stage("checking dictation replacement")
         defaults.set(["test":["AorusGram/Input/Dictation":["kind":"symbol", "symbol":"pencil", "targets":["AorusGram/Input/Dictation"]]]], forKey: AorusPluginIconValues.layersKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
         let replaced = AorusPluginIconValues.own(global, named:"AorusGram/Input/Dictation")!
         expect(replaced.cgImage != nil, "a symbol can replace a symbol")
-        expect(replaced.size == original.size, "replacement keeps layout size")
+        sameCanvas(replaced, original, "replacement keeps layout size")
         expect(replaced.pngData() != global.pngData(), "dictation replacement is applied")
         defaults.removeObject(forKey:AorusPluginIconValues.personLookKey)
         defaults.removeObject(forKey:AorusPluginIconValues.layersKey)
