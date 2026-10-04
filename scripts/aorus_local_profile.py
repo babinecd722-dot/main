@@ -18,6 +18,8 @@ def verify_local_profile(tg: Path) -> list[str]:
         "submodules/TelegramUI/Sources/AorusMessageSettings.swift": ["UIAccessibility.isReduceMotionEnabled", "usingSpringWithDamping: 0.86", "outgoingPreview?.removeFromSuperview()", "kCAMediaTimingFunctionSpring", "AorusPluginIconValues.didChangeNotification", "self.updateGlyph()"],
         "submodules/CheckNode/Sources/CheckNode.swift": ["AorusPluginIconValues.drawnIcon", "aorusDrawOriginalCheck"],
         "submodules/RadialStatusNode/Sources/RadialStatusIconContentNode.swift": ["AorusPluginIconValues.drawnIcon", "aorusDrawOriginalStatus"],
+        "submodules/RadialStatusNode/Sources/RadialCheckContentNode.swift": ['named: "Telegram/Drawn/MediaCheck"'],
+        "submodules/RadialStatusNode/Sources/RadialCloudProgressContentNode.swift": ['named: "Telegram/Drawn/MediaCancel"', "self.cancelNode.color = self.color"],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift": ["aorusRatingIconRevision", "lhs.aorusIconRevision != rhs.aorusIconRevision", "styledBackgroundImage!.cgImage", "styledBorderImage!.cgImage"],
         "submodules/AorusGramUI/Sources/AorusMiscController.swift": ["case anonymousNumber", "strings.UserInfo_AnonymousNumberLabel", "setAnonymousNumber: { value in", "AorusPhoneSpoofStore.setAnonymous(value)"],
     }
@@ -176,6 +178,20 @@ def patch_drawn_icons(tg: Path) -> None:
     private static func aorusDrawOriginalStatus(context: CGContext, bounds: CGRect, parameters: RadialStatusIconContentNodeParameters) {
             let diameter'''),
         ("            }\n        }\n    }\n}", "            }\n    }\n}"),
+    ])
+
+    edit(tg, "submodules/RadialStatusNode/Sources/RadialCheckContentNode.swift", 'named: "Telegram/Drawn/MediaCheck"', [
+        ("        if let parameters = parameters as? RadialCheckContentNodeParameters {\n", '''        if let parameters = parameters as? RadialCheckContentNodeParameters {
+            AorusPluginIconValues.drawnIcon(context: context, size: bounds.size, named: "Telegram/Drawn/MediaCheck") { context in
+'''),
+        ("            context.strokePath()\n        }\n    }", "            context.strokePath()\n            }\n        }\n    }"),
+    ])
+    edit(tg, "submodules/RadialStatusNode/Sources/RadialCloudProgressContentNode.swift", 'named: "Telegram/Drawn/MediaCancel"', [
+        ("        if let parameters = parameters as? RadialCloudProgressContentCancelNodeParameters {\n", '''        if let parameters = parameters as? RadialCloudProgressContentCancelNodeParameters {
+            AorusPluginIconValues.drawnIcon(context: context, size: bounds.size, named: "Telegram/Drawn/MediaCancel") { context in
+'''),
+        ("            path.fill()\n        }\n    }", "            path.fill()\n            }\n        }\n    }"),
+        ("            self.spinnerNode.color = self.color", "            self.spinnerNode.color = self.color\n            self.cancelNode.color = self.color"),
     ])
 
     rating = "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift"

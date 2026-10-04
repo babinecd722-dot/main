@@ -950,7 +950,8 @@ final class AorusLookShuffleButton: UIButton {
     }
 
     private func updateGlyph() {
-        self.glyph.image = AorusPluginIconValues.symbol("arrow.triangle.2.circlepath", pointSize: 13.0, weight: .semibold)?.withRenderingMode(.alwaysTemplate)
+        let image = AorusPluginIconValues.symbol("arrow.triangle.2.circlepath", pointSize: 13.0, weight: .semibold) ?? AorusPluginIconValues.symbol("shuffle", pointSize: 13.0, weight: .semibold)
+        self.glyph.image = image?.withRenderingMode(.alwaysTemplate)
     }
 
     func update(frame: CGRect, theme: PresentationTheme, wallpaper: TelegramWallpaper, backgroundNode: WallpaperBackgroundNode?, backgroundSize: CGSize, title: String) {

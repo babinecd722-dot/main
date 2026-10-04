@@ -30523,8 +30523,6 @@ def main() -> None:
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)
     patch_fake_stars_all_gifts(tg)
-    from aorus_local_profile import patch_local_profile
-    patch_local_profile(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)
@@ -30567,6 +30565,8 @@ def main() -> None:
     patch_plugin_context_menu(tg)
     patch_plugin_settings_rows(tg)
     patch_plugin_settings_refresh(tg)
+    from aorus_local_profile import patch_local_profile
+    patch_local_profile(tg)
     patch_settings_route_registration(tg)
     patch_internal_delete_maintenance(tg)
     patch_hide_tabs(tg)
