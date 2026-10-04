@@ -181,6 +181,42 @@ private enum AorusPluginIconsUIKitTests {
         expect(styledGradient.size == gradient.size,"gradient icon keeps its canvas")
         expect(styledGradient.pngData() != gradient.pngData(),"gradient icon is pixelated")
         expect(styledGradient.renderingMode == .alwaysOriginal,"gradient icon keeps its colours")
+        stage("checking procedural controls")
+        func procedural(_ size: CGSize, styled: Bool) -> UIImage {
+            return generateImage(size, rotatedContext: { _, context in
+                let draw: (CGContext) -> Void = { target in
+                    target.setFillColor(UIColor.red.cgColor)
+                    target.fillEllipse(in: CGRect(x: 3, y: 5, width: 12, height: 9))
+                    target.setFillColor(UIColor.blue.cgColor)
+                    target.fill(CGRect(x: 17, y: 21, width: 7, height: 6))
+                }
+                if styled {
+                    AorusPluginIconValues.drawnIcon(context: context, size: size, named: "Telegram/Drawn/TestControl", draw: draw)
+                } else { draw(context) }
+            })!
+        }
+        let nativeControl = procedural(CGSize(width:32,height:32), styled:false)
+        let pixelControl = procedural(CGSize(width:32,height:32), styled:true)
+        func rgba(_ image: UIImage) -> [UInt8] {
+            let bitmap = image.cgImage!
+            var bytes = [UInt8](repeating:0,count:bitmap.width * bitmap.height * 4)
+            bytes.withUnsafeMutableBytes { buffer in
+                let context = CGContext(data:buffer.baseAddress,width:bitmap.width,height:bitmap.height,bitsPerComponent:8,bytesPerRow:bitmap.width * 4,space:CGColorSpaceCreateDeviceRGB(),bitmapInfo:CGImageAlphaInfo.premultipliedLast.rawValue)!
+                context.draw(bitmap,in:CGRect(x:0,y:0,width:CGFloat(bitmap.width),height:CGFloat(bitmap.height)))
+            }
+            return bytes
+        }
+        sameCanvas(pixelControl, nativeControl, "procedural control keeps its canvas")
+        expect(pixelControl.pngData() != nativeControl.pngData(), "procedural control uses Pixel")
+        expect(rgba(pixelControl) == rgba(AorusPluginIconValues.own(nativeControl,named:"Telegram/Drawn/TestControl")!), "procedural canvas preserves orientation, colours and transparency")
+        expect(pixelControl.renderingMode == nativeControl.renderingMode, "procedural control keeps native rendering mode")
+        let largeControl = procedural(CGSize(width:80,height:80), styled:true)
+        expect(largeControl.pngData() == procedural(CGSize(width:80,height:80),styled:false).pngData(), "large artwork is unchanged")
+        defaults.set(["look":"pixel", "amount":1.5, "names":["AorusGram/Input/Dictation"]],forKey:AorusPluginIconValues.personLookKey)
+        NotificationCenter.default.post(name:AorusPluginIconValues.didChangeNotification,object:nil)
+        expect(procedural(CGSize(width:32,height:32),styled:true).pngData() == nativeControl.pngData(), "procedural control respects icon scope")
+        defaults.set(["look":"pixel", "amount":1.5],forKey:AorusPluginIconValues.personLookKey)
+        NotificationCenter.default.post(name:AorusPluginIconValues.didChangeNotification,object:nil)
         stage("checking dictation replacement")
         defaults.set(["test":["AorusGram/Input/Dictation":["kind":"symbol", "symbol":"pencil", "targets":["AorusGram/Input/Dictation"]]]], forKey: AorusPluginIconValues.layersKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
@@ -195,6 +231,7 @@ private enum AorusPluginIconsUIKitTests {
         stage("checking reset")
         let unstyled = UIImage(systemName:"waveform",withConfiguration:UIImage.SymbolConfiguration(pointSize:20,weight:.regular))!
         expect(unstyled.pngData() == original.pngData(), "reset restores the original symbol")
+        expect(procedural(CGSize(width:32,height:32),styled:true).pngData() == nativeControl.pngData(), "reset restores native procedural drawing")
         print("UIKit icon resolver passed: \(checks) assertions")
     }
 }

@@ -1296,11 +1296,15 @@ private func aorusGlassMaterialNow(dark: Bool) -> String {
 /// The pixel material is the whole pixel look, the icons with it: choosing it draws every icon
 /// in the plugins' pixel style; leaving it takes the pixel icons back off. Pixel icons belong to
 /// the pixel material alone, so none outlive it.
+private func aorusSetPixelIcons(_ enabled: Bool) {
+    AorusIconLook.set(look: enabled ? "pixel" : nil, amount: enabled ? aorusIconPixelStandard : nil)
+}
+
 private func aorusPixelModeChanged(from previous: String, to material: String) {
     if material == "pixel" && previous != "pixel" {
-        AorusIconLook.set(look: "pixel", amount: aorusIconPixelStandard)
+        aorusSetPixelIcons(true)
     } else if material != "pixel" && AorusIconLook.current()?.look == "pixel" {
-        AorusIconLook.set(look: nil)
+        aorusSetPixelIcons(false)
     }
 }
 
@@ -1386,7 +1390,7 @@ func aorusBubbleSettingsController(context: AccountContext) -> ViewController {
         },
         setPixelIcons: { on in
             iconThrottle.cancelAll()
-            AorusIconLook.set(look: on ? "pixel" : nil, amount: on ? aorusIconPixelStandard : nil)
+            aorusSetPixelIcons(on)
         },
         setColor: { row, hex in
             aorusGlassStoreColor(row, hex, dark: screen.theme?.overallDarkAppearance ?? row.dark)

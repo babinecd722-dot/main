@@ -49,6 +49,8 @@ def drawn_own_icon_names(tg: Path) -> set[str]:
 def main() -> None:
     tg = Path(sys.argv[1]).resolve()
     err: list[str] = []
+    from aorus_local_profile import verify_local_profile
+    err.extend(verify_local_profile(tg))
 
     here = Path(__file__).resolve().parent
     branding_source = (here / "aorus_branding.py").read_text(encoding="utf-8")

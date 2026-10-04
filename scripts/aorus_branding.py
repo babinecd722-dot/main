@@ -10019,6 +10019,7 @@ public struct AorusStoredGift: Codable, Equatable {
     public var instanceId: Int64     // stable local identity; separates repeated generic purchases
     public var referencePeerId: Int64 // real profile peer used by the native per-gift reference
     public var purchasedLocally: Bool // true only for Fake Stars purchases
+    public var convertedLocally: Bool
     public var ownerPeerId: Int64    // 0 = legacy own-profile gift
     public var senderPeerId: Int64   // 0 = no sender / anonymous
     public var date: Int32
@@ -10032,11 +10033,12 @@ public struct AorusStoredGift: Codable, Equatable {
     public var collectionIds: [Int32]   // ids of the user's gift collections this fake gift belongs to
     public var collectionOrders: [String: Int32] // stable local order inside each collection
 
-    public init(giftData: Data, instanceId: Int64 = Int64.random(in: 1 ... Int64.max), referencePeerId: Int64 = 0, purchasedLocally: Bool = false, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = [], collectionOrders: [String: Int32] = [:]) {
+    public init(giftData: Data, instanceId: Int64 = Int64.random(in: 1 ... Int64.max), referencePeerId: Int64 = 0, purchasedLocally: Bool = false, convertedLocally: Bool = false, ownerPeerId: Int64 = 0, senderPeerId: Int64, date: Int32, comment: String, showInProfile: Bool, pinnedToTop: Bool = false, worn: Bool = false, pinnedOrder: Int32 = 0, resellStars: Int64 = 0, resellCurrency: Int32 = 0, collectionIds: [Int32] = [], collectionOrders: [String: Int32] = [:]) {
         self.giftData = giftData
         self.instanceId = instanceId
         self.referencePeerId = referencePeerId
         self.purchasedLocally = purchasedLocally
+        self.convertedLocally = convertedLocally
         self.ownerPeerId = ownerPeerId
         self.senderPeerId = senderPeerId
         self.date = date
@@ -10052,7 +10054,7 @@ public struct AorusStoredGift: Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case giftData, instanceId, referencePeerId, purchasedLocally, ownerPeerId, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds, collectionOrders
+        case giftData, instanceId, referencePeerId, purchasedLocally, convertedLocally, ownerPeerId, senderPeerId, date, comment, showInProfile, pinnedToTop, worn, pinnedOrder, resellStars, resellCurrency, collectionIds, collectionOrders
     }
 
     // Tolerant decode so gifts stored before pinnedToTop/worn/pinnedOrder/resellStars/collectionIds existed still load.
@@ -10062,6 +10064,7 @@ public struct AorusStoredGift: Codable, Equatable {
         self.instanceId = try c.decodeIfPresent(Int64.self, forKey: .instanceId) ?? 0
         self.referencePeerId = try c.decodeIfPresent(Int64.self, forKey: .referencePeerId) ?? 0
         self.purchasedLocally = try c.decodeIfPresent(Bool.self, forKey: .purchasedLocally) ?? false
+        self.convertedLocally = try c.decodeIfPresent(Bool.self, forKey: .convertedLocally) ?? false
         self.ownerPeerId = try c.decodeIfPresent(Int64.self, forKey: .ownerPeerId) ?? 0
         self.senderPeerId = try c.decode(Int64.self, forKey: .senderPeerId)
         self.date = try c.decode(Int32.self, forKey: .date)
@@ -10228,6 +10231,7 @@ public enum AorusFakeGiftsStore {
             var normalized = stored
             // Telegram never leaves a hidden gift pinned in the profile header.
             // Enforce the same invariant for edits made through the local manager.
+            if normalized.convertedLocally { normalized.showInProfile = false }
             if !normalized.showInProfile {
                 normalized.pinnedToTop = false
                 normalized.pinnedOrder = 0
@@ -10250,7 +10254,7 @@ public enum AorusFakeGiftsStore {
     }
 
     public static func ownProfileGifts() -> [AorusStoredGift] {
-        return all().filter { $0.ownerPeerId == 0 }
+        return all().filter { $0.ownerPeerId == 0 && !$0.convertedLocally }
     }
 
     public static func stored(for gift: StarGift, reference: StarGiftReference?) -> AorusStoredGift? {
@@ -10554,14 +10558,14 @@ public enum AorusFakeGiftsStore {
         switch ownedGift {
         case .unique:
             action = .starGiftUnique(gift: ownedGift, isUpgrade: false, isTransferred: false, savedToProfile: true, canExportDate: nil, transferStars: nil, isRefunded: false, isPrepaidUpgrade: false, peerId: recipientPeerId, senderId: accountPeerId, savedId: nil, resaleAmount: CurrencyAmount(amount: StarsAmount(value: stars, nanos: 0), currency: .stars), canTransferDate: nil, canResaleDate: nil, dropOriginalDetailsStars: nil, assigned: false, fromOffer: false, canCraftAt: nil, isCrafted: false)
-        case .generic:
+        case let .generic(genericGift):
             // A gift bought for oneself is one's own to upgrade, from its card as from the
             // profile: the card names the stored instance, which is the reference the gift
             // screen builds from a card's peer and saved id, and states the upgrade price the
             // way the profile's own entry does. A gift for someone else is theirs, not ours.
             let isOwnGift = recipientPeerId == accountPeerId
             let upgradeStars = isOwnGift ? upgradePrice(ownedGift) : nil
-            action = .starGift(gift: ownedGift, convertStars: nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: upgradeStars != nil, upgradeStars: upgradeStars, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: isOwnGift ? instanceId : nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
+            action = .starGift(gift: ownedGift, convertStars: (isOwnGift && AorusFakeStarsStore.isEnabled) ? genericGift.convertStars : nil, text: text.isEmpty ? nil : text, entities: entities.isEmpty ? nil : entities, nameHidden: hideName, savedToProfile: true, converted: false, upgraded: false, canUpgrade: upgradeStars != nil, upgradeStars: upgradeStars, isRefunded: false, isPrepaidUpgrade: false, upgradeMessageId: nil, peerId: recipientPeerId, senderId: accountPeerId, savedId: isOwnGift ? instanceId : nil, prepaidUpgradeHash: nil, giftMessageId: nil, upgradeSeparate: false, isAuctionAcquired: false, toPeerId: recipientPeerId, number: nil)
         }
         let message = StoreMessage(peerId: recipientPeerId, namespace: Namespaces.Message.Local, customStableId: nil, globallyUniqueId: Int64.random(in: Int64.min ... Int64.max), groupingKey: nil, threadId: nil, timestamp: timestamp, flags: [], tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: accountPeerId, text: "", attributes: [], media: [TelegramMediaAction(action: action)])
         let _ = account.postbox.transaction { transaction -> Void in
@@ -10685,7 +10689,7 @@ public enum AorusFakeGiftsStore {
         // An ordinary gift that states an upgrade price can become a collectible, and the
         // native screen only offers the button when the wrapper says so. This was hardcoded
         // to false, which is why a stock gift had no Upgrade at all.
-        let aorusUpgradePrice = stored.gift.flatMap { AorusFakeGiftsStore.upgradePrice($0) }
+        let aorusUpgradePrice = stored.convertedLocally ? nil : stored.gift.flatMap { AorusFakeGiftsStore.upgradePrice($0) }
         var dict: [String: Any] = [
             "gift": giftObject,
             "date": Int(stored.date),
@@ -10696,6 +10700,9 @@ public enum AorusFakeGiftsStore {
         ]
         if let aorusUpgradePrice {
             dict["upgradeStars"] = Int(aorusUpgradePrice)
+        }
+        if !stored.convertedLocally, AorusFakeStarsStore.isEnabled, case let .generic(gift)? = stored.gift {
+            dict["convertStars"] = gift.convertStars
         }
         if renderedSenderPeerId != 0 {
             dict["fromPeerId"] = ["iv": renderedSenderPeerId]
@@ -10985,6 +10992,21 @@ public enum AorusFakeStarsStore {
     // Posted on every change so a live StarsContext can re-publish its state at once.
     public static let changedNotification = Notification.Name("AorusGramFakeStarsChanged")
 
+    public static var localRatingData: Data? {
+        if let data = UserDefaults.standard.data(forKey: "aorusgram_fake_stars_rating_v1") ?? aorusKeychainGet(account: "rating_v1") { return data }
+        let purchases = storedTransactions().filter { $0.giftData != nil || $0.premiumMonths != nil }.map {
+            (account: $0.accountPeerId, event: $0.id, amount: $0.amount, resale: $0.isResale)
+        }
+        let data = AorusLocalStarRating.migrating(purchases: purchases)
+        if let data { saveLocalRatingData(data) }
+        return data
+    }
+
+    public static func saveLocalRatingData(_ data: Data) {
+        UserDefaults.standard.set(data, forKey: "aorusgram_fake_stars_rating_v1")
+        aorusKeychainSet(data, account: "rating_v1")
+    }
+
     public static var isEnabled: Bool {
         if UserDefaults.standard.bool(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04") {
             return false
@@ -11007,8 +11029,12 @@ public enum AorusFakeStarsStore {
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
+    private static let balanceLock = NSRecursiveLock()
+
     // The fake balance, in whole stars.
     public static var amount: Int64 {
+        balanceLock.lock()
+        defer { balanceLock.unlock() }
         if UserDefaults.standard.object(forKey: amountKey) == nil {
             if let data = aorusKeychainGet(account: keychainAmountAccount), data.count == 8 {
                 var value: Int64 = 0
@@ -11018,15 +11044,32 @@ public enum AorusFakeStarsStore {
             }
             return 0
         }
-        return Int64(UserDefaults.standard.integer(forKey: amountKey))
+        if let value = UserDefaults.standard.object(forKey: amountKey) as? NSNumber { return max(0, value.int64Value) }
+        if let text = UserDefaults.standard.string(forKey: amountKey), let value = Int64(text) { return max(0, value) }
+        return 0
     }
 
-    public static func setAmount(_ value: Int64) {
+    private static func writeAmount(_ value: Int64) {
         let clamped = max(0, value)
         UserDefaults.standard.set(clamped, forKey: amountKey)
         var v = clamped
         let data = withUnsafeBytes(of: &v) { Data($0) }
         aorusKeychainSet(data, account: keychainAmountAccount)
+    }
+
+    public static func setAmount(_ value: Int64) {
+        balanceLock.lock()
+        writeAmount(value)
+        balanceLock.unlock()
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    public static func credit(_ value: Int64) {
+        guard value >= 0 else { return }
+        balanceLock.lock()
+        let (updated, overflow) = amount.addingReportingOverflow(value)
+        writeAmount(overflow ? Int64.max : updated)
+        balanceLock.unlock()
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 
@@ -11036,9 +11079,12 @@ public enum AorusFakeStarsStore {
     @discardableResult
     public static func spend(_ value: Int64) -> Bool {
         guard isEnabled, value >= 0 else { return false }
+        balanceLock.lock()
         let current = amount
-        guard current >= value else { return false }
-        setAmount(current - value)
+        guard current >= value else { balanceLock.unlock(); return false }
+        writeAmount(current - value)
+        balanceLock.unlock()
+        NotificationCenter.default.post(name: changedNotification, object: nil)
         return true
     }
 
@@ -11146,7 +11192,7 @@ public enum AorusFakeStarsStore {
         aorusKeychainSet(data, account: keychainDailySpendingAccount)
     }
 
-    public static func recordPurchase(accountPeerId: PeerId, recipientPeerId: PeerId, amount: Int64, gift: StarGift?, premiumMonths: Int32?, text: String) {
+    public static func recordPurchase(accountPeerId: PeerId, recipientPeerId: PeerId, amount: Int64, gift: StarGift?, premiumMonths: Int32?, text: String, isUpgrade: Bool = false) {
         guard isEnabled, amount > 0 else { return }
         // Load/migrate totals before inserting the new row, so the current purchase is
         // counted exactly once when upgrading from transaction-only storage.
@@ -11178,6 +11224,9 @@ public enum AorusFakeStarsStore {
         var values = storedTransactions()
         values.insert(value, at: 0)
         persistTransactions(values)
+        if gift != nil || premiumMonths != nil {
+            _ = AorusLocalStarRating.record(accountPeerId: accountPeerId, event: value.id, amount: amount, operation: isUpgrade ? .upgrade : (isResale ? .resale : .gift))
+        }
         let accountKey = String(accountPeerId.toInt64())
         let (updatedTotal, overflow) = (spentTotals[accountKey] ?? 0).addingReportingOverflow(amount)
         spentTotals[accountKey] = overflow ? Int64.max : updatedTotal
@@ -11405,6 +11454,8 @@ extension AorusFakeGiftsStore {
               case let .generic(generic) = gift,
               let price = upgradePrice(gift) else { return nil }
 
+        guard !stored.convertedLocally else { return Signal<ProfileGiftsContext.State.StarGift, UpgradeStarGiftError>.fail(.generic) }
+
         // The balance is *checked* here and *spent* further down, once there is a
         // collectible to hand over. Spending first would have taken the stars for an upgrade
         // that then failed to assemble, and nothing would have given them back. Checking
@@ -11446,7 +11497,8 @@ extension AorusFakeGiftsStore {
                     amount: price,
                     gift: gift,
                     premiumMonths: nil,
-                    text: ""
+                    text: "",
+                    isUpgrade: true
                 )
             }
             guard let upgraded = AorusFakeGiftsStore.replaceStoredGift(
@@ -13997,9 +14049,32 @@ public enum AorusPhoneSpoofStore {
             _ = ensureNumber()
         }
         UserDefaults.standard.set(effectiveValue, forKey: enabledKey)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    public static let changedNotification = Notification.Name("AorusGramPhoneSpoofChanged")
+    private static let anonymousKey = "aorusgram_phone_spoof_anonymous"
+    private static let anonymousNumberKey = "aorusgram_phone_spoof_anonymous_number"
+    private static let anonymousDateKey = "aorusgram_phone_spoof_anonymous_date"
+
+    public static var isAnonymous: Bool { UserDefaults.standard.bool(forKey: anonymousKey) }
+    public static var anonymousDate: Int32 { Int32(clamping: UserDefaults.standard.integer(forKey: anonymousDateKey)) }
+
+    public static func setAnonymous(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: anonymousKey)
+        _ = ensureNumber()
+        NotificationCenter.default.post(name: changedNotification, object: nil)
+    }
+
+    private static func completeAnonymous(_ value: String) -> Bool {
+        return value.hasPrefix("+888") && value.count == 12 && value.dropFirst().allSatisfy { $0.isASCII && $0.isNumber }
     }
 
     public static func ensureNumber() -> String {
+        if isAnonymous {
+            if let stored = UserDefaults.standard.string(forKey: anonymousNumberKey), completeAnonymous(stored) { return stored }
+            return randomize()
+        }
         if let stored = UserDefaults.standard.string(forKey: numberKey), isComplete(stored) {
             return stored
         }
@@ -14007,20 +14082,37 @@ public enum AorusPhoneSpoofStore {
     }
 
     public static func setNumber(_ rawValue: String) -> String {
+        if isAnonymous {
+            let digits = rawValue.filter { $0.isASCII && $0.isNumber }
+            let candidate = "+" + digits
+            guard completeAnonymous(candidate) else { return ensureNumber() }
+            UserDefaults.standard.set(candidate, forKey: anonymousNumberKey)
+            NotificationCenter.default.post(name: changedNotification, object: nil)
+            return candidate
+        }
         if rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             UserDefaults.standard.set("", forKey: numberKey)
             return ""
         }
         let normalized = normalize(rawValue)
         UserDefaults.standard.set(normalized, forKey: numberKey)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
         return normalized
     }
 
     public static func randomize() -> String {
+        if isAnonymous {
+            let value = "+888" + String(Int.random(in: 10000000 ... 99999999))
+            UserDefaults.standard.set(value, forKey: anonymousNumberKey)
+            UserDefaults.standard.set(Int(Date().timeIntervalSince1970), forKey: anonymousDateKey)
+            NotificationCenter.default.post(name: changedNotification, object: nil)
+            return value
+        }
         let rule = defaultRule
         let digits = randomNationalNumber(rule: rule)
         let value = "+\\(rule.countryCode)\\(digits)"
         UserDefaults.standard.set(value, forKey: numberKey)
+        NotificationCenter.default.post(name: changedNotification, object: nil)
         return value
     }
 
@@ -30425,6 +30517,8 @@ def main() -> None:
     patch_fake_stars_statistics(tg)
     patch_fake_stars_purchases(tg)
     patch_fake_stars_all_gifts(tg)
+    from aorus_local_profile import patch_local_profile
+    patch_local_profile(tg)
     patch_stars_purchase_redirects(tg)
     patch_anti_search(tg)
     patch_wallpaper_remove_footer(tg)
@@ -30485,6 +30579,8 @@ def main() -> None:
     patch_plugin_chat_list_button(tg)
     # After every patch of the tab bar and the profile: its anchors are lines those leave.
     patch_plugin_icons(tg)
+    from aorus_local_profile import patch_drawn_icons
+    patch_drawn_icons(tg)
     patch_plugin_profile_look(tg)
     patch_message_look(tg)
     patch_message_settings(tg)

@@ -635,6 +635,7 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
     private var itemHeaderNodes: [ListViewItemNode.HeaderId: ListViewItemHeaderNode] = [:]
     private var item: AorusMessagePreviewItem?
     private var shuffleButton: AorusLookShuffleButton?
+    private var outgoingPreview: UIView?
     /// The size the wallpaper was last laid out at. It is the height of the list the screen
     /// shows, not the row's: the wallpaper then looks as it does behind a chat, and it keeps
     /// its scale while the row grows and shrinks instead of zooming with it.
@@ -751,19 +752,28 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             let previousItem = strongSelf.item
             strongSelf.item = item
 
-            // Another message, or the other side: what was there fades out over what comes,
-            // rather than the words or the bubbles jumping from one to the other.
+            // Keep the wallpaper still while the message changes with the same spring
+            // as the person in the bubble preview.
             let sampleChanged = previousItem.map { $0.sample != item.sample } ?? false
             var crossfades = false
-            if (!reuse && !strongSelf.messageNodes.isEmpty) || sampleChanged, let snapshot = strongSelf.containerNode.view.snapshotView(afterScreenUpdates: false) {
+            strongSelf.outgoingPreview?.removeFromSuperview()
+            strongSelf.outgoingPreview = nil
+            strongSelf.containerNode.layer.removeAnimation(forKey: "opacity")
+            strongSelf.containerNode.layer.removeAnimation(forKey: "position")
+            if !UIAccessibility.isReduceMotionEnabled, (!reuse && !strongSelf.messageNodes.isEmpty) || sampleChanged, let snapshot = strongSelf.containerNode.view.snapshotView(afterScreenUpdates: false) {
                 crossfades = true
+                strongSelf.outgoingPreview = snapshot
                 snapshot.frame = strongSelf.containerNode.frame
                 snapshot.isUserInteractionEnabled = false
                 strongSelf.view.insertSubview(snapshot, aboveSubview: strongSelf.containerNode.view)
-                UIView.animate(withDuration: 0.22, delay: 0.0, options: [.curveEaseInOut], animations: {
+                UIView.animate(withDuration: 0.4, delay: 0.0, usingSpringWithDamping: 0.86, initialSpringVelocity: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
                     snapshot.alpha = 0.0
+                    snapshot.transform = CGAffineTransform(translationX: 0.0, y: -8.0)
                 }, completion: { _ in
                     snapshot.removeFromSuperview()
+                    if strongSelf.outgoingPreview === snapshot {
+                        strongSelf.outgoingPreview = nil
+                    }
                 })
             }
 
@@ -883,7 +893,8 @@ private final class AorusMessagePreviewItemNode: ListViewItemNode {
             }
             strongSelf.updateShuffleButton(item: item, params: params, backgroundSize: backgroundSize)
             if crossfades {
-                strongSelf.containerNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.22, timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue)
+                strongSelf.containerNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.4)
+                strongSelf.containerNode.layer.animatePosition(from: CGPoint(x: 0.0, y: 8.0), to: CGPoint(), duration: 0.4, timingFunction: kCAMediaTimingFunctionSpring, additive: true)
             }
         })
     }
@@ -904,6 +915,7 @@ final class AorusLookShuffleButton: UIButton {
     static let size: CGFloat = 32.0
 
     private let glyph: UIImageView
+    private var iconObserver: NSObjectProtocol?
     /// The button's plate: the same material a chat's date stands on, over this wallpaper.
     private var blur: NavigationBackgroundNode?
     private var wallpaperContent: WallpaperBubbleBackgroundNode?
@@ -922,13 +934,27 @@ final class AorusLookShuffleButton: UIButton {
         self.addTarget(self, action: #selector(self.tapped), for: .touchUpInside)
         self.addTarget(self, action: #selector(self.pressed), for: [.touchDown, .touchDragEnter])
         self.addTarget(self, action: #selector(self.released), for: [.touchUpOutside, .touchCancel, .touchUpInside, .touchDragExit])
+        self.iconObserver = NotificationCenter.default.addObserver(forName: AorusPluginIconValues.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in self?.updateGlyph() }
+        }
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        if let iconObserver = self.iconObserver {
+            NotificationCenter.default.removeObserver(iconObserver)
+        }
+    }
+
+    private func updateGlyph() {
+        self.glyph.image = AorusPluginIconValues.symbol("arrow.triangle.2.circlepath", pointSize: 13.0, weight: .semibold)?.withRenderingMode(.alwaysTemplate)
+    }
+
     func update(frame: CGRect, theme: PresentationTheme, wallpaper: TelegramWallpaper, backgroundNode: WallpaperBackgroundNode?, backgroundSize: CGSize, title: String) {
+        self.updateGlyph()
         // Where a chat lays its dates on the wallpaper itself, dimmed, so does this; elsewhere
         // it is the tinted blur a chat's date uses.
         if let backgroundNode, backgroundNode.hasExtraBubbleBackground() {

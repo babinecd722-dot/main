@@ -85,6 +85,9 @@ jobs:
       - name: Client lifecycle and Mach sampling preflight
         run: python3 aorusgram/scripts/client_lifecycle_check.py aorusgram
 
+      - name: Local phone, rating and gift conversion preflight
+        run: python3 aorusgram/scripts/local_profile_check.py aorusgram
+
       - name: Plugin network profile preflight
         run: |
           mkdir -p /tmp/aorus-plugin-scope
@@ -806,6 +809,8 @@ jobs:
           cp $PATCHES/submodules/TelegramApi/Sources/AorusPluginTL.swift $TG/submodules/TelegramApi/Sources/
           python3 aorusgram/scripts/gen_plugin_tl.py $TG/submodules/TelegramApi/Sources $TG/submodules/TelegramApi/Sources/AorusPluginTL.generated.swift
           cp $PATCHES/submodules/TelegramCore/Sources/AorusPluginAccountUpdates.swift $TG/submodules/TelegramCore/Sources/
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalStarRating.swift $TG/submodules/TelegramCore/Sources/
+          cp $PATCHES/submodules/TelegramCore/Sources/AorusLocalGiftConversion.swift $TG/submodules/TelegramCore/Sources/
 
           # 0. AorusGram core (ClientSpoofManager, AorusGramBootstrap, etc.) — must link into TelegramUI
           mkdir -p $TG/submodules/AorusGram

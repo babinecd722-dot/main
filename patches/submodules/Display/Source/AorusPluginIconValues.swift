@@ -195,6 +195,30 @@ public enum AorusPluginIconValues {
         return result
     }
 
+    /// Procedural controls use a CGContext rather than an image asset. Keep their native
+    /// drawing, including animation progress and colours, and style its small icon canvas.
+    public static func drawnIcon(context: CGContext, size: CGSize, named name: String, draw: (CGContext) -> Void) {
+        guard size.width > 0, size.height > 0, size.width <= styleLimit, size.height <= styleLimit, affects(name) else {
+            draw(context)
+            return
+        }
+        let original = generateImage(size, rotatedContext: { _, iconContext in
+            UIGraphicsPushContext(iconContext)
+            defer { UIGraphicsPopContext() }
+            iconContext.clear(CGRect(origin: .zero, size: size))
+            draw(iconContext)
+        })
+        guard let image = own(original, named: name) else {
+            draw(context)
+            return
+        }
+        context.saveGState()
+        defer { context.restoreGState() }
+        UIGraphicsPushContext(context)
+        defer { UIGraphicsPopContext() }
+        image.draw(in: CGRect(origin: .zero, size: size))
+    }
+
     fileprivate static func systemSymbol(name: String, load: () -> UIImage?) -> UIImage? {
         let previous = Thread.current.threadDictionary[renderingKey]
         Thread.current.threadDictionary[renderingKey] = true

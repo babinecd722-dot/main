@@ -71,6 +71,7 @@ private struct MiscState: Equatable {
     var formattingPanel: Bool
     var autoFormatStyle: String
     var phoneSpoof: Bool
+    var anonymousNumber: Bool
     var phoneSpoofNumber: String
     var mediaMetadata: Bool
     var linkProtection: Bool
@@ -98,6 +99,7 @@ private final class MiscArguments {
     let openAnimatedWallpapers: () -> Void
     let openAnimatedBanner: () -> Void
     let setPhoneSpoof: (Bool) -> Void
+    let setAnonymousNumber: (Bool) -> Void
     let setPhoneSpoofNumber: (String) -> Void
     let randomizePhoneSpoof: () -> Void
     let setMediaMetadata: (Bool) -> Void
@@ -107,7 +109,7 @@ private final class MiscArguments {
     let openChatLock: () -> Void
     let setActionConfirmation: (Bool) -> Void
 
-    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAutoFormat: @escaping () -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
+    init(setLocalPremium: @escaping (Bool) -> Void, openFakeGifts: @escaping () -> Void, setFakeStars: @escaping (Bool) -> Void, setFakeStarsAmount: @escaping (String) -> Void, openVoiceTwin: @escaping () -> Void, openQuickReplies: @escaping () -> Void, setAutoReply: @escaping (Bool) -> Void, setAntiSearch: @escaping (Bool) -> Void, setAnonymousStickers: @escaping (Bool) -> Void, setProfileLink: @escaping (Bool) -> Void, selectProfileLinkSelf: @escaping () -> Void, selectProfileLinkPeer: @escaping () -> Void, setFormattingPanel: @escaping (Bool) -> Void, openAutoFormat: @escaping () -> Void, openAnimatedWallpapers: @escaping () -> Void, openAnimatedBanner: @escaping () -> Void, setPhoneSpoof: @escaping (Bool) -> Void, setAnonymousNumber: @escaping (Bool) -> Void, setPhoneSpoofNumber: @escaping (String) -> Void, randomizePhoneSpoof: @escaping () -> Void, setMediaMetadata: @escaping (Bool) -> Void, setLinkProtection: @escaping (Bool) -> Void, setLinkProtectionRedirects: @escaping (Bool) -> Void, setLinkProtectionBlockFiles: @escaping (Bool) -> Void, openChatLock: @escaping () -> Void, setActionConfirmation: @escaping (Bool) -> Void) {
         self.setLocalPremium = setLocalPremium
         self.openFakeGifts = openFakeGifts
         self.setFakeStars = setFakeStars
@@ -125,6 +127,7 @@ private final class MiscArguments {
         self.openAnimatedWallpapers = openAnimatedWallpapers
         self.openAnimatedBanner = openAnimatedBanner
         self.setPhoneSpoof = setPhoneSpoof
+        self.setAnonymousNumber = setAnonymousNumber
         self.setPhoneSpoofNumber = setPhoneSpoofNumber
         self.randomizePhoneSpoof = randomizePhoneSpoof
         self.setMediaMetadata = setMediaMetadata
@@ -162,6 +165,7 @@ private enum MiscEntry: ItemListNodeEntry {
     case animatedWallpapers(PresentationTheme, String)
     case animatedBanner(PresentationTheme, String)
     case phoneSpoof(PresentationTheme, String, Bool)
+    case anonymousNumber(PresentationTheme, String, Bool)
     case phoneSpoofNumber(PresentationTheme, String, String)
     case phoneSpoofRandomize(PresentationTheme, String)
     case phoneSpoofInfo(PresentationTheme, String)
@@ -189,7 +193,7 @@ private enum MiscEntry: ItemListNodeEntry {
         case .autoReply:
             return MiscSection.autoReplyS.rawValue
         case .antiSearchHeader, .antiSearch, .antiSearchInfo, .anonymousStickers, .anonymousStickersInfo,
-             .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .phoneSpoofNumber,
+             .profileLink, .profileLinkSelf, .profileLinkPeer, .profileLinkInfo, .phoneSpoof, .anonymousNumber, .phoneSpoofNumber,
              .phoneSpoofRandomize, .phoneSpoofInfo, .mediaMetadata, .mediaMetadataInfo:
             return MiscSection.antiSearch.rawValue
         case .formattingPanel, .autoFormat:
@@ -227,6 +231,7 @@ private enum MiscEntry: ItemListNodeEntry {
         case .profileLinkPeer:  return 37
         case .profileLinkInfo:  return 38
         case .phoneSpoof:       return 39
+        case .anonymousNumber:  return 58
         case .phoneSpoofNumber: return 40
         case .phoneSpoofRandomize: return 41
         case .phoneSpoofInfo:   return 42
@@ -248,7 +253,11 @@ private enum MiscEntry: ItemListNodeEntry {
     }
 
     static func < (lhs: MiscEntry, rhs: MiscEntry) -> Bool {
-        return lhs.stableId < rhs.stableId
+        func order(_ entry: MiscEntry) -> Int32 {
+            if case .anonymousNumber = entry { return 79 }
+            return entry.stableId * 2
+        }
+        return order(lhs) < order(rhs)
     }
 
     static func == (lhs: MiscEntry, rhs: MiscEntry) -> Bool {
@@ -303,6 +312,8 @@ private enum MiscEntry: ItemListNodeEntry {
             if case let .animatedBanner(rt, rs) = rhs { return lt === rt && ls == rs }
         case let .phoneSpoof(lt, ls, lv):
             if case let .phoneSpoof(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
+        case let .anonymousNumber(lt, ls, lv):
+            if case let .anonymousNumber(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .phoneSpoofNumber(lt, ls, lv):
             if case let .phoneSpoofNumber(rt, rs, rv) = rhs { return lt === rt && ls == rs && lv == rv }
         case let .phoneSpoofRandomize(lt, ls):
@@ -408,6 +419,8 @@ private enum MiscEntry: ItemListNodeEntry {
             return ItemListDisclosureItem(presentationData: presentationData, title: title, label: "", sectionId: section, style: .blocks, action: args.openAnimatedBanner)
         case let .phoneSpoof(_, title, value):
             return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: { args.setPhoneSpoof($0) })
+        case let .anonymousNumber(_, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, title: title, value: value, sectionId: section, style: .blocks, updated: args.setAnonymousNumber)
         case let .phoneSpoofNumber(_, placeholder, value):
             return ItemListSingleLineInputItem(
                 presentationData: presentationData,
@@ -490,6 +503,8 @@ private func miscEntries(state: MiscState, theme: PresentationTheme, strings: Pr
     entries.append(.profileLinkInfo(theme, aorusL("Делает весь текст ваших исходящих сообщений кликабельным упоминанием выбранного профиля.", "Makes the whole text of your outgoing messages a clickable mention of the selected profile.")))
     entries.append(.phoneSpoof(theme, aorusL("Подмена номера", "Phone Spoofing"), state.phoneSpoof))
     if state.phoneSpoof {
+        let anonymousTitle = strings.UserInfo_AnonymousNumberLabel
+        entries.append(.anonymousNumber(theme, anonymousTitle.prefix(1).uppercased() + String(anonymousTitle.dropFirst()), state.anonymousNumber))
         entries.append(.phoneSpoofNumber(theme, aorusL("Номер", "Number"), state.phoneSpoofNumber))
         entries.append(.phoneSpoofRandomize(theme, aorusL("Рандомизировать", "Randomize")))
     }
@@ -534,6 +549,7 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
         formattingPanel: UserDefaults.standard.bool(forKey: "aorusgram_formatting_panel"),
         autoFormatStyle: aorusAutoFormatStyle(),
         phoneSpoof: AorusPhoneSpoofStore.isEnabled,
+        anonymousNumber: AorusPhoneSpoofStore.isAnonymous,
         phoneSpoofNumber: AorusPhoneSpoofStore.ensureNumber(),
         mediaMetadata: UserDefaults.standard.bool(forKey: "aorusgram_media_metadata_enabled"),
         linkProtection: AorusLinkProtection.isEnabled,
@@ -745,11 +761,21 @@ public func aorusMiscController(context: AccountContext, shortcutRoutes: AorusSe
                 return next
             }
         },
+        setAnonymousNumber: { value in
+            AorusPhoneSpoofStore.setAnonymous(value)
+            let number = AorusPhoneSpoofStore.ensureNumber()
+            updateState { current in
+                var next = current
+                next.anonymousNumber = value
+                next.phoneSpoofNumber = number
+                return next
+            }
+        },
         setPhoneSpoofNumber: { text in
             let number = AorusPhoneSpoofStore.setNumber(text)
             updateState { current in
                 var next = current
-                next.phoneSpoofNumber = number
+                next.phoneSpoofNumber = AorusPhoneSpoofStore.isAnonymous ? text : number
                 return next
             }
         },
