@@ -2050,7 +2050,9 @@ if AorusPluginSandbox.watchdogAvailable {
     expect((chatsSpec?["targets"] as? [String]) == ["Chat List/Tabs/IconChats"], "a slot names the icons it replaces")
     expect(((iconsGood.layer["input.send"] as? [String: Any])?["palette"] as? [String: String]) == ["#": "FF3B30"], "palette colours are kept in capitals")
     expect((iconsGood.layer["Navigation/Back"] as? [String: Any])?["image"] is Data, "a PNG is kept as its bytes")
-    expect(iconsGood.layer["header.back"] == nil, "a slot whose only icon is also named directly is left out")
+    expect(((iconsGood.layer["header.back"] as? [String: Any])?["targets"] as? [String]) == ["Telegram/Navigation/Back", "Telegram/Navigation/GlassBack"], "a direct asset replacement leaves the slot's procedural arrows in place")
+    let singleTargetOverride = AorusPluginIcons.validate(["tab.chats": "star", "Chat List/Tabs/IconChats": "heart"], iconExists: iconExists)
+    expect(singleTargetOverride.rejections.isEmpty && singleTargetOverride.layer["tab.chats"] == nil, "a slot whose only icon is also named directly is left out")
     let pathSpec = AorusPluginIcons.validate(["header.close": ["path": "M4 4 L20 20 M20 4 L4 20", "stroke": NSNumber(value: 2)]], iconExists: iconExists).layer["header.close"] as? [String: Any]
     expect((pathSpec?["viewBox"] as? [Double]) == [0, 0, 24, 24], "a path without a viewBox is on a 24 point grid")
     let iconStyle = iconsGood.layer["*"] as? [String: Any]
@@ -2074,7 +2076,13 @@ if AorusPluginSandbox.watchdogAvailable {
     expect(AorusPluginIcons.ownIconNames.allSatisfy { name in AorusPluginIcons.catalog.contains { $0.assets.contains(name) } }, "every own icon has a slot")
     expect(AorusPluginIcons.catalogByName["format.clipboard"]?.assets == ["AorusGram/Input/Formatting/clipboard", "AorusGram/Input/Formatting/doc.on.clipboard"], "clipboard variants share a slot across iOS versions")
     expect(AorusPluginIcons.ownIconNames.filter { $0.hasPrefix("AorusGram/Input/Formatting/") }.allSatisfy { name in AorusPluginIcons.catalog.contains { $0.group == "format" && $0.assets.contains(name) } }, "the format group reaches every toolbar symbol")
-    expect(AorusPluginIcons.ownIconNames.allSatisfy { AorusPluginIcons.isIconName($0) && $0.hasPrefix("AorusGram/") }, "own icons are named under AorusGram/")
+    let proceduralBackNames = ["Telegram/Navigation/Back", "Telegram/Navigation/GlassBack"]
+    expect(AorusPluginIcons.ownIconNames.allSatisfy { AorusPluginIcons.isIconName($0) && ($0.hasPrefix("AorusGram/") || proceduralBackNames.contains($0)) }, "own icons use the client and procedural navigation namespaces")
+    expect(proceduralBackNames.allSatisfy { AorusPluginIcons.ownIconNames.contains($0) && AorusPluginIcons.catalogByName["header.back"]?.assets.contains($0) == true }, "both native procedural arrows are exposed by header.back")
+    let backStyle = AorusPluginIcons.validate(["*": ["look": "pixel", "only": ["header.back"]]], iconExists: iconExists).layer["*"] as? [String: Any]
+    expect(Set(backStyle?["names"] as? [String] ?? []) == Set(["Navigation/Back"] + proceduralBackNames), "back-only styling reaches the asset, legacy arrow and glass arrow")
+    let proceduralAsAsset = AorusPluginIcons.validate(["header.back": ["asset": "Telegram/Navigation/GlassBack"]], iconExists: { _ in true })
+    expect(proceduralAsAsset.layer.isEmpty && !proceduralAsAsset.rejections.isEmpty, "a procedural arrow cannot be loaded as an asset")
     expect(AorusPluginIcons.catalogByName["tab.wall"]?.group == "tab" && AorusPluginIcons.catalogByName["menu.plugins"]?.group == "menu", "own icons sit in the groups they are part of")
     let tabStyle = AorusPluginIcons.validate(["*": ["look": "pixel", "only": ["tab"]]], iconExists: { _ in true }).layer["*"] as? [String: Any]
     expect((tabStyle?["names"] as? [String]).map { $0.contains("AorusGram/Tabs/Wall") && $0.contains("AorusGram/Tabs/Plugins") && $0.contains("Chat List/Tabs/IconChats") } == true, "a style for the tab bar reaches the Wall and plugin tabs too")

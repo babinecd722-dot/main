@@ -112,10 +112,11 @@ def patch_local_profile(tg: Path) -> None:
                phoneNumber.filter({ $0.isASCII && $0.isNumber }) == AorusPhoneSpoofStore.number.filter({ $0.isASCII && $0.isNumber }) {
                 // The number has a local owner and a local purchase. Resolve the same
                 // native sheet locally; the Fragment and Copy actions keep their native routes.
+                let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
+                let purchaseDate = AorusPhoneSpoofStore.anonymousDate
                 return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
                 |> map { peer -> CollectibleItemInfoScreenInitialData? in
-                    let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
-                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency: "USD", currencyAmount: purchase.usd, cryptoCurrency: "TON", cryptoCurrencyAmount: purchase.ton, url: "https://fragment.com/number/" + phoneNumber.filter { $0.isASCII && $0.isNumber })
+                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: purchaseDate, currency: "USD", currencyAmount: purchase.usd, cryptoCurrency: "TON", cryptoCurrencyAmount: purchase.ton, url: "https://fragment.com/number/" + phoneNumber.filter { $0.isASCII && $0.isNumber })
                     return InitialData(peer: peer, subject: .phoneNumber(ResolvedSubject.PhoneNumber(phoneNumber: phoneNumber, info: info)))
                 }
             }
@@ -124,6 +125,12 @@ def patch_local_profile(tg: Path) -> None:
 
     edit(tg, collectible, "AorusPhoneSpoofStore.anonymousPurchaseAmounts", [
         ('                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency: "USD", currencyAmount: 0, cryptoCurrency: "TON", cryptoCurrencyAmount: 0, url:', '                    let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts\n                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency: "USD", currencyAmount: purchase.usd, cryptoCurrency: "TON", cryptoCurrencyAmount: purchase.ton, url:'),
+    ])
+    # Resolve metadata before the asynchronous owner lookup. A number changed while
+    # that lookup is pending must not lend its price or date to the previous sheet.
+    edit(tg, collectible, "let purchaseDate = AorusPhoneSpoofStore.anonymousDate", [
+        ("                return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))\n                |> map { peer -> CollectibleItemInfoScreenInitialData? in\n                    let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts", "                let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts\n                let purchaseDate = AorusPhoneSpoofStore.anonymousDate\n                return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))\n                |> map { peer -> CollectibleItemInfoScreenInitialData? in"),
+        ("purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency:", "purchaseDate: purchaseDate, currency:"),
     ])
 
     gifts = "submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift"
