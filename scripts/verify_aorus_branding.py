@@ -4145,7 +4145,7 @@ def main() -> None:
             slot_assets += _re_icons.findall(r'"([^"]+)"', body)
         if len(slot_assets) != len(set(slot_assets)):
             err.append("PluginIcons: an icon belongs to two slots")
-        # AorusGram's own icons are drawn, not in the catalogue: each has to be one the core
+        # Registered procedural icons are drawn, not in the catalogue: each must be in the core
         # lists, and a place in the tree has to ask for it by that name, or its slot does
         # nothing.
         core_text = icons_core.read_text(encoding="utf-8")
@@ -4155,7 +4155,7 @@ def main() -> None:
             err.append("PluginIcons: the core lists no own icons")
         asked = drawn_own_icon_names(tg)
         for asset in slot_assets:
-            if asset.startswith("AorusGram/"):
+            if asset in own_names or asset.startswith("AorusGram/"):
                 if asset not in own_names:
                     err.append(f"PluginIcons: slot icon {asset} is not one of the core's own icons")
                 elif asset not in asked:
