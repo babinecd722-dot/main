@@ -14073,6 +14073,49 @@ public enum AorusPhoneSpoofStore {
     private static let anonymousKey = "aorusgram_phone_spoof_anonymous"
     private static let anonymousNumberKey = "aorusgram_phone_spoof_anonymous_number"
     private static let anonymousDateKey = "aorusgram_phone_spoof_anonymous_date"
+    private static let anonymousPurchaseKey = "aorusgram_phone_spoof_anonymous_purchase"
+
+    private struct AnonymousPurchase: Codable {
+        let number: String
+        let ton: Int64
+        let usd: Int64
+    }
+
+    // Telegram stores TON in nanotons and USD in cents. Both amounts belong to the
+    // number, so opening its native sheet again never creates a different purchase.
+    private static func makeAnonymousPurchase(number: String) -> AnonymousPurchase {
+        let previous = UserDefaults.standard.data(forKey: anonymousPurchaseKey).flatMap { try? JSONDecoder().decode(AnonymousPurchase.self, from: $0) }
+        var hundredths = Int64.random(in: 100000 ... 10000000)
+        while hundredths * 10000000 == previous?.ton {
+            hundredths = Int64.random(in: 100000 ... 10000000)
+        }
+        let usdCentsPerTon = Int64.random(in: 250 ... 650)
+        return AnonymousPurchase(number: number, ton: hundredths * 10000000, usd: hundredths * usdCentsPerTon / 100)
+    }
+
+    private static func saveAnonymousNumber(_ number: String) {
+        let defaults = UserDefaults.standard
+        if defaults.string(forKey: anonymousNumberKey) != number {
+            let purchase = makeAnonymousPurchase(number: number)
+            if let data = try? JSONEncoder().encode(purchase) { defaults.set(data, forKey: anonymousPurchaseKey) }
+            defaults.set(Int(Date().timeIntervalSince1970), forKey: anonymousDateKey)
+        }
+        defaults.set(number, forKey: anonymousNumberKey)
+    }
+
+    public static var anonymousPurchaseAmounts: (ton: Int64, usd: Int64) {
+        let number = ensureNumber()
+        let defaults = UserDefaults.standard
+        if let data = defaults.data(forKey: anonymousPurchaseKey),
+           let purchase = try? JSONDecoder().decode(AnonymousPurchase.self, from: data),
+           purchase.number == number, purchase.ton >= 1000000000000, purchase.ton <= 100000000000000,
+           purchase.usd >= 250000, purchase.usd <= 65000000 {
+            return (purchase.ton, purchase.usd)
+        }
+        let purchase = makeAnonymousPurchase(number: number)
+        if let data = try? JSONEncoder().encode(purchase) { defaults.set(data, forKey: anonymousPurchaseKey) }
+        return (purchase.ton, purchase.usd)
+    }
 
     public static var isAnonymous: Bool { UserDefaults.standard.bool(forKey: anonymousKey) }
     public static var anonymousDate: Int32 { Int32(clamping: UserDefaults.standard.integer(forKey: anonymousDateKey)) }
@@ -14103,7 +14146,7 @@ public enum AorusPhoneSpoofStore {
             let digits = rawValue.filter { $0.isASCII && $0.isNumber }
             let candidate = "+" + digits
             guard completeAnonymous(candidate) else { return ensureNumber() }
-            UserDefaults.standard.set(candidate, forKey: anonymousNumberKey)
+            saveAnonymousNumber(candidate)
             NotificationCenter.default.post(name: changedNotification, object: nil)
             return candidate
         }
@@ -14119,9 +14162,11 @@ public enum AorusPhoneSpoofStore {
 
     public static func randomize() -> String {
         if isAnonymous {
-            let value = "+888" + String(Int.random(in: 10000000 ... 99999999))
-            UserDefaults.standard.set(value, forKey: anonymousNumberKey)
-            UserDefaults.standard.set(Int(Date().timeIntervalSince1970), forKey: anonymousDateKey)
+            var value = "+888" + String(Int.random(in: 10000000 ... 99999999))
+            while value == UserDefaults.standard.string(forKey: anonymousNumberKey) {
+                value = "+888" + String(Int.random(in: 10000000 ... 99999999))
+            }
+            saveAnonymousNumber(value)
             NotificationCenter.default.post(name: changedNotification, object: nil)
             return value
         }
@@ -30598,6 +30643,8 @@ def main() -> None:
     patch_plugin_icons(tg)
     from aorus_local_profile import patch_drawn_icons
     patch_drawn_icons(tg)
+    from aorus_navigation_icons import patch_navigation_icons
+    patch_navigation_icons(tg)
     patch_plugin_profile_look(tg)
     patch_message_look(tg)
     patch_message_settings(tg)

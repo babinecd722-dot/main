@@ -67,8 +67,8 @@ public enum AorusPluginIcons {
         "depth": (0.5, 3.0, 1.4),
     ]
     /// AorusGram's own icons, which AorusGram draws rather than loads from Telegram's catalogue.
-    /// They are named the way Telegram's are, under AorusGram/, and are replaced and styled the
-    /// same way.
+    /// AorusGram's controls use AorusGram/ names and procedural Telegram controls use
+    /// Telegram/ names. Both are replaced and styled in the same way.
     public static let ownIconNames = [
         "AorusGram/Tabs/Wall",
         "AorusGram/Tabs/Plugins",
@@ -76,6 +76,8 @@ public enum AorusPluginIcons {
         "AorusGram/Settings/Plugins",
         "AorusGram/Menu/Plugins",
         "AorusGram/Input/Dictation",
+        "Telegram/Navigation/Back",
+        "Telegram/Navigation/GlassBack",
         "AorusGram/Input/Formatting/return",
         "AorusGram/Input/Formatting/pencil.slash",
         "AorusGram/Input/Formatting/text.quote",
@@ -112,7 +114,7 @@ public enum AorusPluginIcons {
         Slot("tab.wall", ["AorusGram/Tabs/Wall"], "Wall tab"),
         Slot("tab.plugins", ["AorusGram/Tabs/Plugins"], "Tabs plugins add"),
 
-        Slot("header.back", ["Navigation/Back"], "Back arrow"),
+        Slot("header.back", ["Navigation/Back", "Telegram/Navigation/Back", "Telegram/Navigation/GlassBack"], "Back arrow"),
         Slot("header.close", ["Navigation/Close"], "Close cross"),
         Slot("header.done", ["Navigation/Done"], "Done check mark"),
         Slot("header.search", ["Navigation/Search", "Chat List/SearchIcon"], "Search magnifier"),

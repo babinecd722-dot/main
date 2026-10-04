@@ -91,19 +91,45 @@ AorusPhoneSpoofStore.setAnonymous(true)
 let anonymous = AorusPhoneSpoofStore.number
 expect(anonymous.hasPrefix("+888") && anonymous.count == 12, "anonymous number has eight digits after 888")
 expect(AorusPhoneSpoofStore.anonymousDate > 0, "anonymous sheet has a stable local creation date")
+let firstPurchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
+expect(firstPurchase.ton > 0 && firstPurchase.usd > 0, "anonymous purchase has nonzero native amounts")
 for _ in 0..<1000 { expect(AorusPhoneSpoofStore.ensureNumber() == anonymous, "profile and contact use the same stable number") }
+expect(AorusPhoneSpoofStore.anonymousPurchaseAmounts == firstPurchase, "opening the sheet preserves its purchase")
 expect(AorusPhoneSpoofStore.setNumber("+888 1234 5678") == "+88812345678", "formatted anonymous number normalizes")
+let editedPurchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
+expect(editedPurchase != firstPurchase, "a different manually entered number has a new purchase")
+_ = AorusPhoneSpoofStore.setNumber("+888 1234 5678")
+expect(AorusPhoneSpoofStore.anonymousPurchaseAmounts == editedPurchase, "same formatted number retains its purchase")
 for invalid in ["", "+888", "+888123456789", "+14155552671", "+888١٢٣٤٥٦٧٨", "888１２３４５６７８"] {
     expect(AorusPhoneSpoofStore.setNumber(invalid) == "+88812345678", "partial or invalid anonymous edit keeps a valid phone")
 }
+expect(AorusPhoneSpoofStore.anonymousPurchaseAmounts == editedPurchase, "incomplete edits cannot change the purchase")
 AorusPhoneSpoofStore.setAnonymous(false)
 expect(AorusPhoneSpoofStore.number == regular, "turning anonymous off restores the regular spoof number")
 AorusPhoneSpoofStore.setAnonymous(true)
 expect(AorusPhoneSpoofStore.number == "+88812345678", "anonymous selection survives a mode round trip")
+expect(AorusPhoneSpoofStore.anonymousPurchaseAmounts == editedPurchase, "purchase survives a mode round trip")
 for _ in 0..<1000 {
+    let previousNumber = AorusPhoneSpoofStore.number
+    let previousPurchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
     let number = AorusPhoneSpoofStore.randomize()
     expect(number.count == 12 && number.hasPrefix("+888") && number.dropFirst().allSatisfy { $0.isASCII && $0.isNumber }, "random anonymous number is valid")
+    let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
+    expect(number != previousNumber && purchase.ton != previousPurchase.ton, "randomize changes both number and price")
+    expect(purchase.ton >= 1000000000000 && purchase.ton <= 100000000000000 && purchase.ton % 10000000 == 0, "TON is stored in nanotons with cent precision")
+    expect(purchase.usd >= purchase.ton / 10000000 * 250 / 100 && purchase.usd <= purchase.ton / 10000000 * 650 / 100, "USD cents correspond to the same local TON purchase")
+    expect(AorusPhoneSpoofStore.anonymousPurchaseAmounts == purchase, "repeated reads keep the generated price")
 }
+let savedNumber = AorusPhoneSpoofStore.number
+for data in [Data(), Data("{bad json}".utf8), Data("{\"number\":\"+88800000000\",\"ton\":-1,\"usd\":0}".utf8)] {
+    testDefaults.set(data, forKey: "aorusgram_phone_spoof_anonymous_purchase")
+    let restored = AorusPhoneSpoofStore.anonymousPurchaseAmounts
+    expect(restored.ton > 0 && restored.usd > 0 && AorusPhoneSpoofStore.number == savedNumber, "invalid purchase metadata is repaired without changing the number")
+    expect(AorusPhoneSpoofStore.anonymousPurchaseAmounts == restored, "repaired metadata remains stable")
+}
+testDefaults.removeObject(forKey: "aorusgram_phone_spoof_anonymous_purchase")
+let migratedPurchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
+expect(migratedPurchase.ton > 0 && AorusPhoneSpoofStore.number == savedNumber, "existing numbers acquire local purchase metadata")
 testDefaults.set(true, forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")
 expect(!AorusPhoneSpoofStore.isEnabled, "existing global disable still disables spoofing")
 testDefaults.removeObject(forKey: "a7f3d9e1-4b82-4c60-9a15-6f8e2d7c1b04")

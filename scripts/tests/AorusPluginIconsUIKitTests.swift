@@ -275,6 +275,10 @@ private enum AorusPluginIconsUIKitTests {
         expect(unstyled.pngData() == original.pngData(), "reset restores the original symbol")
         expect(procedural(CGSize(width:32,height:32),styled:true).pngData() == nativeControl.pngData(), "reset restores native procedural drawing")
         expect(AorusPluginIconValues.drawnLayerIcon(size: shapeSize, layers: [redShape], named: "Telegram/Drawn/MediaDownload") == nil, "reset restores native shape layers")
+        stage("checking native navigation and the open composer")
+        let navigationChecks = runNavigationIconRegression()
+        checks += navigationChecks
+        print("Native navigation and composer passed: \(navigationChecks) assertions")
         print("UIKit icon resolver passed: \(checks) assertions")
     }
 }

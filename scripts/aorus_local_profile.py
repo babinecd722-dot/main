@@ -13,7 +13,7 @@ def verify_local_profile(tg: Path) -> list[str]:
         "submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift": ["AorusLocalGiftConversion.convert"],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoHeaderNode.swift": ["peer?.id == self.context.account.peerId, AorusFakeStarsStore.isEnabled", "AorusLocalStarRating.display", "self.currentPendingStarRating = nil", "PeerInfoRatingComponent(", "ProfileLevelInfoScreen("],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoScreen.swift": ["aorusLocalProfileObservers", "AorusPhoneSpoofStore.changedNotification", "requestLayout(animated: true)", "removeObserver(observer)"],
-        "submodules/TelegramUI/Components/Settings/CollectibleItemInfoScreen/Sources/CollectibleItemInfoScreen.swift": ["peerId == context.account.peerId, AorusPhoneSpoofStore.isEnabled, AorusPhoneSpoofStore.isAnonymous", "AorusPhoneSpoofStore.anonymousDate", 'url: "https://fragment.com/number/"'],
+        "submodules/TelegramUI/Components/Settings/CollectibleItemInfoScreen/Sources/CollectibleItemInfoScreen.swift": ["peerId == context.account.peerId, AorusPhoneSpoofStore.isEnabled, AorusPhoneSpoofStore.isAnonymous", "AorusPhoneSpoofStore.anonymousDate", "AorusPhoneSpoofStore.anonymousPurchaseAmounts", "currencyAmount: purchase.usd", "cryptoCurrencyAmount: purchase.ton", 'url: "https://fragment.com/number/"'],
         "submodules/TelegramUI/Sources/AorusBubbleSettings.swift": ['aorusPixelModeChanged(from: previous, to: aorusGlassMaterialNow(dark: dark))', 'aorusSetPixelIcons(on)', 'AorusIconLook.set(look: enabled ? "pixel" : nil'],
         "submodules/TelegramUI/Sources/AorusMessageSettings.swift": ["UIAccessibility.isReduceMotionEnabled", "usingSpringWithDamping: 0.86", "outgoingPreview?.removeFromSuperview()", "kCAMediaTimingFunctionSpring", "AorusPluginIconValues.didChangeNotification", "self.updateGlyph()"],
         "submodules/CheckNode/Sources/CheckNode.swift": ["AorusPluginIconValues.drawnIcon", "aorusDrawOriginalCheck"],
@@ -110,15 +110,20 @@ def patch_local_profile(tg: Path) -> None:
         ("        case let .phoneNumber(phoneNumber):\n            return combineLatest(", '''        case let .phoneNumber(phoneNumber):
             if peerId == context.account.peerId, AorusPhoneSpoofStore.isEnabled, AorusPhoneSpoofStore.isAnonymous,
                phoneNumber.filter({ $0.isASCII && $0.isNumber }) == AorusPhoneSpoofStore.number.filter({ $0.isASCII && $0.isNumber }) {
-                // The number has a local owner and no server purchase. Resolve the same
+                // The number has a local owner and a local purchase. Resolve the same
                 // native sheet locally; the Fragment and Copy actions keep their native routes.
                 return context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
                 |> map { peer -> CollectibleItemInfoScreenInitialData? in
-                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency: "USD", currencyAmount: 0, cryptoCurrency: "TON", cryptoCurrencyAmount: 0, url: "https://fragment.com/number/" + phoneNumber.filter { $0.isASCII && $0.isNumber })
+                    let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts
+                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency: "USD", currencyAmount: purchase.usd, cryptoCurrency: "TON", cryptoCurrencyAmount: purchase.ton, url: "https://fragment.com/number/" + phoneNumber.filter { $0.isASCII && $0.isNumber })
                     return InitialData(peer: peer, subject: .phoneNumber(ResolvedSubject.PhoneNumber(phoneNumber: phoneNumber, info: info)))
                 }
             }
             return combineLatest('''),
+    ])
+
+    edit(tg, collectible, "AorusPhoneSpoofStore.anonymousPurchaseAmounts", [
+        ('                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency: "USD", currencyAmount: 0, cryptoCurrency: "TON", cryptoCurrencyAmount: 0, url:', '                    let purchase = AorusPhoneSpoofStore.anonymousPurchaseAmounts\n                    let info = TelegramCollectibleItemInfo(subject: .phoneNumber(phoneNumber), purchaseDate: AorusPhoneSpoofStore.anonymousDate, currency: "USD", currencyAmount: purchase.usd, cryptoCurrency: "TON", cryptoCurrencyAmount: purchase.ton, url:'),
     ])
 
     gifts = "submodules/TelegramCore/Sources/TelegramEngine/Payments/StarGifts.swift"

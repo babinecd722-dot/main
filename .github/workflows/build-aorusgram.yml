@@ -383,9 +383,6 @@ jobs:
       # Cache only an immutable, unmodified upstream checkout. The working copy is
       # recreated below on every run, so build-time HMAC injection can never leak
       # into the cache or survive a secret rotation.
-      - name: Plugin icons and UIKit preflight
-        run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram
-
       - name: Cache pristine Telegram iOS source
         id: tg-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -1126,6 +1123,9 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Aorusgram" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleName Aorusgram" "$PLIST" 2>/dev/null || true
           python3 aorusgram/scripts/verify_aorus_branding.py telegram-ios
+
+      - name: Plugin icons and UIKit preflight
+        run: python3 aorusgram/scripts/plugin_icons_check.py aorusgram --telegram-source telegram-ios
 
       # A property of ours whose name a Telegram base class already uses is read by Swift
       # as an attempt to override it, and fails the module compile. It cannot be seen from

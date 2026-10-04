@@ -17,7 +17,7 @@ def drawn_own_icon_names(tg: Path) -> set[str]:
     renderer_text = renderer.read_text(encoding="utf-8") if renderer.is_file() else ""
     symbol_owns_image = "guard let image = own(original, named: name)" in renderer_text
     loaders = "(?:own|symbol)" if symbol_owns_image else "own"
-    direct = re.compile(r"AorusPluginIconValues\." + loaders + r'\([\s\S]*?named:\s*"(AorusGram/[^"\n]+)"')
+    direct = re.compile(r"AorusPluginIconValues\." + loaders + r'\([\s\S]*?named:\s*"((?:AorusGram|Telegram)/[^"\n]+)"')
     asked: set[str] = set()
     for swift_file in root.rglob("*.swift"):
         try:
@@ -51,6 +51,8 @@ def main() -> None:
     err: list[str] = []
     from aorus_local_profile import verify_local_profile
     err.extend(verify_local_profile(tg))
+    from aorus_navigation_icons import verify_navigation_icons
+    err.extend(verify_navigation_icons(tg))
 
     here = Path(__file__).resolve().parent
     branding_source = (here / "aorus_branding.py").read_text(encoding="utf-8")

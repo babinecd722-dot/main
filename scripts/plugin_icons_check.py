@@ -108,6 +108,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repo", type=Path)
     parser.add_argument("--swiftc", default="swiftc")
+    parser.add_argument("--telegram-source", type=Path, help="Branded Telegram tree for native navigation and composer regressions")
     args = parser.parse_args()
     source = (args.repo / "patches/submodules/Display/Source/AorusPluginIconValues.swift").read_text()
     toolbar_source = (args.repo / "patches/submodules/TelegramUI/Components/Chat/ChatTextInputPanelNode/Sources/AorusToolbarIcon.swift").read_text().replace("import Display\n", "").replace("import AppBundle\n", "")
@@ -126,6 +127,11 @@ def main():
         subprocess.run(common + ["-warnings-as-errors", str(test), "-o", str(work / "pixel-tests")], check=True)
         subprocess.run([str(work / "pixel-tests")], check=True)
         if platform.system() == "Darwin":
+            if args.telegram_source is None:
+                raise RuntimeError("--telegram-source is required for the native UIKit navigation regressions")
+            from aorus_navigation_icons import navigation_test_source
+            navigation = work / "NativeNavigationIcons.swift"
+            navigation.write_text(navigation_test_source(args.telegram_source))
             stub = work / "AppBundle.swift"
             stub.write_text(APP_BUNDLE)
             renderer = work / "AorusPluginIconValues.swift"
@@ -161,7 +167,7 @@ def main():
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 try:
