@@ -30,6 +30,7 @@ public enum AorusPluginIconValues {
 
     /// Styles reach icons up to this size. Anything larger is an illustration, not an icon.
     private static let styleLimit: CGFloat = 64.0
+    private static let symbolLimit: CGFloat = 128.0
 
     private final class Table {
         let icons: [String: [String: Any]]
@@ -269,7 +270,7 @@ public enum AorusPluginIconValues {
     /// A symbol drawn for a native or SwiftUI control. Load the vector before applying the
     /// named slot, so a global symbol style cannot hide that slot's replacement or scope.
     public static func symbol(_ symbol: String, pointSize: CGFloat, weight: UIImage.SymbolWeight = .regular, named name: String? = nil) -> UIImage? {
-        guard pointSize.isFinite, pointSize > 0, pointSize <= 64 else { return nil }
+        guard pointSize.isFinite, pointSize > 0, pointSize <= symbolLimit else { return nil }
         let name = name ?? "SFSymbols/" + symbol
         let key = "\(name)|\(symbol)|\(pointSize)|\(weight.rawValue)"
         lock.lock()
@@ -473,7 +474,7 @@ public enum AorusPluginIconValues {
         let previousStyle = objc_getAssociatedObject(original, &styledImageKey) as? NSDictionary
         let alreadyStyled = (previousStyle?["revision"] as? NSNumber)?.intValue == renderRevision
             && previousStyle?["look"] as? String == look && (previousStyle?["amount"] as? NSNumber)?.doubleValue == Double(amount)
-        let isControlSymbol = original.isSymbolImage && size.width <= 128.0 && size.height <= 128.0
+        let isControlSymbol = original.isSymbolImage && size.width <= symbolLimit && size.height <= symbolLimit
         if let look, (spec != nil || !alreadyStyled), original.capInsets == .zero, (isControlSymbol || (size.width <= styleLimit && size.height <= styleLimit)) {
             if let styled = applyLook(look, amount: amount, to: image) {
                 image = styled

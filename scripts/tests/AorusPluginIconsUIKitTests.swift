@@ -165,6 +165,7 @@ private enum AorusPluginIconsUIKitTests {
         expect(AorusPluginIconValues.revision == revisionBeforeMemoryWarning, "memory cleanup does not change the theme revision")
         expect(AorusPluginIconValues.symbol("mic", pointSize: .nan) == nil, "invalid symbol size is rejected")
         expect(AorusPluginIconValues.symbol("mic", pointSize: 0) == nil, "empty symbol size is rejected")
+        expect(AorusPluginIconValues.symbol("mic", pointSize: 129) == nil, "oversized symbol requests are rejected before rendering")
         let fallback = AorusPluginIconValues.symbol("AorusGram.Unknown.Symbol", pointSize: 13, weight: .semibold)
             ?? AorusPluginIconValues.symbol("shuffle", pointSize: 13, weight: .semibold)
         expect(fallback?.cgImage != nil, "shuffle fallback remains available with Pixel enabled")
