@@ -14033,7 +14033,13 @@ public enum AorusPhoneSpoofStore {
     ]
 
     private static var defaultRule: PhoneRule {
-        if let region = Locale.current.regionCode?.uppercased(), let rule = regionRules[region] {
+        let currentRegion: String?
+        if #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) {
+            currentRegion = Locale.current.region?.identifier
+        } else {
+            currentRegion = Locale.current.regionCode
+        }
+        if let region = currentRegion?.uppercased(), let rule = regionRules[region] {
             return rule
         }
         return PhoneRule(countryCode: "1", nationalLengths: [10])
