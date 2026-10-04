@@ -9,7 +9,7 @@ private enum AorusPluginIconsUIKitTests {
         UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil, NSStringFromClass(AorusPluginIconsTestApplication.self))
     }
 
-    @MainActor static func run() {
+    @MainActor static func run() async {
         func stage(_ message: String) { print("UIKit icons: " + message); fflush(stdout) }
         stage("starting")
         var checks = 0
@@ -276,7 +276,7 @@ private enum AorusPluginIconsUIKitTests {
         expect(procedural(CGSize(width:32,height:32),styled:true).pngData() == nativeControl.pngData(), "reset restores native procedural drawing")
         expect(AorusPluginIconValues.drawnLayerIcon(size: shapeSize, layers: [redShape], named: "Telegram/Drawn/MediaDownload") == nil, "reset restores native shape layers")
         stage("checking native navigation and the open composer")
-        let navigationChecks = runNavigationIconRegression()
+        let navigationChecks = await runNavigationIconRegression()
         checks += navigationChecks
         print("Native navigation and composer passed: \(navigationChecks) assertions")
         print("UIKit icon resolver passed: \(checks) assertions")
@@ -287,8 +287,8 @@ private enum AorusPluginIconsUIKitTests {
 @MainActor
 private final class AorusPluginIconsTestApplication: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        DispatchQueue.main.async {
-            AorusPluginIconsUIKitTests.run()
+        Task { @MainActor in
+            await AorusPluginIconsUIKitTests.run()
             fflush(stdout)
             exit(0)
         }

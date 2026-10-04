@@ -187,7 +187,7 @@ private struct ComposerState { let theme: ThemeColours }
 
 
 NAVIGATION_TESTS = r'''
-@MainActor func runNavigationIconRegression() -> Int {
+@MainActor func runNavigationIconRegression() async -> Int {
     var checks = 0
     func expect(_ condition: Bool, _ label: String) { checks += 1; if !condition { fatalError(label) } }
     let defaults = UserDefaults.standard
@@ -202,10 +202,10 @@ NAVIGATION_TESTS = r'''
         defaults.set(value, forKey: AorusPluginIconValues.personLookKey)
         NotificationCenter.default.post(name: AorusPluginIconValues.didChangeNotification, object: nil)
     }
-    func waitForLayout(_ panel: DictationPanelProbe, after count: Int) {
+    @MainActor func waitForLayout(_ panel: DictationPanelProbe, after count: Int) async {
         let deadline = Date().addingTimeInterval(2)
         while panel.layouts <= count && Date() < deadline {
-            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
         expect(panel.layouts > count, "an open chat repaints dictation after the style notification")
     }
@@ -226,7 +226,7 @@ NAVIGATION_TESTS = r'''
     let nativeWave = displayed(panel!.icon)
     let before = panel!.layouts
     look(["look": "pixel", "amount": 1.5])
-    waitForLayout(panel!, after: before)
+    await waitForLayout(panel!, after: before)
     let pixelLegacy = navigationBarBackArrowImage(color: .red)!
     let pixelGlass = aorusGlassBackArrowImage!
     expect(pixelLegacy.pngData() != legacy.pngData(), "cached legacy arrow switches to Pixel")
@@ -241,24 +241,24 @@ NAVIGATION_TESTS = r'''
     let wave = panel!.icon.image!
     let another = panel!.layouts
     look(["look": "pixel", "amount": 3.0])
-    waitForLayout(panel!, after: another)
+    await waitForLayout(panel!, after: another)
     expect(panel!.icon.image!.pngData() != wave.pngData(), "an open chat updates pixel strength")
     expect(navigationBarBackArrowImage(color: .red)!.pngData() != pixelLegacy.pngData(), "arrow cache invalidates when pixel strength changes")
     let scoped = panel!.layouts
     look(["look": "pixel", "amount": 1.5, "names": ["AorusGram/Input/Dictation"]])
-    waitForLayout(panel!, after: scoped)
+    await waitForLayout(panel!, after: scoped)
     expect(navigationBarBackArrowImage(color: .red)!.pngData() == legacy.pngData(), "legacy arrow respects plugin scope")
     expect(aorusGlassBackArrowImage === glass, "glass arrow respects plugin scope")
     let reset = panel!.layouts
     look(nil)
-    waitForLayout(panel!, after: reset)
+    await waitForLayout(panel!, after: reset)
     expect(displayed(panel!.icon).pngData() == nativeWave.pngData(), "disabling Pixel restores the displayed native waveform")
     expect(navigationBarBackArrowImage(color: .red)!.pngData() == legacy.pngData(), "disabling Pixel restores the native cached arrow")
     expect(aorusGlassBackArrowImage === glass, "glass source remains untouched after style round trips")
     panel = nil
     expect(weakPanel == nil, "composer notification subscription does not retain the panel")
     look(["look": "pixel", "amount": 1.5])
-    RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+    try? await Task.sleep(nanoseconds: 20_000_000)
     return checks
 }
 '''
