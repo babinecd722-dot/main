@@ -152,7 +152,7 @@ DispatchQueue.concurrentPerform(iterations: 1000) { index in
     _ = AorusLocalStarRating.record(accountPeerId: own, event: "parallel-" + String(index), amount: 1, operation: .gift)
 }
 expect(AorusLocalStarRating.display(accountPeerId: own, baseline: nil)?.stars == 1000, "concurrent purchases do not lose points")
-AorusFakeStarsStore.localRatingData = AorusLocalStarRating.migrating(purchases: [(1,"old-1",1000,false),(1,"old-1",1000,false),(2,"old-2",500,true)])
+AorusFakeStarsStore.localRatingData = AorusLocalStarRating.migrating(purchases: [(1,"old-1",1000,false,false),(1,"old-1",1000,false,false),(2,"old-2",500,true,false)])
 expect(AorusLocalStarRating.display(accountPeerId: own, baseline: nil)?.stars == 1000, "old purchases migrate without duplication")
 expect(AorusLocalStarRating.display(accountPeerId: other, baseline: nil)?.stars == 100, "old resale purchases migrate per account")
 
@@ -196,6 +196,29 @@ expect(AorusFakeStarsStore.amount == 123, "balance restores its keychain mirror"
 print("Local profile tests passed: \(checks) checks")
 '''
 
+PURCHASE_TESTS = r'''
+testDefaults.removePersistentDomain(forName: "AorusLocalProfileTests")
+defer { testDefaults.removePersistentDomain(forName: "AorusLocalProfileTests") }
+let own = PeerId(1), other = PeerId(2)
+AorusFakeStarsStore.seedLegacyPurchases([AorusStoredStarsTransaction(id: "legacy", amount: 200, date: 1, accountPeerId: 1, peerId: 2, giftData: Data([1]), premiumMonths: nil, text: "", isResale: true, isUpgrade: nil)])
+AorusFakeStarsStore.recordPurchase(accountPeerId: own, recipientPeerId: own, amount: 1000, gift: .unique, premiumMonths: nil, text: "", isUpgrade: true)
+expect(AorusLocalStarRating.display(accountPeerId: own, baseline: nil)?.stars == 1040, "first upgrade after migration contributes its full price")
+AorusFakeStarsStore.recordPurchase(accountPeerId: own, recipientPeerId: other, amount: 500, gift: .unique, premiumMonths: nil, text: "")
+expect(AorusLocalStarRating.display(accountPeerId: own, baseline: nil)?.stars == 1140, "resale contributes twenty percent after migration")
+DispatchQueue.concurrentPerform(iterations: 50) { _ in
+    AorusFakeStarsStore.recordPurchase(accountPeerId: other, recipientPeerId: own, amount: 10, gift: .generic(StarGift.Gift(price: 10, convertStars: 8)), premiumMonths: nil, text: "")
+}
+expect(AorusLocalStarRating.display(accountPeerId: other, baseline: nil)?.stars == 500, "concurrent purchase storage retains every rating contribution")
+expect(AorusFakeStarsStore.purchaseCount == 53, "concurrent purchase storage retains every transaction")
+AorusFakeStarsStore.recordPurchase(accountPeerId: own, recipientPeerId: other, amount: 100, gift: nil, premiumMonths: 3, text: "")
+expect(AorusLocalStarRating.display(accountPeerId: own, baseline: nil)?.stars == 1240, "Premium gift contributes its price")
+AorusFakeStarsStore.recordPurchase(accountPeerId: own, recipientPeerId: other, amount: 100, gift: nil, premiumMonths: nil, text: "")
+expect(AorusLocalStarRating.display(accountPeerId: own, baseline: nil)?.stars == 1240, "ordinary Stars payments do not contribute gift rating")
+AorusFakeStarsStore.forgetRatingData()
+expect(AorusLocalStarRating.display(accountPeerId: own, baseline: nil)?.stars == 1240, "retained history restores upgrades with their full contribution")
+print("Purchase and rating integration passed: \(checks) checks")
+'''
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -224,6 +247,28 @@ def main():
         source.write_text("\n".join([stubs, pixel, phone, rating, conversion, TESTS]))
         subprocess.run([args.swiftc, "-warnings-as-errors", "-module-cache-path", str(work / "cache"), str(source), "-o", str(work / "tests")], check=True)
         subprocess.run([str(work / "tests")], check=True, env={**os.environ, "XDG_CONFIG_HOME": str(work / "preferences")})
+        markers = ["public static var localRatingData:", "public static func saveLocalRatingData", "private static func storedTransactions", "private static func persistTransactions", "private static func storedSpentTotals", "private static func persistSpentTotals", "private static func addingClamped", "private static func utcDay", "private static func storedDailySpending", "private static func persistDailySpending", "public static func recordPurchase"]
+        purchase_functions = "\n".join(declaration(stars, marker) for marker in markers).replace("UserDefaults.standard", "testDefaults")
+        transaction = declaration(gifts, "public struct AorusStoredStarsTransaction")
+        purchase_stubs = STUBS.replace("BALANCE_FUNCTIONS", "")
+        purchase_stubs = purchase_stubs.replace("private static var mirror: Data?", "private static var mirrors: [String: Data] = [:]")
+        purchase_stubs = purchase_stubs.replace("{ mirror }", "{ mirrors[account] }").replace("{ mirror = data }", "{ mirrors[account] = data }")
+        purchase_stubs = purchase_stubs.replace("    static var localRatingData: Data?\n    static func saveLocalRatingData(_ data: Data) { localRatingData = data }", purchase_functions + '''
+    private static let purchaseLock = NSRecursiveLock()
+    private static let transactionsKey = "transactions"
+    private static let spentTotalsKey = "spent"
+    private static let dailySpendingKey = "daily"
+    private static let keychainTransactionsAccount = "transactions"
+    private static let keychainSpentTotalsAccount = "spent"
+    private static let keychainDailySpendingAccount = "daily"
+    static func seedLegacyPurchases(_ values: [AorusStoredStarsTransaction]) { persistTransactions(values) }
+    static var purchaseCount: Int { storedTransactions().count }
+    static func forgetRatingData() { testDefaults.removeObject(forKey: "aorusgram_fake_stars_rating_v1"); mirrors.removeValue(forKey: "rating_v1") }
+''')
+        purchase_stubs = purchase_stubs.replace("enum StarGift { struct Gift", "public enum StarGift: Codable { public struct Gift: Codable")
+        source.write_text("\n".join([purchase_stubs, transaction, rating, PURCHASE_TESTS]))
+        subprocess.run([args.swiftc, "-warnings-as-errors", "-module-cache-path", str(work / "cache"), str(source), "-o", str(work / "purchases")], check=True)
+        subprocess.run([str(work / "purchases")], check=True, env={**os.environ, "XDG_CONFIG_HOME": str(work / "purchase-preferences")})
 
 
 if __name__ == "__main__":

@@ -219,6 +219,34 @@ public enum AorusPluginIconValues {
         image.draw(in: CGRect(origin: .zero, size: size))
     }
 
+    /// Shape-backed controls supply their native paths instead of an asset. Render copies
+    /// so reading an icon never changes the layers or animations owned by the control.
+    public static func drawnLayerIcon(size: CGSize, layers: [CAShapeLayer], named name: String) -> UIImage? {
+        guard size.width > 0, size.height > 0, size.width <= styleLimit, size.height <= styleLimit, affects(name) else { return nil }
+        let original = generateImage(size, rotatedContext: { _, context in
+            context.clear(CGRect(origin: .zero, size: size))
+            for source in layers {
+                let layer = CAShapeLayer()
+                layer.bounds = CGRect(origin: .zero, size: size)
+                layer.path = source.path
+                layer.fillColor = source.fillColor
+                layer.strokeColor = source.strokeColor
+                layer.lineWidth = source.lineWidth
+                layer.lineCap = source.lineCap
+                layer.lineJoin = source.lineJoin
+                layer.miterLimit = source.miterLimit
+                layer.fillRule = source.fillRule
+                layer.lineDashPattern = source.lineDashPattern
+                layer.lineDashPhase = source.lineDashPhase
+                layer.strokeStart = source.strokeStart
+                layer.strokeEnd = source.strokeEnd
+                layer.opacity = source.opacity
+                layer.render(in: context)
+            }
+        })
+        return own(original, named: name)
+    }
+
     fileprivate static func systemSymbol(name: String, load: () -> UIImage?) -> UIImage? {
         let previous = Thread.current.threadDictionary[renderingKey]
         Thread.current.threadDictionary[renderingKey] = true

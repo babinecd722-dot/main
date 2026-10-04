@@ -214,11 +214,43 @@ private enum AorusPluginIconsUIKitTests {
         expect(pixelControl.pngData() != nativeControl.pngData(), "procedural control uses Pixel")
         expect(rgba(pixelControl) == rgba(AorusPluginIconValues.own(nativeControl,named:"Telegram/Drawn/TestControl")!), "procedural canvas preserves orientation, colours and transparency")
         expect(pixelControl.renderingMode == nativeControl.renderingMode, "procedural control keeps native rendering mode")
+        stage("checking native shape layers")
+        let shapeSize = CGSize(width: 32, height: 32)
+        let redShape = CAShapeLayer()
+        redShape.bounds = CGRect(origin: .zero, size: shapeSize)
+        redShape.path = UIBezierPath(ovalIn: CGRect(x: 4, y: 3, width: 13, height: 9)).cgPath
+        redShape.fillColor = UIColor.red.cgColor
+        let blueShape = CAShapeLayer()
+        blueShape.bounds = redShape.bounds
+        let line = UIBezierPath()
+        line.move(to: CGPoint(x: 6, y: 26))
+        line.addLine(to: CGPoint(x: 26, y: 14))
+        blueShape.path = line.cgPath
+        blueShape.fillColor = UIColor.clear.cgColor
+        blueShape.strokeColor = UIColor.blue.cgColor
+        blueShape.lineWidth = 2
+        blueShape.lineCap = .round
+        blueShape.strokeStart = 0.3
+        blueShape.opacity = 0.6
+        let nativeLayers = UIGraphicsImageRenderer(size: shapeSize).image { renderer in
+            redShape.render(in: renderer.cgContext)
+            blueShape.render(in: renderer.cgContext)
+        }
+        let styledLayers = AorusPluginIconValues.drawnLayerIcon(size: shapeSize, layers: [redShape, blueShape], named: "Telegram/Drawn/MediaDownload")!
+        expect(rgba(nativeLayers).contains(where: { $0 != 0 }), "shape fixture renders visible content")
+        expect(rgba(styledLayers) == rgba(AorusPluginIconValues.own(nativeLayers, named: "Telegram/Drawn/MediaDownload")!), "shape layers preserve orientation, stroke range, colours and alpha")
+        expect(rgba(styledLayers) != rgba(nativeLayers), "shape layers use the Pixel style")
+        expect(blueShape.strokeStart == 0.3 && blueShape.opacity == 0.6 && blueShape.path == line.cgPath, "rendering preserves native shape state")
+        redShape.isHidden = true
+        blueShape.isHidden = true
+        expect(rgba(AorusPluginIconValues.drawnLayerIcon(size: shapeSize, layers: [redShape, blueShape], named: "Telegram/Drawn/MediaDownload")!) == rgba(styledLayers), "hidden source layers remain reusable after the first styled layout")
+        expect(AorusPluginIconValues.drawnLayerIcon(size: CGSize(width: 80, height: 80), layers: [redShape], named: "Telegram/Drawn/MediaDownload") == nil, "large shape artwork retains native layers")
         let largeControl = procedural(CGSize(width:80,height:80), styled:true)
         expect(largeControl.pngData() == procedural(CGSize(width:80,height:80),styled:false).pngData(), "large artwork is unchanged")
         defaults.set(["look":"pixel", "amount":1.5, "names":["AorusGram/Input/Dictation"]],forKey:AorusPluginIconValues.personLookKey)
         NotificationCenter.default.post(name:AorusPluginIconValues.didChangeNotification,object:nil)
         expect(procedural(CGSize(width:32,height:32),styled:true).pngData() == nativeControl.pngData(), "procedural control respects icon scope")
+        expect(AorusPluginIconValues.drawnLayerIcon(size: shapeSize, layers: [redShape], named: "Telegram/Drawn/MediaDownload") == nil, "shape layers respect icon scope")
         defaults.set(["look":"pixel", "amount":1.5],forKey:AorusPluginIconValues.personLookKey)
         NotificationCenter.default.post(name:AorusPluginIconValues.didChangeNotification,object:nil)
         stage("checking dictation replacement")
@@ -236,6 +268,7 @@ private enum AorusPluginIconsUIKitTests {
         let unstyled = UIImage(systemName:"waveform",withConfiguration:UIImage.SymbolConfiguration(pointSize:20,weight:.regular))!
         expect(unstyled.pngData() == original.pngData(), "reset restores the original symbol")
         expect(procedural(CGSize(width:32,height:32),styled:true).pngData() == nativeControl.pngData(), "reset restores native procedural drawing")
+        expect(AorusPluginIconValues.drawnLayerIcon(size: shapeSize, layers: [redShape], named: "Telegram/Drawn/MediaDownload") == nil, "reset restores native shape layers")
         print("UIKit icon resolver passed: \(checks) assertions")
     }
 }

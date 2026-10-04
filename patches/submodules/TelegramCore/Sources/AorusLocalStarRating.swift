@@ -64,13 +64,13 @@ public enum AorusLocalStarRating {
         return value
     }
 
-    public static func migrating(purchases: [(account: Int64, event: String, amount: Int64, resale: Bool)]) -> Data? {
+    public static func migrating(purchases: [(account: Int64, event: String, amount: Int64, resale: Bool, upgrade: Bool)]) -> Data? {
         var all: [String: Ledger] = [:]
         for purchase in purchases where purchase.amount > 0 {
             let key = String(purchase.account)
             var ledger = all[key] ?? Ledger()
             if ledger.events.insert(purchase.event).inserted {
-                ledger.points = adding(ledger.points, points(amount: purchase.amount, operation: purchase.resale ? .resale : .gift))
+                ledger.points = adding(ledger.points, points(amount: purchase.amount, operation: purchase.upgrade ? .upgrade : (purchase.resale ? .resale : .gift)))
             }
             all[key] = ledger
         }

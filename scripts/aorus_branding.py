@@ -10968,6 +10968,7 @@ public struct AorusStoredStarsTransaction: Codable, Equatable {
     public let premiumMonths: Int32?
     public let text: String
     public let isResale: Bool
+    public let isUpgrade: Bool?
 }
 
 // AorusGram local "fake stars" — a purely local override of the displayed Telegram Stars
@@ -10995,7 +10996,7 @@ public enum AorusFakeStarsStore {
     public static var localRatingData: Data? {
         if let data = UserDefaults.standard.data(forKey: "aorusgram_fake_stars_rating_v1") ?? aorusKeychainGet(account: "rating_v1") { return data }
         let purchases = storedTransactions().filter { $0.giftData != nil || $0.premiumMonths != nil }.map {
-            (account: $0.accountPeerId, event: $0.id, amount: $0.amount, resale: $0.isResale)
+            (account: $0.accountPeerId, event: $0.id, amount: $0.amount, resale: $0.isResale, upgrade: $0.isUpgrade == true)
         }
         let data = AorusLocalStarRating.migrating(purchases: purchases)
         if let data { saveLocalRatingData(data) }
@@ -11192,8 +11193,16 @@ public enum AorusFakeStarsStore {
         aorusKeychainSet(data, account: keychainDailySpendingAccount)
     }
 
+    private static let purchaseLock = NSRecursiveLock()
+
     public static func recordPurchase(accountPeerId: PeerId, recipientPeerId: PeerId, amount: Int64, gift: StarGift?, premiumMonths: Int32?, text: String, isUpgrade: Bool = false) {
         guard isEnabled, amount > 0 else { return }
+        purchaseLock.lock()
+        // Finish migrating retained history before this purchase enters it. An upgrade
+        // must keep its full contribution instead of being mistaken for a resale.
+        if gift != nil || premiumMonths != nil {
+            _ = AorusLocalStarRating.display(accountPeerId: accountPeerId, baseline: nil)
+        }
         // Load/migrate totals before inserting the new row, so the current purchase is
         // counted exactly once when upgrading from transaction-only storage.
         var spentTotals = storedSpentTotals()
@@ -11219,7 +11228,8 @@ public enum AorusFakeStarsStore {
             giftData: giftData,
             premiumMonths: premiumMonths,
             text: text,
-            isResale: isResale
+            isResale: isResale,
+            isUpgrade: isUpgrade
         )
         var values = storedTransactions()
         values.insert(value, at: 0)
@@ -11236,6 +11246,7 @@ public enum AorusFakeStarsStore {
         accountDays[dayKey] = addingClamped(accountDays[dayKey] ?? 0, amount)
         dailySpending[accountKey] = accountDays
         persistDailySpending(dailySpending)
+        purchaseLock.unlock()
         NotificationCenter.default.post(name: changedNotification, object: nil)
     }
 

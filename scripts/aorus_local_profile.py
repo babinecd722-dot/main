@@ -19,6 +19,7 @@ def verify_local_profile(tg: Path) -> list[str]:
         "submodules/CheckNode/Sources/CheckNode.swift": ["AorusPluginIconValues.drawnIcon", "aorusDrawOriginalCheck"],
         "submodules/RadialStatusNode/Sources/RadialStatusIconContentNode.swift": ["AorusPluginIconValues.drawnIcon", "aorusDrawOriginalStatus"],
         "submodules/RadialStatusNode/Sources/RadialCheckContentNode.swift": ['named: "Telegram/Drawn/MediaCheck"'],
+        "submodules/RadialStatusNode/Sources/RadialDownloadContentNode.swift": ["AorusPluginIconValues.drawnLayerIcon", "aorusDownloadIconRevision", "removeObserver(observer)", "self.aorusDownloadIcon.layer.animateAlpha"],
         "submodules/RadialStatusNode/Sources/RadialCloudProgressContentNode.swift": ['named: "Telegram/Drawn/MediaCancel"', "self.cancelNode.color = self.color"],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift": ["aorusRatingIconRevision", "lhs.aorusIconRevision != rhs.aorusIconRevision", "styledBackgroundImage!.cgImage", "styledBorderImage!.cgImage"],
         "submodules/AorusGramUI/Sources/AorusMiscController.swift": ["case anonymousNumber", "strings.UserInfo_AnonymousNumberLabel", "setAnonymousNumber: { value in", "AorusPhoneSpoofStore.setAnonymous(value)"],
@@ -192,6 +193,52 @@ def patch_drawn_icons(tg: Path) -> None:
 '''),
         ("            path.fill()\n        }\n    }", "            path.fill()\n            }\n        }\n    }"),
         ("            self.spinnerNode.color = self.color", "            self.spinnerNode.color = self.color\n            self.cancelNode.color = self.color"),
+    ])
+
+    edit(tg, "submodules/RadialStatusNode/Sources/RadialDownloadContentNode.swift", "aorusDownloadIconRevision", [
+        ("            self.arrowBody.strokeColor = self.color.cgColor\n", "            self.arrowBody.strokeColor = self.color.cgColor\n            self.setNeedsLayout()\n"),
+        ("    private let arrowBody = CAShapeLayer()", '''    private let arrowBody = CAShapeLayer()
+    private let aorusDownloadIcon = ASImageNode()
+    private var aorusDownloadIconRevision = -1
+    private var aorusDownloadIconSize = CGSize.zero
+    private var aorusDownloadIconColor: UIColor?
+    private var aorusDownloadIconObserver: NSObjectProtocol?
+
+    deinit {
+        if let observer = self.aorusDownloadIconObserver { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    private func updateAorusDownloadIcon() {
+        let size = self.bounds.size
+        let revision = AorusPluginIconValues.revision
+        if self.aorusDownloadIconRevision != revision || self.aorusDownloadIconSize != size || self.aorusDownloadIconColor != self.color {
+            self.aorusDownloadIconRevision = revision
+            self.aorusDownloadIconSize = size
+            self.aorusDownloadIconColor = self.color
+            self.aorusDownloadIcon.image = AorusPluginIconValues.drawnLayerIcon(size: size, layers: [self.arrowBody, self.leftLine, self.rightLine], named: "Telegram/Drawn/MediaDownload")
+        }
+        self.aorusDownloadIcon.frame = self.bounds
+        let styled = self.aorusDownloadIcon.image != nil
+        self.aorusDownloadIcon.isHidden = !styled
+        self.arrowBody.isHidden = styled
+        self.leftLine.isHidden = styled
+        self.rightLine.isHidden = styled
+    }'''),
+        ("        self.layer.addSublayer(self.rightLine)\n", '''        self.layer.addSublayer(self.rightLine)
+        self.aorusDownloadIcon.isLayerBacked = true
+        self.addSubnode(self.aorusDownloadIcon)
+        self.aorusDownloadIconObserver = NotificationCenter.default.addObserver(forName: AorusPluginIconValues.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.aorusDownloadIconRevision = -1
+            self?.setNeedsLayout()
+        }
+'''),
+        ("            self.prepareAnimateIn(from: nil)\n        }\n    }", "            self.prepareAnimateIn(from: nil)\n        }\n        self.updateAorusDownloadIcon()\n    }"),
+        ("    override func prepareAnimateOut(completion: @escaping (Double) -> Void) {", '''    override func prepareAnimateOut(completion: @escaping (Double) -> Void) {
+        self.aorusDownloadIcon.layer.animateAlpha(from: 1.0, to: 0.0, duration: self.duration, removeOnCompletion: false)'''),
+        ("    override func prepareAnimateIn(from: RadialStatusNodeState?) {", '''    override func prepareAnimateIn(from: RadialStatusNodeState?) {
+        self.aorusDownloadIconRevision = -1
+        self.setNeedsLayout()'''),
+        ("        if case .progress = from {", "        if case .progress = from {\n            self.aorusDownloadIcon.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.25, delay: delay)"),
     ])
 
     rating = "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift"
