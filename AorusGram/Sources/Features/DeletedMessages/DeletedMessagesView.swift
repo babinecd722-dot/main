@@ -1,3 +1,4 @@
+import Display
 import SwiftUI
 
 // Standalone screen listing deleted messages for a specific chat (or all chats).
@@ -46,7 +47,7 @@ struct DeletedMessagesView: View {
                         DeletedMessagesCache.shared.clearAll()
                         reload()
                     } label: {
-                        Image(systemName: "trash")
+                        AorusSystemSymbol("trash")
                     }
                 }
             }
@@ -69,7 +70,7 @@ struct DeletedMessagesView: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Image(systemName: "trash.slash")
+            AorusSystemSymbol("trash.slash", pointSize: 56)
                 .font(.system(size: 56))
                 .foregroundColor(.secondary.opacity(0.5))
             Text("Удалённых и изменённых сообщений нет")
@@ -143,7 +144,7 @@ struct DeletedMessageBubble: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: message.isOutgoing ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+            AorusSystemSymbol(message.isOutgoing ? "arrow.up.circle.fill" : "arrow.down.circle.fill", pointSize: 18)
                 .foregroundColor(message.isOutgoing ? Color(hex: "#5C6BC0") : statusColor)
                 .font(.system(size: 18))
                 .padding(.top, 2)
@@ -158,7 +159,7 @@ struct DeletedMessageBubble: View {
                     Spacer()
 
                     HStack(spacing: 3) {
-                        Image(systemName: statusIcon)
+                        AorusSystemSymbol(statusIcon, pointSize: 10)
                             .font(.system(size: 10))
                         Text(Self.dateFormatter.string(from: statusDate))
                             .font(.system(size: 11))
@@ -169,7 +170,7 @@ struct DeletedMessageBubble: View {
                 // Current text (after edit, or final-before-delete)
                 if message.text.isEmpty {
                     if message.hasMedia {
-                        Label("Медиафайл", systemImage: mediaIcon(for: message.mediaType))
+                        Label { Text("Медиафайл") } icon: { AorusSystemSymbol(mediaIcon(for: message.mediaType), pointSize: 13) }
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                     } else {
@@ -249,7 +250,7 @@ struct PinboardView: View {
                                 Button(role: .destructive) {
                                     PinboardManager.shared.unpin(id: item.id)
                                 } label: {
-                                    Label("Открепить", systemImage: "pin.slash.fill")
+                                    Label { Text("Открепить") } icon: { AorusSystemSymbol("pin.slash.fill") }
                                 }
                             }
                         }
@@ -267,7 +268,7 @@ struct PinboardView: View {
 
     private var emptyState: some View {
         VStack(spacing: 16) {
-            Image(systemName: "pin.slash")
+            AorusSystemSymbol("pin.slash", pointSize: 56)
                 .font(.system(size: 56))
                 .foregroundColor(.secondary.opacity(0.5))
             Text("Нет закреплённых сообщений")
@@ -332,7 +333,7 @@ struct PinnedCard: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Label(item.peerName, systemImage: "bubble.left.fill")
+                    Label { Text(item.peerName) } icon: { AorusSystemSymbol("bubble.left.fill", pointSize: 12, weight: .semibold) }
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(Color(hex: "#FFA726"))
                     Spacer()
@@ -347,7 +348,7 @@ struct PinnedCard: View {
 
                 if !item.note.isEmpty {
                     HStack(spacing: 4) {
-                        Image(systemName: "note.text")
+                        AorusSystemSymbol("note.text", pointSize: 11)
                             .font(.system(size: 11))
                         Text(item.note)
                             .font(.system(size: 12))
@@ -362,7 +363,7 @@ struct PinnedCard: View {
                         .foregroundColor(.secondary.opacity(0.7))
                     Spacer()
                     Button(action: onEditNote) {
-                        Image(systemName: "pencil")
+                        AorusSystemSymbol("pencil", pointSize: 12)
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }

@@ -130,8 +130,9 @@ def main():
             stub.write_text(APP_BUNDLE)
             renderer = work / "AorusPluginIconValues.swift"
             renderer.write_text(source.replace("import AppBundle\n", ""))
+            swiftui = args.repo / "patches/submodules/Display/Source/AorusSystemSymbol.swift"
             sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
-            subprocess.run(common + ["-typecheck", "-sdk", sdk, "-target", "arm64-apple-ios13.0", str(stub), str(renderer)], check=True)
+            subprocess.run(common + ["-typecheck", "-sdk", sdk, "-target", "arm64-apple-ios13.0", str(stub), str(renderer), str(swiftui)], check=True)
             print("Icon resolver UIKit SDK type-check passed", flush=True)
             # Exercise Objective-C dispatch and all three UIKit initializers, rather than
             # trusting a type-check to establish that method exchange actually runs.
@@ -160,7 +161,7 @@ def main():
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(toolbar), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 try:

@@ -1,3 +1,4 @@
+import Display
 import SwiftUI
 import UIKit
 
@@ -94,7 +95,7 @@ struct GlassButton: View {
             }
         }) {
             HStack(spacing: 10) {
-                Image(systemName: icon)
+                AorusSystemSymbol(icon, pointSize: 16, weight: .semibold)
                     .font(.system(size: 16, weight: .semibold))
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
@@ -142,7 +143,7 @@ struct GlassToggleRow: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(iconColor.opacity(0.18))
                     .frame(width: 38, height: 38)
-                Image(systemName: icon)
+                AorusSystemSymbol(icon, pointSize: 16, weight: .medium)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(iconColor)
             }

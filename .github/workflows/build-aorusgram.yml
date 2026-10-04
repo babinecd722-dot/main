@@ -999,6 +999,7 @@ jobs:
           #     loaded. aorus_branding.py writes it again with the licence key it reads and
           #     hooks AppBundle's loader up to it.
           cp $PATCHES/submodules/Display/Source/AorusPluginIconValues.swift $TG/submodules/Display/Source/
+          cp $PATCHES/submodules/Display/Source/AorusSystemSymbol.swift $TG/submodules/Display/Source/
 
           # 14. The glass as the person chose it in Bubble Settings, or a plugin asked for it:
           #     read, shaped and drawn around every pane — in Display, where the menus and the

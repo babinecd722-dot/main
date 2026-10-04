@@ -42,6 +42,7 @@ private enum AorusPluginIconsUIKitTests {
         let configuredReference = original.withConfiguration(smallConfiguration)
         let appliedReference = original.applyingSymbolConfiguration(smallConfiguration)!
         let selectedLanguageReference = UIImage(systemName: "checkmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold))!
+        let largeSymbolReference = UIImage(systemName: "mic.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 72, weight: .regular))!
         var paletteReferences: [String: UIImage] = [:]
         if #available(iOS 15.0, *) {
             let palette = UIImage.SymbolConfiguration(paletteColors: [.red, .blue, .yellow])
@@ -75,6 +76,10 @@ private enum AorusPluginIconsUIKitTests {
             }
         }
         stage("checking own icon and preview")
+        let largeSymbol = AorusPluginIconValues.symbol("mic.circle.fill", pointSize: 72)!
+        expect(largeSymbol.cgImage != nil && !largeSymbol.isSymbolImage, "large control symbols use Pixel")
+        sameCanvas(largeSymbol, largeSymbolReference, "large control symbol retains native metrics")
+        expect(largeSymbol.renderingMode == .alwaysTemplate, "large control symbol follows the tint")
         let global = UIImage(systemName: "waveform", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20, weight: .regular))!
         let resized = global.withConfiguration(smallConfiguration)
         sameCanvas(resized, configuredReference, "configuration applied after loading keeps glyph metrics")

@@ -473,7 +473,8 @@ public enum AorusPluginIconValues {
         let previousStyle = objc_getAssociatedObject(original, &styledImageKey) as? NSDictionary
         let alreadyStyled = (previousStyle?["revision"] as? NSNumber)?.intValue == renderRevision
             && previousStyle?["look"] as? String == look && (previousStyle?["amount"] as? NSNumber)?.doubleValue == Double(amount)
-        if let look, (spec != nil || !alreadyStyled), original.capInsets == .zero, size.width <= styleLimit, size.height <= styleLimit {
+        let isControlSymbol = original.isSymbolImage && size.width <= 128.0 && size.height <= 128.0
+        if let look, (spec != nil || !alreadyStyled), original.capInsets == .zero, (isControlSymbol || (size.width <= styleLimit && size.height <= styleLimit)) {
             if let styled = applyLook(look, amount: amount, to: image) {
                 image = styled
                 changed = true

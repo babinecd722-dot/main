@@ -1,3 +1,4 @@
+import Display
 import Foundation
 import UIKit
 import SwiftUI
@@ -118,7 +119,7 @@ struct AorusSessionBackupView: View {
             Section {
                 Button(action: performBackup) {
                     HStack {
-                        Image(systemName: "key.fill").frame(width: 30)
+                        AorusSystemSymbol("key.fill").frame(width: 30)
                         Text(l10n.backup)
                         Spacer()
                     }
@@ -132,7 +133,7 @@ struct AorusSessionBackupView: View {
                     }
                 }) {
                     HStack {
-                        Image(systemName: "arrow.2.circlepath").frame(width: 30)
+                        AorusSystemSymbol("arrow.2.circlepath").frame(width: 30)
                         Text(l10n.restore)
                         Spacer()
                     }
@@ -146,7 +147,7 @@ struct AorusSessionBackupView: View {
                     }
                 }) {
                     HStack {
-                        Image(systemName: "trash").frame(width: 30)
+                        AorusSystemSymbol("trash").frame(width: 30)
                         Text(l10n.deleteAll)
                         Spacer()
                     }

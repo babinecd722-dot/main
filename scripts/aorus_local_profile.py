@@ -20,6 +20,8 @@ def verify_local_profile(tg: Path) -> list[str]:
         "submodules/RadialStatusNode/Sources/RadialStatusIconContentNode.swift": ["AorusPluginIconValues.drawnIcon", "aorusDrawOriginalStatus"],
         "submodules/RadialStatusNode/Sources/RadialCheckContentNode.swift": ['named: "Telegram/Drawn/MediaCheck"'],
         "submodules/RadialStatusNode/Sources/RadialDownloadContentNode.swift": ["AorusPluginIconValues.drawnLayerIcon", "aorusDownloadIconRevision", "removeObserver(observer)", "self.aorusDownloadIcon.layer.animateAlpha"],
+        "submodules/RadialStatusNode/Sources/RadialProgressContentNode.swift": ['named: "Telegram/Drawn/MediaProgressCancel"', "self.cancelNode.color = self.color"],
+        "submodules/Display/Source/AorusSystemSymbol.swift": ["AorusPluginIconValues.symbol", "didChangeNotification", "DispatchQueue.main"],
         "submodules/RadialStatusNode/Sources/RadialCloudProgressContentNode.swift": ['named: "Telegram/Drawn/MediaCancel"', "self.cancelNode.color = self.color"],
         "submodules/TelegramUI/Components/PeerInfo/PeerInfoRatingComponent/Sources/PeerInfoRatingComponent.swift": ["aorusRatingIconRevision", "lhs.aorusIconRevision != rhs.aorusIconRevision", "styledBackgroundImage!.cgImage", "styledBorderImage!.cgImage"],
         "submodules/AorusGramUI/Sources/AorusMiscController.swift": ["case anonymousNumber", "strings.UserInfo_AnonymousNumberLabel", "setAnonymousNumber: { value in", "AorusPhoneSpoofStore.setAnonymous(value)"],
@@ -41,6 +43,10 @@ def verify_local_profile(tg: Path) -> list[str]:
     count = sum(path.read_text().count('named: "Telegram/Drawn/') for path in (tg / "submodules/TelegramPresentationData/Sources/Resources").glob("PresentationResources*.swift"))
     if count < 26:
         errors.append(f"DrawnIcons: only {count} procedural resource glyphs are routed")
+    for module in ["AorusGram", "AorusGramUI"]:
+        for path in (tg / "submodules" / module / "Sources").rglob("*.swift"):
+            if re.search(r"(?<!UI)\bImage\(systemName:|\bLabel\([^\n]*systemImage:", path.read_text()):
+                errors.append(f"DrawnIcons: unhandled SwiftUI symbol in {path.relative_to(tg)}")
     return errors
 
 
@@ -124,6 +130,8 @@ def patch_local_profile(tg: Path) -> None:
 
 def patch_drawn_icons(tg: Path) -> None:
     """Style procedural glyphs which never pass through an image asset loader."""
+    symbol = "submodules/Display/Source/AorusSystemSymbol.swift"
+    (tg / symbol).write_text((ROOT / "patches" / symbol).read_text())
     resources = tg / "submodules/TelegramPresentationData/Sources/Resources"
     total = 0
     for path in sorted(resources.glob("PresentationResources*.swift")):
@@ -192,6 +200,14 @@ def patch_drawn_icons(tg: Path) -> None:
             AorusPluginIconValues.drawnIcon(context: context, size: bounds.size, named: "Telegram/Drawn/MediaCancel") { context in
 '''),
         ("            path.fill()\n        }\n    }", "            path.fill()\n            }\n        }\n    }"),
+        ("            self.spinnerNode.color = self.color", "            self.spinnerNode.color = self.color\n            self.cancelNode.color = self.color"),
+    ])
+
+    edit(tg, "submodules/RadialStatusNode/Sources/RadialProgressContentNode.swift", 'named: "Telegram/Drawn/MediaProgressCancel"', [
+        ("            if parameters.displayCancel {\n", '''            if parameters.displayCancel {
+                AorusPluginIconValues.drawnIcon(context: context, size: bounds.size, named: "Telegram/Drawn/MediaProgressCancel") { context in
+'''),
+        ("                context.strokePath()\n            }\n        }\n    }", "                context.strokePath()\n                }\n            }\n        }\n    }"),
         ("            self.spinnerNode.color = self.color", "            self.spinnerNode.color = self.color\n            self.cancelNode.color = self.color"),
     ])
 

@@ -1,3 +1,4 @@
+import Display
 import Foundation
 import SwiftUI
 import UIKit
@@ -182,7 +183,7 @@ struct AccountSwitcherOverlay: View {
     }
 
     private var addButton: some View {
-        Image(systemName: "plus.circle.fill")
+        AorusSystemSymbol("plus.circle.fill", pointSize: 26)
             .font(.system(size: 26))
             .foregroundColor(.secondary)
             .padding(.horizontal, 4)

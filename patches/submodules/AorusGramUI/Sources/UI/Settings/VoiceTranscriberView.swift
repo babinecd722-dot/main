@@ -1,3 +1,4 @@
+import Display
 import SwiftUI
 import UIKit
 import AVFoundation
@@ -84,7 +85,7 @@ struct VoiceTranscriberView: View {
     private var languagePickerCard: some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 8) {
-                Label(aorusL("Язык распознавания", "Recognition language"), systemImage: "globe")
+                Label { Text(aorusL("Язык распознавания", "Recognition language")) } icon: { AorusSystemSymbol("globe", pointSize: 12, weight: .semibold) }
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Color(hex: "#5C6BC0"))
                 languageMenu
@@ -98,7 +99,7 @@ struct VoiceTranscriberView: View {
             ForEach(availableLocales, id: \.id) { l in
                 Button { selectedLocale = l.id } label: {
                     let icon = selectedLocale == l.id ? "checkmark" : ""
-                    Label("\(l.flag) \(l.name)", systemImage: icon)
+                    Label { Text("\(l.flag) \(l.name)") } icon: { AorusSystemSymbol(icon) }
                 }
             }
         } label: {
@@ -109,7 +110,7 @@ struct VoiceTranscriberView: View {
                         .foregroundColor(.primary)
                 }
                 Spacer()
-                Image(systemName: "chevron.down").foregroundColor(.secondary)
+                AorusSystemSymbol("chevron.down").foregroundColor(.secondary)
             }
             .padding(10)
             .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -121,7 +122,7 @@ struct VoiceTranscriberView: View {
             VStack(spacing: 12) {
                 let micIcon = isRecording ? "waveform.circle.fill" : "mic.circle.fill"
                 let gradientColors: [Color] = isRecording ? [.red, .pink] : [Color(hex: "#FF6D00"), Color(hex: "#FF3D00")]
-                Image(systemName: micIcon)
+                AorusSystemSymbol(micIcon, pointSize: 56)
                     .font(.system(size: 56))
                     .foregroundStyle(LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing))
                     .symbolEffect(.pulse, isActive: isRecording)
@@ -159,7 +160,7 @@ struct VoiceTranscriberView: View {
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label(aorusL("Транскрипция", "Transcript"), systemImage: "text.bubble.fill")
+                    Label { Text(aorusL("Транскрипция", "Transcript")) } icon: { AorusSystemSymbol("text.bubble.fill", pointSize: 13, weight: .semibold) }
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.green)
                     Spacer()
@@ -167,7 +168,7 @@ struct VoiceTranscriberView: View {
                         UIPasteboard.general.string = transcribedText
                         UINotificationFeedbackGenerator().notificationOccurred(.success)
                     } label: {
-                        Image(systemName: "doc.on.doc")
+                        AorusSystemSymbol("doc.on.doc")
                             .foregroundColor(Color(hex: "#FF6D00"))
                     }
                 }
