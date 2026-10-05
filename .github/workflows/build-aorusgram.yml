@@ -79,6 +79,9 @@ jobs:
       - name: Plugin system JavaScript preflight
         run: python3 aorusgram/scripts/plugin_system_prelude_check.py aorusgram
 
+      - name: Plugin AI lifecycle preflight
+        run: python3 aorusgram/scripts/plugin_ai_check.py aorusgram
+
       - name: Plugin documentation export preflight
         run: python3 aorusgram/scripts/plugin_exports_check.py aorusgram
 

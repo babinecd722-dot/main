@@ -143,7 +143,7 @@ const host = new Proxy({}, {
         case 'grantedPermissions': return () => ['sendMessages'];
         case 'hasPermission': return (value) => value === 'sendMessages';
         case 'registerDispatcher': return (value) => { globalThis.__dispatcher = value; };
-        case 'crypto': return () => '';
+        case 'crypto': return (kind) => kind === 'uuid' ? require('crypto').randomUUID() : '';
         case 'log': return (level, text) => record('log', [level, text]);
         case 'storageWrite': return (key, json) => {
             record('storageWrite', [key, json]);
@@ -913,6 +913,35 @@ aorus.chat.current().then(function (value) {
             delete globalThis.__answers['effects.start'];
         });
     });
+}).then(async function () {
+    globalThis.__answers['ai.ask'] = { text: 'Answer', artifacts: [] };
+    const chat = aorus.ai.createChat();
+    const thread = chat.threadId();
+    for (let index = 0; index < 15; index++) {
+        const before = chat.messages();
+        const answer = await chat.ask('Question ' + index);
+        check('AI chat lost the response', answer.text === 'Answer');
+        const payload = lastRequest('ai.ask');
+        check('AI chat changed the thread between questions', payload.threadId === thread);
+        check('AI chat does not carry recent history', JSON.stringify(payload.history) === JSON.stringify(before));
+    }
+    check('AI chat history is not capped to twenty messages', chat.messages().length === 20);
+    const snapshot = chat.messages();
+    snapshot[0].content = 'Mutated';
+    check('AI messages exposes its internal history', chat.messages()[0].content !== 'Mutated');
+    const late = chat.ask('Old thread');
+    chat.clear();
+    await late;
+    check('AI answer repopulated a cleared chat', chat.messages().length === 0);
+    check('AI clear did not create a new thread', chat.threadId() !== thread);
+    globalThis.__requestFailures['ai.ask'] = 'Offline';
+    try { await chat.ask('Failed'); problems.push('AI failure resolved'); } catch (error) { check('AI failure lost its error', error.message === 'Offline'); }
+    delete globalThis.__requestFailures['ai.ask'];
+    await chat.ask('After failure');
+    check('AI failure entered the successful history', chat.messages().length === 2 && chat.messages()[0].content === 'After failure');
+    globalThis.__answers['ai.cancel'] = { cancelled: true };
+    const cancellation = await aorus.ai.cancel();
+    check('AI cancel did not reach its native broker', cancellation.cancelled === true && lastRequest('ai.cancel') !== null);
 }).then(function () {
 VERDICT_TAIL
     globalThis.__nodeLog('VERDICT ' + JSON.stringify(problems));

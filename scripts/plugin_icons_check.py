@@ -132,6 +132,9 @@ def main():
             from aorus_navigation_icons import navigation_test_source
             navigation = work / "NativeNavigationIcons.swift"
             navigation.write_text(navigation_test_source(args.telegram_source))
+            from aorus_native_theme import native_theme_test_source
+            theme = work / "NativeTheme.swift"
+            theme.write_text(native_theme_test_source(args.telegram_source, args.repo))
             stub = work / "AppBundle.swift"
             stub.write_text(APP_BUNDLE)
             renderer = work / "AorusPluginIconValues.swift"
@@ -167,7 +170,7 @@ def main():
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 try:

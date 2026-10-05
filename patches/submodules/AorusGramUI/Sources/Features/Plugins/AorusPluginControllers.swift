@@ -1400,7 +1400,7 @@ private final class AorusPluginEditorController: ViewController, UITextViewDeleg
         navigationItem.rightBarButtonItems = [
             UIBarButtonItem(title: AorusPluginUIString.save.text, style: .done, target: self, action: #selector(save)),
             aiButton,
-            UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle"), style: .plain, target: self, action: #selector(editMetadata))
+            UIBarButtonItem(image: UIImage(systemName: "ellipsis.circle")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(editMetadata))
         ]
     }
 
@@ -2544,7 +2544,7 @@ private final class AorusPluginPermissionsController: ViewController, UITableVie
 
 private final class AorusPluginDocsController: ViewController {
     private let presentationData: PresentationData; private let textView = UITextView()
-    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text; navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share"), style: .plain, target: self, action: #selector(exportDocumentation)); navigationItem.rightBarButtonItem?.accessibilityLabel = AorusPluginUIString.export.text }
+    init(context: AccountContext) { presentationData = context.sharedContext.currentPresentationData.with { $0 }; super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass)); title = AorusPluginUIString.documentation.text; navigationItem.rightBarButtonItem = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(exportDocumentation)); navigationItem.rightBarButtonItem?.accessibilityLabel = AorusPluginUIString.export.text }
     @objc private func exportDocumentation() {
         aorusPluginExportText(AorusPluginTextExport.documentation(AorusPluginDocumentation.text), name: "Plugins_Documentation.md", from: self, anchor: navigationItem.rightBarButtonItem)
     }
@@ -2967,7 +2967,8 @@ private enum AorusPluginDocumentation {
             chat.messages()
             chat.clear()
             chat.threadId()
-            Сессия сама передаёт последние сообщения как историю. Результат содержит text и artifacts с безопасными метаданными файлов: id, filename, mime, size и format. Открыть можно только файл, выданный AorusAI этому плагину в текущем сеансе; загрузка подписывается и проверяется сервером, затем файл открывается в нативном просмотрщике. HMAC, device secret, токены и внутренние маршруты плагину не передаются. Если серверу требуется доступ к Telegram или подтверждение пользователя, запрос нужно продолжить в полном чате AorusAI.
+            Сессия передаёт последние двадцать реплик и сохраняет threadId для всей беседы. Одновременно выполняется один ход плагина; следующий ask вызывайте после завершения предыдущего Promise. Неудачный запрос в историю не добавляется. chat.clear() начинает новую беседу без отмены текущего запроса; его поздний ответ не попадает в новую историю. await aorus.ai.cancel() останавливает текущий ход и возвращает { cancelled: true }, а при отсутствии хода — { cancelled: false }. После завершения cancel можно отправлять следующий запрос.
+            Результат содержит text и artifacts с метаданными файлов: id, filename, mime, size и format. aorus.ai.openArtifact(id) открывает файл, выданный этому плагину в текущем сеансе, в нативном просмотрщике. Запрос инструмента приходит в onEvent как ai.tool, запрос разрешения — как ai.permission. Ответьте через aorus.ai.allow(requestId, options), aorus.ai.deny(requestId) или aorus.ai.resolveTool(requestId, result, options). Событие done содержит ok, waiting и серверное state, если оно передано. При waiting: true завершён один поток, а ход ждёт ответа плагина. Окончательный результат ask приходит через Promise.
 
             Настройки плагина
             aorus.settings.addSection({ title: 'Переводчик', items: [
@@ -3355,7 +3356,8 @@ private enum AorusPluginDocumentation {
     chat.messages()
     chat.clear()
     chat.threadId()
-    The session carries recent messages as history. The result contains text and artifacts with safe file metadata: id, filename, mime, size and format. Only a file returned to this plugin during the current session can be opened; download stays signed and server-authorized, then uses the native preview. HMAC, device secrets, tokens and internal routes never enter the plugin. A request that needs Telegram access or user approval must continue in the full AorusAI chat.
+    The session carries the last twenty messages and keeps its threadId throughout the conversation. One turn runs per plugin; send the next ask after the previous Promise settles. Failed requests are excluded from history. chat.clear() starts a new conversation without cancelling the running request; its late answer does not enter the new history. await aorus.ai.cancel() stops the current turn and returns { cancelled: true }, or { cancelled: false } when there is no active turn. After cancel settles, the next request can be sent.
+    The result contains text and artifacts with file metadata: id, filename, mime, size and format. aorus.ai.openArtifact(id) opens a file returned to this plugin during the current session in the native preview. Tool requests arrive in onEvent as ai.tool; permission requests arrive as ai.permission. Answer with aorus.ai.allow(requestId, options), aorus.ai.deny(requestId), or aorus.ai.resolveTool(requestId, result, options). The done event includes ok, waiting, and the server state when supplied. With waiting: true, one stream has ended and the turn awaits the plugin's answer. The final ask result arrives through its Promise.
 
     Plugin settings
     aorus.settings.addSection({ title: 'Translator', items: [
@@ -4213,8 +4215,9 @@ private final class AorusPluginConsoleController: ViewController {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: presentationData, style: .glass))
         title = AorusPluginUIString.console.text
-        let clear = UIBarButtonItem(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), style: .plain, target: self, action: #selector(clearLog))
-        let export = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share"), style: .plain, target: self, action: #selector(exportLog))
+        let clear = UIBarButtonItem(image: UIImage(bundleImageName: "Chat/Context Menu/Delete")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(clearLog))
+        clear.accessibilityLabel = aorusL("Очистить", "Clear")
+        let export = UIBarButtonItem(image: UIImage(bundleImageName: "Navigation/Share")?.withRenderingMode(.alwaysTemplate), style: .plain, target: self, action: #selector(exportLog))
         export.accessibilityLabel = AorusPluginUIString.export.text
         // Display lays these out from left to right, including its glass navigation bar.
         navigationItem.rightBarButtonItems = [export, clear]

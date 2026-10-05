@@ -8269,7 +8269,10 @@ _AORUS_STOCK_OFF_THEME_HELPER = (
     "        controlAccentColor: accent,\n"
     "        checkContentColor: UIColor(rgb: 0xffffff)\n"
     "    )\n"
-    "    return PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)\n"
+    "    let derived = PresentationTheme(name: theme.name, index: theme.index, referenceTheme: theme.referenceTheme, overallDarkAppearance: theme.overallDarkAppearance, intro: theme.intro, passcode: theme.passcode, rootController: rootController, list: list, chatList: chatList, chat: chat, actionSheet: actionSheet, contextMenu: theme.contextMenu, inAppNotification: theme.inAppNotification, chart: theme.chart, preview: theme.preview)\n"
+    "    derived.forceSync = theme.forceSync\n"
+    "    derived.starGift = theme.starGift\n"
+    "    return derived\n"
     "}\n"
     "\n"
 )
@@ -30645,6 +30648,8 @@ def main() -> None:
     patch_drawn_icons(tg)
     from aorus_navigation_icons import patch_navigation_icons
     patch_navigation_icons(tg)
+    from aorus_native_theme import patch_native_theme
+    patch_native_theme(tg)
     patch_plugin_profile_look(tg)
     patch_message_look(tg)
     patch_message_settings(tg)

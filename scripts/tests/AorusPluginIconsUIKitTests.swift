@@ -279,6 +279,9 @@ private enum AorusPluginIconsUIKitTests {
         let navigationChecks = await runNavigationIconRegression()
         checks += navigationChecks
         print("Native navigation and composer passed: \(navigationChecks) assertions")
+        let themeChecks = runNativeThemeRegression()
+        checks += themeChecks
+        print("Native presentation traits and toolbar colours passed: \(themeChecks) assertions")
         print("UIKit icon resolver passed: \(checks) assertions")
     }
 }

@@ -955,11 +955,15 @@ public enum AorusPluginPrelude {
             var opts = optionalObject(options, 'options');
             var history = Array.isArray(opts.history) ? JSON.parse(JSON.stringify(opts.history)) : [];
             var threadId = typeof opts.threadId === 'string' ? opts.threadId : host.crypto('uuid', '', '');
+            var generation = 0;
             return freeze({
                 ask: function (prompt, options) {
                     var text = requireString(prompt, 'prompt');
                     var call = optionalObject(options, 'options');
-                    return request('ai.ask', { prompt: text, history: history, threadId: threadId }, call.onEvent).then(function (answer) {
+                    var currentGeneration = generation;
+                    var currentHistory = JSON.parse(JSON.stringify(history));
+                    return request('ai.ask', { prompt: text, history: currentHistory, threadId: threadId }, call.onEvent).then(function (answer) {
+                        if (currentGeneration !== generation) { return answer; }
                         history.push({ role: 'user', content: text });
                         if (answer && typeof answer.text === 'string' && answer.text.length > 0) {
                             history.push({ role: 'assistant', content: answer.text });
@@ -968,7 +972,7 @@ public enum AorusPluginPrelude {
                         return answer;
                     });
                 },
-                clear: function () { history = []; threadId = host.crypto('uuid', '', ''); },
+                clear: function () { generation += 1; history = []; threadId = host.crypto('uuid', '', ''); },
                 messages: function () { return JSON.parse(JSON.stringify(history)); },
                 threadId: function () { return threadId; }
             });
@@ -3559,6 +3563,7 @@ public enum AorusPluginPrelude {
                 })
             }),
             ai: freeze({
+                cancel: function () { return request('ai.cancel', {}); },
                 createChat: createAIChat,
                 ask: function (prompt, options) {
                     var opts = optionalObject(options, 'options');

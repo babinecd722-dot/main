@@ -64,6 +64,7 @@ public protocol AorusPluginHostServices: AnyObject {
     func pluginAIAsk(_ pluginId: String, prompt: String, history: [[String: String]], threadId: String?, event: @escaping ([String: Any]) -> Void, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginAIOpenArtifact(_ pluginId: String, artifactId: String, completion: @escaping (Result<Void, Error>) -> Void)
     func pluginAIAnswer(_ pluginId: String, requestId: String, action: String, options: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void)
+    func pluginAICancel(_ pluginId: String, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginAppFeatures(_ pluginId: String, completion: @escaping (Result<[[String: Any]], Error>) -> Void)
     func pluginSetAppFeature(_ pluginId: String, featureId: String, value: Any, completion: @escaping (Result<[String: Any], Error>) -> Void)
     func pluginProxyStatus(_ pluginId: String, completion: @escaping (Result<[String: Any], Error>) -> Void)
@@ -405,6 +406,9 @@ open class AorusPluginNullHost: AorusPluginHostServices {
     }
     open func pluginAIAnswer(_ pluginId: String, requestId: String, action: String, options: [String: Any], completion: @escaping (Result<[String: Any], Error>) -> Void) {
         completion(.success(onAIAnswer?(pluginId, requestId, action, options) ?? ["ok": NSNumber(value: true)]))
+    }
+    open func pluginAICancel(_ pluginId: String, completion: @escaping (Result<[String: Any], Error>) -> Void) {
+        completion(.success(["cancelled": NSNumber(value: false)]))
     }
     open func pluginAppFeatures(_ pluginId: String, completion: @escaping (Result<[[String: Any]], Error>) -> Void) {
         completion(.success(onAppFeatures?(pluginId) ?? []))
@@ -2637,7 +2641,7 @@ public final class AorusPluginSandbox {
                 settle(id, with: .failure(AorusPluginRequestError("prompt is empty or too long")))
                 return
             }
-            let history = (payload["history"] as? [[String: Any]] ?? []).prefix(20).compactMap { item -> [String: String]? in
+            let history = (payload["history"] as? [[String: Any]] ?? []).suffix(20).compactMap { item -> [String: String]? in
                 guard let role = item["role"] as? String, ["user", "assistant"].contains(role),
                       let content = item["content"] as? String, !content.isEmpty else { return nil }
                 return ["role": role, "content": String(content.prefix(8_000))]
@@ -2658,6 +2662,11 @@ public final class AorusPluginSandbox {
                 return
             }
             host.pluginAIAnswer(pluginId, requestId: requestId, action: action, options: (payload["options"] as? [String: Any]) ?? [:]) { [weak self] result in
+                self?.settle(id, with: result.map { $0 as Any })
+            }
+        case "ai.cancel":
+            guard require(.artificialIntelligence, id: id) else { return }
+            host.pluginAICancel(pluginId) { [weak self] result in
                 self?.settle(id, with: result.map { $0 as Any })
             }
         case "ai.openArtifact":

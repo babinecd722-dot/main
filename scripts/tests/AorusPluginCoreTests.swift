@@ -764,8 +764,10 @@ if AorusPluginSandbox.watchdogAvailable {
     let aiHost = AorusPluginNullHost()
     var aiPrompt: String?
     var aiLog: String?
+    var aiHistoryCounts: [Int] = []
     aiHost.onAIAsk = { _, prompt, history in
         aiPrompt = prompt
+        aiHistoryCounts.append(history.count)
         return ["text": "Answer", "artifacts": [], "historyCount": history.count]
     }
     aiHost.onLog = { _, _, text in aiLog = text }
@@ -773,7 +775,8 @@ if AorusPluginSandbox.watchdogAvailable {
     var chat = aorus.ai.createChat();
     aorus.on('start', async function () {
         var answer = await chat.ask('Question');
-        console.log(answer.text);
+        var next = await chat.ask('Second');
+        console.log(answer.text + ' | ' + next.text);
     });
     """
     let ai = AorusPluginSandbox(
@@ -786,8 +789,9 @@ if AorusPluginSandbox.watchdogAvailable {
     ai.start { error in expect(error == nil, "AI chat plugin starts"); aiStarted.signal() }
     _ = aiStarted.wait(timeout: .now() + 2)
     Thread.sleep(forTimeInterval: 0.2)
-    expect(aiPrompt == "Question", "AorusAI chat sends the plugin question through the host")
-    expect(aiLog == "Answer", "AorusAI chat resolves the assistant response")
+    expect(aiPrompt == "Second", "AorusAI chat sends a second plugin question through the host")
+    expect(aiHistoryCounts == [0, 2], "AorusAI chat carries the first turn into the second request")
+    expect(aiLog == "Answer | Answer", "AorusAI chat resolves consecutive assistant responses")
     ai.stop()
 
     // A plugin that once failed to answer the outgoing hook in time used to be shut out of
