@@ -90,23 +90,29 @@ private struct NavigationBarPresentationData {
     }
     func update(dark: Bool) { aorusUpdatePresentationStyle(NavigationBarPresentationData(theme: .init(overallDarkAppearance: dark))) }
 }
-@MainActor func runNativeThemeRegression() async -> Int {
+@MainActor func runNativeThemeRegression(window: UIWindow) async -> Int {
     var checks = 0
     func expect(_ value: Bool, _ message: String) { checks += 1; if !value { fatalError(message) } }
-    let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
     let root = UIViewController()
     window.rootViewController = root
     window.makeKeyAndVisible()
     let cold = NativeThemeControllerProbe()
     cold.update(dark: true)
     expect(!cold.isViewLoaded, "setting presentation style does not force a view to load")
+    root.addChild(cold)
+    root.view.addSubview(cold.view)
+    cold.view.frame = root.view.bounds
+    cold.didMove(toParent: root)
     let coldField = UITextField()
     cold.view.addSubview(coldField)
     try? await Task.sleep(nanoseconds: 20_000_000)
-    expect(coldField.traitCollection.userInterfaceStyle == .dark, "a root loaded after theme resolution inherits the dark style")
+    print("Native cold theme traits: controller=\\(cold.traitCollection.userInterfaceStyle.rawValue), root=\\(cold.view.traitCollection.userInterfaceStyle.rawValue), rootOverride=\\(cold.view.overrideUserInterfaceStyle.rawValue), field=\\(coldField.traitCollection.userInterfaceStyle.rawValue), attached=\\(coldField.window != nil)")
+    expect(coldField.window === window, "cold-loaded form is attached to the app window")
+    expect(coldField.traitCollection.userInterfaceStyle == .dark, "a root loaded after theme resolution inherits the dark style: " + String(coldField.traitCollection.userInterfaceStyle.rawValue))
     let controller = NativeThemeControllerProbe()
     root.addChild(controller)
     root.view.addSubview(controller.view)
+    controller.view.frame = root.view.bounds
     controller.didMove(toParent: root)
     let field = UITextField()
     let table = UITableView(frame: .zero, style: .insetGrouped)

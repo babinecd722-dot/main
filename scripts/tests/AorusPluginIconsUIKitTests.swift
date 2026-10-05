@@ -279,7 +279,10 @@ private enum AorusPluginIconsUIKitTests {
         let navigationChecks = await runNavigationIconRegression()
         checks += navigationChecks
         print("Native navigation and composer passed: \(navigationChecks) assertions")
-        let themeChecks = await runNativeThemeRegression()
+        guard let window = (UIApplication.shared.delegate as? AorusPluginIconsTestApplication)?.window else {
+            fatalError("The native theme regression requires the application's visible window")
+        }
+        let themeChecks = await runNativeThemeRegression(window: window)
         checks += themeChecks
         print("Native presentation traits and toolbar colours passed: \(themeChecks) assertions")
         print("UIKit icon resolver passed: \(checks) assertions")
@@ -289,7 +292,13 @@ private enum AorusPluginIconsUIKitTests {
 @objc(AorusPluginIconsTestApplication)
 @MainActor
 private final class AorusPluginIconsTestApplication: NSObject, UIApplicationDelegate {
+    var window: UIWindow?
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = UIViewController()
+        self.window = window
+        window.makeKeyAndVisible()
         Task { @MainActor in
             await AorusPluginIconsUIKitTests.run()
             fflush(stdout)
