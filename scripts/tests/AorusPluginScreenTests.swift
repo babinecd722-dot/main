@@ -18,6 +18,8 @@ import CoreFoundation
         for screen in screens {
             expect(AorusPluginScreen.resolve(screen.rawValue) == screen, "plain id resolves: " + screen.rawValue)
             expect(AorusPluginScreen.resolve(screen.link) == screen, "canonical link resolves: " + screen.rawValue)
+            expect(AorusPluginScreen.fromLink(screen.link) == screen, "URL containers resolve the native link")
+            expect(AorusPluginScreen.fromLink(screen.rawValue) == nil, "a plain screen id is not a URL")
             expect(tab(["screen": screen.rawValue])?.screen == screen.rawValue, "native tab accepts id")
             expect(tab(["screen": screen.link])?.screen == screen.rawValue, "native tab normalizes link")
             let linkTab = tab(["url": screen.link])

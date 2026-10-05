@@ -711,7 +711,7 @@ public struct AorusPluginUIPage: Codable, Equatable {
                     guard validateKind(&row) else { return nil }
                     if row.kind == .link {
                         guard let value = row.url else { return nil }
-                        if AorusPluginScreen.resolve(value) == nil {
+                        if AorusPluginScreen.fromLink(value) == nil {
                             guard let url = URL(string: value), let scheme = url.scheme?.lowercased(),
                                   (scheme == "http" || scheme == "https"), url.host?.isEmpty == false else { return nil }
                         }
@@ -910,7 +910,7 @@ public struct AorusPluginSettingsShortcut: Codable, Equatable {
             }
             item.url = item.url.map { String($0.prefix(2_048)) }
             if let value = item.url {
-                if let screen = AorusPluginScreen.resolve(value) {
+                if let screen = AorusPluginScreen.fromLink(value) {
                     guard !item.siteIcon else { return nil }
                     item.url = screen.link
                 } else {
@@ -946,6 +946,11 @@ public enum AorusPluginScreen: String, CaseIterable, Codable {
     case chats, contacts, recentCalls = "calls", feed = "wall"
 
     public var link: String { "aorus://screen/" + rawValue }
+
+    public static func fromLink(_ value: String) -> AorusPluginScreen? {
+        guard value.lowercased().hasPrefix("aorus://") else { return nil }
+        return resolve(value)
+    }
 
     /// The same identifier is accepted by the navigation API and by a native tab.
     public static func resolve(_ value: String) -> AorusPluginScreen? {
@@ -1011,7 +1016,7 @@ public struct AorusPluginTab: Codable, Equatable {
             if let pageId = item.pageId,
                identifier?.firstMatch(in: pageId, range: NSRange(location: 0, length: pageId.utf16.count)) == nil { return nil }
             if let value = item.url {
-                if let target = AorusPluginScreen.resolve(value) {
+                if let target = AorusPluginScreen.fromLink(value) {
                     item.screen = target.rawValue
                     item.url = nil
                     items[index] = item

@@ -1115,6 +1115,11 @@ def request_gates(sandbox: str) -> dict[str, set[str]]:
         kinds = re.findall(r'"([^"]+)"', match.group(1))
         end = matches[index + 1].start() if index + 1 < len(matches) else body.index("\n        default:", match.end())
         segment = body[match.end():end]
+        native_url_gate = re.search(r"if AorusPluginScreen\.fromLink\(url\) != nil \{\s*guard require\(\.(\w+), id: id\) else \{ return \}\s*\} else \{\s*guard require\(\.(\w+), id: id\) else \{ return \}\s*\}", segment)
+        if native_url_gate and kinds == ["browser.open"]:
+            # Internal screen links and websites are alternative routes. Check both;
+            # requiring the union would ask for customization on every website call.
+            segment = segment[:native_url_gate.start()] + segment[native_url_gate.end():]
         common = set(re.findall(r"require\(\.(\w+)", segment))
         writes = re.search(r"let writes = (.*?)\n\s*guard", segment, re.S)
         write_kinds = set()
@@ -1130,6 +1135,9 @@ def request_gates(sandbox: str) -> dict[str, set[str]]:
                 if ('kind == "%s"' % kind) in condition:
                     needed.add(permission)
             gates[kind] = needed
+            if native_url_gate and kind == "browser.open":
+                gates[kind].add(native_url_gate.group(2))
+                gates[kind + ".screen"] = common | {native_url_gate.group(1)}
     return gates
 
 
@@ -1161,6 +1169,7 @@ const auditRef = { peerId: '123', namespace: 0, messageId: 5 };
 const auditArguments = [
     [], ['123'], ['123', 'text'], [auditRef], [auditRef, 'text'], [auditRef, '456'], ['https://example.com'],
     ['https://example.com', {}], ['key', 'value'], [auditHandler], ['name', auditHandler], ['text'],
+    ['aorus://screen/plugins'],
     [{ title: 'T', text: 'x', id: 'x', url: 'https://example.com' }], [{ id: 'x', title: 'T' }, auditHandler],
     ['a.txt', 'text'], ['a.txt'], ['snow'], [1000], ['-100123', '42'], ['42', { chatPeerId: '-100123' }],
     ['ab'], ['123', 'text', {}], [{ title: 'T' }], ['#FF0000'], [true], ['topic', {}], ['mail', 3],
@@ -1203,7 +1212,11 @@ const auditIgnored = new Set(['log', 'storageWrite', 'timerSchedule', 'timerCanc
             await new Promise(function (resolve) { globalThis.__nodeSetTimeout(resolve, 0); });
             for (const call of globalThis.__calls) {
                 if (auditIgnored.has(call.name)) { continue; }
-                calls[call.name === 'request' ? 'request:' + call.args[0] : call.name] = true;
+                let key = call.name === 'request' ? 'request:' + call.args[0] : call.name;
+                if (call.name === 'request' && call.args[0] === 'browser.open' && call.args[1].url === 'aorus://screen/plugins') {
+                    key += '.screen';
+                }
+                calls[key] = true;
             }
             // The first argument goes with the calls it led to: `users.get('me')` is the
             // account, `users.get('42')` somebody else, and the scanner reads the difference.

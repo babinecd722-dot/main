@@ -1503,7 +1503,7 @@ private final class AorusPluginTelegramHost: AorusPluginHostServices {
     }
 
     func pluginOpenURL(_ pluginId: String, url: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        if let screen = AorusPluginScreen.resolve(url) {
+        if let screen = AorusPluginScreen.fromLink(url) {
             pluginOpenScreen(pluginId, screen: screen, style: "push", completion: completion)
             return
         }

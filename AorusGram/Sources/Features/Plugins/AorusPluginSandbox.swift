@@ -1649,8 +1649,8 @@ public final class AorusPluginSandbox {
             guard let self, self.hostServices.pluginExecutionAllowed, self.permissions.contains(.settingsIntegration) else { return false }
             let data = Data(json.utf8)
             guard let shortcuts = AorusPluginSettingsShortcut.validated(from: data) else { return false }
-            if shortcuts.contains(where: { $0.url.map { AorusPluginScreen.resolve($0) == nil } ?? false }), !self.permissions.contains(.inAppBrowser) { return false }
-            if shortcuts.contains(where: { $0.url.flatMap(AorusPluginScreen.resolve) != nil }), !self.permissions.contains(.appCustomization) { return false }
+            if shortcuts.contains(where: { $0.url.map { AorusPluginScreen.fromLink($0) == nil } ?? false }), !self.permissions.contains(.inAppBrowser) { return false }
+            if shortcuts.contains(where: { $0.url.flatMap(AorusPluginScreen.fromLink) != nil }), !self.permissions.contains(.appCustomization) { return false }
             if self.publishes { self.hostServices.pluginSettingsShortcutsChanged(pluginId, shortcuts: shortcuts) }
             return true
         }
@@ -2663,7 +2663,7 @@ public final class AorusPluginSandbox {
                 settle(id, with: .failure(AorusPluginRequestError("url is required")))
                 return
             }
-            if AorusPluginScreen.resolve(url) != nil {
+            if AorusPluginScreen.fromLink(url) != nil {
                 guard require(.appCustomization, id: id) else { return }
             } else {
                 guard require(.inAppBrowser, id: id) else { return }
