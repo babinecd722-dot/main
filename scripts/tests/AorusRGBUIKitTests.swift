@@ -30,6 +30,14 @@ import CoreText
     }
     let rgb = AorusRGBColors.color("RGB")!
     let fixed = UIColor.blue
+    let translucent = AorusRGBColors.color("RGB:80")!
+    let maskInk = AorusRGBColors.maskInk(translucent)
+    expect(AorusRGBColors.isAnimated(maskInk) && maskInk.cgColor.alpha == 1.0, "native outline opacity stays in its mask, without being multiplied twice")
+    expect(AorusRGBColors.maskInk(AorusRGBColors.color("RGB:00")!).cgColor.alpha == 0.0, "a fully transparent mask remains transparent")
+    expect(AorusRGBColors.maskInk(fixed).isEqual(fixed), "fixed bitmap colours keep their opacity")
+    expect(AorusRGBColors.sameSource(rgb, AorusRGBColors.color("RGB")!), "identical RGB settings keep the native layout cache")
+    expect(!AorusRGBColors.sameSource(rgb, UIColor(cgColor: rgb.cgColor)), "an RGB source differs from a fixed colour matching its first frame")
+    expect(AorusRGBColors.prepareText(NSAttributedString(string: "fixed", attributes: [.foregroundColor: fixed])).attribute(AorusRGBColors.textAttribute, at: 0, effectiveRange: nil) == nil, "fixed text receives no RGB attributes")
     expect(!AorusRGBColors.isAnimated(fixed), "ordinary colours retain native drawing")
     expect(AorusRGBColors.resolved(fixed).isEqual(fixed), "fixed colour unchanged")
     let layer = CAGradientLayer()
@@ -52,7 +60,7 @@ import CoreText
     }
     AorusRGBColors.animate(layer, keyPath: "colors", colors: [fixed, fixed])
     expect(layer.animation(forKey: "aorusRGB.colors") == nil, "choosing a fixed colour removes RGB")
-    for key in ["fillColor", "shadowColor"] {
+    for key in ["fillColor", "shadowColor", "contentsMultiplyColor"] {
         let target = CAShapeLayer()
         AorusRGBColors.animate(target, keyPath: key, colors: [rgb])
         expect(UIAccessibility.isReduceMotionEnabled || target.animation(forKey: "aorusRGB." + key) != nil, "glass tint/glow animates natively")
@@ -63,6 +71,7 @@ import CoreText
     text.addAttribute(.foregroundColor, value: rgb, range: NSRange(location: 0, length: 3))
     text.addAttribute(.foregroundColor, value: rgb, range: NSRange(location: 10, length: 3))
     let prepared = AorusRGBColors.prepareText(text)
+    expect(prepared.isEqual(to: AorusRGBColors.prepareText(text)), "repeated native layout arguments match the cached RGB attributes")
     expect(AorusRGBColors.hasRGB(prepared), "RGB text is marked without modifying its words")
     expect(prepared.string == text.string, "text content unchanged")
     expect(prepared.attribute(AorusRGBColors.textAttribute, at: 5, effectiveRange: nil) == nil, "fixed runs retain their colour")
@@ -90,6 +99,73 @@ import CoreText
     try? await Task.sleep(nanoseconds: 160_000_000)
     let nextFrame = renderText()
     expect(UIAccessibility.isReduceMotionEnabled ? firstFrame == nextFrame : firstFrame != nextFrame, "cached CoreText runs change RGB pixels without changing layout")
+    let quoteFrame = CGRect(x: 6, y: 6, width: 124, height: 44)
+    let quoteData = TextNodeBlockQuoteData(kind: .quote, title: nil, color: rgb, secondaryColor: nil, tertiaryColor: nil, backgroundColor: .clear, isCollapsible: false)
+    let fixedData = TextNodeBlockQuoteData(kind: .quote, title: nil, color: UIColor(cgColor: rgb.cgColor), secondaryColor: nil, tertiaryColor: nil, backgroundColor: .clear, isCollapsible: false)
+    expect(!quoteData.isEqual(fixedData), "the native quote cache invalidates when RGB is replaced by the same fixed hue")
+    for (secondary, tertiary) in [(nil, nil), (UIColor.clear, nil), (UIColor.clear, UIColor.clear), (UIColor.blue, UIColor.green)] as [(UIColor?, UIColor?)] {
+        let quote = TextNodeBlockQuote(frame: quoteFrame, data: quoteData, tintColor: rgb, secondaryTintColor: secondary, tertiaryTintColor: tertiary, backgroundColor: AorusRGBColors.withAlpha(rgb, multipliedBy: 0.1))
+        var layout = NativeRGBTextLayout()
+        layout.attributedString = NSAttributedString(string: "fixed text", attributes: [.foregroundColor: fixed])
+        layout.blockQuotes = [quote]
+        expect(!AorusRGBColors.hasRGB(layout.attributedString) && layout.aorusHasRGB, "an RGB quote is redrawn even when every glyph has a fixed colour")
+        let firstQuote = nativeRGBQuotePixels(layout)
+        try? await Task.sleep(nanoseconds: 160_000_000)
+        let nextQuote = nativeRGBQuotePixels(layout)
+        expect(UIAccessibility.isReduceMotionEnabled ? firstQuote == nextQuote : firstQuote != nextQuote, "native quote stripes, background and glyphs change colour without changing geometry")
+    }
+    for index in 0 ..< 4 {
+        var layout = NativeRGBTextLayout()
+        layout.blockQuotes = [TextNodeBlockQuote(frame: quoteFrame, data: quoteData, tintColor: index == 0 ? rgb : fixed, secondaryTintColor: index == 1 ? rgb : nil, tertiaryTintColor: index == 2 ? rgb : nil, backgroundColor: index == 3 ? rgb : .clear)]
+        expect(layout.aorusHasRGB, "all four native quote colour fields participate in RGB visibility tracking")
+    }
+    var fixedLayout = NativeRGBTextLayout()
+    fixedLayout.blockQuotes = [TextNodeBlockQuote(frame: quoteFrame, data: quoteData, tintColor: fixed, secondaryTintColor: nil, tertiaryTintColor: nil, backgroundColor: fixed.withAlphaComponent(0.1))]
+    expect(!fixedLayout.aorusHasRGB, "fixed quote colours do not start a display link")
+    let fixedQuote = nativeRGBQuotePixels(fixedLayout)
+    try? await Task.sleep(nanoseconds: 160_000_000)
+    expect(fixedQuote == nativeRGBQuotePixels(fixedLayout), "native fixed quote pixels remain unchanged")
+    let template = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).image { value in
+        UIColor.white.setFill()
+        value.cgContext.fillEllipse(in: CGRect(x: 2, y: 2, width: 16, height: 16))
+    }.resizableImage(withCapInsets: UIEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)).withRenderingMode(.alwaysTemplate)
+    let templateView = UIImageView(image: template)
+    templateView.frame = CGRect(x: 80, y: 60, width: 48, height: 32)
+    templateView.contentMode = .scaleAspectFit
+    window.addSubview(templateView)
+    AorusRGBColors.tintImage(templateView, color: translucent)
+    let templateOverlay = templateView.subviews.first as! AorusRGBGradientView
+    let templateGradient = templateOverlay.layer.sublayers!.first as! CAGradientLayer
+    let templateMask = templateOverlay.mask as! UIImageView
+    expect(templateMask.image!.capInsets == template.capInsets && templateMask.image!.resizingMode == template.resizingMode, "RGB replies preserve native stretch points and resizing mode")
+    expect(templateMask.contentMode == templateView.contentMode, "RGB templates preserve native image placement")
+    expect(abs(UIColor(cgColor: (templateGradient.colors as! [CGColor])[0]).cgColor.alpha - translucent.cgColor.alpha) < 0.001, "untinted reply templates apply the chosen opacity once")
+    expect(templateView.image!.capInsets == template.capInsets, "the original image still supplies native intrinsic sizing")
+    AorusRGBColors.tintImage(templateView, color: rgb)
+    expect(templateView.subviews.count == 1, "template refresh reuses one RGB layer")
+    templateView.frame.size = CGSize(width: 80, height: 48)
+    templateView.layoutIfNeeded()
+    expect(templateOverlay.bounds.size == templateView.bounds.size, "native reply resizing also resizes the RGB mask")
+    AorusRGBColors.tintImage(templateView, color: fixed)
+    expect(templateView.subviews.isEmpty && templateView.tintColor.isEqual(fixed), "choosing a fixed reply colour restores native tinting")
+    expect(templateGradient.animation(forKey: "aorusRGB.colors") == nil, "a detached reply mask stops animating")
+    templateView.removeFromSuperview()
+    let patternLayer = CALayer()
+    patternLayer.frame = CGRect(x: 140, y: 12, width: 20, height: 20)
+    patternLayer.contents = template.cgImage
+    patternLayer.setValue(rgb.cgColor, forKey: "contentsMultiplyColor")
+    window.layer.addSublayer(patternLayer)
+    AorusRGBColors.animate(patternLayer, keyPath: "contentsMultiplyColor", colors: [rgb])
+    if !UIAccessibility.isReduceMotionEnabled {
+        CATransaction.flush()
+        try? await Task.sleep(nanoseconds: 220_000_000)
+        let firstTint = patternLayer.presentation()!.value(forKey: "contentsMultiplyColor") as! CGColor
+        try? await Task.sleep(nanoseconds: 160_000_000)
+        let nextTint = patternLayer.presentation()!.value(forKey: "contentsMultiplyColor") as! CGColor
+        expect(!sameColor(UIColor(cgColor: firstTint), UIColor(cgColor: nextTint)), "Telegram's native pattern tint changes in the render server")
+    }
+    AorusRGBColors.animate(patternLayer, keyPath: "contentsMultiplyColor", colors: [])
+    patternLayer.removeFromSuperlayer()
     let owner = UIView(frame: CGRect(x: 80, y: 12, width: 40, height: 40))
     window.addSubview(owner)
     var redraws = 0

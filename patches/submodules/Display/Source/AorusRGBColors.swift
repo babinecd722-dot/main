@@ -10,6 +10,7 @@ public enum AorusRGBColors {
     public static let textAttribute = NSAttributedString.Key("AorusRGBColor")
     private static var colorKey: UInt8 = 0
     private static var imageKey: UInt8 = 0
+    private static var tintKey: UInt8 = 0
     private static let alphaDigits = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
 
     private final class Color: NSObject {
@@ -41,12 +42,22 @@ public enum AorusRGBColors {
 
     public static func isAnimated(_ color: UIColor) -> Bool { metadata(color) != nil }
 
+    public static func sameSource(_ lhs: UIColor, _ rhs: UIColor) -> Bool {
+        return lhs.isEqual(rhs) && metadata(lhs)?.offset == metadata(rhs)?.offset && metadata(lhs)?.alpha == metadata(rhs)?.alpha
+    }
+
     public static func withAlpha(_ color: UIColor, multipliedBy alpha: CGFloat) -> UIColor {
         guard let source = metadata(color) else { return color.withAlphaComponent(color.cgColor.alpha * alpha) }
         let value = Color(offset: source.offset, alpha: source.alpha * alpha)
         let result = sample(value, time: 0.0)
         objc_setAssociatedObject(result, &colorKey, value, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         return result
+    }
+
+    /// A native tinted bitmap already contains the colour's opacity in its alpha mask.
+    public static func maskInk(_ color: UIColor) -> UIColor {
+        guard let source = metadata(color) else { return color }
+        return withAlpha(color, multipliedBy: source.alpha > 0.0 ? 1.0 / source.alpha : 1.0)
     }
 
     private static func sample(_ value: Color, time: Double) -> UIColor {
@@ -88,15 +99,14 @@ public enum AorusRGBColors {
     }
 
     public static func prepareText(_ text: NSAttributedString) -> NSAttributedString {
-        let result = NSMutableAttributedString(attributedString: text)
-        var changed = false
+        var result: NSMutableAttributedString?
         text.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: text.length)) { value, range, _ in
             guard let color = value as? UIColor, let source = metadata(color) else { return }
-            result.addAttribute(textAttribute, value: source, range: range)
-            result.addAttribute(NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String), value: true, range: range)
-            changed = true
+            if result == nil { result = NSMutableAttributedString(attributedString: text) }
+            result?.addAttribute(textAttribute, value: source, range: range)
+            result?.addAttribute(NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String), value: true, range: range)
         }
-        return changed ? result : text
+        return result ?? text
     }
 
     public static func hasRGB(_ text: NSAttributedString?) -> Bool {
@@ -133,8 +143,9 @@ public enum AorusRGBColors {
     /// The sent/read glyphs keep their native size, shape, pixel style and status animations.
     /// The caller leaves its image empty while the gradient owns the same alpha mask.
     public static func drawImage(on layer: CALayer, image: UIImage?, color: UIColor?) -> Bool {
-        guard let image, let color, let source = metadata(color) else {
+        guard let image, let color, metadata(color) != nil else {
             if let overlay = objc_getAssociatedObject(layer, &imageKey) as? CAGradientLayer {
+                animate(overlay, keyPath: "colors", colors: [])
                 overlay.removeFromSuperlayer()
                 objc_setAssociatedObject(layer, &imageKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             }
@@ -150,13 +161,33 @@ public enum AorusRGBColors {
         mask.contentsScale = image.scale
         overlay.mask = mask
         // The tinted native image already carries the chosen opacity.
-        let ink = withAlpha(color, multipliedBy: source.alpha > 0.0 ? 1.0 / source.alpha : 1.0)
+        let ink = maskInk(color)
         overlay.colors = [ink.cgColor, ink.cgColor]
         if overlay.superlayer == nil { layer.addSublayer(overlay) }
         objc_setAssociatedObject(layer, &imageKey, overlay, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         CATransaction.commit()
         animate(overlay, keyPath: "colors", colors: [ink, ink])
         return true
+    }
+
+    /// Template images keep their native stretch points, tiling, geometry and animations.
+    public static func tintImage(_ view: UIImageView, color: UIColor) {
+        guard isAnimated(color), let image = view.image, image.renderingMode == .alwaysTemplate else {
+            if let overlay = objc_getAssociatedObject(view, &tintKey) as? AorusRGBGradientView {
+                overlay.update(colors: [], mask: nil)
+                overlay.removeFromSuperview()
+                objc_setAssociatedObject(view, &tintKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            }
+            view.tintColor = color
+            return
+        }
+        let overlay = (objc_getAssociatedObject(view, &tintKey) as? AorusRGBGradientView) ?? AorusRGBGradientView(frame: view.bounds)
+        overlay.frame = view.bounds
+        overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        overlay.update(colors: [color], mask: image.withRenderingMode(.alwaysOriginal), contentMode: view.contentMode)
+        view.tintColor = .clear
+        if overlay.superview == nil { view.addSubview(overlay) }
+        objc_setAssociatedObject(view, &tintKey, overlay, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
     private final class Entry {
@@ -278,8 +309,9 @@ public final class AorusRGBGradientView: UIView {
         imageMask.frame = bounds
         CATransaction.commit()
     }
-    public func update(colors: [UIColor], mask: UIImage?) {
+    public func update(colors: [UIColor], mask: UIImage?, contentMode: UIView.ContentMode = .scaleToFill) {
         imageMask.image = mask
+        imageMask.contentMode = contentMode
         let colors = colors.count == 1 ? [colors[0], colors[0]] : colors
         gradient.colors = colors.map { $0.cgColor }
         AorusRGBColors.animate(gradient, keyPath: "colors", colors: colors)

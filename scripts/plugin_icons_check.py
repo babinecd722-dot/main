@@ -141,9 +141,11 @@ def main():
             renderer.write_text(source.replace("import AppBundle\n", ""))
             swiftui = args.repo / "patches/submodules/Display/Source/AorusSystemSymbol.swift"
             rgb = args.repo / "patches/submodules/Display/Source/AorusRGBColors.swift"
-            from message_details_check import native_bitmap_source
+            from message_details_check import native_bitmap_source, native_rgb_quote_source
             bubbles = work / "NativeBubblePainter.swift"
             bubbles.write_text(native_bitmap_source(args.telegram_source))
+            quotes = work / "NativeQuotePainter.swift"
+            quotes.write_text(native_rgb_quote_source(args.telegram_source))
             sdk = subprocess.check_output(["xcrun", "--sdk", "iphoneos", "--show-sdk-path"], text=True).strip()
             subprocess.run(common + ["-typecheck", "-sdk", sdk, "-target", "arm64-apple-ios13.0", str(stub), str(renderer), str(swiftui), str(rgb)], check=True)
             print("Icon resolver UIKit SDK type-check passed", flush=True)
@@ -174,7 +176,7 @@ def main():
                 simulator_environment = dict(os.environ, SDKROOT=simulator_sdk)
                 toolbar = work / "ToolbarIcons.swift"
                 toolbar.write_text(toolbar_source)
-                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(rgb), str(bubbles), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
+                subprocess.run(common + ["-parse-as-library", "-sdk", simulator_sdk, "-target", platform.machine() + "-apple-ios13.0-simulator", str(stub), str(renderer), str(swiftui), str(toolbar), str(navigation), str(theme), str(rgb), str(bubbles), str(quotes), str(args.repo / "scripts/tests/AorusBubbleBitmapUIKitTests.swift"), str(args.repo / "scripts/tests/AorusRGBUIKitTests.swift"), str(args.repo / "scripts/tests/AorusPluginIconsUIKitTests.swift"), "-o", str(executable)], check=True, env=simulator_environment)
                 subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
                 subprocess.run(["xcrun", "simctl", "install", device["udid"], str(app)], check=True)
                 try:

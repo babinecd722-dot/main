@@ -38,6 +38,47 @@ def native_bitmap_source(tg: Path) -> str:
     ]) + "\nprivate let minRadiusForFullTailCorner: CGFloat = 14.0\n"
 
 
+def native_rgb_quote_source(tg: Path) -> str:
+    source = (tg / "submodules/Display/Source/TextNode.swift").read_text()
+    start = source.index("    fileprivate var aorusHasRGB: Bool {")
+    query = source[start:source.index("\n    }\n", start) + 7].replace("fileprivate var", "var", 1)
+    start = source.index("            for blockQuote in layout.blockQuotes {")
+    draw = source[start:source.index("\n            if let textShadowColor =", start)]
+    data = declaration(source, "public final class TextNodeBlockQuoteData:")
+    quote = declaration(source, "private final class TextNodeBlockQuote {").replace("private final class", "final class", 1)
+    return "import Foundation\nimport UIKit\nimport CoreFoundation\n" + data + quote + '''
+extension UIColor {
+    var alpha: CGFloat { cgColor.alpha }
+    func withMultipliedAlpha(_ value: CGFloat) -> UIColor { withAlphaComponent(cgColor.alpha * value) }
+}
+struct NativeRGBTextLayout {
+    var attributedString: NSAttributedString? = nil
+    var backgroundColor: UIColor? = nil
+    var lineColor: UIColor? = nil
+    var textShadowColor: UIColor? = nil
+    var textStroke: (UIColor, CGFloat)? = nil
+    var blockQuotes: [TextNodeBlockQuote] = []
+    var insets = UIEdgeInsets.zero
+''' + query + '''
+}
+func nativeRGBQuotePixels(_ layout: NativeRGBTextLayout) -> Data {
+    let bounds = CGRect(x: 0, y: 0, width: 160, height: 64)
+    UIGraphicsBeginImageContextWithOptions(bounds.size, false, 1)
+    defer { UIGraphicsEndImageContext() }
+    let context = UIGraphicsGetCurrentContext()!
+    let offset = CGPoint.zero
+    let quoteIcon = UIGraphicsImageRenderer(size: CGSize(width: 10, height: 10)).image { value in
+        UIColor.white.setFill()
+        value.cgContext.fillEllipse(in: CGRect(x: 1, y: 1, width: 8, height: 8))
+    }
+    let codeIcon = quoteIcon
+''' + draw + '''
+    let bytes = UIGraphicsGetImageFromCurrentImageContext()!.cgImage!.dataProvider!.data!
+    return Data(bytes: CFDataGetBytePtr(bytes)!, count: CFDataGetLength(bytes))
+}
+'''
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("repo", type=Path)

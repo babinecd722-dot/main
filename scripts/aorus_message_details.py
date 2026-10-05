@@ -81,8 +81,11 @@ def verify_message_details(tg: Path) -> list[str]:
         "submodules/TelegramPresentationData/Sources/ChatMessageBubbleImages.swift": {"drawTail = drawTail && aorusTails": 2},
         "submodules/TelegramStringFormatting/Sources/PresenceStrings.swift": {'AorusPluginAppearanceValues.flag("presence.seconds"': 1, "withSeconds: true": 1},
         "submodules/TelegramUI/Components/Chat/ChatMessageDateAndStatusNode/Sources/ChatMessageDateAndStatusNode.swift": {"AorusMessageDetails.statusText(arguments.dateText": 1, "AorusRGBColors.drawImage(on: node.layer": 2},
-        "submodules/Display/Source/TextNode.swift": {"AorusRGBColors.prepareText(inputText)": 1, "AorusRGBColors.drawRun(run,": 3, "private func aorusTrackRGB()": 2},
-        "submodules/ChatMessageBackground/Sources/ChatMessageBackground.swift": {"public func updateRGB(": 1, "mask: bubbleMaskForType(type, graphics: graphics)": 1},
+        "submodules/Display/Source/TextNode.swift": {"AorusRGBColors.prepareText(inputText)": 1, "AorusRGBColors.drawRun(run,": 3, "private func aorusTrackRGB()": 2, "self.cachedLayout?.aorusHasRGB == true": 2, "fileprivate var aorusHasRGB: Bool": 1, "AorusRGBColors.resolved(blockQuote.tintColor)": 6, "AorusRGBColors.prepareText(title)": 1, "existingString.isEqual(to: AorusRGBColors.prepareText(string))": 2, "AorusRGBColors.sameSource(": 6},
+        "submodules/ChatMessageBackground/Sources/ChatMessageBackground.swift": {"public func updateRGB(": 1, "mask: bubbleMaskForType(type, graphics: graphics)": 1, "AorusRGBColors.maskInk(stroke)": 1},
+        "submodules/TextFormat/Sources/StringWithAppliedEntities.swift": {"AorusRGBColors.withAlpha(baseQuoteTintColor, multipliedBy: 0.1)": 1},
+        "submodules/TelegramUI/Components/Chat/MessageInlineBlockBackgroundView/Sources/MessageInlineBlockBackgroundView.swift": {"AorusRGBColors.tintImage(": 9, 'keyPath: "contentsMultiplyColor"': 2, 'keyPath: "backgroundColor"': 2},
+        "submodules/TelegramUI/Components/Chat/ChatMessageReplyInfoNode/Sources/ChatMessageReplyInfoNode.swift": {"AorusRGBColors.tintImage(quoteIconView": 1, "AorusRGBColors.tintImage(expiredStoryIconView": 1},
         "submodules/TelegramUI/Components/Chat/ChatMessageBubbleItemNode/Sources/ChatMessageBubbleItemNode.swift": {"strongSelf.backgroundNode.updateRGB(": 1, 'chatBubbleCorners.hasTails && AorusPluginAppearanceValues.flag("bubble.tails"': 1},
     }
     for filename, markers in checks.items():
