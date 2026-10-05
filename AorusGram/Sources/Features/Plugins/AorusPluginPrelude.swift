@@ -343,15 +343,37 @@ public enum AorusPluginPrelude {
 
         function requestEvent(id, json) {
             var entry = pending[id];
-            if (!entry || typeof entry.onEvent !== 'function') { return; }
-            try { entry.onEvent(parseJSON(json, {})); }
-            catch (error) { reportError('AorusAI event handler failed', error); }
+            if (!entry || entry.eventError) { return; }
+            var event = parseJSON(json, {});
+            var needsAnswer = event.type === 'ai.tool' || event.type === 'ai.permission';
+            function cancelWithError(message) {
+                if (pending[id] !== entry || entry.eventError) { return; }
+                entry.eventError = message;
+                request('ai.cancel', {}).then(function () {
+                    settle(id, true, message);
+                }, function () {
+                    settle(id, true, message);
+                });
+            }
+            if (typeof entry.onEvent !== 'function') {
+                if (needsAnswer) { cancelWithError('AorusAI requires onEvent to answer tool and permission requests'); }
+                return;
+            }
+            function eventFailed(error) {
+                reportError('AorusAI event handler failed', error);
+                if (needsAnswer) { cancelWithError('AorusAI event handler failed: ' + String(error && error.message || error)); }
+            }
+            try {
+                var result = entry.onEvent(event);
+                if (result && typeof result.then === 'function') { result.then(undefined, eventFailed); }
+            } catch (error) { eventFailed(error); }
         }
 
         function settle(id, isRejection, value) {
             var entry = pending[id];
             if (!entry) { return; }
             delete pending[id];
+            if (entry.eventError) { entry.reject(new Error(entry.eventError)); return; }
             if (isRejection) {
                 entry.reject(new Error(typeof value === 'string' ? value : 'Request failed'));
             } else {

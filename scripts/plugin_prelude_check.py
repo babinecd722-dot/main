@@ -190,7 +190,7 @@ const host = new Proxy({}, {
             return JSON.parse(json).length;
         };
         case 'request': return (kind, json, id) => {
-            record('request', [kind, JSON.parse(json)]);
+            record('request', [kind, JSON.parse(json), id]);
             const dispatcher = globalThis.__dispatcher;
             if (globalThis.__requestFailures[kind]) {
                 dispatcher.reject(id, globalThis.__requestFailures[kind]);
@@ -207,7 +207,14 @@ const host = new Proxy({}, {
             } else if (kind !== 'chat.current' && kind !== 'users.pick' && kind !== 'files.info') {
                 answer = {};
             }
-            dispatcher.resolve(id, JSON.stringify(answer));
+            if (kind === 'ai.ask' && globalThis.__nextAIEvent) {
+                const event = globalThis.__nextAIEvent;
+                delete globalThis.__nextAIEvent;
+                dispatcher.requestEvent(id, JSON.stringify(event));
+                globalThis.__nodeSetTimeout(function () { dispatcher.resolve(id, JSON.stringify(answer)); }, 10);
+            } else {
+                dispatcher.resolve(id, JSON.stringify(answer));
+            }
         };
         case 'timerSchedule': return (id, ms, repeats) => {
             record('timerSchedule', [id, ms, repeats]);
@@ -942,6 +949,27 @@ aorus.chat.current().then(function (value) {
     globalThis.__answers['ai.cancel'] = { cancelled: true };
     const cancellation = await aorus.ai.cancel();
     check('AI cancel did not reach its native broker', cancellation.cancelled === true && lastRequest('ai.cancel') !== null);
+    for (const callback of [undefined, function () { throw new Error('broken handler'); }, async function () { throw new Error('broken async handler'); }]) {
+        globalThis.__nextAIEvent = { type: 'ai.permission', requestId: 'permission' };
+        let rejected = false;
+        try { await aorus.ai.ask('Permission', { onEvent: callback }); }
+        catch (error) { rejected = true; check('AI callback failure lost its explanation', /onEvent|broken.*handler/.test(error.message)); }
+        check('AI permission without a working handler did not reject', rejected);
+        const recovered = await aorus.ai.ask('After handler failure');
+        check('AI handler failure prevented another question', recovered.text === 'Answer');
+    }
+    const cancellationCount = () => globalThis.__calls.filter(call => call.name === 'request' && call.args[0] === 'ai.cancel').length;
+    const beforeStatus = cancellationCount();
+    globalThis.__nextAIEvent = { type: 'status', label: 'Working' };
+    await aorus.ai.ask('Status without a handler');
+    check('AI status without a handler cancelled an ordinary request', cancellationCount() === beforeStatus);
+    globalThis.__nextAIEvent = { type: 'ai.tool', requestId: 'late' };
+    await aorus.ai.ask('Finished before callback failure', { onEvent: function () {
+        return new Promise(function (_, reject) { globalThis.__nodeSetTimeout(function () { reject(new Error('late callback')); }, 15); });
+    } });
+    globalThis.__nextAIEvent = { type: 'status', label: 'Next request' };
+    await aorus.ai.ask('Next request');
+    check('Late AI callback failure cancelled a different request', cancellationCount() === beforeStatus);
 }).then(function () {
 VERDICT_TAIL
     globalThis.__nodeLog('VERDICT ' + JSON.stringify(problems));

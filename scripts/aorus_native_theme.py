@@ -29,6 +29,17 @@ def patch_native_theme(tg: Path) -> None:
     public func setNavigationBarPresentationData(_ presentationData: NavigationBarPresentationData, animated: Bool) {
         self.aorusUpdatePresentationStyle(presentationData)"""),
     ])
+    edit(tg, controller, "private func aorusApplyNativeViewStyle", [
+        ("    private func aorusUpdatePresentationStyle", """    private func aorusApplyNativeViewStyle(_ style: UIUserInterfaceStyle) {
+        if #available(iOS 13.0, *), let view = self.viewIfLoaded, view.overrideUserInterfaceStyle != style {
+            view.overrideUserInterfaceStyle = style
+        }
+    }
+
+    private func aorusUpdatePresentationStyle"""),
+        ("            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }", "            if self.overrideUserInterfaceStyle != style { self.overrideUserInterfaceStyle = style }\n            self.aorusApplyNativeViewStyle(style)"),
+        ("        self.view = self.displayNode.view\n", "        self.view = self.displayNode.view\n        // AorusGram: apply presentation traits to the custom display-node root.\n        if #available(iOS 13.0, *) { self.aorusApplyNativeViewStyle(self.overrideUserInterfaceStyle) }\n"),
+    ])
 
 
 def verify_native_theme(tg: Path) -> list[str]:
@@ -41,6 +52,8 @@ def verify_native_theme(tg: Path) -> list[str]:
     controller = (tg / "submodules/Display/Source/ViewController.swift").read_text()
     if controller.count("self.aorusUpdatePresentationStyle(") != 2:
         errors.append("NativeTheme: controllers must apply traits at creation and theme updates")
+    if controller.count("self.aorusApplyNativeViewStyle(") != 2:
+        errors.append("NativeTheme: loaded and newly created display-node roots must receive presentation traits")
     return errors
 
 
@@ -49,6 +62,10 @@ def native_theme_test_source(tg: Path, repo: Path) -> str:
     match = re.search(r"    private func aorusUpdatePresentationStyle\(.*?\n    }", source, re.S)
     if not match:
         raise RuntimeError("NativeTheme: native controller style helper is missing")
+    view_style = re.search(r"    private func aorusApplyNativeViewStyle\(.*?\n    }", source, re.S)
+    load_style = re.search(r"        // AorusGram: apply presentation traits to the custom display-node root\.\n([^\n]+)", source)
+    if not view_style or not load_style:
+        raise RuntimeError("NativeTheme: native display-node root style hook is missing")
     ui = (repo / "patches/submodules/AorusGramUI/Sources/Features/Plugins/AorusPluginControllers.swift").read_text()
     # The exact image expressions used by the native buttons, drawn as real images
     # below. Bundle resources are supplied by fixtures in the UIKit test application.
@@ -66,16 +83,27 @@ private struct NavigationBarPresentationData {
     let theme: Theme
 }
 @MainActor private final class NativeThemeControllerProbe: UIViewController {
-""" + match.group(0) + """
+""" + view_style.group(0) + "\n" + match.group(0) + """
+    override func loadView() {
+        self.view = UIView()
+""" + load_style.group(1) + """
+    }
     func update(dark: Bool) { aorusUpdatePresentationStyle(NavigationBarPresentationData(theme: .init(overallDarkAppearance: dark))) }
 }
-@MainActor func runNativeThemeRegression() -> Int {
+@MainActor func runNativeThemeRegression() async -> Int {
     var checks = 0
     func expect(_ value: Bool, _ message: String) { checks += 1; if !value { fatalError(message) } }
     let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 640))
     let root = UIViewController()
     window.rootViewController = root
-    window.isHidden = false
+    window.makeKeyAndVisible()
+    let cold = NativeThemeControllerProbe()
+    cold.update(dark: true)
+    expect(!cold.isViewLoaded, "setting presentation style does not force a view to load")
+    let coldField = UITextField()
+    cold.view.addSubview(coldField)
+    try? await Task.sleep(nanoseconds: 20_000_000)
+    expect(coldField.traitCollection.userInterfaceStyle == .dark, "a root loaded after theme resolution inherits the dark style")
     let controller = NativeThemeControllerProbe()
     root.addChild(controller)
     root.view.addSubview(controller.view)
@@ -90,10 +118,11 @@ private struct NavigationBarPresentationData {
         window.overrideUserInterfaceStyle = system
         for dark in [true, false, true] {
             controller.update(dark: dark)
+            try? await Task.sleep(nanoseconds: 20_000_000)
             let expected: UIUserInterfaceStyle = dark ? .dark : .light
             expect(controller.traitCollection.userInterfaceStyle == expected, "controller follows app theme independently of device")
             for view in [field as UIView, table, toggle] {
-                expect(view.traitCollection.userInterfaceStyle == expected, "native form control inherits presentation style")
+                expect(view.traitCollection.userInterfaceStyle == expected, "native form control inherits presentation style: " + String(describing: type(of: view)) + " expected " + String(expected.rawValue) + " got " + String(view.traitCollection.userInterfaceStyle.rawValue))
             }
             expect(window.traitCollection.userInterfaceStyle == system, "app theme does not overwrite system appearance")
         }
